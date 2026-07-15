@@ -1,0 +1,54 @@
+@import 'tailwindcss';
+@import 'dockview-core/dist/styles/dockview.css';
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #0b0e14;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+/* shared control styles */
+.input {
+  @apply rounded border border-slate-700 bg-[#0d1017] px-2 py-1 text-slate-200 outline-none placeholder:text-slate-600 focus:border-indigo-500;
+}
+.btn-primary {
+  @apply rounded bg-indigo-600 px-2.5 py-1 text-white hover:bg-indigo-500 disabled:opacity-50;
+}
+.btn-ghost {
+  @apply rounded border border-slate-700 bg-slate-800/40 px-2.5 py-1 text-slate-300 hover:border-slate-500 hover:text-white disabled:opacity-50;
+}
+.btn-danger {
+  @apply rounded bg-red-600/80 px-2.5 py-1 text-white hover:bg-red-500 disabled:opacity-50;
+}
+.menu-item {
+  @apply block w-full rounded px-2 py-1.5 text-left text-[12px] text-slate-300 hover:bg-indigo-600/40 hover:text-white;
+}
+
+/* dockview dark theme tuning to match DevDeck */
+.dockview-theme-dark {
+  --dv-background-color: #0b0e14;
+  --dv-group-view-background-color: #0d1017;
+  --dv-tabs-and-actions-container-background-color: #11141c;
+  --dv-activegroup-visiblepanel-tab-background-color: #1a1f2b;
+  --dv-activegroup-hiddenpanel-tab-background-color: #11141c;
+  --dv-inactivegroup-visiblepanel-tab-background-color: #151923;
+  --dv-inactivegroup-hiddenpanel-tab-background-color: #11141c;
+  --dv-tab-divider-color: #1e2430;
+  --dv-activegroup-visiblepanel-tab-color: #e2e8f0;
+  --dv-activegroup-hiddenpanel-tab-color: #64748b;
+  --dv-inactivegroup-visiblepanel-tab-color: #94a3b8;
+  --dv-inactivegroup-hiddenpanel-tab-color: #475569;
+  --dv-separator-border: #1e2430;
+  --dv-paneview-header-border-color: #1e2430;
+  --dv-drag-over-background-color: rgba(99, 102, 241, 0.18);
+  --dv-drag-over-border-color: #6366f1;
+}
+
+/* xterm sizing inside dock panels */
+.xterm {
+  height: 100%;
+}

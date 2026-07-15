@@ -1,0 +1,75 @@
+// Settings page (opens as a main-window tab): global behavior and
+// detected shells. Editing individual commands / services / profiles
+// lives in their own dedicated editor pages, opened from the side lists.
+
+import { useState } from 'react'
+import * as ipc from '../lib/ipc'
+import { useApp } from '../store'
+
+export function ConfigPage() {
+  const { hotkey, setHotkey, shells } = useApp()
+  const [draft, setDraft] = useState(hotkey)
+  const [status, setStatus] = useState<string | null>(null)
+
+  const apply = async () => {
+    try {
+      await ipc.hotkeyApply(draft.replace(/\s/g, ''))
+      await ipc.settingSet('hotkey', draft)
+      setHotkey(draft)
+      setStatus('Hotkey applied ✓')
+    } catch (e) {
+      setStatus(`Error: ${e}`)
+    }
+  }
+
+  return (
+    <div className="h-full overflow-y-auto bg-[#0d1017] px-6 py-5 text-slate-300">
+      <div className="max-w-2xl space-y-6">
+        <div>
+          <h2 className="text-[16px] font-semibold text-slate-100">Settings</h2>
+          <p className="text-[12px] text-slate-500">Global behavior and detected shells.</p>
+        </div>
+
+        <section>
+          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            Global hotkey
+          </h3>
+          <div className="flex gap-2">
+            <input className="input w-60" value={draft} onChange={(e) => setDraft(e.target.value)} />
+            <button className="btn-primary" onClick={() => void apply()}>
+              Apply
+            </button>
+          </div>
+          <p className="mt-1 text-[11px] text-slate-500">
+            Summons / hides DevDeck from anywhere, e.g. <code>ctrl+shift+Space</code>, <code>alt+F9</code>.
+          </p>
+          {status && <p className="mt-1 text-[11px] text-emerald-400">{status}</p>}
+        </section>
+
+        <section>
+          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            Detected shells
+          </h3>
+          <div className="space-y-1">
+            {shells.map((s) => (
+              <div key={s.command} className="flex items-center gap-3 rounded bg-[#151923] px-3 py-1.5">
+                <span className="text-emerald-400">❯_</span>
+                <span className="w-28 text-slate-200">{s.name}</span>
+                <span className="truncate font-mono text-[11px] text-slate-500">{s.command}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section>
+          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Data</h3>
+          <p className="text-[11px] leading-5 text-slate-500">
+            Stored locally in SQLite (<code>%APPDATA%\devdeck\devdeck.sqlite</code>). No cloud, no
+            accounts. Commands, services, and profiles are edited in their own pages — click any
+            item in the side lists, or use “+ New”.
+          </p>
+        </section>
+      </div>
+    </div>
+  )
+}

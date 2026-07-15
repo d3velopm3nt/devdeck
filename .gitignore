@@ -1,0 +1,26 @@
+# Rust build output (term-widget and devdeck/src-tauri)
+/target/
+**/target/
+
+# Node
+**/node_modules/
+**/dist/
+**/dist-ssr/
+*.local
+
+# Tauri generated
+**/src-tauri/gen/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp

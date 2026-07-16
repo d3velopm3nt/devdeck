@@ -21,6 +21,12 @@ export function spaceColor(id: number): string {
   return SPACE_PALETTE[Math.abs(id) % SPACE_PALETTE.length]
 }
 
+/// Effective color for a node: the user's picked color if set, else the
+/// stable derived one.
+export function nodeColor(node: { id: number; color: string | null }): string {
+  return node.color && node.color.trim() !== '' ? node.color : spaceColor(node.id)
+}
+
 /// 1–2 letter avatar from a name ("TrackX" → "TR", "web app" → "WA").
 export function avatarLabel(name: string): string {
   const words = name.trim().split(/[\s\-_]+/).filter(Boolean)

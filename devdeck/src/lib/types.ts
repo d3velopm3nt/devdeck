@@ -13,6 +13,8 @@ export interface TreeNode {
   /** folder: subpath relative to the owning project's base path. */
   rel_path: string
   sort: number
+  /** user-picked accent color (hex); null = derive from id. */
+  color: string | null
 }
 
 export interface CommandDef {

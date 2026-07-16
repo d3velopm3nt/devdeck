@@ -8,7 +8,7 @@ import { useApp } from '../store'
 import * as ipc from '../lib/ipc'
 import { openSingleton, openTerminalPanel, openSpace } from '../lib/dock'
 import { subtreeIds } from '../lib/tree'
-import { spaceColor, avatarLabel, projectUsage, rankSpaces } from '../lib/spaces'
+import { nodeColor, avatarLabel, projectUsage, rankSpaces } from '../lib/spaces'
 import type { LogEntry, ProcStat, TreeNode } from '../lib/types'
 
 function fmtUptime(secs: number): string {
@@ -70,7 +70,7 @@ function SpaceCard({ project, topUsed }: { project: TreeNode; topUsed: boolean }
   const svc = services.filter((s) => s.project_id != null && scope.has(s.project_id))
   const running = svc.filter((s) => svcStates[s.id]?.status === 'running').length
   const cmds = commands.filter((c) => c.project_id != null && scope.has(c.project_id)).length
-  const color = spaceColor(project.id)
+  const color = nodeColor(project)
 
   return (
     <button

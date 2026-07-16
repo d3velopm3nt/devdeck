@@ -26,6 +26,9 @@ pub struct Node {
     /// For a folder: subpath relative to the owning project's base path.
     pub rel_path: String,
     pub sort: i64,
+    /// Optional user-picked accent color (hex, e.g. "#7C8CF8"). When null
+    /// the UI derives a stable color from the node id.
+    pub color: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -91,7 +94,8 @@ pub fn open() -> Connection {
             kind TEXT NOT NULL,
             name TEXT NOT NULL,
             path TEXT,
-            sort INTEGER NOT NULL DEFAULT 0
+            sort INTEGER NOT NULL DEFAULT 0,
+            color TEXT
         );
         CREATE TABLE IF NOT EXISTS commands (
             id INTEGER PRIMARY KEY,
@@ -153,6 +157,11 @@ fn migrate(conn: &Connection) {
     if !has_rel_path {
         let _ = conn.execute("ALTER TABLE nodes ADD COLUMN rel_path TEXT NOT NULL DEFAULT ''", []);
     }
+    // Per-node accent color (nullable).
+    let has_color = conn.prepare("SELECT color FROM nodes LIMIT 1").is_ok();
+    if !has_color {
+        let _ = conn.execute("ALTER TABLE nodes ADD COLUMN color TEXT", []);
+    }
     let done = setting_get_conn(conn, "model_v2").ok().flatten().is_some();
     if !done {
         // Old 'space' nodes become projects (they were the app-grouping
@@ -172,6 +181,7 @@ fn row_to_node(row: &rusqlite::Row) -> rusqlite::Result<Node> {
         path: row.get(4)?,
         rel_path: row.get(5)?,
         sort: row.get(6)?,
+        color: row.get(7)?,
     })
 }
 
@@ -181,7 +191,7 @@ fn row_to_node(row: &rusqlite::Row) -> rusqlite::Result<Node> {
 pub fn tree_list(db: tauri::State<Db>) -> Result<Vec<Node>, String> {
     let conn = db.0.lock().unwrap();
     let mut stmt = conn
-        .prepare("SELECT id, parent_id, kind, name, path, rel_path, sort FROM nodes ORDER BY sort, id")
+        .prepare("SELECT id, parent_id, kind, name, path, rel_path, sort, color FROM nodes ORDER BY sort, id")
         .map_err(err)?;
     let nodes = stmt
         .query_map([], row_to_node)
@@ -215,6 +225,7 @@ pub fn node_create(
         path,
         rel_path: rel_path.unwrap_or_default(),
         sort: 0,
+        color: None,
     })
 }
 
@@ -234,10 +245,17 @@ pub fn node_update(
     name: Option<String>,
     path: Option<String>,
     rel_path: Option<String>,
+    color: Option<String>,
 ) -> Result<(), String> {
     let conn = db.0.lock().unwrap();
     if let Some(name) = name {
         conn.execute("UPDATE nodes SET name = ?1 WHERE id = ?2", params![name, id])
+            .map_err(err)?;
+    }
+    if let Some(color) = color {
+        // Empty string clears the override back to the derived color.
+        let val: Option<String> = if color.trim().is_empty() { None } else { Some(color) };
+        conn.execute("UPDATE nodes SET color = ?1 WHERE id = ?2", params![val, id])
             .map_err(err)?;
     }
     if let Some(path) = path {
@@ -358,7 +376,7 @@ pub fn services_list(db: tauri::State<Db>) -> Result<Vec<ServiceDef>, String> {
 /// rel_path. Returns "" if it can't be resolved.
 pub fn resolve_node_dir(conn: &Connection, node_id: i64) -> String {
     let node = conn.query_row(
-        "SELECT id, parent_id, kind, name, path, rel_path, sort FROM nodes WHERE id = ?1",
+        "SELECT id, parent_id, kind, name, path, rel_path, sort, color FROM nodes WHERE id = ?1",
         params![node_id],
         row_to_node,
     );
@@ -376,7 +394,7 @@ pub fn resolve_node_dir(conn: &Connection, node_id: i64) -> String {
             let mut base = String::new();
             while let Some(pid) = cur {
                 if let Ok(parent) = conn.query_row(
-                    "SELECT id, parent_id, kind, name, path, rel_path, sort FROM nodes WHERE id = ?1",
+                    "SELECT id, parent_id, kind, name, path, rel_path, sort, color FROM nodes WHERE id = ?1",
                     params![pid],
                     row_to_node,
                 ) {

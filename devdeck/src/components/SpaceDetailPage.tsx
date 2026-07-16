@@ -9,7 +9,8 @@ import * as ipc from '../lib/ipc'
 import { openEditor, openNodeSetup, openTerminalPanel } from '../lib/dock'
 import { openTerminal, runCommandInNewTerminal, runCommandInBackground, launchProfile } from '../lib/runner'
 import { subtreeIds, resolveDir, nodeLabel } from '../lib/tree'
-import { spaceColor, avatarLabel } from '../lib/spaces'
+import { nodeColor, avatarLabel } from '../lib/spaces'
+import { ColorPicker } from './ColorPicker'
 import type { ProfileStep, ProfileDef, ServiceDef, CommandDef } from '../lib/types'
 
 function fmtUptime(secs: number): string {
@@ -28,13 +29,18 @@ type Tab = 'services' | 'commands' | 'profiles'
 
 export function SpaceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
   const projectId = props.params.id
-  const { nodes, services, commands, profiles, svcStates, stats, terminals } = useApp()
+  const { nodes, services, commands, profiles, svcStates, stats, terminals, refreshTree } = useApp()
   const [tab, setTab] = useState<Tab>('services')
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [busy, setBusy] = useState<number | null>(null)
 
   const project = nodes.find((n) => n.id === projectId) ?? null
-  const color = spaceColor(projectId)
+  const color = project ? nodeColor(project) : '#7C8CF8'
+
+  const setColor = async (hex: string) => {
+    await ipc.nodeUpdate(projectId, { color: hex })
+    await refreshTree()
+  }
   const scope = useMemo(() => new Set(subtreeIds(nodes, projectId)), [nodes, projectId])
   const baseDir = project ? resolveDir(nodes, project) : ''
 
@@ -168,7 +174,13 @@ export function SpaceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
               </button>
             )}
           </div>
-          <div className="flex shrink-0 flex-wrap justify-end gap-2">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            <ColorPicker
+              color={color}
+              custom={!!project.color}
+              onPick={(hex) => void setColor(hex)}
+              onReset={() => void setColor('')}
+            />
             <button
               className="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-[12px] text-slate-200 hover:border-slate-500"
               disabled={!baseDir}

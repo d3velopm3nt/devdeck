@@ -29,13 +29,14 @@ export const nodeCreate = (
 export const nodeRename = (id: number, name: string) => invoke<void>('node_rename', { id, name })
 export const nodeUpdate = (
   id: number,
-  fields: { name?: string; path?: string; relPath?: string },
+  fields: { name?: string; path?: string; relPath?: string; color?: string },
 ) =>
   invoke<void>('node_update', {
     id,
     name: fields.name ?? null,
     path: fields.path ?? null,
     relPath: fields.relPath ?? null,
+    color: fields.color ?? null,
   })
 export const nodeDelete = (id: number) => invoke<void>('node_delete', { id })
 

@@ -1,0 +1,59 @@
+name: Release
+
+# Push a tag like v0.1.0 and this builds the Windows installer and publishes
+# it to a GitHub Release. Nothing is uploaded from a developer machine.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build and release (e.g. v0.1.0)'
+        required: true
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.event.inputs.tag || github.ref_name }}
+          releaseName: 'DevDeck ${{ github.event.inputs.tag || github.ref_name }}'
+          releaseBody: |
+            ### Install
+
+            Download **`DevDeck_*_x64-setup.exe`** below and run it.
+
+            > **Windows SmartScreen** may warn "Windows protected your PC" because
+            > the installer isn't code-signed yet. Click **More info → Run anyway**,
+            > or build from source if you'd rather.
+
+            First run? Click **Load example workspace** on the welcome screen — it
+            creates a small demo project with a real web server and a background
+            worker so you can see DevDeck work before wiring up your own repos.
+
+            **Requirements:** Windows 10/11 (x64). No runtime to install.
+          releaseDraft: false
+          prerelease: false

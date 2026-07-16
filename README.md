@@ -7,10 +7,10 @@
 Start your whole stack, watch every service, and jump into any terminal —
 from one window, or a floating widget you summon with a hotkey.
 
-[![CI](https://github.com/__OWNER__/__REPO__/actions/workflows/ci.yml/badge.svg)](https://github.com/__OWNER__/__REPO__/actions/workflows/ci.yml)
+[![CI](https://github.com/d3velopm3nt/devdeck/actions/workflows/ci.yml/badge.svg)](https://github.com/d3velopm3nt/devdeck/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%202-24C8DB)](https://tauri.app)
-[![Buy Me A Coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-FFDD00?logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/__BMC__)
+[![Buy Me A Coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-FFDD00?logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/d3velopm3nt)
 
 </div>
 
@@ -48,15 +48,15 @@ telemetry** — it never phones home.
 ## Install
 
 Grab the latest `DevDeck_x.y.z_x64-setup.exe` from
-[Releases](https://github.com/__OWNER__/__REPO__/releases), or build it yourself.
+[Releases](https://github.com/d3velopm3nt/devdeck/releases), or build it yourself.
 
 ## Build from source
 
 Requires [Rust](https://rustup.rs) (1.77.2+) and Node.js 20+.
 
 ```bash
-git clone https://github.com/__OWNER__/__REPO__.git
-cd __REPO__
+git clone https://github.com/d3velopm3nt/devdeck.git
+cd devdeck
 npm install
 npx tauri dev      # run in development
 npx tauri build    # release exe + installer in src-tauri/target/release
@@ -108,7 +108,7 @@ project layout, and the data model.
 ## Support
 
 DevDeck is free and MIT-licensed. If it saves you time, you can
-[buy me a coffee](https://www.buymeacoffee.com/__BMC__) ☕ — appreciated, never
+[buy me a coffee](https://www.buymeacoffee.com/d3velopm3nt) ☕ — appreciated, never
 expected.
 
 ## License

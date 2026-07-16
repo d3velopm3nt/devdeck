@@ -23,7 +23,7 @@ import { ProfileEditorPage } from './components/editors/ProfileEditorPage'
 import { NodeSetupPage } from './components/editors/NodeSetupPage'
 import { TerminalView } from './components/TerminalView'
 import { TerminalTab } from './components/TerminalTab'
-import { setDockApi } from './lib/dock'
+import { setDockApi, openInMain } from './lib/dock'
 import * as ipc from './lib/ipc'
 import { useApp } from './store'
 import { openTerminal } from './lib/runner'
@@ -172,16 +172,13 @@ export function Dock() {
     }
     if (!restored) buildDefaultLayout(event.api)
 
-    // A restored (older) layout may predate panels added later — make sure
-    // the Dashboard is always available so it isn't lost on upgrade.
-    if (restored && !event.api.getPanel('dashboard')) {
-      const ref = event.api.getPanel('explorer') ? 'explorer' : undefined
-      event.api.addPanel({
-        id: 'dashboard',
-        component: 'dashboard',
-        title: 'Dashboard',
-        position: ref ? { referencePanel: ref, direction: 'right' } : undefined,
-      })
+    // A restored layout may predate the Dashboard, or (from an earlier
+    // build) contain it in the wrong dock. Force it into the main center
+    // group so it never lands in the Explorer sidebar column.
+    if (restored) {
+      const stale = event.api.getPanel('dashboard')
+      if (stale) event.api.removePanel(stale)
+      openInMain('dashboard', 'dashboard', 'Dashboard')
       event.api.getPanel('dashboard')?.api.setActive()
     }
 

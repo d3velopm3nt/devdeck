@@ -9,6 +9,7 @@ import {
   type IDockviewPanelProps,
 } from 'dockview-react'
 import { Explorer } from './components/Explorer'
+import { Dashboard } from './components/Dashboard'
 import { CommandsPanel } from './components/CommandsPanel'
 import { ServicesPanel } from './components/ServicesPanel'
 import { ProcessDashboard } from './components/ProcessDashboard'
@@ -68,6 +69,7 @@ function Welcome() {
 
 const components = {
   explorer: () => <Explorer />,
+  dashboard: () => <Dashboard />,
   commands: () => <CommandsPanel />,
   services: () => <ServicesPanel />,
   processes: () => <ProcessDashboard />,
@@ -101,10 +103,16 @@ export function buildDefaultLayout(api: DockviewReadyEvent['api']) {
   api.clear()
   api.addPanel({ id: 'explorer', component: 'explorer', title: 'Explorer' })
   api.addPanel({
+    id: 'dashboard',
+    component: 'dashboard',
+    title: 'Dashboard',
+    position: { referencePanel: 'explorer', direction: 'right' },
+  })
+  api.addPanel({
     id: 'welcome',
     component: 'welcome',
     title: 'Welcome',
-    position: { referencePanel: 'explorer', direction: 'right' },
+    position: { referencePanel: 'dashboard', direction: 'within' },
   })
   api.addPanel({
     id: 'commands',
@@ -138,6 +146,7 @@ export function buildDefaultLayout(api: DockviewReadyEvent['api']) {
   })
   api.getPanel('commands')?.api.setActive()
   api.getPanel('logs')?.api.setActive()
+  api.getPanel('dashboard')?.api.setActive()
 
   const explorer = api.getPanel('explorer')
   if (explorer) explorer.api.setSize({ width: 280 })
@@ -162,6 +171,19 @@ export function Dock() {
       restored = false
     }
     if (!restored) buildDefaultLayout(event.api)
+
+    // A restored (older) layout may predate panels added later — make sure
+    // the Dashboard is always available so it isn't lost on upgrade.
+    if (restored && !event.api.getPanel('dashboard')) {
+      const ref = event.api.getPanel('explorer') ? 'explorer' : undefined
+      event.api.addPanel({
+        id: 'dashboard',
+        component: 'dashboard',
+        title: 'Dashboard',
+        position: ref ? { referencePanel: ref, direction: 'right' } : undefined,
+      })
+      event.api.getPanel('dashboard')?.api.setActive()
+    }
 
     // Autosave layout (debounced) so the workspace reopens as you left it.
     let timer: ReturnType<typeof setTimeout> | undefined

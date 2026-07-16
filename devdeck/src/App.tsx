@@ -8,6 +8,7 @@ import { openTerminal, launchProfile } from './lib/runner'
 import { resolveDir } from './lib/tree'
 
 const PANELS: Array<{ id: string; component: string; title: string; main?: boolean }> = [
+  { id: 'dashboard', component: 'dashboard', title: 'Dashboard' },
   { id: 'explorer', component: 'explorer', title: 'Explorer' },
   { id: 'commands', component: 'commands', title: 'Commands' },
   { id: 'services', component: 'services', title: 'Services' },

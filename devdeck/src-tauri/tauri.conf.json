@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "DevDeck",
         "width": 1440,
         "height": 900,
@@ -20,6 +21,21 @@
         "resizable": true,
         "fullscreen": false,
         "center": true
+      },
+      {
+        "label": "widget",
+        "title": "Command Widget",
+        "width": 380,
+        "height": 540,
+        "minWidth": 300,
+        "minHeight": 160,
+        "resizable": true,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "center": false
       }
     ],
     "security": {

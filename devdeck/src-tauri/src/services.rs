@@ -276,6 +276,7 @@ fn service_with_dir(conn: &rusqlite::Connection, id: i64) -> Result<ServiceDef, 
 pub fn svc_start(app: tauri::AppHandle, db: tauri::State<Db>, id: i64) -> Result<SvcState, String> {
     let def = {
         let conn = db.0.lock().unwrap();
+        let _ = db::recent_bump_conn(&conn, "service", id);
         service_with_dir(&conn, id)?
     };
     start_internal(&app, &def, false)

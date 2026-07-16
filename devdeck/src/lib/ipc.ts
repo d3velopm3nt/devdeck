@@ -2,7 +2,7 @@
 // whole backend API.
 
 import { invoke } from '@tauri-apps/api/core'
-import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event'
 import type {
   CommandDef,
   LayoutDef,
@@ -10,6 +10,7 @@ import type {
   ProcStat,
   ProfileDef,
   PtyInfo,
+  Recent,
   ServiceDef,
   ShellDef,
   SvcState,
@@ -70,6 +71,32 @@ export const settingSet = (key: string, value: string) => invoke<void>('setting_
 export const hotkeyApply = (spec: string) => invoke<void>('hotkey_apply', { spec })
 export const shellsDetect = () => invoke<ShellDef[]>('shells_detect')
 export const revealInExplorer = (path: string) => invoke<void>('reveal_in_explorer', { path })
+export const openUrl = (url: string) => invoke<void>('open_url', { url })
+
+// ---- widget window ----
+export const widgetToggle = () => invoke<void>('widget_toggle')
+export const widgetShow = () => invoke<void>('widget_show')
+export const widgetHide = () => invoke<void>('widget_hide')
+export const widgetResize = (width: number, height: number) =>
+  invoke<void>('widget_resize', { width, height })
+
+export const focusMain = () => invoke<void>('focus_main')
+
+// ---- recents ----
+export const recentBump = (kind: 'command' | 'service', refId: number) =>
+  invoke<void>('recent_bump', { kind, refId })
+export const recentsList = () => invoke<Recent[]>('recents_list')
+
+// ---- cross-window: widget asks the main IDE to open a terminal panel ----
+export interface OpenTerminalReq {
+  ptyId: number
+  title: string
+}
+export const emitOpenTerminal = (ptyId: number, title: string) =>
+  emit('devdeck:open-terminal', { ptyId, title } satisfies OpenTerminalReq)
+export function onOpenTerminal(cb: (e: OpenTerminalReq) => void): Promise<UnlistenFn> {
+  return listen<OpenTerminalReq>('devdeck:open-terminal', (e) => cb(e.payload))
+}
 
 // ---- pty ----
 export const ptyCreate = (shell: string, cwd?: string | null, title?: string | null) =>

@@ -6,7 +6,7 @@
 import { useMemo, useState } from 'react'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import * as ipc from '../lib/ipc'
-import type { NodeKind, TreeNode } from '../lib/types'
+import type { NodeKind, ServiceDef, SvcState, TreeNode } from '../lib/types'
 import { useApp } from '../store'
 import { openEditor, openNodeSetup } from '../lib/dock'
 import { openTerminal } from '../lib/runner'
@@ -38,12 +38,24 @@ interface Menu {
 }
 
 export function Explorer() {
-  const { nodes, selectedNodeId, setSelectedNode, refreshTree } = useApp()
+  const { nodes, services, svcStates, selectedNodeId, setSelectedNode, refreshTree } = useApp()
   const roots = useMemo(() => nodes.filter((n) => n.parent_id === null), [nodes])
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
   const [menu, setMenu] = useState<Menu | null>(null)
   const [renamingId, setRenamingId] = useState<number | null>(null)
   const [draft, setDraft] = useState('')
+  const [busySvc, setBusySvc] = useState<number | null>(null)
+
+  const actSvc = async (id: number, fn: () => Promise<unknown>) => {
+    setBusySvc(id)
+    try {
+      await fn()
+    } catch (e) {
+      alert(String(e))
+    } finally {
+      setBusySvc(null)
+    }
+  }
 
   const toggle = (id: number) =>
     setExpanded((prev) => {
@@ -130,8 +142,54 @@ export function Explorer() {
     return items
   }
 
+  const renderService = (svc: ServiceDef, depth: number) => {
+    const st: SvcState | undefined = svcStates[svc.id]
+    const running = st?.status === 'running'
+    const crashed = st?.status === 'crashed'
+    return (
+      <div
+        key={`svc-${svc.id}`}
+        className="group flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[12.5px] text-slate-300 select-none hover:bg-slate-700/40"
+        style={{ paddingLeft: `${depth * 14 + 22}px` }}
+      >
+        <span
+          className={`h-1.5 w-1.5 shrink-0 rounded-full ${running ? 'animate-pulse bg-emerald-400' : crashed ? 'bg-red-400' : 'bg-slate-600'}`}
+        />
+        <span className="text-[10px] text-amber-400/80">⚡</span>
+        <button
+          className="min-w-0 flex-1 cursor-pointer truncate text-left hover:text-slate-100"
+          title="Click to edit service"
+          onClick={() => openEditor('service', svc.id, svc.name || 'Service')}
+        >
+          {svc.name}
+        </button>
+        {svc.health_port != null && (
+          <button
+            className="hidden shrink-0 rounded px-1 text-[11px] text-slate-400 hover:bg-slate-600 hover:text-white group-hover:block"
+            title={running ? `Open http://localhost:${svc.health_port}` : `Opens http://localhost:${svc.health_port} (not running)`}
+            onClick={() => void ipc.openUrl(`http://localhost:${svc.health_port}`).catch((e) => alert(String(e)))}
+          >
+            🌐
+          </button>
+        )}
+        <button
+          className="shrink-0 rounded px-1 text-[11px] hover:bg-slate-600 hover:text-white"
+          disabled={busySvc === svc.id}
+          title={running ? 'Stop' : 'Start'}
+          onClick={() =>
+            void actSvc(svc.id, () => (running ? ipc.svcStop(svc.id) : ipc.svcStart(svc.id)))
+          }
+        >
+          {running ? '■' : '▶'}
+        </button>
+      </div>
+    )
+  }
+
   const renderNode = (node: TreeNode, depth: number) => {
     const children = nodes.filter((n) => n.parent_id === node.id)
+    const nodeServices = services.filter((s) => s.project_id === node.id)
+    const hasKids = children.length > 0 || nodeServices.length > 0
     const isOpen = expanded.has(node.id)
     const selected = selectedNodeId === node.id
     const renaming = renamingId === node.id
@@ -158,7 +216,7 @@ export function Explorer() {
           title={sub || undefined}
         >
           <span
-            className={`w-3 text-[10px] text-slate-500 ${children.length ? 'cursor-pointer' : 'opacity-0'}`}
+            className={`w-3 text-[10px] text-slate-500 ${hasKids ? 'cursor-pointer' : 'opacity-0'}`}
             onClick={(e) => {
               e.stopPropagation()
               toggle(node.id)
@@ -197,7 +255,12 @@ export function Explorer() {
             ⋯
           </button>
         </div>
-        {isOpen && children.map((c) => renderNode(c, depth + 1))}
+        {isOpen && (
+          <>
+            {children.map((c) => renderNode(c, depth + 1))}
+            {nodeServices.map((s) => renderService(s, depth + 1))}
+          </>
+        )}
       </div>
     )
   }

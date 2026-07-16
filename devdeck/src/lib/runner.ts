@@ -28,6 +28,7 @@ export async function openTerminal(shell?: string, cwd?: string, title?: string)
 }
 
 export async function runCommandInNewTerminal(cmd: CommandDef) {
+  if (cmd.id > 0) void ipc.recentBump('command', cmd.id)
   const shell = cmd.shell.trim() !== '' ? cmd.shell : DEFAULT_SHELL()
   const id = await openTerminal(shell, commandCwd(cmd), cmd.name)
   // Give the shell a moment to print its prompt before injecting.
@@ -37,10 +38,12 @@ export async function runCommandInNewTerminal(cmd: CommandDef) {
 }
 
 export async function runCommandInTerminal(cmd: CommandDef, ptyId: number) {
+  if (cmd.id > 0) void ipc.recentBump('command', cmd.id)
   await ipc.ptyWrite(ptyId, cmd.command + '\r')
 }
 
 export async function runCommandInBackground(cmd: CommandDef) {
+  if (cmd.id > 0) void ipc.recentBump('command', cmd.id)
   await ipc.runBackground(cmd.name, cmd.command, commandCwd(cmd))
 }
 

@@ -86,6 +86,15 @@ export function ServicesPanel() {
                 </div>
                 <div className="truncate font-mono text-[10.5px] text-slate-500">{s.command}</div>
               </button>
+              {s.health_port != null && (
+                <button
+                  className="btn-ghost text-[11px]"
+                  title={running ? `Open http://localhost:${s.health_port}` : `Opens http://localhost:${s.health_port} (service is not running)`}
+                  onClick={() => void ipc.openUrl(`http://localhost:${s.health_port}`).catch((e) => alert(String(e)))}
+                >
+                  🌐 {s.health_port}
+                </button>
+              )}
               {!running ? (
                 <button className="btn-primary text-[11px]" disabled={busy === s.id} onClick={() => void act(s.id, () => ipc.svcStart(s.id))}>
                   ▶ Start

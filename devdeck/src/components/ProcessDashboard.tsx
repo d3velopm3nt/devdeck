@@ -98,6 +98,8 @@ export function ProcessDashboard() {
               {rows.map((r) => {
                 const st = r.stat
                 const running = r.status === 'running' || r.status === 'live'
+                const svc = r.kind === 'service' ? services.find((s) => s.id === r.id) : undefined
+                const port = svc?.health_port ?? null
                 return (
                   <tr key={r.key} className="hover:bg-slate-800/30">
                     <td className="px-2 py-1.5">
@@ -116,12 +118,37 @@ export function ProcessDashboard() {
                     <td className="px-2 py-1.5 font-mono">{st ? st.mem_mb.toFixed(0) : '—'}</td>
                     <td className="px-2 py-1.5 font-mono text-slate-400">{st ? fmtUptime(st.uptime_secs) : '—'}</td>
                     <td className="px-2 py-1.5 font-mono text-sky-400">
-                      {st && st.ports.length ? st.ports.join(', ') : '—'}
+                      {st && st.ports.length ? (
+                        <span className="flex flex-wrap gap-x-1.5">
+                          {st.ports.map((p) => (
+                            <button
+                              key={p}
+                              className="text-sky-400 hover:text-sky-300 hover:underline"
+                              title={`Open http://localhost:${p}`}
+                              onClick={() => void ipc.openUrl(`http://localhost:${p}`).catch((e) => alert(String(e)))}
+                            >
+                              {p}
+                            </button>
+                          ))}
+                        </span>
+                      ) : (
+                        '—'
+                      )}
                     </td>
                     <td className="px-2 py-1.5">
                       <div className="flex justify-end gap-1">
                         {r.kind === 'service' ? (
-                          running ? (
+                          <>
+                          {port != null && (
+                            <button
+                              className="rounded border border-sky-500/40 bg-sky-500/10 px-2 py-0.5 text-[11px] text-sky-400 hover:bg-sky-500/25"
+                              title={running ? `Open http://localhost:${port}` : `Opens http://localhost:${port} (not running)`}
+                              onClick={() => void ipc.openUrl(`http://localhost:${port}`).catch((e) => alert(String(e)))}
+                            >
+                              🌐 Open
+                            </button>
+                          )}
+                          {running ? (
                             <>
                               <button
                                 className="rounded border border-slate-600 bg-slate-700/40 px-2 py-0.5 text-[11px] text-slate-200 hover:border-slate-400 disabled:opacity-40"
@@ -149,7 +176,8 @@ export function ProcessDashboard() {
                             >
                               ▶ Start
                             </button>
-                          )
+                          )}
+                          </>
                         ) : (
                           <>
                             <button

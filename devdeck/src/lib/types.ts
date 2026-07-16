@@ -105,3 +105,10 @@ export interface ShellDef {
   name: string
   command: string
 }
+
+export interface Recent {
+  kind: 'command' | 'service'
+  ref_id: number
+  ts: number
+  count: number
+}

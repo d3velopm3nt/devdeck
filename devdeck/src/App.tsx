@@ -3,7 +3,7 @@ import { Dock, buildDefaultLayout } from './Dock'
 import * as ipc from './lib/ipc'
 import { routeOutput } from './lib/termBus'
 import { useApp } from './store'
-import { dockApi, openSingleton, openInMain, saveLayout, restoreLayout } from './lib/dock'
+import { dockApi, openSingleton, openInMain, openTerminalPanel, saveLayout, restoreLayout } from './lib/dock'
 import { openTerminal, launchProfile } from './lib/runner'
 import { resolveDir } from './lib/tree'
 
@@ -64,6 +64,10 @@ export default function App() {
       ipc.onSvcLog((e) => useApp.getState().appendLog(e)),
       ipc.onSvcStatus((e) => useApp.getState().updateSvcState(e)),
       ipc.onStats((e) => useApp.getState().setStats(e)),
+      // The Command Widget opens terminals here in the main dock.
+      ipc.onOpenTerminal((e) => {
+        void useApp.getState().refreshTerminals().then(() => openTerminalPanel(e.ptyId, e.title))
+      }),
     ]
     return () => {
       for (const s of subs) void s.then((un) => un())
@@ -205,6 +209,13 @@ export default function App() {
             {node.kind === 'folder' ? '▤' : '▣'} {node.name}
           </span>
         )}
+        <button
+          className="btn-ghost text-[12px]"
+          title={`Toggle the floating Command Widget  ·  ${app.hotkey}`}
+          onClick={() => void ipc.widgetToggle()}
+        >
+          ▧ Widget
+        </button>
         <button
           className="btn-ghost text-[12px]"
           title="Settings"

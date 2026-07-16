@@ -11,6 +11,7 @@ import type {
   ProcStat,
   ProfileDef,
   PtyInfo,
+  Recent,
   ServiceDef,
   ShellDef,
   SvcState,
@@ -31,6 +32,7 @@ export interface AppState {
   svcStates: Record<number, SvcState>
   stats: ProcStat[]
   logs: LogEntry[]
+  recents: Recent[]
 
   // ui
   selectedNodeId: number | null
@@ -47,6 +49,7 @@ export interface AppState {
   refreshProfiles: () => Promise<void>
   refreshLayouts: () => Promise<void>
   refreshTerminals: () => Promise<void>
+  refreshRecents: () => Promise<void>
   bootstrap: () => Promise<void>
 
   // event ingestion
@@ -72,6 +75,7 @@ export const useApp = create<AppState>((set, get) => ({
   svcStates: {},
   stats: [],
   logs: [],
+  recents: [],
   selectedNodeId: null,
   hotkey: 'ctrl+shift+Space',
 
@@ -93,9 +97,10 @@ export const useApp = create<AppState>((set, get) => ({
   refreshProfiles: async () => set({ profiles: await ipc.profilesList() }),
   refreshLayouts: async () => set({ layouts: await ipc.layoutsList() }),
   refreshTerminals: async () => set({ terminals: await ipc.ptyList() }),
+  refreshRecents: async () => set({ recents: await ipc.recentsList() }),
 
   bootstrap: async () => {
-    const [nodes, commands, services, profiles, layouts, shells, terminals, states, logs, hotkey] =
+    const [nodes, commands, services, profiles, layouts, shells, terminals, states, logs, recents, hotkey] =
       await Promise.all([
         ipc.treeList(),
         ipc.commandsList(),
@@ -106,6 +111,7 @@ export const useApp = create<AppState>((set, get) => ({
         ipc.ptyList(),
         ipc.svcStates(),
         ipc.logsRecent(2000),
+        ipc.recentsList(),
         ipc.settingGet('hotkey'),
       ])
     const svcStates: Record<number, SvcState> = {}
@@ -120,6 +126,7 @@ export const useApp = create<AppState>((set, get) => ({
       terminals,
       svcStates,
       logs,
+      recents,
       hotkey: hotkey ?? 'ctrl+shift+Space',
     })
   },

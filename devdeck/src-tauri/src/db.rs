@@ -128,6 +128,13 @@ pub fn open() -> Connection {
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS recents (
+            kind TEXT NOT NULL,       -- command | service
+            ref_id INTEGER NOT NULL,
+            ts INTEGER NOT NULL,      -- unix millis of last run
+            count INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (kind, ref_id)
+        );
         "#,
     )
     .expect("create schema");
@@ -576,6 +583,60 @@ pub fn setting_set_conn(conn: &Connection, key: &str, value: &str) -> Result<(),
     )
     .map_err(err)?;
     Ok(())
+}
+
+// ---------- recents (for the widget's Recent view + search ranking) ----------
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Recent {
+    pub kind: String, // command | service
+    pub ref_id: i64,
+    pub ts: i64,
+    pub count: i64,
+}
+
+fn now_millis() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+pub fn recent_bump_conn(conn: &Connection, kind: &str, ref_id: i64) -> Result<(), String> {
+    conn.execute(
+        "INSERT INTO recents (kind, ref_id, ts, count) VALUES (?1, ?2, ?3, 1)
+         ON CONFLICT(kind, ref_id) DO UPDATE SET ts = excluded.ts, count = count + 1",
+        params![kind, ref_id, now_millis()],
+    )
+    .map_err(err)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn recent_bump(db: tauri::State<Db>, kind: String, ref_id: i64) -> Result<(), String> {
+    let conn = db.0.lock().unwrap();
+    recent_bump_conn(&conn, &kind, ref_id)
+}
+
+#[tauri::command]
+pub fn recents_list(db: tauri::State<Db>) -> Result<Vec<Recent>, String> {
+    let conn = db.0.lock().unwrap();
+    let mut stmt = conn
+        .prepare("SELECT kind, ref_id, ts, count FROM recents ORDER BY ts DESC")
+        .map_err(err)?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(Recent {
+                kind: row.get(0)?,
+                ref_id: row.get(1)?,
+                ts: row.get(2)?,
+                count: row.get(3)?,
+            })
+        })
+        .map_err(err)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(err)?;
+    Ok(rows)
 }
 
 fn err<E: std::fmt::Display>(e: E) -> String {

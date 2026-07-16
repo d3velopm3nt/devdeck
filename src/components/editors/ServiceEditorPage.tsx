@@ -35,6 +35,20 @@ export function ServiceEditorPage(props: IDockviewPanelProps<Params>) {
   }, [id])
 
   const [svc, setSvc] = useState<ServiceDef | null>(initial)
+
+  // Env is stored as a JSON object string; edit it as KEY=value lines.
+  // Must stay above the early return below — hooks can't run conditionally.
+  const envText = useMemo(() => {
+    try {
+      const obj = JSON.parse(svc?.env || '{}') as Record<string, string>
+      return Object.entries(obj)
+        .map(([k, v]) => `${k}=${v}`)
+        .join('\n')
+    } catch {
+      return ''
+    }
+  }, [svc?.env])
+
   if (!svc) {
     return <div className="p-6 text-slate-500">Service not found (it may have been deleted).</div>
   }
@@ -44,18 +58,6 @@ export function ServiceEditorPage(props: IDockviewPanelProps<Params>) {
     const dir = await openDialog({ directory: true, title: 'Working directory' })
     if (typeof dir === 'string') set({ cwd: dir })
   }
-
-  // Env is stored as a JSON object string; edit it as KEY=value lines.
-  const envText = useMemo(() => {
-    try {
-      const obj = JSON.parse(svc.env || '{}') as Record<string, string>
-      return Object.entries(obj)
-        .map(([k, v]) => `${k}=${v}`)
-        .join('\n')
-    } catch {
-      return ''
-    }
-  }, [svc.env])
 
   const setEnvFromText = (text: string) => {
     const obj: Record<string, string> = {}

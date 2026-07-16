@@ -18,8 +18,8 @@ pub struct ProcStat {
     pub id: i64,
     pub name: String,
     pub pid: u32,
-    pub cpu: f32,       // percent (whole tree)
-    pub mem_mb: f64,    // resident, MB (whole tree)
+    pub cpu: f32,    // percent (whole tree)
+    pub mem_mb: f64, // resident, MB (whole tree)
     pub uptime_secs: u64,
     pub ports: Vec<u16>,
     pub procs: usize, // processes in the tree
@@ -42,7 +42,10 @@ fn listening_ports() -> HashMap<u32, Vec<u16>> {
             let cols: Vec<&str> = line.split_whitespace().collect();
             if cols.len() >= 5 && cols[0] == "TCP" && cols[3] == "LISTENING" {
                 if let (Some(port), Ok(pid)) = (
-                    cols[1].rsplit(':').next().and_then(|p| p.parse::<u16>().ok()),
+                    cols[1]
+                        .rsplit(':')
+                        .next()
+                        .and_then(|p| p.parse::<u16>().ok()),
                     cols[4].parse::<u32>(),
                 ) {
                     let ports = map.entry(pid).or_default();
@@ -96,7 +99,10 @@ pub fn spawn(app: tauri::AppHandle) {
             let mut children: HashMap<u32, Vec<u32>> = HashMap::new();
             for (pid, proc_) in sys.processes() {
                 if let Some(parent) = proc_.parent() {
-                    children.entry(parent.as_u32()).or_default().push(pid.as_u32());
+                    children
+                        .entry(parent.as_u32())
+                        .or_default()
+                        .push(pid.as_u32());
                 }
             }
             let ports = listening_ports();

@@ -1,7 +1,7 @@
 {
   "name": "devdeck",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "A local-first development command center for Windows: run your whole stack, watch every service, and jump into any terminal.",
   "license": "MIT",
@@ -28,7 +28,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "tauri": "tauri"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.2",

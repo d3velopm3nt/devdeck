@@ -64,13 +64,17 @@ pub struct LogEntry {
 static LOG_SEQ: AtomicI64 = AtomicI64::new(0);
 
 fn now_ms() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64
 }
 
 /// Heuristic severity from line content + stream.
 fn detect_level(stream: &str, line: &str) -> &'static str {
     let l = line.to_ascii_lowercase();
-    if l.contains("error") || l.contains("panic") || l.contains("fatal") || l.contains("exception") {
+    if l.contains("error") || l.contains("panic") || l.contains("fatal") || l.contains("exception")
+    {
         "error"
     } else if l.contains("warn") {
         "warn"
@@ -83,7 +87,13 @@ fn detect_level(stream: &str, line: &str) -> &'static str {
     }
 }
 
-pub fn push_log(app: &tauri::AppHandle, service_id: i64, service: &str, stream: &str, line: String) {
+pub fn push_log(
+    app: &tauri::AppHandle,
+    service_id: i64,
+    service: &str,
+    stream: &str,
+    line: String,
+) {
     let mgr = app.state::<Arc<ServiceManager>>();
     let entry = LogEntry {
         seq: LOG_SEQ.fetch_add(1, Ordering::SeqCst) as u64,
@@ -146,7 +156,7 @@ fn start_internal(
 ) -> Result<SvcState, String> {
     let mgr = app.state::<Arc<ServiceManager>>().inner().clone();
     let id = if ephemeral {
-        mgr.next_ephemeral.fetch_sub(1, Ordering::SeqCst) - 0
+        mgr.next_ephemeral.fetch_sub(1, Ordering::SeqCst)
     } else {
         def.id
     };
@@ -164,14 +174,28 @@ fn start_internal(
     let mut child = spawn_shell(&def.command, &def.cwd, &env).map_err(|e| e.to_string())?;
     let pid = child.id();
 
-    push_log(app, id, &def.name, "system", format!("started: {} (pid {})", def.command, pid));
+    push_log(
+        app,
+        id,
+        &def.name,
+        "system",
+        format!("started: {} (pid {})", def.command, pid),
+    );
 
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
 
     // stdout / stderr pumps
-    for (pipe, stream) in [(stdout.map(|s| Box::new(s) as Box<dyn std::io::Read + Send>), "stdout"),
-                           (stderr.map(|s| Box::new(s) as Box<dyn std::io::Read + Send>), "stderr")] {
+    for (pipe, stream) in [
+        (
+            stdout.map(|s| Box::new(s) as Box<dyn std::io::Read + Send>),
+            "stdout",
+        ),
+        (
+            stderr.map(|s| Box::new(s) as Box<dyn std::io::Read + Send>),
+            "stderr",
+        ),
+    ] {
         if let Some(pipe) = pipe {
             let app = app.clone();
             let name = def.name.clone();
@@ -203,7 +227,11 @@ fn start_internal(
     let stopping = Arc::new(std::sync::atomic::AtomicBool::new(false));
     mgr.running.lock().unwrap().insert(
         id,
-        RunningService { state: state.clone(), child: child.clone(), stopping: stopping.clone() },
+        RunningService {
+            state: state.clone(),
+            child: child.clone(),
+            stopping: stopping.clone(),
+        },
     );
 
     // Waiter thread: detect exit, update status, optional auto-restart.
@@ -249,7 +277,11 @@ fn start_internal(
             };
             emit_status(&app, &new_state);
 
-            if def.auto_restart && !was_stopping && status == SvcStatus::Crashed && !new_state.ephemeral {
+            if def.auto_restart
+                && !was_stopping
+                && status == SvcStatus::Crashed
+                && !new_state.ephemeral
+            {
                 push_log(&app, id, &def.name, "system", "auto-restart in 2s".into());
                 std::thread::sleep(std::time::Duration::from_secs(2));
                 let _ = start_internal(&app, &def, false);
@@ -283,7 +315,11 @@ pub fn svc_start(app: tauri::AppHandle, db: tauri::State<Db>, id: i64) -> Result
 }
 
 #[tauri::command]
-pub fn svc_stop(app: tauri::AppHandle, mgr: tauri::State<Arc<ServiceManager>>, id: i64) -> Result<(), String> {
+pub fn svc_stop(
+    app: tauri::AppHandle,
+    mgr: tauri::State<Arc<ServiceManager>>,
+    id: i64,
+) -> Result<(), String> {
     let (child, name) = {
         let running = mgr.running.lock().unwrap();
         let rs = running.get(&id).ok_or("service not running")?;
@@ -314,7 +350,14 @@ pub fn svc_restart(
     mgr: tauri::State<Arc<ServiceManager>>,
     id: i64,
 ) -> Result<(), String> {
-    if mgr.running.lock().unwrap().get(&id).map(|r| r.state.status == SvcStatus::Running).unwrap_or(false) {
+    if mgr
+        .running
+        .lock()
+        .unwrap()
+        .get(&id)
+        .map(|r| r.state.status == SvcStatus::Running)
+        .unwrap_or(false)
+    {
         svc_stop(app.clone(), mgr.clone(), id)?;
         // Wait briefly for the exit to be observed.
         for _ in 0..20 {
@@ -341,11 +384,20 @@ pub fn svc_restart(
 
 /// Run a one-shot command in the background; output lands in the log viewer.
 #[tauri::command]
-pub fn run_background(app: tauri::AppHandle, name: String, command: String, cwd: String) -> Result<SvcState, String> {
+pub fn run_background(
+    app: tauri::AppHandle,
+    name: String,
+    command: String,
+    cwd: String,
+) -> Result<SvcState, String> {
     let def = ServiceDef {
         id: 0,
         project_id: None,
-        name: if name.trim().is_empty() { command.clone() } else { name },
+        name: if name.trim().is_empty() {
+            command.clone()
+        } else {
+            name
+        },
         command,
         cwd,
         env: "{}".into(),
@@ -385,7 +437,10 @@ pub fn logs_export(mgr: tauri::State<Arc<ServiceManager>>, path: String) -> Resu
         let ts = chrono::DateTime::from_timestamp_millis(e.ts as i64)
             .map(|d| d.format("%Y-%m-%d %H:%M:%S%.3f").to_string())
             .unwrap_or_default();
-        out.push_str(&format!("[{}] [{}] [{}] [{}] {}\n", ts, e.service, e.stream, e.level, e.line));
+        out.push_str(&format!(
+            "[{}] [{}] [{}] [{}] {}\n",
+            ts, e.service, e.stream, e.level, e.line
+        ));
     }
     std::fs::write(&path, out).map_err(|e| e.to_string())?;
     Ok(logs.len())

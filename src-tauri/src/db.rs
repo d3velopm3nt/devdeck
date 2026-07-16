@@ -151,11 +151,12 @@ pub fn open() -> Connection {
 fn migrate(conn: &Connection) {
     // v2 model: add folder rel_path, and collapse the old
     // workspace→space→folder→project tree into workspace→project→folder.
-    let has_rel_path = conn
-        .prepare("SELECT rel_path FROM nodes LIMIT 1")
-        .is_ok();
+    let has_rel_path = conn.prepare("SELECT rel_path FROM nodes LIMIT 1").is_ok();
     if !has_rel_path {
-        let _ = conn.execute("ALTER TABLE nodes ADD COLUMN rel_path TEXT NOT NULL DEFAULT ''", []);
+        let _ = conn.execute(
+            "ALTER TABLE nodes ADD COLUMN rel_path TEXT NOT NULL DEFAULT ''",
+            [],
+        );
     }
     // Per-node accent color (nullable).
     let has_color = conn.prepare("SELECT color FROM nodes LIMIT 1").is_ok();
@@ -166,7 +167,10 @@ fn migrate(conn: &Connection) {
     if !done {
         // Old 'space' nodes become projects (they were the app-grouping
         // level); any old leaf 'project' nodes become folders.
-        let _ = conn.execute("UPDATE nodes SET kind = 'folder' WHERE kind = 'project'", []);
+        let _ = conn.execute(
+            "UPDATE nodes SET kind = 'folder' WHERE kind = 'project'",
+            [],
+        );
         let _ = conn.execute("UPDATE nodes SET kind = 'project' WHERE kind = 'space'", []);
         let _ = setting_set_conn(conn, "model_v2", "1");
     }
@@ -213,7 +217,13 @@ pub fn node_create(
     let conn = db.0.lock().unwrap();
     conn.execute(
         "INSERT INTO nodes (parent_id, kind, name, path, rel_path) VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![parent_id, kind, name, path, rel_path.clone().unwrap_or_default()],
+        params![
+            parent_id,
+            kind,
+            name,
+            path,
+            rel_path.clone().unwrap_or_default()
+        ],
     )
     .map_err(err)?;
     let id = conn.last_insert_rowid();
@@ -232,8 +242,11 @@ pub fn node_create(
 #[tauri::command]
 pub fn node_rename(db: tauri::State<Db>, id: i64, name: String) -> Result<(), String> {
     let conn = db.0.lock().unwrap();
-    conn.execute("UPDATE nodes SET name = ?1 WHERE id = ?2", params![name, id])
-        .map_err(err)?;
+    conn.execute(
+        "UPDATE nodes SET name = ?1 WHERE id = ?2",
+        params![name, id],
+    )
+    .map_err(err)?;
     Ok(())
 }
 
@@ -249,22 +262,38 @@ pub fn node_update(
 ) -> Result<(), String> {
     let conn = db.0.lock().unwrap();
     if let Some(name) = name {
-        conn.execute("UPDATE nodes SET name = ?1 WHERE id = ?2", params![name, id])
-            .map_err(err)?;
+        conn.execute(
+            "UPDATE nodes SET name = ?1 WHERE id = ?2",
+            params![name, id],
+        )
+        .map_err(err)?;
     }
     if let Some(color) = color {
         // Empty string clears the override back to the derived color.
-        let val: Option<String> = if color.trim().is_empty() { None } else { Some(color) };
-        conn.execute("UPDATE nodes SET color = ?1 WHERE id = ?2", params![val, id])
-            .map_err(err)?;
+        let val: Option<String> = if color.trim().is_empty() {
+            None
+        } else {
+            Some(color)
+        };
+        conn.execute(
+            "UPDATE nodes SET color = ?1 WHERE id = ?2",
+            params![val, id],
+        )
+        .map_err(err)?;
     }
     if let Some(path) = path {
-        conn.execute("UPDATE nodes SET path = ?1 WHERE id = ?2", params![path, id])
-            .map_err(err)?;
+        conn.execute(
+            "UPDATE nodes SET path = ?1 WHERE id = ?2",
+            params![path, id],
+        )
+        .map_err(err)?;
     }
     if let Some(rel_path) = rel_path {
-        conn.execute("UPDATE nodes SET rel_path = ?1 WHERE id = ?2", params![rel_path, id])
-            .map_err(err)?;
+        conn.execute(
+            "UPDATE nodes SET rel_path = ?1 WHERE id = ?2",
+            params![rel_path, id],
+        )
+        .map_err(err)?;
     }
     Ok(())
 }
@@ -316,7 +345,14 @@ pub fn command_save(db: tauri::State<Db>, cmd: CommandDef) -> Result<i64, String
         conn.execute(
             "INSERT INTO commands (project_id, group_name, name, command, cwd, shell)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![cmd.project_id, cmd.group_name, cmd.name, cmd.command, cmd.cwd, cmd.shell],
+            params![
+                cmd.project_id,
+                cmd.group_name,
+                cmd.name,
+                cmd.command,
+                cmd.cwd,
+                cmd.shell
+            ],
         )
         .map_err(err)?;
         Ok(conn.last_insert_rowid())
@@ -408,7 +444,10 @@ pub fn resolve_node_dir(conn: &Connection, node_id: i64) -> String {
                 }
             }
             let base = base.trim_end_matches(['\\', '/']);
-            let sub = node.rel_path.trim_start_matches(['\\', '/']).replace('/', "\\");
+            let sub = node
+                .rel_path
+                .trim_start_matches(['\\', '/'])
+                .replace('/', "\\");
             if base.is_empty() {
                 sub
             } else if sub.is_empty() {
@@ -539,7 +578,11 @@ pub fn layouts_list(db: tauri::State<Db>) -> Result<Vec<LayoutDef>, String> {
         .map_err(err)?;
     let rows = stmt
         .query_map([], |row| {
-            Ok(LayoutDef { id: row.get(0)?, name: row.get(1)?, data: row.get(2)? })
+            Ok(LayoutDef {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                data: row.get(2)?,
+            })
         })
         .map_err(err)?
         .collect::<Result<Vec<_>, _>>()

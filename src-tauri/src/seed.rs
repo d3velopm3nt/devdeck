@@ -250,9 +250,8 @@ pub fn seed_example(db: tauri::State<Db>) -> Result<i64, String> {
     }
 
     // A profile that boots the whole demo stack at once.
-    let steps = format!(
-        r#"[{{"type":"service","id":{web_svc}}},{{"type":"service","id":{worker_svc}}}]"#
-    );
+    let steps =
+        format!(r#"[{{"type":"service","id":{web_svc}}},{{"type":"service","id":{worker_svc}}}]"#);
     conn.execute(
         "INSERT INTO profiles (project_id, name, steps) VALUES (?1, ?2, ?3)",
         params![project, "Boot Demo", steps],

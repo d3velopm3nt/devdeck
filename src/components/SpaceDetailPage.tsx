@@ -91,7 +91,8 @@ export function SpaceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
   const toggleSel = (id: number) =>
     setSelected((prev) => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
 

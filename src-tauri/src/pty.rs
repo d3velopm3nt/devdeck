@@ -63,7 +63,12 @@ pub fn pty_create(
 ) -> Result<PtyInfo, String> {
     let pty_system = native_pty_system();
     let pair = pty_system
-        .openpty(PtySize { rows: 30, cols: 100, pixel_width: 0, pixel_height: 0 })
+        .openpty(PtySize {
+            rows: 30,
+            cols: 100,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
         .map_err(|e| e.to_string())?;
 
     let mut cmd = CommandBuilder::new(&shell);
@@ -150,17 +155,29 @@ pub fn pty_create(
 pub fn pty_write(ptys: tauri::State<Arc<PtyManager>>, id: u64, data: String) -> Result<(), String> {
     let mut sessions = ptys.sessions.lock().unwrap();
     let s = sessions.get_mut(&id).ok_or("no such terminal")?;
-    s.writer.write_all(data.as_bytes()).map_err(|e| e.to_string())?;
+    s.writer
+        .write_all(data.as_bytes())
+        .map_err(|e| e.to_string())?;
     s.writer.flush().map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
-pub fn pty_resize(ptys: tauri::State<Arc<PtyManager>>, id: u64, cols: u16, rows: u16) -> Result<(), String> {
+pub fn pty_resize(
+    ptys: tauri::State<Arc<PtyManager>>,
+    id: u64,
+    cols: u16,
+    rows: u16,
+) -> Result<(), String> {
     let sessions = ptys.sessions.lock().unwrap();
     let s = sessions.get(&id).ok_or("no such terminal")?;
     s.master
-        .resize(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 })
+        .resize(PtySize {
+            rows,
+            cols,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
         .map_err(|e| e.to_string())
 }
 

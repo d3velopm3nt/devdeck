@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DevDeck — a local-first development command center for Windows</title>
+<meta name="description" content="Start your whole stack, watch every service, and jump into any terminal — from one window, or a floating widget you summon with a hotkey. Free and open source." />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>❯</text></svg>" />
+
+<meta property="og:title" content="DevDeck — local-first development command center" />
+<meta property="og:description" content="Run your whole stack from one window. Free, open source, no telemetry." />
+<meta property="og:type" content="website" />
+<meta property="og:image" content="assets/dashboard.png" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  :root {
+    color-scheme: dark;
+    --bg: #0b0e14;
+    --bg-soft: #0f131b;
+    --card: #151923;
+    --line: #1e293b;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --dim: #94a3b8;
+    --accent: #7C8CF8;
+    --green: #4ADE80;
+    --amber: #FBBF24;
+    --radius: 14px;
+    --max: 1120px;
+  }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  img { max-width: 100%; display: block; }
+  a { color: var(--accent); }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+  .wrap { max-width: var(--max); margin: 0 auto; padding: 0 24px; }
+
+  /* nav */
+  header {
+    position: sticky; top: 0; z-index: 20;
+    background: rgba(11,14,20,.82);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .nav { display: flex; align-items: center; gap: 20px; height: 60px; }
+  .logo { font-weight: 650; font-size: 17px; letter-spacing: -.01em; }
+  .logo span { color: var(--accent); }
+  .nav .spacer { flex: 1; }
+  .nav a.link { color: var(--dim); text-decoration: none; font-size: 14px; }
+  .nav a.link:hover { color: var(--text); }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 9px 16px; border-radius: 10px;
+    font-size: 14px; font-weight: 550; text-decoration: none;
+    border: 1px solid var(--line); color: var(--text);
+    background: #1a1f2b; transition: .15s;
+  }
+  .btn:hover { border-color: #475569; transform: translateY(-1px); }
+  .btn.primary {
+    background: linear-gradient(135deg, var(--accent), #6366f1);
+    border-color: transparent; color: #fff;
+    box-shadow: 0 6px 20px rgba(124,140,248,.32);
+  }
+  .btn.primary:hover { box-shadow: 0 10px 28px rgba(124,140,248,.45); }
+
+  /* hero */
+  .hero { padding: 84px 0 40px; text-align: center; position: relative; overflow: hidden; }
+  .hero::before {
+    content: ""; position: absolute; inset: -40% 0 auto 0; height: 560px;
+    background: radial-gradient(ellipse at 50% 0, rgba(124,140,248,.18), transparent 62%);
+    pointer-events: none;
+  }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    border: 1px solid var(--line); background: var(--card);
+    padding: 5px 13px; border-radius: 999px;
+    font-size: 12.5px; color: var(--dim); margin-bottom: 22px;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .3 } }
+  h1 {
+    margin: 0 0 18px; font-size: clamp(34px, 5.2vw, 56px);
+    line-height: 1.08; letter-spacing: -.028em; font-weight: 700;
+  }
+  h1 .grad {
+    background: linear-gradient(120deg, var(--accent), #a78bfa 55%, #38bdf8);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .sub { max-width: 660px; margin: 0 auto 30px; font-size: 18px; color: var(--dim); }
+  .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .note { margin-top: 14px; font-size: 12.5px; color: var(--muted); }
+
+  /* shot frame */
+  .shot {
+    margin-top: 52px; border: 1px solid var(--line); border-radius: var(--radius);
+    overflow: hidden; background: var(--card);
+    box-shadow: 0 30px 90px rgba(0,0,0,.6);
+  }
+  .shot .bar {
+    display: flex; align-items: center; gap: 7px;
+    padding: 9px 13px; border-bottom: 1px solid var(--line); background: #11141c;
+  }
+  .shot .bar i { width: 11px; height: 11px; border-radius: 50%; background: #334155; }
+  .shot .bar i:nth-child(1) { background: #ef4444aa; }
+  .shot .bar i:nth-child(2) { background: #f59e0baa; }
+  .shot .bar i:nth-child(3) { background: #22c55eaa; }
+  .shot .bar span { margin-left: 8px; font-size: 11.5px; color: var(--muted); }
+
+  /* sections */
+  section { padding: 80px 0; }
+  .eyebrow { font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--accent); font-weight: 600; }
+  h2 { margin: 10px 0 12px; font-size: clamp(26px, 3.4vw, 34px); letter-spacing: -.02em; line-height: 1.18; }
+  .lead { color: var(--dim); max-width: 620px; margin: 0; }
+  .center { text-align: center; }
+  .center .lead { margin: 0 auto; }
+
+  .grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); margin-top: 46px; }
+  .card {
+    border: 1px solid var(--line); background: var(--card);
+    border-radius: var(--radius); padding: 22px; transition: .18s;
+  }
+  .card:hover { border-color: #475569; transform: translateY(-2px); }
+  .ico {
+    width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center;
+    font-size: 18px; margin-bottom: 14px;
+    background: rgba(124,140,248,.13); border: 1px solid rgba(124,140,248,.28);
+  }
+  .card h3 { margin: 0 0 7px; font-size: 15.5px; }
+  .card p { margin: 0; font-size: 13.5px; color: var(--muted); line-height: 1.62; }
+
+  /* split rows */
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 52px; align-items: center; }
+  .split.rev .txt { order: 2; }
+  ul.ticks { list-style: none; padding: 0; margin: 22px 0 0; }
+  ul.ticks li { padding-left: 26px; position: relative; margin-bottom: 11px; font-size: 14.5px; color: var(--dim); }
+  ul.ticks li::before {
+    content: "✓"; position: absolute; left: 0; top: 0;
+    color: var(--green); font-weight: 700;
+  }
+
+  /* steps */
+  .steps { counter-reset: s; display: grid; gap: 16px; margin-top: 40px; }
+  .step {
+    display: flex; gap: 16px; align-items: flex-start;
+    border: 1px solid var(--line); background: var(--card);
+    border-radius: 12px; padding: 18px 20px;
+  }
+  .step::before {
+    counter-increment: s; content: counter(s);
+    flex: 0 0 28px; height: 28px; border-radius: 8px;
+    display: grid; place-items: center; font-size: 13px; font-weight: 700;
+    background: rgba(124,140,248,.14); color: var(--accent);
+    border: 1px solid rgba(124,140,248,.3);
+  }
+  .step h4 { margin: 3px 0 4px; font-size: 14.5px; }
+  .step p { margin: 0; font-size: 13.5px; color: var(--muted); }
+  .step code { background: var(--bg-soft); border: 1px solid var(--line); padding: 1px 6px; border-radius: 5px; font-size: 12.5px; color: var(--dim); }
+
+  /* support */
+  .support {
+    border: 1px solid var(--line); border-radius: 18px; padding: 46px 32px; text-align: center;
+    background:
+      radial-gradient(ellipse at 50% 0, rgba(251,191,36,.09), transparent 68%),
+      var(--card);
+  }
+  .bmc { background: #FFDD00; color: #0b0e14; border-color: transparent; font-weight: 650; }
+  .bmc:hover { box-shadow: 0 10px 28px rgba(255,221,0,.28); }
+
+  .warn {
+    margin-top: 28px; border: 1px solid rgba(251,191,36,.3);
+    background: rgba(251,191,36,.06); border-radius: 12px;
+    padding: 15px 18px; font-size: 13px; color: var(--dim); text-align: left;
+  }
+  .warn b { color: var(--amber); }
+
+  footer { border-top: 1px solid var(--line); padding: 34px 0; color: var(--muted); font-size: 13px; }
+  .fnav { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+  .fnav .spacer { flex: 1; }
+  footer a { color: var(--dim); text-decoration: none; }
+  footer a:hover { color: var(--text); }
+
+  @media (max-width: 860px) {
+    .split { grid-template-columns: 1fr; gap: 32px; }
+    .split.rev .txt { order: 0; }
+    .nav .hide { display: none; }
+    section { padding: 58px 0; }
+    .hero { padding: 56px 0 24px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <div class="logo"><span>❯_</span> DevDeck</div>
+    <div class="spacer"></div>
+    <a class="link hide" href="#features">Features</a>
+    <a class="link hide" href="#widget">Widget</a>
+    <a class="link hide" href="#start">Get started</a>
+    <a class="link hide" href="#support">Support</a>
+    <a class="btn" href="https://github.com/__OWNER__/__REPO__">GitHub</a>
+  </div>
+</header>
+
+<main>
+  <!-- HERO -->
+  <div class="hero">
+    <div class="wrap">
+      <div class="pill"><span class="dot"></span> Free &amp; open source · MIT</div>
+      <h1>Your whole stack.<br /><span class="grad">One window.</span></h1>
+      <p class="sub">
+        DevDeck is a local-first development command center for Windows. Start every service,
+        watch what's running, and jump into any terminal — without hunting through six console
+        windows.
+      </p>
+      <div class="cta">
+        <a class="btn primary" href="https://github.com/__OWNER__/__REPO__/releases">↓ Download for Windows</a>
+        <a class="btn" href="https://github.com/__OWNER__/__REPO__">★ Star on GitHub</a>
+      </div>
+      <p class="note">No account. No server. No telemetry. Your data stays in a local SQLite file.</p>
+
+      <div class="shot">
+        <div class="bar"><i></i><i></i><i></i><span>DevDeck — Dashboard</span></div>
+        <img src="assets/dashboard.png" alt="DevDeck dashboard showing the example workspace with two services running, live active sessions and a warnings feed" />
+      </div>
+    </div>
+  </div>
+
+  <!-- FEATURES -->
+  <section id="features">
+    <div class="wrap center">
+      <div class="eyebrow">What it does</div>
+      <h2>Built for the six-terminal morning</h2>
+      <p class="lead">
+        If you work in a monorepo or juggle several apps, starting the day means opening a pile of
+        terminals and remembering a pile of commands. DevDeck turns that into one click.
+      </p>
+
+      <div class="grid">
+        <div class="card">
+          <div class="ico">▣</div>
+          <h3>Spaces</h3>
+          <p>Organise work as Workspace → Project → Folder. Every command, service and terminal
+             runs in the right directory automatically — no more <code>cd</code> roulette.</p>
+        </div>
+        <div class="card">
+          <div class="ico">⚡</div>
+          <h3>Services</h3>
+          <p>Define dev servers and workers once, then start, stop and restart them with live
+             status, CPU, memory, uptime and ports.</p>
+        </div>
+        <div class="card">
+          <div class="ico">🌐</div>
+          <h3>Open in browser</h3>
+          <p>Give a service a port and DevDeck adds one-click open. Click the port anywhere it
+             appears and your app opens on localhost.</p>
+        </div>
+        <div class="card">
+          <div class="ico">❯_</div>
+          <h3>Real terminals</h3>
+          <p>Genuine PTY sessions (ConPTY) with xterm.js, docked as tabs. They live in the backend,
+             so they survive UI reloads.</p>
+        </div>
+        <div class="card">
+          <div class="ico">▤</div>
+          <h3>Logs &amp; errors</h3>
+          <p>Every service's stdout and stderr in one place, with severity detection, filtering,
+             search and export — plus a dashboard feed of what broke.</p>
+        </div>
+        <div class="card">
+          <div class="ico">▦</div>
+          <h3>Dockable layout</h3>
+          <p>Drag, split, tab, float and resize any panel. Layouts autosave and restore, and launch
+             profiles boot a whole stack in one action.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SPACE PAGE -->
+  <section>
+    <div class="wrap split">
+      <div class="txt">
+        <div class="eyebrow">Spaces</div>
+        <h2>Every project gets its own home</h2>
+        <p class="lead">
+          Click a space and you get a page for it: what's running right now, its services,
+          commands and profiles — and one button to boot the lot.
+        </p>
+        <ul class="ticks">
+          <li>Start all, stop all, or tick just the services you want</li>
+          <li>Live uptime, memory and ports per service</li>
+          <li>Pick an accent colour so spaces stay recognisable</li>
+          <li>Open a terminal in the project root from anywhere</li>
+        </ul>
+      </div>
+      <div class="shot" style="margin-top:0">
+        <div class="bar"><i></i><i></i><i></i><span>Space — Demo App</span></div>
+        <img src="assets/space-running.png" alt="DevDeck space page for Demo App with both services running and live logs streaming" />
+      </div>
+    </div>
+  </section>
+
+  <!-- WIDGET -->
+  <section id="widget">
+    <div class="wrap split rev">
+      <div class="txt">
+        <div class="eyebrow">Command widget</div>
+        <h2>Summon it from anywhere</h2>
+        <p class="lead">
+          A floating, always-on-top widget on a global hotkey. Start a service, restart a worker,
+          or open a terminal without leaving your editor — then collapse it to a single icon.
+        </p>
+        <ul class="ticks">
+          <li><code class="mono">Ctrl+Shift+Space</code> from any app</li>
+          <li>Recent, active, browse and fuzzy search</li>
+          <li>Run things without opening the main window</li>
+          <li>Collapses to a small floating icon</li>
+        </ul>
+      </div>
+      <div class="shot" style="margin-top:0">
+        <div class="bar"><i></i><i></i><i></i><span>Command Widget</span></div>
+        <img src="assets/widget-over-app.png" alt="The DevDeck command widget floating on top of the main window, showing two running services" />
+      </div>
+    </div>
+  </section>
+
+  <!-- GET STARTED -->
+  <section id="start">
+    <div class="wrap center">
+      <div class="eyebrow">Get started</div>
+      <h2>Running in about a minute</h2>
+      <p class="lead">Install it, load the example workspace, and see it work before wiring up your own repos.</p>
+
+      <div class="steps" style="text-align:left">
+        <div class="step">
+          <div>
+            <h4>Install</h4>
+            <p>Download the installer from GitHub Releases and run it. Single app, no dependencies.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div>
+            <h4>Load the example workspace</h4>
+            <p>One click on the welcome screen builds a small demo project with a real web server and
+               a background worker — so you can press Start and watch it actually work.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div>
+            <h4>Add your project</h4>
+            <p>Point DevDeck at a repo root, then add your services — <code>pnpm dev:web</code>,
+               <code>cargo run</code>, whatever you already type — and give them a port.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div>
+            <h4>Start your day with one click</h4>
+            <p>Hit <code>Start all</code>, or summon the widget with <code>Ctrl+Shift+Space</code>.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="warn">
+        <b>Heads up:</b> the installer isn't code-signed yet, so Windows SmartScreen may show
+        “Windows protected your PC”. Click <b>More info → Run anyway</b>, or build from source —
+        it's all on GitHub. Signing certificates are expensive for a free project; sponsorship helps.
+      </div>
+    </div>
+  </section>
+
+  <!-- SUPPORT -->
+  <section id="support">
+    <div class="wrap">
+      <div class="support">
+        <div class="eyebrow">Support the project</div>
+        <h2 style="margin-top:8px">Free forever, built in spare time</h2>
+        <p class="lead" style="margin:0 auto 26px">
+          DevDeck is MIT-licensed and always will be. If it saves you a bit of friction each
+          morning, you can chip in — appreciated, never expected.
+        </p>
+        <div class="cta">
+          <a class="btn bmc" href="https://www.buymeacoffee.com/__BMC__">☕ Buy me a coffee</a>
+          <a class="btn" href="https://github.com/__OWNER__/__REPO__">★ Star the repo</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap fnav">
+    <div class="logo" style="font-size:15px"><span>❯_</span> DevDeck</div>
+    <div class="spacer"></div>
+    <a href="https://github.com/__OWNER__/__REPO__">GitHub</a>
+    <a href="https://github.com/__OWNER__/__REPO__/releases">Releases</a>
+    <a href="https://github.com/__OWNER__/__REPO__/issues">Issues</a>
+    <a href="https://github.com/__OWNER__/__REPO__/blob/main/LICENSE">MIT</a>
+  </div>
+  <div class="wrap" style="margin-top:14px">Windows · Rust + Tauri 2 + React · local-first, no telemetry</div>
+</footer>
+
+</body>
+</html>

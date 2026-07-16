@@ -11,6 +11,7 @@ import { useApp } from '../store'
 import { openEditor, openNodeSetup } from '../lib/dock'
 import { openTerminal } from '../lib/runner'
 import { resolveDir } from '../lib/tree'
+import { nodeColor } from '../lib/spaces'
 import { PopMenu, type MenuItem } from './PopMenu'
 
 const KIND_ICON: Record<NodeKind, string> = {
@@ -153,9 +154,9 @@ export function Explorer() {
         style={{ paddingLeft: `${depth * 14 + 22}px` }}
       >
         <span
-          className={`h-1.5 w-1.5 shrink-0 rounded-full ${running ? 'animate-pulse bg-emerald-400' : crashed ? 'bg-red-400' : 'bg-slate-600'}`}
+          className={`h-2 w-2 shrink-0 rounded-full ${running ? 'animate-pulse bg-emerald-400' : crashed ? 'bg-red-400' : 'bg-slate-600'}`}
         />
-        <span className="text-[10px] text-amber-400/80">⚡</span>
+        <span className="w-5 shrink-0 text-center text-[14px] leading-none text-amber-400/80">⚡</span>
         <button
           className="min-w-0 flex-1 cursor-pointer truncate text-left hover:text-slate-100"
           title="Click to edit service"
@@ -216,7 +217,7 @@ export function Explorer() {
           title={sub || undefined}
         >
           <span
-            className={`w-3 text-[10px] text-slate-500 ${hasKids ? 'cursor-pointer' : 'opacity-0'}`}
+            className={`w-3.5 text-[12px] text-slate-500 ${hasKids ? 'cursor-pointer' : 'opacity-0'}`}
             onClick={(e) => {
               e.stopPropagation()
               toggle(node.id)
@@ -224,7 +225,12 @@ export function Explorer() {
           >
             {isOpen ? '▾' : '▸'}
           </span>
-          <span className={`${KIND_COLOR[node.kind]} text-[11px]`}>{KIND_ICON[node.kind]}</span>
+          <span
+            className={`w-5 shrink-0 text-center text-[17px] leading-none ${node.kind === 'project' ? '' : KIND_COLOR[node.kind]}`}
+            style={node.kind === 'project' ? { color: nodeColor(node) } : undefined}
+          >
+            {KIND_ICON[node.kind]}
+          </span>
           {renaming ? (
             <input
               autoFocus

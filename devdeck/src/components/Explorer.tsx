@@ -217,7 +217,7 @@ export function Explorer() {
           title={sub || undefined}
         >
           <span
-            className={`w-3.5 text-[12px] text-slate-500 ${hasKids ? 'cursor-pointer' : 'opacity-0'}`}
+            className={`w-5 shrink-0 text-center text-[16px] leading-none text-slate-400 hover:text-slate-200 ${hasKids ? 'cursor-pointer' : 'opacity-0'}`}
             onClick={(e) => {
               e.stopPropagation()
               toggle(node.id)

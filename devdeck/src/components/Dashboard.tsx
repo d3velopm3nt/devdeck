@@ -6,8 +6,10 @@
 import { useMemo } from 'react'
 import { useApp } from '../store'
 import * as ipc from '../lib/ipc'
-import { openSingleton, openTerminalPanel } from '../lib/dock'
-import type { LogEntry, ProcStat } from '../lib/types'
+import { openSingleton, openTerminalPanel, openSpace } from '../lib/dock'
+import { subtreeIds } from '../lib/tree'
+import { spaceColor, avatarLabel, projectUsage, rankSpaces } from '../lib/spaces'
+import type { LogEntry, ProcStat, TreeNode } from '../lib/types'
 
 function fmtUptime(secs: number): string {
   const h = Math.floor(secs / 3600)
@@ -56,8 +58,78 @@ const LEVEL_STYLE: Record<string, string> = {
   debug: 'text-slate-500',
 }
 
+function hexA(hex: string, a: number): string {
+  const n = parseInt(hex.slice(1), 16)
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`
+}
+
+// One space (project) card: icon avatar, name, live counts, run controls.
+function SpaceCard({ project, topUsed }: { project: TreeNode; topUsed: boolean }) {
+  const { nodes, services, commands, svcStates } = useApp()
+  const scope = useMemo(() => new Set(subtreeIds(nodes, project.id)), [nodes, project.id])
+  const svc = services.filter((s) => s.project_id != null && scope.has(s.project_id))
+  const running = svc.filter((s) => svcStates[s.id]?.status === 'running').length
+  const cmds = commands.filter((c) => c.project_id != null && scope.has(c.project_id)).length
+  const color = spaceColor(project.id)
+
+  return (
+    <button
+      className="group relative flex w-full items-center gap-3 overflow-hidden rounded-xl border border-slate-800 bg-[#151923] px-3 py-2.5 text-left transition hover:-translate-y-0.5 hover:border-slate-600 hover:shadow-lg"
+      style={{ boxShadow: 'none' }}
+      onClick={() => openSpace(project.id, project.name)}
+      title={`Open ${project.name}`}
+    >
+      <span className="absolute inset-y-0 left-0 w-1" style={{ background: color }} />
+      <span
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[14px] font-bold text-white"
+        style={{ background: `linear-gradient(135deg, ${color}, ${hexA(color, 0.6)})` }}
+      >
+        {avatarLabel(project.name)}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span className="truncate text-[13px] font-medium text-slate-100">{project.name}</span>
+          {topUsed && (
+            <span className="shrink-0 rounded-full px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide" style={{ background: hexA(color, 0.18), color }}>
+              ★ most used
+            </span>
+          )}
+        </div>
+        <div className="mt-0.5 flex items-center gap-2 text-[10.5px] text-slate-500">
+          {running > 0 && (
+            <span className="flex items-center gap-1 text-emerald-400">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+              {running} live
+            </span>
+          )}
+          <span>{svc.length} svc</span>
+          <span>{cmds} cmd</span>
+        </div>
+      </div>
+      <span className="text-slate-600 transition group-hover:translate-x-0.5 group-hover:text-slate-300">→</span>
+    </button>
+  )
+}
+
 export function Dashboard() {
-  const { nodes, services, svcStates, stats, terminals, logs } = useApp()
+  const { nodes, services, commands, svcStates, stats, terminals, logs, recents } = useApp()
+
+  const usage = useMemo(
+    () => projectUsage(nodes, commands, services, recents),
+    [nodes, commands, services, recents],
+  )
+  const workspaces = useMemo(() => nodes.filter((n) => n.kind === 'workspace'), [nodes])
+  const topSpaceId = useMemo(() => {
+    let best: number | null = null
+    let bestScore = 0
+    for (const [id, u] of Object.entries(usage)) {
+      if (u.score > bestScore) {
+        bestScore = u.score
+        best = Number(id)
+      }
+    }
+    return best
+  }, [usage])
 
   const summary = useMemo(() => {
     let running = 0
@@ -158,6 +230,40 @@ export function Dashboard() {
       </div>
 
       <div className="flex-1 space-y-4 overflow-auto p-3">
+        {/* Workspaces & most-used spaces */}
+        {workspaces.length > 0 && (
+          <div className="space-y-3">
+            {workspaces.map((ws) => {
+              const projects = rankSpaces(
+                nodes.filter((n) => n.kind === 'project' && n.parent_id === ws.id),
+                usage,
+              )
+              return (
+                <section key={ws.id}>
+                  <div className="mb-2 flex items-center gap-2">
+                    <span className="text-[13px] text-indigo-400">⬢</span>
+                    <span className="text-[13px] font-semibold text-slate-200">{ws.name}</span>
+                    <span className="text-[11px] text-slate-500">
+                      {projects.length} space{projects.length === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                  {projects.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-slate-800 px-3 py-4 text-[12px] text-slate-500">
+                      No spaces yet — add a Project to this workspace in the Explorer.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+                      {projects.map((p) => (
+                        <SpaceCard key={p.id} project={p} topUsed={p.id === topSpaceId} />
+                      ))}
+                    </div>
+                  )}
+                </section>
+              )
+            })}
+          </div>
+        )}
+
         {/* Summary cards */}
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard

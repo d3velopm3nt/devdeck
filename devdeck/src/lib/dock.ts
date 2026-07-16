@@ -97,6 +97,20 @@ export function openEditor(kind: EditorKind, id: number, title: string, projectI
   })
 }
 
+/// Open (or focus) the personalized detail page for a space (project) as
+/// a main-area tab.
+export function openSpace(projectId: number, title: string) {
+  if (!api) return
+  const id = `space-${projectId}`
+  const existing = api.getPanel(id)
+  if (existing) {
+    existing.api.setActive()
+    return
+  }
+  addToMain({ id, component: 'space-detail', title, params: { id: projectId } })
+  api.getPanel(id)?.api.setActive()
+}
+
 /// Open (or focus) the setup page for a project or folder as a main tab.
 export function openNodeSetup(nodeId: number, title: string) {
   if (!api) return

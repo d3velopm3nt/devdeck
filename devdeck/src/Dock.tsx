@@ -21,6 +21,7 @@ import { CommandEditorPage } from './components/editors/CommandEditorPage'
 import { ServiceEditorPage } from './components/editors/ServiceEditorPage'
 import { ProfileEditorPage } from './components/editors/ProfileEditorPage'
 import { NodeSetupPage } from './components/editors/NodeSetupPage'
+import { SpaceDetailPage } from './components/SpaceDetailPage'
 import { TerminalView } from './components/TerminalView'
 import { TerminalTab } from './components/TerminalTab'
 import { setDockApi, openInMain } from './lib/dock'
@@ -87,6 +88,7 @@ const components = {
     <ProfileEditorPage {...props} />
   ),
   'node-setup': (props: IDockviewPanelProps<{ id: number }>) => <NodeSetupPage {...props} />,
+  'space-detail': (props: IDockviewPanelProps<{ id: number }>) => <SpaceDetailPage {...props} />,
   welcome: () => <Welcome />,
   terminal: (props: IDockviewPanelProps<{ ptyId: number }>) => (
     <TerminalView ptyId={props.params.ptyId} />

@@ -3,6 +3,8 @@ name = "devdeck"
 version = "0.1.0"
 description = "DevDeck — local development command center"
 authors = ["Develtech"]
+license = "MIT"
+repository = "https://github.com/__OWNER__/__REPO__"
 edition = "2021"
 rust-version = "1.77.2"
 

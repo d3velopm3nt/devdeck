@@ -74,6 +74,11 @@ export const shellsDetect = () => invoke<ShellDef[]>('shells_detect')
 export const revealInExplorer = (path: string) => invoke<void>('reveal_in_explorer', { path })
 export const openUrl = (url: string) => invoke<void>('open_url', { url })
 
+// ---- example workspace ----
+/** Writes the demo project to disk and seeds it; returns the new project id. */
+export const seedExample = () => invoke<number>('seed_example')
+export const exampleExists = () => invoke<boolean>('example_exists')
+
 // ---- widget window ----
 export const widgetToggle = () => invoke<void>('widget_toggle')
 export const widgetShow = () => invoke<void>('widget_show')

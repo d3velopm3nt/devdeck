@@ -1,92 +1,116 @@
-# Terminals — always-on-top terminal launcher widget
+<div align="center">
 
-A tiny Rust desktop widget for Windows: summon it from anywhere with a global
-hotkey, launch any of your terminals, and keep an eye on the sessions it
-started — with live running state, uptime, and one-click stop.
+# ❯_ DevDeck
 
-![stack](https://img.shields.io/badge/rust-eframe%2Fegui-informational)
+**A local-first development command center for Windows.**
 
-## Run it
+Start your whole stack, watch every service, and jump into any terminal —
+from one window, or a floating widget you summon with a hotkey.
 
+[![CI](https://github.com/__OWNER__/__REPO__/actions/workflows/ci.yml/badge.svg)](https://github.com/__OWNER__/__REPO__/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%202-24C8DB)](https://tauri.app)
+[![Buy Me A Coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-FFDD00?logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/__BMC__)
+
+</div>
+
+---
+
+## What it is
+
+If you work in a monorepo or juggle several apps at once, starting your day
+means opening six terminals and remembering six commands. DevDeck turns that
+into one click.
+
+It's a small desktop app: a Rust/Tauri backend with a React frontend, and
+everything lives in a local SQLite file. **No accounts, no server, no
+telemetry** — it never phones home.
+
+## Features
+
+- **Spaces** — organize work as `Workspace → Project → Folder`. A project is an
+  app/repo root with a base path; folders are locations inside it. Commands,
+  services, and terminals all run in the right directory automatically.
+- **Services** — define long-running processes (dev servers, workers) once, then
+  start / stop / restart them with live status, CPU, memory, uptime and ports.
+  Give one a port and DevDeck adds one-click **open in browser**.
+- **Interactive terminals** — real PTYs (ConPTY) rendered with xterm.js, docked
+  as tabs. Sessions live in the backend, so they survive UI reloads.
+- **Dashboard** — your workspaces and most-used spaces as a launcher, plus
+  summary counters, active sessions, and a live errors/warnings feed.
+- **Command Widget** — an always-on-top floating window (global hotkey) that
+  collapses to a small icon. Run anything without leaving your editor.
+- **Dockable layout** — drag, split, tab, float and resize any panel; layouts
+  autosave and restore.
+- **Launch profiles** — boot a whole stack (services + terminals + layout) in
+  one action.
+
+## Install
+
+Grab the latest `DevDeck_x.y.z_x64-setup.exe` from
+[Releases](https://github.com/__OWNER__/__REPO__/releases), or build it yourself.
+
+## Build from source
+
+Requires [Rust](https://rustup.rs) (1.77.2+) and Node.js 20+.
+
+```bash
+git clone https://github.com/__OWNER__/__REPO__.git
+cd __REPO__
+npm install
+npx tauri dev      # run in development
+npx tauri build    # release exe + installer in src-tauri/target/release
 ```
-cargo build --release
-.\target\release\term-widget.exe
-```
 
-That's it. No installer, no console window, single ~5 MB exe. On first run it
-detects the terminals installed on your machine (PowerShell 7, Windows
-PowerShell, CMD, Windows Terminal, Git Bash, WSL) and writes a settings file.
-
-Single-instance: running the exe while the app is already open (even hidden)
-just summons the existing window — it never opens a duplicate.
-
-## Using it
+## Usage
 
 | Action | How |
 |---|---|
-| Show / hide from anywhere | `Ctrl+Shift+Space` (configurable) |
-| Launch a terminal | Click it, or type to filter → `↑`/`↓` → `Enter` |
-| Quick-run any command | Type it in the search box (e.g. `cmd /k npm run dev`) → `Enter` |
-| Save a quick-run as a template | `＋` button on its session row |
-| Hide | `Esc` or the `✕` button |
-| Minimize | `–` button (hotkey restores) |
-| Move the window | Drag the title bar |
-| Resize | Drag the bottom-right grip |
-| Stop / dismiss a session | The button on each session row |
-| Settings | `⚙` button |
-| Quit | Settings → Quit Terminals |
+| Summon the floating widget | `Ctrl+Shift+Space` (configurable in Settings) |
+| Add a project | Explorer → right-click a workspace → **New project**, pick its repo root |
+| Add a service | Right-click a project → **New service** (e.g. `pnpm dev:web`, port `3000`) |
+| Start everything | Dashboard → click a space → **▶ Start all** |
+| Open a running app | Click its port, or the 🌐 button, anywhere it appears |
+| Open a terminal there | Right-click any project/folder → **Open terminal here** |
 
-The window floats on top of everything (toggleable) and hides instead of
-closing, so the hotkey always brings it back.
-
-## Settings
-
-Everything is configurable in the in-app Settings screen and saves
-automatically to `%APPDATA%\term-widget\settings.json`:
-
-```jsonc
-{
-  "hotkey": "ctrl+shift+Space",   // modifiers + W3C key code (Space, F9, KeyT…)
-  "always_on_top": true,
-  "start_hidden": false,          // start in the background, summon via hotkey
-  "hide_on_launch": false,        // quake-style: hide right after launching (opt-in)
-  "terminals": [
-    {
-      "name": "PowerShell 7",
-      "command": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
-      "args": ["-NoLogo"],
-      "working_dir": "~",         // ~ = home, empty = inherit
-      "new_console": true,        // console apps need their own console window
-      "tint": [90, 169, 255]      // list icon color
-    }
-  ]
-}
-```
-
-### Adding your own terminals
-
-In Settings → Terminals, **＋ Add terminal** opens a native file picker —
-choose the program (`.exe`/`.bat`/`.cmd`), and the name fills in
-automatically. Use the `…` button next to **Folder** to pick the starting
-directory with a native folder dialog, and type any **Args** (space
-separated). The `…` next to **Command** re-browses an existing entry.
-Everything saves automatically to the local settings file.
-
-Add any tool as a "terminal" — ssh sessions, `wt.exe -p <profile>`, dev
-shells, etc. "Re-detect installed" in Settings merges in anything new it
-finds without touching your entries.
+Your data lives in `%APPDATA%\devdeck\devdeck.sqlite`. Back it up, or delete it
+to start fresh.
 
 ## Architecture
 
-| Module | Responsibility |
-|---|---|
-| `src/config.rs` | Settings schema (designed first), persistence, terminal auto-detection |
-| `src/sessions.rs` | Spawning terminals (`CREATE_NEW_CONSOLE` for console apps), live state polling, kill |
-| `src/hotkey.rs` | Global hotkey registration + OS-level show/hide (works while the window is hidden and egui is asleep) |
-| `src/theme.rs` | Dark theme: indigo accent, rounded surfaces, muted hierarchy |
-| `src/app.rs` | Frameless always-on-top UI: launcher, sessions, settings |
+```
+src/              React 19 + TypeScript (Vite, Tailwind 4, Zustand, dockview)
+  components/     panels & pages
+  widget/         the always-on-top Command Widget window
+  lib/            typed IPC, dock controller, tree/space helpers
+src-tauri/src/    Rust backend
+  db.rs           SQLite (rusqlite) — nodes, commands, services, profiles
+  pty.rs          interactive terminals (portable-pty / ConPTY)
+  services.rs     service lifecycle & log capture
+  monitor.rs      CPU / memory / port sampling (sysinfo + netstat)
+```
 
-One subtlety worth knowing: while the window is hidden, eframe delivers no
-frames, so the hotkey listener thread toggles visibility directly via
-`ShowWindow` instead of queueing viewport commands — that's what makes the
-summon reliable.
+The frontend never spawns a process or touches the filesystem directly —
+everything goes through typed Tauri commands. The `nodes` table is a
+self-referencing tree, so new node kinds need no schema migration.
+
+## Platform support
+
+Windows only, for now. The Windows-specific bits are isolated (ConPTY,
+`cmd.exe`, `taskkill`, `explorer.exe`), and a macOS/Linux port is a very welcome
+contribution.
+
+## Contributing
+
+Issues and PRs are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for setup,
+project layout, and the data model.
+
+## Support
+
+DevDeck is free and MIT-licensed. If it saves you time, you can
+[buy me a coffee](https://www.buymeacoffee.com/__BMC__) ☕ — appreciated, never
+expected.
+
+## License
+
+[MIT](LICENSE) © Develtech

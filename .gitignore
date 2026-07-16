@@ -1,4 +1,4 @@
-# Rust build output (term-widget and devdeck/src-tauri)
+# Rust / Tauri build output
 /target/
 **/target/
 

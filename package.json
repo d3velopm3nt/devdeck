@@ -1,8 +1,29 @@
 {
   "name": "devdeck",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
+  "description": "A local-first development command center for Windows: run your whole stack, watch every service, and jump into any terminal.",
+  "license": "MIT",
+  "author": "Develtech",
+  "homepage": "https://github.com/__OWNER__/__REPO__",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/__OWNER__/__REPO__.git"
+  },
+  "bugs": {
+    "url": "https://github.com/__OWNER__/__REPO__/issues"
+  },
+  "keywords": [
+    "tauri",
+    "rust",
+    "react",
+    "developer-tools",
+    "terminal",
+    "monorepo",
+    "process-manager",
+    "local-first"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

@@ -5,11 +5,13 @@
 import { useState } from 'react'
 import * as ipc from '../lib/ipc'
 import { useApp } from '../store'
+import { loadExampleWorkspace } from '../lib/example'
 
 export function ConfigPage() {
   const { hotkey, setHotkey, shells } = useApp()
   const [draft, setDraft] = useState(hotkey)
   const [status, setStatus] = useState<string | null>(null)
+  const [seeding, setSeeding] = useState(false)
 
   const apply = async () => {
     try {
@@ -59,6 +61,29 @@ export function ConfigPage() {
               </div>
             ))}
           </div>
+        </section>
+
+        <section>
+          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            Example workspace
+          </h3>
+          <p className="mb-2 text-[11px] leading-5 text-slate-500">
+            A small demo project with a real web server and a background worker you can start,
+            watch, and open in your browser. It's written to{' '}
+            <code>%USERPROFILE%\DevDeck Demo</code> — delete that folder and the workspace any time.
+          </p>
+          <button
+            className="btn-primary text-[12px]"
+            disabled={seeding}
+            onClick={() => {
+              setSeeding(true)
+              void loadExampleWorkspace()
+                .catch((e) => alert(String(e)))
+                .finally(() => setSeeding(false))
+            }}
+          >
+            {seeding ? 'Setting up…' : '✨ Load example workspace'}
+          </button>
         </section>
 
         <section>

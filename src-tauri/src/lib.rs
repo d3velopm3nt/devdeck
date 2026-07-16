@@ -15,6 +15,7 @@ mod db;
 mod legacy;
 mod monitor;
 mod pty;
+mod seed;
 mod services;
 
 use std::sync::{Arc, Mutex};
@@ -177,6 +178,8 @@ pub fn run() {
             focus_main,
             reveal_in_explorer,
             open_url,
+            seed::seed_example,
+            seed::example_exists,
             legacy::shells_detect,
             db::tree_list,
             db::node_create,

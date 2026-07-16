@@ -24,11 +24,13 @@ import { NodeSetupPage } from './components/editors/NodeSetupPage'
 import { SpaceDetailPage } from './components/SpaceDetailPage'
 import { TerminalView } from './components/TerminalView'
 import { TerminalTab } from './components/TerminalTab'
+import { useEffect, useState } from 'react'
 import { setDockApi, openInMain } from './lib/dock'
 import * as ipc from './lib/ipc'
 import { useApp } from './store'
 import { openTerminal } from './lib/runner'
 import { resolveDir } from './lib/tree'
+import { loadExampleWorkspace } from './lib/example'
 
 const AUTOSAVE = '__autosave__'
 
@@ -36,8 +38,26 @@ function Welcome() {
   const { shells, nodes, selectedNode } = useApp()
   const node = selectedNode()
   const dir = resolveDir(nodes, node)
+  const [hasExample, setHasExample] = useState(true)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    void ipc.exampleExists().then(setHasExample).catch(() => setHasExample(true))
+  }, [nodes])
+
+  const loadExample = async () => {
+    setLoading(true)
+    try {
+      await loadExampleWorkspace()
+    } catch (e) {
+      alert(String(e))
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
-    <div className="flex h-full items-center justify-center bg-[#0d1017]">
+    <div className="flex h-full items-center justify-center bg-[#0d1017] p-6">
       <div className="max-w-md space-y-4 text-center">
         <div className="text-2xl font-semibold text-slate-200">
           <span className="text-indigo-400">❯_</span> DevDeck
@@ -47,6 +67,24 @@ function Welcome() {
           the Explorer, then open terminals, start services, and watch logs —
           all in one place.
         </p>
+
+        {!hasExample && (
+          <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/[0.07] p-4">
+            <div className="text-[13px] font-medium text-slate-200">New here?</div>
+            <p className="mt-1 text-[12px] leading-5 text-slate-500">
+              Load an example workspace — a small demo project with a real web
+              server and a background worker you can actually start, watch, and
+              open in your browser.
+            </p>
+            <button className="btn-primary mt-3 text-[12px]" disabled={loading} onClick={() => void loadExample()}>
+              {loading ? 'Setting up…' : '✨ Load example workspace'}
+            </button>
+            <p className="mt-2 text-[10.5px] text-slate-600">
+              creates a small folder in your user directory · removable any time
+            </p>
+          </div>
+        )}
+
         <div className="flex flex-wrap justify-center gap-2">
           {shells.map((s) => (
             <button

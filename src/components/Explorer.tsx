@@ -12,6 +12,7 @@ import { openEditor, openNodeSetup } from '../lib/dock'
 import { openTerminal } from '../lib/runner'
 import { resolveDir } from '../lib/tree'
 import { nodeColor } from '../lib/spaces'
+import { loadExampleWorkspace } from '../lib/example'
 import { PopMenu, type MenuItem } from './PopMenu'
 
 const KIND_ICON: Record<NodeKind, string> = {
@@ -293,9 +294,18 @@ export function Explorer() {
       >
         {roots.length === 0 && (
           <div className="p-3 text-[12px] leading-5 text-slate-500">
-            No workspaces yet. Right-click here or use “+ Workspace”. Then add a Project (an app /
-            repo root with a base path), and Folders inside it (each a subpath under that base
-            path). Commands, services, and terminals run in the selected project or folder.
+            <p>
+              No workspaces yet. Right-click here or use “+ Workspace”. Then add a Project (an app /
+              repo root with a base path), and Folders inside it (each a subpath under that base
+              path). Commands, services, and terminals run in the selected project or folder.
+            </p>
+            <button
+              className="btn-primary mt-3 w-full text-[12px]"
+              title="Create a small demo project you can actually run"
+              onClick={() => void loadExampleWorkspace().catch((e) => alert(String(e)))}
+            >
+              ✨ Load example workspace
+            </button>
           </div>
         )}
         {roots.map((n) => renderNode(n, 0))}

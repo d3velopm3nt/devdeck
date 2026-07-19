@@ -19,6 +19,8 @@ mod seed;
 mod services;
 
 use std::sync::{Arc, Mutex};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::Manager;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
@@ -167,7 +169,60 @@ pub fn run() {
             let spec = hotkey.replace(' ', "");
             let _ = hotkey_apply(handle, spec);
 
+            // System tray. Closing the window hides DevDeck to the tray (so
+            // managed services keep running under supervision); the app only
+            // really exits via "Quit DevDeck" here, which first stops every
+            // running service so none are left orphaned.
+            let open_i = MenuItem::with_id(app, "tray_open", "Open DevDeck", true, None::<&str>)?;
+            let widget_i =
+                MenuItem::with_id(app, "tray_widget", "Show / hide widget", true, None::<&str>)?;
+            let sep = PredefinedMenuItem::separator(app)?;
+            let quit_i = MenuItem::with_id(app, "tray_quit", "Quit DevDeck", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&open_i, &widget_i, &sep, &quit_i])?;
+            let icon = app
+                .default_window_icon()
+                .cloned()
+                .ok_or_else(|| "no default window icon".to_string())?;
+            TrayIconBuilder::with_id("devdeck-tray")
+                .icon(icon)
+                .tooltip("DevDeck")
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "tray_open" => focus_main(app.clone()),
+                    "tray_widget" => toggle_widget(app),
+                    "tray_quit" => {
+                        if let Some(mgr) = app.try_state::<Arc<services::ServiceManager>>() {
+                            services::stop_all_running(&mgr);
+                        }
+                        app.exit(0);
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    // Left-click restores the main window.
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        focus_main(tray.app_handle().clone());
+                    }
+                })
+                .build(app)?;
+
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            // Intercept the main window's close: hide to tray instead of
+            // exiting, so services and terminals keep running.
+            if window.label() == "main" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             hotkey_apply,

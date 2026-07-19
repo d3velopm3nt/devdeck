@@ -343,6 +343,33 @@ pub fn svc_stop(
     Ok(())
 }
 
+/// Kill every running service's process tree. Best-effort, used on app
+/// quit so dev servers aren't left orphaned holding their ports.
+pub fn stop_all_running(mgr: &ServiceManager) {
+    let pids: Vec<u32> = {
+        let running = mgr.running.lock().unwrap();
+        running
+            .values()
+            .map(|rs| {
+                rs.stopping.store(true, Ordering::SeqCst);
+                rs.child.lock().unwrap().id()
+            })
+            .collect()
+    };
+    for pid in pids {
+        let mut kill = Command::new("taskkill");
+        kill.args(["/PID", &pid.to_string(), "/T", "/F"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            kill.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+        }
+        let _ = kill.status();
+    }
+}
+
 #[tauri::command]
 pub fn svc_restart(
     app: tauri::AppHandle,

@@ -158,6 +158,13 @@ pub fn run() {
                 .flatten()
                 .unwrap_or_else(|| "ctrl+shift+Space".into());
 
+            // First run (no completed tour) → show the widget with its guided
+            // setup tour.
+            let first_run = db::setting_get_conn(&conn, "widget_tour_done")
+                .ok()
+                .flatten()
+                .is_none();
+
             app.manage(db::Db(Mutex::new(conn)));
             app.manage(Arc::new(pty::PtyManager::default()));
             app.manage(Arc::new(services::ServiceManager::default()));
@@ -211,6 +218,10 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
+
+            if first_run {
+                show_widget(app.handle());
+            }
 
             Ok(())
         })

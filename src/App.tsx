@@ -3,9 +3,52 @@ import { Dock, buildDefaultLayout } from './Dock'
 import * as ipc from './lib/ipc'
 import { routeOutput } from './lib/termBus'
 import { useApp } from './store'
-import { dockApi, openSingleton, openInMain, openTerminalPanel, saveLayout, restoreLayout } from './lib/dock'
+import { open as openDialog } from '@tauri-apps/plugin-dialog'
+import { dockApi, openSingleton, openInMain, openTerminalPanel, openEditor, openNodeSetup, saveLayout, restoreLayout } from './lib/dock'
 import { openTerminal, launchProfile } from './lib/runner'
 import { resolveDir } from './lib/tree'
+
+// The widget's first-run tour asks the main window to perform each setup
+// step here (its store is separate from the widget's).
+async function handleTourAction(action: ipc.TourAction) {
+  const st = useApp.getState()
+  await ipc.focusMain()
+  if (action === 'open-main') {
+    openSingleton('explorer', 'explorer', 'Explorer')
+    return
+  }
+  if (action === 'workspace') {
+    const ws = await ipc.nodeCreate(null, 'workspace', 'New workspace')
+    await st.refreshTree()
+    useApp.getState().setSelectedNode(ws.id)
+    openSingleton('explorer', 'explorer', 'Explorer')
+    void ipc.emitDataChanged()
+    return
+  }
+  if (action === 'project') {
+    let ws = useApp.getState().nodes.find((n) => n.kind === 'workspace')
+    if (!ws) {
+      ws = await ipc.nodeCreate(null, 'workspace', 'New workspace')
+      await st.refreshTree()
+    }
+    const dir = await openDialog({ directory: true, title: 'Select the project base folder (repo root)' })
+    if (typeof dir !== 'string') return
+    const name = dir.split(/[\\/]/).filter(Boolean).pop() ?? 'project'
+    const created = await ipc.nodeCreate(ws.id, 'project', name, dir)
+    await st.refreshTree()
+    useApp.getState().setSelectedNode(created.id)
+    openNodeSetup(created.id, name)
+    void ipc.emitDataChanged()
+    return
+  }
+  // command / service / profile → open the create editor scoped to a project
+  const nodes = useApp.getState().nodes
+  const proj = nodes.find((n) => n.kind === 'project')
+  const target = proj?.id ?? useApp.getState().selectedNodeId ?? null
+  if (action === 'command') openEditor('command', 0, 'New command', target)
+  else if (action === 'service') openEditor('service', 0, 'New service', target)
+  else if (action === 'profile') openEditor('profile', 0, 'New profile', target)
+}
 
 const PANELS: Array<{ id: string; component: string; title: string; main?: boolean }> = [
   { id: 'dashboard', component: 'dashboard', title: 'Dashboard' },
@@ -68,6 +111,16 @@ export default function App() {
       // The Command Widget opens terminals here in the main dock.
       ipc.onOpenTerminal((e) => {
         void useApp.getState().refreshTerminals().then(() => openTerminalPanel(e.ptyId, e.title))
+      }),
+      // The widget's setup tour drives create flows in this window.
+      ipc.onTourAction((a) => void handleTourAction(a)),
+      // When the widget changes data (or vice-versa), refresh.
+      ipc.onDataChanged(() => {
+        const s = useApp.getState()
+        void s.refreshTree()
+        void s.refreshCommands()
+        void s.refreshServices()
+        void s.refreshProfiles()
       }),
     ]
     return () => {

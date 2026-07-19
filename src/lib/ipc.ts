@@ -93,6 +93,20 @@ export const recentBump = (kind: 'command' | 'service', refId: number) =>
   invoke<void>('recent_bump', { kind, refId })
 export const recentsList = () => invoke<Recent[]>('recents_list')
 
+// ---- cross-window: app tour (widget drives the main window) ----
+export type TourAction = 'workspace' | 'project' | 'command' | 'service' | 'profile' | 'open-main'
+export const emitTourAction = (action: TourAction) =>
+  emit('devdeck:tour-action', { action })
+export function onTourAction(cb: (action: TourAction) => void): Promise<UnlistenFn> {
+  return listen<{ action: TourAction }>('devdeck:tour-action', (e) => cb(e.payload.action))
+}
+
+// ---- cross-window: data changed (so the other window can refresh) ----
+export const emitDataChanged = () => emit('devdeck:data-changed', {})
+export function onDataChanged(cb: () => void): Promise<UnlistenFn> {
+  return listen('devdeck:data-changed', () => cb())
+}
+
 // ---- cross-window: widget asks the main IDE to open a terminal panel ----
 export interface OpenTerminalReq {
   ptyId: number

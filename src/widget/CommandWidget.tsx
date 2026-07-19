@@ -8,7 +8,8 @@
 // real OS window.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { getCurrentWindow } from '@tauri-apps/api/window'
+import { getCurrentWindow, currentMonitor } from '@tauri-apps/api/window'
+import { LogicalPosition } from '@tauri-apps/api/dpi'
 import * as ipc from '../lib/ipc'
 import { useApp } from '../store'
 import type { SvcState, TreeNode } from '../lib/types'
@@ -31,6 +32,47 @@ function css(s: string): React.CSSProperties {
 
 const PALETTE = ['#7C8CF8', '#4ADE80', '#FBBF24', '#F472B6', '#38BDF8', '#A78BFA', '#FB7185']
 const win = () => getCurrentWindow()
+
+// Floating-window states and screen-corner docking.
+type Corner = 'tl' | 'tr' | 'bl' | 'br' | 'free'
+type Mode = 'icon' | 'quick' | 'full'
+const CORNER_MARGIN = 14
+const CORNER_BOTTOM = 52 // clears the Windows taskbar for bottom corners
+const CORNERS: { key: Corner; label: string }[] = [
+  { key: 'tl', label: '◤' },
+  { key: 'tr', label: '◥' },
+  { key: 'bl', label: '◣' },
+  { key: 'br', label: '◢' },
+  { key: 'free', label: '✛' },
+]
+
+function sizeForMode(mode: Mode, orient: 'v' | 'h', full: { w: number; h: number }): { w: number; h: number } {
+  if (mode === 'icon') return { w: 58, h: 58 }
+  if (mode === 'quick') return orient === 'h' ? { w: 470, h: 150 } : { w: 296, h: 392 }
+  return full
+}
+
+/// Move the widget window flush to a screen corner (with a margin), or do
+/// nothing when free. Uses the current monitor so it works multi-display.
+async function positionForCorner(corner: Corner, w: number, h: number) {
+  if (corner === 'free') return
+  try {
+    const mon = await currentMonitor()
+    if (!mon) return
+    const sf = mon.scaleFactor
+    const mx = mon.position.x / sf
+    const my = mon.position.y / sf
+    const mw = mon.size.width / sf
+    const mh = mon.size.height / sf
+    const left = corner === 'tl' || corner === 'bl'
+    const top = corner === 'tl' || corner === 'tr'
+    const x = left ? mx + CORNER_MARGIN : mx + mw - w - CORNER_MARGIN
+    const y = top ? my + CORNER_MARGIN : my + mh - h - CORNER_BOTTOM
+    await win().setPosition(new LogicalPosition(Math.round(x), Math.round(y)))
+  } catch {
+    /* ignore */
+  }
+}
 
 function tint(t: string): [string, string] {
   if (/vite|next|proxy|metro|emulator|preview|wrangler|triton|kafka|node|npm|pnpm|yarn|dev/i.test(t)) return ['#7C8CF8', 'rgba(124,140,248,0.16)']
@@ -111,7 +153,11 @@ export function CommandWidget() {
 
   // ---- interactive UI state (mirrors the design's this.state) ----
   const [view, setView] = useState<View>('recent')
-  const [collapsed, setCollapsed] = useState(false)
+  const [mode, setMode] = useState<Mode>('full')
+  const [corner, setCorner] = useState<Corner>('free')
+  const [quickOrient, setQuickOrient] = useState<'v' | 'h'>('v')
+  const [widgetSetOpen, setWidgetSetOpen] = useState(false)
+  const [tourOpen, setTourOpen] = useState(false)
   const [spaceMenuOpen, setSpaceMenuOpen] = useState(false)
   const [shortcutOpen, setShortcutOpen] = useState(false)
   const [currentWorkspace, setCurrentWorkspace] = useState<number | null>(null)
@@ -128,6 +174,7 @@ export function CommandWidget() {
   const [expandedSize, setExpandedSize] = useState<{ w: number; h: number }>({ w: 380, h: 560 })
   const searchRef = useRef<HTMLInputElement>(null)
   const toastT = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const programmaticMove = useRef(false)
 
   const d = DENSITY[density]
 
@@ -151,11 +198,100 @@ export function CommandWidget() {
     void ipc.settingGet('widget_view').then((v) => v && setView(v as View))
     void ipc.settingGet('widget_density').then((v) => v && setDensity(v as Density))
     void ipc.settingGet('widget_recent_count').then((v) => v && setRecentCount(Number(v) || 3))
+    // Corner-dock + quick-list orientation, then anchor if docked.
+    void (async () => {
+      const c = ((await ipc.settingGet('widget_corner')) as Corner | null) ?? 'free'
+      const o = (await ipc.settingGet('widget_quick_orientation')) === 'h' ? 'h' : 'v'
+      setCorner(c)
+      setQuickOrient(o)
+      const done = await ipc.settingGet('widget_tour_done')
+      if (done !== '1') setTourOpen(true) // first run: guided tour in the full widget
+      if (c !== 'free') await positionForCorner(c, sizeForMode('full', o, expandedSize).w, sizeForMode('full', o, expandedSize).h)
+    })()
     return () => {
       for (const s of subs) void s.then((un) => un())
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Snap to a screen corner when the user drags the widget near one.
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout> | undefined
+    const evaluateSnap = async () => {
+      try {
+        const mon = await currentMonitor()
+        if (!mon) return
+        const sf = mon.scaleFactor
+        const pos = await win().outerPosition()
+        const size = await win().outerSize()
+        const x = pos.x / sf
+        const y = pos.y / sf
+        const w = size.width / sf
+        const h = size.height / sf
+        const mx = mon.position.x / sf
+        const my = mon.position.y / sf
+        const mw = mon.size.width / sf
+        const mh = mon.size.height / sf
+        const cs: [Corner, number, number][] = [
+          ['tl', mx, my],
+          ['tr', mx + mw - w, my],
+          ['bl', mx, my + mh - h],
+          ['br', mx + mw - w, my + mh - h],
+        ]
+        let best: Corner = 'free'
+        let bestD = Infinity
+        for (const [c, cx, cy] of cs) {
+          const dist = Math.hypot(x - cx, y - cy)
+          if (dist < bestD) {
+            bestD = dist
+            best = c
+          }
+        }
+        const next: Corner = bestD < 72 ? best : 'free'
+        if (next !== corner) {
+          setCorner(next)
+          void ipc.settingSet('widget_corner', next)
+        }
+        if (next !== 'free') {
+          programmaticMove.current = true
+          const s = sizeForMode(mode, quickOrient, expandedSize)
+          await positionForCorner(next, s.w, s.h)
+          setTimeout(() => (programmaticMove.current = false), 220)
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    const unP = win().onMoved(() => {
+      if (programmaticMove.current) return
+      clearTimeout(t)
+      t = setTimeout(() => void evaluateSnap(), 240)
+    })
+    return () => {
+      clearTimeout(t)
+      void unP.then((f) => f())
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [corner, mode, quickOrient, expandedSize])
+
+  // Poll for data changes while the first-run tour is open (entities are
+  // created in the main window, whose store is separate from the widget's).
+  useEffect(() => {
+    if (!tourOpen) return
+    const tick = () => {
+      const st = useApp.getState()
+      void st.refreshTree()
+      void st.refreshCommands()
+      void st.refreshServices()
+      void st.refreshProfiles()
+    }
+    const un = ipc.onDataChanged(tick)
+    const iv = setInterval(tick, 1600)
+    return () => {
+      clearInterval(iv)
+      void un.then((f) => f())
+    }
+  }, [tourOpen])
 
   useEffect(() => {
     const un = win().onFocusChanged(({ payload }) => {
@@ -272,7 +408,17 @@ export function CommandWidget() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     void win().startResizeDragging('SouthEast' as any)
   }
-  const collapse = async () => {
+  // Resize the OS window for a mode and re-anchor to the docked corner.
+  const placeWidget = async (m: Mode, o: 'v' | 'h', c: Corner) => {
+    const s = sizeForMode(m, o, expandedSize)
+    programmaticMove.current = true
+    await ipc.widgetResize(s.w, s.h)
+    await positionForCorner(c, s.w, s.h)
+    setTimeout(() => (programmaticMove.current = false), 220)
+  }
+  // Remember the full-panel size before leaving it, so it restores.
+  const captureFullSize = async () => {
+    if (mode !== 'full') return
     try {
       const sz = await win().innerSize()
       const sf = await win().scaleFactor()
@@ -280,13 +426,46 @@ export function CommandWidget() {
     } catch {
       /* keep prior */
     }
-    setSpaceMenuOpen(false)
-    setCollapsed(true)
-    void ipc.widgetResize(58, 58)
   }
-  const expand = () => {
-    setCollapsed(false)
-    void ipc.widgetResize(expandedSize.w, expandedSize.h)
+  const goIcon = async () => {
+    await captureFullSize()
+    setSpaceMenuOpen(false)
+    setWidgetSetOpen(false)
+    setMode('icon')
+    await placeWidget('icon', quickOrient, corner)
+  }
+  const goQuick = async () => {
+    await captureFullSize()
+    setMode('quick')
+    await placeWidget('quick', quickOrient, corner)
+  }
+  const goFull = async () => {
+    setMode('full')
+    await placeWidget('full', quickOrient, corner)
+  }
+  // Re-place the quick popup when its orientation changes.
+  useEffect(() => {
+    if (mode === 'quick') void placeWidget('quick', quickOrient, corner)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quickOrient])
+
+  const setCornerDock = (c: Corner) => {
+    setCorner(c)
+    void ipc.settingSet('widget_corner', c)
+    void placeWidget(mode, quickOrient, c)
+  }
+  const setOrient = (o: 'v' | 'h') => {
+    setQuickOrient(o)
+    void ipc.settingSet('widget_quick_orientation', o)
+  }
+  const setCount = (n: number) => {
+    const v = Math.max(1, Math.min(8, n))
+    setRecentCount(v)
+    void ipc.settingSet('widget_recent_count', String(v))
+  }
+  const finishTour = () => {
+    setTourOpen(false)
+    void ipc.settingSet('widget_tour_done', '1')
   }
 
   const switchWorkspace = (id: number) => {
@@ -319,6 +498,42 @@ export function CommandWidget() {
       .slice(0, recentCount)
   }, [app.recents, model.itemsById, recentCount])
 
+  // Quick-access popup list: running services first (they're what you're
+  // most likely to act on), then recent commands — up to the configured count.
+  const quickItems = useMemo(() => {
+    const seen = new Set<string>()
+    const out: Item[] = []
+    for (const s of running) {
+      const it = model.itemsById.get('s' + s.id)
+      if (it && !seen.has(it.id)) {
+        seen.add(it.id)
+        out.push(it)
+      }
+    }
+    for (const it of recentItems) {
+      if (!seen.has(it.id)) {
+        seen.add(it.id)
+        out.push(it)
+      }
+    }
+    return out.slice(0, Math.max(recentCount, running.length))
+  }, [running, recentItems, model.itemsById, recentCount])
+
+  const newTerminalHere = () => {
+    const dir = currentSpace != null ? resolveDir(app.nodes, findNode(app.nodes, currentSpace)) : ''
+    void widgetOpenTerminal(dir, 'Terminal')
+    showToast('Opened terminal', '#9BA3B2')
+  }
+
+  // First-run tour: which setup steps are already satisfied.
+  const tourDone: Record<string, boolean> = {
+    workspace: app.nodes.some((n) => n.kind === 'workspace'),
+    project: app.nodes.some((n) => n.kind === 'project'),
+    command: app.commands.length > 0,
+    service: app.services.length > 0,
+    profile: app.profiles.length > 0,
+  }
+
   // ================= RENDER =================
   const navBtn = (v: View, svg: React.ReactNode) => (
     <button data-nodrag onClick={() => { setView(v); setSpaceMenuOpen(false) }} title={v}
@@ -328,18 +543,79 @@ export function CommandWidget() {
   )
   const navStroke = (v: View) => (view === v ? '#A7B2FF' : '#7d8494')
 
-  // Collapsed launcher
-  if (collapsed) {
+  // Collapsed floating icon: drag to move (snaps to corners), click to pop
+  // up the quick-access list.
+  if (mode === 'icon') {
     return (
       <div style={css('position:fixed;inset:0')}>
         <style>{keyframes}</style>
-        <button data-nodrag onMouseDown={startDrag} onClick={expand} title="Open command widget"
+        <button data-nodrag onMouseDown={startDrag} onClick={() => void goQuick()} title="Quick access — click to open, drag to move"
           style={css('width:100%;height:100%;border:1px solid rgba(255,255,255,0.12);border-radius:16px;background:linear-gradient(145deg,rgba(28,31,40,0.96),rgba(18,20,27,0.96));cursor:grab;display:flex;align-items:center;justify-content:center;position:relative;box-shadow:0 16px 44px rgba(0,0,0,0.5),0 0 0 1px rgba(124,140,248,0.18)')}>
           <div style={css('width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#7C8CF8,#4ADE80);display:flex;align-items:center;justify-content:center;color:#0c0e14;font-weight:700;font-size:17px')}>⌘</div>
           {runningCount > 0 && (
             <div style={css('position:absolute;top:-4px;right:-4px;min-width:19px;height:19px;padding:0 5px;border-radius:10px;background:#4ADE80;color:#08120b;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid #12141b')}>{runningCount}</div>
           )}
         </button>
+      </div>
+    )
+  }
+
+  // Quick-access popup: a compact, movable list of recent commands + running
+  // services, with a New terminal action and a button to open the full widget.
+  if (mode === 'quick') {
+    const horiz = quickOrient === 'h'
+    const quickRow = (it: Item) => {
+      const st = statusOf(it)
+      const running = st === 'running'
+      return (
+        <button key={it.id} data-nodrag title={it.kind === 'command' ? 'Run' : running ? 'Stop' : 'Start'}
+          onClick={() => (it.kind === 'command' ? runCommand(it) : serviceToggle(it))}
+          style={css(`display:flex;align-items:center;gap:7px;text-align:left;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.03);border-radius:9px;cursor:pointer;padding:7px 9px;${horiz ? 'flex:0 0 auto;min-width:130px;max-width:180px' : 'width:100%'}`)}>
+          <span style={{ ...css('width:8px;height:8px;border-radius:50%;flex-shrink:0'), background: it.kind === 'service' ? (running ? '#4ADE80' : '#6B7280') : it.iconColor, animation: running ? 'cw-pulse 2s ease-in-out infinite' : 'none' }} />
+          <span style={css('min-width:0;display:flex;flex-direction:column;line-height:1.15')}>
+            <span style={css('font-size:12px;font-weight:600;color:#E7EAF0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px')}>{it.name}</span>
+            <span style={css('font-size:9.5px;color:#5a6070;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px')}>{it.kind === 'service' ? (running ? 'running' : 'service') : it.projectName}</span>
+          </span>
+        </button>
+      )
+    }
+    return (
+      <div style={css('position:fixed;inset:0;font-family:Geist,system-ui,sans-serif;user-select:none')}>
+        <style>{keyframes}</style>
+        <div style={css('width:100%;height:100%;display:flex;flex-direction:column;border:1px solid rgba(255,255,255,0.1);border-radius:14px;overflow:hidden;background:linear-gradient(180deg,rgba(24,27,35,0.98),rgba(16,18,25,0.98))')}>
+          {/* header / drag bar */}
+          <div onMouseDown={startDrag} style={css('flex-shrink:0;display:flex;align-items:center;gap:6px;padding:8px 8px 8px 10px;border-bottom:1px solid rgba(255,255,255,0.06);cursor:grab')}>
+            <div style={css('width:20px;height:20px;border-radius:6px;background:linear-gradient(135deg,#7C8CF8,#4ADE80);display:flex;align-items:center;justify-content:center;color:#0c0e14;font-weight:700;font-size:12px;flex-shrink:0')}>⌘</div>
+            <span style={css('flex:1;min-width:0;font-size:12px;font-weight:600;color:#E7EAF0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis')}>{curSpace?.name ?? 'Quick access'}</span>
+            <button data-nodrag onClick={() => setWidgetSetOpen((v) => !v)} title="Widget settings" style={css('width:24px;height:24px;border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.04)')}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9BA3B2" strokeWidth="2"><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 00-.1-1l2-1.5-2-3.4-2.4 1a7 7 0 00-1.7-1L14.5 2h-4l-.3 2.6a7 7 0 00-1.7 1l-2.4-1-2 3.4L4 11a7 7 0 000 2l-2 1.5 2 3.4 2.4-1a7 7 0 001.7 1l.3 2.6h4l.3-2.6a7 7 0 001.7-1l2.4 1 2-3.4-2-1.5a7 7 0 00.1-1z" /></svg>
+            </button>
+            <button data-nodrag onClick={() => void goFull()} title="Open full widget" style={css('width:24px;height:24px;border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;background:rgba(124,140,248,0.14)')}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A7B2FF" strokeWidth="2"><path d="M8 3H5a2 2 0 00-2 2v3M16 3h3a2 2 0 012 2v3M8 21H5a2 2 0 01-2-2v-3M16 21h3a2 2 0 002-2v-3" /></svg>
+            </button>
+            <button data-nodrag onClick={() => void goIcon()} title="Collapse to icon" style={css('width:24px;height:24px;border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.04)')}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9BA3B2" strokeWidth="2"><path d="M4 14h6v6M20 10h-6V4M14 10l6-6M10 14l-6 6" /></svg>
+            </button>
+          </div>
+          {/* body */}
+          <div className="cw-scroll" style={css(`flex:1;min-height:0;padding:8px;display:flex;gap:6px;${horiz ? 'flex-direction:row;overflow-x:auto;overflow-y:hidden;align-items:stretch' : 'flex-direction:column;overflow-y:auto;overflow-x:hidden'}`)}>
+            {quickItems.length === 0 ? (
+              <div style={css('flex:1;display:flex;align-items:center;justify-content:center;text-align:center;color:#5a6070;font-size:11.5px;padding:14px')}>Run a command or start a service — it'll show up here.</div>
+            ) : (
+              quickItems.map(quickRow)
+            )}
+          </div>
+          {/* footer actions */}
+          <div style={css('flex-shrink:0;display:flex;gap:6px;padding:8px;border-top:1px solid rgba(255,255,255,0.06)')}>
+            <button data-nodrag onClick={newTerminalHere} title="Open a terminal here" style={css('flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:7px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);border-radius:8px;cursor:pointer;color:#C7CCD6;font-size:11.5px;font-weight:600')}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9BA3B2" strokeWidth="2"><path d="M4 17l6-5-6-5M12 19h8" /></svg>Terminal
+            </button>
+            <button data-nodrag onClick={() => void goFull()} title="Open the full widget" style={css('flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:7px;border:none;background:rgba(124,140,248,0.16);border-radius:8px;cursor:pointer;color:#A7B2FF;font-size:11.5px;font-weight:600')}>
+              Open full
+            </button>
+          </div>
+          {widgetSetOpen && <WidgetSettings corner={corner} orient={quickOrient} count={recentCount} onCorner={setCornerDock} onOrient={setOrient} onCount={setCount} onClose={() => setWidgetSetOpen(false)} onTour={() => { setWidgetSetOpen(false); setTourOpen(true); void goFull() }} />}
+        </div>
       </div>
     )
   }
@@ -404,10 +680,10 @@ export function CommandWidget() {
             {navBtn('search', <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={navStroke('search')} strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>)}
           </div>
 
-          <button data-nodrag onClick={() => void ipc.focusMain()} title="Open main window / settings" style={css('width:26px;height:26px;border:none;border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.04)')}>
+          <button data-nodrag onClick={() => setWidgetSetOpen((v) => !v)} title="Widget settings (dock, quick list)" style={css('width:26px;height:26px;border:none;border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.04)')}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9BA3B2" strokeWidth="2"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.6 1.6 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.6 1.6 0 00-2.7 1.1v.2a2 2 0 01-4 0v-.1A1.6 1.6 0 006 20.9l-.1.1a2 2 0 11-2.8-2.8l.1-.1A1.6 1.6 0 003.5 15H3.3a2 2 0 010-4h.1A1.6 1.6 0 004.9 8.3l-.1-.1a2 2 0 112.8-2.8l.1.1a1.6 1.6 0 001.8.3H9a1.6 1.6 0 001-1.5V3a2 2 0 014 0v.1a1.6 1.6 0 001 1.5 1.6 1.6 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.6 1.6 0 00-.3 1.8V9a1.6 1.6 0 001.5 1h.2a2 2 0 010 4h-.1a1.6 1.6 0 00-1.5 1z" /></svg>
           </button>
-          <button data-nodrag onClick={() => void collapse()} title="Collapse to launcher" style={css('width:26px;height:26px;border:none;border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.04)')}>
+          <button data-nodrag onClick={() => void goIcon()} title="Collapse to icon" style={css('width:26px;height:26px;border:none;border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.04)')}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9BA3B2" strokeWidth="2"><path d="M9 4v16M4 9l-1 3 1 3" /><path d="M14 8l4 4-4 4" /></svg>
           </button>
         </div>
@@ -445,6 +721,10 @@ export function CommandWidget() {
           </div>
         )}
 
+        {widgetSetOpen && <WidgetSettings corner={corner} orient={quickOrient} count={recentCount} onCorner={setCornerDock} onOrient={setOrient} onCount={setCount} onClose={() => setWidgetSetOpen(false)} onTour={() => { setWidgetSetOpen(false); setTourOpen(true) }} />}
+
+        {tourOpen && <TourView done={tourDone} onAction={(a) => void ipc.emitTourAction(a)} onFinish={finishTour} />}
+
         {toast && (
           <div style={css('position:absolute;bottom:44px;left:50%;z-index:55;transform:translateX(-50%);display:flex;align-items:center;gap:8px;padding:8px 13px;border-radius:10px;background:#22262f;border:1px solid rgba(255,255,255,0.12);box-shadow:0 12px 34px rgba(0,0,0,0.5);animation:cw-toast .18s ease;max-width:90%')}>
             <span style={{ ...css('width:7px;height:7px;border-radius:50%;flex-shrink:0'), background: toast.color }} />
@@ -471,6 +751,112 @@ const keyframes = `
 `
 
 type D = typeof DENSITY['compact']
+
+// Widget settings popover: corner dock, quick-list orientation, and how many
+// recent/active items the quick popup shows.
+function WidgetSettings({ corner, orient, count, onCorner, onOrient, onCount, onClose, onTour }: {
+  corner: Corner; orient: 'v' | 'h'; count: number
+  onCorner: (c: Corner) => void; onOrient: (o: 'v' | 'h') => void; onCount: (n: number) => void
+  onClose: () => void; onTour: () => void
+}) {
+  const row = css('display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px')
+  const label = css('font-size:11.5px;color:#9BA3B2')
+  const seg = (active: boolean) => css(`min-width:30px;height:26px;padding:0 8px;border:1px solid ${active ? 'rgba(124,140,248,0.5)' : 'rgba(255,255,255,0.1)'};background:${active ? 'rgba(124,140,248,0.18)' : 'rgba(255,255,255,0.03)'};color:${active ? '#A7B2FF' : '#9BA3B2'};border-radius:7px;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center`)
+  return (
+    <div data-nodrag onClick={onClose} style={css('position:absolute;inset:0;z-index:60;background:rgba(8,9,13,0.55);display:flex;align-items:center;justify-content:center;padding:14px;animation:cw-fade .12s ease')}>
+      <div onClick={(e) => e.stopPropagation()} style={css('width:100%;max-width:280px;background:#1b1e27;border:1px solid rgba(255,255,255,0.12);border-radius:13px;padding:14px;box-shadow:0 18px 50px rgba(0,0,0,0.6);animation:cw-pop .14s ease')}>
+        <div style={css('font-size:13px;font-weight:600;color:#E7EAF0;margin-bottom:13px')}>Widget settings</div>
+
+        <div style={row}>
+          <span style={label}>Dock to corner</span>
+          <div style={css('display:flex;gap:3px')}>
+            {CORNERS.map((c) => (
+              <button key={c.key} title={c.key === 'free' ? 'Free (drag anywhere)' : 'Dock ' + c.key} onClick={() => onCorner(c.key)} style={seg(corner === c.key)}>{c.label}</button>
+            ))}
+          </div>
+        </div>
+
+        <div style={row}>
+          <span style={label}>Quick list</span>
+          <div style={css('display:flex;gap:3px')}>
+            <button onClick={() => onOrient('v')} style={seg(orient === 'v')}>Vertical</button>
+            <button onClick={() => onOrient('h')} style={seg(orient === 'h')}>Horizontal</button>
+          </div>
+        </div>
+
+        <div style={row}>
+          <span style={label}>Show how many</span>
+          <div style={css('display:flex;align-items:center;gap:6px')}>
+            <button onClick={() => onCount(count - 1)} style={seg(false)}>−</button>
+            <span style={css('min-width:18px;text-align:center;font-size:13px;color:#E7EAF0;font-weight:600')}>{count}</span>
+            <button onClick={() => onCount(count + 1)} style={seg(false)}>+</button>
+          </div>
+        </div>
+
+        <button onClick={onTour} style={css('width:100%;margin-top:4px;padding:8px;border:1px solid rgba(124,140,248,0.3);background:rgba(124,140,248,0.1);border-radius:8px;color:#A7B2FF;font-size:12px;font-weight:600;cursor:pointer')}>↻ Restart setup tour</button>
+      </div>
+    </div>
+  )
+}
+
+// First-run guided setup. Each step opens the matching create flow in the
+// main window and ticks off once that kind of entity exists.
+function TourView({ done, onAction, onFinish }: {
+  done: Record<string, boolean>
+  onAction: (a: ipc.TourAction) => void
+  onFinish: () => void
+}) {
+  const steps: { key: string; action: ipc.TourAction; title: string; hint: string }[] = [
+    { key: 'workspace', action: 'workspace', title: 'Create a workspace', hint: 'A top-level group for related projects.' },
+    { key: 'project', action: 'project', title: 'Add a project (space)', hint: 'Point it at a repo or app folder.' },
+    { key: 'command', action: 'command', title: 'Save a command', hint: 'e.g. npm run dev — runs in the project.' },
+    { key: 'service', action: 'service', title: 'Add a service', hint: 'A long-running dev server, with a port.' },
+    { key: 'profile', action: 'profile', title: 'Create a launch profile', hint: 'Boot several things in one click.' },
+  ]
+  const total = steps.length
+  const doneCount = steps.filter((s) => done[s.key]).length
+  const nextIdx = steps.findIndex((s) => !done[s.key])
+  return (
+    <div data-nodrag style={css('position:absolute;inset:0;z-index:62;background:linear-gradient(180deg,rgba(16,18,25,0.98),rgba(12,14,20,0.99));display:flex;flex-direction:column;padding:14px;animation:cw-fade .14s ease')}>
+      <div style={css('display:flex;align-items:center;gap:9px;margin-bottom:4px')}>
+        <div style={css('width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,#7C8CF8,#4ADE80);display:flex;align-items:center;justify-content:center;color:#0c0e14;font-weight:700;font-size:14px')}>✦</div>
+        <div style={css('flex:1;min-width:0')}>
+          <div style={css('font-size:14px;font-weight:700;color:#E7EAF0')}>Welcome to DevDeck</div>
+          <div style={css('font-size:11px;color:#7d8494')}>Let's set up your first workspace</div>
+        </div>
+        <button onClick={onFinish} title="Skip" style={css('border:none;background:rgba(255,255,255,0.05);color:#9BA3B2;border-radius:7px;padding:5px 9px;font-size:11px;cursor:pointer')}>Skip</button>
+      </div>
+
+      {/* progress */}
+      <div style={css('height:5px;border-radius:3px;background:rgba(255,255,255,0.07);margin:8px 0 12px;overflow:hidden')}>
+        <div style={{ ...css('height:100%;border-radius:3px;background:linear-gradient(90deg,#7C8CF8,#4ADE80);transition:width .3s ease'), width: `${(doneCount / total) * 100}%` }} />
+      </div>
+
+      <div className="cw-scroll" style={css('flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:7px')}>
+        {steps.map((s, i) => {
+          const complete = done[s.key]
+          const active = i === nextIdx
+          return (
+            <div key={s.key} style={css(`display:flex;align-items:center;gap:10px;padding:10px;border-radius:10px;border:1px solid ${active ? 'rgba(124,140,248,0.4)' : 'rgba(255,255,255,0.06)'};background:${active ? 'rgba(124,140,248,0.08)' : 'rgba(255,255,255,0.02)'}`)}>
+              <div style={{ ...css('width:22px;height:22px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700'), background: complete ? '#4ADE80' : 'rgba(255,255,255,0.08)', color: complete ? '#08120b' : '#9BA3B2' }}>{complete ? '✓' : i + 1}</div>
+              <div style={css('flex:1;min-width:0')}>
+                <div style={{ ...css('font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'), color: complete ? '#8b93a1' : '#E7EAF0', textDecoration: complete ? 'line-through' : 'none' }}>{s.title}</div>
+                <div style={css('font-size:10.5px;color:#656C7A;white-space:nowrap;overflow:hidden;text-overflow:ellipsis')}>{s.hint}</div>
+              </div>
+              {!complete && (
+                <button onClick={() => onAction(s.action)} style={{ ...css('border:none;border-radius:7px;padding:6px 11px;font-size:11.5px;font-weight:600;cursor:pointer'), background: active ? '#7C8CF8' : 'rgba(255,255,255,0.06)', color: active ? '#fff' : '#C7CCD6' }}>Do it</button>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      <button onClick={onFinish} style={{ ...css('margin-top:11px;width:100%;padding:10px;border:none;border-radius:9px;font-size:12.5px;font-weight:700;cursor:pointer'), background: doneCount === total ? 'linear-gradient(135deg,#7C8CF8,#4ADE80)' : 'rgba(255,255,255,0.06)', color: doneCount === total ? '#0c0e14' : '#C7CCD6' }}>
+        {doneCount === total ? '🎉 All set — start using DevDeck' : `Finish (${doneCount}/${total})`}
+      </button>
+    </div>
+  )
+}
 
 // A generic item row matching the design's Recent/Active markup.
 function ItemRow({ it, d, status, onRun, onToggle, onRestart, onTerminal }: {

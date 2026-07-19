@@ -46,8 +46,26 @@ const CORNERS: { key: Corner; label: string }[] = [
   { key: 'free', label: '✛' },
 ]
 
-function sizeForMode(mode: Mode, orient: 'v' | 'h', full: { w: number; h: number }): { w: number; h: number } {
-  if (mode === 'icon') return { w: 58, h: 58 }
+type CollapsedStyle = 'single' | 'strip'
+const STRIP_W = 60
+const STRIP_ICON = 44
+const STRIP_GAP = 8
+
+function sizeForMode(
+  mode: Mode,
+  orient: 'v' | 'h',
+  full: { w: number; h: number },
+  collapsed?: { style: CollapsedStyle; count: number },
+): { w: number; h: number } {
+  if (mode === 'icon') {
+    if (collapsed?.style === 'strip') {
+      // toggle + sessions + divider + open-full, all stacked vertically
+      const n = collapsed.count
+      const h = 8 + 24 + STRIP_GAP + n * (STRIP_ICON + STRIP_GAP) + 10 + STRIP_ICON + 8
+      return { w: STRIP_W, h: Math.min(Math.max(h, 118), 920) }
+    }
+    return { w: 58, h: 58 }
+  }
   if (mode === 'quick') return orient === 'h' ? { w: 470, h: 150 } : { w: 296, h: 392 }
   return full
 }
@@ -72,6 +90,12 @@ async function positionForCorner(corner: Corner, w: number, h: number) {
   } catch {
     /* ignore */
   }
+}
+
+// Hex "#rrggbb" → rgba() at the given alpha.
+function hexA(hex: string, a: number): string {
+  const n = parseInt(hex.slice(1), 16)
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`
 }
 
 function tint(t: string): [string, string] {
@@ -156,6 +180,7 @@ export function CommandWidget() {
   const [mode, setMode] = useState<Mode>('full')
   const [corner, setCorner] = useState<Corner>('free')
   const [quickOrient, setQuickOrient] = useState<'v' | 'h'>('v')
+  const [collapsedStyle, setCollapsedStyle] = useState<CollapsedStyle>('single')
   const [widgetSetOpen, setWidgetSetOpen] = useState(false)
   const [tourOpen, setTourOpen] = useState(false)
   const [spaceMenuOpen, setSpaceMenuOpen] = useState(false)
@@ -202,8 +227,10 @@ export function CommandWidget() {
     void (async () => {
       const c = ((await ipc.settingGet('widget_corner')) as Corner | null) ?? 'free'
       const o = (await ipc.settingGet('widget_quick_orientation')) === 'h' ? 'h' : 'v'
+      const cs: CollapsedStyle = (await ipc.settingGet('widget_collapsed_style')) === 'strip' ? 'strip' : 'single'
       setCorner(c)
       setQuickOrient(o)
+      setCollapsedStyle(cs)
       const done = await ipc.settingGet('widget_tour_done')
       if (done !== '1') setTourOpen(true) // first run: guided tour in the full widget
       if (c !== 'free') await positionForCorner(c, sizeForMode('full', o, expandedSize).w, sizeForMode('full', o, expandedSize).h)
@@ -253,9 +280,9 @@ export function CommandWidget() {
           void ipc.settingSet('widget_corner', next)
         }
         if (next !== 'free') {
+          // Re-anchor using the window's actual current size.
           programmaticMove.current = true
-          const s = sizeForMode(mode, quickOrient, expandedSize)
-          await positionForCorner(next, s.w, s.h)
+          await positionForCorner(next, w, h)
           setTimeout(() => (programmaticMove.current = false), 220)
         }
       } catch {
@@ -369,6 +396,25 @@ export function CommandWidget() {
   const curWs = currentWorkspace != null ? model.wsById.get(currentWorkspace) : undefined
   const statusOf = (it: Item): string => (it.kind === 'service' ? svcStatus(app.svcStates[it.refId]) : '')
 
+  // ---- floating session strip: every running service/command, across all
+  // spaces, each tinted with its space's color ----
+  const spaceColorOf = (spaceId: number) => model.spaceById.get(spaceId)?.color ?? '#5a6070'
+  const stripSessions = useMemo(() => {
+    return Object.values(app.svcStates)
+      .filter((s) => s.status === 'running')
+      .map((s) => {
+        const it = model.itemsById.get('s' + s.id)
+        return {
+          id: s.id,
+          name: it?.name ?? s.name,
+          spaceId: it?.spaceId ?? -1,
+          spaceName: it?.projectName ?? '',
+          color: it && it.spaceId > 0 ? spaceColorOf(it.spaceId) : '#9BA3B2',
+        }
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [app.svcStates, model.itemsById, model.spaceById])
+
   // ---- actions (wired to real backend) ----
   const cmdDef = (it: Item) => app.commands.find((c) => c.id === it.refId)
   const svcDef = (it: Item) => app.services.find((s) => s.id === it.refId)
@@ -408,9 +454,36 @@ export function CommandWidget() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     void win().startResizeDragging('SouthEast' as any)
   }
+  // Press-and-move drags the window; press-and-release (no move) fires the
+  // click. Lets the collapsed icon / strip be both draggable and clickable —
+  // previously the icon's data-nodrag guard blocked dragging entirely.
+  const dragOrClick = (onClick?: () => void) => (e: React.MouseEvent) => {
+    if (e.button !== 0) return
+    e.stopPropagation()
+    const sx = e.screenX
+    const sy = e.screenY
+    let dragged = false
+    const cleanup = () => {
+      document.removeEventListener('mousemove', move)
+      document.removeEventListener('mouseup', up)
+    }
+    const move = (ev: MouseEvent) => {
+      if (!dragged && (Math.abs(ev.screenX - sx) > 4 || Math.abs(ev.screenY - sy) > 4)) {
+        dragged = true
+        cleanup()
+        void win().startDragging()
+      }
+    }
+    const up = () => {
+      cleanup()
+      if (!dragged && onClick) onClick()
+    }
+    document.addEventListener('mousemove', move)
+    document.addEventListener('mouseup', up)
+  }
   // Resize the OS window for a mode and re-anchor to the docked corner.
-  const placeWidget = async (m: Mode, o: 'v' | 'h', c: Corner) => {
-    const s = sizeForMode(m, o, expandedSize)
+  const placeWidget = async (m: Mode, o: 'v' | 'h', c: Corner, style?: CollapsedStyle) => {
+    const s = sizeForMode(m, o, expandedSize, { style: style ?? collapsedStyle, count: stripSessions.length })
     programmaticMove.current = true
     await ipc.widgetResize(s.w, s.h)
     await positionForCorner(c, s.w, s.h)
@@ -443,6 +516,15 @@ export function CommandWidget() {
     setMode('full')
     await placeWidget('full', quickOrient, corner)
   }
+  // Clicking a strip session icon opens the quick popup scoped to its space.
+  const openSessionInQuick = (spaceId: number) => {
+    if (spaceId > 0) {
+      setCurrentSpace(spaceId)
+      const sp = model.spaceById.get(spaceId)
+      if (sp) setCurrentWorkspace(sp.wsId)
+    }
+    void goQuick()
+  }
   // Re-place the quick popup when its orientation changes.
   useEffect(() => {
     if (mode === 'quick') void placeWidget('quick', quickOrient, corner)
@@ -458,6 +540,16 @@ export function CommandWidget() {
     setQuickOrient(o)
     void ipc.settingSet('widget_quick_orientation', o)
   }
+  const switchCollapsed = (style: CollapsedStyle) => {
+    setCollapsedStyle(style)
+    void ipc.settingSet('widget_collapsed_style', style)
+    if (mode === 'icon') void placeWidget('icon', quickOrient, corner, style)
+  }
+  // Keep the strip's height in sync as sessions come and go.
+  useEffect(() => {
+    if (mode === 'icon' && collapsedStyle === 'strip') void placeWidget('icon', quickOrient, corner)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stripSessions.length])
   const setCount = (n: number) => {
     const v = Math.max(1, Math.min(8, n))
     setRecentCount(v)
@@ -543,19 +635,60 @@ export function CommandWidget() {
   )
   const navStroke = (v: View) => (view === v ? '#A7B2FF' : '#7d8494')
 
-  // Collapsed floating icon: drag to move (snaps to corners), click to pop
-  // up the quick-access list.
-  if (mode === 'icon') {
+  // Collapsed — single floating icon. Press-and-move drags it (snaps to
+  // corners); a tap opens the quick popup. A small toggle flips to the strip.
+  if (mode === 'icon' && collapsedStyle === 'single') {
     return (
       <div style={css('position:fixed;inset:0')}>
         <style>{keyframes}</style>
-        <button data-nodrag onMouseDown={startDrag} onClick={() => void goQuick()} title="Quick access — click to open, drag to move"
+        <div onMouseDown={dragOrClick(() => void goQuick())} title="Quick access — tap to open, drag to move"
           style={css('width:100%;height:100%;border:1px solid rgba(255,255,255,0.12);border-radius:16px;background:linear-gradient(145deg,rgba(28,31,40,0.96),rgba(18,20,27,0.96));cursor:grab;display:flex;align-items:center;justify-content:center;position:relative;box-shadow:0 16px 44px rgba(0,0,0,0.5),0 0 0 1px rgba(124,140,248,0.18)')}>
           <div style={css('width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#7C8CF8,#4ADE80);display:flex;align-items:center;justify-content:center;color:#0c0e14;font-weight:700;font-size:17px')}>⌘</div>
           {runningCount > 0 && (
             <div style={css('position:absolute;top:-4px;right:-4px;min-width:19px;height:19px;padding:0 5px;border-radius:10px;background:#4ADE80;color:#08120b;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid #12141b')}>{runningCount}</div>
           )}
-        </button>
+          {/* toggle → session strip */}
+          <div onMouseDown={dragOrClick(() => switchCollapsed('strip'))} title="Show session strip"
+            style={css('position:absolute;bottom:-3px;left:-3px;width:17px;height:17px;border-radius:6px;background:#12141b;border:1px solid rgba(255,255,255,0.14);display:flex;align-items:center;justify-content:center;cursor:pointer')}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9BA3B2" strokeWidth="2.4"><circle cx="6" cy="6" r="1.6" /><circle cx="6" cy="12" r="1.6" /><circle cx="6" cy="18" r="1.6" /><path d="M11 6h9M11 12h9M11 18h9" /></svg>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Collapsed — session strip: a floating vertical column of icons, one per
+  // running session (tinted by its space), then a last icon to open the full
+  // widget. Everything is drag-to-move; a tap opens/acts.
+  if (mode === 'icon' && collapsedStyle === 'strip') {
+    const sessDot = css('position:absolute;bottom:-1px;right:-1px;width:9px;height:9px;border-radius:50%;background:#4ADE80;border:2px solid #12141b')
+    return (
+      <div style={css('position:fixed;inset:0')}>
+        <style>{keyframes}</style>
+        <div onMouseDown={dragOrClick()} style={css('width:100%;height:100%;display:flex;flex-direction:column;align-items:center;gap:8px;padding:6px 0;border:1px solid rgba(255,255,255,0.12);border-radius:18px;background:linear-gradient(180deg,rgba(28,31,40,0.96),rgba(16,18,25,0.97));box-shadow:0 16px 44px rgba(0,0,0,0.5),0 0 0 1px rgba(124,140,248,0.14);cursor:grab')}>
+          {/* toggle → single icon */}
+          <div onMouseDown={dragOrClick(() => switchCollapsed('single'))} title="Show single icon"
+            style={css('width:22px;height:22px;border-radius:7px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0')}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9BA3B2" strokeWidth="2"><rect x="4" y="4" width="16" height="16" rx="4" /></svg>
+          </div>
+          {/* sessions */}
+          <div className="cw-scroll" style={css('flex:1;min-height:0;width:100%;display:flex;flex-direction:column;align-items:center;gap:8px;overflow-y:auto;overflow-x:hidden')}>
+            {stripSessions.length === 0 && (
+              <div style={css('width:40px;height:40px;border-radius:12px;border:1px dashed rgba(255,255,255,0.14);display:flex;align-items:center;justify-content:center;color:#4f5563;font-size:10px;flex-shrink:0')}>—</div>
+            )}
+            {stripSessions.map((s) => (
+              <div key={s.id} onMouseDown={dragOrClick(() => openSessionInQuick(s.spaceId))} title={`${s.name}${s.spaceName ? ' · ' + s.spaceName : ''} — tap for actions`}
+                style={css(`position:relative;width:40px;height:40px;border-radius:12px;background:${hexA(s.color, 0.16)};border:1px solid ${hexA(s.color, 0.5)};display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0`)}>
+                <span style={{ ...css("font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px"), color: s.color }}>{s.name[0]?.toUpperCase()}</span>
+                <span style={sessDot} />
+              </div>
+            ))}
+          </div>
+          {/* divider + open-full */}
+          <div style={css('width:26px;height:1px;background:rgba(255,255,255,0.1);flex-shrink:0')} />
+          <div onMouseDown={dragOrClick(() => void goFull())} title="Open full widget"
+            style={css('position:relative;width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#7C8CF8,#4ADE80);display:flex;align-items:center;justify-content:center;color:#0c0e14;font-weight:700;font-size:18px;cursor:pointer;flex-shrink:0')}>⌘</div>
+        </div>
       </div>
     )
   }

@@ -119,9 +119,67 @@ fn emit_status(app: &tauri::AppHandle, state: &SvcState) {
     let _ = app.emit("svc:status", state.clone());
 }
 
-/// Spawn `command` through the shell so pipes/&& work like a terminal.
-fn spawn_shell(command: &str, cwd: &str, env: &HashMap<String, String>) -> std::io::Result<Child> {
-    let mut c = Command::new("cmd.exe");
+/// Basename (lowercase, no extension) of a shell path, for dispatch.
+fn shell_base(shell: &str) -> String {
+    std::path::Path::new(shell.trim())
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase()
+}
+
+/// Spawn `command` through the chosen shell so pipes/&& work like a terminal.
+/// `shell` is a shell path; empty means cmd.exe. PowerShell/pwsh/bash/wsl are
+/// recognized so services and commands can run under whichever the user picks.
+fn spawn_shell(
+    shell: &str,
+    command: &str,
+    cwd: &str,
+    env: &HashMap<String, String>,
+) -> std::io::Result<Child> {
+    let base = shell_base(shell);
+    let sh = shell.trim();
+
+    // Build the argv per shell family.
+    let mut c: Command = {
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            if sh.is_empty() || base == "cmd" {
+                let mut c = Command::new(if sh.is_empty() { "cmd.exe" } else { sh });
+                // cmd.exe needs its /C line built verbatim — Rust's MSVCRT arg
+                // escaping mangles the embedded quotes cmd expects literally.
+                c.raw_arg("/C");
+                c.raw_arg(format!("\"{command}\""));
+                c
+            } else if base == "powershell" || base == "pwsh" {
+                let mut c = Command::new(sh);
+                c.args(["-NoProfile", "-Command", command]);
+                c
+            } else if base == "bash" || base == "sh" {
+                let mut c = Command::new(sh);
+                c.args(["-lc", command]);
+                c
+            } else if base == "wsl" {
+                let mut c = Command::new(sh);
+                c.args(["-e", "bash", "-lc", command]);
+                c
+            } else {
+                // Unknown shell: assume a POSIX-style `-c`.
+                let mut c = Command::new(sh);
+                c.args(["-c", command]);
+                c
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            let prog = if sh.is_empty() { "/bin/sh" } else { sh };
+            let mut c = Command::new(prog);
+            c.args(["-c", command]);
+            c
+        }
+    };
+
     if !cwd.trim().is_empty() && std::path::Path::new(cwd).is_dir() {
         c.current_dir(cwd);
     }
@@ -134,17 +192,7 @@ fn spawn_shell(command: &str, cwd: &str, env: &HashMap<String, String>) -> std::
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        // Pass the command line verbatim. Rust's normal arg escaping is
-        // built for the MSVCRT convention and mangles embedded quotes
-        // that cmd.exe needs literally (e.g. `node -e "..."`), so build
-        // the `/C` line ourselves with raw_arg.
-        c.raw_arg("/C");
-        c.raw_arg(format!("\"{command}\""));
         c.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-    }
-    #[cfg(not(windows))]
-    {
-        c.args(["-c", command]);
     }
     c.spawn()
 }
@@ -171,7 +219,8 @@ fn start_internal(
     }
 
     let env: HashMap<String, String> = serde_json::from_str(&def.env).unwrap_or_default();
-    let mut child = spawn_shell(&def.command, &def.cwd, &env).map_err(|e| e.to_string())?;
+    let mut child =
+        spawn_shell(&def.shell, &def.command, &def.cwd, &env).map_err(|e| e.to_string())?;
     let pid = child.id();
 
     push_log(
@@ -416,6 +465,7 @@ pub fn run_background(
     name: String,
     command: String,
     cwd: String,
+    shell: Option<String>,
 ) -> Result<SvcState, String> {
     let def = ServiceDef {
         id: 0,
@@ -430,6 +480,7 @@ pub fn run_background(
         env: "{}".into(),
         auto_restart: false,
         health_port: None,
+        shell: shell.unwrap_or_default(),
     };
     start_internal(&app, &def, true)
 }

@@ -31,10 +31,33 @@ export async function runCommandInNewTerminal(cmd: CommandDef) {
   if (cmd.id > 0) void ipc.recentBump('command', cmd.id)
   const shell = cmd.shell.trim() !== '' ? cmd.shell : DEFAULT_SHELL()
   const id = await openTerminal(shell, commandCwd(cmd), cmd.name)
-  // Give the shell a moment to print its prompt before injecting.
-  setTimeout(() => {
-    void ipc.ptyWrite(id, cmd.command + '\r')
-  }, 600)
+  injectWhenReady(id, cmd.command)
+}
+
+/// Type a command into a freshly-spawned shell only once it has printed its
+/// prompt — writing before the ConPTY/PSReadLine is ready drops the first
+/// keystroke (so `npx …` would run as `px …`). The leading space is a second
+/// safety net: it's ignored by cmd/PowerShell/bash, and absorbs a lost char.
+function injectWhenReady(ptyId: number, command: string) {
+  let done = false
+  let unlisten: (() => void) | null = null
+  const timer = setTimeout(fire, 1500) // fallback if no prompt output arrives
+  function fire() {
+    if (done) return
+    done = true
+    clearTimeout(timer)
+    unlisten?.()
+    void ipc.ptyWrite(ptyId, ' ' + command + '\r')
+  }
+  void ipc.onPtyOutput((e) => {
+    if (e.id === ptyId && !done) {
+      // Prompt seen — give the shell a beat to finish initializing, then type.
+      setTimeout(fire, 180)
+    }
+  }).then((un) => {
+    unlisten = un
+    if (done) un()
+  })
 }
 
 export async function runCommandInTerminal(cmd: CommandDef, ptyId: number) {
@@ -44,7 +67,7 @@ export async function runCommandInTerminal(cmd: CommandDef, ptyId: number) {
 
 export async function runCommandInBackground(cmd: CommandDef) {
   if (cmd.id > 0) void ipc.recentBump('command', cmd.id)
-  await ipc.runBackground(cmd.name, cmd.command, commandCwd(cmd))
+  await ipc.runBackground(cmd.name, cmd.command, commandCwd(cmd), cmd.shell || undefined)
 }
 
 export async function launchProfile(profile: ProfileDef) {

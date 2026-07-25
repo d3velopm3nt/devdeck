@@ -53,8 +53,8 @@ export const svcStart = (id: number) => invoke<SvcState>('svc_start', { id })
 export const svcStop = (id: number) => invoke<void>('svc_stop', { id })
 export const svcRestart = (id: number) => invoke<void>('svc_restart', { id })
 export const svcStates = () => invoke<SvcState[]>('svc_states')
-export const runBackground = (name: string, command: string, cwd: string) =>
-  invoke<SvcState>('run_background', { name, command, cwd })
+export const runBackground = (name: string, command: string, cwd: string, shell?: string) =>
+  invoke<SvcState>('run_background', { name, command, cwd, shell: shell ?? null })
 
 // ---- profiles ----
 export const profilesList = () => invoke<ProfileDef[]>('profiles_list')

@@ -53,6 +53,9 @@ pub struct ServiceDef {
     pub env: String, // JSON object string
     pub auto_restart: bool,
     pub health_port: Option<u16>,
+    /// Shell/interpreter to run the command through (path). Empty = cmd.exe.
+    #[serde(default)]
+    pub shell: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -115,7 +118,8 @@ pub fn open() -> Connection {
             cwd TEXT NOT NULL DEFAULT '',
             env TEXT NOT NULL DEFAULT '{}',
             auto_restart INTEGER NOT NULL DEFAULT 0,
-            health_port INTEGER
+            health_port INTEGER,
+            shell TEXT NOT NULL DEFAULT ''
         );
         CREATE TABLE IF NOT EXISTS profiles (
             id INTEGER PRIMARY KEY,
@@ -162,6 +166,14 @@ fn migrate(conn: &Connection) {
     let has_color = conn.prepare("SELECT color FROM nodes LIMIT 1").is_ok();
     if !has_color {
         let _ = conn.execute("ALTER TABLE nodes ADD COLUMN color TEXT", []);
+    }
+    // Per-service shell/interpreter.
+    let has_svc_shell = conn.prepare("SELECT shell FROM services LIMIT 1").is_ok();
+    if !has_svc_shell {
+        let _ = conn.execute(
+            "ALTER TABLE services ADD COLUMN shell TEXT NOT NULL DEFAULT ''",
+            [],
+        );
     }
     let done = setting_get_conn(conn, "model_v2").ok().flatten().is_some();
     if !done {
@@ -387,6 +399,7 @@ fn row_to_service(row: &rusqlite::Row) -> rusqlite::Result<ServiceDef> {
         env: row.get(5)?,
         auto_restart: row.get::<_, i64>(6)? != 0,
         health_port: row.get::<_, Option<i64>>(7)?.map(|p| p as u16),
+        shell: row.get(8)?,
     })
 }
 
@@ -395,7 +408,7 @@ pub fn services_list(db: tauri::State<Db>) -> Result<Vec<ServiceDef>, String> {
     let conn = db.0.lock().unwrap();
     let mut stmt = conn
         .prepare(
-            "SELECT id, project_id, name, command, cwd, env, auto_restart, health_port
+            "SELECT id, project_id, name, command, cwd, env, auto_restart, health_port, shell
              FROM services ORDER BY id",
         )
         .map_err(err)?;
@@ -462,7 +475,7 @@ pub fn resolve_node_dir(conn: &Connection, node_id: i64) -> String {
 
 pub fn service_get(conn: &Connection, id: i64) -> Result<ServiceDef, String> {
     conn.query_row(
-        "SELECT id, project_id, name, command, cwd, env, auto_restart, health_port
+        "SELECT id, project_id, name, command, cwd, env, auto_restart, health_port, shell
          FROM services WHERE id = ?1",
         params![id],
         row_to_service,
@@ -475,24 +488,8 @@ pub fn service_save(db: tauri::State<Db>, svc: ServiceDef) -> Result<i64, String
     let conn = db.0.lock().unwrap();
     if svc.id <= 0 {
         conn.execute(
-            "INSERT INTO services (project_id, name, command, cwd, env, auto_restart, health_port)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![
-                svc.project_id,
-                svc.name,
-                svc.command,
-                svc.cwd,
-                svc.env,
-                svc.auto_restart as i64,
-                svc.health_port.map(|p| p as i64)
-            ],
-        )
-        .map_err(err)?;
-        Ok(conn.last_insert_rowid())
-    } else {
-        conn.execute(
-            "UPDATE services SET project_id=?1, name=?2, command=?3, cwd=?4, env=?5, auto_restart=?6, health_port=?7
-             WHERE id=?8",
+            "INSERT INTO services (project_id, name, command, cwd, env, auto_restart, health_port, shell)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 svc.project_id,
                 svc.name,
@@ -501,6 +498,24 @@ pub fn service_save(db: tauri::State<Db>, svc: ServiceDef) -> Result<i64, String
                 svc.env,
                 svc.auto_restart as i64,
                 svc.health_port.map(|p| p as i64),
+                svc.shell
+            ],
+        )
+        .map_err(err)?;
+        Ok(conn.last_insert_rowid())
+    } else {
+        conn.execute(
+            "UPDATE services SET project_id=?1, name=?2, command=?3, cwd=?4, env=?5, auto_restart=?6, health_port=?7, shell=?8
+             WHERE id=?9",
+            params![
+                svc.project_id,
+                svc.name,
+                svc.command,
+                svc.cwd,
+                svc.env,
+                svc.auto_restart as i64,
+                svc.health_port.map(|p| p as i64),
+                svc.shell,
                 svc.id
             ],
         )

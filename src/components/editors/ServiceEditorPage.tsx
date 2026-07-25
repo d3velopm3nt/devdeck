@@ -9,6 +9,7 @@ import type { ServiceDef } from '../../lib/types'
 import { useApp } from '../../store'
 import { nodeLabel, ownerNodes } from '../../lib/tree'
 import { EditorShell, Field, Row } from './EditorShell'
+import { ShellSelect } from './ShellSelect'
 
 type Params = { id: number; projectId?: number | null }
 
@@ -21,6 +22,7 @@ const blank = (ownerId: number | null): ServiceDef => ({
   env: '{}',
   auto_restart: false,
   health_port: null,
+  shell: '',
 })
 
 export function ServiceEditorPage(props: IDockviewPanelProps<Params>) {
@@ -119,6 +121,9 @@ export function ServiceEditorPage(props: IDockviewPanelProps<Params>) {
           value={svc.command}
           onChange={(e) => set({ command: e.target.value })}
         />
+      </Field>
+      <Field label="Run with">
+        <ShellSelect value={svc.shell} onChange={(v) => set({ shell: v })} defaultLabel="Default (cmd.exe)" />
       </Field>
       <Row>
         <Field label="Working directory (empty = the location's folder)">

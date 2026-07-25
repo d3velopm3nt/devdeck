@@ -4,7 +4,7 @@
 // the PTY here and ask the main window to attach a panel to it.
 
 import * as ipc from '../lib/ipc'
-import type { CommandDef, ServiceDef, TreeNode } from '../lib/types'
+import type { CommandDef, ProfileDef, ProfileStep, ServiceDef, TreeNode } from '../lib/types'
 import { findNode, resolveDir } from '../lib/tree'
 import { useApp } from '../store'
 
@@ -24,7 +24,7 @@ export async function widgetRunCommand(cmd: CommandDef) {
   const { nodes } = useApp.getState()
   if (cmd.id > 0) void ipc.recentBump('command', cmd.id)
   const cwd = cmd.cwd.trim() !== '' ? cmd.cwd : ownerDir(nodes, cmd.project_id)
-  await ipc.runBackground(cmd.name, cmd.command, cwd)
+  await ipc.runBackground(cmd.name, cmd.command, cwd, cmd.shell || undefined)
 }
 
 /// Open an interactive terminal in the main IDE window (the explicit >_
@@ -49,4 +49,31 @@ export async function widgetRestartService(svc: ServiceDef) {
 /// Service working directory (for its terminal button).
 export function serviceDir(nodes: TreeNode[], svc: ServiceDef): string {
   return svc.cwd.trim() !== '' ? svc.cwd : ownerDir(nodes, svc.project_id)
+}
+
+/// Launch a profile from the widget: start services and run command steps as
+/// background processes (the widget has no dock, so terminal/layout steps that
+/// belong to the main window are opened there / skipped).
+export async function widgetLaunchProfile(profile: ProfileDef) {
+  let steps: ProfileStep[] = []
+  try {
+    steps = JSON.parse(profile.steps) as ProfileStep[]
+  } catch {
+    return
+  }
+  const state = useApp.getState()
+  for (const step of steps) {
+    try {
+      if (step.type === 'service') {
+        await ipc.svcStart(step.id)
+      } else if (step.type === 'command') {
+        const cmd = state.commands.find((c) => c.id === step.id)
+        if (cmd) await widgetRunCommand(cmd)
+      } else if (step.type === 'terminal') {
+        await widgetOpenTerminal(step.cwd || '', 'Terminal')
+      }
+    } catch (e) {
+      console.error('widget profile step failed', step, e)
+    }
+  }
 }

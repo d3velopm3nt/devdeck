@@ -14,7 +14,7 @@ import * as ipc from '../lib/ipc'
 import { useApp } from '../store'
 import type { SvcState, TreeNode } from '../lib/types'
 import { findNode, resolveDir } from '../lib/tree'
-import { widgetOpenTerminal, widgetRunCommand, serviceDir } from './widgetActions'
+import { widgetOpenTerminal, widgetRunCommand, widgetLaunchProfile, serviceDir } from './widgetActions'
 
 // Parse a design inline-style string ("a:b;c:d") into a React style object,
 // so the exact style strings from the design can be used verbatim.
@@ -48,21 +48,38 @@ const CORNERS: { key: Corner; label: string }[] = [
 
 type CollapsedStyle = 'single' | 'strip'
 const STRIP_W = 60
+const STRIP_HOVER_W = 264 // widened while a hover-detail card is shown
 const STRIP_ICON = 44
 const STRIP_GAP = 8
+const STRIP_HEADER = 30
+
+type NavLevel = 'workspace' | 'project' | 'item'
+type NavKind = 'ws' | 'project' | 'service' | 'command' | 'profile'
+interface NavItem {
+  key: string
+  kind: NavKind
+  id: number
+  name: string
+  color: string
+  glyph: string
+  running?: boolean
+  hasRunning?: boolean
+  detail: string
+  cmd?: string
+}
 
 function sizeForMode(
   mode: Mode,
   orient: 'v' | 'h',
   full: { w: number; h: number },
-  collapsed?: { style: CollapsedStyle; count: number },
+  collapsed?: { style: CollapsedStyle; count: number; wide?: boolean },
 ): { w: number; h: number } {
   if (mode === 'icon') {
     if (collapsed?.style === 'strip') {
-      // toggle + sessions + divider + open-full, all stacked vertically
+      // header + N icons + divider + open-full, stacked vertically
       const n = collapsed.count
-      const h = 8 + 24 + STRIP_GAP + n * (STRIP_ICON + STRIP_GAP) + 10 + STRIP_ICON + 8
-      return { w: STRIP_W, h: Math.min(Math.max(h, 118), 920) }
+      const h = 6 + STRIP_HEADER + STRIP_GAP + n * (STRIP_ICON + STRIP_GAP) + 10 + STRIP_ICON + 8
+      return { w: collapsed.wide ? STRIP_HOVER_W : STRIP_W, h: Math.min(Math.max(h, 120), 920) }
     }
     return { w: 58, h: 58 }
   }
@@ -181,6 +198,11 @@ export function CommandWidget() {
   const [corner, setCorner] = useState<Corner>('free')
   const [quickOrient, setQuickOrient] = useState<'v' | 'h'>('v')
   const [collapsedStyle, setCollapsedStyle] = useState<CollapsedStyle>('single')
+  // Strip navigator: drill workspace → project → items.
+  const [navLevel, setNavLevel] = useState<NavLevel>('workspace')
+  const [navWs, setNavWs] = useState<number | null>(null)
+  const [navProject, setNavProject] = useState<number | null>(null)
+  const [hovered, setHovered] = useState<string | null>(null)
   const [widgetSetOpen, setWidgetSetOpen] = useState(false)
   const [tourOpen, setTourOpen] = useState(false)
   const [spaceMenuOpen, setSpaceMenuOpen] = useState(false)
@@ -396,24 +418,95 @@ export function CommandWidget() {
   const curWs = currentWorkspace != null ? model.wsById.get(currentWorkspace) : undefined
   const statusOf = (it: Item): string => (it.kind === 'service' ? svcStatus(app.svcStates[it.refId]) : '')
 
-  // ---- floating session strip: every running service/command, across all
-  // spaces, each tinted with its space's color ----
+  // ---- floating strip navigator: workspace → project → items ----
   const spaceColorOf = (spaceId: number) => model.spaceById.get(spaceId)?.color ?? '#5a6070'
-  const stripSessions = useMemo(() => {
-    return Object.values(app.svcStates)
-      .filter((s) => s.status === 'running')
-      .map((s) => {
-        const it = model.itemsById.get('s' + s.id)
-        return {
+
+  // Projects / workspaces that currently contain a running service.
+  const runningSets = useMemo(() => {
+    const proj = new Set<number>()
+    const ws = new Set<number>()
+    for (const s of Object.values(app.svcStates)) {
+      if (s.status !== 'running') continue
+      const it = model.itemsById.get('s' + s.id)
+      if (it) {
+        if (it.spaceId > 0) proj.add(it.spaceId)
+        if (it.wsId > 0) ws.add(it.wsId)
+      }
+    }
+    return { proj, ws }
+  }, [app.svcStates, model.itemsById])
+
+  const navItems = useMemo((): NavItem[] => {
+    if (navLevel === 'workspace') {
+      return model.workspaces.map((w) => ({
+        key: 'w' + w.id,
+        kind: 'ws' as NavKind,
+        id: w.id,
+        name: w.name,
+        color: '#7C8CF8',
+        glyph: (w.name[0] ?? '?').toUpperCase(),
+        hasRunning: runningSets.ws.has(w.id),
+        detail: `${model.spaces.filter((s) => s.wsId === w.id).length} project(s)`,
+      }))
+    }
+    if (navLevel === 'project') {
+      return model.spaces
+        .filter((s) => s.wsId === navWs)
+        .map((s) => ({
+          key: 'p' + s.id,
+          kind: 'project' as NavKind,
           id: s.id,
-          name: it?.name ?? s.name,
-          spaceId: it?.spaceId ?? -1,
-          spaceName: it?.projectName ?? '',
-          color: it && it.spaceId > 0 ? spaceColorOf(it.spaceId) : '#9BA3B2',
-        }
-      })
+          name: s.name,
+          color: s.color,
+          glyph: (s.name[0] ?? '?').toUpperCase(),
+          hasRunning: runningSets.proj.has(s.id),
+          detail: 'space',
+        }))
+    }
+    // item level: services, then commands, then profiles for navProject
+    const services: NavItem[] = []
+    const commands: NavItem[] = []
+    for (const it of model.itemsById.values()) {
+      if (it.spaceId !== navProject) continue
+      if (it.kind === 'service') {
+        const running = svcStatus(app.svcStates[it.refId]) === 'running'
+        services.push({
+          key: it.id,
+          kind: 'service',
+          id: it.refId,
+          name: it.name,
+          color: spaceColorOf(it.spaceId),
+          glyph: (it.name[0] ?? '?').toUpperCase(),
+          running,
+          detail: running ? 'running · tap to stop' : 'stopped · tap to start',
+        })
+      } else if (it.kind === 'command') {
+        commands.push({
+          key: it.id,
+          kind: 'command',
+          id: it.refId,
+          name: it.name,
+          color: '#9BA3B2',
+          glyph: '›',
+          detail: 'tap to run',
+          cmd: app.commands.find((c) => c.id === it.refId)?.command,
+        })
+      }
+    }
+    const profiles: NavItem[] = app.profiles
+      .filter((p) => model.projOf(findNode(app.nodes, p.project_id ?? -1) ?? undefined)?.id === navProject)
+      .map((p) => ({
+        key: 'pr' + p.id,
+        kind: 'profile' as NavKind,
+        id: p.id,
+        name: p.name,
+        color: '#FBBF24',
+        glyph: '⚡',
+        detail: 'tap to launch',
+      }))
+    return [...services, ...commands, ...profiles]
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [app.svcStates, model.itemsById, model.spaceById])
+  }, [navLevel, navWs, navProject, model, app.svcStates, app.commands, app.profiles, app.nodes, runningSets])
 
   // ---- actions (wired to real backend) ----
   const cmdDef = (it: Item) => app.commands.find((c) => c.id === it.refId)
@@ -483,7 +576,7 @@ export function CommandWidget() {
   }
   // Resize the OS window for a mode and re-anchor to the docked corner.
   const placeWidget = async (m: Mode, o: 'v' | 'h', c: Corner, style?: CollapsedStyle) => {
-    const s = sizeForMode(m, o, expandedSize, { style: style ?? collapsedStyle, count: stripSessions.length })
+    const s = sizeForMode(m, o, expandedSize, { style: style ?? collapsedStyle, count: navItems.length })
     programmaticMove.current = true
     await ipc.widgetResize(s.w, s.h)
     await positionForCorner(c, s.w, s.h)
@@ -507,23 +600,9 @@ export function CommandWidget() {
     setMode('icon')
     await placeWidget('icon', quickOrient, corner)
   }
-  const goQuick = async () => {
-    await captureFullSize()
-    setMode('quick')
-    await placeWidget('quick', quickOrient, corner)
-  }
   const goFull = async () => {
     setMode('full')
     await placeWidget('full', quickOrient, corner)
-  }
-  // Clicking a strip session icon opens the quick popup scoped to its space.
-  const openSessionInQuick = (spaceId: number) => {
-    if (spaceId > 0) {
-      setCurrentSpace(spaceId)
-      const sp = model.spaceById.get(spaceId)
-      if (sp) setCurrentWorkspace(sp.wsId)
-    }
-    void goQuick()
   }
   // Re-place the quick popup when its orientation changes.
   useEffect(() => {
@@ -540,16 +619,100 @@ export function CommandWidget() {
     setQuickOrient(o)
     void ipc.settingSet('widget_quick_orientation', o)
   }
-  const switchCollapsed = (style: CollapsedStyle) => {
+  const resetNav = () => {
+    setNavLevel('workspace')
+    setNavWs(null)
+    setNavProject(null)
+    setHovered(null)
+  }
+  // Set the collapsed style AND collapse into it now (used from settings, so
+  // picking "Strip" shows the strip immediately).
+  const collapseAs = async (style: CollapsedStyle) => {
     setCollapsedStyle(style)
     void ipc.settingSet('widget_collapsed_style', style)
-    if (mode === 'icon') void placeWidget('icon', quickOrient, corner, style)
+    if (style === 'strip') resetNav()
+    await captureFullSize()
+    setSpaceMenuOpen(false)
+    setWidgetSetOpen(false)
+    setMode('icon')
+    await placeWidget('icon', quickOrient, corner, style)
   }
-  // Keep the strip's height in sync as sessions come and go.
+  // Re-place the strip as its item count changes (navigation / sessions).
   useEffect(() => {
-    if (mode === 'icon' && collapsedStyle === 'strip') void placeWidget('icon', quickOrient, corner)
+    if (mode === 'icon' && collapsedStyle === 'strip' && hovered == null) void placeWidget('icon', quickOrient, corner)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stripSessions.length])
+  }, [navItems.length])
+
+  // ---- strip navigation ----
+  const navBack = () => {
+    setHovered(null)
+    if (navLevel === 'item') setNavLevel('project')
+    else if (navLevel === 'project') setNavLevel('workspace')
+  }
+  const navTap = (it: NavItem) => {
+    setHovered(null)
+    if (it.kind === 'ws') {
+      setNavWs(it.id)
+      setNavLevel('project')
+    } else if (it.kind === 'project') {
+      setNavProject(it.id)
+      setNavLevel('item')
+    } else if (it.kind === 'service') {
+      const running = svcStatus(app.svcStates[it.id]) === 'running'
+      void (running ? ipc.svcStop(it.id) : ipc.svcStart(it.id))
+      showToast((running ? 'Stopped ' : 'Started ') + it.name, running ? '#6B7280' : '#4ADE80')
+    } else if (it.kind === 'command') {
+      const c = app.commands.find((x) => x.id === it.id)
+      if (c) {
+        void widgetRunCommand(c)
+        void useApp.getState().refreshRecents()
+      }
+      showToast('Ran ' + it.name, '#7C8CF8')
+    } else if (it.kind === 'profile') {
+      const p = app.profiles.find((x) => x.id === it.id)
+      if (p) void widgetLaunchProfile(p)
+      showToast('Launched ' + it.name, '#FBBF24')
+    }
+  }
+  // Tapping the single icon opens the strip navigator (at Workspaces).
+  const openStrip = async () => {
+    resetNav()
+    setCollapsedStyle('strip')
+    await placeWidget('icon', quickOrient, corner, 'strip')
+  }
+  const openSingle = async () => {
+    setHovered(null)
+    setCollapsedStyle('single')
+    await placeWidget('icon', quickOrient, corner, 'single')
+  }
+
+  // While a hover-detail card is shown, widen the strip window (to the left)
+  // to make room for the card; shrink back when the pointer leaves.
+  const hoverOn = hovered != null
+  useEffect(() => {
+    if (mode !== 'icon' || collapsedStyle !== 'strip') return
+    let cancelled = false
+    void (async () => {
+      if (hoverOn) {
+        programmaticMove.current = true
+        const sf = await win().scaleFactor()
+        const pos = await win().outerPosition()
+        const size = await win().outerSize()
+        const right = (pos.x + size.width) / sf
+        const top = pos.y / sf
+        const h = size.height / sf
+        await ipc.widgetResize(STRIP_HOVER_W, h)
+        if (!cancelled) await win().setPosition(new LogicalPosition(Math.round(right - STRIP_HOVER_W), Math.round(top)))
+        setTimeout(() => (programmaticMove.current = false), 160)
+      } else {
+        await placeWidget('icon', quickOrient, corner, 'strip')
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hoverOn])
   const setCount = (n: number) => {
     const v = Math.max(1, Math.min(8, n))
     setRecentCount(v)
@@ -636,58 +799,83 @@ export function CommandWidget() {
   const navStroke = (v: View) => (view === v ? '#A7B2FF' : '#7d8494')
 
   // Collapsed — single floating icon. Press-and-move drags it (snaps to
-  // corners); a tap opens the quick popup. A small toggle flips to the strip.
+  // corners); a tap opens the strip navigator.
   if (mode === 'icon' && collapsedStyle === 'single') {
     return (
       <div style={css('position:fixed;inset:0')}>
         <style>{keyframes}</style>
-        <div onMouseDown={dragOrClick(() => void goQuick())} title="Quick access — tap to open, drag to move"
+        <div onMouseDown={dragOrClick(() => void openStrip())} title="Tap to open · drag to move"
           style={css('width:100%;height:100%;border:1px solid rgba(255,255,255,0.12);border-radius:16px;background:linear-gradient(145deg,rgba(28,31,40,0.96),rgba(18,20,27,0.96));cursor:grab;display:flex;align-items:center;justify-content:center;position:relative;box-shadow:0 16px 44px rgba(0,0,0,0.5),0 0 0 1px rgba(124,140,248,0.18)')}>
           <div style={css('width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#7C8CF8,#4ADE80);display:flex;align-items:center;justify-content:center;color:#0c0e14;font-weight:700;font-size:17px')}>⌘</div>
           {runningCount > 0 && (
             <div style={css('position:absolute;top:-4px;right:-4px;min-width:19px;height:19px;padding:0 5px;border-radius:10px;background:#4ADE80;color:#08120b;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid #12141b')}>{runningCount}</div>
           )}
-          {/* toggle → session strip */}
-          <div onMouseDown={dragOrClick(() => switchCollapsed('strip'))} title="Show session strip"
-            style={css('position:absolute;bottom:-3px;left:-3px;width:17px;height:17px;border-radius:6px;background:#12141b;border:1px solid rgba(255,255,255,0.14);display:flex;align-items:center;justify-content:center;cursor:pointer')}>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9BA3B2" strokeWidth="2.4"><circle cx="6" cy="6" r="1.6" /><circle cx="6" cy="12" r="1.6" /><circle cx="6" cy="18" r="1.6" /><path d="M11 6h9M11 12h9M11 18h9" /></svg>
-          </div>
         </div>
       </div>
     )
   }
 
-  // Collapsed — session strip: a floating vertical column of icons, one per
-  // running session (tinted by its space), then a last icon to open the full
-  // widget. Everything is drag-to-move; a tap opens/acts.
+  // Collapsed — strip navigator: drill Workspaces → Projects → items, act on
+  // services/commands/profiles. Hovering an icon widens the window to show a
+  // detail card on the left. Everything is drag-to-move.
   if (mode === 'icon' && collapsedStyle === 'strip') {
-    const sessDot = css('position:absolute;bottom:-1px;right:-1px;width:9px;height:9px;border-radius:50%;background:#4ADE80;border:2px solid #12141b')
+    const hoveredItem = hovered ? navItems.find((i) => i.key === hovered) : undefined
+    const hoveredIdx = hovered ? navItems.findIndex((i) => i.key === hovered) : -1
+    const levelLabel = navLevel === 'workspace' ? 'Workspaces' : navLevel === 'project' ? (model.wsById.get(navWs ?? -1)?.name ?? 'Projects') : (model.spaceById.get(navProject ?? -1)?.name ?? 'Items')
+    const dot = (color: string, pulse: boolean) => ({ ...css('position:absolute;bottom:-1px;right:-1px;width:9px;height:9px;border-radius:50%;border:2px solid #12141b'), background: color, animation: pulse ? 'cw-pulse 2s ease-in-out infinite' : 'none' })
     return (
-      <div style={css('position:fixed;inset:0')}>
+      <div style={css('position:fixed;inset:0;font-family:Geist,system-ui,sans-serif')} onMouseLeave={() => setHovered(null)}>
         <style>{keyframes}</style>
-        <div onMouseDown={dragOrClick()} style={css('width:100%;height:100%;display:flex;flex-direction:column;align-items:center;gap:8px;padding:6px 0;border:1px solid rgba(255,255,255,0.12);border-radius:18px;background:linear-gradient(180deg,rgba(28,31,40,0.96),rgba(16,18,25,0.97));box-shadow:0 16px 44px rgba(0,0,0,0.5),0 0 0 1px rgba(124,140,248,0.14);cursor:grab')}>
-          {/* toggle → single icon */}
-          <div onMouseDown={dragOrClick(() => switchCollapsed('single'))} title="Show single icon"
-            style={css('width:22px;height:22px;border-radius:7px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0')}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9BA3B2" strokeWidth="2"><rect x="4" y="4" width="16" height="16" rx="4" /></svg>
-          </div>
-          {/* sessions */}
-          <div className="cw-scroll" style={css('flex:1;min-height:0;width:100%;display:flex;flex-direction:column;align-items:center;gap:8px;overflow-y:auto;overflow-x:hidden')}>
-            {stripSessions.length === 0 && (
-              <div style={css('width:40px;height:40px;border-radius:12px;border:1px dashed rgba(255,255,255,0.14);display:flex;align-items:center;justify-content:center;color:#4f5563;font-size:10px;flex-shrink:0')}>—</div>
-            )}
-            {stripSessions.map((s) => (
-              <div key={s.id} onMouseDown={dragOrClick(() => openSessionInQuick(s.spaceId))} title={`${s.name}${s.spaceName ? ' · ' + s.spaceName : ''} — tap for actions`}
-                style={css(`position:relative;width:40px;height:40px;border-radius:12px;background:${hexA(s.color, 0.16)};border:1px solid ${hexA(s.color, 0.5)};display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0`)}>
-                <span style={{ ...css("font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px"), color: s.color }}>{s.name[0]?.toUpperCase()}</span>
-                <span style={sessDot} />
+        <div style={css('width:100%;height:100%;display:flex;flex-direction:row;justify-content:flex-end')}>
+          {/* hover-detail card (left; only meaningful when the window is widened) */}
+          <div style={css('flex:1;position:relative;pointer-events:none')}>
+            {hoveredItem && (
+              <div style={{ ...css('position:absolute;right:10px;min-width:150px;max-width:186px;padding:9px 11px;border-radius:11px;background:#1b1e27;border:1px solid rgba(255,255,255,0.12);box-shadow:0 14px 40px rgba(0,0,0,0.55);animation:cw-pop .12s ease'), top: 6 + STRIP_HEADER + STRIP_GAP + Math.max(0, hoveredIdx) * (STRIP_ICON + STRIP_GAP) + STRIP_ICON / 2, transform: 'translateY(-50%)' }}>
+                <div style={css('display:flex;align-items:center;gap:6px')}>
+                  {hoveredItem.kind === 'service' && <span style={{ ...css('width:7px;height:7px;border-radius:50%;flex-shrink:0'), background: hoveredItem.running ? '#4ADE80' : '#6B7280' }} />}
+                  <span style={css('font-size:12.5px;font-weight:600;color:#E7EAF0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis')}>{hoveredItem.name}</span>
+                </div>
+                <div style={css('font-size:10.5px;color:#7d8494;margin-top:2px')}>{hoveredItem.detail}</div>
+                {hoveredItem.cmd && <div style={css("font-family:'JetBrains Mono',monospace;font-size:10px;color:#9BA3B2;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis")}>{hoveredItem.cmd}</div>}
               </div>
-            ))}
+            )}
           </div>
-          {/* divider + open-full */}
-          <div style={css('width:26px;height:1px;background:rgba(255,255,255,0.1);flex-shrink:0')} />
-          <div onMouseDown={dragOrClick(() => void goFull())} title="Open full widget"
-            style={css('position:relative;width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#7C8CF8,#4ADE80);display:flex;align-items:center;justify-content:center;color:#0c0e14;font-weight:700;font-size:18px;cursor:pointer;flex-shrink:0')}>⌘</div>
+
+          {/* icon column (right) */}
+          <div onMouseDown={dragOrClick()} style={{ ...css('flex-shrink:0;height:100%;display:flex;flex-direction:column;align-items:center;gap:8px;padding:6px 0;border:1px solid rgba(255,255,255,0.12);border-radius:18px;background:linear-gradient(180deg,rgba(28,31,40,0.97),rgba(16,18,25,0.98));box-shadow:0 16px 44px rgba(0,0,0,0.5),0 0 0 1px rgba(124,140,248,0.14);cursor:grab'), width: STRIP_W }}>
+            {/* header: back (drilled in) or collapse-to-single (top level) */}
+            {navLevel === 'workspace' ? (
+              <div onMouseDown={dragOrClick(() => void openSingle())} title="Collapse to single icon"
+                style={{ ...css('border-radius:7px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0'), width: 24, height: STRIP_HEADER }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9BA3B2" strokeWidth="2"><rect x="5" y="5" width="14" height="14" rx="4" /></svg>
+              </div>
+            ) : (
+              <div onMouseDown={dragOrClick(navBack)} title={'Back to ' + (navLevel === 'item' ? 'projects' : 'workspaces')}
+                style={{ ...css('border-radius:7px;background:rgba(124,140,248,0.14);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0'), width: 34, height: STRIP_HEADER }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A7B2FF" strokeWidth="2.2"><path d="M15 6l-6 6 6 6" /></svg>
+              </div>
+            )}
+
+            {/* items for the current level */}
+            <div className="cw-scroll" style={css('flex:1;min-height:0;width:100%;display:flex;flex-direction:column;align-items:center;gap:8px;overflow-y:auto;overflow-x:hidden')}>
+              {navItems.length === 0 && (
+                <div title={'No items in ' + levelLabel} style={{ ...css('border-radius:12px;border:1px dashed rgba(255,255,255,0.14);display:flex;align-items:center;justify-content:center;color:#4f5563;font-size:10px;flex-shrink:0'), width: STRIP_ICON, height: STRIP_ICON }}>∅</div>
+              )}
+              {navItems.map((it) => (
+                <div key={it.key} onMouseEnter={() => setHovered(it.key)} onMouseDown={dragOrClick(() => navTap(it))} title={it.name}
+                  style={{ ...css(`position:relative;border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;background:${hexA(it.color, 0.16)};border:1px solid ${hexA(it.color, hovered === it.key ? 0.85 : 0.45)}`), width: STRIP_ICON, height: STRIP_ICON }}>
+                  <span style={{ ...css("font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px"), color: it.color }}>{it.glyph}</span>
+                  {it.kind === 'service' && <span style={dot(it.running ? '#4ADE80' : '#6B7280', !!it.running)} />}
+                  {(it.kind === 'ws' || it.kind === 'project') && it.hasRunning && <span style={dot('#4ADE80', true)} />}
+                </div>
+              ))}
+            </div>
+
+            {/* divider + open-full */}
+            <div style={css('width:26px;height:1px;background:rgba(255,255,255,0.1);flex-shrink:0')} />
+            <div onMouseEnter={() => setHovered(null)} onMouseDown={dragOrClick(() => void goFull())} title="Open full widget"
+              style={{ ...css('position:relative;border-radius:12px;background:linear-gradient(135deg,#7C8CF8,#4ADE80);display:flex;align-items:center;justify-content:center;color:#0c0e14;font-weight:700;font-size:18px;cursor:pointer;flex-shrink:0'), width: STRIP_ICON, height: STRIP_ICON }}>⌘</div>
+          </div>
         </div>
       </div>
     )
@@ -747,7 +935,7 @@ export function CommandWidget() {
               Open full
             </button>
           </div>
-          {widgetSetOpen && <WidgetSettings corner={corner} orient={quickOrient} count={recentCount} onCorner={setCornerDock} onOrient={setOrient} onCount={setCount} onClose={() => setWidgetSetOpen(false)} onTour={() => { setWidgetSetOpen(false); setTourOpen(true); void goFull() }} />}
+          {widgetSetOpen && <WidgetSettings corner={corner} orient={quickOrient} count={recentCount} collapsed={collapsedStyle} onCorner={setCornerDock} onOrient={setOrient} onCount={setCount} onCollapse={(s) => void collapseAs(s)} onClose={() => setWidgetSetOpen(false)} onTour={() => { setWidgetSetOpen(false); setTourOpen(true); void goFull() }} />}
         </div>
       </div>
     )
@@ -854,7 +1042,7 @@ export function CommandWidget() {
           </div>
         )}
 
-        {widgetSetOpen && <WidgetSettings corner={corner} orient={quickOrient} count={recentCount} onCorner={setCornerDock} onOrient={setOrient} onCount={setCount} onClose={() => setWidgetSetOpen(false)} onTour={() => { setWidgetSetOpen(false); setTourOpen(true) }} />}
+        {widgetSetOpen && <WidgetSettings corner={corner} orient={quickOrient} count={recentCount} collapsed={collapsedStyle} onCorner={setCornerDock} onOrient={setOrient} onCount={setCount} onCollapse={(s) => void collapseAs(s)} onClose={() => setWidgetSetOpen(false)} onTour={() => { setWidgetSetOpen(false); setTourOpen(true) }} />}
 
         {tourOpen && <TourView done={tourDone} onAction={(a) => void ipc.emitTourAction(a)} onFinish={finishTour} />}
 
@@ -887,9 +1075,10 @@ type D = typeof DENSITY['compact']
 
 // Widget settings popover: corner dock, quick-list orientation, and how many
 // recent/active items the quick popup shows.
-function WidgetSettings({ corner, orient, count, onCorner, onOrient, onCount, onClose, onTour }: {
-  corner: Corner; orient: 'v' | 'h'; count: number
+function WidgetSettings({ corner, orient, count, collapsed, onCorner, onOrient, onCount, onCollapse, onClose, onTour }: {
+  corner: Corner; orient: 'v' | 'h'; count: number; collapsed: CollapsedStyle
   onCorner: (c: Corner) => void; onOrient: (o: 'v' | 'h') => void; onCount: (n: number) => void
+  onCollapse: (s: CollapsedStyle) => void
   onClose: () => void; onTour: () => void
 }) {
   const row = css('display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px')
@@ -899,6 +1088,14 @@ function WidgetSettings({ corner, orient, count, onCorner, onOrient, onCount, on
     <div data-nodrag onClick={onClose} style={css('position:absolute;inset:0;z-index:60;background:rgba(8,9,13,0.55);display:flex;align-items:center;justify-content:center;padding:14px;animation:cw-fade .12s ease')}>
       <div onClick={(e) => e.stopPropagation()} style={css('width:100%;max-width:280px;background:#1b1e27;border:1px solid rgba(255,255,255,0.12);border-radius:13px;padding:14px;box-shadow:0 18px 50px rgba(0,0,0,0.6);animation:cw-pop .14s ease')}>
         <div style={css('font-size:13px;font-weight:600;color:#E7EAF0;margin-bottom:13px')}>Widget settings</div>
+
+        <div style={row}>
+          <span style={label}>Collapse to</span>
+          <div style={css('display:flex;gap:3px')}>
+            <button title="A single floating icon" onClick={() => onCollapse('single')} style={seg(collapsed === 'single')}>⌘ Icon</button>
+            <button title="A strip of session icons" onClick={() => onCollapse('strip')} style={seg(collapsed === 'strip')}>▤ Strip</button>
+          </div>
+        </div>
 
         <div style={row}>
           <span style={label}>Dock to corner</span>

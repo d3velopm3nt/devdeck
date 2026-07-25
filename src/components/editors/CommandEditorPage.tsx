@@ -11,6 +11,7 @@ import { useApp } from '../../store'
 import { runCommandInNewTerminal } from '../../lib/runner'
 import { nodeLabel, ownerNodes } from '../../lib/tree'
 import { EditorShell, Field, Row } from './EditorShell'
+import { ShellSelect } from './ShellSelect'
 
 type Params = { id: number; projectId?: number | null }
 
@@ -133,13 +134,8 @@ export function CommandEditorPage(props: IDockviewPanelProps<Params>) {
           </select>
         </Field>
       </Row>
-      <Field label="Shell override (optional)">
-        <input
-          className="input w-full font-mono"
-          placeholder="empty = default shell"
-          value={cmd.shell}
-          onChange={(e) => set({ shell: e.target.value })}
-        />
+      <Field label="Run with">
+        <ShellSelect value={cmd.shell} onChange={(v) => set({ shell: v })} defaultLabel="Default (PowerShell)" />
       </Field>
     </EditorShell>
   )

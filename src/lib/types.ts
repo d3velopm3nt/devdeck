@@ -37,6 +37,8 @@ export interface ServiceDef {
   env: string
   auto_restart: boolean
   health_port: number | null
+  /** shell/interpreter path to run under; '' = cmd.exe */
+  shell: string
 }
 
 export type ProfileStep =

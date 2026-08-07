@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DevDeck — live demo</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  :root{
+    --accent:#7C8CF8; --green:#4ADE80; --amber:#FBBF24; --blue:#38BDF8; --red:#F87171;
+    --text:#E7EAF0; --dim:#94a3b8; --muted:#64748b;
+  }
+  html,body{margin:0;height:100%}
+  body{
+    background:radial-gradient(1200px 700px at 70% -10%, rgba(124,140,248,0.14), transparent 60%),
+               linear-gradient(180deg,#0b0e14,#080a10);
+    color:var(--text);
+    font:15px/1.5 ui-sans-serif,system-ui,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    overflow:hidden;
+  }
+  .stage{position:relative;width:100%;height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  /* faux editor backdrop */
+  .editor{position:absolute;inset:0;padding:54px 60px;opacity:.16;filter:blur(.4px);pointer-events:none}
+  .ln{height:11px;border-radius:4px;background:#334155;margin:9px 0}
+  .mono{font-family:ui-monospace,"JetBrains Mono",Consolas,monospace}
+
+  .caption{
+    position:absolute;top:8%;left:0;right:0;text-align:center;
+    font-size:26px;font-weight:700;letter-spacing:-.02em;
+    background:linear-gradient(120deg,#a7b2ff,#c4b5fd 55%,#7dd3fc);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    opacity:0;transition:opacity .5s ease, transform .5s ease;transform:translateY(6px);
+  }
+  .caption.on{opacity:1;transform:translateY(0)}
+  .sub{position:absolute;top:calc(8% + 40px);left:0;right:0;text-align:center;color:var(--muted);font-size:14px;opacity:0;transition:opacity .5s ease}
+  .sub.on{opacity:1}
+
+  /* the widget */
+  .widget{position:relative;transition:width .4s cubic-bezier(.2,.7,.2,1), height .4s cubic-bezier(.2,.7,.2,1)}
+  .icon{
+    width:64px;height:64px;border-radius:18px;cursor:default;position:relative;
+    background:linear-gradient(145deg,rgba(28,31,40,.97),rgba(16,18,25,.98));
+    border:1px solid rgba(255,255,255,.12);
+    box-shadow:0 18px 48px rgba(0,0,0,.55);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .icon .glyph{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--green));display:flex;align-items:center;justify-content:center;color:#0c0e14;font-weight:700;font-size:19px}
+  .badge{position:absolute;top:-6px;right:-6px;min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:var(--green);color:#08120b;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid #12141b;transition:transform .3s ease;transform:scale(0)}
+  .badge.on{transform:scale(1)}
+
+  .panel{
+    width:340px;border-radius:16px;overflow:hidden;
+    background:radial-gradient(700px 400px at 82% 0,rgba(124,140,248,.13),transparent 58%),linear-gradient(180deg,rgba(24,27,35,.98),rgba(15,17,23,.98));
+    border:1px solid rgba(255,255,255,.1);box-shadow:0 20px 54px rgba(0,0,0,.55);
+  }
+  .phead{display:flex;align-items:center;gap:9px;padding:11px;border-bottom:1px solid rgba(255,255,255,.06)}
+  .pbtn{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.05);color:var(--dim);font-size:15px;flex-shrink:0}
+  .pbtn.accent{background:rgba(124,140,248,.14);color:#A7B2FF}
+  .ptitle{flex:1;line-height:1.15}
+  .ptitle b{font-size:14px;font-weight:700}
+  .ptitle span{display:block;font-size:11px;color:var(--muted)}
+  .pbody{padding:9px;display:flex;flex-direction:column;gap:7px;min-height:70px}
+  .pfoot{display:flex;padding:8px 9px;border-top:1px solid rgba(255,255,255,.06);background:rgba(0,0,0,.18)}
+  .start{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;border:1px solid rgba(124,140,248,.3);background:rgba(124,140,248,.12);border-radius:8px;color:#A7B2FF;font-size:12.5px;font-weight:600}
+
+  .card{
+    display:flex;align-items:stretch;gap:9px;padding:10px 10px 10px 12px;border-radius:12px;overflow:hidden;
+    background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);
+    opacity:0;transform:translateY(8px);transition:opacity .45s ease, transform .45s ease;
+  }
+  .card.on{opacity:1;transform:translateY(0)}
+  .card.detected{background:rgba(255,255,255,.02);border:1px dashed rgba(255,255,255,.18)}
+  .card .main{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:4px}
+  .row1{display:flex;align-items:center;gap:6px}
+  .row2{display:flex;align-items:center;gap:7px;font-size:12px}
+  .nm{font-weight:600;color:var(--text);font-size:13px}
+  .up{margin-left:auto;font-size:12px;color:#8b93a1}
+  .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+  .dot.run{background:var(--green);animation:pulse 2s ease-in-out infinite}
+  .dot.start{background:var(--amber);animation:pulse .8s ease-in-out infinite}
+  .dot.det{background:transparent;border:1.5px solid var(--blue)}
+  .chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:1px 6px;border-radius:5px}
+  .chip .d{width:5px;height:5px;border-radius:50%}
+  .chip.ok{background:rgba(74,222,128,.14);color:var(--green)}
+  .chip.warn{background:rgba(251,191,36,.14);color:var(--amber)}
+  .meta{color:var(--muted);font-size:11px}
+  .acts{display:flex;align-items:center;gap:5px;flex-shrink:0}
+  .act{width:27px;height:27px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.05);color:var(--dim);font-size:13px}
+  .act.stop{background:rgba(248,113,113,.14);color:var(--red)}
+  .act.hit{outline:2px solid rgba(124,140,248,.6);transform:scale(.9);transition:transform .12s}
+
+  .uhead{display:flex;align-items:center;gap:7px;padding:5px 2px 0;opacity:0;transition:opacity .4s}
+  .uhead.on{opacity:1}
+  .uhead b{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7d8494}
+  .uhead .line{flex:1;height:1px;background:rgba(255,255,255,.08)}
+
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+  .toast{
+    position:absolute;bottom:16%;left:50%;transform:translate(-50%,10px);
+    display:flex;align-items:center;gap:9px;padding:10px 15px;border-radius:11px;
+    background:#22262f;border:1px solid rgba(255,255,255,.14);box-shadow:0 14px 40px rgba(0,0,0,.55);
+    font-size:13px;opacity:0;transition:opacity .35s ease, transform .35s ease;pointer-events:none;
+  }
+  .toast.on{opacity:1;transform:translate(-50%,0)}
+  .toast .d{width:8px;height:8px;border-radius:50%;background:var(--blue)}
+
+  .cursor{position:absolute;width:22px;height:22px;left:0;top:0;z-index:20;pointer-events:none;transition:transform .6s cubic-bezier(.3,.7,.2,1);filter:drop-shadow(0 2px 4px rgba(0,0,0,.5))}
+  .browserflash{
+    position:absolute;bottom:16%;left:50%;transform:translate(-50%,10px) scale(.96);
+    padding:9px 14px;border-radius:10px;background:#0f172a;border:1px solid rgba(56,189,248,.4);
+    color:#7dd3fc;font-size:12.5px;opacity:0;transition:opacity .3s ease, transform .3s ease;
+  }
+  .browserflash.on{opacity:1;transform:translate(-50%,0) scale(1)}
+  .replay{position:absolute;bottom:18px;right:20px;font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <div class="editor" id="editor"></div>
+
+  <div class="caption" id="cap"></div>
+  <div class="sub" id="sub"></div>
+
+  <div class="widget" id="widget">
+    <!-- icon -->
+    <div class="icon" id="icon">
+      <div class="glyph">⌘</div>
+      <div class="badge" id="badge">3</div>
+    </div>
+    <!-- panel -->
+    <div class="panel" id="panel" style="display:none">
+      <div class="phead">
+        <div class="pbtn">▢</div>
+        <div class="ptitle"><b>Sessions</b><span id="pcount">starting…</span></div>
+        <div class="pbtn accent">⤢</div>
+      </div>
+      <div class="pbody" id="pbody">
+        <div class="card" id="c1" style="box-shadow:inset 3px 0 0 #7C8CF8">
+          <div class="main">
+            <div class="row1"><span class="dot start" id="c1dot"></span><span class="nm">AssetX</span><span class="up" id="c1up">0s</span></div>
+            <div class="row2"><span style="font-weight:600;color:#7C8CF8">TrackX</span><span class="chip warn" id="c1h"><span class="d" style="background:#FBBF24"></span>:3001</span><span class="meta" id="c1cpu">–</span></div>
+          </div>
+          <div class="acts"><span class="act" id="c1glob">🌐</span><span class="act">❯</span><span class="act stop">■</span></div>
+        </div>
+        <div class="card" id="c2" style="box-shadow:inset 3px 0 0 #4ADE80">
+          <div class="main">
+            <div class="row1"><span class="dot run"></span><span class="nm">Worker</span><span class="up" id="c2up">0s</span></div>
+            <div class="row2"><span style="font-weight:600;color:#4ADE80">SafeX Backend</span><span class="meta" id="c2cpu">4%</span><span class="meta">142MB</span></div>
+          </div>
+          <div class="acts"><span class="act">❯</span><span class="act stop">■</span></div>
+        </div>
+        <div class="uhead" id="uhead"><b>Unassigned</b><span class="line"></span><span style="font-size:10.5px;color:#64748b">1</span></div>
+        <div class="card detected" id="c3" style="box-shadow:inset 3px 0 0 #38BDF8">
+          <div class="main">
+            <div class="row1"><span class="dot det"></span><span class="nm">web-app</span><span class="up" id="c3up">0s</span></div>
+            <div class="row2"><span style="font-weight:600;color:#38BDF8">vite</span><span class="mono" style="font-size:11px;color:#8b93a1">:5173</span><span class="meta" id="c3cpu">8%</span><span class="chip" style="background:rgba(56,189,248,.16);color:#38BDF8">→ web-app</span></div>
+          </div>
+          <div class="acts"><span class="act" id="c3glob">🌐</span><span class="act">❯</span></div>
+        </div>
+      </div>
+      <div class="pfoot"><div class="start">+ Start something</div></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"><span class="d"></span><span id="toasttxt">Detected vite on :5173</span></div>
+  <div class="browserflash" id="flash">↗ Opening http://localhost:3001</div>
+
+  <svg class="cursor" id="cursor" viewBox="0 0 24 24" fill="#fff"><path d="M4 2l7 18 2.5-7.5L21 10 4 2z"/></svg>
+  <div class="replay mono" id="replay"></div>
+</div>
+
+<script>
+(function(){
+  var $=function(id){return document.getElementById(id)};
+  var editor=$('editor'); for(var i=0;i<26;i++){var d=document.createElement('div');d.className='ln';d.style.width=(30+Math.random()*55)+'%';d.style.marginLeft=(Math.random()*8|0)*12+'px';editor.appendChild(d)}
+
+  var icon=$('icon'),panel=$('panel'),widget=$('widget'),badge=$('badge');
+  var cap=$('cap'),sub=$('sub'),toast=$('toast'),toasttxt=$('toasttxt'),flash=$('flash'),cursor=$('cursor'),replay=$('replay');
+  var c1=$('c1'),c2=$('c2'),c3=$('c3'),uhead=$('uhead'),pcount=$('pcount');
+
+  function fmt(s){s=s|0;if(s<60)return s+'s';var m=(s/60)|0;if(m<60)return m+'m';return ((m/60)|0)+'h '+(m%60)+'m'}
+  // per-card uptime baselines (seconds), driven by a global tick while visible
+  var up={c1:0,c2:3840,c3:0}, ticking={c1:false,c2:true,c3:false};
+  setInterval(function(){
+    if(ticking.c1)up.c1++; if(ticking.c2)up.c2++; if(ticking.c3)up.c3++;
+    $('c1up').textContent=fmt(up.c1); $('c2up').textContent=fmt(up.c2); $('c3up').textContent=fmt(up.c3);
+  },1000);
+
+  function setCap(t,s){cap.textContent=t;sub.textContent=s||'';cap.classList.add('on');sub.classList.toggle('on',!!s)}
+  function showPanel(on){ if(on){icon.style.display='none';panel.style.display='block'} else {panel.style.display='none';icon.style.display='flex'} }
+  function moveCursor(el,dx,dy){ var r=el.getBoundingClientRect(), s=$('stage').getBoundingClientRect(); cursor.style.transform='translate('+(r.left-s.left+r.width/2+(dx||0))+'px,'+(r.top-s.top+r.height/2+(dy||0))+'px)'; }
+
+  var timers=[];
+  function at(ms,fn){timers.push(setTimeout(fn,ms))}
+  function reset(){
+    timers.forEach(clearTimeout);timers=[];
+    showPanel(false); badge.classList.remove('on');
+    [c1,c2,c3,uhead].forEach(function(e){e.classList.remove('on')});
+    toast.classList.remove('on'); flash.classList.remove('on');
+    up.c1=0; up.c3=0; ticking.c1=false; ticking.c3=false;
+    $('c1dot').className='dot start'; $('c1h').className='chip warn'; $('c1h').innerHTML='<span class="d" style="background:#FBBF24"></span>:3001'; $('c1cpu').textContent='–';
+    moveCursor(icon,0,0);
+    run();
+  }
+
+  function run(){
+    setCap('Your whole stack. One window.','A floating widget, always a hotkey away');
+    at(200,function(){moveCursor(icon)});
+    // open panel
+    at(1400,function(){ setCap('Start your stack — watch it come alive'); icon.style.transform='scale(.9)'; });
+    at(1650,function(){ icon.style.transform=''; showPanel(true); c1.classList.add('on'); ticking.c1=true; up.c1=0; pcount.textContent='starting…'; });
+    // c1 healthy + c2
+    at(3000,function(){ $('c1dot').className='dot run'; $('c1h').className='chip ok'; $('c1h').innerHTML='<span class="d" style="background:#4ADE80"></span>:3001'; $('c1cpu').textContent='2%'; });
+    at(3400,function(){ c2.classList.add('on'); pcount.textContent='2 running'; });
+    at(4200,function(){ setCap('Live health, uptime and CPU','Colour-coded by space'); });
+    // detected
+    at(6200,function(){ setCap('It catches servers you start anywhere','Even one your AI assistant spins up'); });
+    at(6600,function(){ toasttxt.textContent='Detected vite on :5173'; toast.classList.add('on'); });
+    at(6900,function(){ uhead.classList.add('on'); c3.classList.add('on'); ticking.c3=true; up.c3=6; pcount.textContent='2 running · 1 detected'; });
+    at(8200,function(){ toast.classList.remove('on'); });
+    // open in browser
+    at(8600,function(){ setCap('Jump straight in','One click to the running app'); moveCursor($('c3glob')); });
+    at(9500,function(){ $('c3glob').classList.add('hit'); flash.textContent='↗ Opening http://localhost:5173'; flash.classList.add('on'); });
+    at(9800,function(){ $('c3glob').classList.remove('hit'); });
+    at(11000,function(){ flash.classList.remove('on'); });
+    // collapse
+    at(11400,function(){ setCap('Everything running. One window.','DevDeck — free & open source'); moveCursor(icon); });
+    at(11800,function(){ showPanel(false); badge.textContent='3'; badge.classList.add('on'); });
+    // loop
+    at(14200,function(){ var n=0; timers.forEach(clearTimeout); reset(); });
+  }
+  // gentle loop counter caption
+  run();
+})();
+</script>
+</body>
+</html>

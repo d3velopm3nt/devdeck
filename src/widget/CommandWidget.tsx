@@ -36,6 +36,10 @@ const win = () => getCurrentWindow()
 // Floating-window states and screen-corner docking.
 type Corner = 'tl' | 'tr' | 'bl' | 'br' | 'free'
 type Mode = 'icon' | 'quick' | 'full'
+// A press must travel this far before it becomes a window drag; below it, the
+// press is treated as a click. Kept deliberately generous so a normal tap on
+// the floating icon opens it instead of nudging the window across the screen.
+const DRAG_THRESHOLD = 8
 const CORNER_MARGIN = 14
 const CORNER_BOTTOM = 52 // clears the Windows taskbar for bottom corners
 const CORNERS: { key: Corner; label: string }[] = [
@@ -47,13 +51,18 @@ const CORNERS: { key: Corner; label: string }[] = [
 ]
 
 type CollapsedStyle = 'single' | 'strip'
-const STRIP_W = 60
-const STRIP_HOVER_W = 264 // widened while a hover-detail card is shown
-const STRIP_ICON = 44
-const STRIP_GAP = 8
-const STRIP_HEADER = 30
+// The "strip" collapsed style is a rich session panel (name · status · health ·
+// uptime), coloured per space — not a column of tiny icons.
+const PANEL_W = 300
+const PANEL_HEADER = 46
+const PANEL_FOOTER = 42
+const PANEL_PAD = 8
+const SESSION_ROW = 62 // a running-session card + gap
+const NAV_ROW = 52 // a workspace / project / item row + gap
 
-type NavLevel = 'workspace' | 'project' | 'item'
+// 'active' shows the sessions currently running; the rest are the drill-down
+// navigator (workspace → project → item) used to start something new.
+type NavLevel = 'active' | 'workspace' | 'project' | 'item'
 type NavKind = 'ws' | 'project' | 'service' | 'command' | 'profile'
 interface NavItem {
   key: string
@@ -72,14 +81,15 @@ function sizeForMode(
   mode: Mode,
   orient: 'v' | 'h',
   full: { w: number; h: number },
-  collapsed?: { style: CollapsedStyle; count: number; wide?: boolean },
+  collapsed?: { style: CollapsedStyle; count: number; rowH?: number },
 ): { w: number; h: number } {
   if (mode === 'icon') {
     if (collapsed?.style === 'strip') {
-      // header + N icons + divider + open-full, stacked vertically
-      const n = collapsed.count
-      const h = 6 + STRIP_HEADER + STRIP_GAP + n * (STRIP_ICON + STRIP_GAP) + 10 + STRIP_ICON + 8
-      return { w: collapsed.wide ? STRIP_HOVER_W : STRIP_W, h: Math.min(Math.max(h, 120), 920) }
+      // header + N rows (in a scroll area) + footer
+      const rows = Math.max(collapsed.count, 1)
+      const rowH = collapsed.rowH ?? SESSION_ROW
+      const h = PANEL_PAD * 2 + PANEL_HEADER + rows * rowH + PANEL_FOOTER
+      return { w: PANEL_W, h: Math.min(Math.max(h, 150), 900) }
     }
     return { w: 58, h: 58 }
   }
@@ -107,6 +117,19 @@ async function positionForCorner(corner: Corner, w: number, h: number) {
   } catch {
     /* ignore */
   }
+}
+
+// Seconds → a short human uptime ("8s", "12m", "1h 4m", "2d 3h").
+function fmtUptime(secs: number): string {
+  if (!Number.isFinite(secs) || secs < 0) return '—'
+  const s = Math.floor(secs)
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m}m`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ${m % 60}m`
+  const day = Math.floor(h / 24)
+  return `${day}d ${h % 24}h`
 }
 
 // Hex "#rrggbb" → rgba() at the given alpha.
@@ -217,6 +240,8 @@ export function CommandWidget() {
   const [selIndex, setSelIndex] = useState(0)
   const [density, setDensity] = useState<Density>('compact')
   const [recentCount, setRecentCount] = useState(3)
+  const [detectEnabled, setDetectEnabled] = useState(true)
+  const [detectNotify, setDetectNotify] = useState(true)
   const [toast, setToast] = useState<{ msg: string; color: string } | null>(null)
   const [expandedSize, setExpandedSize] = useState<{ w: number; h: number }>({ w: 380, h: 560 })
   const searchRef = useRef<HTMLInputElement>(null)
@@ -245,6 +270,8 @@ export function CommandWidget() {
     void ipc.settingGet('widget_view').then((v) => v && setView(v as View))
     void ipc.settingGet('widget_density').then((v) => v && setDensity(v as Density))
     void ipc.settingGet('widget_recent_count').then((v) => v && setRecentCount(Number(v) || 3))
+    void ipc.settingGet('widget_detect').then((v) => setDetectEnabled(v !== '0'))
+    void ipc.settingGet('widget_detect_notify').then((v) => setDetectNotify(v !== '0'))
     // Corner-dock + quick-list orientation, then anchor if docked.
     void (async () => {
       const c = ((await ipc.settingGet('widget_corner')) as Corner | null) ?? 'free'
@@ -436,7 +463,99 @@ export function CommandWidget() {
     return { proj, ws }
   }, [app.svcStates, model.itemsById])
 
+  // The sessions currently running — the strip's default face. Icons here ARE
+  // sessions; tapping one stops it.
+  const activeSessions = useMemo((): NavItem[] => {
+    const out: NavItem[] = []
+    for (const s of Object.values(app.svcStates)) {
+      if (s.status !== 'running') continue
+      const it = model.itemsById.get('s' + s.id)
+      if (!it) continue
+      out.push({
+        key: it.id,
+        kind: 'service',
+        id: it.refId,
+        name: it.name,
+        color: spaceColorOf(it.spaceId),
+        glyph: (it.name[0] ?? '?').toUpperCase(),
+        running: true,
+        detail: it.projectName + ' · running · tap to stop',
+      })
+    }
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [app.svcStates, model.itemsById])
+
+  // Foreign dev servers DevDeck didn't start (from the monitor's `detected`
+  // stats). Each is attributed, best-effort, to the space whose folder contains
+  // its working directory — but stays "unassigned" until the user says so.
+  const detectedSessions = useMemo(() => {
+    const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+    const cands: { dir: string; spaceId: number; name: string; color: string }[] = []
+    const push = (node: TreeNode | undefined, spaceId: number, name: string) => {
+      if (!node) return
+      const dir = resolveDir(app.nodes, node)
+      if (dir) cands.push({ dir: norm(dir), spaceId, name, color: model.spaceById.get(spaceId)?.color ?? '#7C8CF8' })
+    }
+    for (const p of model.projects) push(p, p.id, p.name)
+    for (const n of app.nodes) {
+      if (n.kind !== 'folder') continue
+      const proj = model.projOf(n)
+      if (proj) push(n, proj.id, proj.name)
+    }
+    return app.stats
+      .filter((s) => s.kind === 'detected')
+      .map((s) => {
+        const cwd = s.cwd ?? ''
+        const c = norm(cwd)
+        let match: (typeof cands)[number] | undefined
+        for (const cand of cands) {
+          if (cand.dir && (c === cand.dir || c.startsWith(cand.dir + '/'))) {
+            if (!match || cand.dir.length > match.dir.length) match = cand
+          }
+        }
+        const folder = cwd ? cwd.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || '' : ''
+        return {
+          pid: s.pid,
+          tool: s.tool || s.name,
+          cwd,
+          ports: s.ports,
+          cpu: s.cpu,
+          mem: s.mem_mb,
+          uptime: s.uptime_secs,
+          name: folder || s.tool || s.name || 'pid ' + s.pid,
+          spaceId: match?.spaceId ?? null,
+          spaceName: match?.name ?? null,
+          color: match?.color ?? '#9BA3B2',
+        }
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [app.stats, app.nodes, model])
+
+  const detected = detectEnabled ? detectedSessions : []
+
+  // Toast once when a new foreign server appears (seed silently on first load
+  // so opening the widget doesn't fire a burst for already-running servers).
+  const seenDetected = useRef<Set<number>>(new Set())
+  const detectInit = useRef(false)
+  useEffect(() => {
+    const cur = new Set(detected.map((d) => d.pid))
+    if (!detectInit.current) {
+      detectInit.current = true
+      seenDetected.current = cur
+      return
+    }
+    if (detectNotify) {
+      for (const d of detected) {
+        if (!seenDetected.current.has(d.pid)) showToast(`Detected ${d.tool}${d.ports[0] ? ' on :' + d.ports[0] : ''}`, d.color)
+      }
+    }
+    seenDetected.current = cur
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detected])
+
   const navItems = useMemo((): NavItem[] => {
+    if (navLevel === 'active') return activeSessions
     if (navLevel === 'workspace') {
       return model.workspaces.map((w) => ({
         key: 'w' + w.id,
@@ -561,7 +680,7 @@ export function CommandWidget() {
       document.removeEventListener('mouseup', up)
     }
     const move = (ev: MouseEvent) => {
-      if (!dragged && (Math.abs(ev.screenX - sx) > 4 || Math.abs(ev.screenY - sy) > 4)) {
+      if (!dragged && (Math.abs(ev.screenX - sx) > DRAG_THRESHOLD || Math.abs(ev.screenY - sy) > DRAG_THRESHOLD)) {
         dragged = true
         cleanup()
         void win().startDragging()
@@ -576,7 +695,13 @@ export function CommandWidget() {
   }
   // Resize the OS window for a mode and re-anchor to the docked corner.
   const placeWidget = async (m: Mode, o: 'v' | 'h', c: Corner, style?: CollapsedStyle) => {
-    const s = sizeForMode(m, o, expandedSize, { style: style ?? collapsedStyle, count: navItems.length })
+    const rowH = navLevel === 'active' ? SESSION_ROW : NAV_ROW
+    // The sessions view stacks managed cards + detected cards (+ a subheader).
+    const count =
+      navLevel === 'active'
+        ? activeSessions.length + detected.length + (detected.length ? 1 : 0)
+        : navItems.length
+    const s = sizeForMode(m, o, expandedSize, { style: style ?? collapsedStyle, count, rowH })
     programmaticMove.current = true
     await ipc.widgetResize(s.w, s.h)
     await positionForCorner(c, s.w, s.h)
@@ -619,8 +744,11 @@ export function CommandWidget() {
     setQuickOrient(o)
     void ipc.settingSet('widget_quick_orientation', o)
   }
+  // Where the strip should open: on the running sessions if there are any,
+  // otherwise at the top of the workspace navigator.
+  const initialNavLevel = (): NavLevel => (activeSessions.length + detected.length > 0 ? 'active' : 'workspace')
   const resetNav = () => {
-    setNavLevel('workspace')
+    setNavLevel(initialNavLevel())
     setNavWs(null)
     setNavProject(null)
     setHovered(null)
@@ -641,13 +769,25 @@ export function CommandWidget() {
   useEffect(() => {
     if (mode === 'icon' && collapsedStyle === 'strip' && hovered == null) void placeWidget('icon', quickOrient, corner)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navItems.length])
+  }, [navItems.length, detected.length])
+
+  // Keep the strip's default face honest: surface running sessions the moment
+  // they exist (only from the top level, so a drill-down isn't yanked away),
+  // and drop back to the navigator once the last one stops.
+  useEffect(() => {
+    if (mode !== 'icon' || collapsedStyle !== 'strip') return
+    const live = activeSessions.length + detected.length
+    if (live > 0 && navLevel === 'workspace') setNavLevel('active')
+    else if (live === 0 && navLevel === 'active') setNavLevel('workspace')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSessions.length, detected.length, mode, collapsedStyle])
 
   // ---- strip navigation ----
   const navBack = () => {
     setHovered(null)
     if (navLevel === 'item') setNavLevel('project')
     else if (navLevel === 'project') setNavLevel('workspace')
+    else if (navLevel === 'workspace') setNavLevel('active') // back to sessions
   }
   const navTap = (it: NavItem) => {
     setHovered(null)
@@ -686,37 +826,18 @@ export function CommandWidget() {
     await placeWidget('icon', quickOrient, corner, 'single')
   }
 
-  // While a hover-detail card is shown, widen the strip window (to the left)
-  // to make room for the card; shrink back when the pointer leaves.
-  const hoverOn = hovered != null
-  useEffect(() => {
-    if (mode !== 'icon' || collapsedStyle !== 'strip') return
-    let cancelled = false
-    void (async () => {
-      if (hoverOn) {
-        programmaticMove.current = true
-        const sf = await win().scaleFactor()
-        const pos = await win().outerPosition()
-        const size = await win().outerSize()
-        const right = (pos.x + size.width) / sf
-        const top = pos.y / sf
-        const h = size.height / sf
-        await ipc.widgetResize(STRIP_HOVER_W, h)
-        if (!cancelled) await win().setPosition(new LogicalPosition(Math.round(right - STRIP_HOVER_W), Math.round(top)))
-        setTimeout(() => (programmaticMove.current = false), 160)
-      } else {
-        await placeWidget('icon', quickOrient, corner, 'strip')
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hoverOn])
   const setCount = (n: number) => {
     const v = Math.max(1, Math.min(8, n))
     setRecentCount(v)
     void ipc.settingSet('widget_recent_count', String(v))
+  }
+  const setDetect = (v: boolean) => {
+    setDetectEnabled(v)
+    void ipc.settingSet('widget_detect', v ? '1' : '0')
+  }
+  const setDetectNotifyPref = (v: boolean) => {
+    setDetectNotify(v)
+    void ipc.settingSet('widget_detect_notify', v ? '1' : '0')
   }
   const finishTour = () => {
     setTourOpen(false)
@@ -815,66 +936,202 @@ export function CommandWidget() {
     )
   }
 
-  // Collapsed — strip navigator: drill Workspaces → Projects → items, act on
-  // services/commands/profiles. Hovering an icon widens the window to show a
-  // detail card on the left. Everything is drag-to-move.
+  // Collapsed — the floating session panel. When sessions are running it shows
+  // a coloured card per session (name · status · health · uptime · CPU/mem);
+  // otherwise it drills Workspaces → Projects → items to start something. The
+  // header is the only drag handle, so body controls click cleanly.
   if (mode === 'icon' && collapsedStyle === 'strip') {
-    const hoveredItem = hovered ? navItems.find((i) => i.key === hovered) : undefined
-    const hoveredIdx = hovered ? navItems.findIndex((i) => i.key === hovered) : -1
-    const levelLabel = navLevel === 'workspace' ? 'Workspaces' : navLevel === 'project' ? (model.wsById.get(navWs ?? -1)?.name ?? 'Projects') : (model.spaceById.get(navProject ?? -1)?.name ?? 'Items')
-    const dot = (color: string, pulse: boolean) => ({ ...css('position:absolute;bottom:-1px;right:-1px;width:9px;height:9px;border-radius:50%;border:2px solid #12141b'), background: color, animation: pulse ? 'cw-pulse 2s ease-in-out infinite' : 'none' })
+    const levelLabel = navLevel === 'active' ? 'Sessions' : navLevel === 'workspace' ? 'Workspaces' : navLevel === 'project' ? (model.wsById.get(navWs ?? -1)?.name ?? 'Projects') : (model.spaceById.get(navProject ?? -1)?.name ?? 'Items')
+    const atTop = navLevel === 'active' || (navLevel === 'workspace' && activeSessions.length === 0)
+    const subtitle =
+      navLevel === 'active'
+        ? `${activeSessions.length} running${detected.length ? ` · ${detected.length} detected` : ''}`
+        : navLevel === 'workspace'
+          ? `${model.workspaces.length} workspace${model.workspaces.length === 1 ? '' : 's'}`
+          : navLevel === 'project'
+            ? `${navItems.length} project${navItems.length === 1 ? '' : 's'}`
+            : `${navItems.length} item${navItems.length === 1 ? '' : 's'}`
+
+    const iconBtn = css('width:28px;height:28px;flex-shrink:0;border:none;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center')
+
+    // A live running-session card, coloured by its space.
+    const sessionCard = (s: NavItem) => {
+      const svc = app.services.find((x) => x.id === s.id)
+      const stat = app.stats.find((x) => x.kind === 'service' && x.id === s.id)
+      const spaceName = model.itemsById.get('s' + s.id)?.projectName ?? ''
+      const uptime = stat ? fmtUptime(stat.uptime_secs) : 'starting…'
+      const cpu = stat ? Math.round(stat.cpu) : null
+      const mem = stat ? Math.round(stat.mem_mb) : null
+      const hp = svc?.health_port ?? null
+      const healthy = hp != null && !!stat?.ports?.includes(hp)
+      const it = model.itemsById.get('s' + s.id)
+      // What to open in a browser: the health port, else the first port the
+      // process is actually listening on.
+      const openPort = hp ?? stat?.ports?.[0] ?? null
+      return (
+        <div key={s.key} style={{ ...css('position:relative;display:flex;align-items:stretch;gap:9px;padding:9px 10px 9px 12px;border-radius:12px;overflow:hidden;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07)'), boxShadow: `inset 3px 0 0 ${s.color}` }}>
+          <div style={css('flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:3px')}>
+            <div style={css('display:flex;align-items:center;gap:6px')}>
+              <span style={{ ...css('width:8px;height:8px;border-radius:50%;flex-shrink:0'), background: '#4ADE80', animation: 'cw-pulse 2s ease-in-out infinite' }} />
+              <span style={css('font-size:12.5px;font-weight:600;color:#E7EAF0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis')}>{s.name}</span>
+              <span style={css('flex:1')} />
+              <span style={{ ...css("font-family:'JetBrains Mono',monospace;font-size:10.5px;flex-shrink:0"), color: '#8b93a1' }}>{uptime}</span>
+            </div>
+            <div style={css('display:flex;align-items:center;gap:7px;min-width:0')}>
+              <span style={{ ...css('font-size:10px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:96px'), color: s.color }}>{spaceName || 'global'}</span>
+              {hp != null && (
+                <span style={{ ...css('display:inline-flex;align-items:center;gap:3px;font-size:9.5px;font-weight:600;padding:1px 5px;border-radius:5px;flex-shrink:0'), background: healthy ? 'rgba(74,222,128,0.14)' : 'rgba(251,191,36,0.14)', color: healthy ? '#4ADE80' : '#FBBF24' }}>
+                  <span style={{ ...css('width:5px;height:5px;border-radius:50%'), background: healthy ? '#4ADE80' : '#FBBF24' }} />
+                  :{hp}
+                </span>
+              )}
+              {cpu != null && <span style={css('font-size:9.5px;color:#5a6070;flex-shrink:0')}>{cpu}%</span>}
+              {mem != null && <span style={css('font-size:9.5px;color:#5a6070;flex-shrink:0')}>{mem}MB</span>}
+            </div>
+          </div>
+          <div style={css('display:flex;align-items:center;gap:4px;flex-shrink:0')}>
+            {openPort != null && (
+              <button data-nodrag title={`Open http://localhost:${openPort}`} onClick={() => { void ipc.openUrl(`http://localhost:${openPort}`); showToast('Opening localhost:' + openPort, s.color) }} style={{ ...iconBtn, width: 26, height: 26, background: 'rgba(255,255,255,0.05)' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9BA3B2" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a15 15 0 010 18M12 3a15 15 0 000 18" /></svg>
+              </button>
+            )}
+            <button data-nodrag title="Open a terminal here" onClick={() => it && openTerminal(it)} style={{ ...iconBtn, width: 26, height: 26, background: 'rgba(255,255,255,0.05)' }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9BA3B2" strokeWidth="2"><path d="M4 17l6-5-6-5M12 19h8" /></svg>
+            </button>
+            <button data-nodrag title={'Stop ' + s.name} onClick={() => navTap(s)} style={{ ...iconBtn, width: 26, height: 26, background: 'rgba(248,113,113,0.14)' }}>
+              <span style={css('width:9px;height:9px;border-radius:2px;background:#F87171')} />
+            </button>
+          </div>
+        </div>
+      )
+    }
+
+    // A detected (foreign) session — dashed, marked "detected", with a
+    // suggested space chip when we could attribute it by folder.
+    const detectedCard = (d: (typeof detected)[number]) => {
+      const port = d.ports[0] ?? null
+      return (
+        <div key={'d' + d.pid} style={{ ...css('position:relative;display:flex;align-items:stretch;gap:9px;padding:9px 10px 9px 12px;border-radius:12px;overflow:hidden;background:rgba(255,255,255,0.02);border:1px dashed rgba(255,255,255,0.16)'), boxShadow: `inset 3px 0 0 ${d.color}` }}>
+          <div style={css('flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:3px')}>
+            <div style={css('display:flex;align-items:center;gap:6px')}>
+              <span style={{ ...css('width:8px;height:8px;border-radius:50%;flex-shrink:0;border:1.5px solid #7C8CF8') }} />
+              <span style={css('font-size:12.5px;font-weight:600;color:#E7EAF0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis')}>{d.name}</span>
+              <span style={css('flex:1')} />
+              <span style={{ ...css("font-family:'JetBrains Mono',monospace;font-size:10.5px;flex-shrink:0"), color: '#8b93a1' }}>{fmtUptime(d.uptime)}</span>
+            </div>
+            <div style={css('display:flex;align-items:center;gap:7px;min-width:0')}>
+              <span style={{ ...css('font-size:10px;font-weight:600;flex-shrink:0'), color: d.color }}>{d.tool}</span>
+              {port != null && <span style={css('font-family:\'JetBrains Mono\',monospace;font-size:9.5px;color:#8b93a1;flex-shrink:0')}>:{port}</span>}
+              <span style={css('font-size:9.5px;color:#5a6070;flex-shrink:0')}>{Math.round(d.cpu)}%</span>
+              {d.spaceName ? (
+                <span style={{ ...css('font-size:9px;font-weight:600;padding:1px 5px;border-radius:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'), background: hexA(d.color, 0.16), color: d.color }}>→ {d.spaceName}</span>
+              ) : (
+                <span style={css('font-size:9px;font-weight:600;padding:1px 5px;border-radius:5px;background:rgba(255,255,255,0.05);color:#7d8494;flex-shrink:0')}>unassigned</span>
+              )}
+            </div>
+          </div>
+          <div style={css('display:flex;align-items:center;gap:4px;flex-shrink:0')}>
+            {port != null && (
+              <button data-nodrag title={`Open http://localhost:${port}`} onClick={() => { void ipc.openUrl(`http://localhost:${port}`); showToast('Opening localhost:' + port, d.color) }} style={{ ...iconBtn, width: 26, height: 26, background: 'rgba(255,255,255,0.05)' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9BA3B2" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a15 15 0 010 18M12 3a15 15 0 000 18" /></svg>
+              </button>
+            )}
+            <button data-nodrag title="Open a terminal here" onClick={() => { void widgetOpenTerminal(d.cwd, d.name); showToast('Opened terminal · ' + d.name, d.color) }} style={{ ...iconBtn, width: 26, height: 26, background: 'rgba(255,255,255,0.05)' }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9BA3B2" strokeWidth="2"><path d="M4 17l6-5-6-5M12 19h8" /></svg>
+            </button>
+          </div>
+        </div>
+      )
+    }
+
+    // A workspace / project / command / profile / stopped-service row.
+    const navRow = (it: NavItem) => {
+      const drills = it.kind === 'ws' || it.kind === 'project'
+      return (
+        <button key={it.key} data-nodrag title={it.name} onClick={() => navTap(it)}
+          style={css(`display:flex;align-items:center;gap:10px;text-align:left;width:100%;padding:8px 10px;border-radius:11px;cursor:pointer;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07)`)}>
+          <span style={{ ...css('width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0'), background: hexA(it.color, 0.16), border: `1px solid ${hexA(it.color, 0.4)}` }}>
+            <span style={{ ...css("font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px"), color: it.color }}>{it.glyph}</span>
+          </span>
+          <span style={css('flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.2')}>
+            <span style={css('font-size:12.5px;font-weight:600;color:#E7EAF0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis')}>{it.name}</span>
+            <span style={css('font-size:10px;color:#5a6070;white-space:nowrap;overflow:hidden;text-overflow:ellipsis')}>{it.detail}</span>
+          </span>
+          {it.kind === 'service' && <span style={{ ...css('width:8px;height:8px;border-radius:50%;flex-shrink:0'), background: it.running ? '#4ADE80' : '#6B7280', animation: it.running ? 'cw-pulse 2s ease-in-out infinite' : 'none' }} />}
+          {drills && it.hasRunning && <span style={{ ...css('width:8px;height:8px;border-radius:50%;flex-shrink:0'), background: '#4ADE80', animation: 'cw-pulse 2s ease-in-out infinite' }} />}
+          {drills && (
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#5a6070" strokeWidth="2.2" style={{ flexShrink: 0 }}><path d="M9 6l6 6-6 6" /></svg>
+          )}
+        </button>
+      )
+    }
+
     return (
-      <div style={css('position:fixed;inset:0;font-family:Geist,system-ui,sans-serif')} onMouseLeave={() => setHovered(null)}>
+      <div style={css('position:fixed;inset:0;font-family:Geist,system-ui,sans-serif;user-select:none')}>
         <style>{keyframes}</style>
-        <div style={css('width:100%;height:100%;display:flex;flex-direction:row;justify-content:flex-end')}>
-          {/* hover-detail card (left; only meaningful when the window is widened) */}
-          <div style={css('flex:1;position:relative;pointer-events:none')}>
-            {hoveredItem && (
-              <div style={{ ...css('position:absolute;right:10px;min-width:150px;max-width:186px;padding:9px 11px;border-radius:11px;background:#1b1e27;border:1px solid rgba(255,255,255,0.12);box-shadow:0 14px 40px rgba(0,0,0,0.55);animation:cw-pop .12s ease'), top: 6 + STRIP_HEADER + STRIP_GAP + Math.max(0, hoveredIdx) * (STRIP_ICON + STRIP_GAP) + STRIP_ICON / 2, transform: 'translateY(-50%)' }}>
-                <div style={css('display:flex;align-items:center;gap:6px')}>
-                  {hoveredItem.kind === 'service' && <span style={{ ...css('width:7px;height:7px;border-radius:50%;flex-shrink:0'), background: hoveredItem.running ? '#4ADE80' : '#6B7280' }} />}
-                  <span style={css('font-size:12.5px;font-weight:600;color:#E7EAF0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis')}>{hoveredItem.name}</span>
-                </div>
-                <div style={css('font-size:10.5px;color:#7d8494;margin-top:2px')}>{hoveredItem.detail}</div>
-                {hoveredItem.cmd && <div style={css("font-family:'JetBrains Mono',monospace;font-size:10px;color:#9BA3B2;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis")}>{hoveredItem.cmd}</div>}
+        <div style={css('width:100%;height:100%;display:flex;flex-direction:column;border:1px solid rgba(255,255,255,0.1);border-radius:16px;overflow:hidden;background:radial-gradient(900px 500px at 82% 0,rgba(124,140,248,0.13),transparent 58%),linear-gradient(180deg,rgba(24,27,35,0.98),rgba(15,17,23,0.98));box-shadow:0 18px 48px rgba(0,0,0,0.5)')}>
+
+          {/* header / drag bar */}
+          <div onMouseDown={startDrag} style={css('flex-shrink:0;display:flex;align-items:center;gap:8px;padding:8px 9px;border-bottom:1px solid rgba(255,255,255,0.06);cursor:grab')}>
+            {atTop ? (
+              <button data-nodrag title="Collapse to icon" onClick={() => void openSingle()} style={{ ...iconBtn, background: 'rgba(255,255,255,0.05)' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9BA3B2" strokeWidth="2"><rect x="5" y="5" width="14" height="14" rx="4" /></svg>
+              </button>
+            ) : (
+              <button data-nodrag title={navLevel === 'workspace' ? 'Back to sessions' : navLevel === 'item' ? 'Back to projects' : 'Back to workspaces'} onClick={navBack} style={{ ...iconBtn, background: 'rgba(124,140,248,0.14)' }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#A7B2FF" strokeWidth="2.2"><path d="M15 6l-6 6 6 6" /></svg>
+              </button>
+            )}
+            <div style={css('flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.15')}>
+              <span style={css('font-size:12.5px;font-weight:700;color:#E7EAF0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis')}>{levelLabel}</span>
+              <span style={css('font-size:10px;color:#5a6070;white-space:nowrap;overflow:hidden;text-overflow:ellipsis')}>{subtitle}</span>
+            </div>
+            <button data-nodrag title="Open full widget" onClick={() => void goFull()} style={{ ...iconBtn, background: 'rgba(124,140,248,0.14)' }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#A7B2FF" strokeWidth="2"><path d="M8 3H5a2 2 0 00-2 2v3M16 3h3a2 2 0 012 2v3M8 21H5a2 2 0 01-2-2v-3M16 21h3a2 2 0 002-2v-3" /></svg>
+            </button>
+          </div>
+
+          {/* body */}
+          <div className="cw-scroll" style={css('flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:8px;display:flex;flex-direction:column;gap:6px')}>
+            {navLevel === 'active' ? (
+              <>
+                {activeSessions.map(sessionCard)}
+                {detected.length > 0 && (
+                  <div style={css('display:flex;align-items:center;gap:7px;padding:2px 2px 0;margin-top:2px')}>
+                    <span style={css('font-size:9.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#7d8494')}>Unassigned</span>
+                    <span style={css('flex:1;height:1px;background:rgba(255,255,255,0.07)')} />
+                    <span style={css('font-size:9.5px;color:#5a6070')}>{detected.length}</span>
+                  </div>
+                )}
+                {detected.map(detectedCard)}
+                {activeSessions.length === 0 && detected.length === 0 && (
+                  <div style={css('flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:7px;color:#5a6070;padding:18px 14px')}>
+                    <div style={css('font-size:11.5px')}>No sessions running.</div>
+                  </div>
+                )}
+              </>
+            ) : navItems.length === 0 ? (
+              <div style={css('flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:7px;color:#5a6070;padding:18px 14px')}>
+                <div style={css('font-size:26px;opacity:0.6')}>∅</div>
+                <div style={css('font-size:11.5px')}>Nothing in {levelLabel} yet.</div>
               </div>
+            ) : (
+              navItems.map(navRow)
             )}
           </div>
 
-          {/* icon column (right) */}
-          <div onMouseDown={dragOrClick()} style={{ ...css('flex-shrink:0;height:100%;display:flex;flex-direction:column;align-items:center;gap:8px;padding:6px 0;border:1px solid rgba(255,255,255,0.12);border-radius:18px;background:linear-gradient(180deg,rgba(28,31,40,0.97),rgba(16,18,25,0.98));box-shadow:0 16px 44px rgba(0,0,0,0.5),0 0 0 1px rgba(124,140,248,0.14);cursor:grab'), width: STRIP_W }}>
-            {/* header: back (drilled in) or collapse-to-single (top level) */}
-            {navLevel === 'workspace' ? (
-              <div onMouseDown={dragOrClick(() => void openSingle())} title="Collapse to single icon"
-                style={{ ...css('border-radius:7px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0'), width: 24, height: STRIP_HEADER }}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9BA3B2" strokeWidth="2"><rect x="5" y="5" width="14" height="14" rx="4" /></svg>
-              </div>
+          {/* footer */}
+          <div style={css('flex-shrink:0;display:flex;align-items:center;gap:8px;padding:7px 9px;border-top:1px solid rgba(255,255,255,0.06);background:rgba(0,0,0,0.18)')}>
+            {navLevel === 'active' ? (
+              <button data-nodrag onClick={() => { setNavWs(null); setNavProject(null); setNavLevel('workspace') }} title="Browse workspaces to start something"
+                style={css('flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:7px;border:1px solid rgba(124,140,248,0.3);background:rgba(124,140,248,0.12);border-radius:8px;cursor:pointer;color:#A7B2FF;font-size:11.5px;font-weight:600')}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A7B2FF" strokeWidth="2.2"><path d="M12 5v14M5 12h14" /></svg>Start something
+              </button>
             ) : (
-              <div onMouseDown={dragOrClick(navBack)} title={'Back to ' + (navLevel === 'item' ? 'projects' : 'workspaces')}
-                style={{ ...css('border-radius:7px;background:rgba(124,140,248,0.14);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0'), width: 34, height: STRIP_HEADER }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A7B2FF" strokeWidth="2.2"><path d="M15 6l-6 6 6 6" /></svg>
-              </div>
+              <span style={css('flex:1;font-size:10.5px;color:#4f5563;display:flex;align-items:center;gap:6px')}>
+                <span style={css('width:6px;height:6px;border-radius:50%;background:#4ADE80')} />{runningCount} running
+              </span>
             )}
-
-            {/* items for the current level */}
-            <div className="cw-scroll" style={css('flex:1;min-height:0;width:100%;display:flex;flex-direction:column;align-items:center;gap:8px;overflow-y:auto;overflow-x:hidden')}>
-              {navItems.length === 0 && (
-                <div title={'No items in ' + levelLabel} style={{ ...css('border-radius:12px;border:1px dashed rgba(255,255,255,0.14);display:flex;align-items:center;justify-content:center;color:#4f5563;font-size:10px;flex-shrink:0'), width: STRIP_ICON, height: STRIP_ICON }}>∅</div>
-              )}
-              {navItems.map((it) => (
-                <div key={it.key} onMouseEnter={() => setHovered(it.key)} onMouseDown={dragOrClick(() => navTap(it))} title={it.name}
-                  style={{ ...css(`position:relative;border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;background:${hexA(it.color, 0.16)};border:1px solid ${hexA(it.color, hovered === it.key ? 0.85 : 0.45)}`), width: STRIP_ICON, height: STRIP_ICON }}>
-                  <span style={{ ...css("font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px"), color: it.color }}>{it.glyph}</span>
-                  {it.kind === 'service' && <span style={dot(it.running ? '#4ADE80' : '#6B7280', !!it.running)} />}
-                  {(it.kind === 'ws' || it.kind === 'project') && it.hasRunning && <span style={dot('#4ADE80', true)} />}
-                </div>
-              ))}
-            </div>
-
-            {/* divider + open-full */}
-            <div style={css('width:26px;height:1px;background:rgba(255,255,255,0.1);flex-shrink:0')} />
-            <div onMouseEnter={() => setHovered(null)} onMouseDown={dragOrClick(() => void goFull())} title="Open full widget"
-              style={{ ...css('position:relative;border-radius:12px;background:linear-gradient(135deg,#7C8CF8,#4ADE80);display:flex;align-items:center;justify-content:center;color:#0c0e14;font-weight:700;font-size:18px;cursor:pointer;flex-shrink:0'), width: STRIP_ICON, height: STRIP_ICON }}>⌘</div>
           </div>
         </div>
       </div>
@@ -935,7 +1192,7 @@ export function CommandWidget() {
               Open full
             </button>
           </div>
-          {widgetSetOpen && <WidgetSettings corner={corner} orient={quickOrient} count={recentCount} collapsed={collapsedStyle} onCorner={setCornerDock} onOrient={setOrient} onCount={setCount} onCollapse={(s) => void collapseAs(s)} onClose={() => setWidgetSetOpen(false)} onTour={() => { setWidgetSetOpen(false); setTourOpen(true); void goFull() }} />}
+          {widgetSetOpen && <WidgetSettings corner={corner} orient={quickOrient} count={recentCount} collapsed={collapsedStyle} detect={detectEnabled} detectNotify={detectNotify} onCorner={setCornerDock} onOrient={setOrient} onCount={setCount} onCollapse={(s) => void collapseAs(s)} onDetect={setDetect} onDetectNotify={setDetectNotifyPref} onClose={() => setWidgetSetOpen(false)} onTour={() => { setWidgetSetOpen(false); setTourOpen(true); void goFull() }} />}
         </div>
       </div>
     )
@@ -1042,7 +1299,7 @@ export function CommandWidget() {
           </div>
         )}
 
-        {widgetSetOpen && <WidgetSettings corner={corner} orient={quickOrient} count={recentCount} collapsed={collapsedStyle} onCorner={setCornerDock} onOrient={setOrient} onCount={setCount} onCollapse={(s) => void collapseAs(s)} onClose={() => setWidgetSetOpen(false)} onTour={() => { setWidgetSetOpen(false); setTourOpen(true) }} />}
+        {widgetSetOpen && <WidgetSettings corner={corner} orient={quickOrient} count={recentCount} collapsed={collapsedStyle} detect={detectEnabled} detectNotify={detectNotify} onCorner={setCornerDock} onOrient={setOrient} onCount={setCount} onCollapse={(s) => void collapseAs(s)} onDetect={setDetect} onDetectNotify={setDetectNotifyPref} onClose={() => setWidgetSetOpen(false)} onTour={() => { setWidgetSetOpen(false); setTourOpen(true) }} />}
 
         {tourOpen && <TourView done={tourDone} onAction={(a) => void ipc.emitTourAction(a)} onFinish={finishTour} />}
 
@@ -1075,10 +1332,12 @@ type D = typeof DENSITY['compact']
 
 // Widget settings popover: corner dock, quick-list orientation, and how many
 // recent/active items the quick popup shows.
-function WidgetSettings({ corner, orient, count, collapsed, onCorner, onOrient, onCount, onCollapse, onClose, onTour }: {
+function WidgetSettings({ corner, orient, count, collapsed, detect, detectNotify, onCorner, onOrient, onCount, onCollapse, onDetect, onDetectNotify, onClose, onTour }: {
   corner: Corner; orient: 'v' | 'h'; count: number; collapsed: CollapsedStyle
+  detect: boolean; detectNotify: boolean
   onCorner: (c: Corner) => void; onOrient: (o: 'v' | 'h') => void; onCount: (n: number) => void
   onCollapse: (s: CollapsedStyle) => void
+  onDetect: (v: boolean) => void; onDetectNotify: (v: boolean) => void
   onClose: () => void; onTour: () => void
 }) {
   const row = css('display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px')
@@ -1093,7 +1352,7 @@ function WidgetSettings({ corner, orient, count, collapsed, onCorner, onOrient, 
           <span style={label}>Collapse to</span>
           <div style={css('display:flex;gap:3px')}>
             <button title="A single floating icon" onClick={() => onCollapse('single')} style={seg(collapsed === 'single')}>⌘ Icon</button>
-            <button title="A strip of session icons" onClick={() => onCollapse('strip')} style={seg(collapsed === 'strip')}>▤ Strip</button>
+            <button title="A live session panel" onClick={() => onCollapse('strip')} style={seg(collapsed === 'strip')}>▤ Panel</button>
           </div>
         </div>
 
@@ -1120,6 +1379,24 @@ function WidgetSettings({ corner, orient, count, collapsed, onCorner, onOrient, 
             <button onClick={() => onCount(count - 1)} style={seg(false)}>−</button>
             <span style={css('min-width:18px;text-align:center;font-size:13px;color:#E7EAF0;font-weight:600')}>{count}</span>
             <button onClick={() => onCount(count + 1)} style={seg(false)}>+</button>
+          </div>
+        </div>
+
+        <div style={css('height:1px;background:rgba(255,255,255,0.07);margin:2px 0 12px')} />
+
+        <div style={row}>
+          <span style={label}>Detect outside sessions</span>
+          <div style={css('display:flex;gap:3px')}>
+            <button title="Show dev servers started outside DevDeck" onClick={() => onDetect(true)} style={seg(detect)}>On</button>
+            <button onClick={() => onDetect(false)} style={seg(!detect)}>Off</button>
+          </div>
+        </div>
+
+        <div style={row}>
+          <span style={label}>Toast when detected</span>
+          <div style={css('display:flex;gap:3px')}>
+            <button onClick={() => onDetectNotify(true)} style={seg(detectNotify)}>On</button>
+            <button onClick={() => onDetectNotify(false)} style={seg(!detectNotify)}>Off</button>
           </div>
         </div>
 

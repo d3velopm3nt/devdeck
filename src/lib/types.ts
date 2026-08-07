@@ -94,7 +94,7 @@ export interface LogEntry {
 }
 
 export interface ProcStat {
-  kind: 'service' | 'terminal'
+  kind: 'service' | 'terminal' | 'detected'
   id: number
   name: string
   pid: number
@@ -103,6 +103,10 @@ export interface ProcStat {
   uptime_secs: number
   ports: number[]
   procs: number
+  /** working directory (detected sessions only; used to attribute to a space) */
+  cwd?: string
+  /** inferred dev tool, e.g. "vite", "next", "uvicorn" (detected only) */
+  tool?: string
 }
 
 export interface ShellDef {

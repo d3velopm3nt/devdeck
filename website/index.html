@@ -205,6 +205,7 @@
     <div class="spacer"></div>
     <a class="link hide" href="#features">Features</a>
     <a class="link hide" href="#widget">Widget</a>
+    <a class="link hide" href="#detect">Auto-detect</a>
     <a class="link hide" href="#start">Get started</a>
     <a class="link hide" href="#support">Support</a>
     <a class="btn" href="https://github.com/d3velopm3nt/devdeck">GitHub</a>
@@ -219,8 +220,8 @@
       <h1>Your whole stack.<br /><span class="grad">One window.</span></h1>
       <p class="sub">
         DevDeck is a local-first development command center for Windows. Start every service,
-        watch what's running, and jump into any terminal — without hunting through six console
-        windows.
+        watch what's running — including servers you (or your AI assistant) spin up outside it —
+        and jump into any terminal, without hunting through six console windows.
       </p>
       <div class="cta">
         <a class="btn primary" href="https://github.com/d3velopm3nt/devdeck/releases">↓ Download for Windows</a>
@@ -262,7 +263,19 @@
           <div class="ico">🌐</div>
           <h3>Open in browser</h3>
           <p>Give a service a port and DevDeck adds one-click open. Click the port anywhere it
-             appears and your app opens on localhost.</p>
+             appears — including on the floating widget — and your app opens on localhost.</p>
+        </div>
+        <div class="card">
+          <div class="ico">📡</div>
+          <h3>Auto-detect sessions</h3>
+          <p>Started a dev server from a shell, a script, or an AI assistant? DevDeck spots it,
+             shows it with its real name, port and uptime, and offers to adopt it into a space.</p>
+        </div>
+        <div class="card">
+          <div class="ico">🎛️</div>
+          <h3>Pick the shell</h3>
+          <p>Run each command or service under the shell you want — cmd, PowerShell, pwsh, bash,
+             or WSL — per item, not one global default.</p>
         </div>
         <div class="card">
           <div class="ico">❯_</div>
@@ -317,19 +330,87 @@
         <div class="eyebrow">Command widget</div>
         <h2>Summon it from anywhere</h2>
         <p class="lead">
-          A floating, always-on-top widget on a global hotkey. Start a service, restart a worker,
-          or open a terminal without leaving your editor — then collapse it to a single icon.
+          A floating, always-on-top widget on a global hotkey. Collapse it to a single icon, or to
+          a live <b>session panel</b> — a coloured card per running session with its status, health,
+          port, uptime and CPU, plus one-click open-in-browser, terminal and stop.
         </p>
         <ul class="ticks">
           <li><code class="mono">Ctrl+Shift+Space</code> from any app</li>
-          <li>Recent, active, browse and fuzzy search</li>
-          <li>Run things without opening the main window</li>
-          <li>Collapses to a small floating icon</li>
+          <li>Session panel colour-coded by space, with live health and uptime</li>
+          <li>When nothing's running, drill Workspace → Project → service to start it</li>
+          <li>Full mode adds recent, active, browse and fuzzy search</li>
         </ul>
       </div>
       <div class="shot" style="margin-top:0">
         <div class="bar"><i></i><i></i><i></i><span>Command Widget</span></div>
         <img src="assets/widget-over-app.png" alt="The DevDeck command widget floating on top of the main window, showing two running services" />
+      </div>
+    </div>
+  </section>
+
+  <!-- AUTO-DETECT -->
+  <section id="detect">
+    <div class="wrap split">
+      <div class="txt">
+        <div class="eyebrow">Auto-detect</div>
+        <h2>It knows what you started elsewhere</h2>
+        <p class="lead">
+          Spin up a dev server from a terminal, a script, or an AI assistant like Claude, and DevDeck
+          notices — the listening port shows up in the widget with the tool's real name, its folder,
+          uptime and CPU. No config, nothing to wire up.
+        </p>
+        <ul class="ticks">
+          <li>Detects known tools (Vite, Next, Uvicorn, Cargo…) or any dev-range port</li>
+          <li>Lands in an <b>Unassigned</b> list and suggests the space it belongs to</li>
+          <li>Open it in the browser or a terminal, or adopt it as a service</li>
+          <li>Fully configurable — scope, ports, and a quiet toast when something new appears</li>
+        </ul>
+      </div>
+
+      <div style="display:flex;justify-content:center">
+        <div style="width:320px;border:1px solid rgba(255,255,255,0.1);border-radius:16px;overflow:hidden;background:#15181f;box-shadow:0 18px 48px rgba(0,0,0,0.5);font-size:13px">
+          <div style="display:flex;align-items:center;gap:8px;padding:10px;border-bottom:1px solid rgba(255,255,255,0.06)">
+            <div style="width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;color:#9BA3B2">▢</div>
+            <div style="flex:1;line-height:1.15"><div style="font-size:13px;font-weight:600;color:#E7EAF0">Sessions</div><div style="font-size:11px;color:#64748b">2 running · 1 detected</div></div>
+            <div style="width:28px;height:28px;border-radius:8px;background:rgba(124,140,248,0.14);display:flex;align-items:center;justify-content:center;color:#A7B2FF">⤢</div>
+          </div>
+          <div style="padding:9px;display:flex;flex-direction:column;gap:7px">
+
+            <div style="display:flex;align-items:center;gap:9px;padding:9px 10px 9px 12px;border-radius:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);box-shadow:inset 3px 0 0 #7C8CF8">
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+                <div style="display:flex;align-items:center;gap:6px"><span class="dot" style="width:8px;height:8px"></span><span style="font-weight:600;color:#E7EAF0">AssetX</span><span style="flex:1"></span><span class="mono" style="font-size:12px;color:#8b93a1">12m</span></div>
+                <div style="display:flex;align-items:center;gap:7px;font-size:12px"><span style="font-weight:600;color:#7C8CF8">TrackX</span><span style="display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:5px;background:rgba(74,222,128,0.14);color:#4ADE80;font-size:11px;font-weight:600"><span style="width:5px;height:5px;border-radius:50%;background:#4ADE80"></span>:3001</span><span style="color:#64748b">2%</span><span style="color:#64748b">96MB</span></div>
+              </div>
+              <div style="display:flex;gap:5px"><span style="width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;color:#9BA3B2">🌐</span><span style="width:26px;height:26px;border-radius:8px;background:rgba(248,113,113,0.14);display:flex;align-items:center;justify-content:center;color:#F87171">■</span></div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:9px;padding:9px 10px 9px 12px;border-radius:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);box-shadow:inset 3px 0 0 #4ADE80">
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+                <div style="display:flex;align-items:center;gap:6px"><span class="dot" style="width:8px;height:8px"></span><span style="font-weight:600;color:#E7EAF0">Worker</span><span style="flex:1"></span><span class="mono" style="font-size:12px;color:#8b93a1">1h 4m</span></div>
+                <div style="display:flex;align-items:center;gap:7px;font-size:12px"><span style="font-weight:600;color:#4ADE80">SafeX Backend</span><span style="color:#64748b">5%</span><span style="color:#64748b">142MB</span></div>
+              </div>
+              <div style="display:flex;gap:5px"><span style="width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;color:#9BA3B2">❯</span><span style="width:26px;height:26px;border-radius:8px;background:rgba(248,113,113,0.14);display:flex;align-items:center;justify-content:center;color:#F87171">■</span></div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:7px;padding:4px 2px 0">
+              <span style="font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7d8494">Unassigned</span>
+              <span style="flex:1;height:1px;background:rgba(255,255,255,0.08)"></span>
+              <span style="font-size:10.5px;color:#64748b">1</span>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:9px;padding:9px 10px 9px 12px;border-radius:12px;background:rgba(255,255,255,0.02);border:1px dashed rgba(255,255,255,0.18);box-shadow:inset 3px 0 0 #38BDF8">
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+                <div style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;border:1.5px solid #38BDF8"></span><span style="font-weight:600;color:#E7EAF0">web-app</span><span style="flex:1"></span><span class="mono" style="font-size:12px;color:#8b93a1">3m</span></div>
+                <div style="display:flex;align-items:center;gap:7px;font-size:12px"><span style="font-weight:600;color:#38BDF8">vite</span><span class="mono" style="font-size:11px;color:#8b93a1">:5173</span><span style="color:#64748b">8%</span><span style="padding:1px 6px;border-radius:5px;background:rgba(56,189,248,0.16);color:#38BDF8;font-size:11px;font-weight:600">→ web-app</span></div>
+              </div>
+              <div style="display:flex;gap:5px"><span style="width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;color:#9BA3B2">🌐</span><span style="width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;color:#9BA3B2">❯</span></div>
+            </div>
+
+          </div>
+          <div style="display:flex;padding:8px 9px;border-top:1px solid rgba(255,255,255,0.06);background:rgba(0,0,0,0.18)">
+            <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:7px;border:1px solid rgba(124,140,248,0.3);background:rgba(124,140,248,0.12);border-radius:8px;color:#A7B2FF;font-size:12px;font-weight:600">+ Start something</div>
+          </div>
+        </div>
       </div>
     </div>
   </section>

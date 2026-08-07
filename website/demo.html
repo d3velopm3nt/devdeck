@@ -184,7 +184,7 @@
 
     <div class="dock">
       <div class="dt">Welcome</div>
-      <div class="dt" id="dt-trackx">TrackX <span class="x">✕</span></div>
+      <div class="dt" id="dt-trackx">Storefront <span class="x">✕</span></div>
       <div class="dt act" id="dt-dash">Dashboard <span class="x">✕</span></div>
     </div>
 
@@ -192,9 +192,10 @@
       <div class="left">
         <div class="lp">
           <div class="lph"><span class="t">Explorer</span><span class="addbtn">+ Workspace</span></div>
-          <div class="node"><span style="color:#556;font-size:10px">▾</span><span class="sw"></span>Local Dev</div>
-          <div class="node" style="padding-left:20px"><span style="color:#556;font-size:10px">▸</span><span class="sw" style="background:#f5b63d"></span>TrackX</div>
-          <div class="node" style="padding-left:20px"><span style="color:#556;font-size:10px">▸</span><span class="sw" style="background:#7C8CF8"></span>paperclip-v3-phase-2</div>
+          <div class="node"><span style="color:#556;font-size:10px">▾</span><span class="sw"></span>Acme Cloud</div>
+          <div class="node" style="padding-left:20px"><span style="color:#556;font-size:10px">▸</span><span class="sw" style="background:#7C8CF8"></span>Storefront</div>
+          <div class="node" style="padding-left:20px"><span style="color:#556;font-size:10px">▸</span><span class="sw" style="background:#F472B6"></span>Marketing Site</div>
+          <div class="node" style="padding-left:20px"><span style="color:#556;font-size:10px">▸</span><span class="sw" style="background:#FBBF24"></span>Analytics API</div>
         </div>
         <div class="lpanels">
           <div class="ltabs"><span class="a">Commands</span><span>Services</span><span>Profiles</span></div>
@@ -214,14 +215,14 @@
         <div class="main">
           <!-- Dashboard -->
           <div class="screen on" id="scr-dash">
-            <div class="dhead"><b>❯ Dashboard</b><span class="sub">· 1 workspace · 2 projects · 1 folder</span><span class="r"><span>Processes</span><span>Logs</span></span></div>
-            <p class="lbl"><span class="sw" style="width:9px;height:9px;border-radius:50%;background:#7C8CF8"></span>Local Dev · 2 spaces</p>
+            <div class="dhead"><b>❯ Dashboard</b><span class="sub">· 2 workspaces · 4 projects</span><span class="r"><span>Processes</span><span>Logs</span></span></div>
+            <p class="lbl"><span class="sw" style="width:9px;height:9px;border-radius:50%;background:#7C8CF8"></span>Acme Cloud · 3 spaces</p>
             <div class="spaces">
-              <div class="space hi" id="sp-trackx"><div class="av" style="background:linear-gradient(150deg,#f7c948,#e8951f)">TR</div><div><h4>TrackX <span class="badge">★ MOST USED</span></h4><p>9 svc · 1 cmd</p></div><span class="ar">→</span></div>
-              <div class="space"><div class="av" style="background:linear-gradient(150deg,#8b8bf5,#5b57d8);color:#fff">PV</div><div><h4>paperclip-v3-phase-2</h4><p>1 svc · 0 cmd</p></div><span class="ar">→</span></div>
+              <div class="space hi" id="sp-trackx"><div class="av" style="background:linear-gradient(150deg,#8b8bf5,#5b57d8);color:#fff">ST</div><div><h4>Storefront <span class="badge">★ MOST USED</span></h4><p>3 svc · 2 cmd</p></div><span class="ar">→</span></div>
+              <div class="space"><div class="av" style="background:linear-gradient(150deg,#f7c948,#e8951f)">AA</div><div><h4>Analytics API</h4><p>2 svc · 0 cmd</p></div><span class="ar">→</span></div>
             </div>
             <div class="stats">
-              <div class="stat"><div class="k">Services running</div><div class="v" id="dst-run">0<small>/10</small></div><div class="s" id="dst-runs">10 stopped</div></div>
+              <div class="stat"><div class="k">Services running</div><div class="v" id="dst-run">0<small>/7</small></div><div class="s" id="dst-runs">7 stopped</div></div>
               <div class="stat"><div class="k">Terminals</div><div class="v">0</div><div class="s">live sessions</div></div>
               <div class="stat"><div class="k">Crashed</div><div class="v">0</div><div class="s">none</div></div>
               <div class="stat"><div class="k">Errors</div><div class="v">0</div><div class="s">0 warnings</div></div>
@@ -231,8 +232,8 @@
             <div class="panels2">
               <div class="pnl"><div class="h"><span>Active sessions</span><span id="dst-cnt">0</span></div>
                 <div id="dsempty" class="empty">Nothing running. Start a service or open a terminal.</div>
-                <div class="sess" id="dss1"><span class="wdot g"></span><span style="font-size:12px;font-weight:600">AssetX</span><span style="font-size:10.5px;color:#f5b63d">TrackX</span><span class="chip" style="margin-left:auto"><span class="d"></span>:3001</span></div>
-                <div class="sess" id="dss2"><span class="wdot g"></span><span style="font-size:12px;font-weight:600">TrackX Config</span><span style="font-size:10.5px;color:#f5b63d">TrackX</span><span class="chip" style="margin-left:auto"><span class="d"></span>:8080</span></div>
+                <div class="sess" id="dss1"><span class="wdot g"></span><span style="font-size:12px;font-weight:600">Web</span><span style="font-size:10.5px;color:#7C8CF8">Storefront</span><span class="chip" style="margin-left:auto"><span class="d"></span>:3000</span></div>
+                <div class="sess" id="dss2"><span class="wdot g"></span><span style="font-size:12px;font-weight:600">API</span><span style="font-size:10.5px;color:#7C8CF8">Storefront</span><span class="chip" style="margin-left:auto"><span class="d"></span>:4000</span></div>
               </div>
               <div class="pnl"><div class="h"><span>Errors &amp; warnings</span><span>view all</span></div><div class="empty">No errors or warnings 🎉</div></div>
             </div>
@@ -240,22 +241,20 @@
 
           <!-- Space page -->
           <div class="screen" id="scr-space">
-            <div class="shead"><div class="av">TR</div><div><div class="ey">TrackX</div><h3>TrackX</h3><div class="pa mono">c:\code\trackx\x-platform ✎</div></div>
+            <div class="shead"><div class="av" style="background:linear-gradient(150deg,#8b8bf5,#5b57d8)">ST</div><div><div class="ey">Storefront</div><h3>Storefront</h3><div class="pa mono">C:/code/acme-cloud/storefront ✎</div></div>
               <div class="r"><span class="sbtn">❯ Terminal</span><span class="sbtn gold" id="startall">▶ Start all</span><span class="sbtn">⚙ Setup</span></div></div>
             <div class="spills">
-              <div class="spill"><div class="v" id="sp-run">0<small>/9</small></div><div class="k">Running</div></div>
-              <div class="spill"><div class="v">9</div><div class="k">Services</div></div>
-              <div class="spill"><div class="v">1</div><div class="k">Commands</div></div>
+              <div class="spill"><div class="v" id="sp-run">0<small>/3</small></div><div class="k">Running</div></div>
+              <div class="spill"><div class="v">3</div><div class="k">Services</div></div>
+              <div class="spill"><div class="v">2</div><div class="k">Commands</div></div>
               <div class="spill"><div class="v">0</div><div class="k">Profiles</div></div>
-              <div class="spill"><div class="v">1</div><div class="k">Folders</div></div>
+              <div class="spill"><div class="v">0</div><div class="k">Folders</div></div>
               <div class="spill"><div class="v" id="sp-sess">0</div><div class="k">Sessions</div></div>
             </div>
-            <div class="stabs"><span class="a">Services 9</span><span>Commands 1</span><span>Profiles 0</span></div>
-            <div class="svc" id="sv0"><span class="ck"></span><span class="sd"></span><div><div class="nm">AssetX (web-app)</div><div class="cmd mono">pnpm dev:assetx</div></div><span class="act">▶ Start</span></div>
-            <div class="svc" id="sv1"><span class="ck"></span><span class="sd"></span><div><div class="nm">SafeX (web-app)</div><div class="cmd mono">pnpm dev:safex</div></div><span class="act">▶ Start</span></div>
-            <div class="svc" id="sv2"><span class="ck"></span><span class="sd"></span><div><div class="nm">TrackX Config</div><div class="cmd mono">pnpm dev:trackx</div></div><span class="act">▶ Start</span></div>
-            <div class="svc" id="sv3"><span class="ck"></span><span class="sd"></span><div><div class="nm">TrackX CRM</div><div class="cmd mono">pnpm dev:crm</div></div><span class="act">▶ Start</span></div>
-            <div class="svc" id="sv4"><span class="ck"></span><span class="sd"></span><div><div class="nm">TrackX Admin</div><div class="cmd mono">pnpm dev:admin</div></div><span class="act">▶ Start</span></div>
+            <div class="stabs"><span class="a">Services 3</span><span>Commands 2</span><span>Profiles 0</span></div>
+            <div class="svc" id="sv0"><span class="ck"></span><span class="sd"></span><div><div class="nm">Web</div><div class="cmd mono">npm run dev</div></div><span class="act">▶ Start</span></div>
+            <div class="svc" id="sv1"><span class="ck"></span><span class="sd"></span><div><div class="nm">API</div><div class="cmd mono">npm run dev:api</div></div><span class="act">▶ Start</span></div>
+            <div class="svc" id="sv2"><span class="ck"></span><span class="sd"></span><div><div class="nm">Worker</div><div class="cmd mono">npm run worker</div></div><span class="act">▶ Start</span></div>
           </div>
         </div>
 
@@ -264,11 +263,11 @@
             <span class="ldtools"><span class="pill2" style="background:rgba(248,113,113,.18);color:#F87171">ERROR</span><span class="pill2" style="background:rgba(251,191,36,.18);color:#FBBF24">WARN</span><span class="pill2" style="background:rgba(109,106,240,.18);color:#b9c0ff">INFO</span><span style="font-size:10.5px;color:#647089">☑ Follow</span></span></div>
           <div class="logbody" id="logbody">
             <div id="logempty" style="color:#647089">No log output yet.</div>
-            <div class="lg" id="l0"><span class="t">12:04:01</span> <span class="s" style="color:#7C8CF8">AssetX</span>  server listening on :3001</div>
-            <div class="lg" id="l1"><span class="t">12:04:02</span> <span class="s" style="color:#4ADE80">Config</span>  loaded 42 keys from config store</div>
-            <div class="lg" id="l2"><span class="t">12:04:03</span> <span class="s" style="color:#7C8CF8">AssetX</span>  GET /api/assets 200 · 14ms</div>
-            <div class="lg" id="l3"><span class="t">12:04:05</span> <span class="s" style="color:#FBBF24">SafeX</span>   <span class="warn">warn: token cache miss, refetching</span></div>
-            <div class="lg" id="l4"><span class="t">12:04:06</span> <span class="s" style="color:#7C8CF8">AssetX</span>  GET /api/assets 200 · 9ms</div>
+            <div class="lg" id="l0"><span class="t">12:04:01</span> <span class="s" style="color:#7C8CF8">Web</span>     ready on http://localhost:3000</div>
+            <div class="lg" id="l1"><span class="t">12:04:02</span> <span class="s" style="color:#4ADE80">API</span>     listening on :4000</div>
+            <div class="lg" id="l2"><span class="t">12:04:03</span> <span class="s" style="color:#7C8CF8">Web</span>     GET /api/products 200 · 14ms</div>
+            <div class="lg" id="l3"><span class="t">12:04:05</span> <span class="s" style="color:#FBBF24">Worker</span>  <span class="warn">warn: queue depth rising (42)</span></div>
+            <div class="lg" id="l4"><span class="t">12:04:06</span> <span class="s" style="color:#7C8CF8">Web</span>     GET /api/products 200 · 9ms</div>
           </div>
         </div>
       </div>
@@ -280,10 +279,10 @@
     <div class="kbd" id="kbd"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Space</kbd></div>
     <div class="toast" id="toast"><span class="d"></span><span id="toasttxt">Detected vite on :5173</span></div>
     <div class="widget" id="widget">
-      <div class="whead"><div class="wb">▢</div><div class="wt"><b>Sessions</b><span id="wcount">3 running</span></div><div class="wb a">⤢</div></div>
+      <div class="whead"><div class="wb">▢</div><div class="wt"><b>Sessions</b><span id="wcount">2 running</span></div><div class="wb a">⤢</div></div>
       <div class="wbody">
-        <div class="wcard" id="w0" style="box-shadow:inset 3px 0 0 #f5b63d"><div class="mn"><div class="wr1"><span class="wdot g"></span><span class="wnm">AssetX</span><span class="wup">12m</span></div><div class="wr2"><span style="color:#f5b63d;font-weight:600">TrackX</span><span class="chip"><span class="d"></span>:3001</span><span style="color:#647089">2%</span></div></div><div style="display:flex;gap:4px"><span class="wact">🌐</span><span class="wact" style="color:#F87171;background:rgba(248,113,113,.14)">■</span></div></div>
-        <div class="wcard" id="w1" style="box-shadow:inset 3px 0 0 #7C8CF8"><div class="mn"><div class="wr1"><span class="wdot g"></span><span class="wnm">TrackX Config</span><span class="wup">11m</span></div><div class="wr2"><span style="color:#7C8CF8;font-weight:600">TrackX</span><span class="chip"><span class="d"></span>:8080</span><span style="color:#647089">1%</span></div></div><div style="display:flex;gap:4px"><span class="wact">🌐</span><span class="wact" style="color:#F87171;background:rgba(248,113,113,.14)">■</span></div></div>
+        <div class="wcard" id="w0" style="box-shadow:inset 3px 0 0 #7C8CF8"><div class="mn"><div class="wr1"><span class="wdot g"></span><span class="wnm">Web</span><span class="wup">12m</span></div><div class="wr2"><span style="color:#7C8CF8;font-weight:600">Storefront</span><span class="chip"><span class="d"></span>:3000</span><span style="color:#647089">2%</span></div></div><div style="display:flex;gap:4px"><span class="wact">🌐</span><span class="wact" style="color:#F87171;background:rgba(248,113,113,.14)">■</span></div></div>
+        <div class="wcard" id="w1" style="box-shadow:inset 3px 0 0 #7C8CF8"><div class="mn"><div class="wr1"><span class="wdot g"></span><span class="wnm">API</span><span class="wup">11m</span></div><div class="wr2"><span style="color:#7C8CF8;font-weight:600">Storefront</span><span class="chip"><span class="d"></span>:4000</span><span style="color:#647089">1%</span></div></div><div style="display:flex;gap:4px"><span class="wact">🌐</span><span class="wact" style="color:#F87171;background:rgba(248,113,113,.14)">■</span></div></div>
         <div class="uhead" id="uhead"><b>Unassigned</b><span class="ln"></span><span style="font-size:9.5px;color:#647089">1</span></div>
         <div class="wcard det" id="w2" style="box-shadow:inset 3px 0 0 #38BDF8"><div class="mn"><div class="wr1"><span class="wdot d"></span><span class="wnm">web-app</span><span class="wup">6s</span></div><div class="wr2"><span style="color:#38BDF8;font-weight:600">vite</span><span class="mono" style="color:#8b93a1">:5173</span><span class="chip" style="background:rgba(56,189,248,.16);color:#38BDF8">→ web-app</span></div></div><div style="display:flex;gap:4px"><span class="wact">🌐</span><span class="wact">❯</span></div></div>
       </div>
@@ -308,9 +307,9 @@
   function reset(){
     timers.forEach(clearTimeout);timers=[];
     screen('scr-dash');tab('dash');
-    for(var i=0;i<5;i++){$('sv'+i).classList.remove('run');$('sv'+i).querySelector('.act').textContent='▶ Start'}
-    $('sp-run').innerHTML='0<small>/9</small>';$('sp-sess').textContent='0';
-    $('dst-run').innerHTML='0<small>/10</small>';$('dst-runs').textContent='10 stopped';$('dst-cpu').innerHTML='0<small>%</small>';$('dst-mem').innerHTML='16<small>MB</small>';$('dst-cnt').textContent='0';$('st-run').textContent='0';
+    for(var i=0;i<3;i++){$('sv'+i).classList.remove('run');$('sv'+i).querySelector('.act').textContent='▶ Start'}
+    $('sp-run').innerHTML='0<small>/3</small>';$('sp-sess').textContent='0';
+    $('dst-run').innerHTML='0<small>/7</small>';$('dst-runs').textContent='7 stopped';$('dst-cpu').innerHTML='0<small>%</small>';$('dst-mem').innerHTML='16<small>MB</small>';$('dst-cnt').textContent='0';$('st-run').textContent='0';
     $('dsempty').style.display='block';off('dss1');off('dss2');
     ['l0','l1','l2','l3','l4'].forEach(off);$('logempty').style.display='block';
     ['w0','w1','w2','uhead'].forEach(off);$('widget').classList.remove('on');$('toast').classList.remove('on');$('kbd').classList.remove('on');$('scrim').classList.remove('on');
@@ -321,7 +320,7 @@
     setCap('Your whole stack in one window','Every service, terminal and command — organised');
     at(300,function(){mc($('sp-trackx'))});
 
-    // open TrackX space
+    // open the Storefront space
     at(2600,function(){setCap('Open a space','Its services, commands and profiles in one place')});
     at(2800,function(){$('sp-trackx').style.transform='scale(.99)'});
     at(3050,function(){$('sp-trackx').style.transform='';screen('scr-space');tab('trackx');mc($('startall'))});
@@ -330,17 +329,17 @@
     at(4400,function(){setCap('Start the whole stack in one click','No six-terminal morning')});
     at(4600,function(){$('startall').style.transform='scale(.95)'});
     at(4820,function(){$('startall').style.transform=''});
-    var names=[0,1,2,3,4];
-    names.forEach(function(i,k){at(4900+k*360,function(){
+    var names=[0,1,2];
+    names.forEach(function(i,k){at(4900+k*380,function(){
       var s=$('sv'+i);s.classList.add('run');s.querySelector('.act').textContent='■ Stop';
-      var n=k+1;$('sp-run').innerHTML=n+'<small>/9</small>';$('sp-sess').textContent=n;$('st-run').textContent=n;
+      var n=k+1;$('sp-run').innerHTML=n+'<small>/3</small>';$('sp-sess').textContent=n;$('st-run').textContent=n;
     })});
     at(6800,function(){$('logempty').style.display='none';['l0','l1','l2','l3','l4'].forEach(function(id,k){at(k*260,function(){on(id)})})});
 
     // back to dashboard - live stats
     at(8600,function(){setCap('Live status across everything','CPU, memory, health, uptime — at a glance')});
     at(8800,function(){screen('scr-dash');tab('dash');mc($('dt-dash'));
-      $('dst-run').innerHTML='5<small>/10</small>';$('dst-runs').textContent='5 running';$('dst-cpu').innerHTML='12<small>%</small>';$('dst-mem').innerHTML='840<small>MB</small>';$('dst-cnt').textContent='2';
+      $('dst-run').innerHTML='3<small>/7</small>';$('dst-runs').textContent='3 running';$('dst-cpu').innerHTML='9<small>%</small>';$('dst-mem').innerHTML='612<small>MB</small>';$('dst-cnt').textContent='2';
       $('dsempty').style.display='none';on('dss1');at(180,function(){on('dss2')})});
 
     // widget
@@ -352,7 +351,7 @@
     // detect
     at(13900,function(){setCap('It catches servers you start elsewhere','A vite dev server — detected automatically')});
     at(14200,function(){$('toast').classList.add('on')});
-    at(14500,function(){on('uhead');on('w2');$('wcount').textContent='3 running · 1 detected'});
+    at(14500,function(){on('uhead');on('w2');$('wcount').textContent='2 running · 1 detected'});
     at(15900,function(){$('toast').classList.remove('on');mc($('w2'),88,-6)});
 
     at(16800,function(){setCap('One window. Everything running.','DevDeck — free & open source')});

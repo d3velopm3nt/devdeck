@@ -130,6 +130,10 @@
 
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
 
+  /* when the widget is summoned, dim the app behind it so the floating
+     always-on-top widget clearly reads as an overlay — not a second window */
+  .scrim{position:absolute;inset:0;background:rgba(7,9,14,.58);opacity:0;transition:opacity .35s;z-index:18;pointer-events:none}
+  .scrim.on{opacity:1}
   /* widget overlay */
   .widget{position:absolute;right:24px;bottom:40px;width:288px;border-radius:15px;overflow:hidden;background:radial-gradient(500px 300px at 82% 0,rgba(124,140,248,.14),transparent 58%),linear-gradient(180deg,rgba(24,27,35,.99),rgba(15,17,23,.99));border:1px solid rgba(255,255,255,.12);box-shadow:0 24px 60px rgba(0,0,0,.6);opacity:0;transform:translateY(12px) scale(.97);transition:.4s;z-index:20}
   .widget.on{opacity:1;transform:none}
@@ -270,6 +274,7 @@
 
     <div class="status"><span><span class="g"></span><span id="st-run">0</span> services running</span><span>0 terminals</span><span class="sp mono">ctrl+shift+Space summons · local-first · SQLite</span></div>
 
+    <div class="scrim" id="scrim"></div>
     <div class="kbd" id="kbd"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Space</kbd></div>
     <div class="toast" id="toast"><span class="d"></span><span id="toasttxt">Detected vite on :5173</span></div>
     <div class="widget" id="widget">
@@ -306,7 +311,7 @@
     $('dst-run').innerHTML='0<small>/10</small>';$('dst-runs').textContent='10 stopped';$('dst-cpu').innerHTML='0<small>%</small>';$('dst-mem').innerHTML='16<small>MB</small>';$('dst-cnt').textContent='0';$('st-run').textContent='0';
     $('dsempty').style.display='block';off('dss1');off('dss2');
     ['l0','l1','l2','l3','l4'].forEach(off);$('logempty').style.display='block';
-    ['w0','w1','w2','uhead'].forEach(off);$('widget').classList.remove('on');$('toast').classList.remove('on');$('kbd').classList.remove('on');
+    ['w0','w1','w2','uhead'].forEach(off);$('widget').classList.remove('on');$('toast').classList.remove('on');$('kbd').classList.remove('on');$('scrim').classList.remove('on');
     mc($('sp-trackx'));run();
   }
 
@@ -338,7 +343,7 @@
 
     // widget
     at(11000,function(){setCap('Summon the widget from anywhere','A floating panel on a global hotkey')});
-    at(11200,function(){$('kbd').classList.add('on')});
+    at(11200,function(){$('kbd').classList.add('on');$('scrim').classList.add('on')});
     at(12000,function(){$('kbd').classList.remove('on')});
     at(12200,function(){$('widget').classList.add('on');on('w0');on('w1');mc($('widget'),0,-46)});
 

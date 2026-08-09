@@ -40,6 +40,12 @@ export function resolveDir(nodes: TreeNode[], node: TreeNode | null): string {
   return joinPath(base, node.rel_path ?? '')
 }
 
+/// A service's working directory: its explicit `cwd`, else the resolved
+/// directory of the node it belongs to. '' when nothing applies (global, no cwd).
+export function serviceDir(nodes: TreeNode[], svc: { project_id: number | null; cwd: string }): string {
+  return svc.cwd.trim() !== '' ? svc.cwd : resolveDir(nodes, findNode(nodes, svc.project_id))
+}
+
 /// All descendant node ids of `id` (not including `id` itself).
 export function descendantIds(nodes: TreeNode[], id: number): number[] {
   const out: number[] = []

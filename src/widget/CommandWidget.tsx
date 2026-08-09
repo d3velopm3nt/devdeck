@@ -35,7 +35,10 @@ const win = () => getCurrentWindow()
 
 // Floating-window states and screen-corner docking.
 type Corner = 'tl' | 'tr' | 'bl' | 'br' | 'free'
-type Mode = 'icon' | 'quick' | 'full'
+// The widget has two faces: a floating icon and the session panel. `full` is
+// the deeper command view, reached from the panel. (The old `quick` popup was
+// removed — it duplicated the panel and was unreachable.)
+type Mode = 'icon' | 'full'
 // A press must travel this far before it becomes a window drag; below it, the
 // press is treated as a click. Kept deliberately generous so a normal tap on
 // the floating icon opens it instead of nudging the window across the screen.
@@ -79,7 +82,7 @@ interface NavItem {
 
 function sizeForMode(
   mode: Mode,
-  orient: 'v' | 'h',
+  _orient: 'v' | 'h',
   full: { w: number; h: number },
   collapsed?: { style: CollapsedStyle; count: number; rowH?: number },
 ): { w: number; h: number } {
@@ -93,7 +96,6 @@ function sizeForMode(
     }
     return { w: 58, h: 58 }
   }
-  if (mode === 'quick') return orient === 'h' ? { w: 470, h: 150 } : { w: 296, h: 392 }
   return full
 }
 
@@ -217,10 +219,11 @@ export function CommandWidget() {
 
   // ---- interactive UI state (mirrors the design's this.state) ----
   const [view, setView] = useState<View>('recent')
-  const [mode, setMode] = useState<Mode>('full')
+  // Default face is the session panel (a floating icon that's already opened).
+  // First run switches to the full widget to show the setup tour (see bootstrap).
+  const [mode, setMode] = useState<Mode>('icon')
   const [corner, setCorner] = useState<Corner>('free')
-  const [quickOrient, setQuickOrient] = useState<'v' | 'h'>('v')
-  const [collapsedStyle, setCollapsedStyle] = useState<CollapsedStyle>('single')
+  const [collapsedStyle, setCollapsedStyle] = useState<CollapsedStyle>('strip')
   // Strip navigator: drill workspace → project → items.
   const [navLevel, setNavLevel] = useState<NavLevel>('workspace')
   const [navWs, setNavWs] = useState<number | null>(null)
@@ -275,14 +278,14 @@ export function CommandWidget() {
     // Corner-dock + quick-list orientation, then anchor if docked.
     void (async () => {
       const c = ((await ipc.settingGet('widget_corner')) as Corner | null) ?? 'free'
-      const o = (await ipc.settingGet('widget_quick_orientation')) === 'h' ? 'h' : 'v'
-      const cs: CollapsedStyle = (await ipc.settingGet('widget_collapsed_style')) === 'strip' ? 'strip' : 'single'
       setCorner(c)
-      setQuickOrient(o)
-      setCollapsedStyle(cs)
       const done = await ipc.settingGet('widget_tour_done')
-      if (done !== '1') setTourOpen(true) // first run: guided tour in the full widget
-      if (c !== 'free') await positionForCorner(c, sizeForMode('full', o, expandedSize).w, sizeForMode('full', o, expandedSize).h)
+      if (done !== '1') {
+        // First run: open the full widget so the guided setup tour shows.
+        setMode('full')
+        setTourOpen(true)
+      }
+      if (c !== 'free') await positionForCorner(c, sizeForMode('full', 'v', expandedSize).w, sizeForMode('full', 'v', expandedSize).h)
     })()
     return () => {
       for (const s of subs) void s.then((un) => un())
@@ -348,7 +351,7 @@ export function CommandWidget() {
       void unP.then((f) => f())
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [corner, mode, quickOrient, expandedSize])
+  }, [corner, mode, expandedSize])
 
   // Poll for data changes while the first-run tour is open (entities are
   // created in the main window, whose store is separate from the widget's).
@@ -718,31 +721,25 @@ export function CommandWidget() {
       /* keep prior */
     }
   }
+  // Collapse the full widget back to the session panel (the primary face).
   const goIcon = async () => {
     await captureFullSize()
     setSpaceMenuOpen(false)
     setWidgetSetOpen(false)
+    resetNav()
+    setCollapsedStyle('strip')
     setMode('icon')
-    await placeWidget('icon', quickOrient, corner)
+    await placeWidget('icon', 'v', corner, 'strip')
   }
   const goFull = async () => {
     setMode('full')
-    await placeWidget('full', quickOrient, corner)
+    await placeWidget('full', 'v', corner)
   }
-  // Re-place the quick popup when its orientation changes.
-  useEffect(() => {
-    if (mode === 'quick') void placeWidget('quick', quickOrient, corner)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quickOrient])
 
   const setCornerDock = (c: Corner) => {
     setCorner(c)
     void ipc.settingSet('widget_corner', c)
-    void placeWidget(mode, quickOrient, c)
-  }
-  const setOrient = (o: 'v' | 'h') => {
-    setQuickOrient(o)
-    void ipc.settingSet('widget_quick_orientation', o)
+    void placeWidget(mode, 'v', c)
   }
   // Where the strip should open: on the running sessions if there are any,
   // otherwise at the top of the workspace navigator.
@@ -753,21 +750,9 @@ export function CommandWidget() {
     setNavProject(null)
     setHovered(null)
   }
-  // Set the collapsed style AND collapse into it now (used from settings, so
-  // picking "Strip" shows the strip immediately).
-  const collapseAs = async (style: CollapsedStyle) => {
-    setCollapsedStyle(style)
-    void ipc.settingSet('widget_collapsed_style', style)
-    if (style === 'strip') resetNav()
-    await captureFullSize()
-    setSpaceMenuOpen(false)
-    setWidgetSetOpen(false)
-    setMode('icon')
-    await placeWidget('icon', quickOrient, corner, style)
-  }
   // Re-place the strip as its item count changes (navigation / sessions).
   useEffect(() => {
-    if (mode === 'icon' && collapsedStyle === 'strip' && hovered == null) void placeWidget('icon', quickOrient, corner)
+    if (mode === 'icon' && collapsedStyle === 'strip' && hovered == null) void placeWidget('icon', 'v', corner)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navItems.length, detected.length])
 
@@ -818,12 +803,12 @@ export function CommandWidget() {
   const openStrip = async () => {
     resetNav()
     setCollapsedStyle('strip')
-    await placeWidget('icon', quickOrient, corner, 'strip')
+    await placeWidget('icon', 'v', corner, 'strip')
   }
   const openSingle = async () => {
     setHovered(null)
     setCollapsedStyle('single')
-    await placeWidget('icon', quickOrient, corner, 'single')
+    await placeWidget('icon', 'v', corner, 'single')
   }
 
   const setCount = (n: number) => {
@@ -873,33 +858,6 @@ export function CommandWidget() {
       .filter((x): x is Item => !!x)
       .slice(0, recentCount)
   }, [app.recents, model.itemsById, recentCount])
-
-  // Quick-access popup list: running services first (they're what you're
-  // most likely to act on), then recent commands — up to the configured count.
-  const quickItems = useMemo(() => {
-    const seen = new Set<string>()
-    const out: Item[] = []
-    for (const s of running) {
-      const it = model.itemsById.get('s' + s.id)
-      if (it && !seen.has(it.id)) {
-        seen.add(it.id)
-        out.push(it)
-      }
-    }
-    for (const it of recentItems) {
-      if (!seen.has(it.id)) {
-        seen.add(it.id)
-        out.push(it)
-      }
-    }
-    return out.slice(0, Math.max(recentCount, running.length))
-  }, [running, recentItems, model.itemsById, recentCount])
-
-  const newTerminalHere = () => {
-    const dir = currentSpace != null ? resolveDir(app.nodes, findNode(app.nodes, currentSpace)) : ''
-    void widgetOpenTerminal(dir, 'Terminal')
-    showToast('Opened terminal', '#9BA3B2')
-  }
 
   // First-run tour: which setup steps are already satisfied.
   const tourDone: Record<string, boolean> = {
@@ -1138,66 +1096,6 @@ export function CommandWidget() {
     )
   }
 
-  // Quick-access popup: a compact, movable list of recent commands + running
-  // services, with a New terminal action and a button to open the full widget.
-  if (mode === 'quick') {
-    const horiz = quickOrient === 'h'
-    const quickRow = (it: Item) => {
-      const st = statusOf(it)
-      const running = st === 'running'
-      return (
-        <button key={it.id} data-nodrag title={it.kind === 'command' ? 'Run' : running ? 'Stop' : 'Start'}
-          onClick={() => (it.kind === 'command' ? runCommand(it) : serviceToggle(it))}
-          style={css(`display:flex;align-items:center;gap:7px;text-align:left;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.03);border-radius:9px;cursor:pointer;padding:7px 9px;${horiz ? 'flex:0 0 auto;min-width:130px;max-width:180px' : 'width:100%'}`)}>
-          <span style={{ ...css('width:8px;height:8px;border-radius:50%;flex-shrink:0'), background: it.kind === 'service' ? (running ? '#4ADE80' : '#6B7280') : it.iconColor, animation: running ? 'cw-pulse 2s ease-in-out infinite' : 'none' }} />
-          <span style={css('min-width:0;display:flex;flex-direction:column;line-height:1.15')}>
-            <span style={css('font-size:12px;font-weight:600;color:#E7EAF0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px')}>{it.name}</span>
-            <span style={css('font-size:9.5px;color:#5a6070;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px')}>{it.kind === 'service' ? (running ? 'running' : 'service') : it.projectName}</span>
-          </span>
-        </button>
-      )
-    }
-    return (
-      <div style={css('position:fixed;inset:0;font-family:Geist,system-ui,sans-serif;user-select:none')}>
-        <style>{keyframes}</style>
-        <div style={css('width:100%;height:100%;display:flex;flex-direction:column;border:1px solid rgba(255,255,255,0.1);border-radius:14px;overflow:hidden;background:linear-gradient(180deg,rgba(24,27,35,0.98),rgba(16,18,25,0.98))')}>
-          {/* header / drag bar */}
-          <div onMouseDown={startDrag} style={css('flex-shrink:0;display:flex;align-items:center;gap:6px;padding:8px 8px 8px 10px;border-bottom:1px solid rgba(255,255,255,0.06);cursor:grab')}>
-            <div style={css('width:20px;height:20px;border-radius:6px;background:linear-gradient(135deg,#7C8CF8,#4ADE80);display:flex;align-items:center;justify-content:center;color:#0c0e14;font-weight:700;font-size:12px;flex-shrink:0')}>⌘</div>
-            <span style={css('flex:1;min-width:0;font-size:12px;font-weight:600;color:#E7EAF0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis')}>{curSpace?.name ?? 'Quick access'}</span>
-            <button data-nodrag onClick={() => setWidgetSetOpen((v) => !v)} title="Widget settings" style={css('width:24px;height:24px;border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.04)')}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9BA3B2" strokeWidth="2"><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 00-.1-1l2-1.5-2-3.4-2.4 1a7 7 0 00-1.7-1L14.5 2h-4l-.3 2.6a7 7 0 00-1.7 1l-2.4-1-2 3.4L4 11a7 7 0 000 2l-2 1.5 2 3.4 2.4-1a7 7 0 001.7 1l.3 2.6h4l.3-2.6a7 7 0 001.7-1l2.4 1 2-3.4-2-1.5a7 7 0 00.1-1z" /></svg>
-            </button>
-            <button data-nodrag onClick={() => void goFull()} title="Open full widget" style={css('width:24px;height:24px;border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;background:rgba(124,140,248,0.14)')}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A7B2FF" strokeWidth="2"><path d="M8 3H5a2 2 0 00-2 2v3M16 3h3a2 2 0 012 2v3M8 21H5a2 2 0 01-2-2v-3M16 21h3a2 2 0 002-2v-3" /></svg>
-            </button>
-            <button data-nodrag onClick={() => void goIcon()} title="Collapse to icon" style={css('width:24px;height:24px;border:none;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.04)')}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9BA3B2" strokeWidth="2"><path d="M4 14h6v6M20 10h-6V4M14 10l6-6M10 14l-6 6" /></svg>
-            </button>
-          </div>
-          {/* body */}
-          <div className="cw-scroll" style={css(`flex:1;min-height:0;padding:8px;display:flex;gap:6px;${horiz ? 'flex-direction:row;overflow-x:auto;overflow-y:hidden;align-items:stretch' : 'flex-direction:column;overflow-y:auto;overflow-x:hidden'}`)}>
-            {quickItems.length === 0 ? (
-              <div style={css('flex:1;display:flex;align-items:center;justify-content:center;text-align:center;color:#5a6070;font-size:11.5px;padding:14px')}>Run a command or start a service — it'll show up here.</div>
-            ) : (
-              quickItems.map(quickRow)
-            )}
-          </div>
-          {/* footer actions */}
-          <div style={css('flex-shrink:0;display:flex;gap:6px;padding:8px;border-top:1px solid rgba(255,255,255,0.06)')}>
-            <button data-nodrag onClick={newTerminalHere} title="Open a terminal here" style={css('flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:7px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.03);border-radius:8px;cursor:pointer;color:#C7CCD6;font-size:11.5px;font-weight:600')}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9BA3B2" strokeWidth="2"><path d="M4 17l6-5-6-5M12 19h8" /></svg>Terminal
-            </button>
-            <button data-nodrag onClick={() => void goFull()} title="Open the full widget" style={css('flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:7px;border:none;background:rgba(124,140,248,0.16);border-radius:8px;cursor:pointer;color:#A7B2FF;font-size:11.5px;font-weight:600')}>
-              Open full
-            </button>
-          </div>
-          {widgetSetOpen && <WidgetSettings corner={corner} orient={quickOrient} count={recentCount} collapsed={collapsedStyle} detect={detectEnabled} detectNotify={detectNotify} onCorner={setCornerDock} onOrient={setOrient} onCount={setCount} onCollapse={(s) => void collapseAs(s)} onDetect={setDetect} onDetectNotify={setDetectNotifyPref} onClose={() => setWidgetSetOpen(false)} onTour={() => { setWidgetSetOpen(false); setTourOpen(true); void goFull() }} />}
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div style={css('position:fixed;inset:0;font-family:Geist,system-ui,sans-serif;user-select:none')}>
       <style>{keyframes}</style>
@@ -1299,7 +1197,7 @@ export function CommandWidget() {
           </div>
         )}
 
-        {widgetSetOpen && <WidgetSettings corner={corner} orient={quickOrient} count={recentCount} collapsed={collapsedStyle} detect={detectEnabled} detectNotify={detectNotify} onCorner={setCornerDock} onOrient={setOrient} onCount={setCount} onCollapse={(s) => void collapseAs(s)} onDetect={setDetect} onDetectNotify={setDetectNotifyPref} onClose={() => setWidgetSetOpen(false)} onTour={() => { setWidgetSetOpen(false); setTourOpen(true) }} />}
+        {widgetSetOpen && <WidgetSettings corner={corner} count={recentCount} detect={detectEnabled} detectNotify={detectNotify} onCorner={setCornerDock} onCount={setCount} onDetect={setDetect} onDetectNotify={setDetectNotifyPref} onClose={() => setWidgetSetOpen(false)} onTour={() => { setWidgetSetOpen(false); setTourOpen(true) }} />}
 
         {tourOpen && <TourView done={tourDone} onAction={(a) => void ipc.emitTourAction(a)} onFinish={finishTour} />}
 
@@ -1330,13 +1228,12 @@ const keyframes = `
 
 type D = typeof DENSITY['compact']
 
-// Widget settings popover: corner dock, quick-list orientation, and how many
-// recent/active items the quick popup shows.
-function WidgetSettings({ corner, orient, count, collapsed, detect, detectNotify, onCorner, onOrient, onCount, onCollapse, onDetect, onDetectNotify, onClose, onTour }: {
-  corner: Corner; orient: 'v' | 'h'; count: number; collapsed: CollapsedStyle
+// Widget settings popover: corner dock, foreign-session detection, and how many
+// recents the full widget shows.
+function WidgetSettings({ corner, count, detect, detectNotify, onCorner, onCount, onDetect, onDetectNotify, onClose, onTour }: {
+  corner: Corner; count: number
   detect: boolean; detectNotify: boolean
-  onCorner: (c: Corner) => void; onOrient: (o: 'v' | 'h') => void; onCount: (n: number) => void
-  onCollapse: (s: CollapsedStyle) => void
+  onCorner: (c: Corner) => void; onCount: (n: number) => void
   onDetect: (v: boolean) => void; onDetectNotify: (v: boolean) => void
   onClose: () => void; onTour: () => void
 }) {
@@ -1349,14 +1246,6 @@ function WidgetSettings({ corner, orient, count, collapsed, detect, detectNotify
         <div style={css('font-size:13px;font-weight:600;color:#E7EAF0;margin-bottom:13px')}>Widget settings</div>
 
         <div style={row}>
-          <span style={label}>Collapse to</span>
-          <div style={css('display:flex;gap:3px')}>
-            <button title="A single floating icon" onClick={() => onCollapse('single')} style={seg(collapsed === 'single')}>⌘ Icon</button>
-            <button title="A live session panel" onClick={() => onCollapse('strip')} style={seg(collapsed === 'strip')}>▤ Panel</button>
-          </div>
-        </div>
-
-        <div style={row}>
           <span style={label}>Dock to corner</span>
           <div style={css('display:flex;gap:3px')}>
             {CORNERS.map((c) => (
@@ -1366,15 +1255,7 @@ function WidgetSettings({ corner, orient, count, collapsed, detect, detectNotify
         </div>
 
         <div style={row}>
-          <span style={label}>Quick list</span>
-          <div style={css('display:flex;gap:3px')}>
-            <button onClick={() => onOrient('v')} style={seg(orient === 'v')}>Vertical</button>
-            <button onClick={() => onOrient('h')} style={seg(orient === 'h')}>Horizontal</button>
-          </div>
-        </div>
-
-        <div style={row}>
-          <span style={label}>Show how many</span>
+          <span style={label}>Recents to show</span>
           <div style={css('display:flex;align-items:center;gap:6px')}>
             <button onClick={() => onCount(count - 1)} style={seg(false)}>−</button>
             <span style={css('min-width:18px;text-align:center;font-size:13px;color:#E7EAF0;font-weight:600')}>{count}</span>
@@ -1471,28 +1352,33 @@ function ItemRow({ it, d, status, onRun, onToggle, onRestart, onTerminal }: {
   onRun: (it: Item) => void; onToggle: (it: Item) => void; onRestart: (it: Item) => void; onTerminal: (it: Item) => void
 }) {
   const isService = it.kind === 'service'
-  const [sc, anim] = isService ? statusMeta(status) : ['', 'none']
-  const tv = toggleVisual(status === 'running')
-  const meta = it.projectName + ' · ' + it.type + (isService ? ' · ' + status : '')
+  const running = status === 'running'
+  // Same visual language as the session-panel cards: coloured accent bar,
+  // status dot, bold name, coloured space sub-line, compact icon actions.
+  const [sc, anim] = isService ? statusMeta(status) : [it.iconColor, 'none']
+  const tv = toggleVisual(running)
+  const abtn = 'width:26px;height:26px;border:none;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0'
   return (
-    <div style={css(`display:flex;align-items:center;gap:9px;padding:${d.padY}px 8px;min-height:${d.rowMinH}px;border-radius:9px;background:rgba(255,255,255,0.028);border:1px solid rgba(255,255,255,0.04)`)}>
-      <div style={css(`width:${d.icon}px;height:${d.icon}px;border-radius:${d.rad}px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-weight:600;font-size:11px;color:${it.iconColor};background:${it.iconBg}`)}>{it.name[0]?.toUpperCase()}</div>
-      <div style={css('flex:1;min-width:0')}>
-        <div style={css('display:flex;align-items:center;gap:6px')}>
-          <span style={css(`font-family:'JetBrains Mono',monospace;font-size:${d.name}px;font-weight:500;color:#E7EAF0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis`)}>{it.name}</span>
-          {isService && <span style={{ ...css('flex-shrink:0;width:6px;height:6px;border-radius:50%'), background: sc, animation: anim }} />}
+    <div style={{ ...css('display:flex;align-items:center;gap:9px;padding:9px 10px 9px 12px;border-radius:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07)'), boxShadow: `inset 3px 0 0 ${it.iconColor}` }}>
+      <div style={css('flex:1;min-width:0;display:flex;flex-direction:column;gap:3px')}>
+        <div style={css('display:flex;align-items:center;gap:7px')}>
+          <span style={{ ...css('width:8px;height:8px;border-radius:50%;flex-shrink:0'), background: sc, animation: anim }} />
+          <span style={css(`font-size:${d.name}px;font-weight:600;color:#E7EAF0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis`)}>{it.name}</span>
         </div>
-        <div style={css(`font-size:${d.meta}px;color:#656C7A;white-space:nowrap;overflow:hidden;text-overflow:ellipsis`)}>{meta}</div>
+        <div style={css('display:flex;align-items:center;gap:6px;min-width:0')}>
+          <span style={{ ...css(`font-size:${d.meta}px;font-weight:600;flex-shrink:0`), color: it.iconColor }}>{it.projectName}</span>
+          <span style={css(`font-size:${d.meta}px;color:#5a6070;white-space:nowrap;overflow:hidden;text-overflow:ellipsis`)}>{it.type}{isService ? ' · ' + status : ''}</span>
+        </div>
       </div>
-      <div style={css('display:flex;align-items:center;gap:3px;flex-shrink:0')}>
+      <div style={css('display:flex;align-items:center;gap:4px;flex-shrink:0')}>
         {!isService && (
-          <button onClick={() => onRun(it)} title="Run" style={css('width:26px;height:26px;border:none;border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;background:rgba(124,140,248,0.15)')}>{Icon.play()}</button>
+          <button onClick={() => onRun(it)} title="Run" style={css(abtn + ';background:rgba(124,140,248,0.18)')}>{Icon.play('#A7B2FF')}</button>
         )}
         {isService && (
           <>
-            <button onClick={() => onToggle(it)} title={tv.toggleLabel} style={css(`width:26px;height:26px;border:none;border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;background:${tv.toggleBg}`)}><span style={css(tv.toggleIconWrap)} /></button>
-            <button onClick={() => onRestart(it)} title="Restart" style={css('width:26px;height:26px;border:none;border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.05)')}>{Icon.restart()}</button>
-            <button onClick={() => onTerminal(it)} title="Open terminal" style={css('width:26px;height:26px;border:none;border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.05)')}>{Icon.term()}</button>
+            <button onClick={() => onToggle(it)} title={tv.toggleLabel} style={css(abtn + ';background:' + tv.toggleBg)}><span style={css(tv.toggleIconWrap)} /></button>
+            <button onClick={() => onRestart(it)} title="Restart" style={css(abtn + ';background:rgba(255,255,255,0.05)')}>{Icon.restart()}</button>
+            <button onClick={() => onTerminal(it)} title="Open terminal" style={css(abtn + ';background:rgba(255,255,255,0.05)')}>{Icon.term()}</button>
           </>
         )}
       </div>

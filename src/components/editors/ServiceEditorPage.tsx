@@ -7,7 +7,7 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import * as ipc from '../../lib/ipc'
 import type { ServiceDef } from '../../lib/types'
 import { useApp } from '../../store'
-import { nodeLabel, ownerNodes } from '../../lib/tree'
+import { nodeLabel, ownerNodes, serviceDir } from '../../lib/tree'
 import { EditorShell, Field, Row } from './EditorShell'
 import { ShellSelect } from './ShellSelect'
 
@@ -136,6 +136,14 @@ export function ServiceEditorPage(props: IDockviewPanelProps<Params>) {
             />
             <button className="btn-ghost shrink-0" onClick={() => void pickDir()} title="Browse">
               …
+            </button>
+            <button
+              className="btn-ghost shrink-0"
+              title={serviceDir(nodes, svc) ? `Reveal in File Explorer\n${serviceDir(nodes, svc)}` : 'Set a working directory or a location first'}
+              disabled={!serviceDir(nodes, svc)}
+              onClick={() => void ipc.revealInExplorer(serviceDir(nodes, svc)).catch((e) => alert(String(e)))}
+            >
+              📂
             </button>
           </div>
         </Field>

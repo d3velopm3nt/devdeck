@@ -8,7 +8,7 @@ import { useApp } from '../store'
 import * as ipc from '../lib/ipc'
 import { openEditor, openNodeSetup, openTerminalPanel } from '../lib/dock'
 import { openTerminal, runCommandInNewTerminal, runCommandInBackground, launchProfile } from '../lib/runner'
-import { subtreeIds, resolveDir, nodeLabel } from '../lib/tree'
+import { subtreeIds, resolveDir, serviceDir, nodeLabel } from '../lib/tree'
 import { nodeColor, avatarLabel } from '../lib/spaces'
 import { ColorPicker } from './ColorPicker'
 import type { ProfileStep, ProfileDef, ServiceDef, CommandDef } from '../lib/types'
@@ -291,6 +291,7 @@ export function SpaceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
             onClearSel={() => setSelected(new Set())}
             onAct={act}
             openBrowser={openBrowser}
+            dirOf={(s) => serviceDir(nodes, s)}
           />
         )}
         {tab === 'commands' && <CommandsTab list={spaceCommands} />}
@@ -311,6 +312,7 @@ function ServicesTab({
   onClearSel,
   onAct,
   openBrowser,
+  dirOf,
 }: {
   list: ServiceDef[]
   svcStates: Record<number, { status: string; pid: number | null } | undefined>
@@ -322,6 +324,7 @@ function ServicesTab({
   onClearSel: () => void
   onAct: (id: number, fn: () => Promise<unknown>) => Promise<void>
   openBrowser: (port: number) => void
+  dirOf: (s: ServiceDef) => string
 }) {
   if (list.length === 0)
     return <Empty text="No services in this space yet." action={{ label: '+ New service', onClick: () => openEditor('service', 0, 'New service') }} />
@@ -340,6 +343,7 @@ function ServicesTab({
         const st = svcStates[s.id]
         const running = st?.status === 'running'
         const isSel = selected.has(s.id)
+        const dir = dirOf(s)
         return (
           <div key={s.id} className="group flex items-center gap-2.5 rounded-lg border border-slate-800 bg-[#151923] px-3 py-2 hover:border-slate-600">
             <input type="checkbox" className="accent-indigo-500" checked={isSel} onChange={() => onToggle(s.id)} title="Select for Run selected" />
@@ -348,6 +352,12 @@ function ServicesTab({
               <div className="truncate text-[12.5px] text-slate-200">{s.name}</div>
               <div className="truncate font-mono text-[10.5px] text-slate-500">{s.command}</div>
             </button>
+            <button
+              className="hidden shrink-0 rounded px-1 text-[12px] text-slate-400 hover:bg-slate-600 hover:text-white group-hover:block disabled:opacity-40"
+              title={dir ? `Reveal in File Explorer\n${dir}` : 'No folder set for this service'}
+              disabled={!dir}
+              onClick={() => void ipc.revealInExplorer(dir).catch((e) => alert(String(e)))}
+            >📂</button>
             {s.health_port != null && (
               <button className="hidden shrink-0 rounded px-1 text-[12px] text-slate-400 hover:bg-slate-600 hover:text-white group-hover:block" title={`Open http://localhost:${s.health_port}`} onClick={() => openBrowser(s.health_port!)}>🌐</button>
             )}

@@ -8,6 +8,7 @@ import { useApp } from '../store'
 import * as ipc from '../lib/ipc'
 import type { ProcStat, SvcStatus } from '../lib/types'
 import { openTerminalPanel, closeTerminalPanel } from '../lib/dock'
+import { serviceDir } from '../lib/tree'
 
 function fmtUptime(secs: number): string {
   const h = Math.floor(secs / 3600)
@@ -33,7 +34,7 @@ const STATUS_STYLE: Record<string, string> = {
 }
 
 export function ProcessDashboard() {
-  const { services, svcStates, stats, terminals } = useApp()
+  const { services, svcStates, stats, terminals, nodes } = useApp()
   const [busy, setBusy] = useState<string | null>(null)
 
   const rows = useMemo<Row[]>(() => {
@@ -139,6 +140,15 @@ export function ProcessDashboard() {
                       <div className="flex justify-end gap-1">
                         {r.kind === 'service' ? (
                           <>
+                          {svc && serviceDir(nodes, svc) && (
+                            <button
+                              className="rounded border border-slate-600 bg-slate-700/40 px-2 py-0.5 text-[11px] text-slate-200 hover:border-slate-400"
+                              title={`Reveal in File Explorer\n${serviceDir(nodes, svc)}`}
+                              onClick={() => void ipc.revealInExplorer(serviceDir(nodes, svc)).catch((e) => alert(String(e)))}
+                            >
+                              📂 Folder
+                            </button>
+                          )}
                           {port != null && (
                             <button
                               className="rounded border border-sky-500/40 bg-sky-500/10 px-2 py-0.5 text-[11px] text-sky-400 hover:bg-sky-500/25"

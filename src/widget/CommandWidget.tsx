@@ -14,7 +14,7 @@ import * as ipc from '../lib/ipc'
 import { useApp } from '../store'
 import type { SvcState, TreeNode } from '../lib/types'
 import { findNode, resolveDir } from '../lib/tree'
-import { widgetOpenTerminal, widgetRunCommand, widgetLaunchProfile, serviceDir } from './widgetActions'
+import { widgetOpenTerminal, widgetRunCommand, serviceDir } from './widgetActions'
 
 // Parse a design inline-style string ("a:b;c:d") into a React style object,
 // so the exact style strings from the design can be used verbatim.
@@ -53,49 +53,8 @@ const CORNERS: { key: Corner; label: string }[] = [
   { key: 'free', label: '✛' },
 ]
 
-type CollapsedStyle = 'single' | 'strip'
-// The "strip" collapsed style is a rich session panel (name · status · health ·
-// uptime), coloured per space — not a column of tiny icons.
-const PANEL_W = 300
-const PANEL_HEADER = 46
-const PANEL_FOOTER = 42
-const PANEL_PAD = 8
-const SESSION_ROW = 62 // a running-session card + gap
-const NAV_ROW = 52 // a workspace / project / item row + gap
-
-// 'active' shows the sessions currently running; the rest are the drill-down
-// navigator (workspace → project → item) used to start something new.
-type NavLevel = 'active' | 'workspace' | 'project' | 'item'
-type NavKind = 'ws' | 'project' | 'service' | 'command' | 'profile'
-interface NavItem {
-  key: string
-  kind: NavKind
-  id: number
-  name: string
-  color: string
-  glyph: string
-  running?: boolean
-  hasRunning?: boolean
-  detail: string
-  cmd?: string
-}
-
-function sizeForMode(
-  mode: Mode,
-  _orient: 'v' | 'h',
-  full: { w: number; h: number },
-  collapsed?: { style: CollapsedStyle; count: number; rowH?: number },
-): { w: number; h: number } {
-  if (mode === 'icon') {
-    if (collapsed?.style === 'strip') {
-      // header + N rows (in a scroll area) + footer
-      const rows = Math.max(collapsed.count, 1)
-      const rowH = collapsed.rowH ?? SESSION_ROW
-      const h = PANEL_PAD * 2 + PANEL_HEADER + rows * rowH + PANEL_FOOTER
-      return { w: PANEL_W, h: Math.min(Math.max(h, 150), 900) }
-    }
-    return { w: 58, h: 58 }
-  }
+function sizeForMode(mode: Mode, full: { w: number; h: number }): { w: number; h: number } {
+  if (mode === 'icon') return { w: 58, h: 58 }
   return full
 }
 
@@ -119,25 +78,6 @@ async function positionForCorner(corner: Corner, w: number, h: number) {
   } catch {
     /* ignore */
   }
-}
-
-// Seconds → a short human uptime ("8s", "12m", "1h 4m", "2d 3h").
-function fmtUptime(secs: number): string {
-  if (!Number.isFinite(secs) || secs < 0) return '—'
-  const s = Math.floor(secs)
-  if (s < 60) return `${s}s`
-  const m = Math.floor(s / 60)
-  if (m < 60) return `${m}m`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h}h ${m % 60}m`
-  const day = Math.floor(h / 24)
-  return `${day}d ${h % 24}h`
-}
-
-// Hex "#rrggbb" → rgba() at the given alpha.
-function hexA(hex: string, a: number): string {
-  const n = parseInt(hex.slice(1), 16)
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`
 }
 
 function tint(t: string): [string, string] {
@@ -219,16 +159,9 @@ export function CommandWidget() {
 
   // ---- interactive UI state (mirrors the design's this.state) ----
   const [view, setView] = useState<View>('recent')
-  // Default face is the session panel (a floating icon that's already opened).
-  // First run switches to the full widget to show the setup tour (see bootstrap).
-  const [mode, setMode] = useState<Mode>('icon')
+  // Two faces: a floating icon (collapsed) and the full widget (expanded).
+  const [mode, setMode] = useState<Mode>('full')
   const [corner, setCorner] = useState<Corner>('free')
-  const [collapsedStyle, setCollapsedStyle] = useState<CollapsedStyle>('strip')
-  // Strip navigator: drill workspace → project → items.
-  const [navLevel, setNavLevel] = useState<NavLevel>('workspace')
-  const [navWs, setNavWs] = useState<number | null>(null)
-  const [navProject, setNavProject] = useState<number | null>(null)
-  const [hovered, setHovered] = useState<string | null>(null)
   const [widgetSetOpen, setWidgetSetOpen] = useState(false)
   const [tourOpen, setTourOpen] = useState(false)
   const [spaceMenuOpen, setSpaceMenuOpen] = useState(false)
@@ -285,7 +218,7 @@ export function CommandWidget() {
         setMode('full')
         setTourOpen(true)
       }
-      if (c !== 'free') await positionForCorner(c, sizeForMode('full', 'v', expandedSize).w, sizeForMode('full', 'v', expandedSize).h)
+      if (c !== 'free') await positionForCorner(c, sizeForMode('full', expandedSize).w, sizeForMode('full', expandedSize).h)
     })()
     return () => {
       for (const s of subs) void s.then((un) => un())
@@ -448,46 +381,6 @@ export function CommandWidget() {
   const curWs = currentWorkspace != null ? model.wsById.get(currentWorkspace) : undefined
   const statusOf = (it: Item): string => (it.kind === 'service' ? svcStatus(app.svcStates[it.refId]) : '')
 
-  // ---- floating strip navigator: workspace → project → items ----
-  const spaceColorOf = (spaceId: number) => model.spaceById.get(spaceId)?.color ?? '#5a6070'
-
-  // Projects / workspaces that currently contain a running service.
-  const runningSets = useMemo(() => {
-    const proj = new Set<number>()
-    const ws = new Set<number>()
-    for (const s of Object.values(app.svcStates)) {
-      if (s.status !== 'running') continue
-      const it = model.itemsById.get('s' + s.id)
-      if (it) {
-        if (it.spaceId > 0) proj.add(it.spaceId)
-        if (it.wsId > 0) ws.add(it.wsId)
-      }
-    }
-    return { proj, ws }
-  }, [app.svcStates, model.itemsById])
-
-  // The sessions currently running — the strip's default face. Icons here ARE
-  // sessions; tapping one stops it.
-  const activeSessions = useMemo((): NavItem[] => {
-    const out: NavItem[] = []
-    for (const s of Object.values(app.svcStates)) {
-      if (s.status !== 'running') continue
-      const it = model.itemsById.get('s' + s.id)
-      if (!it) continue
-      out.push({
-        key: it.id,
-        kind: 'service',
-        id: it.refId,
-        name: it.name,
-        color: spaceColorOf(it.spaceId),
-        glyph: (it.name[0] ?? '?').toUpperCase(),
-        running: true,
-        detail: it.projectName + ' · running · tap to stop',
-      })
-    }
-    return out
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [app.svcStates, model.itemsById])
 
   // Foreign dev servers DevDeck didn't start (from the monitor's `detected`
   // stats). Each is attributed, best-effort, to the space whose folder contains
@@ -557,78 +450,6 @@ export function CommandWidget() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detected])
 
-  const navItems = useMemo((): NavItem[] => {
-    if (navLevel === 'active') return activeSessions
-    if (navLevel === 'workspace') {
-      return model.workspaces.map((w) => ({
-        key: 'w' + w.id,
-        kind: 'ws' as NavKind,
-        id: w.id,
-        name: w.name,
-        color: '#7C8CF8',
-        glyph: (w.name[0] ?? '?').toUpperCase(),
-        hasRunning: runningSets.ws.has(w.id),
-        detail: `${model.spaces.filter((s) => s.wsId === w.id).length} project(s)`,
-      }))
-    }
-    if (navLevel === 'project') {
-      return model.spaces
-        .filter((s) => s.wsId === navWs)
-        .map((s) => ({
-          key: 'p' + s.id,
-          kind: 'project' as NavKind,
-          id: s.id,
-          name: s.name,
-          color: s.color,
-          glyph: (s.name[0] ?? '?').toUpperCase(),
-          hasRunning: runningSets.proj.has(s.id),
-          detail: 'space',
-        }))
-    }
-    // item level: services, then commands, then profiles for navProject
-    const services: NavItem[] = []
-    const commands: NavItem[] = []
-    for (const it of model.itemsById.values()) {
-      if (it.spaceId !== navProject) continue
-      if (it.kind === 'service') {
-        const running = svcStatus(app.svcStates[it.refId]) === 'running'
-        services.push({
-          key: it.id,
-          kind: 'service',
-          id: it.refId,
-          name: it.name,
-          color: spaceColorOf(it.spaceId),
-          glyph: (it.name[0] ?? '?').toUpperCase(),
-          running,
-          detail: running ? 'running · tap to stop' : 'stopped · tap to start',
-        })
-      } else if (it.kind === 'command') {
-        commands.push({
-          key: it.id,
-          kind: 'command',
-          id: it.refId,
-          name: it.name,
-          color: '#9BA3B2',
-          glyph: '›',
-          detail: 'tap to run',
-          cmd: app.commands.find((c) => c.id === it.refId)?.command,
-        })
-      }
-    }
-    const profiles: NavItem[] = app.profiles
-      .filter((p) => model.projOf(findNode(app.nodes, p.project_id ?? -1) ?? undefined)?.id === navProject)
-      .map((p) => ({
-        key: 'pr' + p.id,
-        kind: 'profile' as NavKind,
-        id: p.id,
-        name: p.name,
-        color: '#FBBF24',
-        glyph: '⚡',
-        detail: 'tap to launch',
-      }))
-    return [...services, ...commands, ...profiles]
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navLevel, navWs, navProject, model, app.svcStates, app.commands, app.profiles, app.nodes, runningSets])
 
   // ---- actions (wired to real backend) ----
   const cmdDef = (it: Item) => app.commands.find((c) => c.id === it.refId)
@@ -697,14 +518,8 @@ export function CommandWidget() {
     document.addEventListener('mouseup', up)
   }
   // Resize the OS window for a mode and re-anchor to the docked corner.
-  const placeWidget = async (m: Mode, o: 'v' | 'h', c: Corner, style?: CollapsedStyle) => {
-    const rowH = navLevel === 'active' ? SESSION_ROW : NAV_ROW
-    // The sessions view stacks managed cards + detected cards (+ a subheader).
-    const count =
-      navLevel === 'active'
-        ? activeSessions.length + detected.length + (detected.length ? 1 : 0)
-        : navItems.length
-    const s = sizeForMode(m, o, expandedSize, { style: style ?? collapsedStyle, count, rowH })
+  const placeWidget = async (m: Mode, c: Corner) => {
+    const s = sizeForMode(m, expandedSize)
     programmaticMove.current = true
     await ipc.widgetResize(s.w, s.h)
     await positionForCorner(c, s.w, s.h)
@@ -721,94 +536,23 @@ export function CommandWidget() {
       /* keep prior */
     }
   }
-  // Collapse the full widget back to the session panel (the primary face).
+  // Collapse the full widget to the floating icon.
   const goIcon = async () => {
     await captureFullSize()
     setSpaceMenuOpen(false)
     setWidgetSetOpen(false)
-    resetNav()
-    setCollapsedStyle('strip')
     setMode('icon')
-    await placeWidget('icon', 'v', corner, 'strip')
+    await placeWidget('icon', corner)
   }
   const goFull = async () => {
     setMode('full')
-    await placeWidget('full', 'v', corner)
+    await placeWidget('full', corner)
   }
 
   const setCornerDock = (c: Corner) => {
     setCorner(c)
     void ipc.settingSet('widget_corner', c)
-    void placeWidget(mode, 'v', c)
-  }
-  // Where the strip should open: on the running sessions if there are any,
-  // otherwise at the top of the workspace navigator.
-  const initialNavLevel = (): NavLevel => (activeSessions.length + detected.length > 0 ? 'active' : 'workspace')
-  const resetNav = () => {
-    setNavLevel(initialNavLevel())
-    setNavWs(null)
-    setNavProject(null)
-    setHovered(null)
-  }
-  // Re-place the strip as its item count changes (navigation / sessions).
-  useEffect(() => {
-    if (mode === 'icon' && collapsedStyle === 'strip' && hovered == null) void placeWidget('icon', 'v', corner)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navItems.length, detected.length])
-
-  // Keep the strip's default face honest: surface running sessions the moment
-  // they exist (only from the top level, so a drill-down isn't yanked away),
-  // and drop back to the navigator once the last one stops.
-  useEffect(() => {
-    if (mode !== 'icon' || collapsedStyle !== 'strip') return
-    const live = activeSessions.length + detected.length
-    if (live > 0 && navLevel === 'workspace') setNavLevel('active')
-    else if (live === 0 && navLevel === 'active') setNavLevel('workspace')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSessions.length, detected.length, mode, collapsedStyle])
-
-  // ---- strip navigation ----
-  const navBack = () => {
-    setHovered(null)
-    if (navLevel === 'item') setNavLevel('project')
-    else if (navLevel === 'project') setNavLevel('workspace')
-    else if (navLevel === 'workspace') setNavLevel('active') // back to sessions
-  }
-  const navTap = (it: NavItem) => {
-    setHovered(null)
-    if (it.kind === 'ws') {
-      setNavWs(it.id)
-      setNavLevel('project')
-    } else if (it.kind === 'project') {
-      setNavProject(it.id)
-      setNavLevel('item')
-    } else if (it.kind === 'service') {
-      const running = svcStatus(app.svcStates[it.id]) === 'running'
-      void (running ? ipc.svcStop(it.id) : ipc.svcStart(it.id))
-      showToast((running ? 'Stopped ' : 'Started ') + it.name, running ? '#6B7280' : '#4ADE80')
-    } else if (it.kind === 'command') {
-      const c = app.commands.find((x) => x.id === it.id)
-      if (c) {
-        void widgetRunCommand(c)
-        void useApp.getState().refreshRecents()
-      }
-      showToast('Ran ' + it.name, '#7C8CF8')
-    } else if (it.kind === 'profile') {
-      const p = app.profiles.find((x) => x.id === it.id)
-      if (p) void widgetLaunchProfile(p)
-      showToast('Launched ' + it.name, '#FBBF24')
-    }
-  }
-  // Tapping the single icon opens the strip navigator (at Workspaces).
-  const openStrip = async () => {
-    resetNav()
-    setCollapsedStyle('strip')
-    await placeWidget('icon', 'v', corner, 'strip')
-  }
-  const openSingle = async () => {
-    setHovered(null)
-    setCollapsedStyle('single')
-    await placeWidget('icon', 'v', corner, 'single')
+    void placeWidget(mode, c)
   }
 
   const setCount = (n: number) => {
@@ -879,218 +623,16 @@ export function CommandWidget() {
 
   // Collapsed — single floating icon. Press-and-move drags it (snaps to
   // corners); a tap opens the strip navigator.
-  if (mode === 'icon' && collapsedStyle === 'single') {
+  if (mode === 'icon') {
     return (
       <div style={css('position:fixed;inset:0')}>
         <style>{keyframes}</style>
-        <div onMouseDown={dragOrClick(() => void openStrip())} title="Tap to open · drag to move"
+        <div onMouseDown={dragOrClick(() => void goFull())} title="Tap to open · drag to move"
           style={css('width:100%;height:100%;border:1px solid rgba(255,255,255,0.12);border-radius:16px;background:linear-gradient(145deg,rgba(28,31,40,0.96),rgba(18,20,27,0.96));cursor:grab;display:flex;align-items:center;justify-content:center;position:relative;box-shadow:0 16px 44px rgba(0,0,0,0.5),0 0 0 1px rgba(124,140,248,0.18)')}>
           <div style={css('width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#7C8CF8,#4ADE80);display:flex;align-items:center;justify-content:center;color:#0c0e14;font-weight:700;font-size:17px')}>⌘</div>
           {runningCount > 0 && (
             <div style={css('position:absolute;top:-4px;right:-4px;min-width:19px;height:19px;padding:0 5px;border-radius:10px;background:#4ADE80;color:#08120b;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid #12141b')}>{runningCount}</div>
           )}
-        </div>
-      </div>
-    )
-  }
-
-  // Collapsed — the floating session panel. When sessions are running it shows
-  // a coloured card per session (name · status · health · uptime · CPU/mem);
-  // otherwise it drills Workspaces → Projects → items to start something. The
-  // header is the only drag handle, so body controls click cleanly.
-  if (mode === 'icon' && collapsedStyle === 'strip') {
-    const levelLabel = navLevel === 'active' ? 'Sessions' : navLevel === 'workspace' ? 'Workspaces' : navLevel === 'project' ? (model.wsById.get(navWs ?? -1)?.name ?? 'Projects') : (model.spaceById.get(navProject ?? -1)?.name ?? 'Items')
-    const atTop = navLevel === 'active' || (navLevel === 'workspace' && activeSessions.length === 0)
-    const subtitle =
-      navLevel === 'active'
-        ? `${activeSessions.length} running${detected.length ? ` · ${detected.length} detected` : ''}`
-        : navLevel === 'workspace'
-          ? `${model.workspaces.length} workspace${model.workspaces.length === 1 ? '' : 's'}`
-          : navLevel === 'project'
-            ? `${navItems.length} project${navItems.length === 1 ? '' : 's'}`
-            : `${navItems.length} item${navItems.length === 1 ? '' : 's'}`
-
-    const iconBtn = css('width:28px;height:28px;flex-shrink:0;border:none;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center')
-
-    // A live running-session card, coloured by its space.
-    const sessionCard = (s: NavItem) => {
-      const svc = app.services.find((x) => x.id === s.id)
-      const stat = app.stats.find((x) => x.kind === 'service' && x.id === s.id)
-      const spaceName = model.itemsById.get('s' + s.id)?.projectName ?? ''
-      const uptime = stat ? fmtUptime(stat.uptime_secs) : 'starting…'
-      const cpu = stat ? Math.round(stat.cpu) : null
-      const mem = stat ? Math.round(stat.mem_mb) : null
-      const hp = svc?.health_port ?? null
-      const healthy = hp != null && !!stat?.ports?.includes(hp)
-      const it = model.itemsById.get('s' + s.id)
-      // What to open in a browser: the health port, else the first port the
-      // process is actually listening on.
-      const openPort = hp ?? stat?.ports?.[0] ?? null
-      return (
-        <div key={s.key} style={{ ...css('position:relative;display:flex;align-items:stretch;gap:9px;padding:9px 10px 9px 12px;border-radius:12px;overflow:hidden;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07)'), boxShadow: `inset 3px 0 0 ${s.color}` }}>
-          <div style={css('flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:3px')}>
-            <div style={css('display:flex;align-items:center;gap:6px')}>
-              <span style={{ ...css('width:8px;height:8px;border-radius:50%;flex-shrink:0'), background: '#4ADE80', animation: 'cw-pulse 2s ease-in-out infinite' }} />
-              <span style={css('font-size:12.5px;font-weight:600;color:#E7EAF0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis')}>{s.name}</span>
-              <span style={css('flex:1')} />
-              <span style={{ ...css("font-family:'JetBrains Mono',monospace;font-size:10.5px;flex-shrink:0"), color: '#8b93a1' }}>{uptime}</span>
-            </div>
-            <div style={css('display:flex;align-items:center;gap:7px;min-width:0')}>
-              <span style={{ ...css('font-size:10px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:96px'), color: s.color }}>{spaceName || 'global'}</span>
-              {hp != null && (
-                <span style={{ ...css('display:inline-flex;align-items:center;gap:3px;font-size:9.5px;font-weight:600;padding:1px 5px;border-radius:5px;flex-shrink:0'), background: healthy ? 'rgba(74,222,128,0.14)' : 'rgba(251,191,36,0.14)', color: healthy ? '#4ADE80' : '#FBBF24' }}>
-                  <span style={{ ...css('width:5px;height:5px;border-radius:50%'), background: healthy ? '#4ADE80' : '#FBBF24' }} />
-                  :{hp}
-                </span>
-              )}
-              {cpu != null && <span style={css('font-size:9.5px;color:#5a6070;flex-shrink:0')}>{cpu}%</span>}
-              {mem != null && <span style={css('font-size:9.5px;color:#5a6070;flex-shrink:0')}>{mem}MB</span>}
-            </div>
-          </div>
-          <div style={css('display:flex;align-items:center;gap:4px;flex-shrink:0')}>
-            {openPort != null && (
-              <button data-nodrag title={`Open http://localhost:${openPort}`} onClick={() => { void ipc.openUrl(`http://localhost:${openPort}`); showToast('Opening localhost:' + openPort, s.color) }} style={{ ...iconBtn, width: 26, height: 26, background: 'rgba(255,255,255,0.05)' }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9BA3B2" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a15 15 0 010 18M12 3a15 15 0 000 18" /></svg>
-              </button>
-            )}
-            <button data-nodrag title="Open a terminal here" onClick={() => it && openTerminal(it)} style={{ ...iconBtn, width: 26, height: 26, background: 'rgba(255,255,255,0.05)' }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9BA3B2" strokeWidth="2"><path d="M4 17l6-5-6-5M12 19h8" /></svg>
-            </button>
-            <button data-nodrag title={'Stop ' + s.name} onClick={() => navTap(s)} style={{ ...iconBtn, width: 26, height: 26, background: 'rgba(248,113,113,0.14)' }}>
-              <span style={css('width:9px;height:9px;border-radius:2px;background:#F87171')} />
-            </button>
-          </div>
-        </div>
-      )
-    }
-
-    // A detected (foreign) session — dashed, marked "detected", with a
-    // suggested space chip when we could attribute it by folder.
-    const detectedCard = (d: (typeof detected)[number]) => {
-      const port = d.ports[0] ?? null
-      return (
-        <div key={'d' + d.pid} style={{ ...css('position:relative;display:flex;align-items:stretch;gap:9px;padding:9px 10px 9px 12px;border-radius:12px;overflow:hidden;background:rgba(255,255,255,0.02);border:1px dashed rgba(255,255,255,0.16)'), boxShadow: `inset 3px 0 0 ${d.color}` }}>
-          <div style={css('flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:3px')}>
-            <div style={css('display:flex;align-items:center;gap:6px')}>
-              <span style={{ ...css('width:8px;height:8px;border-radius:50%;flex-shrink:0;border:1.5px solid #7C8CF8') }} />
-              <span style={css('font-size:12.5px;font-weight:600;color:#E7EAF0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis')}>{d.name}</span>
-              <span style={css('flex:1')} />
-              <span style={{ ...css("font-family:'JetBrains Mono',monospace;font-size:10.5px;flex-shrink:0"), color: '#8b93a1' }}>{fmtUptime(d.uptime)}</span>
-            </div>
-            <div style={css('display:flex;align-items:center;gap:7px;min-width:0')}>
-              <span style={{ ...css('font-size:10px;font-weight:600;flex-shrink:0'), color: d.color }}>{d.tool}</span>
-              {port != null && <span style={css('font-family:\'JetBrains Mono\',monospace;font-size:9.5px;color:#8b93a1;flex-shrink:0')}>:{port}</span>}
-              <span style={css('font-size:9.5px;color:#5a6070;flex-shrink:0')}>{Math.round(d.cpu)}%</span>
-              {d.spaceName ? (
-                <span style={{ ...css('font-size:9px;font-weight:600;padding:1px 5px;border-radius:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'), background: hexA(d.color, 0.16), color: d.color }}>→ {d.spaceName}</span>
-              ) : (
-                <span style={css('font-size:9px;font-weight:600;padding:1px 5px;border-radius:5px;background:rgba(255,255,255,0.05);color:#7d8494;flex-shrink:0')}>unassigned</span>
-              )}
-            </div>
-          </div>
-          <div style={css('display:flex;align-items:center;gap:4px;flex-shrink:0')}>
-            {port != null && (
-              <button data-nodrag title={`Open http://localhost:${port}`} onClick={() => { void ipc.openUrl(`http://localhost:${port}`); showToast('Opening localhost:' + port, d.color) }} style={{ ...iconBtn, width: 26, height: 26, background: 'rgba(255,255,255,0.05)' }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9BA3B2" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a15 15 0 010 18M12 3a15 15 0 000 18" /></svg>
-              </button>
-            )}
-            <button data-nodrag title="Open a terminal here" onClick={() => { void widgetOpenTerminal(d.cwd, d.name); showToast('Opened terminal · ' + d.name, d.color) }} style={{ ...iconBtn, width: 26, height: 26, background: 'rgba(255,255,255,0.05)' }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9BA3B2" strokeWidth="2"><path d="M4 17l6-5-6-5M12 19h8" /></svg>
-            </button>
-          </div>
-        </div>
-      )
-    }
-
-    // A workspace / project / command / profile / stopped-service row.
-    const navRow = (it: NavItem) => {
-      const drills = it.kind === 'ws' || it.kind === 'project'
-      return (
-        <button key={it.key} data-nodrag title={it.name} onClick={() => navTap(it)}
-          style={css(`display:flex;align-items:center;gap:10px;text-align:left;width:100%;padding:8px 10px;border-radius:11px;cursor:pointer;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07)`)}>
-          <span style={{ ...css('width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0'), background: hexA(it.color, 0.16), border: `1px solid ${hexA(it.color, 0.4)}` }}>
-            <span style={{ ...css("font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px"), color: it.color }}>{it.glyph}</span>
-          </span>
-          <span style={css('flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.2')}>
-            <span style={css('font-size:12.5px;font-weight:600;color:#E7EAF0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis')}>{it.name}</span>
-            <span style={css('font-size:10px;color:#5a6070;white-space:nowrap;overflow:hidden;text-overflow:ellipsis')}>{it.detail}</span>
-          </span>
-          {it.kind === 'service' && <span style={{ ...css('width:8px;height:8px;border-radius:50%;flex-shrink:0'), background: it.running ? '#4ADE80' : '#6B7280', animation: it.running ? 'cw-pulse 2s ease-in-out infinite' : 'none' }} />}
-          {drills && it.hasRunning && <span style={{ ...css('width:8px;height:8px;border-radius:50%;flex-shrink:0'), background: '#4ADE80', animation: 'cw-pulse 2s ease-in-out infinite' }} />}
-          {drills && (
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#5a6070" strokeWidth="2.2" style={{ flexShrink: 0 }}><path d="M9 6l6 6-6 6" /></svg>
-          )}
-        </button>
-      )
-    }
-
-    return (
-      <div style={css('position:fixed;inset:0;font-family:Geist,system-ui,sans-serif;user-select:none')}>
-        <style>{keyframes}</style>
-        <div style={css('width:100%;height:100%;display:flex;flex-direction:column;border:1px solid rgba(255,255,255,0.1);border-radius:16px;overflow:hidden;background:radial-gradient(900px 500px at 82% 0,rgba(124,140,248,0.13),transparent 58%),linear-gradient(180deg,rgba(24,27,35,0.98),rgba(15,17,23,0.98));box-shadow:0 18px 48px rgba(0,0,0,0.5)')}>
-
-          {/* header / drag bar */}
-          <div onMouseDown={startDrag} style={css('flex-shrink:0;display:flex;align-items:center;gap:8px;padding:8px 9px;border-bottom:1px solid rgba(255,255,255,0.06);cursor:grab')}>
-            {atTop ? (
-              <button data-nodrag title="Collapse to icon" onClick={() => void openSingle()} style={{ ...iconBtn, background: 'rgba(255,255,255,0.05)' }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9BA3B2" strokeWidth="2"><rect x="5" y="5" width="14" height="14" rx="4" /></svg>
-              </button>
-            ) : (
-              <button data-nodrag title={navLevel === 'workspace' ? 'Back to sessions' : navLevel === 'item' ? 'Back to projects' : 'Back to workspaces'} onClick={navBack} style={{ ...iconBtn, background: 'rgba(124,140,248,0.14)' }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#A7B2FF" strokeWidth="2.2"><path d="M15 6l-6 6 6 6" /></svg>
-              </button>
-            )}
-            <div style={css('flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.15')}>
-              <span style={css('font-size:12.5px;font-weight:700;color:#E7EAF0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis')}>{levelLabel}</span>
-              <span style={css('font-size:10px;color:#5a6070;white-space:nowrap;overflow:hidden;text-overflow:ellipsis')}>{subtitle}</span>
-            </div>
-            <button data-nodrag title="Open full widget" onClick={() => void goFull()} style={{ ...iconBtn, background: 'rgba(124,140,248,0.14)' }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#A7B2FF" strokeWidth="2"><path d="M8 3H5a2 2 0 00-2 2v3M16 3h3a2 2 0 012 2v3M8 21H5a2 2 0 01-2-2v-3M16 21h3a2 2 0 002-2v-3" /></svg>
-            </button>
-          </div>
-
-          {/* body */}
-          <div className="cw-scroll" style={css('flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:8px;display:flex;flex-direction:column;gap:6px')}>
-            {navLevel === 'active' ? (
-              <>
-                {activeSessions.map(sessionCard)}
-                {detected.length > 0 && (
-                  <div style={css('display:flex;align-items:center;gap:7px;padding:2px 2px 0;margin-top:2px')}>
-                    <span style={css('font-size:9.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#7d8494')}>Unassigned</span>
-                    <span style={css('flex:1;height:1px;background:rgba(255,255,255,0.07)')} />
-                    <span style={css('font-size:9.5px;color:#5a6070')}>{detected.length}</span>
-                  </div>
-                )}
-                {detected.map(detectedCard)}
-                {activeSessions.length === 0 && detected.length === 0 && (
-                  <div style={css('flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:7px;color:#5a6070;padding:18px 14px')}>
-                    <div style={css('font-size:11.5px')}>No sessions running.</div>
-                  </div>
-                )}
-              </>
-            ) : navItems.length === 0 ? (
-              <div style={css('flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:7px;color:#5a6070;padding:18px 14px')}>
-                <div style={css('font-size:26px;opacity:0.6')}>∅</div>
-                <div style={css('font-size:11.5px')}>Nothing in {levelLabel} yet.</div>
-              </div>
-            ) : (
-              navItems.map(navRow)
-            )}
-          </div>
-
-          {/* footer */}
-          <div style={css('flex-shrink:0;display:flex;align-items:center;gap:8px;padding:7px 9px;border-top:1px solid rgba(255,255,255,0.06);background:rgba(0,0,0,0.18)')}>
-            {navLevel === 'active' ? (
-              <button data-nodrag onClick={() => { setNavWs(null); setNavProject(null); setNavLevel('workspace') }} title="Browse workspaces to start something"
-                style={css('flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:7px;border:1px solid rgba(124,140,248,0.3);background:rgba(124,140,248,0.12);border-radius:8px;cursor:pointer;color:#A7B2FF;font-size:11.5px;font-weight:600')}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A7B2FF" strokeWidth="2.2"><path d="M12 5v14M5 12h14" /></svg>Start something
-              </button>
-            ) : (
-              <span style={css('flex:1;font-size:10.5px;color:#4f5563;display:flex;align-items:center;gap:6px')}>
-                <span style={css('width:6px;height:6px;border-radius:50%;background:#4ADE80')} />{runningCount} running
-              </span>
-            )}
-          </div>
         </div>
       </div>
     )

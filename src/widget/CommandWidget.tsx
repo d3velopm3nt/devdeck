@@ -80,6 +80,16 @@ async function positionForCorner(corner: Corner, w: number, h: number) {
   }
 }
 
+// Seconds → a short human uptime ("8s", "12m", "1h 4m").
+function fmtUptime(secs: number): string {
+  const s = Math.max(0, Math.floor(secs))
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m}m`
+  const h = Math.floor(m / 60)
+  return h < 24 ? `${h}h ${m % 60}m` : `${Math.floor(h / 24)}d ${h % 24}h`
+}
+
 function tint(t: string): [string, string] {
   if (/vite|next|proxy|metro|emulator|preview|wrangler|triton|kafka|node|npm|pnpm|yarn|dev/i.test(t)) return ['#7C8CF8', 'rgba(124,140,248,0.16)']
   if (/go|api|mock|worker|server|rust|cargo/i.test(t)) return ['#4ADE80', 'rgba(74,222,128,0.16)']
@@ -895,6 +905,13 @@ function ItemRow({ it, d, status, onRun, onToggle, onRestart, onTerminal }: {
 }) {
   const isService = it.kind === 'service'
   const running = status === 'running'
+  // Look up the live port / uptime for services (restores the session-panel info).
+  const { services, stats } = useApp()
+  const svc = isService ? services.find((s) => s.id === it.refId) : undefined
+  const stat = isService ? stats.find((s) => s.kind === 'service' && s.id === it.refId) : undefined
+  const hp = svc?.health_port ?? null
+  const port = hp ?? stat?.ports?.[0] ?? null
+  const healthy = hp != null && !!stat?.ports?.includes(hp)
   // Same visual language as the session-panel cards: coloured accent bar,
   // status dot, bold name, coloured space sub-line, compact icon actions.
   const [sc, anim] = isService ? statusMeta(status) : [it.iconColor, 'none']
@@ -906,10 +923,21 @@ function ItemRow({ it, d, status, onRun, onToggle, onRestart, onTerminal }: {
         <div style={css('display:flex;align-items:center;gap:7px')}>
           <span style={{ ...css('width:8px;height:8px;border-radius:50%;flex-shrink:0'), background: sc, animation: anim }} />
           <span style={css(`font-size:${d.name}px;font-weight:600;color:#E7EAF0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis`)}>{it.name}</span>
+          {isService && running && stat && (
+            <>
+              <span style={css('flex:1')} />
+              <span style={{ ...css(`font-family:'JetBrains Mono',monospace;font-size:${d.meta}px;flex-shrink:0`), color: '#8b93a1' }}>{fmtUptime(stat.uptime_secs)}</span>
+            </>
+          )}
         </div>
         <div style={css('display:flex;align-items:center;gap:6px;min-width:0')}>
           <span style={{ ...css(`font-size:${d.meta}px;font-weight:600;flex-shrink:0`), color: it.iconColor }}>{it.projectName}</span>
-          <span style={css(`font-size:${d.meta}px;color:#5a6070;white-space:nowrap;overflow:hidden;text-overflow:ellipsis`)}>{it.type}{isService ? ' · ' + status : ''}</span>
+          {port != null && (
+            <span style={{ ...css(`display:inline-flex;align-items:center;gap:3px;font-size:${d.meta}px;font-weight:600;padding:0 5px;border-radius:5px;flex-shrink:0`), background: healthy ? 'rgba(74,222,128,0.14)' : 'rgba(255,255,255,0.06)', color: healthy ? '#4ADE80' : '#8b93a1' }}>
+              {healthy && <span style={css('width:5px;height:5px;border-radius:50%;background:#4ADE80')} />}:{port}
+            </span>
+          )}
+          <span style={css(`font-size:${d.meta}px;color:#5a6070;white-space:nowrap;overflow:hidden;text-overflow:ellipsis`)}>{isService ? status : it.type}</span>
         </div>
       </div>
       <div style={css('display:flex;align-items:center;gap:4px;flex-shrink:0')}>
@@ -918,6 +946,11 @@ function ItemRow({ it, d, status, onRun, onToggle, onRestart, onTerminal }: {
         )}
         {isService && (
           <>
+            {port != null && (
+              <button title={`Open http://localhost:${port}`} onClick={() => void ipc.openUrl(`http://localhost:${port}`).catch(() => {})} style={css(abtn + ';background:rgba(255,255,255,0.05)')}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9BA3B2" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a15 15 0 010 18M12 3a15 15 0 000 18" /></svg>
+              </button>
+            )}
             <button onClick={() => onToggle(it)} title={tv.toggleLabel} style={css(abtn + ';background:' + tv.toggleBg)}><span style={css(tv.toggleIconWrap)} /></button>
             <button onClick={() => onRestart(it)} title="Restart" style={css(abtn + ';background:rgba(255,255,255,0.05)')}>{Icon.restart()}</button>
             <button onClick={() => onTerminal(it)} title="Open terminal" style={css(abtn + ';background:rgba(255,255,255,0.05)')}>{Icon.term()}</button>

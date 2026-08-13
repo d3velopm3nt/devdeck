@@ -9,6 +9,7 @@ import { useApp } from '../store'
 import { openEditor } from '../lib/dock'
 import { subtreeIds } from '../lib/tree'
 import { runCommandInBackground, runCommandInNewTerminal, runCommandInTerminal } from '../lib/runner'
+import { pmBadge, pmFromCommand } from '../lib/pm'
 
 export function CommandsPanel() {
   const { commands, terminals, nodes, selectedNode } = useApp()
@@ -70,7 +71,17 @@ export function CommandsPanel() {
                     title="Click to edit"
                     onClick={() => openEditor('command', c.id, c.name || 'Command')}
                   >
-                    <div className="truncate text-[12.5px] text-slate-200">{c.name}</div>
+                    <div className="flex items-center gap-1.5">
+                      {(() => {
+                        const b = pmBadge(pmFromCommand(c.command) ?? '')
+                        return b ? (
+                          <span className="shrink-0 rounded px-1 py-px text-[9px] font-semibold" style={{ background: b.bg, color: b.color }}>
+                            {b.label}
+                          </span>
+                        ) : null
+                      })()}
+                      <span className="truncate text-[12.5px] text-slate-200">{c.name}</span>
+                    </div>
                     <div className="truncate font-mono text-[10.5px] text-slate-500">{c.command}</div>
                   </button>
                   <button

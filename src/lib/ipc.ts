@@ -5,6 +5,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event'
 import type {
   CommandDef,
+  DetectedCommand,
   LayoutDef,
   LogEntry,
   ProcStat,
@@ -43,6 +44,7 @@ export const nodeDelete = (id: number) => invoke<void>('node_delete', { id })
 // ---- commands ----
 export const commandsList = () => invoke<CommandDef[]>('commands_list')
 export const commandSave = (cmd: CommandDef) => invoke<number>('command_save', { cmd })
+export const scanProject = (dir: string) => invoke<DetectedCommand[]>('scan_project', { dir })
 export const commandDelete = (id: number) => invoke<void>('command_delete', { id })
 
 // ---- services ----

@@ -93,6 +93,14 @@ export interface LogEntry {
   line: string
 }
 
+export interface DetectedCommand {
+  name: string
+  command: string
+  group: string
+  /** npm|pnpm|yarn|bun|cargo|go|dotnet|make|composer|python */
+  manager: string
+}
+
 export interface ProcStat {
   kind: 'service' | 'terminal' | 'detected'
   id: number

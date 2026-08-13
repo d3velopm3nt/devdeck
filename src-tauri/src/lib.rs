@@ -15,6 +15,7 @@ mod db;
 mod legacy;
 mod monitor;
 mod pty;
+mod scan;
 mod seed;
 mod services;
 
@@ -244,6 +245,7 @@ pub fn run() {
             focus_main,
             reveal_in_explorer,
             open_url,
+            scan::scan_project,
             seed::seed_example,
             seed::example_exists,
             legacy::shells_detect,

@@ -31,6 +31,7 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [scanning, setScanning] = useState(false)
   const [scanErr, setScanErr] = useState<string | null>(null)
+  const [result, setResult] = useState<{ added: number; updated: number; failed: number } | null>(null)
 
   if (!node) {
     return <div className="p-6 text-slate-500">This item no longer exists.</div>
@@ -41,8 +42,16 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
   // Live preview of the resolved directory using the edited values.
   const preview = resolveDir(nodes, { ...node, name, path, rel_path: relPath })
 
-  // Commands already on this project — used to de-dupe scan results.
-  const existing = new Set(commands.filter((c) => c.project_id === node.id).map((c) => c.command))
+  // Commands already on this project — used to de-dupe scan results by both the
+  // exact command and the name. Status of a scanned command:
+  //   added   — identical command already exists (skip)
+  //   changed — same name exists but a different command (offer to override)
+  //   new     — not present
+  const projectCommands = commands.filter((c) => c.project_id === node.id)
+  const byCommand = new Set(projectCommands.map((c) => c.command))
+  const byName = new Map(projectCommands.map((c) => [c.name, c]))
+  const rowStatus = (r: DetectedCommand): 'new' | 'added' | 'changed' =>
+    byCommand.has(r.command) ? 'added' : byName.has(r.name) ? 'changed' : 'new'
 
   const browse = async (setter: (v: string) => void, title: string) => {
     const dir = await openDialog({ directory: true, title })
@@ -54,11 +63,12 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
     if (!dir.trim()) return
     setScanning(true)
     setScanErr(null)
+    setResult(null)
     try {
       const res = await ipc.scanProject(dir)
       setScan(res)
-      // pre-select everything not already added
-      setPicked(new Set(res.filter((r) => !existing.has(r.command)).map((r) => r.command)))
+      // pre-select only brand-new commands (existing / changed stay opt-in)
+      setPicked(new Set(res.filter((r) => rowStatus(r) === 'new').map((r) => r.command)))
     } catch (e) {
       setScanErr(String(e))
       setScan([])
@@ -76,21 +86,31 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
     })
 
   const addSelected = async () => {
-    const toAdd = (scan ?? []).filter((r) => picked.has(r.command) && !existing.has(r.command))
-    for (const r of toAdd) {
-      await ipc.commandSave({
-        id: 0,
-        project_id: node.id,
-        group_name: r.group,
-        name: r.name,
-        command: r.command,
-        cwd: '',
-        shell: '',
-        sort: 0,
-      })
+    const rows = (scan ?? []).filter((r) => picked.has(r.command))
+    let added = 0
+    let updated = 0
+    let failed = 0
+    for (const r of rows) {
+      const st = rowStatus(r)
+      if (st === 'added') continue // identical — nothing to do
+      try {
+        if (st === 'changed') {
+          // Override the existing command with the same name (keeps its id).
+          const ex = byName.get(r.name)!
+          await ipc.commandSave({ ...ex, group_name: r.group, command: r.command })
+          updated++
+        } else {
+          await ipc.commandSave({ id: 0, project_id: node.id, group_name: r.group, name: r.name, command: r.command, cwd: '', shell: '', sort: 0 })
+          added++
+        }
+      } catch {
+        failed++
+      }
     }
     await refreshCommands()
+    await refreshTree()
     setPicked(new Set())
+    setResult({ added, updated, failed })
   }
 
   const save = async () => {
@@ -100,7 +120,7 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
     props.api.close()
   }
 
-  const newCount = (scan ?? []).filter((r) => !existing.has(r.command)).length
+  const newCount = (scan ?? []).filter((r) => rowStatus(r) === 'new').length
 
   return (
     <EditorShell
@@ -169,8 +189,11 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
               ) : (
                 <div className="mt-3 space-y-1.5">
                   <div className="flex items-center gap-3 text-[11px] text-slate-400">
-                    <button className="hover:text-slate-200" onClick={() => setPicked(new Set(scan.filter((r) => !existing.has(r.command)).map((r) => r.command)))}>
+                    <button className="hover:text-slate-200" onClick={() => setPicked(new Set(scan.filter((r) => rowStatus(r) === 'new').map((r) => r.command)))}>
                       Select new ({newCount})
+                    </button>
+                    <button className="hover:text-slate-200" title="Also select same-name commands whose command changed, to override them" onClick={() => setPicked(new Set(scan.filter((r) => rowStatus(r) !== 'added').map((r) => r.command)))}>
+                      Select all + override
                     </button>
                     <button className="hover:text-slate-200" onClick={() => setPicked(new Set())}>
                       Clear
@@ -180,15 +203,17 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
 
                   <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
                     {scan.map((r) => {
-                      const added = existing.has(r.command)
+                      const st = rowStatus(r)
                       const on = picked.has(r.command)
                       const b = pmBadge(r.manager)
+                      const ex = st === 'changed' ? byName.get(r.name) : undefined
                       return (
                         <label
                           key={r.manager + '|' + r.command}
-                          className={`flex cursor-pointer items-center gap-2 rounded border px-2 py-1.5 ${added ? 'border-slate-800 opacity-50' : 'border-slate-700 hover:border-slate-600'}`}
+                          title={ex ? `Currently: ${ex.command}` : undefined}
+                          className={`flex cursor-pointer items-center gap-2 rounded border px-2 py-1.5 ${st === 'added' ? 'border-slate-800 opacity-50' : 'border-slate-700 hover:border-slate-600'}`}
                         >
-                          <input type="checkbox" className="accent-indigo-500" disabled={added} checked={added || on} onChange={() => toggle(r.command)} />
+                          <input type="checkbox" className="accent-indigo-500" disabled={st === 'added'} checked={st === 'added' || on} onChange={() => toggle(r.command)} />
                           {b && (
                             <span
                               className="shrink-0 rounded px-1.5 py-px text-[10px] font-semibold"
@@ -201,15 +226,30 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
                             <span className="text-[12.5px] text-slate-200">{r.name}</span>
                             <span className="ml-2 font-mono text-[10.5px] text-slate-500">{r.command}</span>
                           </span>
-                          {added && <span className="shrink-0 text-[10px] text-emerald-400">added</span>}
+                          {st === 'added' && <span className="shrink-0 text-[10px] text-emerald-400">added</span>}
+                          {st === 'changed' && <span className="shrink-0 rounded bg-amber-500/15 px-1.5 py-px text-[10px] text-amber-400">differs</span>}
                         </label>
                       )
                     })}
                   </div>
 
-                  <button className="btn-primary mt-1 text-[12px]" disabled={picked.size === 0} onClick={() => void addSelected()}>
-                    Add {picked.size} command{picked.size === 1 ? '' : 's'}
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button className="btn-primary mt-1 text-[12px]" disabled={picked.size === 0} onClick={() => void addSelected()}>
+                      {(() => {
+                        const rows = scan.filter((r) => picked.has(r.command))
+                        const a = rows.filter((r) => rowStatus(r) === 'new').length
+                        const u = rows.filter((r) => rowStatus(r) === 'changed').length
+                        return `Add ${a}${u ? ` · override ${u}` : ''}`
+                      })()}
+                    </button>
+                    {result && (
+                      <span className="mt-1 text-[11px] text-emerald-400">
+                        ✓ Added {result.added}
+                        {result.updated ? `, overrode ${result.updated}` : ''}
+                        {result.failed ? `, ${result.failed} failed` : ''} — see the Commands panel.
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))}
           </div>

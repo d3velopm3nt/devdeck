@@ -8,8 +8,8 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import * as ipc from '../lib/ipc'
 import type { CommandDef, NodeKind, ProfileDef, ServiceDef, SvcState, TreeNode } from '../lib/types'
 import { useApp } from '../store'
-import { openEditor, openNodeSetup } from '../lib/dock'
-import { launchProfile, openTerminal, runCommandInNewTerminal } from '../lib/runner'
+import { openEditor, openInMain, openNodeSetup } from '../lib/dock'
+import { focusCommandSession, launchProfile, openTerminal, runCommandInNewTerminal } from '../lib/runner'
 import { resolveDir } from '../lib/tree'
 import { nodeColor } from '../lib/spaces'
 import { loadExampleWorkspace } from '../lib/example'
@@ -33,10 +33,16 @@ const KIND_LABEL: Record<NodeKind, string> = {
   folder: 'Folder',
 }
 
+// A right-click / ⋯ menu can target a tree node, a command, or a service.
+type MenuTarget =
+  | { type: 'node'; node: TreeNode | null }
+  | { type: 'command'; cmd: CommandDef }
+  | { type: 'service'; svc: ServiceDef }
+
 interface Menu {
   x: number
   y: number
-  node: TreeNode | null
+  target: MenuTarget
 }
 
 // Category groups shown under a project/folder node. Each is a virtual
@@ -49,7 +55,7 @@ const CAT_META: Record<Cat, { label: string; icon: string; color: string }> = {
 }
 
 export function Explorer() {
-  const { nodes, commands, services, profiles, svcStates, selectedNodeId, setSelectedNode, refreshTree } = useApp()
+  const { nodes, commands, services, profiles, svcStates, selectedNodeId, setSelectedNode, refreshTree, refreshCommands, refreshServices, focusServiceLogs } = useApp()
   const roots = useMemo(() => nodes.filter((n) => n.parent_id === null), [nodes])
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
   // Category groups are open by default; this holds the ones the user collapsed.
@@ -135,7 +141,28 @@ export function Explorer() {
     await refreshTree()
   }
 
-  const menuItems = (node: TreeNode | null): MenuItem[] => {
+  const delCommand = async (cmd: CommandDef) => {
+    if (!confirm(`Delete command “${cmd.name}”?`)) return
+    await ipc.commandDelete(cmd.id)
+    await refreshCommands()
+  }
+
+  const delService = async (svc: ServiceDef) => {
+    if (!confirm(`Delete service “${svc.name}”?`)) return
+    await ipc.serviceDelete(svc.id)
+    await refreshServices()
+  }
+
+  // "View session": jump to a command's live terminal, or a service's logs.
+  const viewCommand = (cmd: CommandDef) => {
+    if (!focusCommandSession(cmd.id)) void runCommandInNewTerminal(cmd)
+  }
+  const viewService = (svc: ServiceDef) => {
+    openInMain('logs', 'logs', 'Logs')
+    focusServiceLogs(svc.name)
+  }
+
+  const nodeMenuItems = (node: TreeNode | null): MenuItem[] => {
     if (!node) {
       return [{ icon: '＋', label: 'New workspace', onClick: () => void addWorkspace() }]
     }
@@ -168,6 +195,34 @@ export function Explorer() {
     return items
   }
 
+  const commandMenuItems = (cmd: CommandDef): MenuItem[] => [
+    { icon: '▶', label: 'Run in new terminal', onClick: () => void runCommandInNewTerminal(cmd) },
+    { icon: '❯', label: 'View session', onClick: () => viewCommand(cmd) },
+    { icon: '✎', label: 'Edit command…', onClick: () => openEditor('command', cmd.id, cmd.name || 'Command') },
+    { separator: true, label: '' },
+    { icon: '🗑', label: 'Delete command', danger: true, onClick: () => void delCommand(cmd) },
+  ]
+
+  const serviceMenuItems = (svc: ServiceDef): MenuItem[] => {
+    const running = svcStates[svc.id]?.status === 'running'
+    return [
+      running
+        ? { icon: '■', label: 'Stop', onClick: () => void actSvc(svc.id, () => ipc.svcStop(svc.id)) }
+        : { icon: '▶', label: 'Start', onClick: () => void actSvc(svc.id, () => ipc.svcStart(svc.id)) },
+      { icon: '↻', label: 'Restart', disabled: !running, onClick: () => void actSvc(svc.id, () => ipc.svcRestart(svc.id)) },
+      { icon: '☰', label: 'View logs', onClick: () => viewService(svc) },
+      { icon: '✎', label: 'Edit service…', onClick: () => openEditor('service', svc.id, svc.name || 'Service') },
+      { separator: true, label: '' },
+      { icon: '🗑', label: 'Delete service', danger: true, onClick: () => void delService(svc) },
+    ]
+  }
+
+  const menuItems = (target: MenuTarget): MenuItem[] => {
+    if (target.type === 'command') return commandMenuItems(target.cmd)
+    if (target.type === 'service') return serviceMenuItems(target.svc)
+    return nodeMenuItems(target.node)
+  }
+
   const renderService = (svc: ServiceDef, depth: number) => {
     const st: SvcState | undefined = svcStates[svc.id]
     const running = st?.status === 'running'
@@ -177,6 +232,11 @@ export function Explorer() {
         key={`svc-${svc.id}`}
         className="group flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[12.5px] text-slate-300 select-none hover:bg-slate-700/40"
         style={{ paddingLeft: `${depth * 14 + 22}px` }}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          setMenu({ x: e.clientX, y: e.clientY, target: { type: 'service', svc } })
+        }}
       >
         <span
           className={`h-2 w-2 shrink-0 rounded-full ${running ? 'animate-pulse bg-emerald-400' : crashed ? 'bg-red-400' : 'bg-slate-600'}`}
@@ -208,6 +268,17 @@ export function Explorer() {
         >
           {running ? '■' : '▶'}
         </button>
+        <button
+          className="hidden shrink-0 rounded px-1 text-[12px] text-slate-400 hover:bg-slate-600 hover:text-white group-hover:block"
+          title="Actions"
+          onClick={(e) => {
+            e.stopPropagation()
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+            setMenu({ x: rect.right, y: rect.bottom, target: { type: 'service', svc } })
+          }}
+        >
+          ⋯
+        </button>
       </div>
     )
   }
@@ -217,6 +288,11 @@ export function Explorer() {
       key={`cmd-${cmd.id}`}
       className="group flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[12.5px] text-slate-300 select-none hover:bg-slate-700/40"
       style={{ paddingLeft: `${depth * 14 + 22}px` }}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setMenu({ x: e.clientX, y: e.clientY, target: { type: 'command', cmd } })
+      }}
     >
       <span className="w-5 shrink-0 text-center text-[13px] leading-none text-sky-400/80">⌘</span>
       <button
@@ -232,6 +308,17 @@ export function Explorer() {
         onClick={() => void runCommandInNewTerminal(cmd)}
       >
         ▶
+      </button>
+      <button
+        className="hidden shrink-0 rounded px-1 text-[12px] text-slate-400 hover:bg-slate-600 hover:text-white group-hover:block"
+        title="Actions"
+        onClick={(e) => {
+          e.stopPropagation()
+          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+          setMenu({ x: rect.right, y: rect.bottom, target: { type: 'command', cmd } })
+        }}
+      >
+        ⋯
       </button>
     </div>
   )
@@ -336,7 +423,7 @@ export function Explorer() {
             e.preventDefault()
             e.stopPropagation()
             setSelectedNode(node.id)
-            setMenu({ x: e.clientX, y: e.clientY, node })
+            setMenu({ x: e.clientX, y: e.clientY, target: { type: 'node', node } })
           }}
           title={sub || undefined}
         >
@@ -379,7 +466,7 @@ export function Explorer() {
               e.stopPropagation()
               const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
               setSelectedNode(node.id)
-              setMenu({ x: rect.right, y: rect.bottom, node })
+              setMenu({ x: rect.right, y: rect.bottom, target: { type: 'node', node } })
             }}
           >
             ⋯
@@ -435,7 +522,7 @@ export function Explorer() {
         className="flex-1 overflow-y-auto p-1"
         onContextMenu={(e) => {
           e.preventDefault()
-          setMenu({ x: e.clientX, y: e.clientY, node: null })
+          setMenu({ x: e.clientX, y: e.clientY, target: { type: 'node', node: null } })
         }}
       >
         {roots.length === 0 && (
@@ -457,7 +544,7 @@ export function Explorer() {
         {roots.map((n) => renderNode(n, 0))}
       </div>
       {menu && (
-        <PopMenu x={menu.x} y={menu.y} items={menuItems(menu.node)} onClose={() => setMenu(null)} />
+        <PopMenu x={menu.x} y={menu.y} items={menuItems(menu.target)} onClose={() => setMenu(null)} />
       )}
     </div>
   )

@@ -7,6 +7,21 @@ import { openTerminalPanel, restoreLayout } from './dock'
 import { findNode, resolveDir } from './tree'
 import { useApp } from '../store'
 
+// Remembers which terminal session a command last launched into, so the
+// sidebar's "View session" can jump straight to it.
+const commandPty = new Map<number, number>()
+
+/// Focus the terminal session a command is running in, if one exists.
+/// Returns false when the command has no live session to jump to.
+export function focusCommandSession(commandId: number): boolean {
+  const ptyId = commandPty.get(commandId)
+  if (ptyId == null) return false
+  const term = useApp.getState().terminals.find((t) => t.id === ptyId)
+  if (!term) return false
+  openTerminalPanel(ptyId, term.title)
+  return true
+}
+
 const DEFAULT_SHELL = () => {
   const shells = useApp.getState().shells
   return shells.find((s) => s.name === 'PowerShell 7')?.command ?? shells[0]?.command ?? 'powershell.exe'
@@ -31,6 +46,7 @@ export async function runCommandInNewTerminal(cmd: CommandDef) {
   if (cmd.id > 0) void ipc.recentBump('command', cmd.id)
   const shell = cmd.shell.trim() !== '' ? cmd.shell : DEFAULT_SHELL()
   const id = await openTerminal(shell, commandCwd(cmd), cmd.name)
+  if (cmd.id > 0) commandPty.set(cmd.id, id)
   injectWhenReady(id, cmd.command)
 }
 

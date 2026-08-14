@@ -37,6 +37,9 @@ export interface AppState {
   // ui
   selectedNodeId: number | null
   hotkey: string
+  /** Request the Log viewer to filter to a service's output. `n` bumps so
+   *  re-selecting the same service refocuses. */
+  logFocus: { name: string; n: number } | null
 
   // derived helpers
   selectedNode: () => TreeNode | null
@@ -62,6 +65,7 @@ export interface AppState {
 
   setSelectedNode: (id: number | null) => void
   setHotkey: (h: string) => void
+  focusServiceLogs: (name: string) => void
 }
 
 export const useApp = create<AppState>((set, get) => ({
@@ -78,6 +82,7 @@ export const useApp = create<AppState>((set, get) => ({
   recents: [],
   selectedNodeId: null,
   hotkey: 'ctrl+shift+Space',
+  logFocus: null,
 
   selectedNode: () => {
     const { nodes, selectedNodeId } = get()
@@ -147,4 +152,6 @@ export const useApp = create<AppState>((set, get) => ({
 
   setSelectedNode: (id) => set({ selectedNodeId: id }),
   setHotkey: (h) => set({ hotkey: h }),
+  focusServiceLogs: (name) =>
+    set((st) => ({ logFocus: { name, n: (st.logFocus?.n ?? 0) + 1 } })),
 }))

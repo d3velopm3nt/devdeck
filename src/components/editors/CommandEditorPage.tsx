@@ -9,6 +9,7 @@ import * as ipc from '../../lib/ipc'
 import type { CommandDef } from '../../lib/types'
 import { useApp } from '../../store'
 import { runCommandInNewTerminal } from '../../lib/runner'
+import { openEditor } from '../../lib/dock'
 import { nodeLabel, ownerNodes } from '../../lib/tree'
 import { EditorShell, Field, Row } from './EditorShell'
 import { ShellSelect } from './ShellSelect'
@@ -27,7 +28,7 @@ const blank = (ownerId: number | null): CommandDef => ({
 })
 
 export function CommandEditorPage(props: IDockviewPanelProps<Params>) {
-  const { commands, nodes, refreshCommands, selectedNode } = useApp()
+  const { commands, nodes, refreshCommands, refreshServices, selectedNode } = useApp()
   const id = props.params.id
   const owners = useMemo(() => ownerNodes(nodes), [nodes])
 
@@ -62,6 +63,33 @@ export function CommandEditorPage(props: IDockviewPanelProps<Params>) {
     props.api.close()
   }
 
+  // Convert this command into a supervised service, carrying over the shared
+  // fields. Command-only settings (the Group) are dropped.
+  const convertToService = async () => {
+    if (!cmd.name.trim() || !cmd.command.trim()) return
+    if (
+      !confirm(
+        `Convert command “${cmd.name}” into a service?\n\nIt will become a supervised background process (start/stop, logs, restart) instead of running in a terminal. The Group field isn't used by services.`,
+      )
+    )
+      return
+    const newId = await ipc.serviceSave({
+      id: 0,
+      project_id: cmd.project_id,
+      name: cmd.name,
+      command: cmd.command,
+      cwd: cmd.cwd,
+      env: '{}',
+      auto_restart: false,
+      health_port: null,
+      shell: cmd.shell,
+    })
+    await ipc.commandDelete(cmd.id)
+    await Promise.all([refreshCommands(), refreshServices()])
+    props.api.close()
+    openEditor('service', newId, cmd.name || 'Service')
+  }
+
   return (
     <EditorShell
       icon="⌘"
@@ -74,13 +102,22 @@ export function CommandEditorPage(props: IDockviewPanelProps<Params>) {
       onDelete={id > 0 ? () => void remove() : undefined}
       extraActions={
         id > 0 && (
-          <button
-            className="btn-ghost"
-            onClick={() => void runCommandInNewTerminal(cmd)}
-            title="Run in a new terminal"
-          >
-            ▶ Run
-          </button>
+          <>
+            <button
+              className="btn-ghost"
+              onClick={() => void runCommandInNewTerminal(cmd)}
+              title="Run in a new terminal"
+            >
+              ▶ Run
+            </button>
+            <button
+              className="btn-ghost"
+              onClick={() => void convertToService()}
+              title="Turn this command into a supervised service"
+            >
+              ⚡ Convert to service
+            </button>
+          </>
         )
       }
     >

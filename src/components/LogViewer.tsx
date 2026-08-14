@@ -18,7 +18,7 @@ const LEVEL_COLOR: Record<LogLevel, string> = {
 const LEVELS: LogLevel[] = ['error', 'warn', 'info', 'debug']
 
 export function LogViewer() {
-  const { logs, clearLogs } = useApp()
+  const { logs, clearLogs, logFocus } = useApp()
   const [search, setSearch] = useState('')
   const [source, setSource] = useState<string>('all')
   const [levels, setLevels] = useState<Set<LogLevel>>(new Set(LEVELS))
@@ -44,6 +44,11 @@ export function LogViewer() {
   useEffect(() => {
     if (follow) endRef.current?.scrollIntoView({ behavior: 'auto' })
   }, [filtered.length, follow])
+
+  // "View logs" from the sidebar focuses this panel on one service.
+  useEffect(() => {
+    if (logFocus) setSource(logFocus.name)
+  }, [logFocus])
 
   const toggleLevel = (lv: LogLevel) =>
     setLevels((prev) => {

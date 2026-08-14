@@ -7,6 +7,7 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import * as ipc from '../../lib/ipc'
 import type { ServiceDef } from '../../lib/types'
 import { useApp } from '../../store'
+import { openEditor } from '../../lib/dock'
 import { nodeLabel, ownerNodes, serviceDir } from '../../lib/tree'
 import { EditorShell, Field, Row } from './EditorShell'
 import { ShellSelect } from './ShellSelect'
@@ -26,7 +27,7 @@ const blank = (ownerId: number | null): ServiceDef => ({
 })
 
 export function ServiceEditorPage(props: IDockviewPanelProps<Params>) {
-  const { services, nodes, refreshServices, selectedNode } = useApp()
+  const { services, nodes, refreshServices, refreshCommands, selectedNode } = useApp()
   const id = props.params.id
   const owners = useMemo(() => ownerNodes(nodes), [nodes])
 
@@ -84,6 +85,32 @@ export function ServiceEditorPage(props: IDockviewPanelProps<Params>) {
     props.api.close()
   }
 
+  // Convert this service into a one-shot command, carrying over the shared
+  // fields. Service-only settings (env, port, auto-restart) are dropped.
+  const convertToCommand = async () => {
+    if (!svc.name.trim() || !svc.command.trim()) return
+    if (
+      !confirm(
+        `Convert service “${svc.name}” into a command?\n\nIt will run in a terminal instead of as a supervised process. Environment variables, the health port and auto-restart aren't used by commands. If it's running now, it will be stopped.`,
+      )
+    )
+      return
+    const newId = await ipc.commandSave({
+      id: 0,
+      project_id: svc.project_id,
+      group_name: '',
+      name: svc.name,
+      command: svc.command,
+      cwd: svc.cwd,
+      shell: svc.shell,
+      sort: 0,
+    })
+    await ipc.serviceDelete(svc.id)
+    await Promise.all([refreshServices(), refreshCommands()])
+    props.api.close()
+    openEditor('command', newId, svc.name || 'Command')
+  }
+
   return (
     <EditorShell
       icon="⚡"
@@ -94,6 +121,17 @@ export function ServiceEditorPage(props: IDockviewPanelProps<Params>) {
       onSave={() => void save()}
       canSave={!!svc.name.trim() && !!svc.command.trim()}
       onDelete={id > 0 ? () => void remove() : undefined}
+      extraActions={
+        id > 0 && (
+          <button
+            className="btn-ghost"
+            onClick={() => void convertToCommand()}
+            title="Turn this service into a one-shot command"
+          >
+            ⌘ Convert to command
+          </button>
+        )
+      }
     >
       <Row>
         <Field label="Name">

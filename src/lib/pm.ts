@@ -25,6 +25,21 @@ export function pmBadge(manager: string): PmBadge | null {
   return BADGES[manager] ?? null
 }
 
+// Script names that are almost always long-running dev servers, so a repo
+// scan defaults them to a Service rather than a one-shot Command.
+const SERVICE_NAMES = new Set(['dev', 'start', 'serve', 'preview', 'watch', 'storybook', 'develop'])
+// Command fragments that signal a process that stays up (watchers / servers).
+const SERVICE_HINTS =
+  /(^|\s)(nodemon|vite|webpack(-dev-server)?\s+serve|next\s+dev|nuxt\s+dev|remix\s+dev|astro\s+dev|uvicorn|gunicorn|flask\s+run|rails\s+s(erver)?|php\s+artisan\s+serve|cargo\s+run|cargo\s+watch|go\s+run|dotnet\s+watch|dotnet\s+run|http-server|serve\b)|--watch\b|--reload\b|--hot\b/i
+
+/// Guess whether a detected script is a long-running service or a one-shot
+/// command. Heuristic only — the UI lets the user flip it before adding.
+export function guessKind(name: string, command: string): 'command' | 'service' {
+  if (SERVICE_NAMES.has(name.trim().toLowerCase())) return 'service'
+  if (SERVICE_HINTS.test(command)) return 'service'
+  return 'command'
+}
+
 /// Best-effort manager from a raw command string.
 export function pmFromCommand(command: string): string | null {
   const c = command.trim().toLowerCase()

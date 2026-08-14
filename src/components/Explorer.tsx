@@ -3,13 +3,13 @@
 // or an absolute override). Managed through a right-click context menu
 // with inline renaming — no blocking modals.
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import * as ipc from '../lib/ipc'
-import type { NodeKind, ServiceDef, SvcState, TreeNode } from '../lib/types'
+import type { CommandDef, NodeKind, ProfileDef, ServiceDef, SvcState, TreeNode } from '../lib/types'
 import { useApp } from '../store'
 import { openEditor, openNodeSetup } from '../lib/dock'
-import { openTerminal } from '../lib/runner'
+import { launchProfile, openTerminal, runCommandInNewTerminal } from '../lib/runner'
 import { resolveDir } from '../lib/tree'
 import { nodeColor } from '../lib/spaces'
 import { loadExampleWorkspace } from '../lib/example'
@@ -39,14 +39,26 @@ interface Menu {
   node: TreeNode | null
 }
 
+// Category groups shown under a project/folder node. Each is a virtual
+// "folder" that holds the node's commands, services, or profiles.
+type Cat = 'commands' | 'services' | 'profiles'
+const CAT_META: Record<Cat, { label: string; icon: string; color: string }> = {
+  commands: { label: 'Commands', icon: '⌘', color: 'text-sky-400/80' },
+  services: { label: 'Services', icon: '⚡', color: 'text-amber-400/80' },
+  profiles: { label: 'Profiles', icon: '⧉', color: 'text-violet-400/80' },
+}
+
 export function Explorer() {
-  const { nodes, services, svcStates, selectedNodeId, setSelectedNode, refreshTree } = useApp()
+  const { nodes, commands, services, profiles, svcStates, selectedNodeId, setSelectedNode, refreshTree } = useApp()
   const roots = useMemo(() => nodes.filter((n) => n.parent_id === null), [nodes])
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
+  // Category groups are open by default; this holds the ones the user collapsed.
+  const [collapsedCats, setCollapsedCats] = useState<Set<string>>(new Set())
   const [menu, setMenu] = useState<Menu | null>(null)
   const [renamingId, setRenamingId] = useState<number | null>(null)
   const [draft, setDraft] = useState('')
   const [busySvc, setBusySvc] = useState<number | null>(null)
+  const [launching, setLaunching] = useState<number | null>(null)
 
   const actSvc = async (id: number, fn: () => Promise<unknown>) => {
     setBusySvc(id)
@@ -67,6 +79,16 @@ export function Explorer() {
       return next
     })
   const expand = (id: number) => setExpanded((prev) => new Set(prev).add(id))
+
+  const catKey = (nodeId: number, cat: Cat) => `${nodeId}:${cat}`
+  const toggleCat = (nodeId: number, cat: Cat) =>
+    setCollapsedCats((prev) => {
+      const next = new Set(prev)
+      const k = catKey(nodeId, cat)
+      if (next.has(k)) next.delete(k)
+      else next.add(k)
+      return next
+    })
 
   const beginRename = (node: TreeNode) => {
     setDraft(node.name)
@@ -134,6 +156,7 @@ export function Explorer() {
         { icon: '❯', label: 'Open terminal here', disabled: !dir, onClick: () => void openTerminal(undefined, dir) },
         { icon: '⌘', label: 'New command', onClick: () => openEditor('command', 0, 'New command', node.id) },
         { icon: '⚡', label: 'New service', onClick: () => openEditor('service', 0, 'New service', node.id) },
+        { icon: '⧉', label: 'New profile', onClick: () => openEditor('profile', 0, 'New profile', node.id) },
         { icon: '↗', label: 'Reveal in File Explorer', disabled: !dir, onClick: () => void ipc.revealInExplorer(dir).catch((e) => alert(String(e))) },
       )
     }
@@ -189,10 +212,109 @@ export function Explorer() {
     )
   }
 
+  const renderCommand = (cmd: CommandDef, depth: number) => (
+    <div
+      key={`cmd-${cmd.id}`}
+      className="group flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[12.5px] text-slate-300 select-none hover:bg-slate-700/40"
+      style={{ paddingLeft: `${depth * 14 + 22}px` }}
+    >
+      <span className="w-5 shrink-0 text-center text-[13px] leading-none text-sky-400/80">⌘</span>
+      <button
+        className="min-w-0 flex-1 cursor-pointer truncate text-left hover:text-slate-100"
+        title="Click to edit command"
+        onClick={() => openEditor('command', cmd.id, cmd.name || 'Command')}
+      >
+        {cmd.name}
+      </button>
+      <button
+        className="hidden shrink-0 rounded px-1 text-[11px] hover:bg-slate-600 hover:text-white group-hover:block"
+        title="Run in a new terminal"
+        onClick={() => void runCommandInNewTerminal(cmd)}
+      >
+        ▶
+      </button>
+    </div>
+  )
+
+  const renderProfile = (profile: ProfileDef, depth: number) => (
+    <div
+      key={`prof-${profile.id}`}
+      className="group flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[12.5px] text-slate-300 select-none hover:bg-slate-700/40"
+      style={{ paddingLeft: `${depth * 14 + 22}px` }}
+    >
+      <span className="w-5 shrink-0 text-center text-[13px] leading-none text-violet-400/80">⧉</span>
+      <button
+        className="min-w-0 flex-1 cursor-pointer truncate text-left hover:text-slate-100"
+        title="Click to edit profile"
+        onClick={() => openEditor('profile', profile.id, profile.name || 'Profile')}
+      >
+        {profile.name}
+      </button>
+      <button
+        className="shrink-0 rounded px-1 text-[11px] hover:bg-slate-600 hover:text-white"
+        disabled={launching === profile.id}
+        title="Launch profile"
+        onClick={async () => {
+          setLaunching(profile.id)
+          try {
+            await launchProfile(profile)
+          } finally {
+            setLaunching(null)
+          }
+        }}
+      >
+        {launching === profile.id ? '…' : '⚡'}
+      </button>
+    </div>
+  )
+
+  // One category group ("Commands"/"Services"/"Profiles") under a node.
+  const renderCategory = (node: TreeNode, cat: Cat, count: number, depth: number, rows: ReactNode) => {
+    const meta = CAT_META[cat]
+    const open = !collapsedCats.has(catKey(node.id, cat))
+    const addKind = cat === 'commands' ? 'command' : cat === 'services' ? 'service' : 'profile'
+    return (
+      <div key={`${node.id}-${cat}`}>
+        <div
+          className="group flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[11.5px] font-medium text-slate-400 select-none hover:bg-slate-700/40"
+          style={{ paddingLeft: `${depth * 14 + 6}px` }}
+          onClick={() => count > 0 && toggleCat(node.id, cat)}
+        >
+          <span className={`w-5 shrink-0 text-center text-[14px] leading-none ${count > 0 ? 'cursor-pointer text-slate-400 hover:text-slate-200' : 'opacity-0'}`}>
+            {open ? '▾' : '▸'}
+          </span>
+          <span className={`w-5 shrink-0 text-center text-[13px] leading-none ${meta.color}`}>{meta.icon}</span>
+          <span className="flex-1 truncate uppercase tracking-wide">{meta.label}</span>
+          <span className="shrink-0 pr-1 text-[10.5px] tabular-nums text-slate-600">{count || ''}</span>
+          <button
+            className="hidden shrink-0 rounded px-1 text-[12px] text-slate-400 hover:bg-slate-600 hover:text-white group-hover:block"
+            title={`New ${addKind}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              openEditor(addKind, 0, `New ${addKind}`, node.id)
+            }}
+          >
+            ＋
+          </button>
+        </div>
+        {open && rows}
+      </div>
+    )
+  }
+
   const renderNode = (node: TreeNode, depth: number) => {
     const children = nodes.filter((n) => n.parent_id === node.id)
+    const nodeCommands = commands.filter((c) => c.project_id === node.id)
     const nodeServices = services.filter((s) => s.project_id === node.id)
-    const hasKids = children.length > 0 || nodeServices.length > 0
+    const nodeProfiles = profiles.filter((p) => p.project_id === node.id)
+    // Projects always show the three category folders (even empty); folders
+    // only show a category when it actually has items.
+    const isProject = node.kind === 'project'
+    const showCommands = isProject || nodeCommands.length > 0
+    const showServices = isProject || nodeServices.length > 0
+    const showProfiles = isProject || nodeProfiles.length > 0
+    const hasKids =
+      children.length > 0 || showCommands || showServices || showProfiles
     const isOpen = expanded.has(node.id)
     const selected = selectedNodeId === node.id
     const renaming = renamingId === node.id
@@ -266,7 +388,30 @@ export function Explorer() {
         {isOpen && (
           <>
             {children.map((c) => renderNode(c, depth + 1))}
-            {nodeServices.map((s) => renderService(s, depth + 1))}
+            {showCommands &&
+              renderCategory(
+                node,
+                'commands',
+                nodeCommands.length,
+                depth + 1,
+                nodeCommands.map((c) => renderCommand(c, depth + 2)),
+              )}
+            {showServices &&
+              renderCategory(
+                node,
+                'services',
+                nodeServices.length,
+                depth + 1,
+                nodeServices.map((s) => renderService(s, depth + 2)),
+              )}
+            {showProfiles &&
+              renderCategory(
+                node,
+                'profiles',
+                nodeProfiles.length,
+                depth + 1,
+                nodeProfiles.map((p) => renderProfile(p, depth + 2)),
+              )}
           </>
         )}
       </div>

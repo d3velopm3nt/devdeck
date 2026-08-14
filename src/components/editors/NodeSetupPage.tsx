@@ -10,7 +10,7 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import * as ipc from '../../lib/ipc'
 import { useApp } from '../../store'
 import { findNode, projectOf, resolveDir } from '../../lib/tree'
-import { pmBadge } from '../../lib/pm'
+import { guessKind, pmBadge } from '../../lib/pm'
 import type { DetectedCommand } from '../../lib/types'
 import { EditorShell, Field } from './EditorShell'
 import { openTerminal } from '../../lib/runner'
@@ -18,7 +18,7 @@ import { openTerminal } from '../../lib/runner'
 type Params = { id: number }
 
 export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
-  const { nodes, commands, refreshTree, refreshCommands } = useApp()
+  const { nodes, commands, services, refreshTree, refreshCommands, refreshServices } = useApp()
   const id = props.params.id
   const node = useMemo(() => findNode(nodes, id), [nodes, id])
 
@@ -29,6 +29,9 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
   // Repo-scan state.
   const [scan, setScan] = useState<DetectedCommand[] | null>(null)
   const [picked, setPicked] = useState<Set<string>>(new Set())
+  // Per-row chosen kind (command vs service), keyed by the detected command
+  // string. Seeded from guessKind on scan; the user can flip each row.
+  const [kinds, setKinds] = useState<Map<string, 'command' | 'service'>>(new Map())
   const [scanning, setScanning] = useState(false)
   const [scanErr, setScanErr] = useState<string | null>(null)
   const [result, setResult] = useState<{ added: number; updated: number; failed: number } | null>(null)
@@ -42,16 +45,32 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
   // Live preview of the resolved directory using the edited values.
   const preview = resolveDir(nodes, { ...node, name, path, rel_path: relPath })
 
-  // Commands already on this project — used to de-dupe scan results by both the
-  // exact command and the name. Status of a scanned command:
-  //   added   — identical command already exists (skip)
+  // Existing commands/services on this project — used to de-dupe scan results by
+  // both the exact command and the name. Status of a scanned row (relative to
+  // its chosen kind):
+  //   added   — identical command already exists in that bucket (skip)
   //   changed — same name exists but a different command (offer to override)
   //   new     — not present
   const projectCommands = commands.filter((c) => c.project_id === node.id)
+  const projectServices = services.filter((s) => s.project_id === node.id)
   const byCommand = new Set(projectCommands.map((c) => c.command))
   const byName = new Map(projectCommands.map((c) => [c.name, c]))
-  const rowStatus = (r: DetectedCommand): 'new' | 'added' | 'changed' =>
-    byCommand.has(r.command) ? 'added' : byName.has(r.name) ? 'changed' : 'new'
+  const svcByCommand = new Set(projectServices.map((s) => s.command))
+  const svcByName = new Map(projectServices.map((s) => [s.name, s]))
+
+  // The chosen kind for a row: an explicit user pick, else the heuristic guess.
+  const kindOf = (r: DetectedCommand): 'command' | 'service' =>
+    kinds.get(r.command) ?? guessKind(r.name, r.command)
+
+  const rowStatus = (r: DetectedCommand): 'new' | 'added' | 'changed' => {
+    if (kindOf(r) === 'service') {
+      return svcByCommand.has(r.command) ? 'added' : svcByName.has(r.name) ? 'changed' : 'new'
+    }
+    return byCommand.has(r.command) ? 'added' : byName.has(r.name) ? 'changed' : 'new'
+  }
+
+  const setKind = (cmd: string, kind: 'command' | 'service') =>
+    setKinds((prev) => new Map(prev).set(cmd, kind))
 
   const browse = async (setter: (v: string) => void, title: string) => {
     const dir = await openDialog({ directory: true, title })
@@ -67,8 +86,18 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
     try {
       const res = await ipc.scanProject(dir)
       setScan(res)
-      // pre-select only brand-new commands (existing / changed stay opt-in)
-      setPicked(new Set(res.filter((r) => rowStatus(r) === 'new').map((r) => r.command)))
+      // Seed each row's kind from the heuristic (user can flip before adding).
+      const guessed = new Map(res.map((r) => [r.command, guessKind(r.name, r.command)] as const))
+      setKinds(guessed)
+      // Pre-select only brand-new rows (existing / changed stay opt-in). Status
+      // is kind-aware, so use the freshly-guessed kinds here.
+      const statusWith = (r: DetectedCommand) => {
+        if ((guessed.get(r.command) ?? 'command') === 'service') {
+          return svcByCommand.has(r.command) ? 'added' : svcByName.has(r.name) ? 'changed' : 'new'
+        }
+        return byCommand.has(r.command) ? 'added' : byName.has(r.name) ? 'changed' : 'new'
+      }
+      setPicked(new Set(res.filter((r) => statusWith(r) === 'new').map((r) => r.command)))
     } catch (e) {
       setScanErr(String(e))
       setScan([])
@@ -94,7 +123,17 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
       const st = rowStatus(r)
       if (st === 'added') continue // identical — nothing to do
       try {
-        if (st === 'changed') {
+        if (kindOf(r) === 'service') {
+          if (st === 'changed') {
+            // Override the same-named service (keeps its id + settings).
+            const ex = svcByName.get(r.name)!
+            await ipc.serviceSave({ ...ex, command: r.command })
+            updated++
+          } else {
+            await ipc.serviceSave({ id: 0, project_id: node.id, name: r.name, command: r.command, cwd: '', env: '', auto_restart: false, health_port: null, shell: '' })
+            added++
+          }
+        } else if (st === 'changed') {
           // Override the existing command with the same name (keeps its id).
           const ex = byName.get(r.name)!
           await ipc.commandSave({ ...ex, group_name: r.group, command: r.command })
@@ -108,6 +147,7 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
       }
     }
     await refreshCommands()
+    await refreshServices()
     await refreshTree()
     setPicked(new Set())
     setResult({ added, updated, failed })
@@ -169,7 +209,7 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
               <div className="min-w-0">
                 <div className="text-[12.5px] font-medium text-slate-200">Scan repo for scripts</div>
                 <div className="text-[11px] text-slate-500">
-                  Detect npm / pnpm / cargo / make / … scripts and add them as commands. Re-scan any time to pick up new ones.
+                  Detect npm / pnpm / cargo / make / … scripts and add them as commands or services (dev servers are guessed as services — flip any row). Re-scan any time to pick up new ones.
                 </div>
               </div>
               <button
@@ -226,6 +266,27 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
                             <span className="text-[12.5px] text-slate-200">{r.name}</span>
                             <span className="ml-2 font-mono text-[10.5px] text-slate-500">{r.command}</span>
                           </span>
+                          {(() => {
+                            const kind = kindOf(r)
+                            return (
+                              <span className="shrink-0 overflow-hidden rounded border border-slate-700 text-[10px] leading-none" title="Add as a one-shot command or a long-running service">
+                                {(['command', 'service'] as const).map((k) => (
+                                  <button
+                                    key={k}
+                                    type="button"
+                                    disabled={st === 'added'}
+                                    onClick={(e) => {
+                                      e.preventDefault()
+                                      setKind(r.command, k)
+                                    }}
+                                    className={`px-1.5 py-1 ${kind === k ? (k === 'service' ? 'bg-amber-500/25 text-amber-300' : 'bg-indigo-500/25 text-indigo-200') : 'text-slate-500 hover:text-slate-300'}`}
+                                  >
+                                    {k === 'service' ? '⚡ Svc' : '⌘ Cmd'}
+                                  </button>
+                                ))}
+                              </span>
+                            )
+                          })()}
                           {st === 'added' && <span className="shrink-0 text-[10px] text-emerald-400">added</span>}
                           {st === 'changed' && <span className="shrink-0 rounded bg-amber-500/15 px-1.5 py-px text-[10px] text-amber-400">differs</span>}
                         </label>
@@ -246,7 +307,7 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
                       <span className="mt-1 text-[11px] text-emerald-400">
                         ✓ Added {result.added}
                         {result.updated ? `, overrode ${result.updated}` : ''}
-                        {result.failed ? `, ${result.failed} failed` : ''} — see the Commands panel.
+                        {result.failed ? `, ${result.failed} failed` : ''} — see the Commands / Services panels.
                       </span>
                     )}
                   </div>

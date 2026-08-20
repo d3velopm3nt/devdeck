@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Dock, buildDefaultLayout } from './Dock'
+import { BottomBar, type BottomTab } from './components/BottomBar'
 import * as ipc from './lib/ipc'
 import { routeOutput } from './lib/termBus'
 import { useApp } from './store'
@@ -20,7 +21,7 @@ async function handleTourAction(action: ipc.TourAction) {
   if (action === 'workspace') {
     const ws = await ipc.nodeCreate(null, 'workspace', 'New workspace')
     await st.refreshTree()
-    useApp.getState().setSelectedNode(ws.id)
+    useApp.getState().setActiveWorkspace(ws.id)
     openSingleton('explorer', 'explorer', 'Explorer')
     void ipc.emitDataChanged()
     return
@@ -36,6 +37,7 @@ async function handleTourAction(action: ipc.TourAction) {
     const name = dir.split(/[\\/]/).filter(Boolean).pop() ?? 'project'
     const created = await ipc.nodeCreate(ws.id, 'project', name, dir)
     await st.refreshTree()
+    useApp.getState().setActiveWorkspace(ws.id)
     useApp.getState().setSelectedNode(created.id)
     openNodeSetup(created.id, name)
     void ipc.emitDataChanged()
@@ -50,14 +52,13 @@ async function handleTourAction(action: ipc.TourAction) {
   else if (action === 'profile') openEditor('profile', 0, 'New profile', target)
 }
 
+// Logs & Processes live in the collapsible bottom bar, not the dock.
 const PANELS: Array<{ id: string; component: string; title: string; main?: boolean }> = [
   { id: 'dashboard', component: 'dashboard', title: 'Dashboard' },
   { id: 'explorer', component: 'explorer', title: 'Explorer' },
   { id: 'commands', component: 'commands', title: 'Commands' },
   { id: 'services', component: 'services', title: 'Services' },
   { id: 'profiles', component: 'profiles', title: 'Profiles' },
-  { id: 'logs', component: 'logs', title: 'Logs' },
-  { id: 'processes', component: 'processes', title: 'Processes' },
   { id: 'config', component: 'config', title: 'Settings', main: true },
   { id: 'welcome', component: 'welcome', title: 'Welcome' },
 ]
@@ -97,6 +98,26 @@ export default function App() {
   const node = app.selectedNode()
   const nodeDir = resolveDir(app.nodes, node)
 
+  // Bottom bar (Logs / Processes) — collapsed state, active tab and height
+  // persist across restarts.
+  const [bottomTab, setBottomTab] = useState<BottomTab>(
+    () => (localStorage.getItem('devdeck.bottom.tab') as BottomTab) || 'logs',
+  )
+  const [bottomCollapsed, setBottomCollapsed] = useState(
+    () => localStorage.getItem('devdeck.bottom.collapsed') === '1',
+  )
+  const [bottomHeight, setBottomHeight] = useState(
+    () => Number(localStorage.getItem('devdeck.bottom.height')) || 260,
+  )
+  useEffect(() => localStorage.setItem('devdeck.bottom.tab', bottomTab), [bottomTab])
+  useEffect(() => localStorage.setItem('devdeck.bottom.collapsed', bottomCollapsed ? '1' : '0'), [bottomCollapsed])
+  useEffect(() => localStorage.setItem('devdeck.bottom.height', String(bottomHeight)), [bottomHeight])
+
+  const showBottom = (t: BottomTab) => {
+    setBottomTab(t)
+    setBottomCollapsed(false)
+  }
+
   useEffect(() => {
     void app.bootstrap()
     const subs = [
@@ -107,7 +128,12 @@ export default function App() {
       }),
       ipc.onSvcLog((e) => useApp.getState().appendLog(e)),
       ipc.onSvcStatus((e) => useApp.getState().updateSvcState(e)),
-      ipc.onStats((e) => useApp.getState().setStats(e)),
+      ipc.onStats((e) => {
+        useApp.getState().setStats(e)
+        // Learn each running service's port from the monitor so you never have
+        // to type it in.
+        useApp.getState().adoptDetectedPorts()
+      }),
       // The Command Widget opens terminals here in the main dock.
       ipc.onOpenTerminal((e) => {
         void useApp.getState().refreshTerminals().then(() => openTerminalPanel(e.ptyId, e.title))
@@ -197,6 +223,13 @@ export default function App() {
                 </button>
               ))}
               <div className="my-1 border-t border-slate-700" />
+              <button className="menu-item" onClick={() => { close(); showBottom('logs') }}>
+                Logs (bottom bar)
+              </button>
+              <button className="menu-item" onClick={() => { close(); showBottom('processes') }}>
+                Processes (bottom bar)
+              </button>
+              <div className="my-1 border-t border-slate-700" />
               {liveTerms.map((t) => (
                 <button
                   key={t.id}
@@ -283,6 +316,16 @@ export default function App() {
       <div className="min-h-0 flex-1">
         <Dock />
       </div>
+
+      {/* Collapsible / resizable bottom bar: Logs + Processes */}
+      <BottomBar
+        tab={bottomTab}
+        onTab={setBottomTab}
+        collapsed={bottomCollapsed}
+        onToggleCollapsed={() => setBottomCollapsed((c) => !c)}
+        height={bottomHeight}
+        onHeight={setBottomHeight}
+      />
 
       {/* Status bar */}
       <div className="flex items-center gap-4 border-t border-slate-800 bg-[#11141c] px-3 py-1 text-[11px] text-slate-500">

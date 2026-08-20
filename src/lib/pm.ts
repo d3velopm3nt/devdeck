@@ -40,6 +40,29 @@ export function guessKind(name: string, command: string): 'command' | 'service' 
   return 'command'
 }
 
+/// Best-effort dev-server port from a command string, so an imported service
+/// can pre-fill its port instead of you typing it every time. Reads an explicit
+/// --port / -p / PORT= first, else falls back to the tool's conventional port.
+export function guessPort(command: string): number | null {
+  const c = command.toLowerCase()
+  const m = c.match(/(?:--port[=\s]|(?:^|\s)-p[=\s]|\bport[:=])\s*(\d{2,5})/)
+  if (m) return Number(m[1])
+  if (/\bvite\b/.test(c)) return 5173
+  if (/\bnext\b/.test(c)) return 3000
+  if (/\bnuxt\b/.test(c)) return 3000
+  if (/\bastro\b/.test(c)) return 4321
+  if (/react-scripts|craco/.test(c)) return 3000
+  if (/\bstorybook\b/.test(c)) return 6006
+  if (/\bng\s+serve\b|angular/.test(c)) return 4200
+  if (/vue-cli-service|\bquasar\b/.test(c)) return 8080
+  if (/uvicorn|fastapi/.test(c)) return 8000
+  if (/manage\.py\s+runserver|django/.test(c)) return 8000
+  if (/rails\s+s(erver)?\b|\bpuma\b/.test(c)) return 3000
+  if (/php\s+artisan\s+serve/.test(c)) return 8000
+  if (/http-server|\bserve\b/.test(c)) return 8080
+  return null
+}
+
 /// Best-effort manager from a raw command string.
 export function pmFromCommand(command: string): string | null {
   const c = command.trim().toLowerCase()

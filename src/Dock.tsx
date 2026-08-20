@@ -172,26 +172,12 @@ export function buildDefaultLayout(api: DockviewReadyEvent['api']) {
     title: 'Profiles',
     position: { referencePanel: 'commands', direction: 'within' },
   })
-  api.addPanel({
-    id: 'logs',
-    component: 'logs',
-    title: 'Logs',
-    position: { referencePanel: 'welcome', direction: 'below' },
-  })
-  api.addPanel({
-    id: 'processes',
-    component: 'processes',
-    title: 'Processes',
-    position: { referencePanel: 'logs', direction: 'within' },
-  })
+  // Logs & Processes now live in the app's bottom bar, not the dock.
   api.getPanel('commands')?.api.setActive()
-  api.getPanel('logs')?.api.setActive()
   api.getPanel('dashboard')?.api.setActive()
 
   const explorer = api.getPanel('explorer')
   if (explorer) explorer.api.setSize({ width: 280 })
-  const logs = api.getPanel('logs')
-  if (logs) logs.api.setSize({ height: 260 })
 }
 
 export function Dock() {
@@ -212,6 +198,17 @@ export function Dock() {
     }
     if (!restored) buildDefaultLayout(event.api)
 
+    // Autosave layout (debounced) so the workspace reopens as you left it.
+    // Registered BEFORE the cleanup below so that removing stale panels is
+    // itself persisted — otherwise the old layout keeps coming back.
+    let timer: ReturnType<typeof setTimeout> | undefined
+    event.api.onDidLayoutChange(() => {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        void ipc.layoutSave(AUTOSAVE, JSON.stringify(event.api.toJSON()))
+      }, 800)
+    })
+
     // A restored layout may predate the Dashboard, or (from an earlier
     // build) contain it in the wrong dock. Force it into the main center
     // group so it never lands in the Explorer sidebar column.
@@ -222,14 +219,16 @@ export function Dock() {
       event.api.getPanel('dashboard')?.api.setActive()
     }
 
-    // Autosave layout (debounced) so the workspace reopens as you left it.
-    let timer: ReturnType<typeof setTimeout> | undefined
-    event.api.onDidLayoutChange(() => {
-      clearTimeout(timer)
-      timer = setTimeout(() => {
-        void ipc.layoutSave(AUTOSAVE, JSON.stringify(event.api.toJSON()))
-      }, 800)
-    })
+    // Logs & Processes moved to the bottom bar — drop any that a saved layout
+    // (or an earlier build) left in the dock, whichever path we took above.
+    for (const id of ['logs', 'processes']) {
+      try {
+        const p = event.api.getPanel(id)
+        if (p) event.api.removePanel(p)
+      } catch {
+        /* not present / already gone */
+      }
+    }
   }
 
   return (

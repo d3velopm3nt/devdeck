@@ -3,7 +3,7 @@
 // or an absolute override). Managed through a right-click context menu
 // with inline renaming — no blocking modals.
 
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import * as ipc from '../lib/ipc'
 import type { CommandDef, NodeKind, ProfileDef, ServiceDef, SvcState, TreeNode } from '../lib/types'
@@ -14,6 +14,29 @@ import { resolveDir } from '../lib/tree'
 import { nodeColor } from '../lib/spaces'
 import { loadExampleWorkspace } from '../lib/example'
 import { PopMenu, type MenuItem } from './PopMenu'
+
+// The expand/collapse state is remembered across restarts so the tree
+// reopens where you left it — a folder isn't "gone" after a restart, its
+// project was just collapsed.
+const EXPANDED_KEY = 'devdeck.tree.expanded.v1'
+const CATS_KEY = 'devdeck.tree.collapsedCats.v1'
+
+function loadSet<T extends string | number>(key: string): Set<T> {
+  try {
+    const arr = JSON.parse(localStorage.getItem(key) ?? '[]')
+    return new Set(Array.isArray(arr) ? (arr as T[]) : [])
+  } catch {
+    return new Set<T>()
+  }
+}
+
+function saveSet<T>(key: string, set: Set<T>) {
+  try {
+    localStorage.setItem(key, JSON.stringify([...set]))
+  } catch {
+    /* storage unavailable — non-fatal */
+  }
+}
 
 const KIND_ICON: Record<NodeKind, string> = {
   workspace: '⬢',
@@ -55,12 +78,28 @@ const CAT_META: Record<Cat, { label: string; icon: string; color: string }> = {
 }
 
 export function Explorer() {
-  const { nodes, commands, services, profiles, svcStates, selectedNodeId, setSelectedNode, refreshTree, refreshCommands, refreshServices, focusServiceLogs } = useApp()
-  const roots = useMemo(() => nodes.filter((n) => n.parent_id === null), [nodes])
-  const [expanded, setExpanded] = useState<Set<number>>(new Set())
+  const {
+    nodes, commands, services, profiles, svcStates,
+    selectedNodeId, setSelectedNode,
+    activeWorkspaceId, activeWorkspace, setActiveWorkspace,
+    refreshTree, refreshCommands, refreshServices, refreshProfiles, focusServiceLogs, servicePort,
+  } = useApp()
+  // The tree shows the active workspace's projects/folders — workspaces
+  // themselves are switched from the header, not browsed in the tree.
+  const workspaces = useMemo(() => nodes.filter((n) => n.kind === 'workspace'), [nodes])
+  const roots = useMemo(
+    () => (activeWorkspaceId == null ? [] : nodes.filter((n) => n.parent_id === activeWorkspaceId)),
+    [nodes, activeWorkspaceId],
+  )
+  const ws = activeWorkspace()
+  const [expanded, setExpanded] = useState<Set<number>>(() => loadSet<number>(EXPANDED_KEY))
   // Category groups are open by default; this holds the ones the user collapsed.
-  const [collapsedCats, setCollapsedCats] = useState<Set<string>>(new Set())
+  const [collapsedCats, setCollapsedCats] = useState<Set<string>>(() => loadSet<string>(CATS_KEY))
+
+  useEffect(() => saveSet(EXPANDED_KEY, expanded), [expanded])
+  useEffect(() => saveSet(CATS_KEY, collapsedCats), [collapsedCats])
   const [menu, setMenu] = useState<Menu | null>(null)
+  const [wsMenu, setWsMenu] = useState<{ x: number; y: number } | null>(null)
   const [renamingId, setRenamingId] = useState<number | null>(null)
   const [draft, setDraft] = useState('')
   const [busySvc, setBusySvc] = useState<number | null>(null)
@@ -109,14 +148,15 @@ export function Explorer() {
     }
   }
 
-  const addProject = async (workspace: TreeNode) => {
+  const addProject = async () => {
+    if (activeWorkspaceId == null) return
     // A project is an app root — pick its base directory.
     const dir = await openDialog({ directory: true, title: 'Select the project base folder (repo root)' })
     if (typeof dir !== 'string') return
     const name = dir.split(/[\\/]/).filter(Boolean).pop() ?? 'project'
-    const created = await ipc.nodeCreate(workspace.id, 'project', name, dir)
-    expand(workspace.id)
+    const created = await ipc.nodeCreate(activeWorkspaceId, 'project', name, dir)
     await refreshTree()
+    setSelectedNode(created.id)
     openNodeSetup(created.id, name)
   }
 
@@ -129,16 +169,32 @@ export function Explorer() {
   }
 
   const addWorkspace = async () => {
-    const created = await ipc.nodeCreate(null, 'workspace', 'New workspace')
+    const name = prompt('Name for the new workspace', 'New workspace')
+    if (name === null) return
+    const created = await ipc.nodeCreate(null, 'workspace', name.trim() || 'New workspace')
     await refreshTree()
-    beginRename(created)
+    setActiveWorkspace(created.id)
   }
 
+  const renameWorkspace = async (w: TreeNode) => {
+    const name = prompt('Rename workspace', w.name)
+    if (name === null) return
+    const n = name.trim()
+    if (n && n !== w.name) {
+      await ipc.nodeRename(w.id, n)
+      await refreshTree()
+    }
+  }
+
+  // Refresh the tree AND the item lists — a cascade delete removes a node's
+  // commands/services/profiles in the DB, so the panels must reload too or they
+  // keep showing items from a workspace you just deleted.
   const del = async (node: TreeNode) => {
-    if (!confirm(`Delete ${node.kind} “${node.name}” and everything inside it?`)) return
+    const label = node.kind === 'workspace' ? 'workspace' : node.kind
+    if (!confirm(`Delete ${label} “${node.name}” and everything inside it?`)) return
     await ipc.nodeDelete(node.id)
     if (selectedNodeId === node.id) setSelectedNode(null)
-    await refreshTree()
+    await Promise.all([refreshTree(), refreshCommands(), refreshServices(), refreshProfiles()])
   }
 
   const delCommand = async (cmd: CommandDef) => {
@@ -162,15 +218,31 @@ export function Explorer() {
     focusServiceLogs(svc.name)
   }
 
+  // The workspace switcher menu: pick a workspace, or manage them.
+  const workspaceMenuItems = (): MenuItem[] => [
+    ...workspaces.map((w) => ({
+      icon: w.id === activeWorkspaceId ? '✓' : '⬢',
+      label: w.name,
+      onClick: () => setActiveWorkspace(w.id),
+    })),
+    { separator: true, label: '' },
+    { icon: '＋', label: 'New workspace…', onClick: () => void addWorkspace() },
+    ...(ws
+      ? [
+          { icon: '✎', label: 'Rename workspace…', onClick: () => void renameWorkspace(ws) },
+          { icon: '🗑', label: 'Delete workspace', danger: true, onClick: () => void del(ws) },
+        ]
+      : []),
+  ]
+
   const nodeMenuItems = (node: TreeNode | null): MenuItem[] => {
     if (!node) {
-      return [{ icon: '＋', label: 'New workspace', onClick: () => void addWorkspace() }]
+      return [
+        { icon: '▣', label: 'New project', disabled: activeWorkspaceId == null, onClick: () => void addProject() },
+      ]
     }
     const items: MenuItem[] = []
 
-    if (node.kind === 'workspace') {
-      items.push({ icon: '▣', label: 'New project', onClick: () => void addProject(node) })
-    }
     if (node.kind === 'project' || node.kind === 'folder') {
       items.push({ icon: '▤', label: 'New folder', onClick: () => void addFolder(node) })
       const dir = resolveDir(nodes, node)
@@ -227,6 +299,7 @@ export function Explorer() {
     const st: SvcState | undefined = svcStates[svc.id]
     const running = st?.status === 'running'
     const crashed = st?.status === 'crashed'
+    const port = servicePort(svc.id) // saved, else the live detected port
     return (
       <div
         key={`svc-${svc.id}`}
@@ -249,11 +322,11 @@ export function Explorer() {
         >
           {svc.name}
         </button>
-        {svc.health_port != null && (
+        {port != null && (
           <button
             className="hidden shrink-0 rounded px-1 text-[11px] text-slate-400 hover:bg-slate-600 hover:text-white group-hover:block"
-            title={running ? `Open http://localhost:${svc.health_port}` : `Opens http://localhost:${svc.health_port} (not running)`}
-            onClick={() => void ipc.openUrl(`http://localhost:${svc.health_port}`).catch((e) => alert(String(e)))}
+            title={running ? `Open http://localhost:${port}` : `Opens http://localhost:${port} (not running)`}
+            onClick={() => void ipc.openUrl(`http://localhost:${port}`).catch((e) => alert(String(e)))}
           >
             🌐
           </button>
@@ -394,12 +467,11 @@ export function Explorer() {
     const nodeCommands = commands.filter((c) => c.project_id === node.id)
     const nodeServices = services.filter((s) => s.project_id === node.id)
     const nodeProfiles = profiles.filter((p) => p.project_id === node.id)
-    // Projects always show the three category folders (even empty); folders
-    // only show a category when it actually has items.
-    const isProject = node.kind === 'project'
-    const showCommands = isProject || nodeCommands.length > 0
-    const showServices = isProject || nodeServices.length > 0
-    const showProfiles = isProject || nodeProfiles.length > 0
+    // Category folders appear only when they actually hold something — a fresh
+    // project/folder stays clean until you add commands/services/profiles.
+    const showCommands = nodeCommands.length > 0
+    const showServices = nodeServices.length > 0
+    const showProfiles = nodeProfiles.length > 0
     const hasKids =
       children.length > 0 || showCommands || showServices || showProfiles
     const isOpen = expanded.has(node.id)
@@ -507,15 +579,27 @@ export function Explorer() {
 
   return (
     <div className="flex h-full flex-col bg-[#11141c]">
-      <div className="flex items-center justify-between border-b border-slate-800 px-2 py-1.5">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-          Explorer
-        </span>
+      {/* Workspace switcher + add project */}
+      <div className="flex items-center justify-between gap-1 border-b border-slate-800 px-2 py-1.5">
         <button
-          className="rounded bg-slate-700/60 px-2 py-0.5 text-[11px] text-slate-200 hover:bg-indigo-600"
-          onClick={() => void addWorkspace()}
+          className="flex min-w-0 items-center gap-1.5 rounded px-1.5 py-1 text-[12.5px] font-medium text-slate-100 hover:bg-slate-700/50"
+          title="Switch workspace"
+          onClick={(e) => {
+            const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+            setWsMenu({ x: r.left, y: r.bottom })
+          }}
         >
-          + Workspace
+          <span className="text-indigo-400">⬢</span>
+          <span className="truncate">{ws?.name ?? 'No workspace'}</span>
+          <span className="text-[10px] text-slate-500">▾</span>
+        </button>
+        <button
+          className="shrink-0 rounded bg-slate-700/60 px-2 py-0.5 text-[11px] text-slate-200 hover:bg-indigo-600 disabled:opacity-40"
+          title={activeWorkspaceId == null ? 'Create a workspace first' : 'Add a project to this workspace'}
+          disabled={activeWorkspaceId == null}
+          onClick={() => void addProject()}
+        >
+          + Project
         </button>
       </div>
       <div
@@ -525,26 +609,45 @@ export function Explorer() {
           setMenu({ x: e.clientX, y: e.clientY, target: { type: 'node', node: null } })
         }}
       >
-        {roots.length === 0 && (
+        {workspaces.length === 0 ? (
           <div className="p-3 text-[12px] leading-5 text-slate-500">
             <p>
-              No workspaces yet. Right-click here or use “+ Workspace”. Then add a Project (an app /
-              repo root with a base path), and Folders inside it (each a subpath under that base
-              path). Commands, services, and terminals run in the selected project or folder.
+              No workspaces yet. A workspace groups related projects. Create one, then add projects
+              (each an app / repo root) and folders inside them.
             </p>
+            <button className="btn-primary mt-3 w-full text-[12px]" onClick={() => void addWorkspace()}>
+              ＋ New workspace
+            </button>
             <button
-              className="btn-primary mt-3 w-full text-[12px]"
+              className="btn-ghost mt-2 w-full text-[12px]"
               title="Create a small demo project you can actually run"
               onClick={() => void loadExampleWorkspace().catch((e) => alert(String(e)))}
             >
               ✨ Load example workspace
             </button>
           </div>
+        ) : roots.length === 0 ? (
+          <div className="p-3 text-[12px] leading-5 text-slate-500">
+            <p>
+              “{ws?.name}” has no projects yet. A project is an app / repo root with a base path;
+              folders inside it are subpaths.
+            </p>
+            <button
+              className="btn-primary mt-3 w-full text-[12px]"
+              onClick={() => void addProject()}
+            >
+              ＋ Add a project
+            </button>
+          </div>
+        ) : (
+          roots.map((n) => renderNode(n, 0))
         )}
-        {roots.map((n) => renderNode(n, 0))}
       </div>
       {menu && (
         <PopMenu x={menu.x} y={menu.y} items={menuItems(menu.target)} onClose={() => setMenu(null)} />
+      )}
+      {wsMenu && (
+        <PopMenu x={wsMenu.x} y={wsMenu.y} items={workspaceMenuItems()} onClose={() => setWsMenu(null)} />
       )}
     </div>
   )

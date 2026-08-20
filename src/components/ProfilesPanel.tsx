@@ -1,80 +1,93 @@
-// Launch profiles. Click a profile to edit it in a main-window tab; the
-// Launch button fires all its steps (services, commands, terminals,
-// layout) in one click.
+// Launch profiles, scoped to the selected project (plus globals). Click a
+// profile to edit it; the primary button launches all its steps and the ⋯ menu
+// offers edit and delete.
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import type { ProfileDef } from '../lib/types'
 import { useApp } from '../store'
 import { openEditor } from '../lib/dock'
 import { launchProfile } from '../lib/runner'
 import { subtreeIds } from '../lib/tree'
+import * as ipc from '../lib/ipc'
+import { PanelShell, RowTitle, ROW_CARD, ICON_BTN, useRowMenu } from './PanelShell'
+import type { MenuItem } from './PopMenu'
+
+const stepCount = (p: ProfileDef): number => {
+  try {
+    return (JSON.parse(p.steps) as unknown[]).length
+  } catch {
+    return 0
+  }
+}
 
 export function ProfilesPanel() {
-  const { profiles, nodes, selectedNode } = useApp()
-  const node = selectedNode()
+  const { profiles, nodes, selectedNode, scopeNode, refreshProfiles } = useApp()
+  const sel = selectedNode()
+  const node = scopeNode() // selection, else the active workspace
   const [launching, setLaunching] = useState<number | null>(null)
+  const { openMenu, menuNode } = useRowMenu()
 
-  const scope = node ? new Set(subtreeIds(nodes, node.id)) : null
-  const visible = profiles.filter(
-    (p) => p.project_id === null || (scope?.has(p.project_id) ?? false),
+  const scope = useMemo(() => (node ? new Set(subtreeIds(nodes, node.id)) : null), [nodes, node])
+  const visible = useMemo(
+    () => profiles.filter((p) => p.project_id === null || (scope?.has(p.project_id) ?? false)),
+    [profiles, scope],
   )
 
+  const launch = async (p: ProfileDef) => {
+    setLaunching(p.id)
+    try {
+      await launchProfile(p)
+    } finally {
+      setLaunching(null)
+    }
+  }
+
+  const del = async (p: ProfileDef) => {
+    if (!confirm(`Delete profile “${p.name}”?`)) return
+    await ipc.profileDelete(p.id)
+    await refreshProfiles()
+  }
+
+  const overflow = (p: ProfileDef): MenuItem[] => [
+    { icon: '✎', label: 'Edit profile…', onClick: () => openEditor('profile', p.id, p.name || 'Profile') },
+    { icon: '🗑', label: 'Delete profile', danger: true, onClick: () => void del(p) },
+  ]
+
   return (
-    <div className="flex h-full flex-col bg-[#11141c] text-slate-300">
-      <div className="flex items-center justify-between border-b border-slate-800 px-2 py-1.5">
-        <span className="text-[11px] text-slate-500">Launch profiles</span>
-        <button
-          className="btn-primary text-[11px]"
-          onClick={() => openEditor('profile', 0, 'New profile', node?.id ?? null)}
-        >
-          + Profile
-        </button>
-      </div>
-      <div className="flex-1 space-y-1.5 overflow-y-auto p-2">
-        {visible.length === 0 && (
-          <div className="p-2 text-[12px] text-slate-500">
-            A launch profile prepares a whole dev environment in one click: start services, run
-            commands, open terminals, restore a layout. Click “+ Profile” to create one.
-          </div>
-        )}
-        {visible.map((p) => {
-          let count = 0
-          try {
-            count = (JSON.parse(p.steps) as unknown[]).length
-          } catch {
-            /* ignore */
-          }
-          return (
-            <div
-              key={p.id}
-              className="group flex items-center gap-2 rounded border border-slate-800 bg-[#151923] px-2 py-1.5 hover:border-slate-600"
-            >
-              <span className="shrink-0 text-indigo-400">⚡</span>
+    <PanelShell
+      scope={node ? `${node.kind}: ${node.name}` : 'Global'}
+      addLabel="Profile"
+      onAdd={() => openEditor('profile', 0, 'New profile', sel?.id ?? null)}
+      isEmpty={visible.length === 0}
+      emptyText="A launch profile prepares a whole dev environment in one click: start services, run commands, open terminals, restore a layout. Click “+ Profile” to create one."
+    >
+      {visible.map((p) => {
+        const n = stepCount(p)
+        return (
+          <div key={p.id} className={ROW_CARD}>
+            <RowTitle
+              badge={<span className="shrink-0 text-[12px] text-violet-400/80">⧉</span>}
+              name={p.name || 'Profile'}
+              sub={`${n} step${n === 1 ? '' : 's'}`}
+              onClick={() => openEditor('profile', p.id, p.name || 'Profile')}
+            />
+            <div className="flex shrink-0 items-center gap-0.5">
               <button
-                className="min-w-0 flex-1 cursor-pointer text-left"
-                title="Click to edit"
-                onClick={() => openEditor('profile', p.id, p.name || 'Profile')}
-              >
-                <div className="truncate text-[12.5px] text-slate-200">{p.name}</div>
-                <div className="text-[10.5px] text-slate-500">{count} step(s)</div>
-              </button>
-              <button
-                className="btn-primary text-[11px]"
+                className={`${ICON_BTN} bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/35 hover:text-white`}
                 disabled={launching === p.id}
-                onClick={async () => {
-                  setLaunching(p.id)
-                  try {
-                    await launchProfile(p)
-                  } finally {
-                    setLaunching(null)
-                  }
-                }}
+                title="Launch profile"
+                onClick={() => void launch(p)}
               >
-                {launching === p.id ? 'Launching…' : '⚡ Launch'}
+                {launching === p.id ? '…' : '⚡'}
+              </button>
+              <button className={ICON_BTN} title="More actions" onClick={(e) => openMenu(e, overflow(p))}>
+                ⋯
               </button>
             </div>
-          )
-        })}
-      </div>
-    </div>
+          </div>
+        )
+      })}
+      {menuNode}
+    </PanelShell>
   )
 }

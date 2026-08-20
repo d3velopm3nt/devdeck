@@ -10,7 +10,7 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import * as ipc from '../../lib/ipc'
 import { useApp } from '../../store'
 import { findNode, projectOf, resolveDir } from '../../lib/tree'
-import { guessKind, pmBadge } from '../../lib/pm'
+import { guessKind, guessPort, pmBadge } from '../../lib/pm'
 import type { DetectedCommand } from '../../lib/types'
 import { EditorShell, Field } from './EditorShell'
 import { openTerminal } from '../../lib/runner'
@@ -32,6 +32,9 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
   // Per-row chosen kind (command vs service), keyed by the detected command
   // string. Seeded from guessKind on scan; the user can flip each row.
   const [kinds, setKinds] = useState<Map<string, 'command' | 'service'>>(new Map())
+  // Per-row port for service rows, so an imported dev server keeps its port and
+  // you don't re-enter it. Seeded from guessPort; '' means no port.
+  const [ports, setPorts] = useState<Map<string, string>>(new Map())
   const [scanning, setScanning] = useState(false)
   const [scanErr, setScanErr] = useState<string | null>(null)
   const [result, setResult] = useState<{ added: number; updated: number; failed: number } | null>(null)
@@ -72,6 +75,12 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
   const setKind = (cmd: string, kind: 'command' | 'service') =>
     setKinds((prev) => new Map(prev).set(cmd, kind))
 
+  // Port shown for a service row: an explicit user value, else the guess.
+  const portOf = (r: DetectedCommand): string =>
+    ports.get(r.command) ?? (guessPort(r.command)?.toString() ?? '')
+  const setPort = (cmd: string, value: string) =>
+    setPorts((prev) => new Map(prev).set(cmd, value.replace(/[^\d]/g, '')))
+
   const browse = async (setter: (v: string) => void, title: string) => {
     const dir = await openDialog({ directory: true, title })
     if (typeof dir === 'string') setter(dir)
@@ -89,6 +98,8 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
       // Seed each row's kind from the heuristic (user can flip before adding).
       const guessed = new Map(res.map((r) => [r.command, guessKind(r.name, r.command)] as const))
       setKinds(guessed)
+      // Pre-fill service ports from the tool's conventional port.
+      setPorts(new Map(res.map((r) => [r.command, guessPort(r.command)?.toString() ?? ''] as const)))
       // Pre-select only brand-new rows (existing / changed stay opt-in). Status
       // is kind-aware, so use the freshly-guessed kinds here.
       const statusWith = (r: DetectedCommand) => {
@@ -130,7 +141,8 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
             await ipc.serviceSave({ ...ex, command: r.command })
             updated++
           } else {
-            await ipc.serviceSave({ id: 0, project_id: node.id, name: r.name, command: r.command, cwd: '', env: '', auto_restart: false, health_port: null, shell: '' })
+            const p = portOf(r)
+            await ipc.serviceSave({ id: 0, project_id: node.id, name: r.name, command: r.command, cwd: '', env: '', auto_restart: false, health_port: p ? Number(p) : null, shell: '' })
             added++
           }
         } else if (st === 'changed') {
@@ -287,6 +299,17 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
                               </span>
                             )
                           })()}
+                          {kindOf(r) === 'service' && (
+                            <input
+                              className="w-14 shrink-0 rounded border border-slate-700 bg-[#0d1017] px-1 py-1 text-center text-[10.5px] text-slate-300"
+                              placeholder="port"
+                              value={portOf(r)}
+                              disabled={st === 'added'}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => setPort(r.command, e.target.value)}
+                              title="Port this service serves on — saved so you can open it in the browser without re-entering it"
+                            />
+                          )}
                           {st === 'added' && <span className="shrink-0 text-[10px] text-emerald-400">added</span>}
                           {st === 'changed' && <span className="shrink-0 rounded bg-amber-500/15 px-1.5 py-px text-[10px] text-amber-400">differs</span>}
                         </label>

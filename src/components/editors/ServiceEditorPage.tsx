@@ -57,6 +57,20 @@ export function ServiceEditorPage(props: IDockviewPanelProps<Params>) {
   }
   const set = (patch: Partial<ServiceDef>) => setSvc((s) => ({ ...s!, ...patch }))
 
+  // Duplicates: another service in the same owner running the exact same
+  // command, or ANY service already using this health port (a port can only be
+  // bound once on the machine, so a repeat is a real conflict).
+  const trimmedCmd = svc.command.trim()
+  const dupCmd = trimmedCmd
+    ? services.find(
+        (s) => s.id !== svc.id && s.project_id === svc.project_id && s.command.trim() === trimmedCmd,
+      )
+    : undefined
+  const dupPort =
+    svc.health_port != null
+      ? services.find((s) => s.id !== svc.id && s.health_port === svc.health_port)
+      : undefined
+
   const pickDir = async () => {
     const dir = await openDialog({ directory: true, title: 'Working directory' })
     if (typeof dir === 'string') set({ cwd: dir })
@@ -72,7 +86,7 @@ export function ServiceEditorPage(props: IDockviewPanelProps<Params>) {
   }
 
   const save = async () => {
-    if (!svc.name.trim() || !svc.command.trim()) return
+    if (!svc.name.trim() || !svc.command.trim() || dupCmd || dupPort) return
     await ipc.serviceSave(svc)
     await refreshServices()
     props.api.close()
@@ -119,7 +133,7 @@ export function ServiceEditorPage(props: IDockviewPanelProps<Params>) {
       subtitle="A long-running dev process DevDeck starts, monitors, and logs."
       onCancel={() => props.api.close()}
       onSave={() => void save()}
-      canSave={!!svc.name.trim() && !!svc.command.trim()}
+      canSave={!!svc.name.trim() && !!svc.command.trim() && !dupCmd && !dupPort}
       onDelete={id > 0 ? () => void remove() : undefined}
       extraActions={
         id > 0 && (
@@ -154,11 +168,22 @@ export function ServiceEditorPage(props: IDockviewPanelProps<Params>) {
       </Row>
       <Field label="Command">
         <input
-          className="input w-full font-mono"
+          className={`input w-full font-mono ${dupCmd ? 'border-amber-500/60' : ''}`}
           placeholder="e.g. npm run dev"
           value={svc.command}
           onChange={(e) => set({ command: e.target.value })}
         />
+        {dupCmd && (
+          <div className="mt-1 flex items-center gap-2 text-[11px] text-amber-400">
+            <span>Duplicate — “{dupCmd.name}” already runs this exact command here.</span>
+            <button
+              className="rounded border border-amber-500/40 px-1.5 py-px text-amber-300 hover:bg-amber-500/15"
+              onClick={() => openEditor('service', dupCmd.id, dupCmd.name || 'Service')}
+            >
+              Edit it
+            </button>
+          </div>
+        )}
       </Field>
       <Field label="Run with">
         <ShellSelect value={svc.shell} onChange={(v) => set({ shell: v })} defaultLabel="Default (cmd.exe)" />
@@ -187,11 +212,22 @@ export function ServiceEditorPage(props: IDockviewPanelProps<Params>) {
         </Field>
         <Field label="Port (health check)">
           <input
-            className="input w-full"
+            className={`input w-full ${dupPort ? 'border-amber-500/60' : ''}`}
             placeholder="e.g. 3000"
             value={svc.health_port ?? ''}
             onChange={(e) => set({ health_port: e.target.value ? Number(e.target.value) : null })}
           />
+          {dupPort && (
+            <div className="mt-1 flex items-center gap-2 text-[11px] text-amber-400">
+              <span>Port {svc.health_port} is already used by “{dupPort.name}”.</span>
+              <button
+                className="rounded border border-amber-500/40 px-1.5 py-px text-amber-300 hover:bg-amber-500/15"
+                onClick={() => openEditor('service', dupPort.id, dupPort.name || 'Service')}
+              >
+                Edit it
+              </button>
+            </div>
+          )}
         </Field>
       </Row>
       <Field label="Environment (KEY=value per line)">

@@ -1,24 +1,25 @@
-// Saved commands, grouped, scoped to the selected project (plus
-// globals). Click a command to edit it in a main-window tab; the Run
-// button (and ⋯ menu) launch it in a new terminal, an existing
-// terminal, or the background.
+// Saved commands, grouped, scoped to the selected project (plus globals).
+// Click a command to edit it; the ▶ button runs it in a new terminal and the
+// ⋯ menu offers background / existing-terminal runs, edit and delete.
 
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import type { CommandDef } from '../lib/types'
 import { useApp } from '../store'
 import { openEditor } from '../lib/dock'
 import { subtreeIds } from '../lib/tree'
 import { runCommandInBackground, runCommandInNewTerminal, runCommandInTerminal } from '../lib/runner'
 import { pmBadge, pmFromCommand } from '../lib/pm'
+import * as ipc from '../lib/ipc'
+import { PanelShell, RowTitle, ROW_CARD, ICON_BTN, useRowMenu } from './PanelShell'
+import type { MenuItem } from './PopMenu'
 
 export function CommandsPanel() {
-  const { commands, terminals, nodes, selectedNode } = useApp()
-  const node = selectedNode()
-  const [runMenu, setRunMenu] = useState<number | null>(null)
+  const { commands, terminals, nodes, selectedNode, scopeNode, refreshCommands } = useApp()
+  const sel = selectedNode()
+  const node = scopeNode() // selection, else the active workspace
+  const { openMenu, menuNode } = useRowMenu()
 
-  // Show globals + commands owned by the selected node or any node under
-  // it (so a project shows all its folders' commands; a folder shows its
-  // own). With nothing selected, show only globals.
+  // Globals + commands owned by the scope node or anything under it.
   const scope = useMemo(() => (node ? new Set(subtreeIds(nodes, node.id)) : null), [nodes, node])
   const visible = useMemo(
     () => commands.filter((c) => c.project_id === null || (scope?.has(c.project_id) ?? false)),
@@ -35,116 +36,78 @@ export function CommandsPanel() {
 
   const liveTerminals = terminals.filter((t) => t.alive)
 
+  const del = async (c: CommandDef) => {
+    if (!confirm(`Delete command “${c.name}”?`)) return
+    await ipc.commandDelete(c.id)
+    await refreshCommands()
+  }
+
+  const overflow = (c: CommandDef): MenuItem[] => [
+    { icon: '⚙', label: 'Run in background (logs)', onClick: () => void runCommandInBackground(c) },
+    ...(liveTerminals.length
+      ? liveTerminals.map((t) => ({
+          icon: '❯',
+          label: `Run in #${t.id} ${t.title}`,
+          onClick: () => void runCommandInTerminal(c, t.id),
+        }))
+      : []),
+    { separator: true, label: '' },
+    { icon: '✎', label: 'Edit command…', onClick: () => openEditor('command', c.id, c.name || 'Command') },
+    { icon: '🗑', label: 'Delete command', danger: true, onClick: () => void del(c) },
+  ]
+
   return (
-    <div className="flex h-full flex-col bg-[#11141c] text-slate-300">
-      <div className="flex items-center justify-between border-b border-slate-800 px-2 py-1.5">
-        <span className="text-[11px] text-slate-500">
-          {node ? `${node.kind}: ${node.name}` : 'Global commands'}
-        </span>
-        <button
-          className="btn-primary text-[11px]"
-          onClick={() => openEditor('command', 0, 'New command', node?.id ?? null)}
-        >
-          + Command
-        </button>
-      </div>
-      <div className="flex-1 space-y-2 overflow-y-auto p-2">
-        {groups.length === 0 && (
-          <div className="p-2 text-[12px] text-slate-500">
-            No commands yet. Click “+ Command” to create one — it opens an editor in the main
-            window.
+    <PanelShell
+      scope={node ? `${node.kind}: ${node.name}` : 'Global'}
+      addLabel="Command"
+      onAdd={() => openEditor('command', 0, 'New command', sel?.id ?? null)}
+      isEmpty={groups.length === 0}
+      emptyText="No commands yet. Click “+ Command” to create one — it opens an editor in the main window."
+    >
+      {groups.map(([group, cmds]) => (
+        <div key={group} className="space-y-1.5">
+          <div className="px-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            {group}
           </div>
-        )}
-        {groups.map(([group, cmds]) => (
-          <div key={group}>
-            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-              {group}
-            </div>
-            <div className="space-y-1">
-              {cmds.map((c) => (
-                <div
-                  key={c.id}
-                  className="group relative flex items-center gap-2 rounded border border-slate-800 bg-[#151923] px-2 py-1.5 hover:border-slate-600"
-                >
+          {cmds.map((c) => {
+            const b = pmBadge(pmFromCommand(c.command) ?? '')
+            return (
+              <div key={c.id} className={ROW_CARD}>
+                <RowTitle
+                  badge={
+                    b ? (
+                      <span
+                        className="shrink-0 rounded px-1 py-px text-[9px] font-semibold"
+                        style={{ background: b.bg, color: b.color }}
+                      >
+                        {b.label}
+                      </span>
+                    ) : (
+                      <span className="shrink-0 text-[12px] text-sky-400/80">⌘</span>
+                    )
+                  }
+                  name={c.name || 'Command'}
+                  sub={c.command}
+                  onClick={() => openEditor('command', c.id, c.name || 'Command')}
+                />
+                <div className="flex shrink-0 items-center gap-0.5">
                   <button
-                    className="min-w-0 flex-1 cursor-pointer text-left"
-                    title="Click to edit"
-                    onClick={() => openEditor('command', c.id, c.name || 'Command')}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      {(() => {
-                        const b = pmBadge(pmFromCommand(c.command) ?? '')
-                        return b ? (
-                          <span className="shrink-0 rounded px-1 py-px text-[9px] font-semibold" style={{ background: b.bg, color: b.color }}>
-                            {b.label}
-                          </span>
-                        ) : null
-                      })()}
-                      <span className="truncate text-[12.5px] text-slate-200">{c.name}</span>
-                    </div>
-                    <div className="truncate font-mono text-[10.5px] text-slate-500">{c.command}</div>
-                  </button>
-                  <button
-                    className="btn-primary text-[11px]"
-                    title="Run in new terminal"
+                    className={`${ICON_BTN} bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/35 hover:text-white`}
+                    title="Run in a new terminal"
                     onClick={() => void runCommandInNewTerminal(c)}
                   >
-                    ▶ Run
+                    ▶
                   </button>
-                  <button
-                    className="btn-ghost text-[11px]"
-                    title="More run options"
-                    onClick={() => setRunMenu(runMenu === c.id ? null : c.id)}
-                  >
+                  <button className={ICON_BTN} title="More actions" onClick={(e) => openMenu(e, overflow(c))}>
                     ⋯
                   </button>
-                  {runMenu === c.id && (
-                    <div className="absolute right-2 top-full z-20 mt-1 w-56 rounded border border-slate-700 bg-[#1a1f2b] p-1 shadow-xl">
-                      <button
-                        className="menu-item"
-                        onClick={() => {
-                          setRunMenu(null)
-                          void runCommandInBackground(c)
-                        }}
-                      >
-                        Run in background (logs)
-                      </button>
-                      <button
-                        className="menu-item"
-                        onClick={() => {
-                          setRunMenu(null)
-                          openEditor('command', c.id, c.name || 'Command')
-                        }}
-                      >
-                        Edit command…
-                      </button>
-                      <div className="my-1 border-t border-slate-700" />
-                      <div className="px-2 py-0.5 text-[10px] uppercase text-slate-500">
-                        Run in existing terminal
-                      </div>
-                      {liveTerminals.length === 0 && (
-                        <div className="px-2 py-1 text-[11px] text-slate-500">no open terminals</div>
-                      )}
-                      {liveTerminals.map((t) => (
-                        <button
-                          key={t.id}
-                          className="menu-item"
-                          onClick={() => {
-                            setRunMenu(null)
-                            void runCommandInTerminal(c, t.id)
-                          }}
-                        >
-                          #{t.id} {t.title}
-                        </button>
-                      ))}
-                    </div>
-                  )}
                 </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
+              </div>
+            )
+          })}
+        </div>
+      ))}
+      {menuNode}
+    </PanelShell>
   )
 }

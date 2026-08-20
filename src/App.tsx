@@ -59,6 +59,7 @@ const PANELS: Array<{ id: string; component: string; title: string; main?: boole
   { id: 'commands', component: 'commands', title: 'Commands' },
   { id: 'services', component: 'services', title: 'Services' },
   { id: 'profiles', component: 'profiles', title: 'Profiles' },
+  { id: 'machine', component: 'machine', title: 'Machine Setup', main: true },
   { id: 'config', component: 'config', title: 'Settings', main: true },
   { id: 'welcome', component: 'welcome', title: 'Welcome' },
 ]
@@ -302,6 +303,13 @@ export default function App() {
           onClick={() => void ipc.widgetToggle()}
         >
           ▧ Widget
+        </button>
+        <button
+          className="btn-ghost text-[12px]"
+          title="Install & manage dev software"
+          onClick={() => openInMain('machine', 'machine', 'Machine Setup')}
+        >
+          🖥 Machine
         </button>
         <button
           className="btn-ghost text-[12px]"

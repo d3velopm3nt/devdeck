@@ -13,6 +13,7 @@
 
 mod db;
 mod legacy;
+mod machine;
 mod monitor;
 mod pty;
 mod scan;
@@ -284,6 +285,11 @@ pub fn run() {
             services::logs_recent,
             services::logs_clear,
             services::logs_export,
+            machine::machine_status,
+            machine::machine_install,
+            machine::machine_snapshot,
+            machine::machine_export,
+            machine::machine_import,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DevDeck");

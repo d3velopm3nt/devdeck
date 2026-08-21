@@ -93,6 +93,27 @@ export const machineSnapshot = (name: string, known: InstallItem[]) =>
 export const machineExport = (path: string, manifest: Manifest) =>
   invoke<void>('machine_export', { path, manifest })
 export const machineImport = (path: string) => invoke<Manifest>('machine_import', { path })
+export const machineShow = (id: string, source: string) => invoke<string>('machine_show', { id, source })
+export const machineInstallPreview = (id: string, source: string) =>
+  invoke<string>('machine_install_preview', { id, source })
+
+// The editable, DB-backed catalog (curated packages seeded on first run).
+export interface MachinePackage {
+  id: string
+  name: string
+  source: string
+  category: string
+  blurb: string
+  elevate: boolean
+  custom: boolean
+  hidden: boolean
+  sort: number
+}
+export const machinePackagesList = () => invoke<MachinePackage[]>('machine_packages_list')
+export const machinePackagesSeed = (packages: MachinePackage[]) =>
+  invoke<number>('machine_packages_seed', { packages })
+export const machinePackageSave = (pkg: MachinePackage) => invoke<void>('machine_package_save', { pkg })
+export const machinePackageDelete = (id: string) => invoke<void>('machine_package_delete', { id })
 
 export interface MachineItemEvent {
   id: string

@@ -143,6 +143,19 @@ pub fn open() -> Connection {
             count INTEGER NOT NULL DEFAULT 0,
             PRIMARY KEY (kind, ref_id)
         );
+        -- Machine Setup catalog: curated packages are seeded here on first run
+        -- (INSERT OR IGNORE), so every package is the user's to edit/override.
+        CREATE TABLE IF NOT EXISTS machine_packages (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            source TEXT NOT NULL,
+            category TEXT NOT NULL,
+            blurb TEXT NOT NULL DEFAULT '',
+            elevate INTEGER NOT NULL DEFAULT 0,
+            custom INTEGER NOT NULL DEFAULT 0,   -- 1 = user-added
+            hidden INTEGER NOT NULL DEFAULT 0,   -- 1 = curated pkg removed by user
+            sort INTEGER NOT NULL DEFAULT 0
+        );
         "#,
     )
     .expect("create schema");
@@ -715,6 +728,6 @@ pub fn recents_list(db: tauri::State<Db>) -> Result<Vec<Recent>, String> {
     Ok(rows)
 }
 
-fn err<E: std::fmt::Display>(e: E) -> String {
+pub(crate) fn err<E: std::fmt::Display>(e: E) -> String {
     e.to_string()
 }

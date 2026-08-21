@@ -10,6 +10,7 @@ export type PkgSource = 'winget' | 'scoop'
 export type PkgCategory =
   | 'editors'
   | 'languages'
+  | 'pkgmgr'
   | 'git'
   | 'terminals'
   | 'cloud'
@@ -19,6 +20,7 @@ export type PkgCategory =
   | 'browsers'
   | 'productivity'
   | 'ai'
+  | 'custom'
 
 export interface CatalogPackage {
   /** Exact winget/scoop package id. */
@@ -53,6 +55,7 @@ export interface Bundle {
 export const CATEGORY_LABELS: Record<PkgCategory, string> = {
   editors: 'Editors & IDEs',
   languages: 'Languages & runtimes',
+  pkgmgr: 'Package managers',
   git: 'Git & version control',
   terminals: 'Terminals & shells',
   cloud: 'Containers, cloud & infra',
@@ -62,6 +65,7 @@ export const CATEGORY_LABELS: Record<PkgCategory, string> = {
   browsers: 'Browsers',
   productivity: 'Dev-adjacent & productivity',
   ai: 'AI / local models',
+  custom: 'My software',
 }
 
 export const PACKAGES: CatalogPackage[] = [
@@ -74,9 +78,8 @@ export const PACKAGES: CatalogPackage[] = [
   { id: 'Notepad++.Notepad++', name: 'Notepad++', source: 'winget', category: 'editors' },
 
   // --- languages & runtimes ---
-  { id: 'OpenJS.NodeJS.LTS', name: 'Node.js (LTS)', source: 'winget', category: 'languages', blurb: 'JavaScript runtime, LTS line' },
+  { id: 'OpenJS.NodeJS.LTS', name: 'Node.js (LTS)', source: 'winget', category: 'languages', blurb: 'JS runtime — bundles npm & corepack' },
   { id: 'CoreyButler.NVMforWindows', name: 'nvm for Windows', source: 'winget', category: 'languages', blurb: 'Switch Node versions' },
-  { id: 'Oven-sh.Bun', name: 'Bun', source: 'winget', category: 'languages', blurb: 'Fast JS runtime + package manager' },
   { id: 'DenoLand.Deno', name: 'Deno', source: 'winget', category: 'languages' },
   { id: 'Python.Python.3.12', name: 'Python 3.12', source: 'winget', category: 'languages' },
   { id: 'GoLang.Go', name: 'Go', source: 'winget', category: 'languages' },
@@ -84,6 +87,16 @@ export const PACKAGES: CatalogPackage[] = [
   { id: 'Microsoft.DotNet.SDK.8', name: '.NET SDK 8', source: 'winget', category: 'languages' },
   { id: 'EclipseAdoptium.Temurin.21.JDK', name: 'Java (Temurin 21)', source: 'winget', category: 'languages' },
   { id: 'RubyInstallerTeam.Ruby.3.3', name: 'Ruby 3.3', source: 'winget', category: 'languages' },
+
+  // --- package managers ---
+  // npm ships inside Node.js (above); corepack (also bundled) can turn on
+  // pnpm/yarn without a separate install — `corepack enable`.
+  { id: 'pnpm.pnpm', name: 'pnpm', source: 'winget', category: 'pkgmgr', blurb: 'Fast, disk-efficient Node package manager' },
+  { id: 'Yarn.Yarn', name: 'Yarn (Classic)', source: 'winget', category: 'pkgmgr', blurb: 'Node package manager' },
+  { id: 'Oven-sh.Bun', name: 'Bun', source: 'winget', category: 'pkgmgr', blurb: 'JS runtime + package manager' },
+  { id: 'Volta.Volta', name: 'Volta', source: 'winget', category: 'pkgmgr', blurb: 'Pins Node/npm/yarn versions per project' },
+  { id: 'astral-sh.uv', name: 'uv', source: 'winget', category: 'pkgmgr', blurb: 'Fast Python package/venv manager' },
+  { id: 'pipx', name: 'pipx', source: 'scoop', category: 'pkgmgr', blurb: 'Install Python CLI apps in isolation' },
 
   // --- git ---
   { id: 'Git.Git', name: 'Git', source: 'winget', category: 'git' },
@@ -177,11 +190,18 @@ export const BUNDLES: Bundle[] = [
     description: 'Front-end & full-stack JavaScript/TypeScript.',
     icon: '🟩',
     packages: [
-      'OpenJS.NodeJS.LTS', 'CoreyButler.NVMforWindows', 'Oven-sh.Bun',
+      'OpenJS.NodeJS.LTS', 'CoreyButler.NVMforWindows', 'pnpm.pnpm', 'Oven-sh.Bun',
       'Microsoft.VisualStudioCode', 'Google.Chrome',
       'Mozilla.Firefox.DeveloperEdition', 'Bruno.Bruno',
     ],
-    steps: [{ run: 'npm i -g pnpm turbo', after: 'OpenJS.NodeJS.LTS', label: 'Global pnpm + turbo' }],
+    steps: [{ run: 'npm i -g turbo', after: 'OpenJS.NodeJS.LTS', label: 'Global turbo' }],
+  },
+  {
+    id: 'pkgmgr',
+    name: 'Package managers',
+    description: 'The JS/Python package managers, minus npm (ships with Node).',
+    icon: '📦',
+    packages: ['pnpm.pnpm', 'Yarn.Yarn', 'Oven-sh.Bun', 'Volta.Volta', 'astral-sh.uv'],
   },
   {
     id: 'python',

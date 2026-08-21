@@ -290,6 +290,12 @@ pub fn run() {
             machine::machine_snapshot,
             machine::machine_export,
             machine::machine_import,
+            machine::machine_show,
+            machine::machine_install_preview,
+            machine::machine_packages_list,
+            machine::machine_packages_seed,
+            machine::machine_package_save,
+            machine::machine_package_delete,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DevDeck");

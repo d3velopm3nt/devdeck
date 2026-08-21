@@ -15,6 +15,7 @@ import { ServicesPanel } from './components/ServicesPanel'
 import { ProcessDashboard } from './components/ProcessDashboard'
 import { LogViewer } from './components/LogViewer'
 import { ProfilesPanel } from './components/ProfilesPanel'
+import { MachineSetup } from './components/MachineSetup'
 import { SettingsPanel } from './components/SettingsPanel'
 import { ConfigPage } from './components/ConfigPage'
 import { CommandEditorPage } from './components/editors/CommandEditorPage'
@@ -114,6 +115,7 @@ const components = {
   processes: () => <ProcessDashboard />,
   logs: () => <LogViewer />,
   profiles: () => <ProfilesPanel />,
+  machine: () => <MachineSetup />,
   settings: () => <SettingsPanel />,
   config: () => <ConfigPage />,
   'command-editor': (props: IDockviewPanelProps<{ id: number; projectId?: number | null }>) => (

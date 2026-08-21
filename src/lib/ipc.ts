@@ -63,6 +63,69 @@ export const profilesList = () => invoke<ProfileDef[]>('profiles_list')
 export const profileSave = (profile: ProfileDef) => invoke<number>('profile_save', { profile })
 export const profileDelete = (id: number) => invoke<void>('profile_delete', { id })
 
+// ---- machine setup ----
+export interface MachineStatus {
+  winget: string[]
+  scoop: string[]
+  scoop_available: boolean
+  winget_available: boolean
+}
+export interface InstallItem {
+  id: string
+  source: string
+}
+export interface ManifestPackage {
+  id: string
+  source: string
+  elevate?: boolean
+}
+export interface Manifest {
+  name: string
+  version: number
+  packages: ManifestPackage[]
+  steps: unknown[]
+  repos: unknown[]
+}
+export const machineStatus = () => invoke<MachineStatus>('machine_status')
+export const machineInstall = (items: InstallItem[]) => invoke<void>('machine_install', { items })
+export const machineSnapshot = (name: string, known: InstallItem[]) =>
+  invoke<Manifest>('machine_snapshot', { name, known })
+export const machineExport = (path: string, manifest: Manifest) =>
+  invoke<void>('machine_export', { path, manifest })
+export const machineImport = (path: string) => invoke<Manifest>('machine_import', { path })
+export const machineShow = (id: string, source: string) => invoke<string>('machine_show', { id, source })
+export const machineInstallPreview = (id: string, source: string) =>
+  invoke<string>('machine_install_preview', { id, source })
+
+// The editable, DB-backed catalog (curated packages seeded on first run).
+export interface MachinePackage {
+  id: string
+  name: string
+  source: string
+  category: string
+  blurb: string
+  elevate: boolean
+  custom: boolean
+  hidden: boolean
+  sort: number
+}
+export const machinePackagesList = () => invoke<MachinePackage[]>('machine_packages_list')
+export const machinePackagesSeed = (packages: MachinePackage[]) =>
+  invoke<number>('machine_packages_seed', { packages })
+export const machinePackageSave = (pkg: MachinePackage) => invoke<void>('machine_package_save', { pkg })
+export const machinePackageDelete = (id: string) => invoke<void>('machine_package_delete', { id })
+
+export interface MachineItemEvent {
+  id: string
+  status: 'installing' | 'ok' | 'failed'
+}
+export function onMachineItem(cb: (e: MachineItemEvent) => void): Promise<UnlistenFn> {
+  return listen<MachineItemEvent>('machine:item', (e) => cb(e.payload))
+}
+export function onMachineDone(cb: () => void): Promise<UnlistenFn> {
+  return listen('machine:done', () => cb())
+}
+
 // ---- layouts ----
 export const layoutsList = () => invoke<LayoutDef[]>('layouts_list')
 export const layoutSave = (name: string, data: string) => invoke<void>('layout_save', { name, data })

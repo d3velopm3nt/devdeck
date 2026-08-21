@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Dock, buildDefaultLayout } from './Dock'
 import { BottomBar, type BottomTab } from './components/BottomBar'
+import { UpdateBar, type UpState } from './components/UpdateBar'
 import * as ipc from './lib/ipc'
 import { routeOutput } from './lib/termBus'
 import { useApp } from './store'
@@ -117,6 +118,51 @@ export default function App() {
   const showBottom = (t: BottomTab) => {
     setBottomTab(t)
     setBottomCollapsed(false)
+  }
+
+  // Self-update: check GitHub for a newer release, update via scoop.
+  const [update, setUpdate] = useState<ipc.UpdateInfo | null>(null)
+  const [upState, setUpState] = useState<UpState>('checking')
+  const [upStatus, setUpStatus] = useState('')
+  const [upHidden, setUpHidden] = useState(false)
+
+  const checkUpdate = () => {
+    setUpHidden(false)
+    setUpStatus('')
+    setUpState('checking')
+    void ipc
+      .appUpdateInfo()
+      .then((info) => {
+        setUpdate(info)
+        setUpState(info.available ? 'available' : 'uptodate')
+      })
+      .catch((e) => {
+        setUpStatus(String(e))
+        setUpState('error')
+      })
+  }
+  useEffect(checkUpdate, [])
+  useEffect(() => {
+    // Reflect scoop-update progress (streamed to the log bus) in the bar.
+    const un = ipc.onSvcLog((e) => {
+      if (e.service !== 'devdeck update') return
+      setUpStatus(e.line)
+      if (/finished|restart DevDeck/i.test(e.line)) setUpState('done')
+      else if (/failed/i.test(e.line)) setUpState('error')
+    })
+    return () => void un.then((u) => u())
+  }, [])
+  const runUpdate = () => {
+    if (!update) return
+    if (update.via_scoop) {
+      setUpState('updating')
+      setUpStatus('Starting scoop update…')
+      showBottom('logs')
+    }
+    void ipc.appUpdate().catch((e) => {
+      setUpStatus(String(e))
+      setUpState('error')
+    })
   }
 
   useEffect(() => {
@@ -312,6 +358,13 @@ export default function App() {
           🖥 Machine
         </button>
         <button
+          className={`text-[12px] ${upState === 'available' ? 'rounded bg-amber-500/15 px-2 py-0.5 font-medium text-amber-300 hover:bg-amber-500/25' : 'btn-ghost'}`}
+          title={upState === 'available' ? `Update available — v${update?.latest}` : `DevDeck ${update ? 'v' + update.current : ''} — check for updates`}
+          onClick={checkUpdate}
+        >
+          {upState === 'available' ? `⟳ Update · v${update?.latest}` : '⟳'}
+        </button>
+        <button
           className="btn-ghost text-[12px]"
           title="Settings"
           onClick={() => openInMain('config', 'config', 'Settings')}
@@ -319,6 +372,20 @@ export default function App() {
           ⚙ Settings
         </button>
       </div>
+
+      {/* Self-update status bar */}
+      {!upHidden && (
+        <UpdateBar
+          state={upState}
+          current={update?.current ?? ''}
+          latest={update?.latest ?? ''}
+          viaScoop={update?.via_scoop ?? false}
+          status={upStatus}
+          onUpdate={runUpdate}
+          onRecheck={checkUpdate}
+          onDismiss={() => setUpHidden(true)}
+        />
+      )}
 
       {/* Dock area */}
       <div className="min-h-0 flex-1">

@@ -52,3 +52,24 @@ body,
 .xterm {
   height: 100%;
 }
+
+/* Update bar: indeterminate progress line */
+.dd-track {
+  position: relative;
+  overflow: hidden;
+}
+.dd-track > .dd-move {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 38%;
+  border-radius: 999px;
+  animation: dd-slide 1.15s ease-in-out infinite;
+}
+@keyframes dd-slide {
+  0% { left: -40%; }
+  100% { left: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dd-track > .dd-move { animation: none; left: 0; width: 100%; opacity: 0.5; }
+}

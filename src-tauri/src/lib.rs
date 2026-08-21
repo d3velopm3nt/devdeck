@@ -145,6 +145,112 @@ fn open_url(url: String) -> Result<(), String> {
     Ok(())
 }
 
+// ---- self-update ----
+
+#[derive(serde::Serialize)]
+struct UpdateInfo {
+    current: String,
+    latest: String,
+    available: bool,
+    via_scoop: bool,
+}
+
+fn ps_capture(script: &str) -> Option<String> {
+    use std::process::{Command, Stdio};
+    let mut cmd = Command::new("powershell");
+    cmd.args(["-NoProfile", "-NonInteractive", "-Command", script])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000);
+    }
+    let out = cmd.output().ok()?;
+    Some(String::from_utf8_lossy(&out.stdout).to_string())
+}
+
+/// True when a > b, comparing dot-separated numeric version parts.
+fn ver_gt(a: &str, b: &str) -> bool {
+    let pa: Vec<u32> = a.split('.').filter_map(|x| x.trim().parse().ok()).collect();
+    let pb: Vec<u32> = b.split('.').filter_map(|x| x.trim().parse().ok()).collect();
+    for i in 0..pa.len().max(pb.len()) {
+        let (x, y) = (pa.get(i).copied().unwrap_or(0), pb.get(i).copied().unwrap_or(0));
+        if x != y {
+            return x > y;
+        }
+    }
+    false
+}
+
+fn devdeck_via_scoop() -> bool {
+    dirs::home_dir()
+        .map(|h| h.join("scoop").join("apps").join("devdeck").exists())
+        .unwrap_or(false)
+}
+
+/// Check GitHub for the latest release and compare to the running version.
+#[tauri::command]
+fn app_update_info() -> UpdateInfo {
+    let current = env!("CARGO_PKG_VERSION").to_string();
+    let latest = ps_capture(
+        "(Invoke-RestMethod -Uri 'https://api.github.com/repos/d3velopm3nt/devdeck/releases/latest' -Headers @{'User-Agent'='devdeck'} -TimeoutSec 8).tag_name",
+    )
+    .map(|s| s.trim().trim_start_matches('v').trim().to_string())
+    .unwrap_or_default();
+    let available = !latest.is_empty() && ver_gt(&latest, &current);
+    UpdateInfo { current, latest, available, via_scoop: devdeck_via_scoop() }
+}
+
+/// Update DevDeck: via `scoop update` when installed through scoop (streamed to
+/// the log bus), otherwise open the latest release page.
+#[tauri::command]
+fn app_update(app: tauri::AppHandle) -> Result<(), String> {
+    use std::io::{BufRead, BufReader};
+    use std::process::{Command, Stdio};
+    if !devdeck_via_scoop() {
+        return open_url("https://github.com/d3velopm3nt/devdeck/releases/latest".into());
+    }
+    std::thread::spawn(move || {
+        let id: i64 = -200_000;
+        services::push_log(&app, id, "devdeck update", "system", "running: scoop update devdeck".into());
+        let mut cmd = Command::new("cmd");
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.raw_arg("/C");
+            cmd.raw_arg("\"scoop update devdeck\"");
+            cmd.creation_flags(0x0800_0000);
+        }
+        cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        let ok = match cmd.spawn() {
+            Ok(mut child) => {
+                if let Some(out) = child.stdout.take() {
+                    for l in BufReader::new(out).lines().map_while(Result::ok) {
+                        if !l.trim().is_empty() {
+                            services::push_log(&app, id, "devdeck update", "stdout", l);
+                        }
+                    }
+                }
+                child.wait().map(|s| s.success()).unwrap_or(false)
+            }
+            Err(e) => {
+                services::push_log(&app, id, "devdeck update", "stderr", format!("failed: {e}"));
+                false
+            }
+        };
+        services::push_log(
+            &app,
+            id,
+            "devdeck update",
+            "system",
+            if ok { "update finished — restart DevDeck to apply.".into() } else { "update failed — see log above.".to_string() },
+        );
+    });
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -246,6 +352,8 @@ pub fn run() {
             focus_main,
             reveal_in_explorer,
             open_url,
+            app_update_info,
+            app_update,
             scan::scan_project,
             seed::seed_example,
             seed::example_exists,

@@ -153,6 +153,16 @@ export const widgetResize = (width: number, height: number) =>
 
 export const focusMain = () => invoke<void>('focus_main')
 
+// ---- self-update ----
+export interface UpdateInfo {
+  current: string
+  latest: string
+  available: boolean
+  via_scoop: boolean
+}
+export const appUpdateInfo = () => invoke<UpdateInfo>('app_update_info')
+export const appUpdate = () => invoke<void>('app_update')
+
 // ---- recents ----
 export const recentBump = (kind: 'command' | 'service', refId: number) =>
   invoke<void>('recent_bump', { kind, refId })

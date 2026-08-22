@@ -1,12 +1,12 @@
 {
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A local-first development command center for Windows: run your whole stack, watch every service, and jump into any terminal.",
   "homepage": "https://github.com/d3velopm3nt/devdeck",
   "license": "MIT",
   "architecture": {
     "64bit": {
-      "url": "https://github.com/d3velopm3nt/devdeck/releases/download/v0.2.0/DevDeck_0.2.0_x64-setup.exe",
-      "hash": "5068f5fd06b127dffc93bbee4aa60ad27671606fe267d4dd25f8421c8b8a91d7"
+      "url": "https://github.com/d3velopm3nt/devdeck/releases/download/v0.2.1/DevDeck_0.2.1_x64-setup.exe",
+      "hash": "60f6d5944e7524460be10b69d03c169cf40860bd239e188b87c9d0cd894f97ac"
     }
   },
   "installer": {

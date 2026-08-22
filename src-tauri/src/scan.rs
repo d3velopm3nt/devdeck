@@ -114,7 +114,9 @@ pub fn scan_project(dir: String) -> Result<Vec<DetectedCommand>, String> {
                 let target = line[..idx].trim();
                 if !target.is_empty()
                     && !target.starts_with('.')
-                    && target.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+                    && target
+                        .chars()
+                        .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
                 {
                     out.push(dc(target, format!("make {target}"), "make", "make"));
                 }

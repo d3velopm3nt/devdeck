@@ -186,8 +186,16 @@ pub fn machine_status() -> MachineStatus {
     let winget_available = exists("winget");
     let scoop_available = scoop_present();
     MachineStatus {
-        winget: if winget_available { winget_installed() } else { Vec::new() },
-        scoop: if scoop_available { scoop_installed() } else { Vec::new() },
+        winget: if winget_available {
+            winget_installed()
+        } else {
+            Vec::new()
+        },
+        scoop: if scoop_available {
+            scoop_installed()
+        } else {
+            Vec::new()
+        },
         scoop_available,
         winget_available,
     }
@@ -214,7 +222,10 @@ pub fn machine_install(app: tauri::AppHandle, items: Vec<InstallItem>) -> Result
         for item in items {
             let _ = app.emit(
                 "machine:item",
-                ItemEvent { id: item.id.clone(), status: "installing".into() },
+                ItemEvent {
+                    id: item.id.clone(),
+                    status: "installing".into(),
+                },
             );
             services::push_log(
                 &app,
@@ -251,8 +262,20 @@ pub fn machine_install(app: tauri::AppHandle, items: Vec<InstallItem>) -> Result
             let ok = match cmd.spawn() {
                 Ok(mut child) => {
                     for (pipe, stream) in [
-                        (child.stdout.take().map(|s| Box::new(s) as Box<dyn std::io::Read + Send>), "stdout"),
-                        (child.stderr.take().map(|s| Box::new(s) as Box<dyn std::io::Read + Send>), "stderr"),
+                        (
+                            child
+                                .stdout
+                                .take()
+                                .map(|s| Box::new(s) as Box<dyn std::io::Read + Send>),
+                            "stdout",
+                        ),
+                        (
+                            child
+                                .stderr
+                                .take()
+                                .map(|s| Box::new(s) as Box<dyn std::io::Read + Send>),
+                            "stderr",
+                        ),
                     ] {
                         if let Some(pipe) = pipe {
                             let app = app.clone();
@@ -270,7 +293,13 @@ pub fn machine_install(app: tauri::AppHandle, items: Vec<InstallItem>) -> Result
                     child.wait().map(|s| s.success()).unwrap_or(false)
                 }
                 Err(e) => {
-                    services::push_log(&app, INSTALL_LOG_ID, &item.id, "stderr", format!("failed to launch: {e}"));
+                    services::push_log(
+                        &app,
+                        INSTALL_LOG_ID,
+                        &item.id,
+                        "stderr",
+                        format!("failed to launch: {e}"),
+                    );
                     false
                 }
             };
@@ -280,11 +309,18 @@ pub fn machine_install(app: tauri::AppHandle, items: Vec<InstallItem>) -> Result
                 INSTALL_LOG_ID,
                 &item.id,
                 "system",
-                if ok { "done".into() } else { "install failed".to_string() },
+                if ok {
+                    "done".into()
+                } else {
+                    "install failed".to_string()
+                },
             );
             let _ = app.emit(
                 "machine:item",
-                ItemEvent { id: item.id, status: if ok { "ok" } else { "failed" }.into() },
+                ItemEvent {
+                    id: item.id,
+                    status: if ok { "ok" } else { "failed" }.into(),
+                },
             );
         }
         let _ = app.emit("machine:done", ());
@@ -302,7 +338,13 @@ pub fn machine_install_scoop(app: tauri::AppHandle) -> Result<(), String> {
     }
     std::thread::spawn(move || {
         let name = "scoop setup";
-        services::push_log(&app, INSTALL_LOG_ID, name, "system", "installing scoop (per-user, no admin) …".into());
+        services::push_log(
+            &app,
+            INSTALL_LOG_ID,
+            name,
+            "system",
+            "installing scoop (per-user, no admin) …".into(),
+        );
         let script = "Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force; Invoke-RestMethod -Uri https://get.scoop.sh | Invoke-Expression";
         let mut cmd = Command::new("powershell");
         cmd.args(["-NoProfile", "-Command", script])
@@ -313,8 +355,20 @@ pub fn machine_install_scoop(app: tauri::AppHandle) -> Result<(), String> {
         let ok = match cmd.spawn() {
             Ok(mut child) => {
                 for (pipe, stream) in [
-                    (child.stdout.take().map(|s| Box::new(s) as Box<dyn std::io::Read + Send>), "stdout"),
-                    (child.stderr.take().map(|s| Box::new(s) as Box<dyn std::io::Read + Send>), "stderr"),
+                    (
+                        child
+                            .stdout
+                            .take()
+                            .map(|s| Box::new(s) as Box<dyn std::io::Read + Send>),
+                        "stdout",
+                    ),
+                    (
+                        child
+                            .stderr
+                            .take()
+                            .map(|s| Box::new(s) as Box<dyn std::io::Read + Send>),
+                        "stderr",
+                    ),
                 ] {
                     if let Some(pipe) = pipe {
                         let app = app.clone();
@@ -322,7 +376,13 @@ pub fn machine_install_scoop(app: tauri::AppHandle) -> Result<(), String> {
                         std::thread::spawn(move || {
                             for l in BufReader::new(pipe).lines().map_while(Result::ok) {
                                 if !l.trim().is_empty() {
-                                    services::push_log(&app, INSTALL_LOG_ID, "scoop setup", &stream, l);
+                                    services::push_log(
+                                        &app,
+                                        INSTALL_LOG_ID,
+                                        "scoop setup",
+                                        &stream,
+                                        l,
+                                    );
                                 }
                             }
                         });
@@ -331,7 +391,13 @@ pub fn machine_install_scoop(app: tauri::AppHandle) -> Result<(), String> {
                 child.wait().map(|s| s.success()).unwrap_or(false)
             }
             Err(e) => {
-                services::push_log(&app, INSTALL_LOG_ID, name, "stderr", format!("failed to launch: {e}"));
+                services::push_log(
+                    &app,
+                    INSTALL_LOG_ID,
+                    name,
+                    "stderr",
+                    format!("failed to launch: {e}"),
+                );
                 false
             }
         };
@@ -342,7 +408,11 @@ pub fn machine_install_scoop(app: tauri::AppHandle) -> Result<(), String> {
             INSTALL_LOG_ID,
             name,
             "system",
-            if installed { "scoop installed — scoop packages are now available.".into() } else { "scoop install failed — see the log above.".to_string() },
+            if installed {
+                "scoop installed — scoop packages are now available.".into()
+            } else {
+                "scoop install failed — see the log above.".to_string()
+            },
         );
         let _ = app.emit("machine:done", ());
     });
@@ -362,11 +432,19 @@ pub fn machine_snapshot(name: String, known: Vec<InstallItem>) -> Manifest {
             _ => status.winget.iter().any(|s| s.eq_ignore_ascii_case(&k.id)),
         };
         if installed {
-            packages.push(ManifestPackage { id: k.id.clone(), source: k.source.clone(), elevate: false });
+            packages.push(ManifestPackage {
+                id: k.id.clone(),
+                source: k.source.clone(),
+                elevate: false,
+            });
         }
     }
     Manifest {
-        name: if name.trim().is_empty() { "dev machine".into() } else { name },
+        name: if name.trim().is_empty() {
+            "dev machine".into()
+        } else {
+            name
+        },
         version: 1,
         packages,
         steps: Vec::new(),
@@ -411,7 +489,9 @@ pub fn machine_show(id: String, source: String) -> Result<String, String> {
             c
         }
     };
-    cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     no_window(&mut cmd);
     let out = cmd.output().map_err(|e| e.to_string())?;
     let mut text = String::from_utf8_lossy(&out.stdout).to_string();
@@ -485,7 +565,10 @@ pub fn machine_packages_list(db: tauri::State<Db>) -> Result<Vec<MachinePackage>
 /// later runs add any newly-shipped packages while preserving the user's edits,
 /// hides and custom entries. Returns how many new rows were added.
 #[tauri::command]
-pub fn machine_packages_seed(db: tauri::State<Db>, packages: Vec<MachinePackage>) -> Result<usize, String> {
+pub fn machine_packages_seed(
+    db: tauri::State<Db>,
+    packages: Vec<MachinePackage>,
+) -> Result<usize, String> {
     let conn = db.0.lock().unwrap();
     let mut added = 0usize;
     for (i, p) in packages.iter().enumerate() {
@@ -527,13 +610,22 @@ pub fn machine_package_save(db: tauri::State<Db>, pkg: MachinePackage) -> Result
 pub fn machine_package_delete(db: tauri::State<Db>, id: String) -> Result<(), String> {
     let conn = db.0.lock().unwrap();
     let is_custom: bool = conn
-        .query_row("SELECT custom FROM machine_packages WHERE id = ?1", params![id], |r| r.get::<_, i64>(0))
+        .query_row(
+            "SELECT custom FROM machine_packages WHERE id = ?1",
+            params![id],
+            |r| r.get::<_, i64>(0),
+        )
         .map(|v| v != 0)
         .unwrap_or(false);
     if is_custom {
-        conn.execute("DELETE FROM machine_packages WHERE id = ?1", params![id]).map_err(err)?;
+        conn.execute("DELETE FROM machine_packages WHERE id = ?1", params![id])
+            .map_err(err)?;
     } else {
-        conn.execute("UPDATE machine_packages SET hidden = 1 WHERE id = ?1", params![id]).map_err(err)?;
+        conn.execute(
+            "UPDATE machine_packages SET hidden = 1 WHERE id = ?1",
+            params![id],
+        )
+        .map_err(err)?;
     }
     Ok(())
 }

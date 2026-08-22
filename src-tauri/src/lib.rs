@@ -186,7 +186,10 @@ fn ver_gt(a: &str, b: &str) -> bool {
     let pa: Vec<u32> = a.split('.').filter_map(|x| x.trim().parse().ok()).collect();
     let pb: Vec<u32> = b.split('.').filter_map(|x| x.trim().parse().ok()).collect();
     for i in 0..pa.len().max(pb.len()) {
-        let (x, y) = (pa.get(i).copied().unwrap_or(0), pb.get(i).copied().unwrap_or(0));
+        let (x, y) = (
+            pa.get(i).copied().unwrap_or(0),
+            pb.get(i).copied().unwrap_or(0),
+        );
         if x != y {
             return x > y;
         }
@@ -210,7 +213,13 @@ fn app_update_info() -> UpdateInfo {
     .map(|s| s.trim().trim_start_matches('v').trim().to_string())
     .unwrap_or_default();
     let available = !latest.is_empty() && ver_gt(&latest, &current);
-    UpdateInfo { current, latest, available, via_scoop: devdeck_via_scoop(), scoop_available: scoop_present() }
+    UpdateInfo {
+        current,
+        latest,
+        available,
+        via_scoop: devdeck_via_scoop(),
+        scoop_available: scoop_present(),
+    }
 }
 
 /// Log id the update bar listens on (see UpdateBar/App.tsx).
@@ -221,7 +230,9 @@ const UPDATE_LOG_ID: i64 = -200_000;
 fn stream_update_cmd(app: &tauri::AppHandle, mut cmd: std::process::Command) -> bool {
     use std::io::{BufRead, BufReader};
     use std::process::Stdio;
-    cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     match cmd.spawn() {
         Ok(mut child) => {
             // stderr on its own thread so a chatty pipe can't deadlock the other.
@@ -249,7 +260,13 @@ fn stream_update_cmd(app: &tauri::AppHandle, mut cmd: std::process::Command) -> 
             ok
         }
         Err(e) => {
-            services::push_log(&app.clone(), UPDATE_LOG_ID, "devdeck update", "stderr", format!("failed to launch: {e}"));
+            services::push_log(
+                &app.clone(),
+                UPDATE_LOG_ID,
+                "devdeck update",
+                "stderr",
+                format!("failed to launch: {e}"),
+            );
             false
         }
     }
@@ -287,13 +304,25 @@ try {
     // The script reports its own outcome (the UI keys off "finished"/"failed"),
     // so only add a line when it died without saying anything.
     if !stream_update_cmd(&app, cmd) {
-        services::push_log(&app, UPDATE_LOG_ID, "devdeck update", "system", "update failed - see log above.".into());
+        services::push_log(
+            &app,
+            UPDATE_LOG_ID,
+            "devdeck update",
+            "system",
+            "update failed - see log above.".into(),
+        );
     }
 }
 
 /// Update via scoop, which owns the install when DevDeck came from the bucket.
 fn update_via_scoop(app: tauri::AppHandle) {
-    services::push_log(&app, UPDATE_LOG_ID, "devdeck update", "system", "running: scoop update devdeck".into());
+    services::push_log(
+        &app,
+        UPDATE_LOG_ID,
+        "devdeck update",
+        "system",
+        "running: scoop update devdeck".into(),
+    );
     let mut cmd = std::process::Command::new("cmd");
     #[cfg(windows)]
     {
@@ -308,7 +337,11 @@ fn update_via_scoop(app: tauri::AppHandle) {
         UPDATE_LOG_ID,
         "devdeck update",
         "system",
-        if ok { "update finished - restart DevDeck to apply.".into() } else { "update failed - see log above.".to_string() },
+        if ok {
+            "update finished - restart DevDeck to apply.".into()
+        } else {
+            "update failed - see log above.".to_string()
+        },
     );
 }
 

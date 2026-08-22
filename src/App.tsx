@@ -165,6 +165,29 @@ export default function App() {
     })
   }
 
+  // Install scoop from the update bar (to enable one-click updates + CLI tools).
+  const [scoopInstalling, setScoopInstalling] = useState(false)
+  const installScoop = () => {
+    setScoopInstalling(true)
+    setUpStatus('Installing scoop (per-user, no admin)…')
+    showBottom('logs')
+    void ipc.machineInstallScoop().catch((e) => {
+      setUpStatus(String(e))
+      setScoopInstalling(false)
+    })
+  }
+  useEffect(() => {
+    // scoop install (and package installs) emit machine:done — re-check after.
+    const un = ipc.onMachineDone(() => {
+      if (scoopInstalling) {
+        setScoopInstalling(false)
+        checkUpdate()
+      }
+    })
+    return () => void un.then((u) => u())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scoopInstalling])
+
   useEffect(() => {
     void app.bootstrap()
     const subs = [
@@ -380,8 +403,11 @@ export default function App() {
           current={update?.current ?? ''}
           latest={update?.latest ?? ''}
           viaScoop={update?.via_scoop ?? false}
+          scoopAvailable={update?.scoop_available ?? true}
+          scoopInstalling={scoopInstalling}
           status={upStatus}
           onUpdate={runUpdate}
+          onInstallScoop={installScoop}
           onRecheck={checkUpdate}
           onDismiss={() => setUpHidden(true)}
         />

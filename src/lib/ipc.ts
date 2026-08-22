@@ -160,6 +160,7 @@ export interface UpdateInfo {
   latest: string
   available: boolean
   via_scoop: boolean
+  scoop_available: boolean
 }
 export const appUpdateInfo = () => invoke<UpdateInfo>('app_update_info')
 export const appUpdate = () => invoke<void>('app_update')

@@ -18,8 +18,11 @@ export function UpdateBar({
   current,
   latest,
   viaScoop,
+  scoopAvailable,
+  scoopInstalling,
   status,
   onUpdate,
+  onInstallScoop,
   onRecheck,
   onDismiss,
 }: {
@@ -27,22 +30,30 @@ export function UpdateBar({
   current: string
   latest: string
   viaScoop: boolean
+  scoopAvailable: boolean
+  scoopInstalling: boolean
   status: string
   onUpdate: () => void
+  onInstallScoop: () => void
   onRecheck: () => void
   onDismiss: () => void
 }) {
   const t = THEME[state]
-  const busy = state === 'checking' || state === 'updating'
+  const busy = state === 'checking' || state === 'updating' || scoopInstalling
+  // Offer scoop when it's missing and we're not mid-update — it enables the
+  // one-click update path (and CLI tools).
+  const offerScoop = !scoopAvailable && (state === 'uptodate' || state === 'available' || state === 'error')
 
-  const icon =
-    state === 'checking' || state === 'updating' ? '⟳'
+  const icon = scoopInstalling
+    ? '⟳'
+    : state === 'checking' || state === 'updating' ? '⟳'
       : state === 'available' ? '⬆'
       : state === 'error' ? '⚠'
       : '✓'
 
-  const title =
-    state === 'checking' ? 'Checking for updates…'
+  const title = scoopInstalling
+    ? 'Installing scoop…'
+    : state === 'checking' ? 'Checking for updates…'
       : state === 'updating' ? 'Updating DevDeck…'
       : state === 'available' ? `Update available — v${latest}`
       : state === 'done' ? `Updated to v${latest} — restart DevDeck to apply`
@@ -51,13 +62,15 @@ export function UpdateBar({
 
   const sub =
     status ||
-    (state === 'available'
-      ? viaScoop
-        ? `You're on v${current}. Installs via scoop update devdeck.`
-        : `You're on v${current}. Opens the download page.`
-      : state === 'uptodate'
-        ? 'You have the latest release.'
-        : '')
+    (offerScoop
+      ? 'Install scoop to enable one-click updates and CLI tools.'
+      : state === 'available'
+        ? viaScoop
+          ? `You're on v${current}. Installs via scoop update devdeck.`
+          : `You're on v${current}. Opens the download page.`
+        : state === 'uptodate'
+          ? 'You have the latest release.'
+          : '')
 
   return (
     <div className={`flex flex-col border-b border-slate-800 ${t.bg}`}>
@@ -66,7 +79,17 @@ export function UpdateBar({
         <span className={`font-medium ${t.fg}`}>{title}</span>
         {sub && <span className="min-w-0 truncate font-mono text-[11px] text-slate-500">{sub}</span>}
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
-          {state === 'available' && (
+          {offerScoop && (
+            <button
+              className="rounded bg-sky-500/20 px-2.5 py-0.5 text-[11.5px] font-semibold text-sky-200 hover:bg-sky-500/30 disabled:opacity-60"
+              title="Install scoop (per-user, no admin) — enables one-click updates"
+              disabled={scoopInstalling}
+              onClick={onInstallScoop}
+            >
+              ⤓ Install scoop
+            </button>
+          )}
+          {state === 'available' && !scoopInstalling && (
             <button
               className="rounded bg-amber-500/20 px-2.5 py-0.5 text-[11.5px] font-semibold text-amber-200 hover:bg-amber-500/30"
               onClick={onUpdate}

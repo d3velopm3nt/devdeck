@@ -153,6 +153,16 @@ struct UpdateInfo {
     latest: String,
     available: bool,
     via_scoop: bool,
+    scoop_available: bool,
+}
+
+fn scoop_present() -> bool {
+    dirs::home_dir()
+        .map(|h| {
+            let shims = h.join("scoop").join("shims");
+            shims.join("scoop.cmd").exists() || shims.join("scoop.ps1").exists()
+        })
+        .unwrap_or(false)
 }
 
 fn ps_capture(script: &str) -> Option<String> {
@@ -200,7 +210,7 @@ fn app_update_info() -> UpdateInfo {
     .map(|s| s.trim().trim_start_matches('v').trim().to_string())
     .unwrap_or_default();
     let available = !latest.is_empty() && ver_gt(&latest, &current);
-    UpdateInfo { current, latest, available, via_scoop: devdeck_via_scoop() }
+    UpdateInfo { current, latest, available, via_scoop: devdeck_via_scoop(), scoop_available: scoop_present() }
 }
 
 /// Update DevDeck: via `scoop update` when installed through scoop (streamed to

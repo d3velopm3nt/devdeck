@@ -130,11 +130,34 @@ fn winget_installed() -> Vec<String> {
     ids
 }
 
+/// The scoop shims directory (~/scoop/shims) if it exists.
+fn scoop_shims() -> Option<std::path::PathBuf> {
+    dirs::home_dir().map(|h| h.join("scoop").join("shims"))
+}
+
+/// Scoop is present if its shim exists on disk — checked directly (not via
+/// PATH), so it's still detected right after install before PATH refreshes.
+fn scoop_present() -> bool {
+    scoop_shims()
+        .map(|s| s.join("scoop.cmd").exists() || s.join("scoop.ps1").exists())
+        .unwrap_or(false)
+}
+
+/// A PowerShell snippet prefix that puts scoop's shims on PATH for this process,
+/// so `scoop …` resolves even when the app started before scoop was installed.
+fn scoop_prefix() -> String {
+    "$env:PATH = \"$env:USERPROFILE\\scoop\\shims;$env:PATH\"; ".to_string()
+}
+
 /// Installed scoop apps. `scoop export` is a PowerShell function, so it's run
 /// through PowerShell; the format has changed across versions, so accept both
 /// the newer JSON ({"apps":[{"Name":…}]}) and an older plain name-per-line list.
 fn scoop_installed() -> Vec<String> {
-    let text = match capture("powershell", &["-NoProfile", "-Command", "scoop export"]) {
+    if !scoop_present() {
+        return Vec::new();
+    }
+    let script = format!("{}scoop export", scoop_prefix());
+    let text = match capture("powershell", &["-NoProfile", "-Command", &script]) {
         Some(t) => t,
         None => return Vec::new(),
     };
@@ -161,7 +184,7 @@ fn scoop_installed() -> Vec<String> {
 #[tauri::command]
 pub fn machine_status() -> MachineStatus {
     let winget_available = exists("winget");
-    let scoop_available = exists("scoop") || exists("scoop.cmd") || exists("scoop.ps1");
+    let scoop_available = scoop_present();
     MachineStatus {
         winget: if winget_available { winget_installed() } else { Vec::new() },
         scoop: if scoop_available { scoop_installed() } else { Vec::new() },
@@ -218,6 +241,11 @@ pub fn machine_install(app: tauri::AppHandle, items: Vec<InstallItem>) -> Result
             cmd.stdin(Stdio::null())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped());
+            // Put scoop's shims on PATH so `scoop install` resolves even when
+            // DevDeck was launched before scoop existed.
+            if let (Some(shims), Ok(path)) = (scoop_shims(), std::env::var("PATH")) {
+                cmd.env("PATH", format!("{};{}", shims.display(), path));
+            }
             no_window(&mut cmd);
 
             let ok = match cmd.spawn() {
@@ -259,6 +287,63 @@ pub fn machine_install(app: tauri::AppHandle, items: Vec<InstallItem>) -> Result
                 ItemEvent { id: item.id, status: if ok { "ok" } else { "failed" }.into() },
             );
         }
+        let _ = app.emit("machine:done", ());
+    });
+    Ok(())
+}
+
+/// Install scoop itself (per-user, no admin) via its official one-liner, so the
+/// scoop catalog becomes available. Streams to the log bus; emits machine:done
+/// so the UI re-checks availability.
+#[tauri::command]
+pub fn machine_install_scoop(app: tauri::AppHandle) -> Result<(), String> {
+    if scoop_present() {
+        return Ok(());
+    }
+    std::thread::spawn(move || {
+        let name = "scoop setup";
+        services::push_log(&app, INSTALL_LOG_ID, name, "system", "installing scoop (per-user, no admin) …".into());
+        let script = "Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force; Invoke-RestMethod -Uri https://get.scoop.sh | Invoke-Expression";
+        let mut cmd = Command::new("powershell");
+        cmd.args(["-NoProfile", "-Command", script])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        no_window(&mut cmd);
+        let ok = match cmd.spawn() {
+            Ok(mut child) => {
+                for (pipe, stream) in [
+                    (child.stdout.take().map(|s| Box::new(s) as Box<dyn std::io::Read + Send>), "stdout"),
+                    (child.stderr.take().map(|s| Box::new(s) as Box<dyn std::io::Read + Send>), "stderr"),
+                ] {
+                    if let Some(pipe) = pipe {
+                        let app = app.clone();
+                        let stream = stream.to_string();
+                        std::thread::spawn(move || {
+                            for l in BufReader::new(pipe).lines().map_while(Result::ok) {
+                                if !l.trim().is_empty() {
+                                    services::push_log(&app, INSTALL_LOG_ID, "scoop setup", &stream, l);
+                                }
+                            }
+                        });
+                    }
+                }
+                child.wait().map(|s| s.success()).unwrap_or(false)
+            }
+            Err(e) => {
+                services::push_log(&app, INSTALL_LOG_ID, name, "stderr", format!("failed to launch: {e}"));
+                false
+            }
+        };
+        // Confirm by disk presence rather than exit code alone.
+        let installed = ok && scoop_present();
+        services::push_log(
+            &app,
+            INSTALL_LOG_ID,
+            name,
+            "system",
+            if installed { "scoop installed — scoop packages are now available.".into() } else { "scoop install failed — see the log above.".to_string() },
+        );
         let _ = app.emit("machine:done", ());
     });
     Ok(())

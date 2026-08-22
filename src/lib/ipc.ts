@@ -88,6 +88,7 @@ export interface Manifest {
 }
 export const machineStatus = () => invoke<MachineStatus>('machine_status')
 export const machineInstall = (items: InstallItem[]) => invoke<void>('machine_install', { items })
+export const machineInstallScoop = () => invoke<void>('machine_install_scoop')
 export const machineSnapshot = (name: string, known: InstallItem[]) =>
   invoke<Manifest>('machine_snapshot', { name, known })
 export const machineExport = (path: string, manifest: Manifest) =>

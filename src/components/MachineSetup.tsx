@@ -50,6 +50,7 @@ export function MachineSetup() {
   const [source, setSource] = useState<'all' | 'winget' | 'scoop'>('all')
   const [tab, setTab] = useState<'search' | 'bundles'>('search')
 
+  const [scoopInstalling, setScoopInstalling] = useState(false)
   const [detail, setDetail] = useState<Pkg | null>(null)
   const [editing, setEditing] = useState<Draft | null>(null)
   const [info, setInfo] = useState<string | null>(null)
@@ -86,6 +87,7 @@ export function MachineSetup() {
       ipc.onMachineItem((e) => setLive((m) => new Map(m).set(e.id, e.status))),
       ipc.onMachineDone(() => {
         setInstalling(false)
+        setScoopInstalling(false)
         void refreshStatus()
       }),
     ]
@@ -280,9 +282,21 @@ export function MachineSetup() {
       </div>
 
       {(!avail.winget || !avail.scoop) && (
-        <div className="border-b border-slate-800 bg-amber-500/[0.06] px-5 py-2 text-[11.5px] text-amber-400/90">
-          {!avail.winget && <span>winget was not found — winget installs are disabled. </span>}
-          {!avail.scoop && <span>scoop is not installed — scoop packages are disabled (install scoop to enable CLI tools). </span>}
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 bg-amber-500/[0.06] px-5 py-2 text-[11.5px] text-amber-400/90">
+          {!avail.winget && <span>winget was not found — winget installs are disabled.</span>}
+          {!avail.scoop && (
+            <>
+              <span>scoop is not installed — scoop packages (CLI tools) are disabled.</span>
+              <button
+                className="rounded bg-amber-500/20 px-2 py-0.5 text-[11px] font-semibold text-amber-100 hover:bg-amber-500/30 disabled:opacity-60"
+                disabled={scoopInstalling}
+                title="Install scoop (per-user, no admin)"
+                onClick={() => { setScoopInstalling(true); void ipc.machineInstallScoop().catch((e) => { alert(String(e)); setScoopInstalling(false) }) }}
+              >
+                {scoopInstalling ? 'Installing scoop…' : '⤓ Install scoop'}
+              </button>
+            </>
+          )}
         </div>
       )}
 

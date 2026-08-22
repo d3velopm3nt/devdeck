@@ -395,6 +395,7 @@ pub fn run() {
             services::logs_export,
             machine::machine_status,
             machine::machine_install,
+            machine::machine_install_scoop,
             machine::machine_snapshot,
             machine::machine_export,
             machine::machine_import,

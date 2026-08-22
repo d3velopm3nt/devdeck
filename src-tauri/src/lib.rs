@@ -213,50 +213,127 @@ fn app_update_info() -> UpdateInfo {
     UpdateInfo { current, latest, available, via_scoop: devdeck_via_scoop(), scoop_available: scoop_present() }
 }
 
-/// Update DevDeck: via `scoop update` when installed through scoop (streamed to
-/// the log bus), otherwise open the latest release page.
-#[tauri::command]
-fn app_update(app: tauri::AppHandle) -> Result<(), String> {
+/// Log id the update bar listens on (see UpdateBar/App.tsx).
+const UPDATE_LOG_ID: i64 = -200_000;
+
+/// Run a child process, streaming both pipes to the update log. Returns
+/// whether it exited successfully.
+fn stream_update_cmd(app: &tauri::AppHandle, mut cmd: std::process::Command) -> bool {
     use std::io::{BufRead, BufReader};
-    use std::process::{Command, Stdio};
-    if !devdeck_via_scoop() {
-        return open_url("https://github.com/d3velopm3nt/devdeck/releases/latest".into());
-    }
-    std::thread::spawn(move || {
-        let id: i64 = -200_000;
-        services::push_log(&app, id, "devdeck update", "system", "running: scoop update devdeck".into());
-        let mut cmd = Command::new("cmd");
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            cmd.raw_arg("/C");
-            cmd.raw_arg("\"scoop update devdeck\"");
-            cmd.creation_flags(0x0800_0000);
-        }
-        cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
-        let ok = match cmd.spawn() {
-            Ok(mut child) => {
-                if let Some(out) = child.stdout.take() {
-                    for l in BufReader::new(out).lines().map_while(Result::ok) {
+    use std::process::Stdio;
+    cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    match cmd.spawn() {
+        Ok(mut child) => {
+            // stderr on its own thread so a chatty pipe can't deadlock the other.
+            let err_thread = child.stderr.take().map(|e| {
+                let app = app.clone();
+                std::thread::spawn(move || {
+                    for l in BufReader::new(e).lines().map_while(Result::ok) {
                         if !l.trim().is_empty() {
-                            services::push_log(&app, id, "devdeck update", "stdout", l);
+                            services::push_log(&app, UPDATE_LOG_ID, "devdeck update", "stderr", l);
                         }
                     }
+                })
+            });
+            if let Some(out) = child.stdout.take() {
+                for l in BufReader::new(out).lines().map_while(Result::ok) {
+                    if !l.trim().is_empty() {
+                        services::push_log(app, UPDATE_LOG_ID, "devdeck update", "stdout", l);
+                    }
                 }
-                child.wait().map(|s| s.success()).unwrap_or(false)
             }
-            Err(e) => {
-                services::push_log(&app, id, "devdeck update", "stderr", format!("failed: {e}"));
-                false
+            let ok = child.wait().map(|s| s.success()).unwrap_or(false);
+            if let Some(t) = err_thread {
+                let _ = t.join();
             }
-        };
-        services::push_log(
-            &app,
-            id,
-            "devdeck update",
-            "system",
-            if ok { "update finished — restart DevDeck to apply.".into() } else { "update failed — see log above.".to_string() },
-        );
+            ok
+        }
+        Err(e) => {
+            services::push_log(&app.clone(), UPDATE_LOG_ID, "devdeck update", "stderr", format!("failed to launch: {e}"));
+            false
+        }
+    }
+}
+
+/// Download the latest release installer and run it silently. This is the
+/// path for every install that scoop doesn't manage -- the NSIS installer is
+/// per-user and needs no admin, so DevDeck can update itself in place rather
+/// than sending you to a browser to do it by hand.
+fn update_via_installer(app: tauri::AppHandle) {
+    let script = r#"
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+try {
+  $h = @{ 'User-Agent' = 'devdeck' }
+  $rel = Invoke-RestMethod -Uri 'https://api.github.com/repos/d3velopm3nt/devdeck/releases/latest' -Headers $h -TimeoutSec 20
+  $asset = $rel.assets | Where-Object { $_.name -like '*-setup.exe' } | Select-Object -First 1
+  if (-not $asset) { throw "the $($rel.tag_name) release has no installer asset" }
+  $dst = Join-Path $env:TEMP $asset.name
+  Write-Output "downloading $($asset.name) ($([math]::Round($asset.size/1MB,1)) MB) ..."
+  Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $dst -Headers $h -TimeoutSec 600
+  Write-Output 'running the installer (per-user, silent, no admin) ...'
+  $p = Start-Process -FilePath $dst -ArgumentList '/S' -Wait -PassThru
+  if ($p.ExitCode -ne 0) { throw "the installer exited with code $($p.ExitCode)" }
+  Remove-Item $dst -ErrorAction SilentlyContinue
+  Write-Output 'update finished - restart DevDeck to apply.'
+} catch {
+  Write-Output "update failed: $_"
+  exit 1
+}
+"#;
+    let mut cmd = std::process::Command::new("powershell");
+    cmd.args(["-NoProfile", "-NonInteractive", "-Command", script]);
+    no_update_window(&mut cmd);
+    // The script reports its own outcome (the UI keys off "finished"/"failed"),
+    // so only add a line when it died without saying anything.
+    if !stream_update_cmd(&app, cmd) {
+        services::push_log(&app, UPDATE_LOG_ID, "devdeck update", "system", "update failed - see log above.".into());
+    }
+}
+
+/// Update via scoop, which owns the install when DevDeck came from the bucket.
+fn update_via_scoop(app: tauri::AppHandle) {
+    services::push_log(&app, UPDATE_LOG_ID, "devdeck update", "system", "running: scoop update devdeck".into());
+    let mut cmd = std::process::Command::new("cmd");
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.raw_arg("/C");
+        cmd.raw_arg("\"scoop update devdeck\"");
+    }
+    no_update_window(&mut cmd);
+    let ok = stream_update_cmd(&app, cmd);
+    services::push_log(
+        &app,
+        UPDATE_LOG_ID,
+        "devdeck update",
+        "system",
+        if ok { "update finished - restart DevDeck to apply.".into() } else { "update failed - see log above.".to_string() },
+    );
+}
+
+fn no_update_window(cmd: &mut std::process::Command) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000);
+    }
+    #[cfg(not(windows))]
+    let _ = cmd;
+}
+
+/// Update DevDeck in place: `scoop update` when scoop owns the install,
+/// otherwise download the latest release installer and run it silently.
+/// Both paths stream to the log bus so the update bar can show progress.
+#[tauri::command]
+fn app_update(app: tauri::AppHandle) -> Result<(), String> {
+    let via_scoop = devdeck_via_scoop();
+    std::thread::spawn(move || {
+        if via_scoop {
+            update_via_scoop(app);
+        } else {
+            update_via_installer(app);
+        }
     });
     Ok(())
 }

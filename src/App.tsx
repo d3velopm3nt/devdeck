@@ -154,11 +154,11 @@ export default function App() {
   }, [])
   const runUpdate = () => {
     if (!update) return
-    if (update.via_scoop) {
-      setUpState('updating')
-      setUpStatus('Starting scoop update…')
-      showBottom('logs')
-    }
+    // Both paths (scoop, and downloading the installer ourselves) stream to
+    // the log bus, so the bar tracks either one.
+    setUpState('updating')
+    setUpStatus(update.via_scoop ? 'Starting scoop update…' : 'Fetching the latest installer…')
+    showBottom('logs')
     void ipc.appUpdate().catch((e) => {
       setUpStatus(String(e))
       setUpState('error')

@@ -63,11 +63,11 @@ export function UpdateBar({
   const sub =
     status ||
     (offerScoop
-      ? 'Install scoop to enable one-click updates and CLI tools.'
+      ? 'Install scoop to manage CLI tools and packages.'
       : state === 'available'
         ? viaScoop
           ? `You're on v${current}. Installs via scoop update devdeck.`
-          : `You're on v${current}. Opens the download page.`
+          : `You're on v${current}. Downloads and runs the installer.`
         : state === 'uptodate'
           ? 'You have the latest release.'
           : '')
@@ -94,7 +94,7 @@ export function UpdateBar({
               className="rounded bg-amber-500/20 px-2.5 py-0.5 text-[11.5px] font-semibold text-amber-200 hover:bg-amber-500/30"
               onClick={onUpdate}
             >
-              {viaScoop ? '⤓ Update now' : '↗ Get update'}
+              ⤓ Update now
             </button>
           )}
           {state === 'done' && (

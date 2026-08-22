@@ -12,7 +12,7 @@ import { PanelShell, RowTitle, ROW_CARD, ICON_BTN, useRowMenu } from './PanelShe
 import type { MenuItem } from './PopMenu'
 
 export function ServicesPanel() {
-  const { services, svcStates, nodes, selectedNode, scopeNode, refreshServices, focusServiceLogs, servicePort } = useApp()
+  const { services, svcStates, nodes, selectedNode, scopeNode, refreshServices, focusServiceLogs, servicePort, requestStartService } = useApp()
   const sel = selectedNode()
   const node = scopeNode() // selection, else the active workspace
   const [busy, setBusy] = useState<number | null>(null)
@@ -98,7 +98,7 @@ export function ServicesPanel() {
                 }
                 disabled={busy === s.id}
                 title={running ? 'Stop' : 'Start'}
-                onClick={() => void act(s.id, () => (running ? ipc.svcStop(s.id) : ipc.svcStart(s.id)))}
+                onClick={() => void act(s.id, () => (running ? ipc.svcStop(s.id) : requestStartService(s)))}
               >
                 {running ? '■' : '▶'}
               </button>

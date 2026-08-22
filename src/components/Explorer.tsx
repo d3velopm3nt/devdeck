@@ -83,6 +83,7 @@ export function Explorer() {
     selectedNodeId, setSelectedNode,
     activeWorkspaceId, activeWorkspace, setActiveWorkspace,
     refreshTree, refreshCommands, refreshServices, refreshProfiles, focusServiceLogs, servicePort,
+    requestStartService,
   } = useApp()
   // The tree shows the active workspace's projects/folders — workspaces
   // themselves are switched from the header, not browsed in the tree.
@@ -280,7 +281,7 @@ export function Explorer() {
     return [
       running
         ? { icon: '■', label: 'Stop', onClick: () => void actSvc(svc.id, () => ipc.svcStop(svc.id)) }
-        : { icon: '▶', label: 'Start', onClick: () => void actSvc(svc.id, () => ipc.svcStart(svc.id)) },
+        : { icon: '▶', label: 'Start', onClick: () => void actSvc(svc.id, () => requestStartService(svc)) },
       { icon: '↻', label: 'Restart', disabled: !running, onClick: () => void actSvc(svc.id, () => ipc.svcRestart(svc.id)) },
       { icon: '☰', label: 'View logs', onClick: () => viewService(svc) },
       { icon: '✎', label: 'Edit service…', onClick: () => openEditor('service', svc.id, svc.name || 'Service') },
@@ -336,7 +337,7 @@ export function Explorer() {
           disabled={busySvc === svc.id}
           title={running ? 'Stop' : 'Start'}
           onClick={() =>
-            void actSvc(svc.id, () => (running ? ipc.svcStop(svc.id) : ipc.svcStart(svc.id)))
+            void actSvc(svc.id, () => (running ? ipc.svcStop(svc.id) : requestStartService(svc)))
           }
         >
           {running ? '■' : '▶'}

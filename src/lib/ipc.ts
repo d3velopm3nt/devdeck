@@ -127,6 +127,36 @@ export function onMachineDone(cb: () => void): Promise<UnlistenFn> {
   return listen('machine:done', () => cb())
 }
 
+// ---- project setup ----
+export interface RequiredTool {
+  binary: string
+  name: string
+  pkg_id: string
+  source: string
+  installed: boolean
+}
+export interface SetupStep {
+  label: string
+  run: string
+  done: boolean
+}
+export interface ProjectSetup {
+  tools: RequiredTool[]
+  steps: SetupStep[]
+  ready: boolean
+}
+export const detectProjectSetup = (dir: string) => invoke<ProjectSetup>('detect_project_setup', { dir })
+export const refreshPath = () => invoke<void>('refresh_path')
+export const suggestInstall = (line: string) => invoke<RequiredTool | null>('suggest_install', { line })
+export const runProjectSetup = (
+  tools: { pkg_id: string; source: string }[],
+  steps: string[],
+  cwd: string,
+) => invoke<void>('run_project_setup', { tools, steps, cwd })
+export function onSetupDone(cb: (ok: boolean) => void): Promise<UnlistenFn> {
+  return listen<boolean>('setup:done', (e) => cb(e.payload))
+}
+
 // ---- layouts ----
 export const layoutsList = () => invoke<LayoutDef[]>('layouts_list')
 export const layoutSave = (name: string, data: string) => invoke<void>('layout_save', { name, data })

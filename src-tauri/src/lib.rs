@@ -19,6 +19,7 @@ mod pty;
 mod scan;
 mod seed;
 mod services;
+mod setup;
 
 use std::sync::{Arc, Mutex};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
@@ -535,6 +536,10 @@ pub fn run() {
             machine::machine_packages_seed,
             machine::machine_package_save,
             machine::machine_package_delete,
+            setup::detect_project_setup,
+            setup::refresh_path,
+            setup::suggest_install,
+            setup::run_project_setup,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DevDeck");

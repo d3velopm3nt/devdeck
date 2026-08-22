@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Dock, buildDefaultLayout } from './Dock'
 import { BottomBar, type BottomTab } from './components/BottomBar'
+import { SetupModal } from './components/SetupModal'
 import { UpdateBar, type UpState } from './components/UpdateBar'
 import { tauriSelfUpdate } from './lib/updater'
 import * as ipc from './lib/ipc'
@@ -221,7 +222,19 @@ export default function App() {
         useApp.getState().markPtyExited(e.id)
         routeOutput(e.id, '\r\n\x1b[90m[session ended]\x1b[0m\r\n')
       }),
-      ipc.onSvcLog((e) => useApp.getState().appendLog(e)),
+      ipc.onSvcLog((e) => {
+        useApp.getState().appendLog(e)
+        // A "command not found"-style error on a service line → suggest the
+        // tool to install. Cheap prefilter before the IPC round-trip.
+        if (
+          e.level === 'error' ||
+          /not recognized|command not found|no such file/i.test(e.line)
+        ) {
+          void ipc.suggestInstall(e.line).then((t) => {
+            if (t && !t.installed) useApp.getState().setInstallHint(t)
+          })
+        }
+      }),
       ipc.onSvcStatus((e) => useApp.getState().updateSvcState(e)),
       ipc.onStats((e) => {
         useApp.getState().setStats(e)
@@ -465,6 +478,40 @@ export default function App() {
         <span className="flex-1" />
         <span>{app.hotkey} summons · local-first · SQLite</span>
       </div>
+
+      {/* Project Setup: prepare-to-run prompt */}
+      {app.setupPrompt && (
+        <SetupModal
+          svc={app.setupPrompt.svc}
+          setup={app.setupPrompt.setup}
+          dir={app.setupPrompt.dir}
+          onClose={app.dismissSetup}
+        />
+      )}
+
+      {/* Missing-tool hint from a command's error */}
+      {app.installHint && (
+        <div className="fixed bottom-16 right-4 z-[400] flex max-w-[360px] items-center gap-3 rounded-lg border border-amber-500/30 bg-[#1a1f2b] px-3 py-2.5 text-[12px] shadow-2xl">
+          <span className="text-[15px]">🧩</span>
+          <div className="min-w-0">
+            <div className="text-slate-200"><b>{app.installHint.name}</b> looks missing</div>
+            <div className="truncate font-mono text-[11px] text-slate-500">{app.installHint.pkg_id}</div>
+          </div>
+          <button
+            className="ml-auto shrink-0 rounded bg-indigo-600 px-2.5 py-1 text-[11.5px] font-semibold text-white hover:bg-indigo-500"
+            onClick={() => {
+              const t = app.installHint!
+              showBottom('logs')
+              void ipc.machineInstall([{ id: t.pkg_id, source: t.source }])
+                .then(() => ipc.onMachineDone(() => void ipc.refreshPath()))
+              app.setInstallHint(null)
+            }}
+          >
+            ⤓ Install
+          </button>
+          <button className="shrink-0 rounded px-1 text-slate-500 hover:text-white" onClick={() => app.setInstallHint(null)}>✕</button>
+        </div>
+      )}
     </div>
   )
 }

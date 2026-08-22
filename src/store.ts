@@ -3,7 +3,7 @@
 
 import { create } from 'zustand'
 import * as ipc from './lib/ipc'
-import { findNode, projectOf } from './lib/tree'
+import { findNode, projectOf, serviceDir } from './lib/tree'
 import type {
   CommandDef,
   LayoutDef,
@@ -79,6 +79,14 @@ export interface AppState {
   setActiveWorkspace: (id: number | null) => void
   setHotkey: (h: string) => void
   focusServiceLogs: (name: string) => void
+
+  // Project Setup: a start blocked on a "prepare" prompt (missing tools /
+  // bootstrap), plus a passive "install this missing tool" hint from errors.
+  setupPrompt: { svc: ServiceDef; setup: ipc.ProjectSetup; dir: string } | null
+  requestStartService: (svc: ServiceDef) => Promise<void>
+  dismissSetup: () => void
+  installHint: ipc.RequiredTool | null
+  setInstallHint: (t: ipc.RequiredTool | null) => void
 }
 
 // Pick the most likely user-facing port from a process's listeners: prefer a
@@ -236,6 +244,27 @@ export const useApp = create<AppState>((set, get) => ({
     set((st) => ({
       terminals: st.terminals.map((t) => (t.id === id ? { ...t, alive: false } : t)),
     })),
+
+  setupPrompt: null,
+  installHint: null,
+  requestStartService: async (svc) => {
+    const { nodes } = get()
+    const dir = serviceDir(nodes, svc)
+    // No folder to inspect → just start.
+    if (!dir) return void (await ipc.svcStart(svc.id))
+    try {
+      const setup = await ipc.detectProjectSetup(dir)
+      if (setup.ready) {
+        await ipc.svcStart(svc.id)
+      } else {
+        set({ setupPrompt: { svc, setup, dir } })
+      }
+    } catch {
+      await ipc.svcStart(svc.id)
+    }
+  },
+  dismissSetup: () => set({ setupPrompt: null }),
+  setInstallHint: (t) => set({ installHint: t }),
 
   setSelectedNode: (id) => set({ selectedNodeId: id }),
   setActiveWorkspace: (id) => {

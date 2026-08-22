@@ -320,6 +320,10 @@ pub fn run() {
                         if let Some(mgr) = app.try_state::<Arc<services::ServiceManager>>() {
                             services::stop_all_running(&mgr);
                         }
+                        // app.exit does not drop managed state, so the SQLite
+                        // connection never gets its close-time checkpoint.
+                        // Fold the WAL into devdeck.sqlite ourselves first.
+                        db::checkpoint_state(app);
                         app.exit(0);
                     }
                     _ => {}
@@ -350,6 +354,10 @@ pub fn run() {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
                     let _ = window.hide();
+                    // Closing to the tray is the usual "I'm done" moment, and
+                    // the app may be killed from there (PC restart, Task
+                    // Manager) without ever reaching Quit. Persist now.
+                    db::checkpoint_state(window.app_handle());
                 }
             }
         })

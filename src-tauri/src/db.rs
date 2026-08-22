@@ -9,6 +9,7 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Mutex;
+use tauri::Manager;
 
 pub struct Db(pub Mutex<Connection>);
 
@@ -90,6 +91,13 @@ pub fn open() -> Connection {
         r#"
         PRAGMA journal_mode = WAL;
         PRAGMA foreign_keys = ON;
+        -- Fold the write-ahead log back into devdeck.sqlite often. The default
+        -- threshold (1000 pages) is never reached by a database this small, so
+        -- without this the main file stays empty on a fresh install and every
+        -- workspace you create lives only in devdeck.sqlite-wal. Anything that
+        -- drops that sidecar -- a roaming-profile sync, a cleanup tool, copying
+        -- just the .sqlite -- then looks exactly like "my workspaces vanished".
+        PRAGMA wal_autocheckpoint = 32;
 
         CREATE TABLE IF NOT EXISTS nodes (
             id INTEGER PRIMARY KEY,
@@ -161,7 +169,29 @@ pub fn open() -> Connection {
     .expect("create schema");
 
     migrate(&conn);
+    // Startup recovery has just replayed any leftover WAL; write it into the
+    // main file straight away so devdeck.sqlite is a complete standalone copy.
+    checkpoint(&conn);
     conn
+}
+
+/// Fold the write-ahead log into the main database file and reset it, so
+/// devdeck.sqlite alone holds every workspace, project, command and service.
+/// Called on open and again before the app exits or hides to the tray.
+pub fn checkpoint(conn: &Connection) {
+    // execute_batch (not pragma_update) because wal_checkpoint returns a row.
+    let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
+}
+
+/// Checkpoint via the managed connection, skipping quietly if the state is
+/// gone or the lock is poisoned -- this runs on shutdown paths that must not
+/// panic.
+pub fn checkpoint_state(app: &tauri::AppHandle) {
+    if let Some(db) = app.try_state::<Db>() {
+        if let Ok(conn) = db.0.lock() {
+            checkpoint(&conn);
+        }
+    }
 }
 
 /// Schema/data migrations that run on every open (each is idempotent).

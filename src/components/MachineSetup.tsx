@@ -48,6 +48,7 @@ export function MachineSetup() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [source, setSource] = useState<'all' | 'winget' | 'scoop'>('all')
+  const [tab, setTab] = useState<'search' | 'bundles'>('search')
 
   const [detail, setDetail] = useState<Pkg | null>(null)
   const [editing, setEditing] = useState<Draft | null>(null)
@@ -285,49 +286,71 @@ export function MachineSetup() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-3 px-5 py-3">
-        <label className="flex min-w-[220px] flex-1 items-center gap-2 rounded-lg border border-slate-700 bg-[#0d1017] px-3 py-2 text-slate-400">
-          🔎
-          <input className="flex-1 bg-transparent text-[13px] text-slate-200 outline-none placeholder:text-slate-600" placeholder="Search winget & scoop — e.g. “docker”, “node”, “vscode”…" value={search} onChange={(e) => setSearch(e.target.value)} />
-        </label>
-        <div className="inline-flex overflow-hidden rounded-lg border border-slate-700">
-          {(['all', 'winget', 'scoop'] as const).map((s) => (
-            <button key={s} className={`px-3 py-1.5 text-[11.5px] ${source === s ? 'bg-indigo-500/20 text-indigo-200' : 'text-slate-500 hover:text-slate-300'}`} onClick={() => setSource(s)}>
-              {s === 'all' ? 'All sources' : s}
-            </button>
-          ))}
+      {/* stats — above the tabs */}
+      <div className="flex flex-wrap gap-2 px-5 py-3">
+        <Stat n={installedCount} label="Installed" color="text-emerald-400" dot="bg-emerald-400" />
+        <Stat n={selectableSelected.length} label="Selected to install" color="text-indigo-300" dot="bg-indigo-400" />
+        <Stat n={visiblePkgs.length - installedCount} label="Available" color="text-slate-300" dot="bg-slate-600" />
+      </div>
+
+      {/* tabs */}
+      <div className="flex items-center gap-1 border-b border-slate-800 px-5">
+        {([
+          ['search', 'Search & install'],
+          ['bundles', 'One-click bundles'],
+        ] as const).map(([id, label]) => (
+          <button
+            key={id}
+            className={`-mb-px border-b-2 px-3 py-2 text-[12.5px] ${tab === id ? 'border-indigo-400 font-medium text-slate-100' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+            onClick={() => setTab(id)}
+          >
+            {label}
+            {id === 'bundles' && <span className="ml-1.5 text-[10px] text-slate-600">{BUNDLES.length}</span>}
+          </button>
+        ))}
+        <div className="ml-auto flex items-center gap-1.5">
+          <button className="btn-ghost text-[11.5px]" disabled={loading} onClick={() => void refreshStatus()}>{loading ? 'Checking…' : '↻ Refresh'}</button>
+          <button className="btn-ghost text-[11.5px]" title="Re-seed curated packages and un-hide removed ones" onClick={() => void restoreDefaults()}>Restore defaults</button>
         </div>
-        <button className="btn-ghost text-[11.5px]" disabled={loading} onClick={() => void refreshStatus()}>{loading ? 'Checking…' : '↻ Refresh'}</button>
-        <button className="btn-ghost text-[11.5px]" title="Re-seed curated packages and un-hide removed ones" onClick={() => void restoreDefaults()}>Restore defaults</button>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6">
-        <div className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-500">One-click bundles</div>
-        <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-4">
-          {BUNDLES.map((b) => {
-            const total = b.packages.length
-            const done = b.packages.filter((id) => { const p = byId.get(id); return p && isInstalled(p) }).length
-            return (
-              <button key={b.id} className="group rounded-lg border border-slate-800 bg-[#151923] p-3 text-left hover:border-indigo-500/50" onClick={() => addBundle(b.packages)} title={`Add ${total - done} package(s) to install`}>
-                <div className="flex items-center gap-2">
-                  <span className="text-[16px]">{b.icon}</span>
-                  <span className="text-[12.5px] font-semibold text-slate-100">{b.name}</span>
-                  <span className="ml-auto text-[10px] tabular-nums text-slate-500">{done}/{total}</span>
-                </div>
-                <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">{b.description}</div>
-                <div className="mt-2 text-[10.5px] text-indigo-400 opacity-0 transition group-hover:opacity-100">+ Add to selection</div>
-              </button>
-            )
-          })}
-        </div>
+        {tab === 'bundles' ? (
+          <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-4">
+            {BUNDLES.map((b) => {
+              const total = b.packages.length
+              const done = b.packages.filter((id) => { const p = byId.get(id); return p && isInstalled(p) }).length
+              return (
+                <button key={b.id} className="group rounded-lg border border-slate-800 bg-[#151923] p-3 text-left hover:border-indigo-500/50" onClick={() => { addBundle(b.packages); setTab('search') }} title={`Add ${total - done} package(s) to install`}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[16px]">{b.icon}</span>
+                    <span className="text-[12.5px] font-semibold text-slate-100">{b.name}</span>
+                    <span className="ml-auto text-[10px] tabular-nums text-slate-500">{done}/{total}</span>
+                  </div>
+                  <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">{b.description}</div>
+                  <div className="mt-2 text-[10.5px] text-indigo-400 opacity-0 transition group-hover:opacity-100">+ Add to selection</div>
+                </button>
+              )
+            })}
+          </div>
+        ) : (
+          <>
+            {/* search toolbar */}
+            <div className="flex flex-wrap items-center gap-3 py-3">
+              <label className="flex min-w-[220px] flex-1 items-center gap-2 rounded-lg border border-slate-700 bg-[#0d1017] px-3 py-2 text-slate-400">
+                🔎
+                <input className="flex-1 bg-transparent text-[13px] text-slate-200 outline-none placeholder:text-slate-600" placeholder="Search winget & scoop — e.g. “docker”, “node”, “vscode”…" value={search} onChange={(e) => setSearch(e.target.value)} />
+              </label>
+              <div className="inline-flex overflow-hidden rounded-lg border border-slate-700">
+                {(['all', 'winget', 'scoop'] as const).map((s) => (
+                  <button key={s} className={`px-3 py-1.5 text-[11.5px] ${source === s ? 'bg-indigo-500/20 text-indigo-200' : 'text-slate-500 hover:text-slate-300'}`} onClick={() => setSource(s)}>
+                    {s === 'all' ? 'All sources' : s}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-        <div className="mt-5 flex flex-wrap gap-2">
-          <Stat n={installedCount} label="Installed" color="text-emerald-400" dot="bg-emerald-400" />
-          <Stat n={selectableSelected.length} label="Selected to install" color="text-indigo-300" dot="bg-indigo-400" />
-          <Stat n={visiblePkgs.length - installedCount} label="Available" color="text-slate-300" dot="bg-slate-600" />
-        </div>
-
-        {groups.map(([cat, list]) => (
+            {groups.map(([cat, list]) => (
           <div key={cat} className="mt-5">
             <div className="flex items-center gap-2 px-1 text-[10.5px] font-semibold uppercase tracking-wider text-slate-500">
               {CATEGORY_LABELS[cat as PkgCategory] ?? cat} <span className="text-slate-600">{list.length}</span>
@@ -365,8 +388,10 @@ export function MachineSetup() {
               })}
             </div>
           </div>
-        ))}
-        {groups.length === 0 && <div className="mt-6 text-[12px] text-slate-500">No packages match “{search}”. <button className="text-indigo-400 hover:underline" onClick={() => setEditing({ ...blankDraft(), name: search })}>Add it as custom software →</button></div>}
+            ))}
+            {groups.length === 0 && <div className="mt-6 text-[12px] text-slate-500">No packages match “{search}”. <button className="text-indigo-400 hover:underline" onClick={() => setEditing({ ...blankDraft(), name: search })}>Add it as custom software →</button></div>}
+          </>
+        )}
       </div>
 
       {detail && !editing && (

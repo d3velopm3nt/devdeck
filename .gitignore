@@ -24,3 +24,6 @@ Thumbs.db
 !.vscode/extensions.json
 .idea/
 *.swp
+
+# updater signing keys (private key must never be committed)
+.keys/

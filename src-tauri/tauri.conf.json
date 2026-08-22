@@ -55,5 +55,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/d3velopm3nt/devdeck/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM1RDRDQTUyRjU0REQyMUUKUldRZTBrMzFVc3JVTmRjN1dBTnc3RHNodWZrQUJxcjRQTUxkMDBrVXRiaXI4MWF5VGdjanZQTWoK"
+    }
   }
 }

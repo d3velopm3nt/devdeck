@@ -44,9 +44,16 @@ jobs:
         run: npm ci
 
       # Build the NSIS installer (build only — we publish the release ourselves
-      # further down, after optionally signing).
+      # further down, after optionally signing). Updater artifacts (the minisign
+      # .sig the in-app updater verifies) are enabled here — not in the shared
+      # config — so CI/PR builds don't need the signing key. The signing key
+      # secret makes this build emit the .sig.
       - name: Build installer
-        uses: tauri-apps/tauri-action@v0
+        shell: pwsh
+        run: npx tauri build --config src-tauri/tauri.conf.updater.json
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
       - name: Locate installer
         id: installer
@@ -92,6 +99,28 @@ jobs:
             "path=${{ steps.installer.outputs.path }}" >> $env:GITHUB_OUTPUT
           }
 
+      # Updater manifest for the in-app (signed) self-update. The .sig is emitted
+      # by `tauri build` next to the installer. NOTE: if SignPath re-signs the
+      # installer (SIGN=true), its bytes change and this build-time .sig no longer
+      # matches — a re-sign step would be needed; for unsigned builds it's exact.
+      - name: Generate updater manifest (latest.json)
+        if: ${{ env.SIGN != 'true' }}
+        shell: pwsh
+        run: |
+          $sig = Get-ChildItem src-tauri/target/release/bundle/nsis/*-setup.exe.sig -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $sig) { throw "No .sig found — is the TAURI_SIGNING_PRIVATE_KEY secret set?" }
+          $name = "${{ steps.installer.outputs.name }}"
+          $ver  = "${{ env.TAG }}".TrimStart('v')
+          $url  = "https://github.com/d3velopm3nt/devdeck/releases/download/${{ env.TAG }}/$name"
+          $manifest = [ordered]@{
+            version   = $ver
+            notes     = "See the release notes at https://github.com/d3velopm3nt/devdeck/releases/tag/${{ env.TAG }}"
+            pub_date  = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            platforms = @{ "windows-x86_64" = @{ signature = (Get-Content $sig.FullName -Raw).Trim(); url = $url } }
+          }
+          $manifest | ConvertTo-Json -Depth 6 | Set-Content latest.json -Encoding utf8
+          Get-Content latest.json
+
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
@@ -99,7 +128,9 @@ jobs:
           name: DevDeck ${{ env.TAG }}
           draft: false
           prerelease: false
-          files: ${{ steps.final.outputs.path }}
+          files: |
+            ${{ steps.final.outputs.path }}
+            latest.json
           body: |
             ### Install
 

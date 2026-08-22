@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Dock, buildDefaultLayout } from './Dock'
 import { BottomBar, type BottomTab } from './components/BottomBar'
 import { UpdateBar, type UpState } from './components/UpdateBar'
+import { tauriSelfUpdate } from './lib/updater'
 import * as ipc from './lib/ipc'
 import { routeOutput } from './lib/termBus'
 import { useApp } from './store'
@@ -152,17 +153,41 @@ export default function App() {
     })
     return () => void un.then((u) => u())
   }, [])
-  const runUpdate = () => {
-    if (!update) return
-    // Both paths (scoop, and downloading the installer ourselves) stream to
-    // the log bus, so the bar tracks either one.
-    setUpState('updating')
-    setUpStatus(update.via_scoop ? 'Starting scoop update…' : 'Fetching the latest installer…')
+  // Non-scoop installer path (Rust downloads + runs the installer, streamed to
+  // the log bus). Fallback when the signed updater has nothing published yet.
+  const updateViaInstaller = () => {
+    setUpStatus('Fetching the latest installer…')
     showBottom('logs')
     void ipc.appUpdate().catch((e) => {
       setUpStatus(String(e))
       setUpState('error')
     })
+  }
+
+  const runUpdate = () => {
+    if (!update) return
+    setUpState('updating')
+    if (update.via_scoop) {
+      // scoop owns the install → scoop update (streams to Logs).
+      setUpStatus('Starting scoop update…')
+      showBottom('logs')
+      void ipc.appUpdate().catch((e) => {
+        setUpStatus(String(e))
+        setUpState('error')
+      })
+      return
+    }
+    // Prefer the signed Tauri updater; fall back to the installer download if
+    // no signed manifest is published yet (or it errors).
+    setUpStatus('Checking for a signed update…')
+    void tauriSelfUpdate(setUpStatus)
+      .then((r) => {
+        if (r === 'none') updateViaInstaller()
+      })
+      .catch((e) => {
+        console.warn('signed updater unavailable, using installer:', e)
+        updateViaInstaller()
+      })
   }
 
   // Install scoop from the update bar (to enable one-click updates + CLI tools).

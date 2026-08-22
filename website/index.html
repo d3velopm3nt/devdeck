@@ -191,6 +191,8 @@
   @media (max-width: 860px) {
     .split { grid-template-columns: 1fr; gap: 32px; }
     .split.rev .txt { order: 0; }
+    .mgrid { grid-template-columns: 1fr !important; }
+    ul.ticks[style*="grid"] { grid-template-columns: 1fr !important; }
     .nav .hide { display: none; }
     section { padding: 58px 0; }
     .hero { padding: 56px 0 24px; }
@@ -206,6 +208,7 @@
     <a class="link hide" href="#features">Features</a>
     <a class="link hide" href="#widget">Widget</a>
     <a class="link hide" href="#detect">Auto-detect</a>
+    <a class="link hide" href="#machine">Machine setup</a>
     <a class="link hide" href="#start">Get started</a>
     <a class="link hide" href="#support">Support</a>
     <a class="btn" href="https://github.com/d3velopm3nt/devdeck">GitHub</a>
@@ -312,6 +315,12 @@
           <h3>Dockable layout</h3>
           <p>Drag, split, tab, float and resize any panel. Layouts autosave and restore, and launch
              profiles boot a whole stack in one action.</p>
+        </div>
+        <div class="card">
+          <div class="ico">📦</div>
+          <h3>Machine setup</h3>
+          <p>Install your toolchain through winget &amp; scoop — search, one-click bundles, or your own
+             packages — and export a manifest to rebuild any machine. DevDeck even updates itself.</p>
         </div>
       </div>
     </div>
@@ -433,6 +442,39 @@
     </div>
   </section>
 
+  <!-- MACHINE SETUP -->
+  <section id="machine">
+    <div class="wrap center">
+      <div class="eyebrow">Machine setup</div>
+      <h2>Set up a whole dev machine — in clicks, not a day</h2>
+      <p class="lead" style="margin:0 auto">
+        Fresh Windows install? DevDeck installs your toolchain through <b>winget &amp; scoop</b>: search the
+        catalog, or pick a one-click bundle. It sees what's already installed, every package is yours to
+        edit (or add your own), and you can export a manifest to rebuild any machine.
+      </p>
+    </div>
+    <div class="wrap" style="margin-top:40px">
+      <div class="mgrid" style="display:grid;grid-template-columns:1fr 1fr;gap:26px">
+        <div class="shot" style="margin-top:0">
+          <div class="bar"><i></i><i></i><i></i><span>Machine Setup — Search &amp; install</span></div>
+          <img src="assets/machine-search.png" alt="DevDeck Machine Setup search tab: a searchable catalog of winget and scoop packages grouped by category, with live install status, per-package config and Install buttons" />
+        </div>
+        <div class="shot" style="margin-top:0">
+          <div class="bar"><i></i><i></i><i></i><span>Machine Setup — One-click bundles</span></div>
+          <img src="assets/machine-bundles.png" alt="DevDeck Machine Setup bundles tab: role-based one-click bundles such as Base essentials, Node/Web dev, Package managers, DevOps/Cloud and CLI power-tools" />
+        </div>
+      </div>
+      <ul class="ticks" style="max-width:780px;margin:32px auto 0;display:grid;grid-template-columns:1fr 1fr;gap:2px 34px">
+        <li>Install via <b>winget &amp; scoop</b> — search or one-click bundles</li>
+        <li>Detects what's already installed and skips it</li>
+        <li>Edit any package or add your own — seeded to a local DB</li>
+        <li>Export a manifest and rebuild any machine in one go</li>
+        <li><b>Self-updating</b>: DevDeck installs and updates itself via scoop</li>
+        <li>No admin needed for user-scope installs</li>
+      </ul>
+    </div>
+  </section>
+
   <!-- GET STARTED -->
   <section id="start">
     <div class="wrap center">
@@ -444,7 +486,10 @@
         <div class="step">
           <div>
             <h4>Install</h4>
-            <p>Download the installer from GitHub Releases and run it. Single app, no dependencies.</p>
+            <p>Download the installer from GitHub Releases and run it — or, with
+               <a href="https://scoop.sh">scoop</a>: <code>scoop bucket add devdeck https://github.com/d3velopm3nt/devdeck</code>
+               then <code>scoop install devdeck</code>. Single app, no dependencies — and it updates itself
+               in place (no uninstall/reinstall).</p>
           </div>
         </div>
         <div class="step">

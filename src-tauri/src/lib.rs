@@ -204,12 +204,14 @@ fn devdeck_via_scoop() -> bool {
         .unwrap_or(false)
 }
 
-/// Check GitHub for the latest release and compare to the running version.
+/// Check for the latest release and compare to the running version. Reads the
+/// updater manifest (latest.json) from the release download URL — a plain CDN
+/// URL that isn't subject to GitHub's REST API rate limit — rather than the API.
 #[tauri::command]
 fn app_update_info() -> UpdateInfo {
     let current = env!("CARGO_PKG_VERSION").to_string();
     let latest = ps_capture(
-        "(Invoke-RestMethod -Uri 'https://api.github.com/repos/d3velopm3nt/devdeck/releases/latest' -Headers @{'User-Agent'='devdeck'} -TimeoutSec 8).tag_name",
+        "(Invoke-RestMethod -Uri 'https://github.com/d3velopm3nt/devdeck/releases/latest/download/latest.json' -Headers @{'User-Agent'='devdeck'} -TimeoutSec 10).version",
     )
     .map(|s| s.trim().trim_start_matches('v').trim().to_string())
     .unwrap_or_default();

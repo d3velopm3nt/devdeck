@@ -293,6 +293,46 @@ fn stream(app: &tauri::AppHandle, name: &str, mut cmd: Command) -> bool {
     }
 }
 
+/// Clone a git repository into `parent`/<repo-name> and return the path.
+/// Relies on the user's existing git credentials (helper / gh auth) for
+/// private repos. Output streams to the log bus.
+#[tauri::command]
+pub fn clone_repo(app: tauri::AppHandle, url: String, parent: String) -> Result<String, String> {
+    let url = url.trim().to_string();
+    if url.is_empty() {
+        return Err("Enter a repository URL.".into());
+    }
+    if !on_path("git") {
+        return Err("Git isn't installed — install Git, then try again.".into());
+    }
+    let name = url
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .unwrap_or("repo")
+        .trim_end_matches(".git")
+        .to_string();
+    if name.is_empty() {
+        return Err("Could not read a repo name from that URL.".into());
+    }
+    let target = Path::new(&parent).join(&name);
+    if target.exists()
+        && target.read_dir().map(|mut d| d.next().is_some()).unwrap_or(false)
+    {
+        return Err(format!("“{}” already exists and isn't empty.", target.display()));
+    }
+    let target_str = target.to_string_lossy().to_string();
+
+    services::push_log(&app, SETUP_LOG_ID, "git clone", "system", format!("cloning {url} → {target_str}"));
+    let mut cmd = Command::new("git");
+    cmd.args(["clone", "--progress", &url, &target_str]);
+    if !stream(&app, "git clone", cmd) {
+        return Err("git clone failed — see the Logs.".into());
+    }
+    services::push_log(&app, SETUP_LOG_ID, "git clone", "system", "clone complete.".into());
+    Ok(target_str)
+}
+
 /// Install the given tools, refresh PATH, then run the bootstrap steps in the
 /// project directory. Emits `setup:done` with `{ ok }` when finished so the UI
 /// can start the service it was preparing.

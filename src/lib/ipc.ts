@@ -156,6 +156,7 @@ export const runProjectSetup = (
 export function onSetupDone(cb: (ok: boolean) => void): Promise<UnlistenFn> {
   return listen<boolean>('setup:done', (e) => cb(e.payload))
 }
+export const cloneRepo = (url: string, parent: string) => invoke<string>('clone_repo', { url, parent })
 
 // ---- layouts ----
 export const layoutsList = () => invoke<LayoutDef[]>('layouts_list')

@@ -540,6 +540,7 @@ pub fn run() {
             setup::refresh_path,
             setup::suggest_install,
             setup::run_project_setup,
+            setup::clone_repo,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DevDeck");

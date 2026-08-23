@@ -14,6 +14,7 @@ import { resolveDir } from '../lib/tree'
 import { nodeColor } from '../lib/spaces'
 import { loadExampleWorkspace } from '../lib/example'
 import { PopMenu, type MenuItem } from './PopMenu'
+import { GitHubImportModal } from './GitHubImportModal'
 
 // The expand/collapse state is remembered across restarts so the tree
 // reopens where you left it — a folder isn't "gone" after a restart, its
@@ -101,6 +102,7 @@ export function Explorer() {
   useEffect(() => saveSet(CATS_KEY, collapsedCats), [collapsedCats])
   const [menu, setMenu] = useState<Menu | null>(null)
   const [wsMenu, setWsMenu] = useState<{ x: number; y: number } | null>(null)
+  const [ghOpen, setGhOpen] = useState(false)
   const [renamingId, setRenamingId] = useState<number | null>(null)
   const [draft, setDraft] = useState('')
   const [busySvc, setBusySvc] = useState<number | null>(null)
@@ -596,6 +598,14 @@ export function Explorer() {
         </button>
         <button
           className="shrink-0 rounded bg-slate-700/60 px-2 py-0.5 text-[11px] text-slate-200 hover:bg-indigo-600 disabled:opacity-40"
+          title={activeWorkspaceId == null ? 'Create a workspace first' : 'Clone a GitHub repo into this workspace'}
+          disabled={activeWorkspaceId == null}
+          onClick={() => setGhOpen(true)}
+        >
+          🐙 GitHub
+        </button>
+        <button
+          className="shrink-0 rounded bg-slate-700/60 px-2 py-0.5 text-[11px] text-slate-200 hover:bg-indigo-600 disabled:opacity-40"
           title={activeWorkspaceId == null ? 'Create a workspace first' : 'Add a project to this workspace'}
           disabled={activeWorkspaceId == null}
           onClick={() => void addProject()}
@@ -650,6 +660,7 @@ export function Explorer() {
       {wsMenu && (
         <PopMenu x={wsMenu.x} y={wsMenu.y} items={workspaceMenuItems()} onClose={() => setWsMenu(null)} />
       )}
+      {ghOpen && <GitHubImportModal onClose={() => setGhOpen(false)} />}
     </div>
   )
 }

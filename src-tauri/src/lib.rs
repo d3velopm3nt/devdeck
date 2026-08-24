@@ -12,6 +12,7 @@
 //! modules with their own commands/events without touching existing ones.
 
 mod db;
+mod git;
 mod legacy;
 mod machine;
 mod monitor;
@@ -543,6 +544,7 @@ pub fn run() {
             setup::suggest_install,
             setup::run_project_setup,
             setup::clone_repo,
+            git::git_info,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DevDeck");

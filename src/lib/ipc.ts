@@ -158,6 +158,14 @@ export function onSetupDone(cb: (ok: boolean) => void): Promise<UnlistenFn> {
 }
 export const cloneRepo = (url: string, parent: string) => invoke<string>('clone_repo', { url, parent })
 
+// ---- git ----
+export interface GitInfo {
+  is_repo: boolean
+  branch: string | null
+  detached: boolean
+}
+export const gitInfo = (dir: string) => invoke<GitInfo>('git_info', { dir })
+
 // ---- layouts ----
 export const layoutsList = () => invoke<LayoutDef[]>('layouts_list')
 export const layoutSave = (name: string, data: string) => invoke<void>('layout_save', { name, data })

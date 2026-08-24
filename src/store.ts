@@ -3,7 +3,8 @@
 
 import { create } from 'zustand'
 import * as ipc from './lib/ipc'
-import { findNode, projectOf, serviceDir } from './lib/tree'
+import type { GitInfo } from './lib/ipc'
+import { findNode, projectOf, resolveDir, serviceDir } from './lib/tree'
 import type {
   CommandDef,
   LayoutDef,
@@ -33,6 +34,8 @@ export interface AppState {
   stats: ProcStat[]
   logs: LogEntry[]
   recents: Recent[]
+  /** Git branch info per project node id (only repos appear). */
+  gitByNode: Record<number, GitInfo>
 
   // ui
   selectedNodeId: number | null
@@ -62,6 +65,8 @@ export interface AppState {
   refreshLayouts: () => Promise<void>
   refreshTerminals: () => Promise<void>
   refreshRecents: () => Promise<void>
+  /** Resolve the current git branch for every project node into `gitByNode`. */
+  refreshGit: () => Promise<void>
   bootstrap: () => Promise<void>
 
   // event ingestion
@@ -132,6 +137,7 @@ export const useApp = create<AppState>((set, get) => ({
   stats: [],
   logs: [],
   recents: [],
+  gitByNode: {},
   selectedNodeId: null,
   activeWorkspaceId: loadActiveWs(),
   hotkey: 'ctrl+shift+Space',
@@ -172,6 +178,7 @@ export const useApp = create<AppState>((set, get) => ({
     const activeWorkspaceId = resolveActiveWs(nodes, get().activeWorkspaceId)
     persistActiveWs(activeWorkspaceId)
     set({ nodes, activeWorkspaceId })
+    void get().refreshGit()
   },
   refreshCommands: async () => set({ commands: await ipc.commandsList() }),
   refreshServices: async () => set({ services: await ipc.servicesList() }),
@@ -179,6 +186,24 @@ export const useApp = create<AppState>((set, get) => ({
   refreshLayouts: async () => set({ layouts: await ipc.layoutsList() }),
   refreshTerminals: async () => set({ terminals: await ipc.ptyList() }),
   refreshRecents: async () => set({ recents: await ipc.recentsList() }),
+  refreshGit: async () => {
+    const { nodes } = get()
+    const projects = nodes.filter((n) => n.kind === 'project')
+    const entries = await Promise.all(
+      projects.map(async (p) => {
+        const dir = resolveDir(nodes, p)
+        if (!dir) return [p.id, null] as const
+        try {
+          return [p.id, await ipc.gitInfo(dir)] as const
+        } catch {
+          return [p.id, null] as const
+        }
+      }),
+    )
+    const gitByNode: Record<number, GitInfo> = {}
+    for (const [id, info] of entries) if (info?.is_repo) gitByNode[id] = info
+    set({ gitByNode })
+  },
 
   bootstrap: async () => {
     const [nodes, commands, services, profiles, layouts, shells, terminals, states, logs, recents, hotkey] =
@@ -213,6 +238,7 @@ export const useApp = create<AppState>((set, get) => ({
       activeWorkspaceId,
       hotkey: hotkey ?? 'ctrl+shift+Space',
     })
+    void get().refreshGit()
   },
 
   appendLog: (e) =>

@@ -81,7 +81,7 @@ const CAT_META: Record<Cat, { label: string; icon: string; color: string }> = {
 
 export function Explorer() {
   const {
-    nodes, commands, services, profiles, svcStates,
+    nodes, commands, services, profiles, svcStates, gitByNode,
     selectedNodeId, setSelectedNode,
     activeWorkspaceId, activeWorkspace, setActiveWorkspace,
     refreshTree, refreshCommands, refreshServices, refreshProfiles, focusServiceLogs, servicePort,
@@ -542,6 +542,19 @@ export function Explorer() {
             />
           ) : (
             <span className="flex-1 truncate">{node.name}</span>
+          )}
+          {node.kind === 'project' && gitByNode[node.id]?.branch && (
+            <span
+              className="flex shrink-0 items-center gap-1 text-[10px] text-slate-500"
+              title={
+                gitByNode[node.id]!.detached
+                  ? `Detached HEAD at ${gitByNode[node.id]!.branch}`
+                  : `On branch ${gitByNode[node.id]!.branch}`
+              }
+            >
+              <Icon name="github" size={10} className="shrink-0" />
+              <span className="max-w-[84px] truncate">{gitByNode[node.id]!.branch}</span>
+            </span>
           )}
           <button
             className="hidden items-center rounded px-1 text-slate-400 hover:bg-slate-600 hover:text-white group-hover:flex"

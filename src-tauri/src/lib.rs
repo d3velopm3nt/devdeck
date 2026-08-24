@@ -545,6 +545,8 @@ pub fn run() {
             setup::run_project_setup,
             setup::clone_repo,
             git::git_info,
+            git::git_fetch,
+            git::git_pull,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DevDeck");

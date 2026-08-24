@@ -215,6 +215,18 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scoopInstalling])
 
+  // Background git monitoring: fetch the active workspace's repos on an
+  // interval so the "to pull" counts stay live. Re-arms when the toggle, the
+  // interval, or the active workspace changes.
+  useEffect(() => {
+    if (!app.gitMonitorEnabled) return
+    const tick = () => void useApp.getState().fetchGitStatus()
+    tick()
+    const id = setInterval(tick, Math.max(1, app.gitMonitorIntervalMin) * 60_000)
+    return () => clearInterval(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [app.gitMonitorEnabled, app.gitMonitorIntervalMin, app.activeWorkspaceId])
+
   useEffect(() => {
     void app.bootstrap()
     const subs = [
@@ -257,6 +269,8 @@ export default function App() {
         void s.refreshServices()
         void s.refreshProfiles()
       }),
+      // After a pull finishes, re-read local git status (counts change).
+      ipc.onGitDone(() => void useApp.getState().refreshGit()),
     ]
     return () => {
       for (const s of subs) void s.then((un) => un())

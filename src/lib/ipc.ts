@@ -163,8 +163,19 @@ export interface GitInfo {
   is_repo: boolean
   branch: string | null
   detached: boolean
+  upstream: string | null
+  ahead: number
+  behind: number
 }
+/** Branch + ahead/behind from local refs — no network. */
 export const gitInfo = (dir: string) => invoke<GitInfo>('git_info', { dir })
+/** Quiet non-interactive fetch, then fresh status (learns what's to pull). */
+export const gitFetch = (dir: string) => invoke<GitInfo>('git_fetch', { dir })
+/** Fast-forward pull, streaming to Logs; emits git:done when finished. */
+export const gitPull = (dir: string) => invoke<void>('git_pull', { dir })
+export function onGitDone(cb: (ok: boolean) => void): Promise<UnlistenFn> {
+  return listen<boolean>('git:done', (e) => cb(e.payload))
+}
 
 // ---- layouts ----
 export const layoutsList = () => invoke<LayoutDef[]>('layouts_list')

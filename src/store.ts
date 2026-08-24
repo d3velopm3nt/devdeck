@@ -4,7 +4,7 @@
 import { create } from 'zustand'
 import * as ipc from './lib/ipc'
 import type { GitInfo } from './lib/ipc'
-import { findNode, projectOf, resolveDir, serviceDir } from './lib/tree'
+import { findNode, projectOf, resolveDir, serviceDir, subtreeIds } from './lib/tree'
 import type {
   CommandDef,
   LayoutDef,
@@ -36,6 +36,10 @@ export interface AppState {
   recents: Recent[]
   /** Git branch info per project node id (only repos appear). */
   gitByNode: Record<number, GitInfo>
+  /** Background auto-fetch of git status (learns what's to pull). */
+  gitMonitorEnabled: boolean
+  /** Minutes between background fetches when monitoring is on. */
+  gitMonitorIntervalMin: number
 
   // ui
   selectedNodeId: number | null
@@ -67,6 +71,11 @@ export interface AppState {
   refreshRecents: () => Promise<void>
   /** Resolve the current git branch for every project node into `gitByNode`. */
   refreshGit: () => Promise<void>
+  /** Fetch remote-tracking refs for the active workspace's repos, then update
+   *  ahead/behind. This is the networked monitoring pass. */
+  fetchGitStatus: () => Promise<void>
+  /** Persist + apply the git-monitor settings. */
+  setGitMonitor: (enabled: boolean, intervalMin: number) => Promise<void>
   bootstrap: () => Promise<void>
 
   // event ingestion
@@ -138,6 +147,8 @@ export const useApp = create<AppState>((set, get) => ({
   logs: [],
   recents: [],
   gitByNode: {},
+  gitMonitorEnabled: true,
+  gitMonitorIntervalMin: 5,
   selectedNodeId: null,
   activeWorkspaceId: loadActiveWs(),
   hotkey: 'ctrl+shift+Space',
@@ -204,9 +215,33 @@ export const useApp = create<AppState>((set, get) => ({
     for (const [id, info] of entries) if (info?.is_repo) gitByNode[id] = info
     set({ gitByNode })
   },
+  fetchGitStatus: async () => {
+    const { nodes, activeWorkspaceId } = get()
+    // Only the active workspace's projects — bounds the network work.
+    const inWs = new Set(activeWorkspaceId != null ? subtreeIds(nodes, activeWorkspaceId) : [])
+    const projects = nodes.filter((n) => n.kind === 'project' && inWs.has(n.id))
+    for (const p of projects) {
+      const dir = resolveDir(nodes, p)
+      if (!dir) continue
+      try {
+        const info = await ipc.gitFetch(dir) // sequential: don't spawn N gits at once
+        if (info?.is_repo) set((st) => ({ gitByNode: { ...st.gitByNode, [p.id]: info } }))
+      } catch {
+        /* offline / no creds — leave the last-known status in place */
+      }
+    }
+  },
+  setGitMonitor: async (enabled, intervalMin) => {
+    const iv = Math.max(1, Math.round(intervalMin) || 5)
+    set({ gitMonitorEnabled: enabled, gitMonitorIntervalMin: iv })
+    await Promise.all([
+      ipc.settingSet('git_monitor_enabled', enabled ? '1' : '0'),
+      ipc.settingSet('git_monitor_interval_min', String(iv)),
+    ])
+  },
 
   bootstrap: async () => {
-    const [nodes, commands, services, profiles, layouts, shells, terminals, states, logs, recents, hotkey] =
+    const [nodes, commands, services, profiles, layouts, shells, terminals, states, logs, recents, hotkey, gitEnabled, gitInterval] =
       await Promise.all([
         ipc.treeList(),
         ipc.commandsList(),
@@ -219,6 +254,8 @@ export const useApp = create<AppState>((set, get) => ({
         ipc.logsRecent(2000),
         ipc.recentsList(),
         ipc.settingGet('hotkey'),
+        ipc.settingGet('git_monitor_enabled'),
+        ipc.settingGet('git_monitor_interval_min'),
       ])
     const svcStates: Record<number, SvcState> = {}
     for (const s of states) svcStates[s.id] = s
@@ -237,6 +274,9 @@ export const useApp = create<AppState>((set, get) => ({
       recents,
       activeWorkspaceId,
       hotkey: hotkey ?? 'ctrl+shift+Space',
+      // Default monitoring on; only an explicit '0' disables it.
+      gitMonitorEnabled: gitEnabled == null ? true : gitEnabled !== '0',
+      gitMonitorIntervalMin: Math.max(1, Number(gitInterval) || 5),
     })
     void get().refreshGit()
   },

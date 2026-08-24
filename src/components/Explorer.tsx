@@ -222,6 +222,18 @@ export function Explorer() {
     focusServiceLogs(svc.name)
   }
 
+  // Fast-forward pull for a project. Streams to Logs; git:done refreshes counts.
+  const pullProject = async (node: TreeNode) => {
+    const dir = resolveDir(nodes, node)
+    if (!dir) return
+    openInMain('logs', 'logs', 'Logs')
+    try {
+      await ipc.gitPull(dir)
+    } catch (e) {
+      alert(String(e))
+    }
+  }
+
   // The workspace switcher menu: pick a workspace, or manage them.
   const workspaceMenuItems = (): MenuItem[] => [
     ...workspaces.map((w) => ({
@@ -543,19 +555,46 @@ export function Explorer() {
           ) : (
             <span className="flex-1 truncate">{node.name}</span>
           )}
-          {node.kind === 'project' && gitByNode[node.id]?.branch && (
-            <span
-              className="flex shrink-0 items-center gap-1 text-[10px] text-slate-500"
-              title={
-                gitByNode[node.id]!.detached
-                  ? `Detached HEAD at ${gitByNode[node.id]!.branch}`
-                  : `On branch ${gitByNode[node.id]!.branch}`
-              }
-            >
-              <Icon name="github" size={10} className="shrink-0" />
-              <span className="max-w-[84px] truncate">{gitByNode[node.id]!.branch}</span>
-            </span>
-          )}
+          {node.kind === 'project' && gitByNode[node.id]?.branch && (() => {
+            const g = gitByNode[node.id]!
+            return (
+              <span className="flex shrink-0 items-center gap-1 text-[10px] text-slate-500">
+                <span
+                  className="flex items-center gap-1"
+                  title={
+                    g.detached
+                      ? `Detached HEAD at ${g.branch}`
+                      : `On branch ${g.branch}${g.upstream ? ` · tracking ${g.upstream}` : ' · no upstream'}`
+                  }
+                >
+                  <Icon name="github" size={10} className="shrink-0" />
+                  <span className="max-w-[72px] truncate">{g.branch}</span>
+                </span>
+                {g.behind > 0 && (
+                  <button
+                    className="flex items-center gap-0.5 rounded bg-amber-500/15 px-1 text-amber-300 hover:bg-amber-500/30"
+                    title={`${g.behind} commit${g.behind === 1 ? '' : 's'} to pull — click to pull (fast-forward)`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void pullProject(node)
+                    }}
+                  >
+                    <Icon name="arrow-down" size={9} />
+                    {g.behind}
+                  </button>
+                )}
+                {g.ahead > 0 && (
+                  <span
+                    className="flex items-center gap-0.5"
+                    title={`${g.ahead} commit${g.ahead === 1 ? '' : 's'} to push`}
+                  >
+                    <Icon name="arrow-up" size={9} />
+                    {g.ahead}
+                  </span>
+                )}
+              </span>
+            )
+          })()}
           <button
             className="hidden items-center rounded px-1 text-slate-400 hover:bg-slate-600 hover:text-white group-hover:flex"
             title="Actions"

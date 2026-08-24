@@ -9,10 +9,11 @@ import { loadExampleWorkspace } from '../lib/example'
 import { Icon } from '../lib/icons'
 
 export function ConfigPage() {
-  const { hotkey, setHotkey, shells } = useApp()
+  const { hotkey, setHotkey, shells, gitMonitorEnabled, gitMonitorIntervalMin, setGitMonitor, fetchGitStatus } = useApp()
   const [draft, setDraft] = useState(hotkey)
   const [status, setStatus] = useState<string | null>(null)
   const [seeding, setSeeding] = useState(false)
+  const [gitIv, setGitIv] = useState(String(gitMonitorIntervalMin))
 
   const apply = async () => {
     try {
@@ -47,6 +48,46 @@ export function ConfigPage() {
             Summons / hides DevDeck from anywhere, e.g. <code>ctrl+shift+Space</code>, <code>alt+F9</code>.
           </p>
           {status && <p className="mt-1 text-[11px] text-emerald-400">{status}</p>}
+        </section>
+
+        <section>
+          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            Git monitoring
+          </h3>
+          <label className="flex w-fit cursor-pointer items-center gap-2 text-[12px] text-slate-300">
+            <input
+              type="checkbox"
+              className="h-3.5 w-3.5 accent-indigo-500"
+              checked={gitMonitorEnabled}
+              onChange={(e) => void setGitMonitor(e.target.checked, Number(gitIv) || gitMonitorIntervalMin)}
+            />
+            Auto-check repositories for changes to pull
+          </label>
+          <div className="mt-2 flex items-center gap-2 text-[12px] text-slate-400">
+            <span>Every</span>
+            <input
+              className="input w-16 text-center"
+              type="number"
+              min={1}
+              value={gitIv}
+              disabled={!gitMonitorEnabled}
+              onChange={(e) => setGitIv(e.target.value)}
+              onBlur={() => void setGitMonitor(gitMonitorEnabled, Number(gitIv) || 5)}
+            />
+            <span>minutes</span>
+            <button
+              className="btn-ghost inline-flex items-center gap-1 text-[12px]"
+              title="Fetch the active workspace's repositories now"
+              onClick={() => void fetchGitStatus()}
+            >
+              <Icon name="restart" size={12} /> Check now
+            </button>
+          </div>
+          <p className="mt-1 text-[11px] leading-5 text-slate-500">
+            Runs a quiet <code>git fetch</code> for the active workspace's repositories using your
+            existing git credentials, then shows how many commits each project is ahead/behind.
+            Nothing is pulled automatically — click a project's <span className="text-amber-300">↓</span> badge to fast-forward.
+          </p>
         </section>
 
         <section>

@@ -87,8 +87,9 @@
   .btn.coffee:hover { filter: brightness(1.05); }
 
   /* ---- hero ---- */
-  .hero { padding: 78px 0 72px; border-bottom: 1px solid var(--line-soft); }
-  .hero-grid { display: grid; grid-template-columns: 1.02fr .98fr; gap: 56px; align-items: center; }
+  .hero { padding: 74px 0 64px; border-bottom: 1px solid var(--line-soft); }
+  .hero-top { max-width: 40em; }
+  .hero-shot { margin-top: 46px; }
   h1 { margin: 18px 0 0; font-size: clamp(38px, 5.2vw, 60px); line-height: 1.04; letter-spacing: -.033em; font-weight: 680; }
   h1 .low { color: var(--dim); }
   .lede { margin: 22px 0 0; font-size: 18px; line-height: 1.6; color: var(--dim); max-width: 30em; }
@@ -264,8 +265,8 @@
 <main id="top">
   <!-- HERO -->
   <div class="hero">
-    <div class="wrap hero-grid">
-      <div>
+    <div class="wrap">
+      <div class="hero-top">
         <div class="kick accent">Local-first · Windows · MIT</div>
         <h1>Your whole stack,<br /><span class="low">on one deck.</span></h1>
         <p class="lede">
@@ -275,6 +276,7 @@
         </p>
         <div class="cta">
           <a class="btn primary" href="https://github.com/d3velopm3nt/devdeck/releases"><svg class="i"><use href="#download"/></svg> Download for Windows</a>
+          <a class="btn" href="#demo">Watch it work</a>
           <a class="btn" href="https://github.com/d3velopm3nt/devdeck">Star on GitHub</a>
         </div>
         <div class="meta">
@@ -282,26 +284,9 @@
         </div>
       </div>
 
-      <!-- CSS control-surface mock -->
-      <div class="deck" role="img" aria-label="DevDeck explorer showing the storefront project on branch main with 3 commits to pull, its running web and api services with live ports, and a git pull streaming to the log.">
-        <div class="tb"><i></i><i></i><i></i><b>DevDeck — Explorer</b></div>
-        <div class="exp">
-          <div class="row proj">
-            <span class="tw">▾</span><svg class="i ic"><use href="#box"/></svg>
-            <span class="nm">storefront</span>
-            <span class="gb"><svg class="i"><use href="#git-branch"/></svg> main
-              <span class="pill-b pull"><svg class="i" style="font-size:11px"><use href="#arrow-down"/></svg>3</span>
-            </span>
-          </div>
-          <div class="cat">Services</div>
-          <div class="svc"><span class="dot on pulse"></span><span class="nm">web</span><span class="port">:3000</span><span class="up">12m</span></div>
-          <div class="svc"><span class="dot on pulse"></span><span class="nm">api</span><span class="port">:8080</span><span class="up">1h 04m</span></div>
-          <div class="svc"><span class="dot off"></span><span class="nm">worker</span><span class="port" style="color:var(--muted)">—</span><span class="up">idle</span></div>
-          <div class="cat">Commands</div>
-          <div class="svc" style="padding-left:30px"><svg class="i" style="font-size:12px;color:var(--cyan)"><use href="#terminal"/></svg><span class="nm" style="font-weight:500">test:e2e</span><span class="up" style="width:auto;margin-left:auto">pnpm</span></div>
-          <div class="row proj" style="margin-top:2px"><span class="tw">▸</span><svg class="i ic"><use href="#box"/></svg><span class="nm">marketing</span><span class="gb"><svg class="i"><use href="#git-branch"/></svg> main</span></div>
-        </div>
-        <div class="logline"><span class="p">❯ git pull --ff-only</span> <span class="d">·</span> Fast-forward <span class="d">·</span> 3 files changed, +182 −40</div>
+      <div class="frame hero-shot">
+        <div class="tb"><i></i><i></i><i></i><b>DevDeck — Dashboard</b></div>
+        <img src="assets/dashboard-real.png" alt="The DevDeck dashboard: the Acme Cloud workspace with its storefront, api-gateway, design-tokens and infra spaces, live stat cards, and the Explorer showing each project's git branch and how far ahead or behind it is." />
       </div>
     </div>
   </div>
@@ -394,20 +379,7 @@
       <div class="vis">
         <div class="frame">
           <div class="tb"><i></i><i></i><i></i><b>Explorer — git status</b></div>
-          <div class="exp" style="padding:14px 10px">
-            <div class="row proj"><span class="tw">▾</span><svg class="i ic"><use href="#box"/></svg><span class="nm">storefront</span>
-              <span class="gb"><svg class="i"><use href="#git-branch"/></svg> main
-                <span class="pill-b pull"><svg class="i" style="font-size:11px"><use href="#arrow-down"/></svg>3</span></span></div>
-            <div class="row proj"><span class="tw">▸</span><svg class="i ic"><use href="#box"/></svg><span class="nm">api-gateway</span>
-              <span class="gb"><svg class="i"><use href="#git-branch"/></svg> release/1.4
-                <span class="pill-b push">↑2</span></span></div>
-            <div class="row proj"><span class="tw">▸</span><svg class="i ic"><use href="#box"/></svg><span class="nm">design-tokens</span>
-              <span class="gb"><svg class="i"><use href="#git-branch"/></svg> main</span></div>
-            <div class="row proj"><span class="tw">▸</span><svg class="i ic"><use href="#box"/></svg><span class="nm">infra</span>
-              <span class="gb"><svg class="i"><use href="#git-branch"/></svg> feat/tf-1.7
-                <span class="pill-b pull"><svg class="i" style="font-size:11px"><use href="#arrow-down"/></svg>12</span></span></div>
-          </div>
-          <div class="logline"><span class="p">❯ git fetch</span> <span class="d">·</span> storefront ↓3 <span class="d">·</span> infra ↓12 <span class="d">·</span> checked 4 repos</div>
+          <img src="assets/explorer-git.png" alt="The DevDeck Explorer: storefront on main is 3 commits behind, api-gateway is 2 ahead, design-tokens is level, and infra is 12 behind — each shown as a badge on the project row." />
         </div>
       </div>
     </div>

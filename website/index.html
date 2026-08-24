@@ -3,439 +3,449 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>DevDeck — a local-first development command center for Windows</title>
-<meta name="description" content="Start your whole stack, watch every service, and jump into any terminal — from one window, or a floating widget you summon with a hotkey. Free and open source." />
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>❯</text></svg>" />
+<title>DevDeck — the local-first dev command center for Windows</title>
+<meta name="description" content="Run your whole stack from one window: start every service, watch what's running, track each repo's branch and what's to pull, and jump into any terminal. Free, open source, no telemetry." />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='84'>❯</text></svg>" />
 
-<meta property="og:title" content="DevDeck — local-first development command center" />
-<meta property="og:description" content="Run your whole stack from one window. Free, open source, no telemetry." />
+<meta property="og:title" content="DevDeck — local-first dev command center for Windows" />
+<meta property="og:description" content="Run your whole stack from one window. Git-aware, self-updating, no telemetry." />
 <meta property="og:type" content="website" />
-<meta property="og:image" content="assets/dashboard.png" />
+<meta property="og:image" content="assets/machine-search.png" />
 <meta name="twitter:card" content="summary_large_image" />
 
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   :root {
     color-scheme: dark;
-    --bg: #0b0e14;
-    --bg-soft: #0f131b;
-    --card: #151923;
-    --line: #1e293b;
-    --text: #e2e8f0;
-    --muted: #64748b;
-    --dim: #94a3b8;
-    --accent: #7C8CF8;
-    --green: #4ADE80;
-    --amber: #FBBF24;
-    --radius: 14px;
-    --max: 1120px;
+    --bg:       #0a0c11;
+    --panel:    #0f131a;
+    --panel-2:  #141922;
+    --line:     #212a36;
+    --line-soft:#171d26;
+    --ink:      #e8ecf3;
+    --dim:      #9ba4b2;
+    --muted:    #69727f;
+    --accent:   #7c8cf8;
+    --accent-2: #aab4ff;
+    --run:      #4ade80;
+    --warn:     #fbbf24;
+    --cyan:     #46b7f0;
+    --sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+    --mono: "Cascadia Code", "Cascadia Mono", "JetBrains Mono", ui-monospace, "SF Mono", Consolas, monospace;
+    --max: 1080px;
   }
   html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation: none !important; transition: none !important; } }
   body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--text);
-    font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-    -webkit-font-smoothing: antialiased;
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--sans); font-size: 16px; line-height: 1.65;
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+    overflow-x: hidden;
   }
   img { max-width: 100%; display: block; }
-  a { color: var(--accent); }
-  code, .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
-  .wrap { max-width: var(--max); margin: 0 auto; padding: 0 24px; }
+  a { color: var(--accent-2); text-underline-offset: 3px; }
+  code, .mono { font-family: var(--mono); }
+  ::selection { background: rgba(124,140,248,.28); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  .wrap { max-width: var(--max); margin: 0 auto; padding: 0 28px; }
 
-  /* nav */
-  header {
-    position: sticky; top: 0; z-index: 20;
-    background: rgba(11,14,20,.82);
-    backdrop-filter: blur(10px);
-    border-bottom: 1px solid var(--line);
+  /* mono micro-label — the structural voice */
+  .kick {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--muted);
   }
-  .nav { display: flex; align-items: center; gap: 20px; height: 60px; }
-  .logo { font-weight: 650; font-size: 17px; letter-spacing: -.01em; }
-  .logo span { color: var(--accent); }
-  .nav .spacer { flex: 1; }
-  .nav a.link { color: var(--dim); text-decoration: none; font-size: 14px; }
-  .nav a.link:hover { color: var(--text); }
+  .kick.accent { color: var(--accent); }
+
+  /* line icons */
+  .i { width: 1em; height: 1em; stroke: currentColor; stroke-width: 1.75; fill: none;
+       stroke-linecap: round; stroke-linejoin: round; display: inline-block; vertical-align: -.14em; }
+
+  /* ---- nav ---- */
+  header {
+    position: sticky; top: 0; z-index: 30;
+    background: rgba(10,12,17,.72); backdrop-filter: blur(12px) saturate(1.2);
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .nav { display: flex; align-items: center; gap: 26px; height: 58px; }
+  .brand { font-family: var(--mono); font-weight: 600; font-size: 15px; letter-spacing: -.01em; color: var(--ink); text-decoration: none; }
+  .brand b { color: var(--accent); font-weight: 700; }
+  .nav .sp { flex: 1; }
+  .nav a.lnk { color: var(--dim); text-decoration: none; font-size: 13.5px; font-family: var(--mono); letter-spacing: .01em; }
+  .nav a.lnk:hover { color: var(--ink); }
 
   .btn {
     display: inline-flex; align-items: center; gap: 8px;
-    padding: 9px 16px; border-radius: 10px;
-    font-size: 14px; font-weight: 550; text-decoration: none;
-    border: 1px solid var(--line); color: var(--text);
-    background: #1a1f2b; transition: .15s;
+    padding: 9px 15px; border-radius: 8px; font-size: 13.5px; font-weight: 550;
+    text-decoration: none; border: 1px solid var(--line); color: var(--ink);
+    background: var(--panel-2); transition: border-color .16s, background .16s, color .16s;
   }
-  .btn:hover { border-color: #475569; transform: translateY(-1px); }
-  .btn.primary {
-    background: linear-gradient(135deg, var(--accent), #6366f1);
-    border-color: transparent; color: #fff;
-    box-shadow: 0 6px 20px rgba(124,140,248,.32);
-  }
-  .btn.primary:hover { box-shadow: 0 10px 28px rgba(124,140,248,.45); }
+  .btn:hover { border-color: #3a4557; background: #182030; }
+  .btn .i { font-size: 16px; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #0a0c11; font-weight: 650; }
+  .btn.primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
+  .btn.coffee { background: #ffdd00; border-color: #ffdd00; color: #12140a; font-weight: 650; }
+  .btn.coffee:hover { filter: brightness(1.05); }
 
-  /* hero */
-  .hero { padding: 84px 0 40px; text-align: center; position: relative; overflow: hidden; }
-  .hero::before {
-    content: ""; position: absolute; inset: -40% 0 auto 0; height: 560px;
-    background: radial-gradient(ellipse at 50% 0, rgba(124,140,248,.18), transparent 62%);
-    pointer-events: none;
-  }
-  .pill {
-    display: inline-flex; align-items: center; gap: 8px;
-    border: 1px solid var(--line); background: var(--card);
-    padding: 5px 13px; border-radius: 999px;
-    font-size: 12.5px; color: var(--dim); margin-bottom: 22px;
-  }
-  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: pulse 2s ease-in-out infinite; }
-  @keyframes pulse { 50% { opacity: .3 } }
-  h1 {
-    margin: 0 0 18px; font-size: clamp(34px, 5.2vw, 56px);
-    line-height: 1.08; letter-spacing: -.028em; font-weight: 700;
-  }
-  h1 .grad {
-    background: linear-gradient(120deg, var(--accent), #a78bfa 55%, #38bdf8);
-    -webkit-background-clip: text; background-clip: text; color: transparent;
-  }
-  .sub { max-width: 660px; margin: 0 auto 30px; font-size: 18px; color: var(--dim); }
-  .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-  .note { margin-top: 14px; font-size: 12.5px; color: var(--muted); }
+  /* ---- hero ---- */
+  .hero { padding: 78px 0 72px; border-bottom: 1px solid var(--line-soft); }
+  .hero-grid { display: grid; grid-template-columns: 1.02fr .98fr; gap: 56px; align-items: center; }
+  h1 { margin: 18px 0 0; font-size: clamp(38px, 5.2vw, 60px); line-height: 1.04; letter-spacing: -.033em; font-weight: 680; }
+  h1 .low { color: var(--dim); }
+  .lede { margin: 22px 0 0; font-size: 18px; line-height: 1.6; color: var(--dim); max-width: 30em; }
+  .lede b { color: var(--ink); font-weight: 600; }
+  .cta { display: flex; gap: 11px; flex-wrap: wrap; margin-top: 30px; }
+  .meta { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 0; font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+  .meta span { padding: 0 14px; border-left: 1px solid var(--line); }
+  .meta span:first-child { padding-left: 0; border-left: 0; }
 
-  /* shot frame */
-  .shot {
-    margin-top: 52px; border: 1px solid var(--line); border-radius: var(--radius);
-    overflow: hidden; background: var(--card);
-    box-shadow: 0 30px 90px rgba(0,0,0,.6);
-  }
-  .shot .bar {
-    display: flex; align-items: center; gap: 7px;
-    padding: 9px 13px; border-bottom: 1px solid var(--line); background: #11141c;
-  }
-  .shot .bar i { width: 11px; height: 11px; border-radius: 50%; background: #334155; }
-  .shot .bar i:nth-child(1) { background: #ef4444aa; }
-  .shot .bar i:nth-child(2) { background: #f59e0baa; }
-  .shot .bar i:nth-child(3) { background: #22c55eaa; }
-  .shot .bar span { margin-left: 8px; font-size: 11.5px; color: var(--muted); }
+  /* ---- the deck mock (hero visual) ---- */
+  .deck { border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+    background: linear-gradient(180deg, #10141c, #0d1017); box-shadow: 0 24px 60px rgba(0,0,0,.55), 0 2px 0 rgba(255,255,255,.02) inset; }
+  .deck .tb { display: flex; align-items: center; gap: 7px; padding: 9px 12px; background: #0d1119; border-bottom: 1px solid var(--line-soft); }
+  .deck .tb i { width: 10px; height: 10px; border-radius: 50%; background: #2a3342; }
+  .deck .tb i:nth-child(1){ background:#e0555044 } .deck .tb i:nth-child(2){ background:#e0a94044 } .deck .tb i:nth-child(3){ background:#4ade8044 }
+  .deck .tb b { margin-left: 8px; font-family: var(--mono); font-size: 11px; font-weight: 500; color: var(--muted); letter-spacing: .02em; }
+  .exp { padding: 10px 8px; font-size: 12.5px; }
+  .row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 6px; color: var(--dim); }
+  .row .tw { color: var(--muted); width: 11px; font-family: var(--mono); font-size: 10px; }
+  .row .nm { color: var(--ink); font-weight: 550; }
+  .row.proj .ic { color: var(--accent); font-size: 14px; }
+  .row .gb { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .row .gb .i { font-size: 12px; }
+  .pill-b { display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px; border-radius: 5px; font-family: var(--mono); font-size: 10.5px; font-weight: 600; }
+  .pill-b.pull { background: rgba(251,191,36,.14); color: var(--warn); }
+  .pill-b.push { color: var(--muted); }
+  .cat { padding-left: 20px; color: var(--muted); font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; }
+  .svc { display: flex; align-items: center; gap: 8px; padding: 4px 8px 4px 30px; color: var(--dim); }
+  .svc .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .svc .dot.on { background: var(--run); box-shadow: 0 0 0 3px rgba(74,222,128,.13); }
+  .svc .dot.off { background: #3a4250; }
+  .svc .nm { color: var(--ink); font-weight: 500; }
+  .svc .port { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--accent-2); }
+  .svc .up { font-family: var(--mono); font-size: 11px; color: var(--muted); width: 40px; text-align: right; }
+  .deck .logline { display: flex; align-items: center; gap: 8px; padding: 9px 14px; border-top: 1px solid var(--line-soft);
+    background: #0b0e15; font-family: var(--mono); font-size: 11px; color: var(--dim); }
+  .deck .logline .p { color: var(--run); }
+  .deck .logline .d { color: var(--muted); }
+  .pulse { animation: pulse 2.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
 
-  /* sections */
-  section { padding: 80px 0; }
-  .eyebrow { font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--accent); font-weight: 600; }
-  h2 { margin: 10px 0 12px; font-size: clamp(26px, 3.4vw, 34px); letter-spacing: -.02em; line-height: 1.18; }
-  .lead { color: var(--dim); max-width: 620px; margin: 0; }
-  .center { text-align: center; }
-  .center .lead { margin: 0 auto; }
+  /* ---- section scaffolding ---- */
+  section { padding: 78px 0; border-bottom: 1px solid var(--line-soft); }
+  .shead { max-width: 34em; }
+  .shead h2 { margin: 12px 0 0; font-size: clamp(25px, 3.2vw, 33px); letter-spacing: -.022em; line-height: 1.16; font-weight: 640; }
+  .shead p { margin: 14px 0 0; color: var(--dim); font-size: 16px; }
 
-  .grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); margin-top: 46px; }
-  .card {
-    border: 1px solid var(--line); background: var(--card);
-    border-radius: var(--radius); padding: 22px; transition: .18s;
-  }
-  .card:hover { border-color: #475569; transform: translateY(-2px); }
-  .ico {
-    width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center;
-    font-size: 18px; margin-bottom: 14px;
-    background: rgba(124,140,248,.13); border: 1px solid rgba(124,140,248,.28);
-  }
-  .card h3 { margin: 0 0 7px; font-size: 15.5px; }
-  .card p { margin: 0; font-size: 13.5px; color: var(--muted); line-height: 1.62; }
+  /* feature index */
+  .feat { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 48px;
+    border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--panel); }
+  .cell { padding: 26px 24px; border-right: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
+  .feat .cell:nth-child(3n) { border-right: 0; }
+  .cell .hd { display: flex; align-items: center; gap: 10px; }
+  .cell .gl { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center;
+    background: #161c26; border: 1px solid var(--line); color: var(--accent-2); font-size: 16px; }
+  .cell h3 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+  .cell .tag { margin-left: auto; font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--accent); border: 1px solid rgba(124,140,248,.32); padding: 2px 6px; border-radius: 999px; }
+  .cell p { margin: 13px 0 0; font-size: 13.5px; line-height: 1.6; color: var(--muted); }
+  .cell p code { color: var(--dim); background: #12161e; border: 1px solid var(--line-soft); padding: 0 5px; border-radius: 4px; font-size: 12px; }
 
-  /* split rows */
-  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 52px; align-items: center; }
-  .split.rev .txt { order: 2; }
-  ul.ticks { list-style: none; padding: 0; margin: 22px 0 0; }
-  ul.ticks li { padding-left: 26px; position: relative; margin-bottom: 11px; font-size: 14.5px; color: var(--dim); }
-  ul.ticks li::before {
-    content: "✓"; position: absolute; left: 0; top: 0;
-    color: var(--green); font-weight: 700;
-  }
+  /* split deep-dive */
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 54px; align-items: center; }
+  .split.rev .vis { order: -1; }
+  .ticks { list-style: none; padding: 0; margin: 24px 0 0; display: grid; gap: 12px; }
+  .ticks li { position: relative; padding-left: 26px; color: var(--dim); font-size: 14.5px; line-height: 1.5; }
+  .ticks li .i { position: absolute; left: 0; top: 3px; font-size: 15px; color: var(--accent); }
+  .ticks li b { color: var(--ink); font-weight: 600; }
+  .ticks li code { font-family: var(--mono); font-size: 12.5px; color: var(--accent-2); background: #12161e; border: 1px solid var(--line-soft); padding: 1px 6px; border-radius: 5px; }
 
-  /* steps */
-  .steps { counter-reset: s; display: grid; gap: 16px; margin-top: 40px; }
-  .step {
-    display: flex; gap: 16px; align-items: flex-start;
-    border: 1px solid var(--line); background: var(--card);
-    border-radius: 12px; padding: 18px 20px;
-  }
-  .step::before {
-    counter-increment: s; content: counter(s);
-    flex: 0 0 28px; height: 28px; border-radius: 8px;
-    display: grid; place-items: center; font-size: 13px; font-weight: 700;
-    background: rgba(124,140,248,.14); color: var(--accent);
-    border: 1px solid rgba(124,140,248,.3);
-  }
-  .step h4 { margin: 3px 0 4px; font-size: 14.5px; }
-  .step p { margin: 0; font-size: 13.5px; color: var(--muted); }
-  .step code { background: var(--bg-soft); border: 1px solid var(--line); padding: 1px 6px; border-radius: 5px; font-size: 12.5px; color: var(--dim); }
+  .frame { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--panel);
+    box-shadow: 0 20px 48px rgba(0,0,0,.45); }
+  .frame .tb { display: flex; align-items: center; gap: 7px; padding: 9px 12px; background: #0d1119; border-bottom: 1px solid var(--line-soft); }
+  .frame .tb i { width: 10px; height: 10px; border-radius: 50%; background: #2a3342; }
+  .frame .tb i:nth-child(1){ background:#e0555044 } .frame .tb i:nth-child(2){ background:#e0a94044 } .frame .tb i:nth-child(3){ background:#4ade8044 }
+  .frame .tb b { margin-left: 8px; font-family: var(--mono); font-size: 11px; font-weight: 500; color: var(--muted); }
+  .stack { display: grid; gap: 22px; }
+
+  /* auto-detect widget mock */
+  .wcard { width: 330px; max-width: 100%; margin: 0 auto; border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+    background: #10141c; box-shadow: 0 22px 54px rgba(0,0,0,.5); font-size: 13px; }
+  .wcard .wh { display: flex; align-items: center; gap: 9px; padding: 11px 12px; border-bottom: 1px solid var(--line-soft); }
+  .wcard .wh .av { width: 28px; height: 28px; border-radius: 8px; background: #171d27; display: grid; place-items: center; color: var(--dim); font-size: 15px; }
+  .wcard .wh .t { flex: 1; line-height: 1.2; }
+  .wcard .wh .t b { font-size: 13px; color: var(--ink); }
+  .wcard .wh .t span { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+  .wbody { padding: 9px; display: flex; flex-direction: column; gap: 7px; }
+  .scard { display: flex; align-items: center; gap: 9px; padding: 9px 10px 9px 12px; border-radius: 10px;
+    background: rgba(255,255,255,.02); border: 1px solid var(--line-soft); }
+  .scard .col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .scard .l1 { display: flex; align-items: center; gap: 6px; }
+  .scard .l1 b { color: var(--ink); font-weight: 600; } .scard .l1 .u { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .scard .l2 { display: flex; align-items: center; gap: 7px; font-size: 12px; }
+  .scard .sp { font-weight: 600; } .scard .mono { font-family: var(--mono); font-size: 11px; color: var(--dim); }
+  .scard .badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border-radius: 5px; font-size: 11px; font-weight: 600; font-family: var(--mono); }
+  .divh { display: flex; align-items: center; gap: 8px; padding: 4px 2px 0; }
+  .divh span { font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .divh i { flex: 1; height: 1px; background: var(--line-soft); }
+  .miniact { width: 26px; height: 26px; border-radius: 8px; background: rgba(255,255,255,.04); display: grid; place-items: center; color: var(--dim); font-size: 14px; }
+
+  /* steps — a genuine sequence, so numbering is meaningful */
+  .steps { counter-reset: s; display: grid; gap: 0; margin-top: 44px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .step { display: grid; grid-template-columns: 54px 1fr; gap: 4px; padding: 22px 24px; border-bottom: 1px solid var(--line-soft); background: var(--panel); }
+  .step:last-child { border-bottom: 0; }
+  .step::before { counter-increment: s; content: counter(s, decimal-leading-zero); font-family: var(--mono); font-size: 13px; color: var(--accent); padding-top: 2px; }
+  .step h4 { margin: 0 0 5px; font-size: 15px; font-weight: 600; }
+  .step p { margin: 0; font-size: 13.5px; color: var(--muted); line-height: 1.62; }
+  .step code { font-family: var(--mono); background: #12161e; border: 1px solid var(--line-soft); padding: 1px 6px; border-radius: 5px; font-size: 12.5px; color: var(--dim); }
+
+  .note { margin-top: 26px; border: 1px solid rgba(251,191,36,.26); background: rgba(251,191,36,.05);
+    border-radius: 10px; padding: 15px 18px; font-size: 13px; color: var(--dim); line-height: 1.6; }
+  .note b { color: var(--warn); }
 
   /* support */
-  .support {
-    border: 1px solid var(--line); border-radius: 18px; padding: 46px 32px; text-align: center;
-    background:
-      radial-gradient(ellipse at 50% 0, rgba(251,191,36,.09), transparent 68%),
-      var(--card);
-  }
-  .bmc { background: #FFDD00; color: #0b0e14; border-color: transparent; font-weight: 650; }
-  .bmc:hover { box-shadow: 0 10px 28px rgba(255,221,0,.28); }
+  .support { border: 1px solid var(--line); border-radius: 16px; padding: 44px 34px; background: var(--panel); text-align: center; }
+  .support h2 { margin: 12px 0 0; font-size: clamp(24px, 3vw, 30px); letter-spacing: -.02em; }
+  .support p { margin: 12px auto 26px; max-width: 40em; color: var(--dim); }
 
-  .warn {
-    margin-top: 28px; border: 1px solid rgba(251,191,36,.3);
-    background: rgba(251,191,36,.06); border-radius: 12px;
-    padding: 15px 18px; font-size: 13px; color: var(--dim); text-align: left;
-  }
-  .warn b { color: var(--amber); }
+  footer { padding: 40px 0; color: var(--muted); font-size: 13px; }
+  .fnav { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+  .fnav .sp { flex: 1; }
+  footer a { color: var(--dim); text-decoration: none; font-family: var(--mono); font-size: 12.5px; }
+  footer a:hover { color: var(--ink); }
+  .fmeta { margin-top: 16px; font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
 
-  footer { border-top: 1px solid var(--line); padding: 34px 0; color: var(--muted); font-size: 13px; }
-  .fnav { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
-  .fnav .spacer { flex: 1; }
-  footer a { color: var(--dim); text-decoration: none; }
-  footer a:hover { color: var(--text); }
-
-  @media (max-width: 860px) {
+  @media (max-width: 900px) {
+    .hero-grid { grid-template-columns: 1fr; gap: 40px; }
     .split { grid-template-columns: 1fr; gap: 32px; }
-    .split.rev .txt { order: 0; }
-    .mgrid { grid-template-columns: 1fr !important; }
-    ul.ticks[style*="grid"] { grid-template-columns: 1fr !important; }
+    .split.rev .vis { order: 0; }
+    .feat { grid-template-columns: 1fr; }
+    .cell { border-right: 0 !important; }
     .nav .hide { display: none; }
-    section { padding: 58px 0; }
-    .hero { padding: 56px 0 24px; }
+    section { padding: 56px 0; }
+    .hero { padding: 52px 0 48px; }
   }
 </style>
 </head>
 <body>
 
+<!-- icon sprite -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="git-branch" viewBox="0 0 24 24"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></symbol>
+  <symbol id="terminal" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></symbol>
+  <symbol id="zap" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></symbol>
+  <symbol id="box" viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></symbol>
+  <symbol id="monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></symbol>
+  <symbol id="activity" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+  <symbol id="layout" viewBox="0 0 24 24"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></symbol>
+  <symbol id="download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></symbol>
+  <symbol id="refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+  <symbol id="git-fork" viewBox="0 0 24 24"><circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v1a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9"/><path d="M12 12v3"/></symbol>
+  <symbol id="package" viewBox="0 0 24 24"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></symbol>
+  <symbol id="wrench" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></symbol>
+  <symbol id="check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="arrow-down" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></symbol>
+  <symbol id="shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></symbol>
+  <symbol id="globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></symbol>
+</svg>
+
 <header>
   <div class="wrap nav">
-    <div class="logo"><span>❯_</span> DevDeck</div>
-    <div class="spacer"></div>
-    <a class="link hide" href="#features">Features</a>
-    <a class="link hide" href="#widget">Widget</a>
-    <a class="link hide" href="#detect">Auto-detect</a>
-    <a class="link hide" href="#machine">Machine setup</a>
-    <a class="link hide" href="#start">Get started</a>
-    <a class="link hide" href="#support">Support</a>
-    <a class="btn" href="https://github.com/d3velopm3nt/devdeck">GitHub</a>
+    <a class="brand" href="#top"><b>❯_</b> devdeck</a>
+    <div class="sp"></div>
+    <a class="lnk hide" href="#deck">features</a>
+    <a class="lnk hide" href="#git">git</a>
+    <a class="lnk hide" href="#machine">machine</a>
+    <a class="lnk hide" href="#start">get started</a>
+    <a class="btn" href="https://github.com/d3velopm3nt/devdeck"><svg class="i"><use href="#git-fork"/></svg> GitHub</a>
   </div>
 </header>
 
-<main>
+<main id="top">
   <!-- HERO -->
   <div class="hero">
-    <div class="wrap">
-      <div class="pill"><span class="dot"></span> Free &amp; open source · MIT</div>
-      <h1>Your whole stack.<br /><span class="grad">One window.</span></h1>
-      <p class="sub">
-        DevDeck is a local-first development command center for Windows. Start every service,
-        watch what's running — including servers you (or your AI assistant) spin up outside it —
-        and jump into any terminal, without hunting through six console windows.
-      </p>
-      <div class="cta">
-        <a class="btn primary" href="https://github.com/d3velopm3nt/devdeck/releases">↓ Download for Windows</a>
-        <a class="btn" href="#demo">▶ Watch demo</a>
-        <a class="btn" href="https://github.com/d3velopm3nt/devdeck">★ Star on GitHub</a>
+    <div class="wrap hero-grid">
+      <div>
+        <div class="kick accent">Local-first · Windows · MIT</div>
+        <h1>Your whole stack,<br /><span class="low">on one deck.</span></h1>
+        <p class="lede">
+          DevDeck runs every service, watches what's live — <b>including servers you or your AI
+          assistant start elsewhere</b> — tracks each repo's branch and what's left to pull, and drops
+          you into any terminal. One window instead of six.
+        </p>
+        <div class="cta">
+          <a class="btn primary" href="https://github.com/d3velopm3nt/devdeck/releases"><svg class="i"><use href="#download"/></svg> Download for Windows</a>
+          <a class="btn" href="https://github.com/d3velopm3nt/devdeck">Star on GitHub</a>
+        </div>
+        <div class="meta">
+          <span>SQLite-backed</span><span>No account</span><span>No telemetry</span><span>Self-updating</span>
+        </div>
       </div>
-      <p class="note">No account. No server. No telemetry. Your data stays in a local SQLite file.</p>
 
-      <div class="shot">
-        <div class="bar"><i></i><i></i><i></i><span>DevDeck — Dashboard</span></div>
-        <img src="assets/dashboard.png" alt="DevDeck dashboard showing the Acme Cloud workspace with its spaces — Storefront, Marketing Site and Analytics API — plus live status cards" />
+      <!-- CSS control-surface mock -->
+      <div class="deck" role="img" aria-label="DevDeck explorer showing the storefront project on branch main with 3 commits to pull, its running web and api services with live ports, and a git pull streaming to the log.">
+        <div class="tb"><i></i><i></i><i></i><b>DevDeck — Explorer</b></div>
+        <div class="exp">
+          <div class="row proj">
+            <span class="tw">▾</span><svg class="i ic"><use href="#box"/></svg>
+            <span class="nm">storefront</span>
+            <span class="gb"><svg class="i"><use href="#git-branch"/></svg> main
+              <span class="pill-b pull"><svg class="i" style="font-size:11px"><use href="#arrow-down"/></svg>3</span>
+            </span>
+          </div>
+          <div class="cat">Services</div>
+          <div class="svc"><span class="dot on pulse"></span><span class="nm">web</span><span class="port">:3000</span><span class="up">12m</span></div>
+          <div class="svc"><span class="dot on pulse"></span><span class="nm">api</span><span class="port">:8080</span><span class="up">1h 04m</span></div>
+          <div class="svc"><span class="dot off"></span><span class="nm">worker</span><span class="port" style="color:var(--muted)">—</span><span class="up">idle</span></div>
+          <div class="cat">Commands</div>
+          <div class="svc" style="padding-left:30px"><svg class="i" style="font-size:12px;color:var(--cyan)"><use href="#terminal"/></svg><span class="nm" style="font-weight:500">test:e2e</span><span class="up" style="width:auto;margin-left:auto">pnpm</span></div>
+          <div class="row proj" style="margin-top:2px"><span class="tw">▸</span><svg class="i ic"><use href="#box"/></svg><span class="nm">marketing</span><span class="gb"><svg class="i"><use href="#git-branch"/></svg> main</span></div>
+        </div>
+        <div class="logline"><span class="p">❯ git pull --ff-only</span> <span class="d">·</span> Fast-forward <span class="d">·</span> 3 files changed, +182 −40</div>
       </div>
     </div>
   </div>
 
-  <!-- DEMO -->
-  <section id="demo" style="padding-top:24px">
-    <div class="wrap center">
-      <div class="eyebrow">See it in motion</div>
-      <h2>A minute of your morning, in fifteen seconds</h2>
-      <p class="lead" style="margin:0 auto 26px">
-        Start a stack, watch health and uptime go live, and see DevDeck catch a server started
-        somewhere else entirely — then jump straight in.
-      </p>
-      <div class="shot" style="margin-top:0">
-        <div class="bar"><i></i><i></i><i></i><span>DevDeck — live demo</span></div>
-        <iframe src="demo.html" title="DevDeck animated demo" loading="lazy"
-          style="display:block;width:100%;height:650px;border:0;background:#0b0e14"></iframe>
+  <!-- FEATURE INDEX -->
+  <section id="deck">
+    <div class="wrap">
+      <div class="shead">
+        <div class="kick">What it does</div>
+        <h2>Built for the six-terminal morning</h2>
+        <p>Working across a monorepo or a handful of apps means opening a pile of terminals and
+           remembering a pile of commands. DevDeck folds that into one control surface.</p>
       </div>
-    </div>
-  </section>
 
-  <!-- FEATURES -->
-  <section id="features">
-    <div class="wrap center">
-      <div class="eyebrow">What it does</div>
-      <h2>Built for the six-terminal morning</h2>
-      <p class="lead">
-        If you work in a monorepo or juggle several apps, starting the day means opening a pile of
-        terminals and remembering a pile of commands. DevDeck turns that into one click.
-      </p>
-
-      <div class="grid">
-        <div class="card">
-          <div class="ico">▣</div>
-          <h3>Spaces</h3>
-          <p>Organise work as Workspace → Project → Folder. Every command, service and terminal
-             runs in the right directory automatically — no more <code>cd</code> roulette.</p>
+      <div class="feat">
+        <div class="cell">
+          <div class="hd"><span class="gl"><svg class="i"><use href="#box"/></svg></span><h3>Spaces</h3></div>
+          <p>Organise work as Workspace → Project → Folder. Every command, service and terminal runs in the right directory — no <code>cd</code> roulette.</p>
         </div>
-        <div class="card">
-          <div class="ico">⚡</div>
-          <h3>Services</h3>
-          <p>Define dev servers and workers once, then start, stop and restart them with live
-             status, CPU, memory, uptime and ports.</p>
+        <div class="cell">
+          <div class="hd"><span class="gl"><svg class="i"><use href="#zap"/></svg></span><h3>Services</h3></div>
+          <p>Define dev servers and workers once, then start, stop and restart them with live status, CPU, memory, uptime and port.</p>
         </div>
-        <div class="card">
-          <div class="ico">🌐</div>
-          <h3>Open in browser</h3>
-          <p>Give a service a port and DevDeck adds one-click open. Click the port anywhere it
-             appears — including on the floating widget — and your app opens on localhost.</p>
+        <div class="cell">
+          <div class="hd"><span class="gl"><svg class="i"><use href="#git-branch"/></svg></span><h3>Git-aware</h3><span class="tag">New</span></div>
+          <p>Every project shows its branch and how far ahead/behind it is. One click fast-forwards — no terminal detour.</p>
         </div>
-        <div class="card">
-          <div class="ico">📡</div>
-          <h3>Auto-detect sessions</h3>
-          <p>Started a dev server from a shell, a script, or an AI assistant? DevDeck spots it,
-             shows it with its real name, port and uptime, and offers to adopt it into a space.</p>
+        <div class="cell">
+          <div class="hd"><span class="gl"><svg class="i"><use href="#git-fork"/></svg></span><h3>Clone &amp; run</h3><span class="tag">New</span></div>
+          <p>Paste a GitHub URL. DevDeck clones it, scans for services and tools, and hands it to you ready to start.</p>
         </div>
-        <div class="card">
-          <div class="ico">🎛️</div>
-          <h3>Pick the shell</h3>
-          <p>Run each command or service under the shell you want — cmd, PowerShell, pwsh, bash,
-             or WSL — per item, not one global default.</p>
+        <div class="cell">
+          <div class="hd"><span class="gl"><svg class="i"><use href="#activity"/></svg></span><h3>Auto-detect</h3></div>
+          <p>Started a server from a shell, a script, or an AI assistant? DevDeck spots the port, names the tool, and offers to adopt it.</p>
         </div>
-        <div class="card">
-          <div class="ico">❯_</div>
-          <h3>Real terminals</h3>
-          <p>Genuine PTY sessions (ConPTY) with xterm.js, docked as tabs. They live in the backend,
-             so they survive UI reloads.</p>
+        <div class="cell">
+          <div class="hd"><span class="gl"><svg class="i"><use href="#terminal"/></svg></span><h3>Real terminals</h3></div>
+          <p>Genuine ConPTY sessions with xterm.js, docked as tabs. They live in the backend, so they survive a UI reload. Pick the shell per item.</p>
         </div>
-        <div class="card">
-          <div class="ico">▤</div>
-          <h3>Logs &amp; errors</h3>
-          <p>Every service's stdout and stderr in one place, with severity detection, filtering,
-             search and export — plus a dashboard feed of what broke.</p>
+        <div class="cell">
+          <div class="hd"><span class="gl"><svg class="i"><use href="#wrench"/></svg></span><h3>Project setup</h3><span class="tag">New</span></div>
+          <p>First run on a new machine? DevDeck detects missing tools (Node, pnpm…), installs them, runs the bootstrap, then starts.</p>
         </div>
-        <div class="card">
-          <div class="ico">▦</div>
-          <h3>Dockable layout</h3>
-          <p>Drag, split, tab, float and resize any panel. Layouts autosave and restore, and launch
-             profiles boot a whole stack in one action.</p>
+        <div class="cell">
+          <div class="hd"><span class="gl"><svg class="i"><use href="#package"/></svg></span><h3>Machine setup</h3></div>
+          <p>Install your toolchain through winget &amp; scoop — search, one-click bundles, your own packages — and export a manifest to rebuild any box.</p>
         </div>
-        <div class="card">
-          <div class="ico">📦</div>
-          <h3>Machine setup</h3>
-          <p>Install your toolchain through winget &amp; scoop — search, one-click bundles, or your own
-             packages — and export a manifest to rebuild any machine. DevDeck even updates itself.</p>
+        <div class="cell">
+          <div class="hd"><span class="gl"><svg class="i"><use href="#layout"/></svg></span><h3>Dockable</h3></div>
+          <p>Drag, split, tab, float and resize any panel. Layouts autosave; launch profiles boot a whole stack in one action.</p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- SPACE PAGE -->
-  <section>
+  <!-- GIT DEEP-DIVE (new) -->
+  <section id="git">
     <div class="wrap split">
       <div class="txt">
-        <div class="eyebrow">Spaces</div>
-        <h2>Every project gets its own home</h2>
-        <p class="lead">
-          Click a space and you get a page for it: what's running right now, its services,
-          commands and profiles — and one button to boot the lot.
+        <div class="kick accent">Git-aware</div>
+        <h2 style="margin:12px 0 0;font-size:clamp(25px,3.2vw,33px);letter-spacing:-.022em;line-height:1.16">Know what's to pull, before you switch context</h2>
+        <p style="margin:14px 0 0;color:var(--dim)">
+          DevDeck reads each project's current branch and, on a quiet interval, checks the remote.
+          Fall behind and an amber counter appears on the row — click it to fast-forward, streamed to the Logs.
         </p>
         <ul class="ticks">
-          <li>Start all, stop all, or tick just the services you want</li>
-          <li>Live uptime, memory and ports per service</li>
-          <li>Pick an accent colour so spaces stay recognisable</li>
-          <li>Open a terminal in the project root from anywhere</li>
+          <li><svg class="i"><use href="#check"/></svg> Current <b>branch on every project row</b>, detached-HEAD aware</li>
+          <li><svg class="i"><use href="#check"/></svg> <b>↓ behind / ↑ ahead</b> counts, refreshed by a background fetch</li>
+          <li><svg class="i"><use href="#check"/></svg> One-click <code>pull --ff-only</code> — never a surprise merge</li>
+          <li><svg class="i"><use href="#check"/></svg> Interval and on/off live in Settings; nothing pulls on its own</li>
         </ul>
       </div>
-      <div class="shot" style="margin-top:0">
-        <div class="bar"><i></i><i></i><i></i><span>Space — Demo App</span></div>
-        <img src="assets/space-running.png" alt="DevDeck space page for Storefront with its Web, API and Worker services and a Start all button" />
+      <div class="vis">
+        <div class="frame">
+          <div class="tb"><i></i><i></i><i></i><b>Explorer — git status</b></div>
+          <div class="exp" style="padding:14px 10px">
+            <div class="row proj"><span class="tw">▾</span><svg class="i ic"><use href="#box"/></svg><span class="nm">storefront</span>
+              <span class="gb"><svg class="i"><use href="#git-branch"/></svg> main
+                <span class="pill-b pull"><svg class="i" style="font-size:11px"><use href="#arrow-down"/></svg>3</span></span></div>
+            <div class="row proj"><span class="tw">▸</span><svg class="i ic"><use href="#box"/></svg><span class="nm">api-gateway</span>
+              <span class="gb"><svg class="i"><use href="#git-branch"/></svg> release/1.4
+                <span class="pill-b push">↑2</span></span></div>
+            <div class="row proj"><span class="tw">▸</span><svg class="i ic"><use href="#box"/></svg><span class="nm">design-tokens</span>
+              <span class="gb"><svg class="i"><use href="#git-branch"/></svg> main</span></div>
+            <div class="row proj"><span class="tw">▸</span><svg class="i ic"><use href="#box"/></svg><span class="nm">infra</span>
+              <span class="gb"><svg class="i"><use href="#git-branch"/></svg> feat/tf-1.7
+                <span class="pill-b pull"><svg class="i" style="font-size:11px"><use href="#arrow-down"/></svg>12</span></span></div>
+          </div>
+          <div class="logline"><span class="p">❯ git fetch</span> <span class="d">·</span> storefront ↓3 <span class="d">·</span> infra ↓12 <span class="d">·</span> checked 4 repos</div>
+        </div>
       </div>
     </div>
   </section>
 
-  <!-- WIDGET -->
+  <!-- AUTO-DETECT + WIDGET -->
   <section id="widget">
     <div class="wrap split rev">
       <div class="txt">
-        <div class="eyebrow">Command widget</div>
-        <h2>Summon it from anywhere</h2>
-        <p class="lead">
-          A floating, always-on-top widget on a global hotkey. Collapse it to a single icon, or to
-          a live <b>session panel</b> — a coloured card per running session with its status, health,
-          port, uptime and CPU, plus one-click open-in-browser, terminal and stop.
+        <div class="kick accent">Command widget · auto-detect</div>
+        <h2 style="margin:12px 0 0;font-size:clamp(25px,3.2vw,33px);letter-spacing:-.022em;line-height:1.16">A control surface you summon with a hotkey</h2>
+        <p style="margin:14px 0 0;color:var(--dim)">
+          A floating, always-on-top widget on <code style="font-family:var(--mono);color:var(--accent-2)">Ctrl+Shift+Space</code>.
+          It shows a live card per running session — status, port, uptime, CPU — and catches servers started
+          outside DevDeck entirely, offering to adopt them into a space.
         </p>
         <ul class="ticks">
-          <li><code class="mono">Ctrl+Shift+Space</code> from any app</li>
-          <li>Session panel colour-coded by space, with live health and uptime</li>
-          <li>When nothing's running, drill Workspace → Project → service to start it</li>
-          <li>Full mode adds recent, active, browse and fuzzy search</li>
+          <li><svg class="i"><use href="#check"/></svg> Colour-coded session cards with <b>live health and uptime</b></li>
+          <li><svg class="i"><use href="#check"/></svg> Detects known tools (Vite, Next, Uvicorn, Cargo…) or any dev-range port</li>
+          <li><svg class="i"><use href="#check"/></svg> Open in browser, jump to a terminal, or stop — one click</li>
+          <li><svg class="i"><use href="#check"/></svg> Full mode adds recent, active, browse and fuzzy search</li>
         </ul>
       </div>
-      <div class="shot" style="margin-top:0">
-        <div class="bar"><i></i><i></i><i></i><span>Command Widget</span></div>
-        <img src="assets/widget-over-app.png" alt="The DevDeck command widget floating over the app, showing a searchable palette of the Acme Cloud commands and services" />
-      </div>
-    </div>
-  </section>
-
-  <!-- AUTO-DETECT -->
-  <section id="detect">
-    <div class="wrap split">
-      <div class="txt">
-        <div class="eyebrow">Auto-detect</div>
-        <h2>It knows what you started elsewhere</h2>
-        <p class="lead">
-          Spin up a dev server from a terminal, a script, or an AI assistant like Claude, and DevDeck
-          notices — the listening port shows up in the widget with the tool's real name, its folder,
-          uptime and CPU. No config, nothing to wire up.
-        </p>
-        <ul class="ticks">
-          <li>Detects known tools (Vite, Next, Uvicorn, Cargo…) or any dev-range port</li>
-          <li>Lands in an <b>Unassigned</b> list and suggests the space it belongs to</li>
-          <li>Open it in the browser or a terminal, or adopt it as a service</li>
-          <li>Fully configurable — scope, ports, and a quiet toast when something new appears</li>
-        </ul>
-      </div>
-
-      <div style="display:flex;justify-content:center">
-        <div style="width:320px;border:1px solid rgba(255,255,255,0.1);border-radius:16px;overflow:hidden;background:#15181f;box-shadow:0 18px 48px rgba(0,0,0,0.5);font-size:13px">
-          <div style="display:flex;align-items:center;gap:8px;padding:10px;border-bottom:1px solid rgba(255,255,255,0.06)">
-            <div style="width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;color:#9BA3B2">▢</div>
-            <div style="flex:1;line-height:1.15"><div style="font-size:13px;font-weight:600;color:#E7EAF0">Sessions</div><div style="font-size:11px;color:#64748b">2 running · 1 detected</div></div>
-            <div style="width:28px;height:28px;border-radius:8px;background:rgba(124,140,248,0.14);display:flex;align-items:center;justify-content:center;color:#A7B2FF">⤢</div>
+      <div class="vis">
+        <div class="wcard" role="img" aria-label="The DevDeck command widget listing two running sessions and one auto-detected Vite server suggested for the web-app space.">
+          <div class="wh">
+            <div class="av"><svg class="i"><use href="#activity"/></svg></div>
+            <div class="t"><b>Sessions</b><br /><span>2 running · 1 detected</span></div>
+            <div class="miniact">⤢</div>
           </div>
-          <div style="padding:9px;display:flex;flex-direction:column;gap:7px">
-
-            <div style="display:flex;align-items:center;gap:9px;padding:9px 10px 9px 12px;border-radius:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);box-shadow:inset 3px 0 0 #7C8CF8">
-              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
-                <div style="display:flex;align-items:center;gap:6px"><span class="dot" style="width:8px;height:8px"></span><span style="font-weight:600;color:#E7EAF0">Web</span><span style="flex:1"></span><span class="mono" style="font-size:12px;color:#8b93a1">12m</span></div>
-                <div style="display:flex;align-items:center;gap:7px;font-size:12px"><span style="font-weight:600;color:#7C8CF8">Storefront</span><span style="display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:5px;background:rgba(74,222,128,0.14);color:#4ADE80;font-size:11px;font-weight:600"><span style="width:5px;height:5px;border-radius:50%;background:#4ADE80"></span>:3000</span><span style="color:#64748b">2%</span><span style="color:#64748b">96MB</span></div>
+          <div class="wbody">
+            <div class="scard" style="box-shadow: inset 3px 0 0 var(--accent)">
+              <div class="col">
+                <div class="l1"><span class="dot on pulse" style="width:8px;height:8px;border-radius:50%;background:var(--run)"></span><b>web</b><span class="u">12m</span></div>
+                <div class="l2"><span class="sp" style="color:var(--accent)">Storefront</span>
+                  <span class="badge" style="background:rgba(74,222,128,.14);color:var(--run)"><span style="width:5px;height:5px;border-radius:50%;background:var(--run)"></span>:3000</span>
+                  <span style="color:var(--muted)">2%</span><span style="color:var(--muted)">96MB</span></div>
               </div>
-              <div style="display:flex;gap:5px"><span style="width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;color:#9BA3B2">🌐</span><span style="width:26px;height:26px;border-radius:8px;background:rgba(248,113,113,0.14);display:flex;align-items:center;justify-content:center;color:#F87171">■</span></div>
+              <div class="miniact"><svg class="i"><use href="#globe"/></svg></div>
             </div>
-
-            <div style="display:flex;align-items:center;gap:9px;padding:9px 10px 9px 12px;border-radius:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);box-shadow:inset 3px 0 0 #4ADE80">
-              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
-                <div style="display:flex;align-items:center;gap:6px"><span class="dot" style="width:8px;height:8px"></span><span style="font-weight:600;color:#E7EAF0">Worker</span><span style="flex:1"></span><span class="mono" style="font-size:12px;color:#8b93a1">1h 4m</span></div>
-                <div style="display:flex;align-items:center;gap:7px;font-size:12px"><span style="font-weight:600;color:#4ADE80">Storefront</span><span style="color:#64748b">5%</span><span style="color:#64748b">142MB</span></div>
+            <div class="scard" style="box-shadow: inset 3px 0 0 var(--run)">
+              <div class="col">
+                <div class="l1"><span class="dot on" style="width:8px;height:8px;border-radius:50%;background:var(--run)"></span><b>worker</b><span class="u">1h 04m</span></div>
+                <div class="l2"><span class="sp" style="color:var(--run)">Storefront</span><span style="color:var(--muted)">5%</span><span style="color:var(--muted)">142MB</span></div>
               </div>
-              <div style="display:flex;gap:5px"><span style="width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;color:#9BA3B2">❯</span><span style="width:26px;height:26px;border-radius:8px;background:rgba(248,113,113,0.14);display:flex;align-items:center;justify-content:center;color:#F87171">■</span></div>
+              <div class="miniact"><svg class="i"><use href="#terminal"/></svg></div>
             </div>
-
-            <div style="display:flex;align-items:center;gap:7px;padding:4px 2px 0">
-              <span style="font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7d8494">Unassigned</span>
-              <span style="flex:1;height:1px;background:rgba(255,255,255,0.08)"></span>
-              <span style="font-size:10.5px;color:#64748b">1</span>
-            </div>
-
-            <div style="display:flex;align-items:center;gap:9px;padding:9px 10px 9px 12px;border-radius:12px;background:rgba(255,255,255,0.02);border:1px dashed rgba(255,255,255,0.18);box-shadow:inset 3px 0 0 #38BDF8">
-              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
-                <div style="display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;border:1.5px solid #38BDF8"></span><span style="font-weight:600;color:#E7EAF0">web-app</span><span style="flex:1"></span><span class="mono" style="font-size:12px;color:#8b93a1">3m</span></div>
-                <div style="display:flex;align-items:center;gap:7px;font-size:12px"><span style="font-weight:600;color:#38BDF8">vite</span><span class="mono" style="font-size:11px;color:#8b93a1">:5173</span><span style="color:#64748b">8%</span><span style="padding:1px 6px;border-radius:5px;background:rgba(56,189,248,0.16);color:#38BDF8;font-size:11px;font-weight:600">→ web-app</span></div>
+            <div class="divh"><span>Detected</span><i></i><span>1</span></div>
+            <div class="scard" style="border-style:dashed;box-shadow: inset 3px 0 0 var(--cyan)">
+              <div class="col">
+                <div class="l1"><span style="width:8px;height:8px;border-radius:50%;border:1.5px solid var(--cyan)"></span><b>web-app</b><span class="u">3m</span></div>
+                <div class="l2"><span class="sp" style="color:var(--cyan)">vite</span><span class="mono">:5173</span>
+                  <span class="badge" style="background:rgba(70,183,240,.16);color:var(--cyan)">→ web-app</span></div>
               </div>
-              <div style="display:flex;gap:5px"><span style="width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;color:#9BA3B2">🌐</span><span style="width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;color:#9BA3B2">❯</span></div>
+              <div class="miniact"><svg class="i"><use href="#globe"/></svg></div>
             </div>
-
-          </div>
-          <div style="display:flex;padding:8px 9px;border-top:1px solid rgba(255,255,255,0.06);background:rgba(0,0,0,0.18)">
-            <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:7px;border:1px solid rgba(124,140,248,0.3);background:rgba(124,140,248,0.12);border-radius:8px;color:#A7B2FF;font-size:12px;font-weight:600">+ Start something</div>
           </div>
         </div>
       </div>
@@ -444,97 +454,91 @@
 
   <!-- MACHINE SETUP -->
   <section id="machine">
-    <div class="wrap center">
-      <div class="eyebrow">Machine setup</div>
-      <h2>Set up a whole dev machine — in clicks, not a day</h2>
-      <p class="lead" style="margin:0 auto">
-        Fresh Windows install? DevDeck installs your toolchain through <b>winget &amp; scoop</b>: search the
-        catalog, or pick a one-click bundle. It sees what's already installed, every package is yours to
-        edit (or add your own), and you can export a manifest to rebuild any machine.
-      </p>
-    </div>
-    <div class="wrap" style="margin-top:40px">
-      <div class="mgrid" style="display:grid;grid-template-columns:1fr;gap:26px;max-width:920px;margin:0 auto">
-        <div class="shot" style="margin-top:0">
-          <div class="bar"><i></i><i></i><i></i><span>Machine Setup — Search &amp; install</span></div>
-          <img src="assets/machine-search.png" alt="DevDeck Machine Setup search tab: a searchable catalog of winget and scoop packages grouped by category, with live install status, per-package config and Install buttons" />
+    <div class="wrap">
+      <div class="shead" style="max-width:38em">
+        <div class="kick">Machine setup</div>
+        <h2>Set up a whole dev machine in clicks, not a day</h2>
+        <p>Fresh Windows install? DevDeck installs your toolchain through <b>winget &amp; scoop</b>: search the
+           catalog or pick a one-click bundle. It sees what's already there, every package is yours to edit,
+           and a manifest rebuilds any machine.</p>
+      </div>
+      <div class="stack" style="margin-top:44px;max-width:900px">
+        <div class="frame">
+          <div class="tb"><i></i><i></i><i></i><b>Machine Setup — Search &amp; install</b></div>
+          <img src="assets/machine-search.png" alt="DevDeck Machine Setup search tab: a searchable catalog of winget and scoop packages grouped by category, with live install status, per-package config, and Install buttons." loading="lazy" />
         </div>
-        <div class="shot" style="margin-top:0">
-          <div class="bar"><i></i><i></i><i></i><span>Machine Setup — One-click bundles</span></div>
-          <img src="assets/machine-bundles.png" alt="DevDeck Machine Setup bundles tab: role-based one-click bundles such as Base essentials, Node/Web dev, Package managers, DevOps/Cloud and CLI power-tools" />
+        <div class="frame">
+          <div class="tb"><i></i><i></i><i></i><b>Machine Setup — One-click bundles</b></div>
+          <img src="assets/machine-bundles.png" alt="DevDeck Machine Setup bundles tab: role-based bundles such as Base essentials, Node/Web, Package managers, DevOps/Cloud, and CLI power-tools." loading="lazy" />
         </div>
       </div>
-      <ul class="ticks" style="max-width:780px;margin:32px auto 0;display:grid;grid-template-columns:1fr 1fr;gap:2px 34px">
-        <li>Install via <b>winget &amp; scoop</b> — search or one-click bundles</li>
-        <li>Detects what's already installed and skips it</li>
-        <li>Edit any package or add your own — seeded to a local DB</li>
-        <li>Export a manifest and rebuild any machine in one go</li>
-        <li><b>Self-updating</b>: DevDeck installs and updates itself via scoop</li>
-        <li>No admin needed for user-scope installs</li>
+      <ul class="ticks" style="max-width:820px;margin:34px auto 0;grid-template-columns:1fr 1fr;gap:12px 36px">
+        <li><svg class="i"><use href="#check"/></svg> Install via <b>winget &amp; scoop</b> — search or bundles</li>
+        <li><svg class="i"><use href="#check"/></svg> Detects what's installed and skips it</li>
+        <li><svg class="i"><use href="#check"/></svg> Edit any package, or add your own — seeded to a local DB</li>
+        <li><svg class="i"><use href="#check"/></svg> Export a manifest, rebuild any machine</li>
+        <li><svg class="i"><use href="#check"/></svg> <b>Self-updating</b> via scoop or a signed in-app updater</li>
+        <li><svg class="i"><use href="#check"/></svg> No admin needed for user-scope installs</li>
       </ul>
     </div>
   </section>
 
   <!-- GET STARTED -->
   <section id="start">
-    <div class="wrap center">
-      <div class="eyebrow">Get started</div>
-      <h2>Running in about a minute</h2>
-      <p class="lead">Install it, load the example workspace, and see it work before wiring up your own repos.</p>
-
-      <div class="steps" style="text-align:left">
+    <div class="wrap">
+      <div class="shead">
+        <div class="kick">Get started</div>
+        <h2>Running in about a minute</h2>
+        <p>Install it, load the example workspace, and watch it work before wiring up your own repos.</p>
+      </div>
+      <div class="steps">
         <div class="step">
           <div>
             <h4>Install</h4>
-            <p>Download the installer from GitHub Releases and run it — or, with
-               <a href="https://scoop.sh">scoop</a>: <code>scoop bucket add devdeck https://github.com/d3velopm3nt/devdeck</code>
-               then <code>scoop install devdeck</code>. Single app, no dependencies — and it updates itself
-               in place (no uninstall/reinstall).</p>
+            <p>Grab the installer from GitHub Releases and run it — or with <a href="https://scoop.sh">scoop</a>:
+               <code>scoop bucket add devdeck https://github.com/d3velopm3nt/devdeck</code> then <code>scoop install devdeck</code>.
+               Single app, no dependencies, and it updates itself in place.</p>
           </div>
         </div>
         <div class="step">
           <div>
             <h4>Load the example workspace</h4>
-            <p>One click on the welcome screen builds a small demo project with a real web server and
-               a background worker — so you can press Start and watch it actually work.</p>
+            <p>One click on the welcome screen builds a small demo project — a real web server and a background worker — so you can press Start and see it work.</p>
           </div>
         </div>
         <div class="step">
           <div>
             <h4>Add your project</h4>
-            <p>Point DevDeck at a repo root, then add your services — <code>pnpm dev:web</code>,
-               <code>cargo run</code>, whatever you already type — and give them a port.</p>
+            <p>Point DevDeck at a repo root — or paste a GitHub URL and let it clone — then add the services you already run: <code>pnpm dev:web</code>, <code>cargo run</code>, and give them a port.</p>
           </div>
         </div>
         <div class="step">
           <div>
             <h4>Start your day with one click</h4>
-            <p>Hit <code>Start all</code>, or summon the widget with <code>Ctrl+Shift+Space</code>.</p>
+            <p>Hit <code>Start all</code>, or summon the widget with <code>Ctrl+Shift+Space</code> from any app.</p>
           </div>
         </div>
       </div>
 
-      <div class="warn">
-        <b>Heads up:</b> the installer isn't code-signed yet, so Windows SmartScreen may show
-        “Windows protected your PC”. Click <b>More info → Run anyway</b>, or build from source —
-        it's all on GitHub. Signing certificates are expensive for a free project; sponsorship helps.
+      <div class="note">
+        <b>Heads up —</b> the installer isn't code-signed yet, so Windows SmartScreen may say
+        “Windows protected your PC”. Click <b>More info → Run anyway</b>, or build from source; it's all on GitHub.
+        Signing certificates are pricey for a free project — sponsorship helps.
       </div>
     </div>
   </section>
 
   <!-- SUPPORT -->
-  <section id="support">
+  <section id="support" style="border-bottom:0">
     <div class="wrap">
       <div class="support">
-        <div class="eyebrow">Support the project</div>
-        <h2 style="margin-top:8px">Free forever, built in spare time</h2>
-        <p class="lead" style="margin:0 auto 26px">
-          DevDeck is MIT-licensed and always will be. If it saves you a bit of friction each
-          morning, you can chip in — appreciated, never expected.
-        </p>
-        <div class="cta">
-          <a class="btn bmc" href="https://www.buymeacoffee.com/d3velopm3nt">☕ Buy me a coffee</a>
-          <a class="btn" href="https://github.com/d3velopm3nt/devdeck">★ Star the repo</a>
+        <div class="kick">Support the project</div>
+        <h2>Free forever, built in spare time</h2>
+        <p>DevDeck is MIT-licensed and always will be. If it takes a little friction out of your morning,
+           you can chip in — appreciated, never expected.</p>
+        <div class="cta" style="justify-content:center">
+          <a class="btn coffee" href="https://www.buymeacoffee.com/d3velopm3nt">Buy me a coffee</a>
+          <a class="btn" href="https://github.com/d3velopm3nt/devdeck">Star the repo</a>
         </div>
       </div>
     </div>
@@ -542,15 +546,17 @@
 </main>
 
 <footer>
-  <div class="wrap fnav">
-    <div class="logo" style="font-size:15px"><span>❯_</span> DevDeck</div>
-    <div class="spacer"></div>
-    <a href="https://github.com/d3velopm3nt/devdeck">GitHub</a>
-    <a href="https://github.com/d3velopm3nt/devdeck/releases">Releases</a>
-    <a href="https://github.com/d3velopm3nt/devdeck/issues">Issues</a>
-    <a href="https://github.com/d3velopm3nt/devdeck/blob/main/LICENSE">MIT</a>
+  <div class="wrap">
+    <div class="fnav">
+      <a class="brand" href="#top"><b>❯_</b> devdeck</a>
+      <div class="sp"></div>
+      <a href="https://github.com/d3velopm3nt/devdeck">GitHub</a>
+      <a href="https://github.com/d3velopm3nt/devdeck/releases">Releases</a>
+      <a href="https://github.com/d3velopm3nt/devdeck/issues">Issues</a>
+      <a href="https://github.com/d3velopm3nt/devdeck/blob/main/LICENSE">MIT</a>
+    </div>
+    <div class="fmeta">Windows · Rust + Tauri 2 + React · local-first · no telemetry</div>
   </div>
-  <div class="wrap" style="margin-top:14px">Windows · Rust + Tauri 2 + React · local-first, no telemetry</div>
 </footer>
 
 </body>

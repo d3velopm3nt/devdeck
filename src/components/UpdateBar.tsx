@@ -2,6 +2,8 @@
 // whether you're up to date or an update is available, and an animated progress
 // line while checking or updating (via scoop).
 
+import { Icon, type IconName } from '../lib/icons'
+
 export type UpState = 'checking' | 'uptodate' | 'available' | 'updating' | 'done' | 'error'
 
 const THEME: Record<UpState, { fg: string; bg: string; accent: string }> = {
@@ -44,12 +46,12 @@ export function UpdateBar({
   // one-click update path (and CLI tools).
   const offerScoop = !scoopAvailable && (state === 'uptodate' || state === 'available' || state === 'error')
 
-  const icon = scoopInstalling
-    ? '⟳'
-    : state === 'checking' || state === 'updating' ? '⟳'
-      : state === 'available' ? '⬆'
-      : state === 'error' ? '⚠'
-      : '✓'
+  const icon: IconName = scoopInstalling
+    ? 'spinner'
+    : state === 'checking' || state === 'updating' ? 'spinner'
+      : state === 'available' ? 'update'
+      : state === 'error' ? 'alert'
+      : 'ok'
 
   const title = scoopInstalling
     ? 'Installing scoop…'
@@ -75,39 +77,39 @@ export function UpdateBar({
   return (
     <div className={`flex flex-col border-b border-slate-800 ${t.bg}`}>
       <div className="flex items-center gap-2.5 px-3 py-1.5 text-[12px]">
-        <span className={`text-[13px] ${t.fg} ${busy ? 'inline-block animate-spin' : ''}`}>{icon}</span>
+        <Icon name={icon} size={14} className={t.fg} spin={busy} />
         <span className={`font-medium ${t.fg}`}>{title}</span>
         {sub && <span className="min-w-0 truncate font-mono text-[11px] text-slate-500">{sub}</span>}
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
           {offerScoop && (
             <button
-              className="rounded bg-sky-500/20 px-2.5 py-0.5 text-[11.5px] font-semibold text-sky-200 hover:bg-sky-500/30 disabled:opacity-60"
+              className="flex items-center gap-1 rounded bg-sky-500/20 px-2.5 py-1 text-[11.5px] font-semibold text-sky-200 hover:bg-sky-500/30 disabled:opacity-60"
               title="Install scoop (per-user, no admin) — enables one-click updates"
               disabled={scoopInstalling}
               onClick={onInstallScoop}
             >
-              ⤓ Install scoop
+              <Icon name="download" size={13} /> Install scoop
             </button>
           )}
           {state === 'available' && !scoopInstalling && (
             <button
-              className="rounded bg-amber-500/20 px-2.5 py-0.5 text-[11.5px] font-semibold text-amber-200 hover:bg-amber-500/30"
+              className="flex items-center gap-1 rounded bg-amber-500/20 px-2.5 py-1 text-[11.5px] font-semibold text-amber-200 hover:bg-amber-500/30"
               onClick={onUpdate}
             >
-              ⤓ Update now
+              <Icon name="download" size={13} /> Update now
             </button>
           )}
           {state === 'done' && (
             <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-[11px] text-emerald-300">Restart to finish</span>
           )}
           {(state === 'uptodate' || state === 'error') && (
-            <button className="rounded px-2 py-0.5 text-[11.5px] text-slate-400 hover:bg-slate-700 hover:text-white" onClick={onRecheck}>
-              ↻ Re-check
+            <button className="flex items-center gap-1 rounded px-2 py-1 text-[11.5px] text-slate-400 hover:bg-slate-700 hover:text-white" onClick={onRecheck}>
+              <Icon name="restart" size={12} /> Re-check
             </button>
           )}
           {!busy && (
-            <button className="rounded px-1.5 py-0.5 text-[13px] text-slate-500 hover:bg-slate-700 hover:text-white" title="Dismiss" onClick={onDismiss}>
-              ✕
+            <button className="flex items-center rounded px-1.5 py-1 text-slate-500 hover:bg-slate-700 hover:text-white" title="Dismiss" onClick={onDismiss}>
+              <Icon name="close" size={13} />
             </button>
           )}
         </div>

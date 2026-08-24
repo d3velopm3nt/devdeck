@@ -3,6 +3,7 @@ import { Dock, buildDefaultLayout } from './Dock'
 import { BottomBar, type BottomTab } from './components/BottomBar'
 import { SetupModal } from './components/SetupModal'
 import { UpdateBar, type UpState } from './components/UpdateBar'
+import { Icon } from './lib/icons'
 import { tauriSelfUpdate } from './lib/updater'
 import * as ipc from './lib/ipc'
 import { routeOutput } from './lib/termBus'
@@ -72,7 +73,7 @@ function Menu({
   children,
   accent,
 }: {
-  label: string
+  label: React.ReactNode
   children: (close: () => void) => React.ReactNode
   accent?: boolean
 }) {
@@ -80,7 +81,7 @@ function Menu({
   return (
     <div className="relative">
       <button
-        className={accent ? 'btn-primary text-[12px]' : 'btn-ghost text-[12px]'}
+        className={`inline-flex items-center gap-1 ${accent ? 'btn-primary' : 'btn-ghost'} text-[12px]`}
         onClick={() => setOpen((o) => !o)}
       >
         {label}
@@ -274,25 +275,25 @@ export default function App() {
           <span className="text-indigo-400">❯_</span> DevDeck
         </span>
 
-        <Menu label="＋ Terminal" accent>
+        <Menu label={<><Icon name="add" size={13} /> Terminal</>} accent>
           {(close) =>
             app.shells.map((s) => (
               <button
                 key={s.command}
-                className="menu-item"
+                className="menu-item inline-flex items-center gap-1.5"
                 onClick={() => {
                   close()
                   void openTerminal(s.command, nodeDir || undefined)
                 }}
               >
-                ❯ {s.name}
+                <Icon name="terminal" size={13} /> {s.name}
                 {node && <span className="ml-1 text-slate-500">in {node.name}</span>}
               </button>
             ))
           }
         </Menu>
 
-        <Menu label="⚡ Launch">
+        <Menu label={<><Icon name="service" size={13} /> Launch</>}>
           {(close) => (
             <>
               {app.profiles.length === 0 && (
@@ -301,13 +302,13 @@ export default function App() {
               {app.profiles.map((p) => (
                 <button
                   key={p.id}
-                  className="menu-item"
+                  className="menu-item inline-flex items-center gap-1.5"
                   onClick={() => {
                     close()
                     void launchProfile(p)
                   }}
                 >
-                  ⚡ {p.name}
+                  <Icon name="service" size={13} /> {p.name}
                 </button>
               ))}
             </>
@@ -347,7 +348,7 @@ export default function App() {
                     openSingleton(`terminal-${t.id}`, 'terminal', t.title)
                   }}
                 >
-                  ❯ #{t.id} {t.title}
+                  <span className="inline-flex items-center gap-1.5"><Icon name="terminal" size={13} /> #{t.id} {t.title}</span>
                 </button>
               ))}
             </>
@@ -385,13 +386,13 @@ export default function App() {
                 .map((l) => (
                   <button
                     key={l.id}
-                    className="menu-item"
+                    className="menu-item inline-flex items-center gap-1.5"
                     onClick={() => {
                       close()
                       restoreLayout(l.data)
                     }}
                   >
-                    ▦ {l.name}
+                    <Icon name="layout" size={13} /> {l.name}
                   </button>
                 ))}
             </>
@@ -400,37 +401,38 @@ export default function App() {
 
         <div className="flex-1" />
         {node && (
-          <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-400" title={nodeDir}>
-            {node.kind === 'folder' ? '▤' : '▣'} {node.name}
+          <span className="flex items-center gap-1 rounded bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-400" title={nodeDir}>
+            <Icon name={node.kind === 'folder' ? 'folder' : 'project'} size={12} /> {node.name}
           </span>
         )}
         <button
-          className="btn-ghost text-[12px]"
+          className="btn-ghost flex items-center gap-1 text-[12px]"
           title={`Toggle the floating Command Widget  ·  ${app.hotkey}`}
           onClick={() => void ipc.widgetToggle()}
         >
-          ▧ Widget
+          <Icon name="widget" size={13} /> Widget
         </button>
         <button
-          className="btn-ghost text-[12px]"
+          className="btn-ghost flex items-center gap-1 text-[12px]"
           title="Install & manage dev software"
           onClick={() => openInMain('machine', 'machine', 'Machine Setup')}
         >
-          🖥 Machine
+          <Icon name="machine" size={13} /> Machine
         </button>
         <button
-          className={`text-[12px] ${upState === 'available' ? 'rounded bg-amber-500/15 px-2 py-0.5 font-medium text-amber-300 hover:bg-amber-500/25' : 'btn-ghost'}`}
+          className={`flex items-center gap-1 text-[12px] ${upState === 'available' ? 'rounded bg-amber-500/15 px-2 py-0.5 font-medium text-amber-300 hover:bg-amber-500/25' : 'btn-ghost'}`}
           title={upState === 'available' ? `Update available — v${update?.latest}` : `DevDeck ${update ? 'v' + update.current : ''} — check for updates`}
           onClick={checkUpdate}
         >
-          {upState === 'available' ? `⟳ Update · v${update?.latest}` : '⟳'}
+          <Icon name="update" size={13} spin={upState === 'checking' || upState === 'updating'} />
+          {upState === 'available' ? `Update · v${update?.latest}` : ''}
         </button>
         <button
-          className="btn-ghost text-[12px]"
+          className="btn-ghost flex items-center gap-1 text-[12px]"
           title="Settings"
           onClick={() => openInMain('config', 'config', 'Settings')}
         >
-          ⚙ Settings
+          <Icon name="settings" size={13} /> Settings
         </button>
       </div>
 
@@ -492,13 +494,13 @@ export default function App() {
       {/* Missing-tool hint from a command's error */}
       {app.installHint && (
         <div className="fixed bottom-16 right-4 z-[400] flex max-w-[360px] items-center gap-3 rounded-lg border border-amber-500/30 bg-[#1a1f2b] px-3 py-2.5 text-[12px] shadow-2xl">
-          <span className="text-[15px]">🧩</span>
+          <Icon name="puzzle" size={16} className="shrink-0 text-amber-300" />
           <div className="min-w-0">
             <div className="text-slate-200"><b>{app.installHint.name}</b> looks missing</div>
             <div className="truncate font-mono text-[11px] text-slate-500">{app.installHint.pkg_id}</div>
           </div>
           <button
-            className="ml-auto shrink-0 rounded bg-indigo-600 px-2.5 py-1 text-[11.5px] font-semibold text-white hover:bg-indigo-500"
+            className="ml-auto inline-flex shrink-0 items-center gap-1 rounded bg-indigo-600 px-2.5 py-1 text-[11.5px] font-semibold text-white hover:bg-indigo-500"
             onClick={() => {
               const t = app.installHint!
               showBottom('logs')
@@ -507,9 +509,9 @@ export default function App() {
               app.setInstallHint(null)
             }}
           >
-            ⤓ Install
+            <Icon name="download" size={13} /> Install
           </button>
-          <button className="shrink-0 rounded px-1 text-slate-500 hover:text-white" onClick={() => app.setInstallHint(null)}>✕</button>
+          <button className="flex shrink-0 items-center rounded px-1 text-slate-500 hover:text-white" onClick={() => app.setInstallHint(null)}><Icon name="close" size={13} /></button>
         </div>
       )}
     </div>

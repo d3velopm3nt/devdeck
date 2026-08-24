@@ -13,6 +13,7 @@ import { openEditor } from '../../lib/dock'
 import { nodeLabel, ownerNodes } from '../../lib/tree'
 import { EditorShell, Field, Row } from './EditorShell'
 import { ShellSelect } from './ShellSelect'
+import { Icon } from '../../lib/icons'
 
 type Params = { id: number; projectId?: number | null }
 
@@ -102,7 +103,7 @@ export function CommandEditorPage(props: IDockviewPanelProps<Params>) {
 
   return (
     <EditorShell
-      icon="⌘"
+      icon="command"
       kind="Command"
       title={id > 0 ? cmd.name || 'Command' : 'New command'}
       subtitle="Runs in a new terminal, an existing terminal, or the background."
@@ -114,18 +115,18 @@ export function CommandEditorPage(props: IDockviewPanelProps<Params>) {
         id > 0 && (
           <>
             <button
-              className="btn-ghost"
+              className="btn-ghost inline-flex items-center gap-1"
               onClick={() => void runCommandInNewTerminal(cmd)}
               title="Run in a new terminal"
             >
-              ▶ Run
+              <Icon name="run" size={14} /> Run
             </button>
             <button
-              className="btn-ghost"
+              className="btn-ghost inline-flex items-center gap-1"
               onClick={() => void convertToService()}
               title="Turn this command into a supervised service"
             >
-              ⚡ Convert to service
+              <Icon name="convert" size={14} /> Convert to service
             </button>
           </>
         )

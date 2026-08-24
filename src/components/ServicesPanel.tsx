@@ -10,6 +10,7 @@ import { subtreeIds, serviceDir } from '../lib/tree'
 import * as ipc from '../lib/ipc'
 import { PanelShell, RowTitle, ROW_CARD, ICON_BTN, useRowMenu } from './PanelShell'
 import type { MenuItem } from './PopMenu'
+import { Icon } from '../lib/icons'
 
 export function ServicesPanel() {
   const { services, svcStates, nodes, selectedNode, scopeNode, refreshServices, focusServiceLogs, servicePort, requestStartService } = useApp()
@@ -50,15 +51,15 @@ export function ServicesPanel() {
     const dir = serviceDir(nodes, s)
     const port = servicePort(s.id)
     return [
-      { icon: '↻', label: 'Restart', disabled: !running, onClick: () => void act(s.id, () => ipc.svcRestart(s.id)) },
-      { icon: '☰', label: 'View logs', onClick: () => viewLogs(s) },
+      { icon: 'restart', label: 'Restart', disabled: !running, onClick: () => void act(s.id, () => ipc.svcRestart(s.id)) },
+      { icon: 'logs', label: 'View logs', onClick: () => viewLogs(s) },
       ...(port != null
-        ? [{ icon: '🌐', label: `Open http://localhost:${port}`, onClick: () => void ipc.openUrl(`http://localhost:${port}`).catch((e) => alert(String(e))) }]
+        ? [{ icon: 'globe', label: `Open http://localhost:${port}`, onClick: () => void ipc.openUrl(`http://localhost:${port}`).catch((e) => alert(String(e))) }]
         : []),
-      { icon: '📂', label: 'Reveal in File Explorer', disabled: !dir, onClick: () => void ipc.revealInExplorer(dir).catch((e) => alert(String(e))) },
+      { icon: 'reveal', label: 'Reveal in File Explorer', disabled: !dir, onClick: () => void ipc.revealInExplorer(dir).catch((e) => alert(String(e))) },
       { separator: true, label: '' },
-      { icon: '✎', label: 'Edit service…', onClick: () => openEditor('service', s.id, s.name || 'Service') },
-      { icon: '🗑', label: 'Delete service', danger: true, onClick: () => void del(s) },
+      { icon: 'edit', label: 'Edit service…', onClick: () => openEditor('service', s.id, s.name || 'Service') },
+      { icon: 'delete', label: 'Delete service', danger: true, onClick: () => void del(s) },
     ]
   }
 
@@ -100,10 +101,10 @@ export function ServicesPanel() {
                 title={running ? 'Stop' : 'Start'}
                 onClick={() => void act(s.id, () => (running ? ipc.svcStop(s.id) : requestStartService(s)))}
               >
-                {running ? '■' : '▶'}
+                <Icon name={running ? 'stop' : 'run'} size={13} />
               </button>
               <button className={ICON_BTN} title="More actions" onClick={(e) => openMenu(e, overflow(s, running))}>
-                ⋯
+                <Icon name="more" size={14} />
               </button>
             </div>
           </div>

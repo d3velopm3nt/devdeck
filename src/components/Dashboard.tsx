@@ -9,6 +9,7 @@ import * as ipc from '../lib/ipc'
 import { openSingleton, openTerminalPanel, openSpace } from '../lib/dock'
 import { subtreeIds } from '../lib/tree'
 import { nodeColor, avatarLabel, projectUsage, rankSpaces } from '../lib/spaces'
+import { Icon } from '../lib/icons'
 import type { LogEntry, ProcStat, TreeNode } from '../lib/types'
 
 function fmtUptime(secs: number): string {
@@ -90,8 +91,8 @@ function SpaceCard({ project, topUsed }: { project: TreeNode; topUsed: boolean }
         <div className="flex items-center gap-1.5">
           <span className="truncate text-[13px] font-medium text-slate-100">{project.name}</span>
           {topUsed && (
-            <span className="shrink-0 rounded-full px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide" style={{ background: hexA(color, 0.18), color }}>
-              ★ most used
+            <span className="flex shrink-0 items-center gap-1 rounded-full px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide" style={{ background: hexA(color, 0.18), color }}>
+              <Icon name="star" size={10} /> most used
             </span>
           )}
         </div>
@@ -106,7 +107,7 @@ function SpaceCard({ project, topUsed }: { project: TreeNode; topUsed: boolean }
           <span>{cmds} cmd</span>
         </div>
       </div>
-      <span className="text-slate-600 transition group-hover:translate-x-0.5 group-hover:text-slate-300">→</span>
+      <span className="flex items-center text-slate-600 transition group-hover:translate-x-0.5 group-hover:text-slate-300"><Icon name="arrow-right" size={14} /></span>
     </button>
   )
 }
@@ -241,7 +242,7 @@ export function Dashboard() {
               return (
                 <section key={ws.id}>
                   <div className="mb-2 flex items-center gap-2">
-                    <span className="text-[13px] text-indigo-400">⬢</span>
+                    <span className="flex items-center text-indigo-400"><Icon name="workspace" size={14} /></span>
                     <span className="text-[13px] font-semibold text-slate-200">{ws.name}</span>
                     <span className="text-[11px] text-slate-500">
                       {projects.length} space{projects.length === 1 ? '' : 's'}
@@ -321,8 +322,8 @@ export function Dashboard() {
               )}
               {sessions.map((s) => (
                 <div key={s.key} className="group flex items-center gap-2 px-3 py-1.5 text-[12px] hover:bg-slate-800/30">
-                  <span className={`text-[10px] ${s.kind === 'service' ? 'text-amber-400/80' : 'text-emerald-400'}`}>
-                    {s.kind === 'service' ? '⚡' : '❯_'}
+                  <span className={`flex items-center ${s.kind === 'service' ? 'text-amber-400/80' : 'text-emerald-400'}`}>
+                    <Icon name={s.kind === 'service' ? 'service' : 'command'} size={12} />
                   </span>
                   <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-emerald-400" />
                   <button
@@ -355,19 +356,19 @@ export function Dashboard() {
                     <>
                       {s.port != null && (
                         <button
-                          className="hidden shrink-0 rounded px-1 text-[11px] text-slate-400 hover:bg-slate-600 hover:text-white group-hover:block"
+                          className="hidden shrink-0 items-center rounded px-1 text-slate-400 hover:bg-slate-600 hover:text-white group-hover:flex"
                           title={`Open http://localhost:${s.port}`}
                           onClick={() => openBrowser(s.port!)}
                         >
-                          🌐
+                          <Icon name="globe" size={13} />
                         </button>
                       )}
                       <button
-                        className="shrink-0 rounded border border-red-500/40 bg-red-500/10 px-1.5 py-0.5 text-[10.5px] text-red-400 hover:bg-red-500/25"
+                        className="flex shrink-0 items-center rounded border border-red-500/40 bg-red-500/10 px-1.5 py-0.5 text-red-400 hover:bg-red-500/25"
                         title="Stop service"
                         onClick={() => void ipc.svcStop(s.id).catch((e) => alert(String(e)))}
                       >
-                        ■
+                        <Icon name="stop" size={12} />
                       </button>
                     </>
                   ) : (
@@ -385,15 +386,15 @@ export function Dashboard() {
                 Errors &amp; warnings
               </span>
               <button
-                className="text-[11px] text-slate-500 hover:text-slate-300"
+                className="inline-flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-300"
                 onClick={() => openSingleton('logs', 'logs', 'Logs')}
               >
-                view all →
+                view all <Icon name="arrow-right" size={12} />
               </button>
             </div>
             <div className="divide-y divide-slate-800/70">
               {issues.length === 0 && (
-                <div className="px-3 py-6 text-center text-[12px] text-slate-500">No errors or warnings. 🎉</div>
+                <div className="flex items-center justify-center gap-1 px-3 py-6 text-center text-[12px] text-slate-500">No errors or warnings. <Icon name="celebrate" size={14} /></div>
               )}
               {issues.map((i) => (
                 <div key={i.key} className="flex items-start gap-2 px-3 py-1.5 text-[12px] hover:bg-slate-800/30">

@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
 import * as ipc from '../lib/ipc'
+import { Icon } from '../lib/icons'
 import { PACKAGES, BUNDLES, CATEGORY_LABELS, type PkgCategory } from '../lib/machineCatalog'
 
 type Pkg = ipc.MachinePackage
@@ -270,12 +271,12 @@ export function MachineSetup() {
             </p>
           </div>
           <div className="ml-auto flex shrink-0 flex-wrap justify-end gap-1.5">
-            <button className="btn-ghost text-[12px]" onClick={() => setEditing(blankDraft())}>＋ Add software</button>
-            <button className="btn-ghost text-[12px]" onClick={() => void doImport()}>↥ Import</button>
-            <button className="btn-ghost text-[12px]" onClick={() => void doExport()}>↧ Export</button>
-            <button className="btn-ghost text-[12px]" title="Read what's installed and write a manifest" onClick={() => void doSnapshot()}>📸 Snapshot</button>
-            <button className="btn-primary text-[12px]" disabled={selectableSelected.length === 0 || installing} onClick={installSelected}>
-              {installing ? 'Installing…' : `⤓ Install selected · ${selectableSelected.length}`}
+            <button className="btn-ghost inline-flex items-center gap-1 text-[12px]" onClick={() => setEditing(blankDraft())}><Icon name="add" size={13} /> Add software</button>
+            <button className="btn-ghost inline-flex items-center gap-1 text-[12px]" onClick={() => void doImport()}><Icon name="import" size={13} /> Import</button>
+            <button className="btn-ghost inline-flex items-center gap-1 text-[12px]" onClick={() => void doExport()}><Icon name="export" size={13} /> Export</button>
+            <button className="btn-ghost inline-flex items-center gap-1 text-[12px]" title="Read what's installed and write a manifest" onClick={() => void doSnapshot()}><Icon name="snapshot" size={13} /> Snapshot</button>
+            <button className="btn-primary inline-flex items-center gap-1 text-[12px]" disabled={selectableSelected.length === 0 || installing} onClick={installSelected}>
+              {installing ? 'Installing…' : <><Icon name="download" size={13} /> Install selected · {selectableSelected.length}</>}
             </button>
           </div>
         </div>
@@ -288,12 +289,12 @@ export function MachineSetup() {
             <>
               <span>scoop is not installed — scoop packages (CLI tools) are disabled.</span>
               <button
-                className="rounded bg-amber-500/20 px-2 py-0.5 text-[11px] font-semibold text-amber-100 hover:bg-amber-500/30 disabled:opacity-60"
+                className="inline-flex items-center gap-1 rounded bg-amber-500/20 px-2 py-0.5 text-[11px] font-semibold text-amber-100 hover:bg-amber-500/30 disabled:opacity-60"
                 disabled={scoopInstalling}
                 title="Install scoop (per-user, no admin)"
                 onClick={() => { setScoopInstalling(true); void ipc.machineInstallScoop().catch((e) => { alert(String(e)); setScoopInstalling(false) }) }}
               >
-                {scoopInstalling ? 'Installing scoop…' : '⤓ Install scoop'}
+                {scoopInstalling ? 'Installing scoop…' : <><Icon name="download" size={12} /> Install scoop</>}
               </button>
             </>
           )}
@@ -323,7 +324,7 @@ export function MachineSetup() {
           </button>
         ))}
         <div className="ml-auto flex items-center gap-1.5">
-          <button className="btn-ghost text-[11.5px]" disabled={loading} onClick={() => void refreshStatus()}>{loading ? 'Checking…' : '↻ Refresh'}</button>
+          <button className="btn-ghost inline-flex items-center gap-1 text-[11.5px]" disabled={loading} onClick={() => void refreshStatus()}>{loading ? 'Checking…' : <><Icon name="restart" size={12} /> Refresh</>}</button>
           <button className="btn-ghost text-[11.5px]" title="Re-seed curated packages and un-hide removed ones" onClick={() => void restoreDefaults()}>Restore defaults</button>
         </div>
       </div>
@@ -352,7 +353,7 @@ export function MachineSetup() {
             {/* search toolbar */}
             <div className="flex flex-wrap items-center gap-3 py-3">
               <label className="flex min-w-[220px] flex-1 items-center gap-2 rounded-lg border border-slate-700 bg-[#0d1017] px-3 py-2 text-slate-400">
-                🔎
+                <Icon name="search" size={14} />
                 <input className="flex-1 bg-transparent text-[13px] text-slate-200 outline-none placeholder:text-slate-600" placeholder="Search winget & scoop — e.g. “docker”, “node”, “vscode”…" value={search} onChange={(e) => setSearch(e.target.value)} />
               </label>
               <div className="inline-flex overflow-hidden rounded-lg border border-slate-700">
@@ -388,8 +389,8 @@ export function MachineSetup() {
                     </button>
                     <span className={`shrink-0 rounded px-1.5 py-px text-[9.5px] font-semibold ${p.source === 'scoop' ? 'bg-emerald-500/12 text-emerald-400' : 'bg-sky-500/12 text-sky-400'}`}>{p.source}</span>
                     <StatusBadge status={st} />
-                    <button className="shrink-0 rounded-md border border-slate-700 px-1.5 py-1 text-[11px] text-slate-400 opacity-0 hover:border-slate-500 hover:text-white group-hover:opacity-100" title="Edit configuration" onClick={() => setEditing(editFrom(p))}>✎</button>
-                    <button className="shrink-0 rounded-md border border-slate-700 px-1.5 py-1 text-[11px] text-slate-400 hover:border-slate-500 hover:text-white" title="Configuration" onClick={() => openDetail(p)}>ⓘ</button>
+                    <button className="flex shrink-0 items-center rounded-md border border-slate-700 px-1.5 py-1 text-[11px] text-slate-400 opacity-0 hover:border-slate-500 hover:text-white group-hover:opacity-100" title="Edit configuration" onClick={() => setEditing(editFrom(p))}><Icon name="edit" size={12} /></button>
+                    <button className="flex shrink-0 items-center rounded-md border border-slate-700 px-1.5 py-1 text-[11px] text-slate-400 hover:border-slate-500 hover:text-white" title="Configuration" onClick={() => openDetail(p)}><Icon name="info" size={12} /></button>
                     <button
                       className={`min-w-[76px] shrink-0 rounded-md px-2.5 py-1 text-[11px] ${st === 'installed' ? 'text-slate-500' : st === 'installing' ? 'border border-slate-700 text-slate-400' : 'bg-indigo-600 font-semibold text-white hover:bg-indigo-500'}`}
                       disabled={disabled || st === 'installing'}
@@ -490,7 +491,7 @@ function DetailModal(props: {
           <div className="truncate text-[14px] font-semibold text-slate-100">{pkg.name}</div>
           <div className="truncate font-mono text-[11px] text-slate-500">{pkg.id}</div>
         </div>
-        <button className="ml-auto rounded px-2 py-1 text-slate-500 hover:bg-slate-700 hover:text-white" onClick={props.onClose}>✕</button>
+        <button className="ml-auto flex items-center rounded px-2 py-1 text-slate-500 hover:bg-slate-700 hover:text-white" onClick={props.onClose}><Icon name="close" size={14} /></button>
       </div>
       <div className="space-y-3 px-5 py-4 text-[12.5px]">
         <div className="grid grid-cols-2 gap-3">
@@ -512,10 +513,10 @@ function DetailModal(props: {
         </FieldLbl>
       </div>
       <div className="flex items-center gap-2 border-t border-slate-800 px-5 py-3">
-        <button className="btn-ghost text-[12px]" onClick={props.onEdit}>✎ Edit</button>
-        {changed && props.onReset && <button className="btn-ghost text-[12px]" onClick={props.onReset}>↺ Reset to default</button>}
+        <button className="btn-ghost inline-flex items-center gap-1 text-[12px]" onClick={props.onEdit}><Icon name="edit" size={13} /> Edit</button>
+        {changed && props.onReset && <button className="btn-ghost inline-flex items-center gap-1 text-[12px]" onClick={props.onReset}><Icon name="reset" size={13} /> Reset to default</button>}
         <button className="text-[12px] text-red-400 hover:underline" onClick={props.onDelete}>{pkg.custom ? 'Delete' : 'Remove'}</button>
-        <button className="btn-primary ml-auto text-[12px]" onClick={props.onInstall}>⤓ Install</button>
+        <button className="btn-primary ml-auto inline-flex items-center gap-1 text-[12px]" onClick={props.onInstall}><Icon name="download" size={13} /> Install</button>
       </div>
     </Overlay>
   )
@@ -528,7 +529,7 @@ function EditModal({ draft, idLocked, onChange, onSave, onCancel }: { draft: Dra
     <Overlay onClose={onCancel}>
       <div className="flex items-center gap-3 border-b border-slate-800 px-5 py-3">
         <div className="text-[14px] font-semibold text-slate-100">{draft.orig ? `Edit ${draft.isCustom ? 'software' : 'curated package'}` : 'Add your own software'}</div>
-        <button className="ml-auto rounded px-2 py-1 text-slate-500 hover:bg-slate-700 hover:text-white" onClick={onCancel}>✕</button>
+        <button className="ml-auto flex items-center rounded px-2 py-1 text-slate-500 hover:bg-slate-700 hover:text-white" onClick={onCancel}><Icon name="close" size={14} /></button>
       </div>
       <div className="space-y-3 px-5 py-4">
         <FieldLbl label="Name"><input className={input} value={draft.name} onChange={(e) => set({ name: e.target.value })} placeholder="e.g. My Internal CLI" /></FieldLbl>

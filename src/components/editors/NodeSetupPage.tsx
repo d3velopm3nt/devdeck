@@ -14,6 +14,7 @@ import { guessKind, guessPort, pmBadge } from '../../lib/pm'
 import type { DetectedCommand } from '../../lib/types'
 import { EditorShell, Field } from './EditorShell'
 import { openTerminal } from '../../lib/runner'
+import { Icon } from '../../lib/icons'
 
 type Params = { id: number }
 
@@ -176,7 +177,7 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
 
   return (
     <EditorShell
-      icon={isProject ? '▣' : '▤'}
+      icon={isProject ? 'project' : 'folder'}
       kind={isProject ? 'Project' : 'Folder'}
       title={name || (isProject ? 'Project' : 'Folder')}
       subtitle={
@@ -189,8 +190,8 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
       canSave={!!name.trim()}
       extraActions={
         preview ? (
-          <button className="btn-ghost" title="Open a terminal here" onClick={() => void openTerminal(undefined, preview)}>
-            ❯ Terminal
+          <button className="btn-ghost inline-flex items-center gap-1" title="Open a terminal here" onClick={() => void openTerminal(undefined, preview)}>
+            <Icon name="terminal" size={13} /> Terminal
           </button>
         ) : null
       }
@@ -225,11 +226,21 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
                 </div>
               </div>
               <button
-                className="btn-primary shrink-0 text-[12px]"
+                className="btn-primary inline-flex shrink-0 items-center gap-1 text-[12px]"
                 disabled={!(preview || path).trim() || scanning}
                 onClick={() => void runScan()}
               >
-                {scanning ? 'Scanning…' : scan ? '↻ Re-scan' : '🔍 Scan'}
+                {scanning ? (
+                  'Scanning…'
+                ) : scan ? (
+                  <>
+                    <Icon name="restart" size={13} /> Re-scan
+                  </>
+                ) : (
+                  <>
+                    <Icon name="search" size={13} /> Scan
+                  </>
+                )}
               </button>
             </div>
 
@@ -291,9 +302,17 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
                                       e.preventDefault()
                                       setKind(r.command, k)
                                     }}
-                                    className={`px-1.5 py-1 ${kind === k ? (k === 'service' ? 'bg-amber-500/25 text-amber-300' : 'bg-indigo-500/25 text-indigo-200') : 'text-slate-500 hover:text-slate-300'}`}
+                                    className={`inline-flex items-center gap-1 px-1.5 py-1 ${kind === k ? (k === 'service' ? 'bg-amber-500/25 text-amber-300' : 'bg-indigo-500/25 text-indigo-200') : 'text-slate-500 hover:text-slate-300'}`}
                                   >
-                                    {k === 'service' ? '⚡ Svc' : '⌘ Cmd'}
+                                    {k === 'service' ? (
+                                      <>
+                                        <Icon name="service" size={12} /> Svc
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Icon name="command" size={12} /> Cmd
+                                      </>
+                                    )}
                                   </button>
                                 ))}
                               </span>
@@ -327,8 +346,8 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
                       })()}
                     </button>
                     {result && (
-                      <span className="mt-1 text-[11px] text-emerald-400">
-                        ✓ Added {result.added}
+                      <span className="mt-1 inline-flex items-center gap-1 text-[11px] text-emerald-400">
+                        <Icon name="check" size={12} /> Added {result.added}
                         {result.updated ? `, overrode ${result.updated}` : ''}
                         {result.failed ? `, ${result.failed} failed` : ''} — see the Commands / Services panels.
                       </span>

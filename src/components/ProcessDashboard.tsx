@@ -9,6 +9,7 @@ import * as ipc from '../lib/ipc'
 import type { ProcStat, SvcStatus } from '../lib/types'
 import { openTerminalPanel, closeTerminalPanel } from '../lib/dock'
 import { serviceDir } from '../lib/tree'
+import { Icon } from '../lib/icons'
 
 function fmtUptime(secs: number): string {
   const h = Math.floor(secs / 3600)
@@ -104,8 +105,8 @@ export function ProcessDashboard() {
                 return (
                   <tr key={r.key} className="hover:bg-slate-800/30">
                     <td className="px-2 py-1.5">
-                      <span className={`text-[10px] ${r.kind === 'service' ? 'text-indigo-400' : 'text-emerald-400'}`}>
-                        {r.kind === 'service' ? '⚙' : '❯_'}
+                      <span className={`flex items-center ${r.kind === 'service' ? 'text-indigo-400' : 'text-emerald-400'}`}>
+                        <Icon name={r.kind === 'service' ? 'service' : 'command'} size={13} />
                       </span>
                     </td>
                     <td className="max-w-48 truncate px-2 py-1.5 text-slate-200">{r.name}</td>
@@ -142,63 +143,63 @@ export function ProcessDashboard() {
                           <>
                           {svc && serviceDir(nodes, svc) && (
                             <button
-                              className="rounded border border-slate-600 bg-slate-700/40 px-2 py-0.5 text-[11px] text-slate-200 hover:border-slate-400"
+                              className="inline-flex items-center gap-1 rounded border border-slate-600 bg-slate-700/40 px-2 py-0.5 text-[11px] text-slate-200 hover:border-slate-400"
                               title={`Reveal in File Explorer\n${serviceDir(nodes, svc)}`}
                               onClick={() => void ipc.revealInExplorer(serviceDir(nodes, svc)).catch((e) => alert(String(e)))}
                             >
-                              📂 Folder
+                              <Icon name="reveal" size={13} /> Folder
                             </button>
                           )}
                           {port != null && (
                             <button
-                              className="rounded border border-sky-500/40 bg-sky-500/10 px-2 py-0.5 text-[11px] text-sky-400 hover:bg-sky-500/25"
+                              className="inline-flex items-center gap-1 rounded border border-sky-500/40 bg-sky-500/10 px-2 py-0.5 text-[11px] text-sky-400 hover:bg-sky-500/25"
                               title={running ? `Open http://localhost:${port}` : `Opens http://localhost:${port} (not running)`}
                               onClick={() => void ipc.openUrl(`http://localhost:${port}`).catch((e) => alert(String(e)))}
                             >
-                              🌐 Open
+                              <Icon name="globe" size={13} /> Open
                             </button>
                           )}
                           {running ? (
                             <>
                               <button
-                                className="rounded border border-slate-600 bg-slate-700/40 px-2 py-0.5 text-[11px] text-slate-200 hover:border-slate-400 disabled:opacity-40"
+                                className="inline-flex items-center gap-1 rounded border border-slate-600 bg-slate-700/40 px-2 py-0.5 text-[11px] text-slate-200 hover:border-slate-400 disabled:opacity-40"
                                 disabled={busy === r.key}
                                 title="Restart service"
                                 onClick={() => void act(r.key, () => ipc.svcRestart(r.id))}
                               >
-                                ⟳ Restart
+                                <Icon name="restart" size={13} /> Restart
                               </button>
                               <button
-                                className="rounded border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-[11px] text-red-400 hover:bg-red-500/25 disabled:opacity-40"
+                                className="inline-flex items-center gap-1 rounded border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-[11px] text-red-400 hover:bg-red-500/25 disabled:opacity-40"
                                 disabled={busy === r.key}
                                 title="Stop service"
                                 onClick={() => void act(r.key, () => ipc.svcStop(r.id))}
                               >
-                                ■ Stop
+                                <Icon name="stop" size={13} /> Stop
                               </button>
                             </>
                           ) : (
                             <button
-                              className="rounded border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-400 hover:bg-emerald-500/25 disabled:opacity-40"
+                              className="inline-flex items-center gap-1 rounded border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-400 hover:bg-emerald-500/25 disabled:opacity-40"
                               disabled={busy === r.key}
                               title="Start service"
                               onClick={() => void act(r.key, () => ipc.svcStart(r.id))}
                             >
-                              ▶ Start
+                              <Icon name="run" size={13} /> Start
                             </button>
                           )}
                           </>
                         ) : (
                           <>
                             <button
-                              className="rounded border border-slate-600 bg-slate-700/40 px-2 py-0.5 text-[11px] text-slate-200 hover:border-slate-400"
+                              className="inline-flex items-center gap-1 rounded border border-slate-600 bg-slate-700/40 px-2 py-0.5 text-[11px] text-slate-200 hover:border-slate-400"
                               title="Open / focus terminal tab"
                               onClick={() => openTerminalPanel(r.id, r.name)}
                             >
-                              ⮌ Open
+                              <Icon name="external" size={13} /> Open
                             </button>
                             <button
-                              className="rounded border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-[11px] text-red-400 hover:bg-red-500/25"
+                              className="inline-flex items-center gap-1 rounded border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-[11px] text-red-400 hover:bg-red-500/25"
                               title="Kill terminal session"
                               onClick={() =>
                                 void act(r.key, async () => {
@@ -208,7 +209,7 @@ export function ProcessDashboard() {
                                 })
                               }
                             >
-                              ■ Kill
+                              <Icon name="stop" size={13} /> Kill
                             </button>
                           </>
                         )}

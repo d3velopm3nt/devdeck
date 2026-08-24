@@ -9,6 +9,7 @@ import { useApp } from '../../store'
 import { launchProfile } from '../../lib/runner'
 import { resolveDir } from '../../lib/tree'
 import { EditorShell, Field } from './EditorShell'
+import { Icon } from '../../lib/icons'
 
 type Params = { id: number; projectId?: number | null }
 
@@ -79,7 +80,7 @@ export function ProfileEditorPage(props: IDockviewPanelProps<Params>) {
 
   return (
     <EditorShell
-      icon="⚡"
+      icon="service"
       kind="Profile"
       title={id > 0 ? profile.name || 'Profile' : 'New profile'}
       subtitle="One click starts services, runs commands, opens terminals, and restores a layout."
@@ -89,8 +90,8 @@ export function ProfileEditorPage(props: IDockviewPanelProps<Params>) {
       onDelete={id > 0 ? () => void remove() : undefined}
       extraActions={
         id > 0 && (
-          <button className="btn-ghost" onClick={() => void launchProfile(profile)} title="Launch now">
-            ⚡ Launch
+          <button className="btn-ghost inline-flex items-center gap-1" onClick={() => void launchProfile(profile)} title="Launch now">
+            <Icon name="service" size={14} /> Launch
           </button>
         )
       }
@@ -115,11 +116,11 @@ export function ProfileEditorPage(props: IDockviewPanelProps<Params>) {
           <div key={i} className="flex items-center gap-2 rounded bg-slate-800/40 px-2 py-1.5 text-[12.5px]">
             <span className="w-5 text-[10px] text-slate-500">{i + 1}.</span>
             <span className="flex-1 text-slate-300">{stepLabel(s, state)}</span>
-            <button className="px-1 text-slate-500 hover:text-white disabled:opacity-30" disabled={i === 0} onClick={() => move(i, -1)} title="Move up">
-              ↑
+            <button className="inline-flex items-center px-1 text-slate-500 hover:text-white disabled:opacity-30" disabled={i === 0} onClick={() => move(i, -1)} title="Move up">
+              <Icon name="arrow-up" size={14} />
             </button>
-            <button className="px-1 text-slate-500 hover:text-white disabled:opacity-30" disabled={i === steps.length - 1} onClick={() => move(i, 1)} title="Move down">
-              ↓
+            <button className="inline-flex items-center px-1 text-slate-500 hover:text-white disabled:opacity-30" disabled={i === steps.length - 1} onClick={() => move(i, 1)} title="Move down">
+              <Icon name="arrow-down" size={14} />
             </button>
             <button className="px-1 text-slate-500 hover:text-red-400" onClick={() => setSteps(steps.filter((_, j) => j !== i))} title="Remove">
               ×

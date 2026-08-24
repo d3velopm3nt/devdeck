@@ -11,6 +11,7 @@ import { openTerminal, runCommandInNewTerminal, runCommandInBackground, launchPr
 import { subtreeIds, resolveDir, serviceDir, nodeLabel } from '../lib/tree'
 import { nodeColor, avatarLabel } from '../lib/spaces'
 import { ColorPicker } from './ColorPicker'
+import { Icon } from '../lib/icons'
 import type { ProfileStep, ProfileDef, ServiceDef, CommandDef } from '../lib/types'
 
 function fmtUptime(secs: number): string {
@@ -167,11 +168,11 @@ export function SpaceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
             <div className="truncate text-[22px] font-semibold text-slate-100">{project.name}</div>
             {baseDir && (
               <button
-                className="mt-0.5 max-w-full truncate font-mono text-[11px] text-slate-500 hover:text-slate-300"
+                className="mt-0.5 inline-flex max-w-full items-center gap-1 truncate font-mono text-[11px] text-slate-500 hover:text-slate-300"
                 title="Reveal in File Explorer"
                 onClick={() => void ipc.revealInExplorer(baseDir).catch((e) => alert(String(e)))}
               >
-                {baseDir} ↗
+                <span className="truncate">{baseDir}</span> <Icon name="external" size={12} />
               </button>
             )}
           </div>
@@ -183,34 +184,34 @@ export function SpaceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
               onReset={() => void setColor('')}
             />
             <button
-              className="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-[12px] text-slate-200 hover:border-slate-500"
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-[12px] text-slate-200 hover:border-slate-500"
               disabled={!baseDir}
               onClick={() => void openTerminal(undefined, baseDir || undefined)}
             >
-              ❯ Terminal
+              <Icon name="terminal" size={13} /> Terminal
             </button>
             <button
-              className="rounded-lg px-3 py-1.5 text-[12px] font-medium text-white disabled:opacity-40"
+              className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-[12px] font-medium text-white disabled:opacity-40"
               style={{ background: color, boxShadow: `0 4px 14px ${hexA(color, 0.35)}` }}
               disabled={spaceServices.length === 0}
               title="Start every service in this space"
               onClick={() => void startAll()}
             >
-              ▶ Start all
+              <Icon name="run" size={13} /> Start all
             </button>
             {runningServices.length > 0 && (
               <button
-                className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-[12px] text-red-400 hover:bg-red-500/25"
+                className="inline-flex items-center gap-1 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-[12px] text-red-400 hover:bg-red-500/25"
                 onClick={() => void stopAll()}
               >
-                ■ Stop all
+                <Icon name="stop" size={13} /> Stop all
               </button>
             )}
             <button
-              className="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-[12px] text-slate-200 hover:border-slate-500"
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-[12px] text-slate-200 hover:border-slate-500"
               onClick={() => openNodeSetup(project.id, project.name)}
             >
-              ⚙ Setup
+              <Icon name="settings" size={13} /> Setup
             </button>
           </div>
         </div>
@@ -239,9 +240,9 @@ export function SpaceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
                   <span className="text-slate-200">{s.name}</span>
                   {st && <span className="font-mono text-[10px] text-slate-500">{fmtUptime(st.uptime_secs)} · {st.mem_mb.toFixed(0)}mb</span>}
                   {s.health_port != null && (
-                    <button className="text-sky-400 hover:underline" title={`Open http://localhost:${s.health_port}`} onClick={() => openBrowser(s.health_port!)}>🌐</button>
+                    <button className="flex items-center text-sky-400 hover:underline" title={`Open http://localhost:${s.health_port}`} onClick={() => openBrowser(s.health_port!)}><Icon name="globe" size={13} /></button>
                   )}
-                  <button className="text-red-400 hover:text-red-300" title="Stop" onClick={() => void act(s.id, () => ipc.svcStop(s.id))}>■</button>
+                  <button className="flex items-center text-red-400 hover:text-red-300" title="Stop" onClick={() => void act(s.id, () => ipc.svcStop(s.id))}><Icon name="stop" size={13} /></button>
                 </div>
               )
             })}
@@ -336,7 +337,7 @@ function ServicesTab({
           <span className="text-slate-200">{selCount} selected</span>
           <span className="flex-1" />
           <button className="rounded px-2 py-0.5 text-[11px] text-slate-400 hover:text-slate-200" onClick={onClearSel}>Clear</button>
-          <button className="rounded px-3 py-0.5 text-[11px] font-medium text-white" style={{ background: color }} onClick={onRunSelected}>▶ Run selected</button>
+          <button className="inline-flex items-center gap-1 rounded px-3 py-0.5 text-[11px] font-medium text-white" style={{ background: color }} onClick={onRunSelected}><Icon name="run" size={12} /> Run selected</button>
         </div>
       )}
       {list.map((s) => {
@@ -353,21 +354,21 @@ function ServicesTab({
               <div className="truncate font-mono text-[10.5px] text-slate-500">{s.command}</div>
             </button>
             <button
-              className="hidden shrink-0 rounded px-1 text-[12px] text-slate-400 hover:bg-slate-600 hover:text-white group-hover:block disabled:opacity-40"
+              className="hidden shrink-0 items-center rounded px-1 text-[12px] text-slate-400 hover:bg-slate-600 hover:text-white group-hover:flex disabled:opacity-40"
               title={dir ? `Reveal in File Explorer\n${dir}` : 'No folder set for this service'}
               disabled={!dir}
               onClick={() => void ipc.revealInExplorer(dir).catch((e) => alert(String(e)))}
-            >📂</button>
+            ><Icon name="reveal" size={13} /></button>
             {s.health_port != null && (
-              <button className="hidden shrink-0 rounded px-1 text-[12px] text-slate-400 hover:bg-slate-600 hover:text-white group-hover:block" title={`Open http://localhost:${s.health_port}`} onClick={() => openBrowser(s.health_port!)}>🌐</button>
+              <button className="hidden shrink-0 items-center rounded px-1 text-[12px] text-slate-400 hover:bg-slate-600 hover:text-white group-hover:flex" title={`Open http://localhost:${s.health_port}`} onClick={() => openBrowser(s.health_port!)}><Icon name="globe" size={13} /></button>
             )}
             {running ? (
               <>
-                <button className="btn-ghost text-[11px]" disabled={busy === s.id} title="Restart" onClick={() => void onAct(s.id, () => ipc.svcRestart(s.id))}>⟳</button>
-                <button className="btn-danger text-[11px]" disabled={busy === s.id} onClick={() => void onAct(s.id, () => ipc.svcStop(s.id))}>■ Stop</button>
+                <button className="btn-ghost flex items-center text-[11px]" disabled={busy === s.id} title="Restart" onClick={() => void onAct(s.id, () => ipc.svcRestart(s.id))}><Icon name="restart" size={12} /></button>
+                <button className="btn-danger inline-flex items-center gap-1 text-[11px]" disabled={busy === s.id} onClick={() => void onAct(s.id, () => ipc.svcStop(s.id))}><Icon name="stop" size={12} /> Stop</button>
               </>
             ) : (
-              <button className="btn-primary text-[11px]" disabled={busy === s.id} onClick={() => void onAct(s.id, () => ipc.svcStart(s.id))}>▶ Start</button>
+              <button className="btn-primary inline-flex items-center gap-1 text-[11px]" disabled={busy === s.id} onClick={() => void onAct(s.id, () => ipc.svcStart(s.id))}><Icon name="run" size={12} /> Start</button>
             )}
           </div>
         )
@@ -383,13 +384,13 @@ function CommandsTab({ list }: { list: CommandDef[] }) {
     <div className="space-y-2">
       {list.map((c) => (
         <div key={c.id} className="group flex items-center gap-2.5 rounded-lg border border-slate-800 bg-[#151923] px-3 py-2 hover:border-slate-600">
-          <span className="text-[12px] text-indigo-400">⌘</span>
+          <span className="flex items-center text-indigo-400"><Icon name="command" size={13} /></span>
           <button className="min-w-0 flex-1 text-left" onClick={() => openEditor('command', c.id, c.name || 'Command')}>
             <div className="truncate text-[12.5px] text-slate-200">{c.name}</div>
             <div className="truncate font-mono text-[10.5px] text-slate-500">{c.command}</div>
           </button>
-          <button className="btn-ghost text-[11px]" title="Run in background" onClick={() => void runCommandInBackground(c).catch((e) => alert(String(e)))}>⚙ Bg</button>
-          <button className="btn-primary text-[11px]" title="Run in a new terminal" onClick={() => void runCommandInNewTerminal(c).catch((e) => alert(String(e)))}>▶ Run</button>
+          <button className="btn-ghost inline-flex items-center gap-1 text-[11px]" title="Run in background" onClick={() => void runCommandInBackground(c).catch((e) => alert(String(e)))}><Icon name="logs" size={12} /> Bg</button>
+          <button className="btn-primary inline-flex items-center gap-1 text-[11px]" title="Run in a new terminal" onClick={() => void runCommandInNewTerminal(c).catch((e) => alert(String(e)))}><Icon name="run" size={12} /> Run</button>
         </div>
       ))}
     </div>
@@ -403,12 +404,12 @@ function ProfilesTab({ list, stepCount }: { list: ProfileDef[]; stepCount: (p: P
     <div className="space-y-2">
       {list.map((p) => (
         <div key={p.id} className="group flex items-center gap-2.5 rounded-lg border border-slate-800 bg-[#151923] px-3 py-2 hover:border-slate-600">
-          <span className="text-[12px] text-amber-400">⚡</span>
+          <span className="flex items-center text-amber-400"><Icon name="service" size={13} /></span>
           <button className="min-w-0 flex-1 text-left" onClick={() => openEditor('profile', p.id, p.name || 'Profile')}>
             <div className="truncate text-[12.5px] text-slate-200">{p.name}</div>
             <div className="text-[10.5px] text-slate-500">{stepCount(p)} step{stepCount(p) === 1 ? '' : 's'}</div>
           </button>
-          <button className="btn-primary text-[11px]" title="Launch profile" onClick={() => void launchProfile(p).catch((e) => alert(String(e)))}>⚡ Launch</button>
+          <button className="btn-primary inline-flex items-center gap-1 text-[11px]" title="Launch profile" onClick={() => void launchProfile(p).catch((e) => alert(String(e)))}><Icon name="service" size={12} /> Launch</button>
         </div>
       ))}
     </div>

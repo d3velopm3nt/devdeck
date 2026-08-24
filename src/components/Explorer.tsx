@@ -15,6 +15,7 @@ import { nodeColor } from '../lib/spaces'
 import { loadExampleWorkspace } from '../lib/example'
 import { PopMenu, type MenuItem } from './PopMenu'
 import { GitHubImportModal } from './GitHubImportModal'
+import { Icon } from '../lib/icons'
 
 // The expand/collapse state is remembered across restarts so the tree
 // reopens where you left it — a folder isn't "gone" after a restart, its
@@ -40,9 +41,9 @@ function saveSet<T>(key: string, set: Set<T>) {
 }
 
 const KIND_ICON: Record<NodeKind, string> = {
-  workspace: '⬢',
-  project: '▣',
-  folder: '▤',
+  workspace: 'workspace',
+  project: 'project',
+  folder: 'folder',
 }
 
 const KIND_COLOR: Record<NodeKind, string> = {
@@ -73,9 +74,9 @@ interface Menu {
 // "folder" that holds the node's commands, services, or profiles.
 type Cat = 'commands' | 'services' | 'profiles'
 const CAT_META: Record<Cat, { label: string; icon: string; color: string }> = {
-  commands: { label: 'Commands', icon: '⌘', color: 'text-sky-400/80' },
-  services: { label: 'Services', icon: '⚡', color: 'text-amber-400/80' },
-  profiles: { label: 'Profiles', icon: '⧉', color: 'text-violet-400/80' },
+  commands: { label: 'Commands', icon: 'command', color: 'text-sky-400/80' },
+  services: { label: 'Services', icon: 'service', color: 'text-amber-400/80' },
+  profiles: { label: 'Profiles', icon: 'profile', color: 'text-violet-400/80' },
 }
 
 export function Explorer() {
@@ -224,16 +225,16 @@ export function Explorer() {
   // The workspace switcher menu: pick a workspace, or manage them.
   const workspaceMenuItems = (): MenuItem[] => [
     ...workspaces.map((w) => ({
-      icon: w.id === activeWorkspaceId ? '✓' : '⬢',
+      icon: w.id === activeWorkspaceId ? 'check' : 'workspace',
       label: w.name,
       onClick: () => setActiveWorkspace(w.id),
     })),
     { separator: true, label: '' },
-    { icon: '＋', label: 'New workspace…', onClick: () => void addWorkspace() },
+    { icon: 'add', label: 'New workspace…', onClick: () => void addWorkspace() },
     ...(ws
       ? [
-          { icon: '✎', label: 'Rename workspace…', onClick: () => void renameWorkspace(ws) },
-          { icon: '🗑', label: 'Delete workspace', danger: true, onClick: () => void del(ws) },
+          { icon: 'edit', label: 'Rename workspace…', onClick: () => void renameWorkspace(ws) },
+          { icon: 'delete', label: 'Delete workspace', danger: true, onClick: () => void del(ws) },
         ]
       : []),
   ]
@@ -241,54 +242,54 @@ export function Explorer() {
   const nodeMenuItems = (node: TreeNode | null): MenuItem[] => {
     if (!node) {
       return [
-        { icon: '▣', label: 'New project', disabled: activeWorkspaceId == null, onClick: () => void addProject() },
+        { icon: 'project', label: 'New project', disabled: activeWorkspaceId == null, onClick: () => void addProject() },
       ]
     }
     const items: MenuItem[] = []
 
     if (node.kind === 'project' || node.kind === 'folder') {
-      items.push({ icon: '▤', label: 'New folder', onClick: () => void addFolder(node) })
+      items.push({ icon: 'folder', label: 'New folder', onClick: () => void addFolder(node) })
       const dir = resolveDir(nodes, node)
       items.push(
         {
-          icon: '⚙',
+          icon: 'settings',
           label: node.kind === 'project' ? 'Project settings…' : 'Configure folder…',
           onClick: () => openNodeSetup(node.id, node.name),
         },
-        { icon: '❯', label: 'Open terminal here', disabled: !dir, onClick: () => void openTerminal(undefined, dir) },
-        { icon: '⌘', label: 'New command', onClick: () => openEditor('command', 0, 'New command', node.id) },
-        { icon: '⚡', label: 'New service', onClick: () => openEditor('service', 0, 'New service', node.id) },
-        { icon: '⧉', label: 'New profile', onClick: () => openEditor('profile', 0, 'New profile', node.id) },
-        { icon: '↗', label: 'Reveal in File Explorer', disabled: !dir, onClick: () => void ipc.revealInExplorer(dir).catch((e) => alert(String(e))) },
+        { icon: 'terminal', label: 'Open terminal here', disabled: !dir, onClick: () => void openTerminal(undefined, dir) },
+        { icon: 'command', label: 'New command', onClick: () => openEditor('command', 0, 'New command', node.id) },
+        { icon: 'service', label: 'New service', onClick: () => openEditor('service', 0, 'New service', node.id) },
+        { icon: 'profile', label: 'New profile', onClick: () => openEditor('profile', 0, 'New profile', node.id) },
+        { icon: 'reveal', label: 'Reveal in File Explorer', disabled: !dir, onClick: () => void ipc.revealInExplorer(dir).catch((e) => alert(String(e))) },
       )
     }
     items.push(
       { separator: true, label: '' },
-      { icon: '✎', label: 'Rename', onClick: () => beginRename(node) },
-      { icon: '🗑', label: `Delete ${KIND_LABEL[node.kind].toLowerCase()}`, danger: true, onClick: () => void del(node) },
+      { icon: 'edit', label: 'Rename', onClick: () => beginRename(node) },
+      { icon: 'delete', label: `Delete ${KIND_LABEL[node.kind].toLowerCase()}`, danger: true, onClick: () => void del(node) },
     )
     return items
   }
 
   const commandMenuItems = (cmd: CommandDef): MenuItem[] => [
-    { icon: '▶', label: 'Run in new terminal', onClick: () => void runCommandInNewTerminal(cmd) },
-    { icon: '❯', label: 'View session', onClick: () => viewCommand(cmd) },
-    { icon: '✎', label: 'Edit command…', onClick: () => openEditor('command', cmd.id, cmd.name || 'Command') },
+    { icon: 'run', label: 'Run in new terminal', onClick: () => void runCommandInNewTerminal(cmd) },
+    { icon: 'view', label: 'View session', onClick: () => viewCommand(cmd) },
+    { icon: 'edit', label: 'Edit command…', onClick: () => openEditor('command', cmd.id, cmd.name || 'Command') },
     { separator: true, label: '' },
-    { icon: '🗑', label: 'Delete command', danger: true, onClick: () => void delCommand(cmd) },
+    { icon: 'delete', label: 'Delete command', danger: true, onClick: () => void delCommand(cmd) },
   ]
 
   const serviceMenuItems = (svc: ServiceDef): MenuItem[] => {
     const running = svcStates[svc.id]?.status === 'running'
     return [
       running
-        ? { icon: '■', label: 'Stop', onClick: () => void actSvc(svc.id, () => ipc.svcStop(svc.id)) }
-        : { icon: '▶', label: 'Start', onClick: () => void actSvc(svc.id, () => requestStartService(svc)) },
-      { icon: '↻', label: 'Restart', disabled: !running, onClick: () => void actSvc(svc.id, () => ipc.svcRestart(svc.id)) },
-      { icon: '☰', label: 'View logs', onClick: () => viewService(svc) },
-      { icon: '✎', label: 'Edit service…', onClick: () => openEditor('service', svc.id, svc.name || 'Service') },
+        ? { icon: 'stop', label: 'Stop', onClick: () => void actSvc(svc.id, () => ipc.svcStop(svc.id)) }
+        : { icon: 'run', label: 'Start', onClick: () => void actSvc(svc.id, () => requestStartService(svc)) },
+      { icon: 'restart', label: 'Restart', disabled: !running, onClick: () => void actSvc(svc.id, () => ipc.svcRestart(svc.id)) },
+      { icon: 'logs', label: 'View logs', onClick: () => viewService(svc) },
+      { icon: 'edit', label: 'Edit service…', onClick: () => openEditor('service', svc.id, svc.name || 'Service') },
       { separator: true, label: '' },
-      { icon: '🗑', label: 'Delete service', danger: true, onClick: () => void delService(svc) },
+      { icon: 'delete', label: 'Delete service', danger: true, onClick: () => void delService(svc) },
     ]
   }
 
@@ -317,7 +318,9 @@ export function Explorer() {
         <span
           className={`h-2 w-2 shrink-0 rounded-full ${running ? 'animate-pulse bg-emerald-400' : crashed ? 'bg-red-400' : 'bg-slate-600'}`}
         />
-        <span className="w-5 shrink-0 text-center text-[14px] leading-none text-amber-400/80">⚡</span>
+        <span className="flex w-5 shrink-0 items-center justify-center text-amber-400/80">
+          <Icon name="service" size={14} />
+        </span>
         <button
           className="min-w-0 flex-1 cursor-pointer truncate text-left hover:text-slate-100"
           title="Click to edit service"
@@ -327,25 +330,25 @@ export function Explorer() {
         </button>
         {port != null && (
           <button
-            className="hidden shrink-0 rounded px-1 text-[11px] text-slate-400 hover:bg-slate-600 hover:text-white group-hover:block"
+            className="hidden shrink-0 items-center rounded px-1 text-slate-400 hover:bg-slate-600 hover:text-white group-hover:flex"
             title={running ? `Open http://localhost:${port}` : `Opens http://localhost:${port} (not running)`}
             onClick={() => void ipc.openUrl(`http://localhost:${port}`).catch((e) => alert(String(e)))}
           >
-            🌐
+            <Icon name="globe" size={13} />
           </button>
         )}
         <button
-          className="shrink-0 rounded px-1 text-[11px] hover:bg-slate-600 hover:text-white"
+          className="flex shrink-0 items-center rounded px-1 hover:bg-slate-600 hover:text-white"
           disabled={busySvc === svc.id}
           title={running ? 'Stop' : 'Start'}
           onClick={() =>
             void actSvc(svc.id, () => (running ? ipc.svcStop(svc.id) : requestStartService(svc)))
           }
         >
-          {running ? '■' : '▶'}
+          <Icon name={running ? 'stop' : 'run'} size={13} />
         </button>
         <button
-          className="hidden shrink-0 rounded px-1 text-[12px] text-slate-400 hover:bg-slate-600 hover:text-white group-hover:block"
+          className="hidden shrink-0 items-center rounded px-1 text-slate-400 hover:bg-slate-600 hover:text-white group-hover:flex"
           title="Actions"
           onClick={(e) => {
             e.stopPropagation()
@@ -353,7 +356,7 @@ export function Explorer() {
             setMenu({ x: rect.right, y: rect.bottom, target: { type: 'service', svc } })
           }}
         >
-          ⋯
+          <Icon name="more" size={14} />
         </button>
       </div>
     )
@@ -370,7 +373,9 @@ export function Explorer() {
         setMenu({ x: e.clientX, y: e.clientY, target: { type: 'command', cmd } })
       }}
     >
-      <span className="w-5 shrink-0 text-center text-[13px] leading-none text-sky-400/80">⌘</span>
+      <span className="flex w-5 shrink-0 items-center justify-center text-sky-400/80">
+        <Icon name="command" size={13} />
+      </span>
       <button
         className="min-w-0 flex-1 cursor-pointer truncate text-left hover:text-slate-100"
         title="Click to edit command"
@@ -379,14 +384,14 @@ export function Explorer() {
         {cmd.name}
       </button>
       <button
-        className="hidden shrink-0 rounded px-1 text-[11px] hover:bg-slate-600 hover:text-white group-hover:block"
+        className="hidden shrink-0 items-center rounded px-1 hover:bg-slate-600 hover:text-white group-hover:flex"
         title="Run in a new terminal"
         onClick={() => void runCommandInNewTerminal(cmd)}
       >
-        ▶
+        <Icon name="run" size={13} />
       </button>
       <button
-        className="hidden shrink-0 rounded px-1 text-[12px] text-slate-400 hover:bg-slate-600 hover:text-white group-hover:block"
+        className="hidden shrink-0 items-center rounded px-1 text-slate-400 hover:bg-slate-600 hover:text-white group-hover:flex"
         title="Actions"
         onClick={(e) => {
           e.stopPropagation()
@@ -394,7 +399,7 @@ export function Explorer() {
           setMenu({ x: rect.right, y: rect.bottom, target: { type: 'command', cmd } })
         }}
       >
-        ⋯
+        <Icon name="more" size={14} />
       </button>
     </div>
   )
@@ -405,7 +410,9 @@ export function Explorer() {
       className="group flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[12.5px] text-slate-300 select-none hover:bg-slate-700/40"
       style={{ paddingLeft: `${depth * 14 + 22}px` }}
     >
-      <span className="w-5 shrink-0 text-center text-[13px] leading-none text-violet-400/80">⧉</span>
+      <span className="flex w-5 shrink-0 items-center justify-center text-violet-400/80">
+        <Icon name="profile" size={13} />
+      </span>
       <button
         className="min-w-0 flex-1 cursor-pointer truncate text-left hover:text-slate-100"
         title="Click to edit profile"
@@ -414,7 +421,7 @@ export function Explorer() {
         {profile.name}
       </button>
       <button
-        className="shrink-0 rounded px-1 text-[11px] hover:bg-slate-600 hover:text-white"
+        className="flex shrink-0 items-center rounded px-1 hover:bg-slate-600 hover:text-white"
         disabled={launching === profile.id}
         title="Launch profile"
         onClick={async () => {
@@ -426,7 +433,7 @@ export function Explorer() {
           }
         }}
       >
-        {launching === profile.id ? '…' : '⚡'}
+        <Icon name={launching === profile.id ? 'spinner' : 'run'} size={13} spin={launching === profile.id} />
       </button>
     </div>
   )
@@ -443,21 +450,23 @@ export function Explorer() {
           style={{ paddingLeft: `${depth * 14 + 6}px` }}
           onClick={() => count > 0 && toggleCat(node.id, cat)}
         >
-          <span className={`w-5 shrink-0 text-center text-[14px] leading-none ${count > 0 ? 'cursor-pointer text-slate-400 hover:text-slate-200' : 'opacity-0'}`}>
-            {open ? '▾' : '▸'}
+          <span className={`flex w-5 shrink-0 items-center justify-center ${count > 0 ? 'cursor-pointer text-slate-400 hover:text-slate-200' : 'opacity-0'}`}>
+            <Icon name={open ? 'chevron-down' : 'chevron-right'} size={14} />
           </span>
-          <span className={`w-5 shrink-0 text-center text-[13px] leading-none ${meta.color}`}>{meta.icon}</span>
+          <span className={`flex w-5 shrink-0 items-center justify-center ${meta.color}`}>
+            <Icon name={meta.icon} size={13} />
+          </span>
           <span className="flex-1 truncate uppercase tracking-wide">{meta.label}</span>
           <span className="shrink-0 pr-1 text-[10.5px] tabular-nums text-slate-600">{count || ''}</span>
           <button
-            className="hidden shrink-0 rounded px-1 text-[12px] text-slate-400 hover:bg-slate-600 hover:text-white group-hover:block"
+            className="hidden shrink-0 items-center rounded px-1 text-slate-400 hover:bg-slate-600 hover:text-white group-hover:flex"
             title={`New ${addKind}`}
             onClick={(e) => {
               e.stopPropagation()
               openEditor(addKind, 0, `New ${addKind}`, node.id)
             }}
           >
-            ＋
+            <Icon name="add" size={14} />
           </button>
         </div>
         {open && rows}
@@ -503,19 +512,19 @@ export function Explorer() {
           title={sub || undefined}
         >
           <span
-            className={`w-5 shrink-0 text-center text-[16px] leading-none text-slate-400 hover:text-slate-200 ${hasKids ? 'cursor-pointer' : 'opacity-0'}`}
+            className={`flex w-5 shrink-0 items-center justify-center text-slate-400 hover:text-slate-200 ${hasKids ? 'cursor-pointer' : 'opacity-0'}`}
             onClick={(e) => {
               e.stopPropagation()
               toggle(node.id)
             }}
           >
-            {isOpen ? '▾' : '▸'}
+            <Icon name={isOpen ? 'chevron-down' : 'chevron-right'} size={15} />
           </span>
           <span
-            className={`w-5 shrink-0 text-center text-[17px] leading-none ${node.kind === 'project' ? '' : KIND_COLOR[node.kind]}`}
+            className={`flex w-5 shrink-0 items-center justify-center ${node.kind === 'project' ? '' : KIND_COLOR[node.kind]}`}
             style={node.kind === 'project' ? { color: nodeColor(node) } : undefined}
           >
-            {KIND_ICON[node.kind]}
+            <Icon name={KIND_ICON[node.kind]} size={15} />
           </span>
           {renaming ? (
             <input
@@ -535,7 +544,7 @@ export function Explorer() {
             <span className="flex-1 truncate">{node.name}</span>
           )}
           <button
-            className="hidden rounded px-1 text-[13px] text-slate-400 hover:bg-slate-600 hover:text-white group-hover:block"
+            className="hidden items-center rounded px-1 text-slate-400 hover:bg-slate-600 hover:text-white group-hover:flex"
             title="Actions"
             onClick={(e) => {
               e.stopPropagation()
@@ -544,7 +553,7 @@ export function Explorer() {
               setMenu({ x: rect.right, y: rect.bottom, target: { type: 'node', node } })
             }}
           >
-            ⋯
+            <Icon name="more" size={15} />
           </button>
         </div>
         {isOpen && (
@@ -592,25 +601,25 @@ export function Explorer() {
             setWsMenu({ x: r.left, y: r.bottom })
           }}
         >
-          <span className="text-indigo-400">⬢</span>
+          <Icon name="workspace" size={15} className="shrink-0 text-indigo-400" />
           <span className="truncate">{ws?.name ?? 'No workspace'}</span>
-          <span className="text-[10px] text-slate-500">▾</span>
+          <Icon name="chevron-down" size={12} className="shrink-0 text-slate-500" />
         </button>
         <button
-          className="shrink-0 rounded bg-slate-700/60 px-2 py-0.5 text-[11px] text-slate-200 hover:bg-indigo-600 disabled:opacity-40"
+          className="flex shrink-0 items-center gap-1 rounded bg-slate-700/60 px-2 py-1 text-[11px] text-slate-200 hover:bg-indigo-600 disabled:opacity-40"
           title={activeWorkspaceId == null ? 'Create a workspace first' : 'Clone a GitHub repo into this workspace'}
           disabled={activeWorkspaceId == null}
           onClick={() => setGhOpen(true)}
         >
-          🐙 GitHub
+          <Icon name="github" size={13} /> GitHub
         </button>
         <button
-          className="shrink-0 rounded bg-slate-700/60 px-2 py-0.5 text-[11px] text-slate-200 hover:bg-indigo-600 disabled:opacity-40"
+          className="flex shrink-0 items-center gap-1 rounded bg-slate-700/60 px-2 py-1 text-[11px] text-slate-200 hover:bg-indigo-600 disabled:opacity-40"
           title={activeWorkspaceId == null ? 'Create a workspace first' : 'Add a project to this workspace'}
           disabled={activeWorkspaceId == null}
           onClick={() => void addProject()}
         >
-          + Project
+          <Icon name="add" size={13} /> Project
         </button>
       </div>
       <div
@@ -626,15 +635,15 @@ export function Explorer() {
               No workspaces yet. A workspace groups related projects. Create one, then add projects
               (each an app / repo root) and folders inside them.
             </p>
-            <button className="btn-primary mt-3 w-full text-[12px]" onClick={() => void addWorkspace()}>
-              ＋ New workspace
+            <button className="btn-primary mt-3 flex w-full items-center justify-center gap-1.5 text-[12px]" onClick={() => void addWorkspace()}>
+              <Icon name="add" size={14} /> New workspace
             </button>
             <button
-              className="btn-ghost mt-2 w-full text-[12px]"
+              className="btn-ghost mt-2 flex w-full items-center justify-center gap-1.5 text-[12px]"
               title="Create a small demo project you can actually run"
               onClick={() => void loadExampleWorkspace().catch((e) => alert(String(e)))}
             >
-              ✨ Load example workspace
+              <Icon name="example" size={14} /> Load example workspace
             </button>
           </div>
         ) : roots.length === 0 ? (
@@ -644,10 +653,10 @@ export function Explorer() {
               folders inside it are subpaths.
             </p>
             <button
-              className="btn-primary mt-3 w-full text-[12px]"
+              className="btn-primary mt-3 flex w-full items-center justify-center gap-1.5 text-[12px]"
               onClick={() => void addProject()}
             >
-              ＋ Add a project
+              <Icon name="add" size={14} /> Add a project
             </button>
           </div>
         ) : (

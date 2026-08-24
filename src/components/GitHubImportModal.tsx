@@ -8,6 +8,7 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import * as ipc from '../lib/ipc'
 import { useApp } from '../store'
 import { guessKind, guessPort } from '../lib/pm'
+import { Icon } from '../lib/icons'
 
 const PARENT_KEY = 'devdeck.clone.parent'
 
@@ -111,12 +112,12 @@ export function GitHubImportModal({ onClose }: { onClose: () => void }) {
     <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/50 p-6" onClick={busy ? undefined : onClose}>
       <div className="w-full max-w-[520px] overflow-hidden rounded-xl border border-slate-700 bg-[#11141c] shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-3 border-b border-slate-800 px-5 py-3">
-          <span className="text-[15px]">🐙</span>
+          <Icon name="github" size={16} className="shrink-0 text-slate-300" />
           <div className="min-w-0">
             <div className="text-[14px] font-semibold text-slate-100">Add a project from GitHub</div>
             <div className="text-[11px] text-slate-500">Clone, scan, and set it up — ready to run in one go.</div>
           </div>
-          {!busy && <button className="ml-auto rounded px-2 py-1 text-slate-500 hover:bg-slate-700 hover:text-white" onClick={onClose}>✕</button>}
+          {!busy && <button className="ml-auto flex items-center rounded px-2 py-1 text-slate-500 hover:bg-slate-700 hover:text-white" onClick={onClose}><Icon name="close" size={14} /></button>}
         </div>
 
         <div className="space-y-3 px-5 py-4">
@@ -147,12 +148,12 @@ export function GitHubImportModal({ onClose }: { onClose: () => void }) {
 
           {busy && (
             <div className="flex items-center gap-2 rounded-lg border border-indigo-500/30 bg-indigo-500/[0.07] px-3 py-2 text-[12px] text-indigo-200">
-              <span className="inline-block animate-spin">⟳</span>
+              <Icon name="spinner" size={13} spin className="shrink-0" />
               <span className="min-w-0 truncate">{status}</span>
             </div>
           )}
           {phase === 'done' && (
-            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/[0.07] px-3 py-2 text-[12px] text-emerald-300">✓ {status}</div>
+            <div className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/[0.07] px-3 py-2 text-[12px] text-emerald-300"><Icon name="check" size={13} className="shrink-0" /> {status}</div>
           )}
           {error && (
             <div className="rounded-lg border border-red-500/30 bg-red-500/[0.07] px-3 py-2 text-[12px] text-red-300">

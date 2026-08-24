@@ -8,6 +8,7 @@ import type { IDockviewPanelHeaderProps } from 'dockview-react'
 import * as ipc from '../lib/ipc'
 import { useApp } from '../store'
 import { PopMenu } from './PopMenu'
+import { Icon } from '../lib/icons'
 
 function ptyIdFromPanel(id: string): number | null {
   const m = /^terminal-(\d+)$/.exec(id)
@@ -34,12 +35,12 @@ export function TerminalTab(props: IDockviewPanelHeaderProps) {
 
   return (
     <div className="flex h-full items-center gap-2 px-2">
-      <span className="truncate text-[12px]">
-        <span className="mr-1 text-emerald-400/80">❯</span>
+      <span className="flex items-center gap-1 truncate text-[12px]">
+        <Icon name="terminal" size={12} className="shrink-0 text-emerald-400/80" />
         {title}
       </span>
       <button
-        className="rounded px-1 text-[13px] leading-none text-slate-500 hover:bg-slate-600 hover:text-white"
+        className="flex items-center rounded px-1 text-slate-500 hover:bg-slate-600 hover:text-white"
         title="Close terminal"
         onClick={(e) => {
           e.stopPropagation()
@@ -47,7 +48,7 @@ export function TerminalTab(props: IDockviewPanelHeaderProps) {
           setMenu({ x: r.left, y: r.bottom })
         }}
       >
-        ×
+        <Icon name="close" size={13} />
       </button>
       {menu && (
         <PopMenu
@@ -55,8 +56,8 @@ export function TerminalTab(props: IDockviewPanelHeaderProps) {
           y={menu.y}
           onClose={() => setMenu(null)}
           items={[
-            { icon: '▣', label: 'Close tab · keep session running', onClick: closeKeep },
-            { icon: '■', label: 'Close tab · end session', danger: true, onClick: () => void closeEnd() },
+            { icon: 'close', label: 'Close tab · keep session running', onClick: closeKeep },
+            { icon: 'stop', label: 'Close tab · end session', danger: true, onClick: () => void closeEnd() },
           ]}
         />
       )}

@@ -6,6 +6,7 @@ import { useEffect, useRef } from 'react'
 import { LogViewer } from './LogViewer'
 import { ProcessDashboard } from './ProcessDashboard'
 import { useApp } from '../store'
+import { Icon } from '../lib/icons'
 
 export type BottomTab = 'logs' | 'processes'
 
@@ -90,11 +91,11 @@ export function BottomBar({
         <TabBtn id="processes" label="Processes" badge={runningCount} />
         <div className="flex-1" />
         <button
-          className="rounded px-2 py-1 text-[12px] text-slate-400 hover:bg-slate-700 hover:text-white"
+          className="flex items-center rounded px-2 py-1 text-slate-400 hover:bg-slate-700 hover:text-white"
           title={collapsed ? 'Expand panel' : 'Collapse panel'}
           onClick={onToggleCollapsed}
         >
-          {collapsed ? '▴' : '▾'}
+          <Icon name={collapsed ? 'caret-up' : 'chevron-down'} size={14} />
         </button>
       </div>
 

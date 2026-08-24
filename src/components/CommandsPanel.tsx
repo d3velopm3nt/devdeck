@@ -12,6 +12,7 @@ import { pmBadge, pmFromCommand } from '../lib/pm'
 import * as ipc from '../lib/ipc'
 import { PanelShell, RowTitle, ROW_CARD, ICON_BTN, useRowMenu } from './PanelShell'
 import type { MenuItem } from './PopMenu'
+import { Icon } from '../lib/icons'
 
 export function CommandsPanel() {
   const { commands, terminals, nodes, selectedNode, scopeNode, refreshCommands } = useApp()
@@ -43,17 +44,17 @@ export function CommandsPanel() {
   }
 
   const overflow = (c: CommandDef): MenuItem[] => [
-    { icon: '⚙', label: 'Run in background (logs)', onClick: () => void runCommandInBackground(c) },
+    { icon: 'logs', label: 'Run in background (logs)', onClick: () => void runCommandInBackground(c) },
     ...(liveTerminals.length
       ? liveTerminals.map((t) => ({
-          icon: '❯',
+          icon: 'terminal',
           label: `Run in #${t.id} ${t.title}`,
           onClick: () => void runCommandInTerminal(c, t.id),
         }))
       : []),
     { separator: true, label: '' },
-    { icon: '✎', label: 'Edit command…', onClick: () => openEditor('command', c.id, c.name || 'Command') },
-    { icon: '🗑', label: 'Delete command', danger: true, onClick: () => void del(c) },
+    { icon: 'edit', label: 'Edit command…', onClick: () => openEditor('command', c.id, c.name || 'Command') },
+    { icon: 'delete', label: 'Delete command', danger: true, onClick: () => void del(c) },
   ]
 
   return (
@@ -83,7 +84,7 @@ export function CommandsPanel() {
                         {b.label}
                       </span>
                     ) : (
-                      <span className="shrink-0 text-[12px] text-sky-400/80">⌘</span>
+                      <span className="flex shrink-0 items-center text-sky-400/80"><Icon name="command" size={13} /></span>
                     )
                   }
                   name={c.name || 'Command'}
@@ -96,10 +97,10 @@ export function CommandsPanel() {
                     title="Run in a new terminal"
                     onClick={() => void runCommandInNewTerminal(c)}
                   >
-                    ▶
+                    <Icon name="run" size={13} />
                   </button>
                   <button className={ICON_BTN} title="More actions" onClick={(e) => openMenu(e, overflow(c))}>
-                    ⋯
+                    <Icon name="more" size={14} />
                   </button>
                 </div>
               </div>

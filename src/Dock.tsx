@@ -32,6 +32,7 @@ import { useApp } from './store'
 import { openTerminal } from './lib/runner'
 import { resolveDir } from './lib/tree'
 import { loadExampleWorkspace } from './lib/example'
+import { Icon } from './lib/icons'
 
 const AUTOSAVE = '__autosave__'
 
@@ -77,8 +78,8 @@ function Welcome() {
               server and a background worker you can actually start, watch, and
               open in your browser.
             </p>
-            <button className="btn-primary mt-3 text-[12px]" disabled={loading} onClick={() => void loadExample()}>
-              {loading ? 'Setting up…' : '✨ Load example workspace'}
+            <button className="btn-primary mt-3 inline-flex items-center gap-1.5 text-[12px]" disabled={loading} onClick={() => void loadExample()}>
+              {loading ? 'Setting up…' : <><Icon name="example" size={13} /> Load example workspace</>}
             </button>
             <p className="mt-2 text-[10.5px] text-slate-600">
               creates a small folder in your user directory · removable any time
@@ -90,10 +91,10 @@ function Welcome() {
           {shells.map((s) => (
             <button
               key={s.command}
-              className="btn-primary text-[12px]"
+              className="btn-primary inline-flex items-center gap-1.5 text-[12px]"
               onClick={() => void openTerminal(s.command, dir || undefined)}
             >
-              ❯ {s.name}
+              <Icon name="terminal" size={13} /> {s.name}
             </button>
           ))}
         </div>

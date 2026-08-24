@@ -3,6 +3,7 @@
 
 import { useState } from 'react'
 import { SPACE_PALETTE } from '../lib/spaces'
+import { Icon } from '../lib/icons'
 
 export function ColorPicker({
   color,
@@ -27,7 +28,7 @@ export function ColorPicker({
         title="Change color"
         onClick={() => setOpen((o) => !o)}
       >
-        <span className="text-[10px] text-white/90 drop-shadow">🎨</span>
+        <Icon name="palette" size={12} className="text-white/90 drop-shadow" />
       </button>
       {open && (
         <>

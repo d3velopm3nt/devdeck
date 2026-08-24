@@ -4,6 +4,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { Icon } from '../lib/icons'
 
 export interface MenuItem {
   icon?: string
@@ -84,7 +85,9 @@ export function PopMenu({
                 it.onClick?.()
               }}
             >
-              <span className="w-4 shrink-0 text-center text-[13px] opacity-90">{it.icon}</span>
+              <span className="flex w-4 shrink-0 items-center justify-center opacity-90">
+                {it.icon ? <Icon name={it.icon} size={15} /> : null}
+              </span>
               <span className="flex-1">{it.label}</span>
             </button>
           ),

@@ -6,6 +6,7 @@ import { useState } from 'react'
 import * as ipc from '../lib/ipc'
 import { useApp } from '../store'
 import { loadExampleWorkspace } from '../lib/example'
+import { Icon } from '../lib/icons'
 
 export function ConfigPage() {
   const { hotkey, setHotkey, shells } = useApp()
@@ -73,7 +74,7 @@ export function ConfigPage() {
             <code>%USERPROFILE%\DevDeck Demo</code> — delete that folder and the workspace any time.
           </p>
           <button
-            className="btn-primary text-[12px]"
+            className="btn-primary inline-flex items-center gap-1.5 text-[12px]"
             disabled={seeding}
             onClick={() => {
               setSeeding(true)
@@ -82,7 +83,7 @@ export function ConfigPage() {
                 .finally(() => setSeeding(false))
             }}
           >
-            {seeding ? 'Setting up…' : '✨ Load example workspace'}
+            {seeding ? 'Setting up…' : <><Icon name="example" size={13} /> Load example workspace</>}
           </button>
         </section>
 

@@ -11,6 +11,7 @@ import { openEditor } from '../../lib/dock'
 import { nodeLabel, ownerNodes, serviceDir } from '../../lib/tree'
 import { EditorShell, Field, Row } from './EditorShell'
 import { ShellSelect } from './ShellSelect'
+import { Icon } from '../../lib/icons'
 
 type Params = { id: number; projectId?: number | null }
 
@@ -127,7 +128,7 @@ export function ServiceEditorPage(props: IDockviewPanelProps<Params>) {
 
   return (
     <EditorShell
-      icon="⚡"
+      icon="service"
       kind="Service"
       title={id > 0 ? svc.name || 'Service' : 'New service'}
       subtitle="A long-running dev process DevDeck starts, monitors, and logs."
@@ -138,11 +139,11 @@ export function ServiceEditorPage(props: IDockviewPanelProps<Params>) {
       extraActions={
         id > 0 && (
           <button
-            className="btn-ghost"
+            className="btn-ghost inline-flex items-center gap-1"
             onClick={() => void convertToCommand()}
             title="Turn this service into a one-shot command"
           >
-            ⌘ Convert to command
+            <Icon name="convert" size={14} /> Convert to command
           </button>
         )
       }
@@ -201,12 +202,12 @@ export function ServiceEditorPage(props: IDockviewPanelProps<Params>) {
               …
             </button>
             <button
-              className="btn-ghost shrink-0"
+              className="btn-ghost shrink-0 flex items-center"
               title={serviceDir(nodes, svc) ? `Reveal in File Explorer\n${serviceDir(nodes, svc)}` : 'Set a working directory or a location first'}
               disabled={!serviceDir(nodes, svc)}
               onClick={() => void ipc.revealInExplorer(serviceDir(nodes, svc)).catch((e) => alert(String(e)))}
             >
-              📂
+              <Icon name="reveal" size={14} />
             </button>
           </div>
         </Field>

@@ -2,6 +2,7 @@
 // title, a scrollable body, and a sticky action bar.
 
 import type { ReactNode } from 'react'
+import { Icon } from '../../lib/icons'
 
 export function EditorShell({
   icon,
@@ -30,7 +31,7 @@ export function EditorShell({
     <div className="flex h-full flex-col bg-[#0d1017] text-slate-300">
       <div className="flex items-start gap-3 border-b border-slate-800 px-6 py-4">
         <div className="flex h-9 w-9 items-center justify-center rounded bg-indigo-500/15 text-indigo-300">
-          {icon}
+          <Icon name={icon} size={18} />
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">

@@ -11,6 +11,7 @@ import { subtreeIds } from '../lib/tree'
 import * as ipc from '../lib/ipc'
 import { PanelShell, RowTitle, ROW_CARD, ICON_BTN, useRowMenu } from './PanelShell'
 import type { MenuItem } from './PopMenu'
+import { Icon } from '../lib/icons'
 
 const stepCount = (p: ProfileDef): number => {
   try {
@@ -49,8 +50,8 @@ export function ProfilesPanel() {
   }
 
   const overflow = (p: ProfileDef): MenuItem[] => [
-    { icon: '✎', label: 'Edit profile…', onClick: () => openEditor('profile', p.id, p.name || 'Profile') },
-    { icon: '🗑', label: 'Delete profile', danger: true, onClick: () => void del(p) },
+    { icon: 'edit', label: 'Edit profile…', onClick: () => openEditor('profile', p.id, p.name || 'Profile') },
+    { icon: 'delete', label: 'Delete profile', danger: true, onClick: () => void del(p) },
   ]
 
   return (
@@ -66,7 +67,7 @@ export function ProfilesPanel() {
         return (
           <div key={p.id} className={ROW_CARD}>
             <RowTitle
-              badge={<span className="shrink-0 text-[12px] text-violet-400/80">⧉</span>}
+              badge={<span className="flex shrink-0 items-center text-violet-400/80"><Icon name="profile" size={13} /></span>}
               name={p.name || 'Profile'}
               sub={`${n} step${n === 1 ? '' : 's'}`}
               onClick={() => openEditor('profile', p.id, p.name || 'Profile')}
@@ -78,7 +79,7 @@ export function ProfilesPanel() {
                 title="Launch profile"
                 onClick={() => void launch(p)}
               >
-                {launching === p.id ? '…' : '⚡'}
+                <Icon name={launching === p.id ? 'spinner' : 'service'} size={13} spin={launching === p.id} />
               </button>
               <button className={ICON_BTN} title="More actions" onClick={(e) => openMenu(e, overflow(p))}>
                 ⋯

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Dock, buildDefaultLayout } from './Dock'
 import { BottomBar } from './components/BottomBar'
 import { SetupModal } from './components/SetupModal'
@@ -118,22 +118,55 @@ export default function App() {
   const [upStatus, setUpStatus] = useState('')
   const [upHidden, setUpHidden] = useState(false)
 
-  const checkUpdate = () => {
-    setUpHidden(false)
-    setUpStatus('')
-    setUpState('checking')
+  // Timestamp of the last completed check, so a background re-check doesn't
+  // fire on every window focus.
+  const lastCheck = useRef(0)
+
+  const checkUpdate = (quiet = false) => {
+    if (!quiet) {
+      setUpHidden(false)
+      setUpStatus('')
+      setUpState('checking')
+    }
     void ipc
       .appUpdateInfo()
       .then((info) => {
+        lastCheck.current = Date.now()
         setUpdate(info)
+        if (!info.ok) {
+          // The check failed — say so. Reporting "up to date" here would be a
+          // lie that hides real updates (and did, before this).
+          setUpStatus("Couldn't reach the update server — check your connection, then re-check.")
+          setUpState('error')
+          return
+        }
+        setUpStatus('')
         setUpState(info.available ? 'available' : 'uptodate')
+        if (info.available && quiet) setUpHidden(false)
       })
       .catch((e) => {
         setUpStatus(String(e))
         setUpState('error')
       })
   }
-  useEffect(checkUpdate, [])
+  useEffect(() => checkUpdate(), [])
+
+  // Re-check periodically and when the window regains focus — a long-running
+  // window used to never learn about a new release after startup.
+  useEffect(() => {
+    const STALE = 60 * 60_000 // an hour
+    const tick = () => {
+      const busy = upState === 'checking' || upState === 'updating' || upState === 'done'
+      if (!busy && Date.now() - lastCheck.current > STALE) checkUpdate(true)
+    }
+    const id = setInterval(tick, 15 * 60_000)
+    window.addEventListener('focus', tick)
+    return () => {
+      clearInterval(id)
+      window.removeEventListener('focus', tick)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [upState])
   useEffect(() => {
     // Reflect scoop-update progress (streamed to the log bus) in the bar.
     const un = ipc.onSvcLog((e) => {
@@ -397,7 +430,7 @@ export default function App() {
         <button
           className={`flex items-center gap-1 text-[12px] ${upState === 'available' ? 'rounded bg-amber-500/15 px-2 py-0.5 font-medium text-warn hover:bg-amber-500/25' : 'btn-ghost'}`}
           title={upState === 'available' ? `Update available — v${update?.latest}` : `DevDeck ${update ? 'v' + update.current : ''} — check for updates`}
-          onClick={checkUpdate}
+          onClick={() => checkUpdate()}
         >
           <Icon name="update" size={13} spin={upState === 'checking' || upState === 'updating'} />
           {upState === 'available' ? `Update · v${update?.latest}` : ''}
@@ -416,7 +449,7 @@ export default function App() {
           status={upStatus}
           onUpdate={runUpdate}
           onInstallScoop={installScoop}
-          onRecheck={checkUpdate}
+          onRecheck={() => checkUpdate()}
           onDismiss={() => setUpHidden(true)}
         />
       )}

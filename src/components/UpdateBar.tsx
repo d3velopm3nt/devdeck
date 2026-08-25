@@ -59,7 +59,7 @@ export function UpdateBar({
       : state === 'updating' ? 'Updating DevDeck…'
       : state === 'available' ? `Update available — v${latest}`
       : state === 'done' ? `Updated to v${latest} — restart DevDeck to apply`
-      : state === 'error' ? 'Update problem'
+      : state === 'error' ? (latest ? 'Update problem' : "Couldn't check for updates")
       : `DevDeck v${current} is up to date`
 
   const sub =

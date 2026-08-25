@@ -156,6 +156,10 @@ struct UpdateInfo {
     available: bool,
     via_scoop: bool,
     scoop_available: bool,
+    /// True only when we actually read a version from the manifest. A failed
+    /// check (offline, DNS, timeout, 404) must NOT be reported as "up to
+    /// date" — the UI shows "couldn't check" instead.
+    ok: bool,
 }
 
 fn scoop_present() -> bool {
@@ -216,13 +220,17 @@ fn app_update_info() -> UpdateInfo {
     )
     .map(|s| s.trim().trim_start_matches('v').trim().to_string())
     .unwrap_or_default();
-    let available = !latest.is_empty() && ver_gt(&latest, &current);
+    // A version string is the only proof the check actually reached the
+    // manifest; anything else (offline, timeout, 404, garbage) is "unknown".
+    let ok = latest.chars().next().is_some_and(|c| c.is_ascii_digit());
+    let available = ok && ver_gt(&latest, &current);
     UpdateInfo {
         current,
         latest,
         available,
         via_scoop: devdeck_via_scoop(),
         scoop_available: scoop_present(),
+        ok,
     }
 }
 

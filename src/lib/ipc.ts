@@ -206,6 +206,9 @@ export const focusMain = () => invoke<void>('focus_main')
 
 // ---- self-update ----
 export interface UpdateInfo {
+  /** False when the check couldn't reach the manifest — do NOT read that as
+   *  "up to date". */
+  ok: boolean
   current: string
   latest: string
   available: boolean

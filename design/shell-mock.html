@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DevDeck shell — design mock</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  :root{
+    --bg:#0a0c11; --panel:#0f131a; --panel2:#141922; --raise:#171d28;
+    --line:#212a36; --line-soft:#171d26;
+    --ink:#e8ecf3; --dim:#9ba4b2; --muted:#69727f;
+    --accent:#7c8cf8; --accent2:#aab4ff; --run:#4ade80; --warn:#fbbf24; --err:#f87171; --cyan:#46b7f0;
+    --sans:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
+    --mono:"Cascadia Code","Cascadia Mono",ui-monospace,Consolas,monospace;
+  }
+  html,body{margin:0;height:100%}
+  body{background:#07090d;color:var(--ink);font:13px/1.5 var(--sans);-webkit-font-smoothing:antialiased;
+       display:flex;flex-direction:column;align-items:center;gap:10px;padding:18px;min-height:100vh}
+  .mono{font-family:var(--mono)}
+  .i{width:1em;height:1em;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round;display:inline-block;vertical-align:-.13em}
+
+  /* mock chrome */
+  .mockbar{width:min(1240px,100%);display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .mockbar b{color:var(--dim);font-weight:500}
+  .mockbar .views{margin-left:auto;display:flex;gap:6px}
+  .vbtn{padding:4px 10px;border:1px solid var(--line);border-radius:6px;color:var(--dim);cursor:pointer;text-decoration:none;font-family:var(--mono);font-size:11px}
+  .vbtn.on{border-color:var(--accent);color:var(--accent2)}
+
+  .app{position:relative;width:min(1240px,100%);height:780px;border:1px solid var(--line);border-radius:12px;overflow:hidden;
+       background:var(--bg);box-shadow:0 30px 80px rgba(0,0,0,.6);display:flex;flex-direction:column}
+  .native{height:30px;flex-shrink:0;display:flex;align-items:center;gap:8px;padding:0 12px;background:#0b0e15;border-bottom:1px solid var(--line-soft);font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .native .d{width:9px;height:9px;border-radius:50%;background:#2a3342}
+  .native .d1{background:#e0555044}.native .d2{background:#e0a94044}.native .d3{background:#4ade8044}
+  .native .wc{margin-left:auto;color:#3a4250;letter-spacing:2px}
+
+  .shell{flex:1;display:flex;min-height:0}
+
+  /* ---- rail ---- */
+  .rail{width:52px;flex-shrink:0;background:#090b10;border-right:1px solid var(--line-soft);display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:4px}
+  .rlogo{font-family:var(--mono);font-weight:700;color:var(--accent);font-size:14px;margin-bottom:10px}
+  .ritem{position:relative;width:40px;height:40px;border-radius:9px;display:grid;place-items:center;color:var(--muted);cursor:pointer;font-size:18px}
+  .ritem:hover{color:var(--dim);background:rgba(255,255,255,.03)}
+  .ritem.on{color:var(--ink);background:var(--raise)}
+  .ritem.on::before{content:"";position:absolute;left:-6px;top:9px;bottom:9px;width:2.5px;border-radius:2px;background:var(--accent)}
+  .rail .sp{flex:1}
+  .ritem .dot{position:absolute;top:6px;right:6px;width:7px;height:7px;border-radius:50%;background:var(--run);border:2px solid #090b10}
+
+  /* ---- sidebar ---- */
+  .sidebar{width:246px;flex-shrink:0;background:#0a0d14;border-right:1px solid var(--line-soft);display:flex;flex-direction:column;min-height:0}
+  .sbhead{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line-soft)}
+  .sbhead .t{font-size:12.5px;font-weight:600}
+  .sbhead .i{color:var(--accent);font-size:14px}
+  .sbhead .act{margin-left:auto;font-size:10.5px;color:var(--dim);border:1px solid var(--line);border-radius:6px;padding:3px 8px;display:inline-flex;align-items:center;gap:4px;cursor:pointer}
+  .sbody{flex:1;overflow:auto;padding:8px 6px}
+  .cat{padding:8px 8px 3px;font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+
+  /* tree rows (projects) */
+  .trow{display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:6px;color:var(--dim);font-size:12.5px;cursor:pointer}
+  .trow:hover{background:rgba(255,255,255,.03)}
+  .trow .tw{width:9px;color:var(--muted);font-family:var(--mono);font-size:9px}
+  .trow .i{font-size:14px}
+  .trow.proj .i{color:var(--accent)}
+  .trow .nm{color:var(--ink);font-weight:550}
+  .gb{margin-left:auto;display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;color:var(--muted)}
+  .pill{display:inline-flex;align-items:center;gap:2px;padding:0 5px;border-radius:5px;font-family:var(--mono);font-size:9.5px;font-weight:600}
+  .pill.pull{background:rgba(251,191,36,.15);color:var(--warn)}
+  .pill.push{color:var(--muted)}
+  .srow{display:flex;align-items:center;gap:8px;padding:4px 8px 4px 28px;color:var(--dim);font-size:12.5px}
+  .srow .sd{width:7px;height:7px;border-radius:50%;background:#38414f;flex:none}
+  .srow.run .sd{background:var(--run);box-shadow:0 0 0 3px rgba(74,222,128,.12)}
+  .srow .nm{color:var(--ink);font-weight:500}
+  .srow .port{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--accent2)}
+
+  /* connection rows */
+  .crow{display:flex;align-items:center;gap:9px;padding:8px;border-radius:8px;cursor:pointer;margin:0 2px}
+  .crow:hover{background:rgba(255,255,255,.03)}
+  .crow.on{background:var(--raise)}
+  .crow .eng{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-family:var(--mono);font-size:9px;font-weight:700;flex:none}
+  .crow .eng.pg{background:rgba(70,183,240,.13);color:var(--cyan)}
+  .crow .eng.lite{background:rgba(74,222,128,.12);color:var(--run)}
+  .crow .eng.ms{background:rgba(251,191,36,.12);color:var(--warn)}
+  .crow .cinf{flex:1;min-width:0;line-height:1.25}
+  .crow .cinf b{font-size:12.5px;color:var(--ink);display:block}
+  .crow .cinf span{font-family:var(--mono);font-size:10px;color:var(--muted)}
+  .crow .st{width:7px;height:7px;border-radius:50%;flex:none}
+  .qrow{display:flex;align-items:center;gap:8px;padding:4px 8px 4px 40px;color:var(--dim);font-size:12px;cursor:pointer;border-radius:6px}
+  .qrow:hover{background:rgba(255,255,255,.03)}
+  .qrow.on{color:var(--ink)}
+  .qrow .i{font-size:12px;color:var(--cyan)}
+  .qrow .tag{margin-left:auto;font-family:var(--mono);font-size:9px;color:var(--muted)}
+
+  /* ---- main surface ---- */
+  .center{flex:1;display:flex;flex-direction:column;min-width:0}
+  .surface{flex:1;display:flex;flex-direction:column;min-height:0}
+  .doctabs{height:34px;flex-shrink:0;display:flex;align-items:flex-end;gap:2px;padding:0 8px;background:#0a0d13;border-bottom:1px solid var(--line-soft)}
+  .dt{display:flex;align-items:center;gap:7px;padding:7px 13px;border-radius:8px 8px 0 0;font-size:12px;color:var(--muted);cursor:pointer}
+  .dt.on{background:var(--bg);color:var(--ink)}
+  .dt .x{color:#3a4250;font-size:11px}
+  .dt .i{font-size:12px}
+  .docbody{flex:1;min-height:0;overflow:auto;padding:16px 18px}
+
+  /* home view */
+  .hgrid{display:grid;grid-template-columns:1.25fr .75fr;gap:14px;height:100%}
+  .hcol{display:flex;flex-direction:column;gap:14px;min-height:0}
+  .card{border:1px solid var(--line-soft);border-radius:11px;background:var(--panel);padding:13px 14px}
+  .card .hd{display:flex;align-items:center;gap:8px;margin-bottom:11px}
+  .card .hd b{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  .card .hd .ln{flex:1;height:1px;background:var(--line-soft)}
+  .card .hd a{font-family:var(--mono);font-size:10px;color:var(--accent2);text-decoration:none}
+  .chiprow{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:2px}
+  .stat{flex:1;min-width:120px;border:1px solid var(--line-soft);border-radius:10px;background:var(--panel);padding:10px 12px}
+  .stat .k{font-family:var(--mono);font-size:9px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+  .stat .v{font-size:20px;font-weight:700;margin-top:2px}
+  .stat .v small{font-size:11px;color:var(--muted);font-weight:600}
+  .stat .v.g{color:var(--run)}
+  .proc{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line-soft);border-radius:9px;background:rgba(255,255,255,.015);margin-bottom:7px}
+  .proc:last-child{margin-bottom:0}
+  .proc .sd{width:8px;height:8px;border-radius:50%;background:var(--run)}
+  .proc .sd.det{background:none;border:1.5px solid var(--cyan)}
+  .proc .sd.idle{background:#38414f}
+  .proc b{font-size:12.5px}
+  .proc .sp{font-size:11px;color:var(--accent2);font-weight:600}
+  .proc .m{margin-left:auto;display:flex;gap:10px;font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+  .proc .m .port{color:var(--accent2)}
+  .proc .a{display:flex;gap:4px}
+  .proc .ab{width:24px;height:24px;border-radius:7px;display:grid;place-items:center;background:rgba(255,255,255,.04);color:var(--dim);font-size:12px;cursor:pointer}
+  .feed{display:flex;flex-direction:column}
+  .fitem{display:flex;align-items:flex-start;gap:9px;padding:6px 2px;border-bottom:1px solid var(--line-soft);font-size:12px;color:var(--dim)}
+  .fitem:last-child{border-bottom:0}
+  .fitem .t{font-family:var(--mono);font-size:10px;color:var(--muted);width:34px;flex:none;padding-top:2px}
+  .fitem .fi{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;flex:none;font-size:11px}
+  .fitem b{color:var(--ink);font-weight:600}
+  .fitem .mono{font-size:11px}
+  .loglines{font-family:var(--mono);font-size:11px;line-height:1.75;color:var(--dim)}
+  .loglines .t{color:#3f4a5a}.loglines .sv{color:var(--accent2)}.loglines .ok{color:var(--run)}.loglines .wn{color:var(--warn)}
+
+  /* space page (projects view) */
+  .sphead{display:flex;align-items:center;gap:13px;margin-bottom:14px}
+  .sphead .av{width:46px;height:46px;border-radius:11px;background:linear-gradient(150deg,#f7c948,#e8951f);display:grid;place-items:center;font-weight:800;font-size:15px;color:#2a1c02}
+  .sphead .ey{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+  .sphead h3{margin:1px 0;font-size:18px;letter-spacing:-.02em}
+  .sphead .pa{font-family:var(--mono);font-size:10px;color:var(--muted)}
+  .sphead .r{margin-left:auto;display:flex;gap:7px}
+  .btn{font-size:11.5px;font-weight:600;border-radius:8px;padding:7px 12px;color:var(--dim);border:1px solid var(--line);display:inline-flex;gap:6px;align-items:center;cursor:pointer;background:none}
+  .btn.pri{background:var(--accent);color:#0a0c11;border-color:var(--accent)}
+  .svcdoc{display:flex;align-items:center;gap:11px;padding:10px 13px;border:1px solid var(--line-soft);border-radius:10px;background:rgba(255,255,255,.015);margin-bottom:8px}
+  .svcdoc .sd{width:8px;height:8px;border-radius:50%;background:#38414f}
+  .svcdoc.run .sd{background:var(--run)}
+  .svcdoc b{font-size:13px}
+  .svcdoc .cmd{font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+  .svcdoc .m{margin-left:auto;display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .svcdoc .m .port{color:var(--accent2)}
+
+  /* sql doc (connections view) */
+  .sqlhead{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .sqlhead .eng{width:34px;height:34px;border-radius:9px;background:rgba(70,183,240,.13);color:var(--cyan);display:grid;place-items:center;font-family:var(--mono);font-size:10px;font-weight:700}
+  .sqlhead b{font-size:14px}
+  .sqlhead .sub{font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+  .sqlhead .st{display:inline-flex;align-items:center;gap:5px;margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--run)}
+  .sqlhead .st i{width:7px;height:7px;border-radius:50%;background:var(--run)}
+  .editor{border:1px solid var(--line-soft);border-radius:10px;background:#0b0f16;padding:12px 14px;font-family:var(--mono);font-size:12px;line-height:1.7;margin-bottom:10px}
+  .k{color:#c792ea}.f{color:#82aaff}.s{color:#c3e88d}.n{color:#f78c6c}.c{color:#546e7a}
+  .runrow{display:flex;align-items:center;gap:9px;margin-bottom:12px}
+  .runrow .meta{font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+  table.grid{width:100%;border-collapse:collapse;border:1px solid var(--line-soft);border-radius:10px;overflow:hidden;font-size:12px}
+  .grid th{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:left;font-weight:600;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--line)}
+  .grid td{padding:7px 12px;border-bottom:1px solid var(--line-soft);color:var(--dim)}
+  .grid tr:nth-child(even) td{background:rgba(255,255,255,.012)}
+  .grid td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;color:var(--ink)}
+  .grid td b{color:var(--ink);font-weight:550}
+  .gridfoot{display:flex;gap:14px;padding:8px 2px;font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+
+  /* bottom bar + status */
+  .bottom{height:120px;flex-shrink:0;border-top:1px solid var(--line-soft);background:#080b10;display:flex;flex-direction:column}
+  .btabs{display:flex;align-items:center;gap:14px;padding:6px 12px;border-bottom:1px solid var(--line-soft);font-size:11.5px;color:var(--muted)}
+  .btabs .on{color:var(--ink);font-weight:600}
+  .btabs .caret{margin-left:auto;color:var(--muted);font-family:var(--mono)}
+  .bbody{flex:1;overflow:hidden;padding:8px 12px}
+  .status{height:24px;flex-shrink:0;display:flex;align-items:center;gap:14px;padding:0 12px;background:#0a0c12;border-top:1px solid var(--line-soft);font-family:var(--mono);font-size:10px;color:var(--muted)}
+  .status .g{width:6px;height:6px;border-radius:50%;background:var(--run);display:inline-block;margin-right:5px}
+  .status .spacer{margin-left:auto}
+
+  /* ---- sheet editor ---- */
+  .scrim{position:absolute;inset:30px 0 0 52px;background:rgba(5,7,11,.45);opacity:0;pointer-events:none;transition:opacity .25s;z-index:30}
+  .sheet{position:absolute;top:30px;right:0;bottom:0;width:400px;background:#0d1119;border-left:1px solid var(--line);box-shadow:-24px 0 60px rgba(0,0,0,.45);
+         transform:translateX(102%);transition:transform .28s cubic-bezier(.3,.7,.2,1);z-index:31;display:flex;flex-direction:column}
+  body[data-sheet="open"] .sheet{transform:none}
+  body[data-sheet="open"] .scrim{opacity:1}
+  .shhead{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line-soft)}
+  .shhead .gl{width:34px;height:34px;border-radius:9px;background:rgba(124,140,248,.14);color:var(--accent2);display:grid;place-items:center;font-size:16px}
+  .shhead .tt{line-height:1.2}
+  .shhead .tt .k2{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+  .shhead .tt b{font-size:14px}
+  .shhead .x{margin-left:auto;color:var(--muted);cursor:pointer;font-size:14px}
+  .shbody{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:13px}
+  .fld label{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+  .fld input,.fld select{width:100%;background:#0b0f16;border:1px solid var(--line);border-radius:8px;color:var(--ink);font:12.5px var(--sans);padding:8px 10px;outline:none}
+  .fld input.mono{font-family:var(--mono);font-size:12px}
+  .fld input:focus{border-color:var(--accent)}
+  .fld .hint{font-size:10.5px;color:var(--muted);margin-top:4px}
+  .frow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .shfoot{display:flex;align-items:center;gap:8px;padding:13px 16px;border-top:1px solid var(--line-soft)}
+  .shfoot .danger{color:var(--err);font-size:11.5px;cursor:pointer}
+  .shfoot .grow{flex:1}
+  kbd{font-family:var(--mono);font-size:9.5px;padding:2px 6px;border-radius:5px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--dim)}
+
+  /* ---- widget peek ---- */
+  .peek{position:absolute;right:18px;bottom:158px;width:270px;border:1px solid var(--line);border-radius:13px;overflow:hidden;
+        background:linear-gradient(180deg,#131722,#0e1119);box-shadow:0 20px 55px rgba(0,0,0,.55);z-index:20}
+  .peek .ph{display:flex;align-items:center;gap:8px;padding:9px 11px;border-bottom:1px solid var(--line-soft)}
+  .peek .ph b{font-size:12px}
+  .peek .ph span{margin-left:auto;font-family:var(--mono);font-size:9.5px;color:var(--muted)}
+  .peek .pb{padding:9px 11px}
+  .pcard{display:flex;align-items:center;gap:9px}
+  .pcard .sd{width:8px;height:8px;border-radius:50%;background:var(--warn);animation:pulse 1.6s ease-in-out infinite}
+  .pcard b{font-size:12px}
+  .pcard .u{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+  .pbar{margin-top:8px;height:3px;border-radius:2px;background:rgba(255,255,255,.06);overflow:hidden}
+  .pbar i{display:block;height:100%;width:56%;background:var(--accent);border-radius:2px}
+  .peeknote{position:absolute;right:18px;bottom:128px;font-family:var(--mono);font-size:9.5px;color:var(--muted);z-index:20}
+  @keyframes pulse{50%{opacity:.35}}
+
+  /* view switching */
+  [data-view] .view{display:none}
+  body[data-view="home"] .view.home{display:block}
+  body[data-view="home"] .sidebar{display:none}
+  body[data-view="home"] .peek,body[data-view="home"] .peeknote{display:block}
+  .peek,.peeknote{display:none}
+  body[data-view="projects"] .view.projects{display:block}
+  body[data-view="connections"] .view.connections{display:block}
+  .sb{display:none}
+  body[data-view="projects"] .sb.projects{display:flex}
+  body[data-view="connections"] .sb.connections{display:flex}
+  body[data-view="home"] .doctabs{display:none}
+</style>
+</head>
+<body data-view="home" data-sheet="closed">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="home" viewBox="0 0 24 24"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></symbol>
+  <symbol id="box" viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></symbol>
+  <symbol id="db" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></symbol>
+  <symbol id="layers" viewBox="0 0 24 24"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></symbol>
+  <symbol id="monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></symbol>
+  <symbol id="settings" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="terminal" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></symbol>
+  <symbol id="zap" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></symbol>
+  <symbol id="play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></symbol>
+  <symbol id="stopi" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></symbol>
+  <symbol id="globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></symbol>
+  <symbol id="git-branch" viewBox="0 0 24 24"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></symbol>
+  <symbol id="file-code" viewBox="0 0 24 24"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="m9 18 3-3-3-3"/></symbol>
+  <symbol id="clip" viewBox="0 0 24 24"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></symbol>
+  <symbol id="boxes" viewBox="0 0 24 24"><path d="M2.97 12.92A2 2 0 0 0 2 14.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0L12 19v-5.5l-5-3-4.03 2.42Z"/><path d="m7 16.5-4.74-2.85"/><path d="M17 16.5 22 19v-5.5l-5-3"/><path d="m17 16.5-5-3"/><path d="M12 13.5 17 16.5"/></symbol>
+  <symbol id="activity" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+</svg>
+
+<div class="mockbar">
+  <b>design/shell-mock.html</b> · rail → sidebar → surface · click the rail or these:
+  <div class="views">
+    <a class="vbtn" href="#home">home</a>
+    <a class="vbtn" href="#projects">projects</a>
+    <a class="vbtn" href="#sheet">editor sheet</a>
+    <a class="vbtn" href="#connections">connections</a>
+  </div>
+</div>
+
+<div class="app">
+  <div class="native"><span class="d d1"></span><span class="d d2"></span><span class="d d3"></span><b style="margin-left:4px;font-weight:500">DevDeck</b><span class="wc">— ▢ ✕</span></div>
+
+  <div class="shell">
+    <!-- rail -->
+    <nav class="rail">
+      <div class="rlogo">❯_</div>
+      <div class="ritem" data-nav="home" title="Home"><svg class="i"><use href="#home"/></svg></div>
+      <div class="ritem" data-nav="projects" title="Projects"><svg class="i"><use href="#box"/></svg><span class="dot"></span></div>
+      <div class="ritem" data-nav="connections" title="Connections"><svg class="i"><use href="#db"/></svg></div>
+      <div class="ritem" style="opacity:.45" title="Stash — later"><svg class="i"><use href="#layers"/></svg></div>
+      <div class="ritem" title="Machine"><svg class="i"><use href="#monitor"/></svg></div>
+      <div class="sp"></div>
+      <div class="ritem" title="Settings"><svg class="i"><use href="#settings"/></svg></div>
+    </nav>
+
+    <!-- sidebar: projects -->
+    <aside class="sidebar sb projects">
+      <div class="sbhead">
+        <svg class="i"><use href="#boxes"/></svg><span class="t">Acme Cloud</span>
+        <span class="act"><svg class="i" style="font-size:11px"><use href="#git-branch"/></svg> GitHub</span>
+        <span class="act">+ Project</span>
+      </div>
+      <div class="sbody">
+        <div class="trow proj"><span class="tw">▾</span><svg class="i"><use href="#box"/></svg><span class="nm">storefront</span>
+          <span class="gb"><svg class="i" style="font-size:11px"><use href="#git-branch"/></svg> main <span class="pill pull">↓3</span></span></div>
+        <div class="cat">Services</div>
+        <div class="srow run"><span class="sd"></span><span class="nm">web</span><span class="port">:3000</span></div>
+        <div class="srow run"><span class="sd"></span><span class="nm">api</span><span class="port">:8080</span></div>
+        <div class="srow"><span class="sd"></span><span class="nm">worker</span></div>
+        <div class="cat">Commands</div>
+        <div class="srow"><svg class="i" style="font-size:12px;color:var(--cyan)"><use href="#terminal"/></svg><span class="nm" style="font-weight:500">test:e2e</span></div>
+        <div class="srow"><svg class="i" style="font-size:12px;color:var(--cyan)"><use href="#terminal"/></svg><span class="nm" style="font-weight:500">build</span></div>
+        <div class="trow proj" style="margin-top:4px"><span class="tw">▸</span><svg class="i"><use href="#box"/></svg><span class="nm">api-gateway</span>
+          <span class="gb"><svg class="i" style="font-size:11px"><use href="#git-branch"/></svg> main <span class="pill push">↑2</span></span></div>
+        <div class="trow proj"><span class="tw">▸</span><svg class="i"><use href="#box"/></svg><span class="nm">design-tokens</span>
+          <span class="gb"><svg class="i" style="font-size:11px"><use href="#git-branch"/></svg> main</span></div>
+        <div class="trow proj"><span class="tw">▸</span><svg class="i"><use href="#box"/></svg><span class="nm">infra</span>
+          <span class="gb"><svg class="i" style="font-size:11px"><use href="#git-branch"/></svg> main <span class="pill pull">↓12</span></span></div>
+      </div>
+    </aside>
+
+    <!-- sidebar: connections -->
+    <aside class="sidebar sb connections">
+      <div class="sbhead">
+        <svg class="i"><use href="#db"/></svg><span class="t">Connections</span>
+        <span class="act">+ Connection</span>
+      </div>
+      <div class="sbody">
+        <div class="crow on"><span class="eng pg">PG</span>
+          <span class="cinf"><b>staging-db</b><span>db.staging.acme.io · postgres 16</span></span>
+          <span class="st" style="background:var(--run)"></span></div>
+        <div class="cat" style="padding-left:14px">Saved queries</div>
+        <div class="qrow on"><svg class="i"><use href="#file-code"/></svg> top-orders.sql <span class="tag">2m ago</span></div>
+        <div class="qrow"><svg class="i"><use href="#file-code"/></svg> failed-jobs.sql <span class="tag">1d</span></div>
+        <div class="qrow"><svg class="i"><use href="#file-code"/></svg> revenue-by-day.sql <span class="tag">3d</span></div>
+        <div class="crow" style="margin-top:8px"><span class="eng lite">SQ</span>
+          <span class="cinf"><b>local.sqlite</b><span>storefront · dev.db</span></span>
+          <span class="st" style="background:var(--run)"></span></div>
+        <div class="crow"><span class="eng ms">MS</span>
+          <span class="cinf"><b>prod-replica</b><span>sql.acme.internal · read-only</span></span>
+          <span class="st" style="background:#38414f"></span></div>
+      </div>
+    </aside>
+
+    <!-- main -->
+    <div class="center">
+      <div class="surface">
+        <div class="doctabs">
+          <div class="dt on" id="tab1"></div>
+          <div class="dt"><svg class="i"><use href="#terminal"/></svg> pwsh #3 <span class="x">✕</span></div>
+        </div>
+        <div class="docbody">
+
+          <!-- HOME -->
+          <div class="view home">
+            <div class="chiprow">
+              <div class="stat"><div class="k">Services</div><div class="v g">2<small>/3 running</small></div></div>
+              <div class="stat"><div class="k">Terminals</div><div class="v">1<small> live</small></div></div>
+              <div class="stat"><div class="k">Connections</div><div class="v">2<small>/3 reachable</small></div></div>
+              <div class="stat"><div class="k">Repos behind</div><div class="v" style="color:var(--warn)">2<small> to pull</small></div></div>
+              <div class="stat"><div class="k">Errors · 1h</div><div class="v">0</div></div>
+            </div>
+            <div class="hgrid" style="margin-top:14px">
+              <div class="hcol">
+                <div class="card">
+                  <div class="hd"><b>Active processes</b><span class="ln"></span><a href="#">stop all</a></div>
+                  <div class="proc"><span class="sd"></span><b>web</b><span class="sp">storefront</span>
+                    <span class="m"><span class="port">:3000</span><span>12m</span><span>2%</span><span>96MB</span></span>
+                    <span class="a"><span class="ab"><svg class="i"><use href="#globe"/></svg></span><span class="ab" style="color:var(--err)"><svg class="i"><use href="#stopi"/></svg></span></span></div>
+                  <div class="proc"><span class="sd"></span><b>api</b><span class="sp">storefront</span>
+                    <span class="m"><span class="port">:8080</span><span>9m</span><span>4%</span><span>142MB</span></span>
+                    <span class="a"><span class="ab"><svg class="i"><use href="#terminal"/></svg></span><span class="ab" style="color:var(--err)"><svg class="i"><use href="#stopi"/></svg></span></span></div>
+                  <div class="proc"><span class="sd det"></span><b>web-app</b><span class="sp" style="color:var(--cyan)">vite · detected</span>
+                    <span class="m"><span class="port">:5173</span><span>3m</span></span>
+                    <span class="a"><span class="ab"><svg class="i"><use href="#globe"/></svg></span><span class="ab">＋</span></span></div>
+                  <div class="proc"><span class="sd idle"></span><b>worker</b><span class="sp">storefront</span>
+                    <span class="m"><span>idle</span></span>
+                    <span class="a"><span class="ab" style="color:var(--accent2)"><svg class="i"><use href="#play"/></svg></span></span></div>
+                </div>
+                <div class="card" style="flex:1">
+                  <div class="hd"><b>Master log</b><span class="ln"></span><a href="#">open full log →</a></div>
+                  <div class="loglines">
+                    <div><span class="t">10:24:01</span> <span class="sv">web</span> ready on <span class="ok">http://localhost:3000</span></div>
+                    <div><span class="t">10:24:01</span> <span class="sv">api</span> listening on <span class="ok">:8080</span> · db connected</div>
+                    <div><span class="t">10:23:48</span> <span class="sv">git</span> fetched 4 repos · storefront <span class="wn">↓3</span> · infra <span class="wn">↓12</span></div>
+                    <div><span class="t">10:21:12</span> <span class="sv">sql</span> top-orders.sql on staging-db · <span class="ok">142 rows</span> · 38ms</div>
+                    <div><span class="t">10:18:03</span> <span class="sv">git</span> pull storefront · <span class="ok">fast-forward</span> · +182 −40</div>
+                  </div>
+                </div>
+              </div>
+              <div class="hcol">
+                <div class="card" style="flex:1">
+                  <div class="hd"><b>Recent activity</b><span class="ln"></span></div>
+                  <div class="feed">
+                    <div class="fitem"><span class="t">10:24</span><span class="fi" style="background:rgba(74,222,128,.12);color:var(--run)"><svg class="i"><use href="#zap"/></svg></span><span><b>web</b> started · storefront</span></div>
+                    <div class="fitem"><span class="t">10:21</span><span class="fi" style="background:rgba(70,183,240,.12);color:var(--cyan)"><svg class="i"><use href="#db"/></svg></span><span><b>top-orders.sql</b> ran on <b>staging-db</b> · <span class="mono">142 rows</span></span></div>
+                    <div class="fitem"><span class="t">10:18</span><span class="fi" style="background:rgba(251,191,36,.12);color:var(--warn)"><svg class="i"><use href="#git-branch"/></svg></span><span>pulled <b>storefront</b> · <span class="mono">↓3 → 0</span></span></div>
+                    <div class="fitem"><span class="t">10:12</span><span class="fi" style="background:rgba(124,140,248,.12);color:var(--accent2)"><svg class="i"><use href="#clip"/></svg></span><span>clip captured · <span class="mono">json · 2.1KB</span></span></div>
+                    <div class="fitem"><span class="t">09:58</span><span class="fi" style="background:rgba(74,222,128,.12);color:var(--run)"><svg class="i"><use href="#play"/></svg></span><span>profile <b>Morning</b> launched · 3 services</span></div>
+                    <div class="fitem"><span class="t">09:57</span><span class="fi" style="background:rgba(124,140,248,.12);color:var(--accent2)"><svg class="i"><use href="#terminal"/></svg></span><span>terminal <b>pwsh #3</b> opened in storefront</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- PROJECTS: space page -->
+          <div class="view projects">
+            <div class="sphead">
+              <div class="av">SF</div>
+              <div>
+                <div class="ey">Space</div>
+                <h3>storefront</h3>
+                <div class="pa">C:\dev\acme\storefront · <svg class="i" style="font-size:10px"><use href="#git-branch"/></svg> main <span class="pill pull">↓3</span></div>
+              </div>
+              <div class="r">
+                <button class="btn"><svg class="i"><use href="#terminal"/></svg> Terminal</button>
+                <button class="btn"><svg class="i"><use href="#git-branch"/></svg> Pull</button>
+                <button class="btn pri"><svg class="i"><use href="#play"/></svg> Start all</button>
+              </div>
+            </div>
+            <div class="svcdoc run"><span class="sd"></span><div><b>web</b><div class="cmd">pnpm dev:web</div></div>
+              <span class="m"><span class="port">:3000</span><span>12m</span><span>2%</span></span></div>
+            <div class="svcdoc run"><span class="sd"></span><div><b>api</b><div class="cmd">pnpm dev:api</div></div>
+              <span class="m"><span class="port">:8080</span><span>9m</span><span>4%</span></span></div>
+            <div class="svcdoc" id="editTarget"><span class="sd"></span><div><b>worker</b><div class="cmd">pnpm dev:worker</div></div>
+              <span class="m"><span style="color:var(--accent2);cursor:pointer" onclick="document.body.dataset.sheet='open'">edit →</span></span></div>
+          </div>
+
+          <!-- CONNECTIONS: sql doc -->
+          <div class="view connections">
+            <div class="sqlhead">
+              <span class="eng">PG</span>
+              <div><b>top-orders.sql</b><div class="sub">staging-db · db.staging.acme.io · postgres 16</div></div>
+              <span class="st"><i></i> connected · 12ms</span>
+            </div>
+            <div class="editor">
+<span class="c">-- top orders in the last 7 days</span><br/>
+<span class="k">select</span> o.id, c.name <span class="k">as</span> customer, o.total, o.created_at<br/>
+<span class="k">from</span> orders o <span class="k">join</span> customers c <span class="k">on</span> c.id = o.customer_id<br/>
+<span class="k">where</span> o.created_at &gt; now() - <span class="s">'7 days'</span>::interval<br/>
+<span class="k">order by</span> o.total <span class="k">desc</span> <span class="k">limit</span> <span class="n">100</span>;
+            </div>
+            <div class="runrow">
+              <button class="btn pri"><svg class="i"><use href="#play"/></svg> Run</button>
+              <button class="btn">Explain</button>
+              <span class="meta">last run 10:21 · 142 rows · 38ms</span>
+            </div>
+            <table class="grid">
+              <tr><th>id</th><th>customer</th><th style="text-align:right">total</th><th>created_at</th></tr>
+              <tr><td class="num">10482</td><td><b>Northwind Traders</b></td><td class="num">4,120.00</td><td class="mono" style="font-size:11px">2026-08-24 16:02</td></tr>
+              <tr><td class="num">10471</td><td><b>Fabrikam Inc</b></td><td class="num">3,987.50</td><td class="mono" style="font-size:11px">2026-08-24 11:47</td></tr>
+              <tr><td class="num">10463</td><td><b>Contoso Ltd</b></td><td class="num">2,845.00</td><td class="mono" style="font-size:11px">2026-08-23 09:15</td></tr>
+              <tr><td class="num">10454</td><td><b>Adventure Works</b></td><td class="num">2,610.25</td><td class="mono" style="font-size:11px">2026-08-22 19:33</td></tr>
+              <tr><td class="num">10440</td><td><b>Tailspin Toys</b></td><td class="num">2,395.00</td><td class="mono" style="font-size:11px">2026-08-22 08:04</td></tr>
+            </table>
+            <div class="gridfoot"><span>142 rows</span><span>38ms</span><span>LIMIT 100</span><span style="margin-left:auto">export csv · copy</span></div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- bottom bar -->
+      <div class="bottom">
+        <div class="btabs"><span class="on">Logs</span><span>Processes</span><span class="caret">▾</span></div>
+        <div class="bbody loglines">
+          <div><span class="t">10:24:01</span> <span class="sv">web</span> ready on <span class="ok">http://localhost:3000</span></div>
+          <div><span class="t">10:24:01</span> <span class="sv">api</span> listening on <span class="ok">:8080</span> · db connected</div>
+          <div><span class="t">10:23:48</span> <span class="sv">git</span> fetched 4 repos · storefront <span class="wn">↓3</span></div>
+        </div>
+      </div>
+      <div class="status"><span><span class="g"></span>2 services running</span><span>1 terminal</span><span>staging-db connected</span><span class="spacer">widget: peek on start · ctrl+shift+Space</span></div>
+    </div>
+  </div>
+
+  <!-- sheet editor -->
+  <div class="scrim" onclick="document.body.dataset.sheet='closed'"></div>
+  <div class="sheet">
+    <div class="shhead">
+      <span class="gl"><svg class="i"><use href="#zap"/></svg></span>
+      <span class="tt"><span class="k2">Service editor</span><br/><b>worker</b></span>
+      <span class="x" onclick="document.body.dataset.sheet='closed'">✕ <kbd>esc</kbd></span>
+    </div>
+    <div class="shbody">
+      <div class="fld"><label>Name</label><input value="worker" /></div>
+      <div class="fld"><label>Command</label><input class="mono" value="pnpm dev:worker" /></div>
+      <div class="fld"><label>Directory</label><input class="mono" value="C:\dev\acme\storefront" /><div class="hint">defaults to the project root</div></div>
+      <div class="frow">
+        <div class="fld"><label>Port</label><input class="mono" placeholder="auto-detect" /></div>
+        <div class="fld"><label>Shell</label><select><option>default</option><option>pwsh</option><option>cmd</option><option>wsl</option></select></div>
+      </div>
+      <div class="fld"><label>Environment</label><input class="mono" placeholder="KEY=value, one per line…" /></div>
+    </div>
+    <div class="shfoot">
+      <span class="danger">Delete</span>
+      <span class="grow"></span>
+      <button class="btn" onclick="document.body.dataset.sheet='closed'">Cancel</button>
+      <button class="btn pri">Save</button>
+    </div>
+  </div>
+
+  <!-- widget peek (home view) -->
+  <div class="peeknote">▼ widget peeks on start — no focus steal, auto-collapses when healthy</div>
+  <div class="peek">
+    <div class="ph"><svg class="i" style="color:var(--dim)"><use href="#activity"/></svg><b>Sessions</b><span>starting 1 of 3</span></div>
+    <div class="pb">
+      <div class="pcard"><span class="sd"></span><b>worker</b><span class="u">storefront · booting…</span></div>
+      <div class="pbar"><i></i></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var tabNames = { home: 'Home', projects: 'storefront', connections: 'top-orders.sql — staging-db' };
+  var tabIcons = { home: 'home', projects: 'box', connections: 'file-code' };
+  function apply(view, sheet){
+    document.body.dataset.view = view;
+    document.body.dataset.sheet = sheet ? 'open' : 'closed';
+    document.querySelectorAll('.ritem[data-nav]').forEach(function(r){
+      r.classList.toggle('on', r.dataset.nav === view);
+    });
+    document.querySelectorAll('.vbtn').forEach(function(b){
+      var h = b.getAttribute('href').slice(1);
+      b.classList.toggle('on', h === view || (h === 'sheet' && sheet));
+    });
+    var t = document.getElementById('tab1');
+    t.innerHTML = '<svg class="i"><use href="#'+tabIcons[view]+'"/></svg> ' + tabNames[view] + (view==='home' ? '' : ' <span class="x">✕</span>');
+  }
+  function fromHash(){
+    var h = (location.hash || '#home').slice(1);
+    if (h === 'sheet') apply('projects', true);
+    else apply(['home','projects','connections'].indexOf(h) >= 0 ? h : 'home', false);
+  }
+  window.addEventListener('hashchange', fromHash);
+  document.querySelectorAll('.ritem[data-nav]').forEach(function(r){
+    r.addEventListener('click', function(){ location.hash = '#' + r.dataset.nav; });
+  });
+  fromHash();
+})();
+</script>
+</body>
+</html>

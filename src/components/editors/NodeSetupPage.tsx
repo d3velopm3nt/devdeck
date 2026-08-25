@@ -41,7 +41,7 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
   const [result, setResult] = useState<{ added: number; updated: number; failed: number } | null>(null)
 
   if (!node) {
-    return <div className="p-6 text-slate-500">This item no longer exists.</div>
+    return <div className="p-6 text-muted">This item no longer exists.</div>
   }
   const isProject = node.kind === 'project'
   const project = projectOf(nodes, node)
@@ -217,11 +217,11 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
           </Field>
 
           {/* ---- Scan repo for scripts ---- */}
-          <div className="rounded-lg border border-slate-700 bg-[#151923] p-3">
+          <div className="rounded-lg border border-line2 bg-raise p-3">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-[12.5px] font-medium text-slate-200">Scan repo for scripts</div>
-                <div className="text-[11px] text-slate-500">
+                <div className="text-[12.5px] font-medium text-ink">Scan repo for scripts</div>
+                <div className="text-[11px] text-muted">
                   Detect npm / pnpm / cargo / make / … scripts and add them as commands or services (dev servers are guessed as services — flip any row). Re-scan any time to pick up new ones.
                 </div>
               </div>
@@ -244,21 +244,21 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
               </button>
             </div>
 
-            {scanErr && <div className="mt-2 text-[11px] text-red-400">{scanErr}</div>}
+            {scanErr && <div className="mt-2 text-[11px] text-err">{scanErr}</div>}
 
             {scan &&
               (scan.length === 0 ? (
-                <div className="mt-3 text-[11px] text-slate-500">No scripts found — check the base path points at the repo root.</div>
+                <div className="mt-3 text-[11px] text-muted">No scripts found — check the base path points at the repo root.</div>
               ) : (
                 <div className="mt-3 space-y-1.5">
-                  <div className="flex items-center gap-3 text-[11px] text-slate-400">
-                    <button className="hover:text-slate-200" onClick={() => setPicked(new Set(scan.filter((r) => rowStatus(r) === 'new').map((r) => r.command)))}>
+                  <div className="flex items-center gap-3 text-[11px] text-dim">
+                    <button className="hover:text-ink" onClick={() => setPicked(new Set(scan.filter((r) => rowStatus(r) === 'new').map((r) => r.command)))}>
                       Select new ({newCount})
                     </button>
-                    <button className="hover:text-slate-200" title="Also select same-name commands whose command changed, to override them" onClick={() => setPicked(new Set(scan.filter((r) => rowStatus(r) !== 'added').map((r) => r.command)))}>
+                    <button className="hover:text-ink" title="Also select same-name commands whose command changed, to override them" onClick={() => setPicked(new Set(scan.filter((r) => rowStatus(r) !== 'added').map((r) => r.command)))}>
                       Select all + override
                     </button>
-                    <button className="hover:text-slate-200" onClick={() => setPicked(new Set())}>
+                    <button className="hover:text-ink" onClick={() => setPicked(new Set())}>
                       Clear
                     </button>
                     <span className="ml-auto">{picked.size} selected</span>
@@ -274,7 +274,7 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
                         <label
                           key={r.manager + '|' + r.command}
                           title={ex ? `Currently: ${ex.command}` : undefined}
-                          className={`flex cursor-pointer items-center gap-2 rounded border px-2 py-1.5 ${st === 'added' ? 'border-slate-800 opacity-50' : 'border-slate-700 hover:border-slate-600'}`}
+                          className={`flex cursor-pointer items-center gap-2 rounded border px-2 py-1.5 ${st === 'added' ? 'border-line opacity-50' : 'border-line2 hover:border-line3'}`}
                         >
                           <input type="checkbox" className="accent-indigo-500" disabled={st === 'added'} checked={st === 'added' || on} onChange={() => toggle(r.command)} />
                           {b && (
@@ -286,13 +286,13 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
                             </span>
                           )}
                           <span className="min-w-0 flex-1 truncate">
-                            <span className="text-[12.5px] text-slate-200">{r.name}</span>
-                            <span className="ml-2 font-mono text-[10.5px] text-slate-500">{r.command}</span>
+                            <span className="text-[12.5px] text-ink">{r.name}</span>
+                            <span className="ml-2 font-mono text-[10.5px] text-muted">{r.command}</span>
                           </span>
                           {(() => {
                             const kind = kindOf(r)
                             return (
-                              <span className="shrink-0 overflow-hidden rounded border border-slate-700 text-[10px] leading-none" title="Add as a one-shot command or a long-running service">
+                              <span className="shrink-0 overflow-hidden rounded border border-line2 text-[10px] leading-none" title="Add as a one-shot command or a long-running service">
                                 {(['command', 'service'] as const).map((k) => (
                                   <button
                                     key={k}
@@ -302,7 +302,7 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
                                       e.preventDefault()
                                       setKind(r.command, k)
                                     }}
-                                    className={`inline-flex items-center gap-1 px-1.5 py-1 ${kind === k ? (k === 'service' ? 'bg-amber-500/25 text-amber-300' : 'bg-indigo-500/25 text-indigo-200') : 'text-slate-500 hover:text-slate-300'}`}
+                                    className={`inline-flex items-center gap-1 px-1.5 py-1 ${kind === k ? (k === 'service' ? 'bg-amber-500/25 text-warn' : 'bg-indigo-500/25 text-indigo-200') : 'text-muted hover:text-ink'}`}
                                   >
                                     {k === 'service' ? (
                                       <>
@@ -320,7 +320,7 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
                           })()}
                           {kindOf(r) === 'service' && (
                             <input
-                              className="w-14 shrink-0 rounded border border-slate-700 bg-[#0d1017] px-1 py-1 text-center text-[10.5px] text-slate-300"
+                              className="w-14 shrink-0 rounded border border-line2 bg-page px-1 py-1 text-center text-[10.5px] text-body"
                               placeholder="port"
                               value={portOf(r)}
                               disabled={st === 'added'}
@@ -329,8 +329,8 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
                               title="Port this service serves on — saved so you can open it in the browser without re-entering it"
                             />
                           )}
-                          {st === 'added' && <span className="shrink-0 text-[10px] text-emerald-400">added</span>}
-                          {st === 'changed' && <span className="shrink-0 rounded bg-amber-500/15 px-1.5 py-px text-[10px] text-amber-400">differs</span>}
+                          {st === 'added' && <span className="shrink-0 text-[10px] text-ok">added</span>}
+                          {st === 'changed' && <span className="shrink-0 rounded bg-amber-500/15 px-1.5 py-px text-[10px] text-warn">differs</span>}
                         </label>
                       )
                     })}
@@ -346,7 +346,7 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
                       })()}
                     </button>
                     {result && (
-                      <span className="mt-1 inline-flex items-center gap-1 text-[11px] text-emerald-400">
+                      <span className="mt-1 inline-flex items-center gap-1 text-[11px] text-ok">
                         <Icon name="check" size={12} /> Added {result.added}
                         {result.updated ? `, overrode ${result.updated}` : ''}
                         {result.failed ? `, ${result.failed} failed` : ''} — see the Commands / Services panels.
@@ -367,9 +367,9 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
               onChange={(e) => setRelPath(e.target.value)}
             />
           </Field>
-          <div className="text-[11px] text-slate-500">
+          <div className="text-[11px] text-muted">
             Project base:{' '}
-            <span className="font-mono text-slate-400">{project?.path || '(project has no base path yet)'}</span>
+            <span className="font-mono text-dim">{project?.path || '(project has no base path yet)'}</span>
           </div>
           <Field label="Absolute path override (optional)">
             <div className="flex gap-1">
@@ -387,9 +387,9 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
         </>
       )}
 
-      <div className="rounded border border-slate-700 bg-[#151923] px-3 py-2 text-[12px]">
-        <span className="text-slate-500">Resolves to: </span>
-        <span className="font-mono text-emerald-400">{preview || '(no directory)'}</span>
+      <div className="rounded border border-line2 bg-raise px-3 py-2 text-[12px]">
+        <span className="text-muted">Resolves to: </span>
+        <span className="font-mono text-ok">{preview || '(no directory)'}</span>
       </div>
     </EditorShell>
   )

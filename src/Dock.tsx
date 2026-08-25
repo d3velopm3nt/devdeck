@@ -1,6 +1,7 @@
-// Dockable IDE-style workspace built on dockview: every panel
-// (explorer, terminals, services, logs, …) can be dragged, split,
-// tabbed, floated, resized; layouts serialize to SQLite.
+// The document surface: terminals, space pages, and project setup, built on
+// dockview so real documents can be split, tabbed and floated. Navigation
+// (Explorer, Home, Machine, Settings) lives in the fixed shell around this —
+// only documents get dock tabs.
 
 import {
   DockviewReact,
@@ -8,25 +9,12 @@ import {
   type DockviewReadyEvent,
   type IDockviewPanelProps,
 } from 'dockview-react'
-import { Explorer } from './components/Explorer'
-import { Dashboard } from './components/Dashboard'
-import { CommandsPanel } from './components/CommandsPanel'
-import { ServicesPanel } from './components/ServicesPanel'
-import { ProcessDashboard } from './components/ProcessDashboard'
-import { LogViewer } from './components/LogViewer'
-import { ProfilesPanel } from './components/ProfilesPanel'
-import { MachineSetup } from './components/MachineSetup'
-import { SettingsPanel } from './components/SettingsPanel'
-import { ConfigPage } from './components/ConfigPage'
-import { CommandEditorPage } from './components/editors/CommandEditorPage'
-import { ServiceEditorPage } from './components/editors/ServiceEditorPage'
-import { ProfileEditorPage } from './components/editors/ProfileEditorPage'
 import { NodeSetupPage } from './components/editors/NodeSetupPage'
 import { SpaceDetailPage } from './components/SpaceDetailPage'
 import { TerminalView } from './components/TerminalView'
 import { TerminalTab } from './components/TerminalTab'
 import { useEffect, useState } from 'react'
-import { setDockApi, openInMain } from './lib/dock'
+import { setDockApi } from './lib/dock'
 import * as ipc from './lib/ipc'
 import { useApp } from './store'
 import { openTerminal } from './lib/runner'
@@ -34,7 +22,9 @@ import { resolveDir } from './lib/tree'
 import { loadExampleWorkspace } from './lib/example'
 import { Icon } from './lib/icons'
 
-const AUTOSAVE = '__autosave__'
+// v2: the shell restructure moved navigation out of the dock — old autosaves
+// reference panels that no longer exist, so they get a fresh key.
+const AUTOSAVE = '__autosave_v2__'
 
 function Welcome() {
   const { shells, nodes, selectedNode } = useApp()
@@ -59,12 +49,12 @@ function Welcome() {
   }
 
   return (
-    <div className="flex h-full items-center justify-center bg-[#0d1017] p-6">
+    <div className="flex h-full items-center justify-center bg-page p-6">
       <div className="max-w-md space-y-4 text-center">
-        <div className="text-2xl font-semibold text-slate-200">
+        <div className="text-2xl font-semibold text-ink">
           <span className="text-indigo-400">❯_</span> DevDeck
         </div>
-        <p className="text-[13px] leading-6 text-slate-500">
+        <p className="text-[13px] leading-6 text-muted">
           Your local development command center. Pick a project or folder in
           the Explorer, then open terminals, start services, and watch logs —
           all in one place.
@@ -72,8 +62,8 @@ function Welcome() {
 
         {!hasExample && (
           <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/[0.07] p-4">
-            <div className="text-[13px] font-medium text-slate-200">New here?</div>
-            <p className="mt-1 text-[12px] leading-5 text-slate-500">
+            <div className="text-[13px] font-medium text-ink">New here?</div>
+            <p className="mt-1 text-[12px] leading-5 text-muted">
               Load an example workspace — a small demo project with a real web
               server and a background worker you can actually start, watch, and
               open in your browser.
@@ -81,7 +71,7 @@ function Welcome() {
             <button className="btn-primary mt-3 inline-flex items-center gap-1.5 text-[12px]" disabled={loading} onClick={() => void loadExample()}>
               {loading ? 'Setting up…' : <><Icon name="example" size={13} /> Load example workspace</>}
             </button>
-            <p className="mt-2 text-[10.5px] text-slate-600">
+            <p className="mt-2 text-[10.5px] text-faint">
               creates a small folder in your user directory · removable any time
             </p>
           </div>
@@ -99,8 +89,8 @@ function Welcome() {
           ))}
         </div>
         {dir && (
-          <p className="text-[11px] text-slate-600">
-            terminals open in <span className="text-slate-400">{dir}</span>
+          <p className="text-[11px] text-faint">
+            terminals open in <span className="text-dim">{dir}</span>
           </p>
         )}
       </div>
@@ -109,25 +99,6 @@ function Welcome() {
 }
 
 const components = {
-  explorer: () => <Explorer />,
-  dashboard: () => <Dashboard />,
-  commands: () => <CommandsPanel />,
-  services: () => <ServicesPanel />,
-  processes: () => <ProcessDashboard />,
-  logs: () => <LogViewer />,
-  profiles: () => <ProfilesPanel />,
-  machine: () => <MachineSetup />,
-  settings: () => <SettingsPanel />,
-  config: () => <ConfigPage />,
-  'command-editor': (props: IDockviewPanelProps<{ id: number; projectId?: number | null }>) => (
-    <CommandEditorPage {...props} />
-  ),
-  'service-editor': (props: IDockviewPanelProps<{ id: number; projectId?: number | null }>) => (
-    <ServiceEditorPage {...props} />
-  ),
-  'profile-editor': (props: IDockviewPanelProps<{ id: number; projectId?: number | null }>) => (
-    <ProfileEditorPage {...props} />
-  ),
   'node-setup': (props: IDockviewPanelProps<{ id: number }>) => <NodeSetupPage {...props} />,
   'space-detail': (props: IDockviewPanelProps<{ id: number }>) => <SpaceDetailPage {...props} />,
   welcome: () => <Welcome />,
@@ -144,57 +115,23 @@ const tabComponents = {
 
 export function buildDefaultLayout(api: DockviewReadyEvent['api']) {
   api.clear()
-  api.addPanel({ id: 'explorer', component: 'explorer', title: 'Explorer' })
-  api.addPanel({
-    id: 'dashboard',
-    component: 'dashboard',
-    title: 'Dashboard',
-    position: { referencePanel: 'explorer', direction: 'right' },
-  })
-  api.addPanel({
-    id: 'welcome',
-    component: 'welcome',
-    title: 'Welcome',
-    position: { referencePanel: 'dashboard', direction: 'within' },
-  })
-  api.addPanel({
-    id: 'commands',
-    component: 'commands',
-    title: 'Commands',
-    position: { referencePanel: 'explorer', direction: 'below' },
-  })
-  api.addPanel({
-    id: 'services',
-    component: 'services',
-    title: 'Services',
-    position: { referencePanel: 'commands', direction: 'within' },
-  })
-  api.addPanel({
-    id: 'profiles',
-    component: 'profiles',
-    title: 'Profiles',
-    position: { referencePanel: 'commands', direction: 'within' },
-  })
-  // Logs & Processes now live in the app's bottom bar, not the dock.
-  api.getPanel('commands')?.api.setActive()
-  api.getPanel('dashboard')?.api.setActive()
-
-  const explorer = api.getPanel('explorer')
-  if (explorer) explorer.api.setSize({ width: 280 })
+  api.addPanel({ id: 'welcome', component: 'welcome', title: 'Welcome' })
 }
 
 export function Dock() {
   const onReady = async (event: DockviewReadyEvent) => {
     setDockApi(event.api)
 
-    // Restore the last session's layout, else build the default.
+    // Restore the last session's layout, else build the default. A layout
+    // from before the shell restructure references removed panels and fails
+    // to parse — that error path lands on the default too.
     let restored = false
     try {
       const layouts = await ipc.layoutsList()
       const auto = layouts.find((l) => l.name === AUTOSAVE)
       if (auto) {
         event.api.fromJSON(JSON.parse(auto.data))
-        restored = true
+        restored = event.api.panels.length > 0
       }
     } catch {
       restored = false
@@ -202,8 +139,6 @@ export function Dock() {
     if (!restored) buildDefaultLayout(event.api)
 
     // Autosave layout (debounced) so the workspace reopens as you left it.
-    // Registered BEFORE the cleanup below so that removing stale panels is
-    // itself persisted — otherwise the old layout keeps coming back.
     let timer: ReturnType<typeof setTimeout> | undefined
     event.api.onDidLayoutChange(() => {
       clearTimeout(timer)
@@ -211,27 +146,6 @@ export function Dock() {
         void ipc.layoutSave(AUTOSAVE, JSON.stringify(event.api.toJSON()))
       }, 800)
     })
-
-    // A restored layout may predate the Dashboard, or (from an earlier
-    // build) contain it in the wrong dock. Force it into the main center
-    // group so it never lands in the Explorer sidebar column.
-    if (restored) {
-      const stale = event.api.getPanel('dashboard')
-      if (stale) event.api.removePanel(stale)
-      openInMain('dashboard', 'dashboard', 'Dashboard')
-      event.api.getPanel('dashboard')?.api.setActive()
-    }
-
-    // Logs & Processes moved to the bottom bar — drop any that a saved layout
-    // (or an earlier build) left in the dock, whichever path we took above.
-    for (const id of ['logs', 'processes']) {
-      try {
-        const p = event.api.getPanel(id)
-        if (p) event.api.removePanel(p)
-      } catch {
-        /* not present / already gone */
-      }
-    }
   }
 
   return (

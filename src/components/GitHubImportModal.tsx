@@ -110,21 +110,21 @@ export function GitHubImportModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/50 p-6" onClick={busy ? undefined : onClose}>
-      <div className="w-full max-w-[520px] overflow-hidden rounded-xl border border-slate-700 bg-[#11141c] shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-3 border-b border-slate-800 px-5 py-3">
-          <Icon name="github" size={16} className="shrink-0 text-slate-300" />
+      <div className="w-full max-w-[520px] overflow-hidden rounded-xl border border-line2 bg-panel shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-3 border-b border-line px-5 py-3">
+          <Icon name="github" size={16} className="shrink-0 text-body" />
           <div className="min-w-0">
-            <div className="text-[14px] font-semibold text-slate-100">Add a project from GitHub</div>
-            <div className="text-[11px] text-slate-500">Clone, scan, and set it up — ready to run in one go.</div>
+            <div className="text-[14px] font-semibold text-ink">Add a project from GitHub</div>
+            <div className="text-[11px] text-muted">Clone, scan, and set it up — ready to run in one go.</div>
           </div>
-          {!busy && <button className="ml-auto flex items-center rounded px-2 py-1 text-slate-500 hover:bg-slate-700 hover:text-white" onClick={onClose}><Icon name="close" size={14} /></button>}
+          {!busy && <button className="ml-auto flex items-center rounded px-2 py-1 text-muted hover:bg-hover hover:text-ink" onClick={onClose}><Icon name="close" size={14} /></button>}
         </div>
 
         <div className="space-y-3 px-5 py-4">
           <div>
-            <div className="mb-1 text-[11px] text-slate-500">Repository URL</div>
+            <div className="mb-1 text-[11px] text-muted">Repository URL</div>
             <input
-              className="w-full rounded-lg border border-slate-700 bg-[#0d1017] px-3 py-2 font-mono text-[13px] text-slate-200 outline-none focus:border-indigo-500"
+              className="w-full rounded-lg border border-line2 bg-page px-3 py-2 font-mono text-[13px] text-ink outline-none focus:border-indigo-500"
               placeholder="https://github.com/you/tyrex"
               value={url}
               disabled={busy}
@@ -133,10 +133,10 @@ export function GitHubImportModal({ onClose }: { onClose: () => void }) {
             />
           </div>
           <div>
-            <div className="mb-1 text-[11px] text-slate-500">Clone into</div>
+            <div className="mb-1 text-[11px] text-muted">Clone into</div>
             <div className="flex gap-1">
               <input
-                className="w-full rounded-lg border border-slate-700 bg-[#0d1017] px-3 py-2 font-mono text-[12.5px] text-slate-200 outline-none focus:border-indigo-500"
+                className="w-full rounded-lg border border-line2 bg-page px-3 py-2 font-mono text-[12.5px] text-ink outline-none focus:border-indigo-500"
                 placeholder="C:\code"
                 value={parent}
                 disabled={busy}
@@ -153,21 +153,21 @@ export function GitHubImportModal({ onClose }: { onClose: () => void }) {
             </div>
           )}
           {phase === 'done' && (
-            <div className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/[0.07] px-3 py-2 text-[12px] text-emerald-300"><Icon name="check" size={13} className="shrink-0" /> {status}</div>
+            <div className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/[0.07] px-3 py-2 text-[12px] text-ok"><Icon name="check" size={13} className="shrink-0" /> {status}</div>
           )}
           {error && (
-            <div className="rounded-lg border border-red-500/30 bg-red-500/[0.07] px-3 py-2 text-[12px] text-red-300">
+            <div className="rounded-lg border border-red-500/30 bg-red-500/[0.07] px-3 py-2 text-[12px] text-err">
               {error}
               {gitMissing && (
                 <button className="ml-2 rounded bg-indigo-600 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-indigo-500" onClick={() => void installGit()}>⤓ Install Git & retry</button>
               )}
             </div>
           )}
-          <p className="text-[11px] leading-4 text-slate-600">Uses your existing git credentials. Progress shows in the Logs panel.</p>
+          <p className="text-[11px] leading-4 text-faint">Uses your existing git credentials. Progress shows in the Logs panel.</p>
         </div>
 
-        <div className="flex items-center gap-2 border-t border-slate-800 px-5 py-3">
-          {!busy && <button className="text-[12px] text-slate-400 hover:text-slate-200" onClick={onClose}>Cancel</button>}
+        <div className="flex items-center gap-2 border-t border-line px-5 py-3">
+          {!busy && <button className="text-[12px] text-dim hover:text-ink" onClick={onClose}>Cancel</button>}
           <button className="btn-primary ml-auto text-[12px]" disabled={busy} onClick={() => void run()}>
             {busy ? 'Working…' : '⤓ Clone & set up'}
           </button>

@@ -36,11 +36,11 @@ export function TerminalTab(props: IDockviewPanelHeaderProps) {
   return (
     <div className="flex h-full items-center gap-2 px-2">
       <span className="flex items-center gap-1 truncate text-[12px]">
-        <Icon name="terminal" size={12} className="shrink-0 text-emerald-400/80" />
+        <Icon name="terminal" size={12} className="shrink-0 text-ok/80" />
         {title}
       </span>
       <button
-        className="flex items-center rounded px-1 text-slate-500 hover:bg-slate-600 hover:text-white"
+        className="flex items-center rounded px-1 text-muted hover:bg-hover hover:text-ink"
         title="Close terminal"
         onClick={(e) => {
           e.stopPropagation()

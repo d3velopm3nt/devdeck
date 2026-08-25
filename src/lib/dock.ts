@@ -4,6 +4,7 @@
 
 import type { DockviewApi } from 'dockview-react'
 import * as ipc from './ipc'
+import { useApp } from '../store'
 
 let api: DockviewApi | null = null
 
@@ -32,9 +33,8 @@ export function openSingleton(id: string, component: string, title: string) {
 function mainAnchorId(): string | undefined {
   if (!api) return undefined
   if (api.getPanel('welcome')) return 'welcome'
-  if (api.getPanel('config')) return 'config'
-  const editor = api.panels.find((p) => /-editor-(?:\d+|new)$/.test(p.id))
-  if (editor) return editor.id
+  const space = api.panels.find((p) => p.id.startsWith('space-') || p.id.startsWith('node-setup-'))
+  if (space) return space.id
   const terminal = api.panels.find((p) => p.id.startsWith('terminal-'))
   return terminal?.id
 }
@@ -56,11 +56,6 @@ function addToMain(opts: {
     api.addPanel({ ...opts, position: { referencePanel: anchorId, direction: 'within' } })
     return
   }
-  const explorer = api.getPanel('explorer')
-  if (explorer) {
-    api.addPanel({ ...opts, position: { referencePanel: 'explorer', direction: 'right' } })
-    return
-  }
   api.addPanel(opts)
 }
 
@@ -78,23 +73,12 @@ export function openInMain(id: string, component: string, title: string) {
 
 export type EditorKind = 'command' | 'service' | 'profile'
 
-/// Open (or focus) a dedicated editor page for one item as a main-area
-/// tab. id === 0 means create-new. Re-opening the same item focuses its
-/// existing tab instead of stacking duplicates.
-export function openEditor(kind: EditorKind, id: number, title: string, projectId?: number | null) {
-  if (!api) return
-  const panelId = `${kind}-editor-${id > 0 ? id : 'new'}`
-  const existing = api.getPanel(panelId)
-  if (existing) {
-    existing.api.setActive()
-    return
-  }
-  addToMain({
-    id: panelId,
-    component: `${kind}-editor`,
-    title,
-    params: { id, projectId: projectId ?? null },
-  })
+/// Open the editor for one item in the slide-over sheet (id === 0 means
+/// create-new). Editors no longer occupy main-area tabs — the sheet keeps
+/// the current view visible behind it. `_title` is unused but kept so the
+/// many call sites stay unchanged.
+export function openEditor(kind: EditorKind, id: number, _title?: string, projectId?: number | null) {
+  useApp.getState().openSheet({ kind, id, projectId: projectId ?? null })
 }
 
 /// Open (or focus) the personalized detail page for a space (project) as

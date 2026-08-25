@@ -3,7 +3,6 @@
 // + New = create). Save refreshes the list and closes the tab.
 
 import { useMemo, useState } from 'react'
-import type { IDockviewPanelProps } from 'dockview-react'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import * as ipc from '../../lib/ipc'
 import type { CommandDef } from '../../lib/types'
@@ -11,7 +10,7 @@ import { useApp } from '../../store'
 import { runCommandInNewTerminal } from '../../lib/runner'
 import { openEditor } from '../../lib/dock'
 import { nodeLabel, ownerNodes } from '../../lib/tree'
-import { EditorShell, Field, Row } from './EditorShell'
+import { EditorShell, Field, Row, type EditorPageProps } from './EditorShell'
 import { ShellSelect } from './ShellSelect'
 import { Icon } from '../../lib/icons'
 
@@ -28,7 +27,7 @@ const blank = (ownerId: number | null): CommandDef => ({
   sort: 0,
 })
 
-export function CommandEditorPage(props: IDockviewPanelProps<Params>) {
+export function CommandEditorPage(props: EditorPageProps<Params>) {
   const { commands, nodes, refreshCommands, refreshServices, selectedNode } = useApp()
   const id = props.params.id
   const owners = useMemo(() => ownerNodes(nodes), [nodes])
@@ -41,7 +40,7 @@ export function CommandEditorPage(props: IDockviewPanelProps<Params>) {
 
   const [cmd, setCmd] = useState<CommandDef | null>(initial)
   if (!cmd) {
-    return <div className="p-6 text-slate-500">Command not found (it may have been deleted).</div>
+    return <div className="p-6 text-muted">Command not found (it may have been deleted).</div>
   }
   const set = (patch: Partial<CommandDef>) => setCmd((c) => ({ ...c!, ...patch }))
 
@@ -153,10 +152,10 @@ export function CommandEditorPage(props: IDockviewPanelProps<Params>) {
           onChange={(e) => set({ command: e.target.value })}
         />
         {dup && (
-          <div className="mt-1 flex items-center gap-2 text-[11px] text-amber-400">
+          <div className="mt-1 flex items-center gap-2 text-[11px] text-warn">
             <span>Duplicate — “{dup.name}” already runs this exact command here.</span>
             <button
-              className="rounded border border-amber-500/40 px-1.5 py-px text-amber-300 hover:bg-amber-500/15"
+              className="rounded border border-amber-500/40 px-1.5 py-px text-warn hover:bg-amber-500/15"
               onClick={() => openEditor('command', dup.id, dup.name || 'Command')}
             >
               Edit it

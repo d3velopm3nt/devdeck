@@ -260,12 +260,12 @@ export function MachineSetup() {
   const editFrom = (p: Pkg): Draft => ({ orig: p.id, isCustom: p.custom, id: p.id, name: p.name, source: p.source as 'winget' | 'scoop', category: p.category as PkgCategory, blurb: p.blurb, elevate: p.elevate })
 
   return (
-    <div className="flex h-full flex-col bg-[#0b0e14] text-slate-300">
-      <div className="border-b border-slate-800 px-5 py-4">
+    <div className="flex h-full flex-col bg-app text-body">
+      <div className="border-b border-line px-5 py-4">
         <div className="flex items-start gap-3">
           <div className="min-w-0">
-            <h1 className="text-[17px] font-semibold text-slate-100">Machine Setup</h1>
-            <p className="mt-1 max-w-[62ch] text-[12.5px] text-slate-500">
+            <h1 className="text-[17px] font-semibold text-ink">Machine Setup</h1>
+            <p className="mt-1 max-w-[62ch] text-[12.5px] text-muted">
               Install and track your toolchain. Every package is yours to edit; export it as a
               manifest, then rebuild a fresh Windows install in one click.
             </p>
@@ -283,13 +283,13 @@ export function MachineSetup() {
       </div>
 
       {(!avail.winget || !avail.scoop) && (
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 bg-amber-500/[0.06] px-5 py-2 text-[11.5px] text-amber-400/90">
+        <div className="flex flex-wrap items-center gap-2 border-b border-line bg-amber-500/[0.06] px-5 py-2 text-[11.5px] text-warn/90">
           {!avail.winget && <span>winget was not found — winget installs are disabled.</span>}
           {!avail.scoop && (
             <>
               <span>scoop is not installed — scoop packages (CLI tools) are disabled.</span>
               <button
-                className="inline-flex items-center gap-1 rounded bg-amber-500/20 px-2 py-0.5 text-[11px] font-semibold text-amber-100 hover:bg-amber-500/30 disabled:opacity-60"
+                className="inline-flex items-center gap-1 rounded bg-amber-500/20 px-2 py-0.5 text-[11px] font-semibold text-warn hover:bg-amber-500/30 disabled:opacity-60"
                 disabled={scoopInstalling}
                 title="Install scoop (per-user, no admin)"
                 onClick={() => { setScoopInstalling(true); void ipc.machineInstallScoop().catch((e) => { alert(String(e)); setScoopInstalling(false) }) }}
@@ -303,24 +303,24 @@ export function MachineSetup() {
 
       {/* stats — above the tabs */}
       <div className="flex flex-wrap gap-2 px-5 py-3">
-        <Stat n={installedCount} label="Installed" color="text-emerald-400" dot="bg-emerald-400" />
+        <Stat n={installedCount} label="Installed" color="text-ok" dot="bg-emerald-400" />
         <Stat n={selectableSelected.length} label="Selected to install" color="text-indigo-300" dot="bg-indigo-400" />
-        <Stat n={visiblePkgs.length - installedCount} label="Available" color="text-slate-300" dot="bg-slate-600" />
+        <Stat n={visiblePkgs.length - installedCount} label="Available" color="text-body" dot="bg-faint" />
       </div>
 
       {/* tabs */}
-      <div className="flex items-center gap-1 border-b border-slate-800 px-5">
+      <div className="flex items-center gap-1 border-b border-line px-5">
         {([
           ['search', 'Search & install'],
           ['bundles', 'One-click bundles'],
         ] as const).map(([id, label]) => (
           <button
             key={id}
-            className={`-mb-px border-b-2 px-3 py-2 text-[12.5px] ${tab === id ? 'border-indigo-400 font-medium text-slate-100' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+            className={`-mb-px border-b-2 px-3 py-2 text-[12.5px] ${tab === id ? 'border-indigo-400 font-medium text-ink' : 'border-transparent text-muted hover:text-ink'}`}
             onClick={() => setTab(id)}
           >
             {label}
-            {id === 'bundles' && <span className="ml-1.5 text-[10px] text-slate-600">{BUNDLES.length}</span>}
+            {id === 'bundles' && <span className="ml-1.5 text-[10px] text-faint">{BUNDLES.length}</span>}
           </button>
         ))}
         <div className="ml-auto flex items-center gap-1.5">
@@ -336,13 +336,13 @@ export function MachineSetup() {
               const total = b.packages.length
               const done = b.packages.filter((id) => { const p = byId.get(id); return p && isInstalled(p) }).length
               return (
-                <button key={b.id} className="group rounded-lg border border-slate-800 bg-[#151923] p-3 text-left hover:border-indigo-500/50" onClick={() => { addBundle(b.packages); setTab('search') }} title={`Add ${total - done} package(s) to install`}>
+                <button key={b.id} className="group rounded-lg border border-line bg-raise p-3 text-left hover:border-indigo-500/50" onClick={() => { addBundle(b.packages); setTab('search') }} title={`Add ${total - done} package(s) to install`}>
                   <div className="flex items-center gap-2">
                     <span className="text-[16px]">{b.icon}</span>
-                    <span className="text-[12.5px] font-semibold text-slate-100">{b.name}</span>
-                    <span className="ml-auto text-[10px] tabular-nums text-slate-500">{done}/{total}</span>
+                    <span className="text-[12.5px] font-semibold text-ink">{b.name}</span>
+                    <span className="ml-auto text-[10px] tabular-nums text-muted">{done}/{total}</span>
                   </div>
-                  <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">{b.description}</div>
+                  <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-muted">{b.description}</div>
                   <div className="mt-2 text-[10.5px] text-indigo-400 opacity-0 transition group-hover:opacity-100">+ Add to selection</div>
                 </button>
               )
@@ -352,13 +352,13 @@ export function MachineSetup() {
           <>
             {/* search toolbar */}
             <div className="flex flex-wrap items-center gap-3 py-3">
-              <label className="flex min-w-[220px] flex-1 items-center gap-2 rounded-lg border border-slate-700 bg-[#0d1017] px-3 py-2 text-slate-400">
+              <label className="flex min-w-[220px] flex-1 items-center gap-2 rounded-lg border border-line2 bg-page px-3 py-2 text-dim">
                 <Icon name="search" size={14} />
-                <input className="flex-1 bg-transparent text-[13px] text-slate-200 outline-none placeholder:text-slate-600" placeholder="Search winget & scoop — e.g. “docker”, “node”, “vscode”…" value={search} onChange={(e) => setSearch(e.target.value)} />
+                <input className="flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-faint" placeholder="Search winget & scoop — e.g. “docker”, “node”, “vscode”…" value={search} onChange={(e) => setSearch(e.target.value)} />
               </label>
-              <div className="inline-flex overflow-hidden rounded-lg border border-slate-700">
+              <div className="inline-flex overflow-hidden rounded-lg border border-line2">
                 {(['all', 'winget', 'scoop'] as const).map((s) => (
-                  <button key={s} className={`px-3 py-1.5 text-[11.5px] ${source === s ? 'bg-indigo-500/20 text-indigo-200' : 'text-slate-500 hover:text-slate-300'}`} onClick={() => setSource(s)}>
+                  <button key={s} className={`px-3 py-1.5 text-[11.5px] ${source === s ? 'bg-indigo-500/20 text-indigo-200' : 'text-muted hover:text-ink'}`} onClick={() => setSource(s)}>
                     {s === 'all' ? 'All sources' : s}
                   </button>
                 ))}
@@ -367,32 +367,32 @@ export function MachineSetup() {
 
             {groups.map(([cat, list]) => (
           <div key={cat} className="mt-5">
-            <div className="flex items-center gap-2 px-1 text-[10.5px] font-semibold uppercase tracking-wider text-slate-500">
-              {CATEGORY_LABELS[cat as PkgCategory] ?? cat} <span className="text-slate-600">{list.length}</span>
-              <span className="h-px flex-1 bg-gradient-to-r from-slate-800 to-transparent" />
+            <div className="flex items-center gap-2 px-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted">
+              {CATEGORY_LABELS[cat as PkgCategory] ?? cat} <span className="text-faint">{list.length}</span>
+              <span className="h-px flex-1 bg-gradient-to-r from-line to-transparent" />
             </div>
             <div className="mt-2 flex flex-col gap-1.5">
               {list.map((p) => {
                 const st = statusOf(p)
                 const disabled = st === 'installed' || (p.source === 'scoop' ? !avail.scoop : !avail.winget)
                 return (
-                  <div key={p.id} className="group flex items-center gap-3 rounded-lg border border-slate-800 bg-[#151923] px-3 py-2 hover:border-slate-600">
+                  <div key={p.id} className="group flex items-center gap-3 rounded-lg border border-line bg-raise px-3 py-2 hover:border-line2">
                     <input type="checkbox" className="h-4 w-4 accent-indigo-500" disabled={disabled} checked={selected.has(p.id) && st !== 'installed'} onChange={() => toggle(p.id)} />
-                    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-slate-700 bg-[#0d1017] text-[12px] font-semibold text-slate-400">{p.name[0]}</div>
+                    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-line2 bg-page text-[12px] font-semibold text-dim">{p.name[0]}</div>
                     <button className="min-w-0 flex-1 text-left" title="View & edit configuration" onClick={() => openDetail(p)}>
                       <div className="flex items-center gap-2">
-                        <span className="truncate text-[13px] font-semibold text-slate-100">{p.name}</span>
-                        {p.custom && <span className="shrink-0 rounded bg-violet-500/15 px-1.5 py-px text-[9px] font-semibold text-violet-300">custom</span>}
-                        {p.elevate && <span className="shrink-0 rounded bg-amber-500/15 px-1.5 py-px text-[9px] font-semibold text-amber-400" title="Needs admin (UAC)">admin</span>}
+                        <span className="truncate text-[13px] font-semibold text-ink">{p.name}</span>
+                        {p.custom && <span className="shrink-0 rounded bg-violet-500/15 px-1.5 py-px text-[9px] font-semibold text-viol">custom</span>}
+                        {p.elevate && <span className="shrink-0 rounded bg-amber-500/15 px-1.5 py-px text-[9px] font-semibold text-warn" title="Needs admin (UAC)">admin</span>}
                       </div>
-                      <div className="truncate font-mono text-[11px] text-slate-500">{p.id}{p.blurb ? `  ·  ${p.blurb}` : ''}</div>
+                      <div className="truncate font-mono text-[11px] text-muted">{p.id}{p.blurb ? `  ·  ${p.blurb}` : ''}</div>
                     </button>
-                    <span className={`shrink-0 rounded px-1.5 py-px text-[9.5px] font-semibold ${p.source === 'scoop' ? 'bg-emerald-500/12 text-emerald-400' : 'bg-sky-500/12 text-sky-400'}`}>{p.source}</span>
+                    <span className={`shrink-0 rounded px-1.5 py-px text-[9.5px] font-semibold ${p.source === 'scoop' ? 'bg-emerald-500/12 text-ok' : 'bg-sky-500/12 text-info'}`}>{p.source}</span>
                     <StatusBadge status={st} />
-                    <button className="flex shrink-0 items-center rounded-md border border-slate-700 px-1.5 py-1 text-[11px] text-slate-400 opacity-0 hover:border-slate-500 hover:text-white group-hover:opacity-100" title="Edit configuration" onClick={() => setEditing(editFrom(p))}><Icon name="edit" size={12} /></button>
-                    <button className="flex shrink-0 items-center rounded-md border border-slate-700 px-1.5 py-1 text-[11px] text-slate-400 hover:border-slate-500 hover:text-white" title="Configuration" onClick={() => openDetail(p)}><Icon name="info" size={12} /></button>
+                    <button className="flex shrink-0 items-center rounded-md border border-line2 px-1.5 py-1 text-[11px] text-dim opacity-0 hover:border-line3 hover:text-ink group-hover:opacity-100" title="Edit configuration" onClick={() => setEditing(editFrom(p))}><Icon name="edit" size={12} /></button>
+                    <button className="flex shrink-0 items-center rounded-md border border-line2 px-1.5 py-1 text-[11px] text-dim hover:border-line3 hover:text-ink" title="Configuration" onClick={() => openDetail(p)}><Icon name="info" size={12} /></button>
                     <button
-                      className={`min-w-[76px] shrink-0 rounded-md px-2.5 py-1 text-[11px] ${st === 'installed' ? 'text-slate-500' : st === 'installing' ? 'border border-slate-700 text-slate-400' : 'bg-indigo-600 font-semibold text-white hover:bg-indigo-500'}`}
+                      className={`min-w-[76px] shrink-0 rounded-md px-2.5 py-1 text-[11px] ${st === 'installed' ? 'text-muted' : st === 'installing' ? 'border border-line2 text-dim' : 'bg-indigo-600 font-semibold text-white hover:bg-indigo-500'}`}
                       disabled={disabled || st === 'installing'}
                       onClick={() => installOne(p)}
                     >
@@ -404,7 +404,7 @@ export function MachineSetup() {
             </div>
           </div>
             ))}
-            {groups.length === 0 && <div className="mt-6 text-[12px] text-slate-500">No packages match “{search}”. <button className="text-indigo-400 hover:underline" onClick={() => setEditing({ ...blankDraft(), name: search })}>Add it as custom software →</button></div>}
+            {groups.length === 0 && <div className="mt-6 text-[12px] text-muted">No packages match “{search}”. <button className="text-indigo-400 hover:underline" onClick={() => setEditing({ ...blankDraft(), name: search })}>Add it as custom software →</button></div>}
           </>
         )}
       </div>
@@ -434,37 +434,37 @@ export function MachineSetup() {
 
 function Stat({ n, label, color, dot }: { n: number; label: string; color: string; dot: string }) {
   return (
-    <div className="min-w-[130px] flex-1 rounded-lg border border-slate-800 bg-[#151923] px-3 py-2">
+    <div className="min-w-[130px] flex-1 rounded-lg border border-line bg-raise px-3 py-2">
       <div className={`text-[19px] font-bold tabular-nums ${color}`}>{n}</div>
-      <div className="mt-0.5 text-[11px] text-slate-500"><span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle ${dot}`} />{label}</div>
+      <div className="mt-0.5 text-[11px] text-muted"><span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle ${dot}`} />{label}</div>
     </div>
   )
 }
 
 function StatusBadge({ status }: { status: 'installed' | 'installing' | 'failed' | 'none' }) {
-  if (status === 'installed') return <span className="shrink-0 rounded-full bg-emerald-500/12 px-2 py-0.5 text-[10.5px] text-emerald-400">Installed</span>
+  if (status === 'installed') return <span className="shrink-0 rounded-full bg-emerald-500/12 px-2 py-0.5 text-[10.5px] text-ok">Installed</span>
   if (status === 'installing') return <span className="shrink-0 rounded-full bg-indigo-500/15 px-2 py-0.5 text-[10.5px] text-indigo-300">Installing…</span>
-  if (status === 'failed') return <span className="shrink-0 rounded-full bg-red-500/12 px-2 py-0.5 text-[10.5px] text-red-400">Failed</span>
-  return <span className="shrink-0 rounded-full bg-white/[0.045] px-2 py-0.5 text-[10.5px] text-slate-500">Not installed</span>
+  if (status === 'failed') return <span className="shrink-0 rounded-full bg-red-500/12 px-2 py-0.5 text-[10.5px] text-err">Failed</span>
+  return <span className="shrink-0 rounded-full bg-white/[0.045] px-2 py-0.5 text-[10.5px] text-muted">Not installed</span>
 }
 
 function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/50 p-6" onClick={onClose}>
-      <div className="max-h-[86vh] w-full max-w-[560px] overflow-y-auto rounded-xl border border-slate-700 bg-[#11141c] shadow-2xl" onClick={(e) => e.stopPropagation()}>
+      <div className="max-h-[86vh] w-full max-w-[560px] overflow-y-auto rounded-xl border border-line2 bg-panel shadow-2xl" onClick={(e) => e.stopPropagation()}>
         {children}
       </div>
     </div>
   )
 }
 function FieldLbl({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div><div className="mb-1 text-[11px] text-slate-500">{label}</div>{children}</div>
+  return <div><div className="mb-1 text-[11px] text-muted">{label}</div>{children}</div>
 }
 function Config({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-slate-800 bg-[#151923] px-3 py-2">
-      <div className="text-[10.5px] text-slate-500">{label}</div>
-      <div className="mt-0.5 text-[12.5px] text-slate-200">{value}</div>
+    <div className="rounded-lg border border-line bg-raise px-3 py-2">
+      <div className="text-[10.5px] text-muted">{label}</div>
+      <div className="mt-0.5 text-[12.5px] text-ink">{value}</div>
     </div>
   )
 }
@@ -485,13 +485,13 @@ function DetailModal(props: {
   const { pkg, changed, installCmd, info, infoLoading } = props
   return (
     <Overlay onClose={props.onClose}>
-      <div className="flex items-center gap-3 border-b border-slate-800 px-5 py-3">
-        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-slate-700 bg-[#0d1017] text-[14px] font-semibold text-slate-300">{pkg.name[0]}</div>
+      <div className="flex items-center gap-3 border-b border-line px-5 py-3">
+        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-line2 bg-page text-[14px] font-semibold text-body">{pkg.name[0]}</div>
         <div className="min-w-0">
-          <div className="truncate text-[14px] font-semibold text-slate-100">{pkg.name}</div>
-          <div className="truncate font-mono text-[11px] text-slate-500">{pkg.id}</div>
+          <div className="truncate text-[14px] font-semibold text-ink">{pkg.name}</div>
+          <div className="truncate font-mono text-[11px] text-muted">{pkg.id}</div>
         </div>
-        <button className="ml-auto flex items-center rounded px-2 py-1 text-slate-500 hover:bg-slate-700 hover:text-white" onClick={props.onClose}><Icon name="close" size={14} /></button>
+        <button className="ml-auto flex items-center rounded px-2 py-1 text-muted hover:bg-hover hover:text-ink" onClick={props.onClose}><Icon name="close" size={14} /></button>
       </div>
       <div className="space-y-3 px-5 py-4 text-[12.5px]">
         <div className="grid grid-cols-2 gap-3">
@@ -500,22 +500,22 @@ function DetailModal(props: {
           <Config label="Needs admin" value={pkg.elevate ? 'Yes (UAC)' : 'No'} />
           <Config label="Origin" value={pkg.custom ? 'Custom (yours)' : changed ? 'Curated · edited' : 'Curated'} />
         </div>
-        {pkg.blurb && <div className="text-[12px] text-slate-400">{pkg.blurb}</div>}
+        {pkg.blurb && <div className="text-[12px] text-dim">{pkg.blurb}</div>}
         <FieldLbl label="Install command">
-          <pre className="overflow-x-auto rounded-lg border border-slate-800 bg-[#0d1017] px-3 py-2 font-mono text-[11.5px] text-slate-300">{installCmd}</pre>
+          <pre className="overflow-x-auto rounded-lg border border-line bg-page px-3 py-2 font-mono text-[11.5px] text-body">{installCmd}</pre>
         </FieldLbl>
         <FieldLbl label="Live details from the source">
           {info == null ? (
             <button className="btn-ghost text-[11.5px]" disabled={infoLoading} onClick={props.onFetchInfo}>{infoLoading ? 'Fetching…' : `Fetch ${pkg.source} info`}</button>
           ) : (
-            <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg border border-slate-800 bg-[#0d1017] px-3 py-2 font-mono text-[11px] leading-5 text-slate-400">{info}</pre>
+            <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg border border-line bg-page px-3 py-2 font-mono text-[11px] leading-5 text-dim">{info}</pre>
           )}
         </FieldLbl>
       </div>
-      <div className="flex items-center gap-2 border-t border-slate-800 px-5 py-3">
+      <div className="flex items-center gap-2 border-t border-line px-5 py-3">
         <button className="btn-ghost inline-flex items-center gap-1 text-[12px]" onClick={props.onEdit}><Icon name="edit" size={13} /> Edit</button>
         {changed && props.onReset && <button className="btn-ghost inline-flex items-center gap-1 text-[12px]" onClick={props.onReset}><Icon name="reset" size={13} /> Reset to default</button>}
-        <button className="text-[12px] text-red-400 hover:underline" onClick={props.onDelete}>{pkg.custom ? 'Delete' : 'Remove'}</button>
+        <button className="text-[12px] text-err hover:underline" onClick={props.onDelete}>{pkg.custom ? 'Delete' : 'Remove'}</button>
         <button className="btn-primary ml-auto inline-flex items-center gap-1 text-[12px]" onClick={props.onInstall}><Icon name="download" size={13} /> Install</button>
       </div>
     </Overlay>
@@ -524,12 +524,12 @@ function DetailModal(props: {
 
 function EditModal({ draft, idLocked, onChange, onSave, onCancel }: { draft: Draft; idLocked: boolean; onChange: (d: Draft) => void; onSave: () => void; onCancel: () => void }) {
   const set = (patch: Partial<Draft>) => onChange({ ...draft, ...patch })
-  const input = 'w-full rounded-lg border border-slate-700 bg-[#0d1017] px-3 py-2 text-[13px] text-slate-200 outline-none focus:border-indigo-500 disabled:opacity-60'
+  const input = 'w-full rounded-lg border border-line2 bg-page px-3 py-2 text-[13px] text-ink outline-none focus:border-indigo-500 disabled:opacity-60'
   return (
     <Overlay onClose={onCancel}>
-      <div className="flex items-center gap-3 border-b border-slate-800 px-5 py-3">
-        <div className="text-[14px] font-semibold text-slate-100">{draft.orig ? `Edit ${draft.isCustom ? 'software' : 'curated package'}` : 'Add your own software'}</div>
-        <button className="ml-auto flex items-center rounded px-2 py-1 text-slate-500 hover:bg-slate-700 hover:text-white" onClick={onCancel}><Icon name="close" size={14} /></button>
+      <div className="flex items-center gap-3 border-b border-line px-5 py-3">
+        <div className="text-[14px] font-semibold text-ink">{draft.orig ? `Edit ${draft.isCustom ? 'software' : 'curated package'}` : 'Add your own software'}</div>
+        <button className="ml-auto flex items-center rounded px-2 py-1 text-muted hover:bg-hover hover:text-ink" onClick={onCancel}><Icon name="close" size={14} /></button>
       </div>
       <div className="space-y-3 px-5 py-4">
         <FieldLbl label="Name"><input className={input} value={draft.name} onChange={(e) => set({ name: e.target.value })} placeholder="e.g. My Internal CLI" /></FieldLbl>
@@ -538,9 +538,9 @@ function EditModal({ draft, idLocked, onChange, onSave, onCancel }: { draft: Dra
         </FieldLbl>
         <div className="grid grid-cols-2 gap-3">
           <FieldLbl label="Source">
-            <div className="inline-flex overflow-hidden rounded-lg border border-slate-700">
+            <div className="inline-flex overflow-hidden rounded-lg border border-line2">
               {(['winget', 'scoop'] as const).map((s) => (
-                <button key={s} className={`px-3 py-1.5 text-[12px] ${draft.source === s ? 'bg-indigo-500/20 text-indigo-200' : 'text-slate-500 hover:text-slate-300'}`} onClick={() => set({ source: s })}>{s}</button>
+                <button key={s} className={`px-3 py-1.5 text-[12px] ${draft.source === s ? 'bg-indigo-500/20 text-indigo-200' : 'text-muted hover:text-ink'}`} onClick={() => set({ source: s })}>{s}</button>
               ))}
             </div>
           </FieldLbl>
@@ -551,13 +551,13 @@ function EditModal({ draft, idLocked, onChange, onSave, onCancel }: { draft: Dra
           </FieldLbl>
         </div>
         <FieldLbl label="Note (optional)"><input className={input} value={draft.blurb} onChange={(e) => set({ blurb: e.target.value })} placeholder="What is it?" /></FieldLbl>
-        <label className="flex items-center gap-2 text-[12.5px] text-slate-400">
+        <label className="flex items-center gap-2 text-[12.5px] text-dim">
           <input type="checkbox" className="h-4 w-4 accent-indigo-500" checked={draft.elevate} onChange={(e) => set({ elevate: e.target.checked })} />
           Needs admin (UAC)
         </label>
-        <pre className="overflow-x-auto rounded-lg border border-slate-800 bg-[#0d1017] px-3 py-2 font-mono text-[11px] text-slate-500">{draft.id ? previewCmd({ id: draft.id, source: draft.source }) : 'install command preview…'}</pre>
+        <pre className="overflow-x-auto rounded-lg border border-line bg-page px-3 py-2 font-mono text-[11px] text-muted">{draft.id ? previewCmd({ id: draft.id, source: draft.source }) : 'install command preview…'}</pre>
       </div>
-      <div className="flex items-center gap-2 border-t border-slate-800 px-5 py-3">
+      <div className="flex items-center gap-2 border-t border-line px-5 py-3">
         <button className="btn-ghost ml-auto text-[12px]" onClick={onCancel}>Cancel</button>
         <button className="btn-primary text-[12px]" onClick={onSave}>{draft.orig ? 'Save' : 'Add software'}</button>
       </div>

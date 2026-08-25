@@ -1,15 +1,21 @@
 import { useEffect, useState } from 'react'
 import { Dock, buildDefaultLayout } from './Dock'
-import { BottomBar, type BottomTab } from './components/BottomBar'
+import { BottomBar } from './components/BottomBar'
 import { SetupModal } from './components/SetupModal'
+import { Sheet } from './components/Sheet'
 import { UpdateBar, type UpState } from './components/UpdateBar'
+import { Rail } from './shell/Rail'
+import { Home } from './components/Home'
+import { Explorer } from './components/Explorer'
+import { MachineSetup } from './components/MachineSetup'
+import { ConfigPage } from './components/ConfigPage'
 import { Icon } from './lib/icons'
 import { tauriSelfUpdate } from './lib/updater'
 import * as ipc from './lib/ipc'
 import { routeOutput } from './lib/termBus'
 import { useApp } from './store'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
-import { dockApi, openSingleton, openInMain, openTerminalPanel, openEditor, openNodeSetup, saveLayout, restoreLayout } from './lib/dock'
+import { dockApi, openTerminalPanel, openEditor, openNodeSetup, openSingleton, saveLayout, restoreLayout } from './lib/dock'
 import { openTerminal, launchProfile } from './lib/runner'
 import { resolveDir } from './lib/tree'
 
@@ -19,14 +25,14 @@ async function handleTourAction(action: ipc.TourAction) {
   const st = useApp.getState()
   await ipc.focusMain()
   if (action === 'open-main') {
-    openSingleton('explorer', 'explorer', 'Explorer')
+    st.setRailView('projects')
     return
   }
   if (action === 'workspace') {
     const ws = await ipc.nodeCreate(null, 'workspace', 'New workspace')
     await st.refreshTree()
     useApp.getState().setActiveWorkspace(ws.id)
-    openSingleton('explorer', 'explorer', 'Explorer')
+    useApp.getState().setRailView('projects')
     void ipc.emitDataChanged()
     return
   }
@@ -43,6 +49,7 @@ async function handleTourAction(action: ipc.TourAction) {
     await st.refreshTree()
     useApp.getState().setActiveWorkspace(ws.id)
     useApp.getState().setSelectedNode(created.id)
+    useApp.getState().setRailView('projects')
     openNodeSetup(created.id, name)
     void ipc.emitDataChanged()
     return
@@ -55,18 +62,6 @@ async function handleTourAction(action: ipc.TourAction) {
   else if (action === 'service') openEditor('service', 0, 'New service', target)
   else if (action === 'profile') openEditor('profile', 0, 'New profile', target)
 }
-
-// Logs & Processes live in the collapsible bottom bar, not the dock.
-const PANELS: Array<{ id: string; component: string; title: string; main?: boolean }> = [
-  { id: 'dashboard', component: 'dashboard', title: 'Dashboard' },
-  { id: 'explorer', component: 'explorer', title: 'Explorer' },
-  { id: 'commands', component: 'commands', title: 'Commands' },
-  { id: 'services', component: 'services', title: 'Services' },
-  { id: 'profiles', component: 'profiles', title: 'Profiles' },
-  { id: 'machine', component: 'machine', title: 'Machine Setup', main: true },
-  { id: 'config', component: 'config', title: 'Settings', main: true },
-  { id: 'welcome', component: 'welcome', title: 'Welcome' },
-]
 
 function Menu({
   label,
@@ -89,7 +84,7 @@ function Menu({
       {open && (
         <>
           <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full z-40 mt-1 min-w-52 rounded border border-slate-700 bg-[#1a1f2b] p-1 shadow-xl">
+          <div className="absolute left-0 top-full z-40 mt-1 min-w-52 rounded border border-line2 bg-menu p-1 shadow-xl">
             {children(() => setOpen(false))}
           </div>
         </>
@@ -102,26 +97,20 @@ export default function App() {
   const app = useApp()
   const node = app.selectedNode()
   const nodeDir = resolveDir(app.nodes, node)
+  const railView = app.railView
 
-  // Bottom bar (Logs / Processes) — collapsed state, active tab and height
-  // persist across restarts.
-  const [bottomTab, setBottomTab] = useState<BottomTab>(
-    () => (localStorage.getItem('devdeck.bottom.tab') as BottomTab) || 'logs',
-  )
-  const [bottomCollapsed, setBottomCollapsed] = useState(
-    () => localStorage.getItem('devdeck.bottom.collapsed') === '1',
-  )
+  // Apply the theme to <html> whenever it changes (bootstrap also sets it).
+  useEffect(() => {
+    document.documentElement.dataset.theme = app.theme
+  }, [app.theme])
+
+  // Bottom bar height is layout-local; tab/collapsed live in the store so
+  // any view (Home's "open full log", service actions…) can reveal it.
   const [bottomHeight, setBottomHeight] = useState(
     () => Number(localStorage.getItem('devdeck.bottom.height')) || 260,
   )
-  useEffect(() => localStorage.setItem('devdeck.bottom.tab', bottomTab), [bottomTab])
-  useEffect(() => localStorage.setItem('devdeck.bottom.collapsed', bottomCollapsed ? '1' : '0'), [bottomCollapsed])
   useEffect(() => localStorage.setItem('devdeck.bottom.height', String(bottomHeight)), [bottomHeight])
-
-  const showBottom = (t: BottomTab) => {
-    setBottomTab(t)
-    setBottomCollapsed(false)
-  }
+  const showBottom = app.showBottom
 
   // Self-update: check GitHub for a newer release, update via scoop.
   const [update, setUpdate] = useState<ipc.UpdateInfo | null>(null)
@@ -257,6 +246,7 @@ export default function App() {
       }),
       // The Command Widget opens terminals here in the main dock.
       ipc.onOpenTerminal((e) => {
+        useApp.getState().setRailView('projects')
         void useApp.getState().refreshTerminals().then(() => openTerminalPanel(e.ptyId, e.title))
       }),
       // The widget's setup tour drives create flows in this window.
@@ -282,36 +272,53 @@ export default function App() {
   const liveTerms = app.terminals.filter((t) => t.alive)
 
   return (
-    <div className="flex h-screen flex-col bg-[#0b0e14] text-slate-300">
+    <div className="flex h-screen flex-col bg-app text-body">
       {/* Top bar */}
-      <div className="flex items-center gap-2 border-b border-slate-800 bg-[#11141c] px-2 py-1.5">
-        <span className="mr-1 select-none text-[13px] font-semibold text-slate-100">
+      <div className="flex items-center gap-2 border-b border-line bg-panel px-2 py-1.5">
+        <span className="mr-1 select-none text-[13px] font-semibold text-ink">
           <span className="text-indigo-400">❯_</span> DevDeck
         </span>
 
         <Menu label={<><Icon name="add" size={13} /> Terminal</>} accent>
-          {(close) =>
-            app.shells.map((s) => (
-              <button
-                key={s.command}
-                className="menu-item inline-flex items-center gap-1.5"
-                onClick={() => {
-                  close()
-                  void openTerminal(s.command, nodeDir || undefined)
-                }}
-              >
-                <Icon name="terminal" size={13} /> {s.name}
-                {node && <span className="ml-1 text-slate-500">in {node.name}</span>}
-              </button>
-            ))
-          }
+          {(close) => (
+            <>
+              {app.shells.map((s) => (
+                <button
+                  key={s.command}
+                  className="menu-item inline-flex items-center gap-1.5"
+                  onClick={() => {
+                    close()
+                    app.setRailView('projects')
+                    void openTerminal(s.command, nodeDir || undefined)
+                  }}
+                >
+                  <Icon name="terminal" size={13} /> {s.name}
+                  {node && <span className="ml-1 text-muted">in {node.name}</span>}
+                </button>
+              ))}
+              {liveTerms.length > 0 && <div className="my-1 border-t border-line" />}
+              {liveTerms.map((t) => (
+                <button
+                  key={t.id}
+                  className="menu-item"
+                  onClick={() => {
+                    close()
+                    app.setRailView('projects')
+                    openSingleton(`terminal-${t.id}`, 'terminal', t.title)
+                  }}
+                >
+                  <span className="inline-flex items-center gap-1.5"><Icon name="terminal" size={13} /> #{t.id} {t.title}</span>
+                </button>
+              ))}
+            </>
+          )}
         </Menu>
 
         <Menu label={<><Icon name="service" size={13} /> Launch</>}>
           {(close) => (
             <>
               {app.profiles.length === 0 && (
-                <div className="px-2 py-1 text-[11px] text-slate-500">no profiles yet</div>
+                <div className="px-2 py-1 text-[11px] text-muted">no profiles yet</div>
               )}
               {app.profiles.map((p) => (
                 <button
@@ -323,46 +330,6 @@ export default function App() {
                   }}
                 >
                   <Icon name="service" size={13} /> {p.name}
-                </button>
-              ))}
-            </>
-          )}
-        </Menu>
-
-        <Menu label="Panels">
-          {(close) => (
-            <>
-              {PANELS.map((p) => (
-                <button
-                  key={p.id}
-                  className="menu-item"
-                  onClick={() => {
-                    close()
-                    if (p.main) openInMain(p.id, p.component, p.title)
-                    else openSingleton(p.id, p.component, p.title)
-                  }}
-                >
-                  {p.title}
-                </button>
-              ))}
-              <div className="my-1 border-t border-slate-700" />
-              <button className="menu-item" onClick={() => { close(); showBottom('logs') }}>
-                Logs (bottom bar)
-              </button>
-              <button className="menu-item" onClick={() => { close(); showBottom('processes') }}>
-                Processes (bottom bar)
-              </button>
-              <div className="my-1 border-t border-slate-700" />
-              {liveTerms.map((t) => (
-                <button
-                  key={t.id}
-                  className="menu-item"
-                  onClick={() => {
-                    close()
-                    openSingleton(`terminal-${t.id}`, 'terminal', t.title)
-                  }}
-                >
-                  <span className="inline-flex items-center gap-1.5"><Icon name="terminal" size={13} /> #{t.id} {t.title}</span>
                 </button>
               ))}
             </>
@@ -394,15 +361,16 @@ export default function App() {
               >
                 Reset to default
               </button>
-              <div className="my-1 border-t border-slate-700" />
+              <div className="my-1 border-t border-line" />
               {app.layouts
-                .filter((l) => l.name !== '__autosave__')
+                .filter((l) => !l.name.startsWith('__autosave'))
                 .map((l) => (
                   <button
                     key={l.id}
                     className="menu-item inline-flex items-center gap-1.5"
                     onClick={() => {
                       close()
+                      app.setRailView('projects')
                       restoreLayout(l.data)
                     }}
                   >
@@ -415,7 +383,7 @@ export default function App() {
 
         <div className="flex-1" />
         {node && (
-          <span className="flex items-center gap-1 rounded bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-400" title={nodeDir}>
+          <span className="flex items-center gap-1 rounded bg-emerald-500/10 px-2 py-0.5 text-[11px] text-ok" title={nodeDir}>
             <Icon name={node.kind === 'folder' ? 'folder' : 'project'} size={12} /> {node.name}
           </span>
         )}
@@ -427,26 +395,12 @@ export default function App() {
           <Icon name="widget" size={13} /> Widget
         </button>
         <button
-          className="btn-ghost flex items-center gap-1 text-[12px]"
-          title="Install & manage dev software"
-          onClick={() => openInMain('machine', 'machine', 'Machine Setup')}
-        >
-          <Icon name="machine" size={13} /> Machine
-        </button>
-        <button
-          className={`flex items-center gap-1 text-[12px] ${upState === 'available' ? 'rounded bg-amber-500/15 px-2 py-0.5 font-medium text-amber-300 hover:bg-amber-500/25' : 'btn-ghost'}`}
+          className={`flex items-center gap-1 text-[12px] ${upState === 'available' ? 'rounded bg-amber-500/15 px-2 py-0.5 font-medium text-warn hover:bg-amber-500/25' : 'btn-ghost'}`}
           title={upState === 'available' ? `Update available — v${update?.latest}` : `DevDeck ${update ? 'v' + update.current : ''} — check for updates`}
           onClick={checkUpdate}
         >
           <Icon name="update" size={13} spin={upState === 'checking' || upState === 'updating'} />
           {upState === 'available' ? `Update · v${update?.latest}` : ''}
-        </button>
-        <button
-          className="btn-ghost flex items-center gap-1 text-[12px]"
-          title="Settings"
-          onClick={() => openInMain('config', 'config', 'Settings')}
-        >
-          <Icon name="settings" size={13} /> Settings
         </button>
       </div>
 
@@ -467,25 +421,40 @@ export default function App() {
         />
       )}
 
-      {/* Dock area */}
-      <div className="min-h-0 flex-1">
-        <Dock />
+      {/* Shell: rail → contextual sidebar → view surface */}
+      <div className="flex min-h-0 flex-1">
+        <Rail />
+        {railView === 'projects' && (
+          <aside className="w-[280px] shrink-0 overflow-hidden border-r border-line">
+            <Explorer />
+          </aside>
+        )}
+        <main className="min-w-0 flex-1">
+          {railView === 'home' && <Home />}
+          {/* The Dock stays mounted (terminals live in it) — just hidden when
+              another rail view is showing. */}
+          <div className={railView === 'projects' ? 'h-full' : 'hidden'}>
+            <Dock />
+          </div>
+          {railView === 'machine' && <MachineSetup />}
+          {railView === 'settings' && <ConfigPage />}
+        </main>
       </div>
 
       {/* Collapsible / resizable bottom bar: Logs + Processes */}
       <BottomBar
-        tab={bottomTab}
-        onTab={setBottomTab}
-        collapsed={bottomCollapsed}
-        onToggleCollapsed={() => setBottomCollapsed((c) => !c)}
+        tab={app.bottomTab}
+        onTab={app.setBottomTab}
+        collapsed={app.bottomCollapsed}
+        onToggleCollapsed={() => app.setBottomCollapsed(!app.bottomCollapsed)}
         height={bottomHeight}
         onHeight={setBottomHeight}
       />
 
       {/* Status bar */}
-      <div className="flex items-center gap-4 border-t border-slate-800 bg-[#11141c] px-3 py-1 text-[11px] text-slate-500">
+      <div className="flex items-center gap-4 border-t border-line bg-panel px-3 py-1 text-[11px] text-muted">
         <span>
-          <span className={runningCount ? 'text-emerald-400' : ''}>{runningCount}</span> service
+          <span className={runningCount ? 'text-ok' : ''}>{runningCount}</span> service
           {runningCount === 1 ? '' : 's'} running
         </span>
         <span>
@@ -494,6 +463,9 @@ export default function App() {
         <span className="flex-1" />
         <span>{app.hotkey} summons · local-first · SQLite</span>
       </div>
+
+      {/* Slide-over editor sheet */}
+      <Sheet />
 
       {/* Project Setup: prepare-to-run prompt */}
       {app.setupPrompt && (
@@ -507,11 +479,11 @@ export default function App() {
 
       {/* Missing-tool hint from a command's error */}
       {app.installHint && (
-        <div className="fixed bottom-16 right-4 z-[400] flex max-w-[360px] items-center gap-3 rounded-lg border border-amber-500/30 bg-[#1a1f2b] px-3 py-2.5 text-[12px] shadow-2xl">
-          <Icon name="puzzle" size={16} className="shrink-0 text-amber-300" />
+        <div className="fixed bottom-16 right-4 z-[400] flex max-w-[360px] items-center gap-3 rounded-lg border border-amber-500/30 bg-menu px-3 py-2.5 text-[12px] shadow-2xl">
+          <Icon name="puzzle" size={16} className="shrink-0 text-warn" />
           <div className="min-w-0">
-            <div className="text-slate-200"><b>{app.installHint.name}</b> looks missing</div>
-            <div className="truncate font-mono text-[11px] text-slate-500">{app.installHint.pkg_id}</div>
+            <div className="text-ink"><b>{app.installHint.name}</b> looks missing</div>
+            <div className="truncate font-mono text-[11px] text-muted">{app.installHint.pkg_id}</div>
           </div>
           <button
             className="ml-auto inline-flex shrink-0 items-center gap-1 rounded bg-indigo-600 px-2.5 py-1 text-[11.5px] font-semibold text-white hover:bg-indigo-500"
@@ -525,7 +497,7 @@ export default function App() {
           >
             <Icon name="download" size={13} /> Install
           </button>
-          <button className="flex shrink-0 items-center rounded px-1 text-slate-500 hover:text-white" onClick={() => app.setInstallHint(null)}><Icon name="close" size={13} /></button>
+          <button className="flex shrink-0 items-center rounded px-1 text-muted hover:text-ink" onClick={() => app.setInstallHint(null)}><Icon name="close" size={13} /></button>
         </div>
       )}
     </div>

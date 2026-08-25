@@ -2,14 +2,13 @@
 // main-area tab from the Services side panel.
 
 import { useMemo, useState } from 'react'
-import type { IDockviewPanelProps } from 'dockview-react'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import * as ipc from '../../lib/ipc'
 import type { ServiceDef } from '../../lib/types'
 import { useApp } from '../../store'
 import { openEditor } from '../../lib/dock'
 import { nodeLabel, ownerNodes, serviceDir } from '../../lib/tree'
-import { EditorShell, Field, Row } from './EditorShell'
+import { EditorShell, Field, Row, type EditorPageProps } from './EditorShell'
 import { ShellSelect } from './ShellSelect'
 import { Icon } from '../../lib/icons'
 
@@ -27,7 +26,7 @@ const blank = (ownerId: number | null): ServiceDef => ({
   shell: '',
 })
 
-export function ServiceEditorPage(props: IDockviewPanelProps<Params>) {
+export function ServiceEditorPage(props: EditorPageProps<Params>) {
   const { services, nodes, refreshServices, refreshCommands, selectedNode } = useApp()
   const id = props.params.id
   const owners = useMemo(() => ownerNodes(nodes), [nodes])
@@ -54,7 +53,7 @@ export function ServiceEditorPage(props: IDockviewPanelProps<Params>) {
   }, [svc?.env])
 
   if (!svc) {
-    return <div className="p-6 text-slate-500">Service not found (it may have been deleted).</div>
+    return <div className="p-6 text-muted">Service not found (it may have been deleted).</div>
   }
   const set = (patch: Partial<ServiceDef>) => setSvc((s) => ({ ...s!, ...patch }))
 
@@ -175,10 +174,10 @@ export function ServiceEditorPage(props: IDockviewPanelProps<Params>) {
           onChange={(e) => set({ command: e.target.value })}
         />
         {dupCmd && (
-          <div className="mt-1 flex items-center gap-2 text-[11px] text-amber-400">
+          <div className="mt-1 flex items-center gap-2 text-[11px] text-warn">
             <span>Duplicate — “{dupCmd.name}” already runs this exact command here.</span>
             <button
-              className="rounded border border-amber-500/40 px-1.5 py-px text-amber-300 hover:bg-amber-500/15"
+              className="rounded border border-amber-500/40 px-1.5 py-px text-warn hover:bg-amber-500/15"
               onClick={() => openEditor('service', dupCmd.id, dupCmd.name || 'Service')}
             >
               Edit it
@@ -219,10 +218,10 @@ export function ServiceEditorPage(props: IDockviewPanelProps<Params>) {
             onChange={(e) => set({ health_port: e.target.value ? Number(e.target.value) : null })}
           />
           {dupPort && (
-            <div className="mt-1 flex items-center gap-2 text-[11px] text-amber-400">
+            <div className="mt-1 flex items-center gap-2 text-[11px] text-warn">
               <span>Port {svc.health_port} is already used by “{dupPort.name}”.</span>
               <button
-                className="rounded border border-amber-500/40 px-1.5 py-px text-amber-300 hover:bg-amber-500/15"
+                className="rounded border border-amber-500/40 px-1.5 py-px text-warn hover:bg-amber-500/15"
                 onClick={() => openEditor('service', dupPort.id, dupPort.name || 'Service')}
               >
                 Edit it
@@ -239,7 +238,7 @@ export function ServiceEditorPage(props: IDockviewPanelProps<Params>) {
           onChange={(e) => setEnvFromText(e.target.value)}
         />
       </Field>
-      <label className="flex items-center gap-2 text-[12.5px] text-slate-400">
+      <label className="flex items-center gap-2 text-[12.5px] text-dim">
         <input
           type="checkbox"
           checked={svc.auto_restart}

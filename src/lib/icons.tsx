@@ -43,6 +43,8 @@ import {
   X,
   AppWindow,
   MonitorCog,
+  House,
+  History,
   LayoutGrid,
   Palette,
   Search,
@@ -100,6 +102,8 @@ export type IconName =
   | 'close'
   | 'widget'
   | 'machine'
+  | 'home'
+  | 'history'
   | 'layout'
   | 'palette'
   | 'search'
@@ -153,6 +157,8 @@ const REGISTRY: Record<IconName, LucideIcon> = {
   close: X,
   widget: AppWindow,
   machine: MonitorCog,
+  home: House,
+  history: History,
   layout: LayoutGrid,
   palette: Palette,
   search: Search,

@@ -4,6 +4,14 @@
 import type { ReactNode } from 'react'
 import { Icon } from '../../lib/icons'
 
+/** Props contract for editor pages hosted in the slide-over Sheet. A
+ *  structural subset of dockview's panel props, so pages need no host
+ *  awareness: params + a close() to dismiss. */
+export interface EditorPageProps<P> {
+  params: P
+  api: { close: () => void }
+}
+
 export function EditorShell({
   icon,
   kind,
@@ -28,25 +36,25 @@ export function EditorShell({
   extraActions?: ReactNode
 }) {
   return (
-    <div className="flex h-full flex-col bg-[#0d1017] text-slate-300">
-      <div className="flex items-start gap-3 border-b border-slate-800 px-6 py-4">
-        <div className="flex h-9 w-9 items-center justify-center rounded bg-indigo-500/15 text-indigo-300">
+    <div className="flex h-full flex-col bg-panel text-body">
+      <div className="flex items-start gap-3 border-b border-line px-5 py-4">
+        <div className="flex h-9 w-9 items-center justify-center rounded bg-indigo-500/15 text-indigo-400">
           <Icon name={icon} size={18} />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-muted">
             {kind} editor
           </div>
-          <div className="truncate text-[16px] font-semibold text-slate-100">{title}</div>
-          {subtitle && <div className="text-[12px] text-slate-500">{subtitle}</div>}
+          <div className="truncate text-[16px] font-semibold text-ink">{title}</div>
+          {subtitle && <div className="text-[12px] text-muted">{subtitle}</div>}
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 py-5">
-        <div className="max-w-2xl space-y-3">{children}</div>
+      <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="space-y-3">{children}</div>
       </div>
 
-      <div className="flex items-center gap-2 border-t border-slate-800 bg-[#11141c] px-6 py-3">
+      <div className="flex items-center gap-2 border-t border-line bg-panel px-5 py-3">
         {onDelete && (
           <button className="btn-danger" onClick={onDelete}>
             Delete
@@ -68,7 +76,7 @@ export function EditorShell({
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block space-y-1">
-      <span className="text-[11px] font-medium text-slate-500">{label}</span>
+      <span className="text-[11px] font-medium text-muted">{label}</span>
       {children}
     </label>
   )

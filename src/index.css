@@ -1,50 +1,145 @@
 @import 'tailwindcss';
 @import 'dockview-core/dist/styles/dockview.css';
 
+/* ---------------------------------------------------------------------------
+   Design tokens. The raw values live on :root (dark is the default theme) and
+   are overridden wholesale by [data-theme='light']. Components never use raw
+   slate/hex colors — they use the token utilities mapped in @theme below
+   (bg-app, bg-panel, text-ink, border-line, …), so the whole app re-skins by
+   flipping one attribute on <html>.
+--------------------------------------------------------------------------- */
+:root {
+  /* surfaces */
+  --c-app: #0b0e14;      /* window ground */
+  --c-page: #0d1017;     /* documents / pages */
+  --c-panel: #11141c;    /* bars, sidebars */
+  --c-raise: #151923;    /* cards on a panel */
+  --c-menu: #1a1f2b;     /* popovers, menus, sheets */
+  --c-hover: #232b3b;    /* hover fill on interactive rows */
+  --c-soft: rgb(30 41 59 / 0.4); /* soft button fill */
+
+  /* lines */
+  --c-line: #1e293b;
+  --c-line2: #334155;
+  --c-line3: #64748b;
+
+  /* text */
+  --c-ink: #e2e8f0;      /* headings, emphasized */
+  --c-body: #cbd5e1;     /* default body */
+  --c-dim: #94a3b8;      /* secondary */
+  --c-muted: #64748b;    /* tertiary */
+  --c-faint: #475569;    /* barely-there */
+
+  /* accent + status (text-safe on this theme's surfaces) */
+  --c-accent: #818cf8;
+  --c-ok: #4ade80;
+  --c-warn: #fbbf24;
+  --c-err: #f87171;
+  --c-info: #38bdf8;
+  --c-viol: #a78bfa;
+
+  color-scheme: dark;
+}
+
+[data-theme='light'] {
+  --c-app: #e9ebf0;
+  --c-page: #f6f7f9;
+  --c-panel: #fdfdfe;
+  --c-raise: #f0f2f6;
+  --c-menu: #ffffff;
+  --c-hover: #e7eaf1;
+  --c-soft: rgb(203 213 225 / 0.35);
+
+  --c-line: #d9dee7;
+  --c-line2: #c3cbd8;
+  --c-line3: #9aa5b5;
+
+  --c-ink: #16181d;
+  --c-body: #333a45;
+  --c-dim: #5a6472;
+  --c-muted: #7d8794;
+  --c-faint: #a5aebb;
+
+  --c-accent: #4f46e5;
+  --c-ok: #15803d;
+  --c-warn: #b45309;
+  --c-err: #dc2626;
+  --c-info: #0369a1;
+  --c-viol: #6d28d9;
+
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-app: var(--c-app);
+  --color-page: var(--c-page);
+  --color-panel: var(--c-panel);
+  --color-raise: var(--c-raise);
+  --color-menu: var(--c-menu);
+  --color-hover: var(--c-hover);
+  --color-soft: var(--c-soft);
+  --color-line: var(--c-line);
+  --color-line2: var(--c-line2);
+  --color-line3: var(--c-line3);
+  --color-ink: var(--c-ink);
+  --color-body: var(--c-body);
+  --color-dim: var(--c-dim);
+  --color-muted: var(--c-muted);
+  --color-faint: var(--c-faint);
+  --color-accent: var(--c-accent);
+  --color-ok: var(--c-ok);
+  --color-warn: var(--c-warn);
+  --color-err: var(--c-err);
+  --color-info: var(--c-info);
+  --color-viol: var(--c-viol);
+}
+
 html,
 body,
 #root {
   height: 100%;
   margin: 0;
   overflow: hidden;
-  background: #0b0e14;
+  background: var(--c-app);
+  color: var(--c-body);
   font-family: 'Segoe UI', system-ui, sans-serif;
 }
 
 /* shared control styles */
 .input {
-  @apply rounded border border-slate-700 bg-[#0d1017] px-2 py-1 text-slate-200 outline-none placeholder:text-slate-600 focus:border-indigo-500;
+  @apply rounded border border-line2 bg-page px-2 py-1 text-ink outline-none placeholder:text-faint focus:border-indigo-500;
 }
 .btn-primary {
   @apply rounded bg-indigo-600 px-2.5 py-1 text-white hover:bg-indigo-500 disabled:opacity-50;
 }
 .btn-ghost {
-  @apply rounded border border-slate-700 bg-slate-800/40 px-2.5 py-1 text-slate-300 hover:border-slate-500 hover:text-white disabled:opacity-50;
+  @apply rounded border border-line2 bg-soft px-2.5 py-1 text-body hover:border-line3 hover:text-ink disabled:opacity-50;
 }
 .btn-danger {
   @apply rounded bg-red-600/80 px-2.5 py-1 text-white hover:bg-red-500 disabled:opacity-50;
 }
 .menu-item {
-  @apply block w-full rounded px-2 py-1.5 text-left text-[12px] text-slate-300 hover:bg-indigo-600/40 hover:text-white;
+  @apply block w-full rounded px-2 py-1.5 text-left text-[12px] text-body hover:bg-indigo-600/40 hover:text-ink;
 }
 
-/* dockview dark theme tuning to match DevDeck */
+/* Dockview: one theme class, all colors driven by our tokens so it follows
+   the app theme automatically. */
 .dockview-theme-dark {
-  --dv-background-color: #0b0e14;
-  --dv-group-view-background-color: #0d1017;
-  --dv-tabs-and-actions-container-background-color: #11141c;
-  --dv-activegroup-visiblepanel-tab-background-color: #1a1f2b;
-  --dv-activegroup-hiddenpanel-tab-background-color: #11141c;
-  --dv-inactivegroup-visiblepanel-tab-background-color: #151923;
-  --dv-inactivegroup-hiddenpanel-tab-background-color: #11141c;
-  --dv-tab-divider-color: #1e2430;
-  --dv-activegroup-visiblepanel-tab-color: #e2e8f0;
-  --dv-activegroup-hiddenpanel-tab-color: #64748b;
-  --dv-inactivegroup-visiblepanel-tab-color: #94a3b8;
-  --dv-inactivegroup-hiddenpanel-tab-color: #475569;
-  --dv-separator-border: #1e2430;
-  --dv-paneview-header-border-color: #1e2430;
-  --dv-drag-over-background-color: rgba(99, 102, 241, 0.18);
+  --dv-background-color: var(--c-app);
+  --dv-group-view-background-color: var(--c-page);
+  --dv-tabs-and-actions-container-background-color: var(--c-panel);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--c-menu);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--c-panel);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--c-raise);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--c-panel);
+  --dv-tab-divider-color: var(--c-line);
+  --dv-activegroup-visiblepanel-tab-color: var(--c-ink);
+  --dv-activegroup-hiddenpanel-tab-color: var(--c-muted);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--c-dim);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--c-faint);
+  --dv-separator-border: var(--c-line);
+  --dv-paneview-header-border-color: var(--c-line);
+  --dv-drag-over-background-color: rgb(99 102 241 / 0.18);
   --dv-drag-over-border-color: #6366f1;
 }
 
@@ -72,4 +167,32 @@ body,
 }
 @media (prefers-reduced-motion: reduce) {
   .dd-track > .dd-move { animation: none; left: 0; width: 100%; opacity: 0.5; }
+}
+
+/* Editor sheet slide-over */
+.sheet-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  background: rgb(0 0 0 / 0.35);
+}
+.sheet-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 401;
+  width: 460px;
+  max-width: 92vw;
+  background: var(--c-panel);
+  border-left: 1px solid var(--c-line);
+  box-shadow: -24px 0 60px rgb(0 0 0 / 0.45);
+  animation: sheet-in 0.22s cubic-bezier(0.3, 0.7, 0.2, 1);
+}
+@keyframes sheet-in {
+  from { transform: translateX(40px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet-panel { animation: none; }
 }

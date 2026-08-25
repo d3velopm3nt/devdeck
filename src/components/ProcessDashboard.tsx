@@ -28,10 +28,10 @@ interface Row {
 }
 
 const STATUS_STYLE: Record<string, string> = {
-  running: 'text-emerald-400',
-  live: 'text-emerald-400',
-  stopped: 'text-slate-500',
-  crashed: 'text-red-400',
+  running: 'text-ok',
+  live: 'text-ok',
+  stopped: 'text-muted',
+  crashed: 'text-err',
 }
 
 export function ProcessDashboard() {
@@ -69,27 +69,27 @@ export function ProcessDashboard() {
   }
 
   return (
-    <div className="flex h-full flex-col bg-[#11141c] text-slate-300">
-      <div className="flex items-center gap-2 border-b border-slate-800 px-3 py-1.5 text-[11px] text-slate-500">
+    <div className="flex h-full flex-col bg-panel text-body">
+      <div className="flex items-center gap-2 border-b border-line px-3 py-1.5 text-[11px] text-muted">
         <span>Processes</span>
-        <span className="text-slate-600">·</span>
+        <span className="text-faint">·</span>
         <span>{rows.filter((r) => r.status === 'running' || r.status === 'live').length} running</span>
-        <span className="text-slate-600">·</span>
+        <span className="text-faint">·</span>
         <span>{services.length} service(s)</span>
       </div>
       <div className="flex-1 overflow-auto">
         {rows.length === 0 ? (
-          <div className="p-3 text-[12px] text-slate-500">
+          <div className="p-3 text-[12px] text-muted">
             No services or terminals yet. Add a service (Services panel) or open a terminal — they
             appear here to start, stop, restart, and monitor.
           </div>
         ) : (
           <table className="w-full border-collapse text-[12px]">
-            <thead className="sticky top-0 bg-[#161a24] text-[10px] uppercase tracking-wider text-slate-500">
+            <thead className="sticky top-0 bg-raise text-[10px] uppercase tracking-wider text-muted">
               <tr>
                 {['', 'Name', 'Status', 'PID', 'CPU %', 'Mem MB', 'Uptime', 'Ports', 'Actions'].map(
                   (h, i) => (
-                    <th key={i} className="border-b border-slate-800 px-2 py-1.5 text-left font-medium">
+                    <th key={i} className="border-b border-line px-2 py-1.5 text-left font-medium">
                       {h}
                     </th>
                   ),
@@ -103,29 +103,29 @@ export function ProcessDashboard() {
                 const svc = r.kind === 'service' ? services.find((s) => s.id === r.id) : undefined
                 const port = svc?.health_port ?? null
                 return (
-                  <tr key={r.key} className="hover:bg-slate-800/30">
+                  <tr key={r.key} className="hover:bg-hover">
                     <td className="px-2 py-1.5">
-                      <span className={`flex items-center ${r.kind === 'service' ? 'text-indigo-400' : 'text-emerald-400'}`}>
+                      <span className={`flex items-center ${r.kind === 'service' ? 'text-indigo-400' : 'text-ok'}`}>
                         <Icon name={r.kind === 'service' ? 'service' : 'command'} size={13} />
                       </span>
                     </td>
-                    <td className="max-w-48 truncate px-2 py-1.5 text-slate-200">{r.name}</td>
-                    <td className={`px-2 py-1.5 uppercase text-[10px] tracking-wide ${STATUS_STYLE[r.status] ?? 'text-slate-400'}`}>
+                    <td className="max-w-48 truncate px-2 py-1.5 text-ink">{r.name}</td>
+                    <td className={`px-2 py-1.5 uppercase text-[10px] tracking-wide ${STATUS_STYLE[r.status] ?? 'text-dim'}`}>
                       {r.status === 'live' ? 'running' : r.status}
                     </td>
-                    <td className="px-2 py-1.5 font-mono text-slate-400">{st?.pid ?? '—'}</td>
-                    <td className={`px-2 py-1.5 font-mono ${st && st.cpu > 80 ? 'text-red-400' : st && st.cpu > 30 ? 'text-yellow-400' : 'text-slate-300'}`}>
+                    <td className="px-2 py-1.5 font-mono text-dim">{st?.pid ?? '—'}</td>
+                    <td className={`px-2 py-1.5 font-mono ${st && st.cpu > 80 ? 'text-err' : st && st.cpu > 30 ? 'text-warn' : 'text-body'}`}>
                       {st ? st.cpu.toFixed(1) : '—'}
                     </td>
                     <td className="px-2 py-1.5 font-mono">{st ? st.mem_mb.toFixed(0) : '—'}</td>
-                    <td className="px-2 py-1.5 font-mono text-slate-400">{st ? fmtUptime(st.uptime_secs) : '—'}</td>
-                    <td className="px-2 py-1.5 font-mono text-sky-400">
+                    <td className="px-2 py-1.5 font-mono text-dim">{st ? fmtUptime(st.uptime_secs) : '—'}</td>
+                    <td className="px-2 py-1.5 font-mono text-info">
                       {st && st.ports.length ? (
                         <span className="flex flex-wrap gap-x-1.5">
                           {st.ports.map((p) => (
                             <button
                               key={p}
-                              className="text-sky-400 hover:text-sky-300 hover:underline"
+                              className="text-info hover:underline"
                               title={`Open http://localhost:${p}`}
                               onClick={() => void ipc.openUrl(`http://localhost:${p}`).catch((e) => alert(String(e)))}
                             >
@@ -143,7 +143,7 @@ export function ProcessDashboard() {
                           <>
                           {svc && serviceDir(nodes, svc) && (
                             <button
-                              className="inline-flex items-center gap-1 rounded border border-slate-600 bg-slate-700/40 px-2 py-0.5 text-[11px] text-slate-200 hover:border-slate-400"
+                              className="inline-flex items-center gap-1 rounded border border-line2 bg-soft px-2 py-0.5 text-[11px] text-ink hover:border-line3"
                               title={`Reveal in File Explorer\n${serviceDir(nodes, svc)}`}
                               onClick={() => void ipc.revealInExplorer(serviceDir(nodes, svc)).catch((e) => alert(String(e)))}
                             >
@@ -152,7 +152,7 @@ export function ProcessDashboard() {
                           )}
                           {port != null && (
                             <button
-                              className="inline-flex items-center gap-1 rounded border border-sky-500/40 bg-sky-500/10 px-2 py-0.5 text-[11px] text-sky-400 hover:bg-sky-500/25"
+                              className="inline-flex items-center gap-1 rounded border border-sky-500/40 bg-sky-500/10 px-2 py-0.5 text-[11px] text-info hover:bg-sky-500/25"
                               title={running ? `Open http://localhost:${port}` : `Opens http://localhost:${port} (not running)`}
                               onClick={() => void ipc.openUrl(`http://localhost:${port}`).catch((e) => alert(String(e)))}
                             >
@@ -162,7 +162,7 @@ export function ProcessDashboard() {
                           {running ? (
                             <>
                               <button
-                                className="inline-flex items-center gap-1 rounded border border-slate-600 bg-slate-700/40 px-2 py-0.5 text-[11px] text-slate-200 hover:border-slate-400 disabled:opacity-40"
+                                className="inline-flex items-center gap-1 rounded border border-line2 bg-soft px-2 py-0.5 text-[11px] text-ink hover:border-line3 disabled:opacity-40"
                                 disabled={busy === r.key}
                                 title="Restart service"
                                 onClick={() => void act(r.key, () => ipc.svcRestart(r.id))}
@@ -170,7 +170,7 @@ export function ProcessDashboard() {
                                 <Icon name="restart" size={13} /> Restart
                               </button>
                               <button
-                                className="inline-flex items-center gap-1 rounded border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-[11px] text-red-400 hover:bg-red-500/25 disabled:opacity-40"
+                                className="inline-flex items-center gap-1 rounded border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-[11px] text-err hover:bg-red-500/25 disabled:opacity-40"
                                 disabled={busy === r.key}
                                 title="Stop service"
                                 onClick={() => void act(r.key, () => ipc.svcStop(r.id))}
@@ -180,7 +180,7 @@ export function ProcessDashboard() {
                             </>
                           ) : (
                             <button
-                              className="inline-flex items-center gap-1 rounded border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-400 hover:bg-emerald-500/25 disabled:opacity-40"
+                              className="inline-flex items-center gap-1 rounded border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-ok hover:bg-emerald-500/25 disabled:opacity-40"
                               disabled={busy === r.key}
                               title="Start service"
                               onClick={() => void act(r.key, () => ipc.svcStart(r.id))}
@@ -192,14 +192,14 @@ export function ProcessDashboard() {
                         ) : (
                           <>
                             <button
-                              className="inline-flex items-center gap-1 rounded border border-slate-600 bg-slate-700/40 px-2 py-0.5 text-[11px] text-slate-200 hover:border-slate-400"
+                              className="inline-flex items-center gap-1 rounded border border-line2 bg-soft px-2 py-0.5 text-[11px] text-ink hover:border-line3"
                               title="Open / focus terminal tab"
                               onClick={() => openTerminalPanel(r.id, r.name)}
                             >
                               <Icon name="external" size={13} /> Open
                             </button>
                             <button
-                              className="inline-flex items-center gap-1 rounded border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-[11px] text-red-400 hover:bg-red-500/25"
+                              className="inline-flex items-center gap-1 rounded border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-[11px] text-err hover:bg-red-500/25"
                               title="Kill terminal session"
                               onClick={() =>
                                 void act(r.key, async () => {

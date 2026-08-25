@@ -8,7 +8,7 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import * as ipc from '../lib/ipc'
 import type { CommandDef, NodeKind, ProfileDef, ServiceDef, SvcState, TreeNode } from '../lib/types'
 import { useApp } from '../store'
-import { openEditor, openInMain, openNodeSetup } from '../lib/dock'
+import { openEditor, openNodeSetup, openService, openSpace } from '../lib/dock'
 import { focusCommandSession, launchProfile, openTerminal, runCommandInNewTerminal } from '../lib/runner'
 import { resolveDir } from '../lib/tree'
 import { nodeColor } from '../lib/spaces'
@@ -48,8 +48,8 @@ const KIND_ICON: Record<NodeKind, string> = {
 
 const KIND_COLOR: Record<NodeKind, string> = {
   workspace: 'text-indigo-400',
-  project: 'text-emerald-400',
-  folder: 'text-slate-400',
+  project: 'text-ok',
+  folder: 'text-dim',
 }
 
 const KIND_LABEL: Record<NodeKind, string> = {
@@ -74,9 +74,9 @@ interface Menu {
 // "folder" that holds the node's commands, services, or profiles.
 type Cat = 'commands' | 'services' | 'profiles'
 const CAT_META: Record<Cat, { label: string; icon: string; color: string }> = {
-  commands: { label: 'Commands', icon: 'command', color: 'text-sky-400/80' },
-  services: { label: 'Services', icon: 'service', color: 'text-amber-400/80' },
-  profiles: { label: 'Profiles', icon: 'profile', color: 'text-violet-400/80' },
+  commands: { label: 'Commands', icon: 'command', color: 'text-info/80' },
+  services: { label: 'Services', icon: 'service', color: 'text-warn/80' },
+  profiles: { label: 'Profiles', icon: 'profile', color: 'text-viol/80' },
 }
 
 export function Explorer() {
@@ -218,7 +218,7 @@ export function Explorer() {
     if (!focusCommandSession(cmd.id)) void runCommandInNewTerminal(cmd)
   }
   const viewService = (svc: ServiceDef) => {
-    openInMain('logs', 'logs', 'Logs')
+    useApp.getState().showBottom('logs')
     focusServiceLogs(svc.name)
   }
 
@@ -226,7 +226,7 @@ export function Explorer() {
   const pullProject = async (node: TreeNode) => {
     const dir = resolveDir(nodes, node)
     if (!dir) return
-    openInMain('logs', 'logs', 'Logs')
+    useApp.getState().showBottom('logs')
     try {
       await ipc.gitPull(dir)
     } catch (e) {
@@ -259,6 +259,9 @@ export function Explorer() {
     }
     const items: MenuItem[] = []
 
+    if (node.kind === 'project') {
+      items.push({ icon: 'view', label: 'Open dashboard', onClick: () => openSpace(node.id, node.name) })
+    }
     if (node.kind === 'project' || node.kind === 'folder') {
       items.push({ icon: 'folder', label: 'New folder', onClick: () => void addFolder(node) })
       const dir = resolveDir(nodes, node)
@@ -294,6 +297,7 @@ export function Explorer() {
   const serviceMenuItems = (svc: ServiceDef): MenuItem[] => {
     const running = svcStates[svc.id]?.status === 'running'
     return [
+      { icon: 'view', label: 'Open page', onClick: () => openService(svc.id, svc.name || 'Service') },
       running
         ? { icon: 'stop', label: 'Stop', onClick: () => void actSvc(svc.id, () => ipc.svcStop(svc.id)) }
         : { icon: 'run', label: 'Start', onClick: () => void actSvc(svc.id, () => requestStartService(svc)) },
@@ -319,7 +323,7 @@ export function Explorer() {
     return (
       <div
         key={`svc-${svc.id}`}
-        className="group flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[12.5px] text-slate-300 select-none hover:bg-slate-700/40"
+        className="group flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[12.5px] text-body select-none hover:bg-hover"
         style={{ paddingLeft: `${depth * 14 + 22}px` }}
         onContextMenu={(e) => {
           e.preventDefault()
@@ -328,21 +332,21 @@ export function Explorer() {
         }}
       >
         <span
-          className={`h-2 w-2 shrink-0 rounded-full ${running ? 'animate-pulse bg-emerald-400' : crashed ? 'bg-red-400' : 'bg-slate-600'}`}
+          className={`h-2 w-2 shrink-0 rounded-full ${running ? 'animate-pulse bg-emerald-400' : crashed ? 'bg-red-400' : 'bg-faint'}`}
         />
-        <span className="flex w-5 shrink-0 items-center justify-center text-amber-400/80">
+        <span className="flex w-5 shrink-0 items-center justify-center text-warn/80">
           <Icon name="service" size={14} />
         </span>
         <button
-          className="min-w-0 flex-1 cursor-pointer truncate text-left hover:text-slate-100"
-          title="Click to edit service"
-          onClick={() => openEditor('service', svc.id, svc.name || 'Service')}
+          className="min-w-0 flex-1 cursor-pointer truncate text-left hover:text-ink"
+          title="Open the service page"
+          onClick={() => openService(svc.id, svc.name || 'Service')}
         >
           {svc.name}
         </button>
         {port != null && (
           <button
-            className="hidden shrink-0 items-center rounded px-1 text-slate-400 hover:bg-slate-600 hover:text-white group-hover:flex"
+            className="hidden shrink-0 items-center rounded px-1 text-dim hover:bg-hover hover:text-ink group-hover:flex"
             title={running ? `Open http://localhost:${port}` : `Opens http://localhost:${port} (not running)`}
             onClick={() => void ipc.openUrl(`http://localhost:${port}`).catch((e) => alert(String(e)))}
           >
@@ -350,7 +354,7 @@ export function Explorer() {
           </button>
         )}
         <button
-          className="flex shrink-0 items-center rounded px-1 hover:bg-slate-600 hover:text-white"
+          className="flex shrink-0 items-center rounded px-1 hover:bg-hover hover:text-ink"
           disabled={busySvc === svc.id}
           title={running ? 'Stop' : 'Start'}
           onClick={() =>
@@ -360,7 +364,7 @@ export function Explorer() {
           <Icon name={running ? 'stop' : 'run'} size={13} />
         </button>
         <button
-          className="hidden shrink-0 items-center rounded px-1 text-slate-400 hover:bg-slate-600 hover:text-white group-hover:flex"
+          className="hidden shrink-0 items-center rounded px-1 text-dim hover:bg-hover hover:text-ink group-hover:flex"
           title="Actions"
           onClick={(e) => {
             e.stopPropagation()
@@ -377,7 +381,7 @@ export function Explorer() {
   const renderCommand = (cmd: CommandDef, depth: number) => (
     <div
       key={`cmd-${cmd.id}`}
-      className="group flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[12.5px] text-slate-300 select-none hover:bg-slate-700/40"
+      className="group flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[12.5px] text-body select-none hover:bg-hover"
       style={{ paddingLeft: `${depth * 14 + 22}px` }}
       onContextMenu={(e) => {
         e.preventDefault()
@@ -385,25 +389,25 @@ export function Explorer() {
         setMenu({ x: e.clientX, y: e.clientY, target: { type: 'command', cmd } })
       }}
     >
-      <span className="flex w-5 shrink-0 items-center justify-center text-sky-400/80">
+      <span className="flex w-5 shrink-0 items-center justify-center text-info/80">
         <Icon name="command" size={13} />
       </span>
       <button
-        className="min-w-0 flex-1 cursor-pointer truncate text-left hover:text-slate-100"
+        className="min-w-0 flex-1 cursor-pointer truncate text-left hover:text-ink"
         title="Click to edit command"
         onClick={() => openEditor('command', cmd.id, cmd.name || 'Command')}
       >
         {cmd.name}
       </button>
       <button
-        className="hidden shrink-0 items-center rounded px-1 hover:bg-slate-600 hover:text-white group-hover:flex"
+        className="hidden shrink-0 items-center rounded px-1 hover:bg-hover hover:text-ink group-hover:flex"
         title="Run in a new terminal"
         onClick={() => void runCommandInNewTerminal(cmd)}
       >
         <Icon name="run" size={13} />
       </button>
       <button
-        className="hidden shrink-0 items-center rounded px-1 text-slate-400 hover:bg-slate-600 hover:text-white group-hover:flex"
+        className="hidden shrink-0 items-center rounded px-1 text-dim hover:bg-hover hover:text-ink group-hover:flex"
         title="Actions"
         onClick={(e) => {
           e.stopPropagation()
@@ -419,21 +423,21 @@ export function Explorer() {
   const renderProfile = (profile: ProfileDef, depth: number) => (
     <div
       key={`prof-${profile.id}`}
-      className="group flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[12.5px] text-slate-300 select-none hover:bg-slate-700/40"
+      className="group flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[12.5px] text-body select-none hover:bg-hover"
       style={{ paddingLeft: `${depth * 14 + 22}px` }}
     >
-      <span className="flex w-5 shrink-0 items-center justify-center text-violet-400/80">
+      <span className="flex w-5 shrink-0 items-center justify-center text-viol/80">
         <Icon name="profile" size={13} />
       </span>
       <button
-        className="min-w-0 flex-1 cursor-pointer truncate text-left hover:text-slate-100"
+        className="min-w-0 flex-1 cursor-pointer truncate text-left hover:text-ink"
         title="Click to edit profile"
         onClick={() => openEditor('profile', profile.id, profile.name || 'Profile')}
       >
         {profile.name}
       </button>
       <button
-        className="flex shrink-0 items-center rounded px-1 hover:bg-slate-600 hover:text-white"
+        className="flex shrink-0 items-center rounded px-1 hover:bg-hover hover:text-ink"
         disabled={launching === profile.id}
         title="Launch profile"
         onClick={async () => {
@@ -458,20 +462,20 @@ export function Explorer() {
     return (
       <div key={`${node.id}-${cat}`}>
         <div
-          className="group flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[11.5px] font-medium text-slate-400 select-none hover:bg-slate-700/40"
+          className="group flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[11.5px] font-medium text-dim select-none hover:bg-hover"
           style={{ paddingLeft: `${depth * 14 + 6}px` }}
           onClick={() => count > 0 && toggleCat(node.id, cat)}
         >
-          <span className={`flex w-5 shrink-0 items-center justify-center ${count > 0 ? 'cursor-pointer text-slate-400 hover:text-slate-200' : 'opacity-0'}`}>
+          <span className={`flex w-5 shrink-0 items-center justify-center ${count > 0 ? 'cursor-pointer text-dim hover:text-ink' : 'opacity-0'}`}>
             <Icon name={open ? 'chevron-down' : 'chevron-right'} size={14} />
           </span>
           <span className={`flex w-5 shrink-0 items-center justify-center ${meta.color}`}>
             <Icon name={meta.icon} size={13} />
           </span>
           <span className="flex-1 truncate uppercase tracking-wide">{meta.label}</span>
-          <span className="shrink-0 pr-1 text-[10.5px] tabular-nums text-slate-600">{count || ''}</span>
+          <span className="shrink-0 pr-1 text-[10.5px] tabular-nums text-faint">{count || ''}</span>
           <button
-            className="hidden shrink-0 items-center rounded px-1 text-slate-400 hover:bg-slate-600 hover:text-white group-hover:flex"
+            className="hidden shrink-0 items-center rounded px-1 text-dim hover:bg-hover hover:text-ink group-hover:flex"
             title={`New ${addKind}`}
             onClick={(e) => {
               e.stopPropagation()
@@ -507,10 +511,16 @@ export function Explorer() {
       <div key={node.id}>
         <div
           className={`group flex items-center gap-1.5 rounded px-1.5 py-1 text-[13px] select-none ${
-            selected ? 'bg-indigo-500/20 text-slate-100' : 'text-slate-300 hover:bg-slate-700/40'
+            selected ? 'bg-indigo-500/20 text-ink' : 'text-body hover:bg-hover'
           } ${renaming ? '' : 'cursor-pointer'}`}
           style={{ paddingLeft: `${depth * 14 + 6}px` }}
-          onClick={() => !renaming && setSelectedNode(node.id)}
+          onClick={() => {
+            if (renaming) return
+            setSelectedNode(node.id)
+            // A project's click opens its dashboard (the space page); settings
+            // stay on double-click / context menu.
+            if (node.kind === 'project') openSpace(node.id, node.name)
+          }}
           onDoubleClick={() => {
             if (renaming) return
             if (node.kind === 'project' || node.kind === 'folder') openNodeSetup(node.id, node.name)
@@ -524,7 +534,7 @@ export function Explorer() {
           title={sub || undefined}
         >
           <span
-            className={`flex w-5 shrink-0 items-center justify-center text-slate-400 hover:text-slate-200 ${hasKids ? 'cursor-pointer' : 'opacity-0'}`}
+            className={`flex w-5 shrink-0 items-center justify-center text-dim hover:text-ink ${hasKids ? 'cursor-pointer' : 'opacity-0'}`}
             onClick={(e) => {
               e.stopPropagation()
               toggle(node.id)
@@ -558,7 +568,7 @@ export function Explorer() {
           {node.kind === 'project' && gitByNode[node.id]?.branch && (() => {
             const g = gitByNode[node.id]!
             return (
-              <span className="flex shrink-0 items-center gap-1 text-[10px] text-slate-500">
+              <span className="flex shrink-0 items-center gap-1 text-[10px] text-muted">
                 <span
                   className="flex items-center gap-1"
                   title={
@@ -572,7 +582,7 @@ export function Explorer() {
                 </span>
                 {g.behind > 0 && (
                   <button
-                    className="flex items-center gap-0.5 rounded bg-amber-500/15 px-1 text-amber-300 hover:bg-amber-500/30"
+                    className="flex items-center gap-0.5 rounded bg-amber-500/15 px-1 text-warn hover:bg-amber-500/30"
                     title={`${g.behind} commit${g.behind === 1 ? '' : 's'} to pull — click to pull (fast-forward)`}
                     onClick={(e) => {
                       e.stopPropagation()
@@ -596,7 +606,7 @@ export function Explorer() {
             )
           })()}
           <button
-            className="hidden items-center rounded px-1 text-slate-400 hover:bg-slate-600 hover:text-white group-hover:flex"
+            className="hidden items-center rounded px-1 text-dim hover:bg-hover hover:text-ink group-hover:flex"
             title="Actions"
             onClick={(e) => {
               e.stopPropagation()
@@ -642,11 +652,11 @@ export function Explorer() {
   }
 
   return (
-    <div className="flex h-full flex-col bg-[#11141c]">
+    <div className="flex h-full flex-col bg-panel">
       {/* Workspace switcher + add project */}
-      <div className="flex items-center justify-between gap-1 border-b border-slate-800 px-2 py-1.5">
+      <div className="flex items-center justify-between gap-1 border-b border-line px-2 py-1.5">
         <button
-          className="flex min-w-0 items-center gap-1.5 rounded px-1.5 py-1 text-[12.5px] font-medium text-slate-100 hover:bg-slate-700/50"
+          className="flex min-w-0 items-center gap-1.5 rounded px-1.5 py-1 text-[12.5px] font-medium text-ink hover:bg-hover"
           title="Switch workspace"
           onClick={(e) => {
             const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
@@ -655,10 +665,10 @@ export function Explorer() {
         >
           <Icon name="workspace" size={15} className="shrink-0 text-indigo-400" />
           <span className="truncate">{ws?.name ?? 'No workspace'}</span>
-          <Icon name="chevron-down" size={12} className="shrink-0 text-slate-500" />
+          <Icon name="chevron-down" size={12} className="shrink-0 text-muted" />
         </button>
         <button
-          className="flex shrink-0 items-center gap-1 rounded bg-slate-700/60 px-2 py-1 text-[11px] text-slate-200 hover:bg-indigo-600 disabled:opacity-40"
+          className="flex shrink-0 items-center gap-1 rounded bg-soft px-2 py-1 text-[11px] text-ink hover:bg-indigo-600 disabled:opacity-40"
           title={activeWorkspaceId == null ? 'Create a workspace first' : 'Clone a GitHub repo into this workspace'}
           disabled={activeWorkspaceId == null}
           onClick={() => setGhOpen(true)}
@@ -666,7 +676,7 @@ export function Explorer() {
           <Icon name="github" size={13} /> GitHub
         </button>
         <button
-          className="flex shrink-0 items-center gap-1 rounded bg-slate-700/60 px-2 py-1 text-[11px] text-slate-200 hover:bg-indigo-600 disabled:opacity-40"
+          className="flex shrink-0 items-center gap-1 rounded bg-soft px-2 py-1 text-[11px] text-ink hover:bg-indigo-600 disabled:opacity-40"
           title={activeWorkspaceId == null ? 'Create a workspace first' : 'Add a project to this workspace'}
           disabled={activeWorkspaceId == null}
           onClick={() => void addProject()}
@@ -682,7 +692,7 @@ export function Explorer() {
         }}
       >
         {workspaces.length === 0 ? (
-          <div className="p-3 text-[12px] leading-5 text-slate-500">
+          <div className="p-3 text-[12px] leading-5 text-muted">
             <p>
               No workspaces yet. A workspace groups related projects. Create one, then add projects
               (each an app / repo root) and folders inside them.
@@ -699,7 +709,7 @@ export function Explorer() {
             </button>
           </div>
         ) : roots.length === 0 ? (
-          <div className="p-3 text-[12px] leading-5 text-slate-500">
+          <div className="p-3 text-[12px] leading-5 text-muted">
             <p>
               “{ws?.name}” has no projects yet. A project is an app / repo root with a base path;
               folders inside it are subpaths.

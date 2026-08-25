@@ -56,8 +56,8 @@ export function BottomBar({
       <button
         className={`flex items-center gap-1.5 border-b-2 px-2.5 py-1 text-[11.5px] transition ${
           active
-            ? 'border-indigo-400 text-slate-100'
-            : 'border-transparent text-slate-500 hover:text-slate-300'
+            ? 'border-indigo-400 text-ink'
+            : 'border-transparent text-muted hover:text-body'
         }`}
         onClick={() => {
           if (collapsed) onToggleCollapsed()
@@ -66,14 +66,14 @@ export function BottomBar({
       >
         {label}
         {badge != null && badge > 0 && (
-          <span className="rounded bg-slate-700/70 px-1 text-[9.5px] tabular-nums text-slate-300">{badge}</span>
+          <span className="rounded bg-soft px-1 text-[9.5px] tabular-nums text-body">{badge}</span>
         )}
       </button>
     )
   }
 
   return (
-    <div className="flex shrink-0 flex-col border-t border-slate-800 bg-[#11141c]">
+    <div className="flex shrink-0 flex-col border-t border-line bg-panel">
       {/* resize handle (hidden when collapsed) */}
       {!collapsed && (
         <div
@@ -91,7 +91,7 @@ export function BottomBar({
         <TabBtn id="processes" label="Processes" badge={runningCount} />
         <div className="flex-1" />
         <button
-          className="flex items-center rounded px-2 py-1 text-slate-400 hover:bg-slate-700 hover:text-white"
+          className="flex items-center rounded px-2 py-1 text-dim hover:bg-hover hover:text-ink"
           title={collapsed ? 'Expand panel' : 'Collapse panel'}
           onClick={onToggleCollapsed}
         >
@@ -101,7 +101,7 @@ export function BottomBar({
 
       {/* body */}
       {!collapsed && (
-        <div style={{ height }} className="min-h-0 border-t border-slate-800">
+        <div style={{ height }} className="min-h-0 border-t border-line">
           {tab === 'logs' ? <LogViewer /> : <ProcessDashboard />}
         </div>
       )}

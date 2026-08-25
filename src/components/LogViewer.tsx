@@ -9,10 +9,10 @@ import type { LogLevel } from '../lib/types'
 import { useApp } from '../store'
 
 const LEVEL_COLOR: Record<LogLevel, string> = {
-  error: 'text-red-400',
-  warn: 'text-yellow-400',
-  info: 'text-slate-300',
-  debug: 'text-slate-500',
+  error: 'text-err',
+  warn: 'text-warn',
+  info: 'text-body',
+  debug: 'text-muted',
 }
 
 const LEVELS: LogLevel[] = ['error', 'warn', 'info', 'debug']
@@ -71,8 +71,8 @@ export function LogViewer() {
   }
 
   return (
-    <div className="flex h-full flex-col bg-[#0d1017] text-slate-300">
-      <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-800 bg-[#11141c] px-2 py-1.5">
+    <div className="flex h-full flex-col bg-page text-body">
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-line bg-panel px-2 py-1.5">
         <input
           className="input w-44 text-[11.5px]"
           placeholder="Search logs…"
@@ -92,8 +92,8 @@ export function LogViewer() {
             key={lv}
             className={`rounded border px-1.5 py-0.5 text-[10px] uppercase ${
               levels.has(lv)
-                ? `border-slate-600 bg-slate-700/50 ${LEVEL_COLOR[lv]}`
-                : 'border-slate-800 text-slate-600'
+                ? `border-line2 bg-soft ${LEVEL_COLOR[lv]}`
+                : 'border-line text-faint'
             }`}
             onClick={() => toggleLevel(lv)}
           >
@@ -101,7 +101,7 @@ export function LogViewer() {
           </button>
         ))}
         <div className="flex-1" />
-        <label className="flex items-center gap-1 text-[11px] text-slate-400">
+        <label className="flex items-center gap-1 text-[11px] text-dim">
           <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} />
           Follow
         </label>
@@ -120,16 +120,16 @@ export function LogViewer() {
       </div>
       <div className="flex-1 overflow-y-auto p-1 font-mono text-[11.5px] leading-[1.5]">
         {filtered.length === 0 && (
-          <div className="p-3 text-slate-600">No log output {logs.length > 0 ? 'matches the filters' : 'yet'}.</div>
+          <div className="p-3 text-faint">No log output {logs.length > 0 ? 'matches the filters' : 'yet'}.</div>
         )}
         {filtered.map((l) => (
-          <div key={l.seq} className="flex gap-2 whitespace-pre-wrap break-all px-1 hover:bg-slate-800/30">
-            <span className="shrink-0 text-slate-600">
+          <div key={l.seq} className="flex gap-2 whitespace-pre-wrap break-all px-1 hover:bg-hover">
+            <span className="shrink-0 text-faint">
               {new Date(l.ts).toLocaleTimeString('en-GB', { hour12: false })}
             </span>
             <span className="shrink-0 text-indigo-400/80">{l.service}</span>
             <span className={`shrink-0 w-10 ${LEVEL_COLOR[l.level]}`}>{l.level}</span>
-            <span className={l.level === 'error' ? 'text-red-300' : ''}>{l.line}</span>
+            <span className={l.level === 'error' ? 'text-err' : ''}>{l.line}</span>
           </div>
         ))}
         <div ref={endRef} />

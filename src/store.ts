@@ -21,6 +21,17 @@ import type {
 
 const LOG_UI_LIMIT = 5000
 
+export type Theme = 'dark' | 'light'
+export type RailView = 'home' | 'projects' | 'machine' | 'settings'
+export type BottomTab = 'logs' | 'processes'
+/** The slide-over editor sheet target: which entity kind, its id (0 = new),
+ *  and the project to pre-select for new items. */
+export interface SheetState {
+  kind: 'command' | 'service' | 'profile'
+  id: number
+  projectId: number | null
+}
+
 export interface AppState {
   // data
   nodes: TreeNode[]
@@ -50,6 +61,15 @@ export interface AppState {
   /** Request the Log viewer to filter to a service's output. `n` bumps so
    *  re-selecting the same service refocuses. */
   logFocus: { name: string; n: number } | null
+  /** App color theme; applied as data-theme on <html>, persisted to settings. */
+  theme: Theme
+  /** Which rail view the shell is showing. */
+  railView: RailView
+  /** The slide-over editor sheet, or null when closed. */
+  sheet: SheetState | null
+  /** Bottom bar (Logs/Processes) UI state — global across rail views. */
+  bottomTab: BottomTab
+  bottomCollapsed: boolean
 
   // derived helpers
   selectedNode: () => TreeNode | null
@@ -93,6 +113,14 @@ export interface AppState {
   setActiveWorkspace: (id: number | null) => void
   setHotkey: (h: string) => void
   focusServiceLogs: (name: string) => void
+  setTheme: (t: Theme) => Promise<void>
+  setRailView: (v: RailView) => void
+  openSheet: (s: SheetState) => void
+  closeSheet: () => void
+  /** Reveal the bottom bar on the given tab (expands if collapsed). */
+  showBottom: (tab: BottomTab) => void
+  setBottomTab: (tab: BottomTab) => void
+  setBottomCollapsed: (collapsed: boolean) => void
 
   // Project Setup: a start blocked on a "prepare" prompt (missing tools /
   // bootstrap), plus a passive "install this missing tool" hint from errors.
@@ -114,6 +142,12 @@ const bestPort = (ports?: number[]): number | null => {
 // Services we're currently writing an auto-detected port to (in-flight guard so
 // the 2s stats tick doesn't queue duplicate saves).
 const adoptingPorts = new Set<number>()
+
+const RAIL_KEY = 'devdeck.railView'
+const loadRailView = (): RailView => {
+  const v = localStorage.getItem(RAIL_KEY)
+  return v === 'projects' || v === 'machine' || v === 'settings' ? v : 'home'
+}
 
 const AW_KEY = 'devdeck.activeWorkspace'
 const loadActiveWs = (): number | null => {
@@ -152,6 +186,11 @@ export const useApp = create<AppState>((set, get) => ({
   selectedNodeId: null,
   activeWorkspaceId: loadActiveWs(),
   hotkey: 'ctrl+shift+Space',
+  theme: 'dark',
+  railView: loadRailView(),
+  sheet: null,
+  bottomTab: (localStorage.getItem('devdeck.bottom.tab') as BottomTab) || 'logs',
+  bottomCollapsed: localStorage.getItem('devdeck.bottom.collapsed') === '1',
   logFocus: null,
 
   selectedNode: () => {
@@ -241,7 +280,7 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   bootstrap: async () => {
-    const [nodes, commands, services, profiles, layouts, shells, terminals, states, logs, recents, hotkey, gitEnabled, gitInterval] =
+    const [nodes, commands, services, profiles, layouts, shells, terminals, states, logs, recents, hotkey, gitEnabled, gitInterval, savedTheme] =
       await Promise.all([
         ipc.treeList(),
         ipc.commandsList(),
@@ -256,6 +295,7 @@ export const useApp = create<AppState>((set, get) => ({
         ipc.settingGet('hotkey'),
         ipc.settingGet('git_monitor_enabled'),
         ipc.settingGet('git_monitor_interval_min'),
+        ipc.settingGet('app_theme'),
       ])
     const svcStates: Record<number, SvcState> = {}
     for (const s of states) svcStates[s.id] = s
@@ -277,7 +317,9 @@ export const useApp = create<AppState>((set, get) => ({
       // Default monitoring on; only an explicit '0' disables it.
       gitMonitorEnabled: gitEnabled == null ? true : gitEnabled !== '0',
       gitMonitorIntervalMin: Math.max(1, Number(gitInterval) || 5),
+      theme: savedTheme === 'light' ? 'light' : 'dark',
     })
+    document.documentElement.dataset.theme = savedTheme === 'light' ? 'light' : 'dark'
     void get().refreshGit()
   },
 
@@ -339,6 +381,30 @@ export const useApp = create<AppState>((set, get) => ({
     set({ activeWorkspaceId: id, selectedNodeId: null })
   },
   setHotkey: (h) => set({ hotkey: h }),
+  setTheme: async (t) => {
+    set({ theme: t })
+    document.documentElement.dataset.theme = t
+    await ipc.settingSet('app_theme', t)
+  },
+  setRailView: (v) => {
+    localStorage.setItem(RAIL_KEY, v)
+    set({ railView: v })
+  },
+  openSheet: (s) => set({ sheet: s }),
+  closeSheet: () => set({ sheet: null }),
+  showBottom: (tab) => {
+    localStorage.setItem('devdeck.bottom.tab', tab)
+    localStorage.setItem('devdeck.bottom.collapsed', '0')
+    set({ bottomTab: tab, bottomCollapsed: false })
+  },
+  setBottomTab: (tab) => {
+    localStorage.setItem('devdeck.bottom.tab', tab)
+    set({ bottomTab: tab })
+  },
+  setBottomCollapsed: (collapsed) => {
+    localStorage.setItem('devdeck.bottom.collapsed', collapsed ? '1' : '0')
+    set({ bottomCollapsed: collapsed })
+  },
   focusServiceLogs: (name) =>
     set((st) => ({ logFocus: { name, n: (st.logFocus?.n ?? 0) + 1 } })),
 }))

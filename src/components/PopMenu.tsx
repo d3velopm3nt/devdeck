@@ -64,21 +64,21 @@ export function PopMenu({
     >
       <div
         ref={ref}
-        className="absolute min-w-52 rounded-md border border-slate-700 bg-[#1a1f2b] p-1 shadow-2xl"
+        className="absolute min-w-52 rounded-md border border-line2 bg-menu p-1 shadow-2xl"
         style={pos}
         onClick={(e) => e.stopPropagation()}
       >
         {items.map((it, i) =>
           it.separator ? (
-            <div key={i} className="my-1 border-t border-slate-700" />
+            <div key={i} className="my-1 border-t border-line2" />
           ) : (
             <button
               key={i}
               disabled={it.disabled}
               className={`flex w-full items-center gap-2.5 rounded px-2 py-1.5 text-left text-[12.5px] disabled:opacity-40 ${
                 it.danger
-                  ? 'text-red-400 hover:bg-red-500/20'
-                  : 'text-slate-200 hover:bg-indigo-600/40 hover:text-white'
+                  ? 'text-err hover:bg-red-500/20'
+                  : 'text-ink hover:bg-indigo-600/40 hover:text-ink'
               }`}
               onClick={() => {
                 onClose()

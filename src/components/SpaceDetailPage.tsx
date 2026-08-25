@@ -6,7 +6,7 @@ import { useMemo, useState } from 'react'
 import type { IDockviewPanelProps } from 'dockview-react'
 import { useApp } from '../store'
 import * as ipc from '../lib/ipc'
-import { openEditor, openNodeSetup, openTerminalPanel } from '../lib/dock'
+import { openEditor, openNodeSetup, openService, openTerminalPanel } from '../lib/dock'
 import { openTerminal, runCommandInNewTerminal, runCommandInBackground, launchProfile } from '../lib/runner'
 import { subtreeIds, resolveDir, serviceDir, nodeLabel } from '../lib/tree'
 import { nodeColor, avatarLabel } from '../lib/spaces'
@@ -349,7 +349,7 @@ function ServicesTab({
           <div key={s.id} className="group flex items-center gap-2.5 rounded-lg border border-line bg-raise px-3 py-2 hover:border-line2">
             <input type="checkbox" className="accent-indigo-500" checked={isSel} onChange={() => onToggle(s.id)} title="Select for Run selected" />
             <span className={`h-2 w-2 shrink-0 rounded-full ${running ? 'animate-pulse bg-emerald-400' : st?.status === 'crashed' ? 'bg-red-400' : 'bg-faint'}`} />
-            <button className="min-w-0 flex-1 text-left" onClick={() => openEditor('service', s.id, s.name || 'Service')}>
+            <button className="min-w-0 flex-1 text-left" title="Open the service page" onClick={() => openService(s.id, s.name || 'Service')}>
               <div className="truncate text-[12.5px] text-ink">{s.name}</div>
               <div className="truncate font-mono text-[10.5px] text-muted">{s.command}</div>
             </button>

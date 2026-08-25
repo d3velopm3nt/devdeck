@@ -8,7 +8,7 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import * as ipc from '../lib/ipc'
 import type { CommandDef, NodeKind, ProfileDef, ServiceDef, SvcState, TreeNode } from '../lib/types'
 import { useApp } from '../store'
-import { openEditor, openNodeSetup } from '../lib/dock'
+import { openEditor, openNodeSetup, openService, openSpace } from '../lib/dock'
 import { focusCommandSession, launchProfile, openTerminal, runCommandInNewTerminal } from '../lib/runner'
 import { resolveDir } from '../lib/tree'
 import { nodeColor } from '../lib/spaces'
@@ -259,6 +259,9 @@ export function Explorer() {
     }
     const items: MenuItem[] = []
 
+    if (node.kind === 'project') {
+      items.push({ icon: 'view', label: 'Open dashboard', onClick: () => openSpace(node.id, node.name) })
+    }
     if (node.kind === 'project' || node.kind === 'folder') {
       items.push({ icon: 'folder', label: 'New folder', onClick: () => void addFolder(node) })
       const dir = resolveDir(nodes, node)
@@ -294,6 +297,7 @@ export function Explorer() {
   const serviceMenuItems = (svc: ServiceDef): MenuItem[] => {
     const running = svcStates[svc.id]?.status === 'running'
     return [
+      { icon: 'view', label: 'Open page', onClick: () => openService(svc.id, svc.name || 'Service') },
       running
         ? { icon: 'stop', label: 'Stop', onClick: () => void actSvc(svc.id, () => ipc.svcStop(svc.id)) }
         : { icon: 'run', label: 'Start', onClick: () => void actSvc(svc.id, () => requestStartService(svc)) },
@@ -335,8 +339,8 @@ export function Explorer() {
         </span>
         <button
           className="min-w-0 flex-1 cursor-pointer truncate text-left hover:text-ink"
-          title="Click to edit service"
-          onClick={() => openEditor('service', svc.id, svc.name || 'Service')}
+          title="Open the service page"
+          onClick={() => openService(svc.id, svc.name || 'Service')}
         >
           {svc.name}
         </button>
@@ -510,7 +514,13 @@ export function Explorer() {
             selected ? 'bg-indigo-500/20 text-ink' : 'text-body hover:bg-hover'
           } ${renaming ? '' : 'cursor-pointer'}`}
           style={{ paddingLeft: `${depth * 14 + 6}px` }}
-          onClick={() => !renaming && setSelectedNode(node.id)}
+          onClick={() => {
+            if (renaming) return
+            setSelectedNode(node.id)
+            // A project's click opens its dashboard (the space page); settings
+            // stay on double-click / context menu.
+            if (node.kind === 'project') openSpace(node.id, node.name)
+          }}
           onDoubleClick={() => {
             if (renaming) return
             if (node.kind === 'project' || node.kind === 'folder') openNodeSetup(node.id, node.name)

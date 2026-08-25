@@ -85,6 +85,7 @@ export function openEditor(kind: EditorKind, id: number, _title?: string, projec
 /// a main-area tab.
 export function openSpace(projectId: number, title: string) {
   if (!api) return
+  useApp.getState().setRailView('projects')
   const id = `space-${projectId}`
   const existing = api.getPanel(id)
   if (existing) {
@@ -95,16 +96,34 @@ export function openSpace(projectId: number, title: string) {
   api.getPanel(id)?.api.setActive()
 }
 
+/// Open (or focus) the service page — live status, config, run history and
+/// log tail for one service — as a document tab.
+export function openService(serviceId: number, title: string) {
+  if (!api) return
+  useApp.getState().setRailView('projects')
+  const id = `service-${serviceId}`
+  const existing = api.getPanel(id)
+  if (existing) {
+    existing.api.setActive()
+    return
+  }
+  addToMain({ id, component: 'service-detail', title, params: { id: serviceId } })
+  api.getPanel(id)?.api.setActive()
+}
+
 /// Open (or focus) the setup page for a project or folder as a main tab.
 export function openNodeSetup(nodeId: number, title: string) {
   if (!api) return
+  useApp.getState().setRailView('projects')
   const id = `node-setup-${nodeId}`
   const existing = api.getPanel(id)
   if (existing) {
     existing.api.setActive()
     return
   }
-  addToMain({ id, component: 'node-setup', title, params: { id: nodeId } })
+  // "· settings" keeps this tab distinguishable from the project's dashboard
+  // tab, which carries the bare project name.
+  addToMain({ id, component: 'node-setup', title: `${title} · settings`, params: { id: nodeId } })
 }
 
 export function openTerminalPanel(ptyId: number, title: string) {

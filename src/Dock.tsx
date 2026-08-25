@@ -11,6 +11,7 @@ import {
 } from 'dockview-react'
 import { NodeSetupPage } from './components/editors/NodeSetupPage'
 import { SpaceDetailPage } from './components/SpaceDetailPage'
+import { ServiceDetailPage } from './components/ServiceDetailPage'
 import { TerminalView } from './components/TerminalView'
 import { TerminalTab } from './components/TerminalTab'
 import { useEffect, useState } from 'react'
@@ -101,6 +102,7 @@ function Welcome() {
 const components = {
   'node-setup': (props: IDockviewPanelProps<{ id: number }>) => <NodeSetupPage {...props} />,
   'space-detail': (props: IDockviewPanelProps<{ id: number }>) => <SpaceDetailPage {...props} />,
+  'service-detail': (props: IDockviewPanelProps<{ id: number }>) => <ServiceDetailPage {...props} />,
   welcome: () => <Welcome />,
   terminal: (props: IDockviewPanelProps<{ ptyId: number }>) => (
     <TerminalView ptyId={props.params.ptyId} />

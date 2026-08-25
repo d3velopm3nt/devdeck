@@ -6,28 +6,10 @@ import { useEffect, useMemo, useState } from 'react'
 import * as ipc from '../lib/ipc'
 import { useApp } from '../store'
 import { Icon, type IconName } from '../lib/icons'
-import { openSpace } from '../lib/dock'
+import { openService, openSpace } from '../lib/dock'
 import { findNode, projectOf, subtreeIds } from '../lib/tree'
+import { fmtAgo, fmtUptime } from '../lib/time'
 import type { ProcStat } from '../lib/types'
-
-const fmtUptime = (startedAt: number | null | undefined, now: number): string => {
-  if (!startedAt) return ''
-  const s = Math.max(0, Math.floor((now - startedAt) / 1000))
-  if (s < 60) return `${s}s`
-  const m = Math.floor(s / 60)
-  if (m < 60) return `${m}m`
-  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`
-}
-
-const fmtAgo = (ts: number, now: number): string => {
-  const s = Math.max(0, Math.floor((now - ts) / 1000))
-  if (s < 60) return 'now'
-  const m = Math.floor(s / 60)
-  if (m < 60) return `${m}m ago`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h}h ago`
-  return `${Math.floor(h / 24)}d ago`
-}
 
 function StatChip({ k, v, sub, tone }: { k: string; v: React.ReactNode; sub?: string; tone?: string }) {
   return (
@@ -165,10 +147,20 @@ export function Home() {
               return (
                 <div key={`run-${s.id}`} className="mb-1.5 flex items-center gap-2.5 rounded-lg border border-line bg-raise/40 px-2.5 py-2 last:mb-0">
                   <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-                  <button className="text-[12.5px] font-semibold text-ink hover:underline" onClick={() => jumpToService(s.project_id)}>
+                  <button
+                    className="text-[12.5px] font-semibold text-ink hover:underline"
+                    title="Open the service page"
+                    onClick={() => openService(s.id, s.name)}
+                  >
                     {s.name}
                   </button>
-                  <span className="text-[11px] font-medium text-indigo-400">{projName(s.project_id)}</span>
+                  <button
+                    className="text-[11px] font-medium text-indigo-400 hover:underline"
+                    title="Open the project dashboard"
+                    onClick={() => jumpToService(s.project_id)}
+                  >
+                    {projName(s.project_id)}
+                  </button>
                   <span className="ml-auto flex items-center gap-2.5 font-mono text-[10.5px] text-muted">
                     {port != null && <span className="text-indigo-300">:{port}</span>}
                     <span>{fmtUptime(svcStates[s.id]?.started_at, now)}</span>
@@ -210,7 +202,13 @@ export function Home() {
             {idle.map((s) => (
               <div key={`idle-${s.id}`} className="mb-1.5 flex items-center gap-2.5 rounded-lg border border-line/60 px-2.5 py-2 opacity-80 last:mb-0">
                 <span className="h-2 w-2 rounded-full bg-faint/60" />
-                <span className="text-[12.5px] font-medium text-dim">{s.name}</span>
+                <button
+                  className="text-[12.5px] font-medium text-dim hover:text-ink hover:underline"
+                  title="Open the service page"
+                  onClick={() => openService(s.id, s.name)}
+                >
+                  {s.name}
+                </button>
                 <span className="text-[11px] text-muted">{projName(s.project_id)}</span>
                 <span className="ml-auto font-mono text-[10.5px] text-faint">idle</span>
                 <button

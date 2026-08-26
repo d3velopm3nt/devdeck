@@ -160,8 +160,11 @@ export interface AppState {
   refreshStashStatus: () => Promise<void>
   setStashFilters: (patch: Partial<StashFilters>) => void
   selectStashItem: (id: number | null) => Promise<void>
-  /** A clip was just captured — re-read the list if the view is showing. */
+  /** A clip was just captured — re-read the list if the view is showing.
+   *  Debounced, so a bulk import doesn't requery once per file. */
   ingestStashItem: () => void
+  /** The debounced body of `ingestStashItem`; not called directly. */
+  doIngest: () => void
   toggleStashPin: (id: number) => Promise<void>
   deleteStashItem: (id: number) => Promise<void>
   setStashCapture: (enabled: boolean) => Promise<void>
@@ -209,6 +212,9 @@ const bestPort = (ports?: number[]): number | null => {
 // Services we're currently writing an auto-detected port to (in-flight guard so
 // the 2s stats tick doesn't queue duplicate saves).
 const adoptingPorts = new Set<number>()
+
+/** Trailing-edge timer for `ingestStashItem`. */
+let ingestTimer: number | undefined
 
 const RAIL_KEY = 'devdeck.railView'
 const loadRailView = (): RailView => {
@@ -472,6 +478,13 @@ export const useApp = create<AppState>((set, get) => ({
   },
   ingestStashItem: () => {
     if (get().railView !== 'stash') return
+    // Coalesce: importing a folder of screenshots fires one event per file,
+    // and re-running the whole query per event would thrash the list while
+    // you are trying to read it.
+    window.clearTimeout(ingestTimer)
+    ingestTimer = window.setTimeout(() => get().doIngest(), 250)
+  },
+  doIngest: () => {
     void get().refreshStash()
     void get().refreshStashCounts()
     // Another window (the capture toast) may have edited the open item. Patch

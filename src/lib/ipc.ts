@@ -277,10 +277,16 @@ export const stashSetOption = (key: 'toast' | 'auto_paste', value: boolean) =>
   invoke<void>('stash_set_option', { key, value })
 /** Prune now using the saved window. Resolves with the number removed. */
 export const stashPrune = () => invoke<number>('stash_prune')
+/** Open a linked screenshot in the default image viewer. */
+export const stashOpenFile = (id: number) => invoke<void>('stash_open_file', { id })
 /** Save a retention window (days; 0 = forever) and apply it immediately. */
 export const stashSetRetention = (days: number) => invoke<number>('stash_set_retention', { days })
 export function onStashItem(cb: (item: StashItem) => void): Promise<UnlistenFn> {
   return listen<StashItem>('stash:item', (e) => cb(e.payload))
+}
+/** A screenshot landed in the watched folder and was stashed. */
+export function onStashShot(cb: () => void): Promise<UnlistenFn> {
+  return listen('stash:shot', () => cb())
 }
 
 // ---- stash copy / paste ----

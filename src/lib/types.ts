@@ -132,11 +132,23 @@ export interface Recent {
 // ---- stash ----
 
 /** Smart type detection (backend classifier). */
-export type StashType = 'json' | 'sql' | 'url' | 'path' | 'jwt' | 'uuid' | 'hex' | 'stacktrace' | 'text'
+export type StashType =
+  | 'json'
+  | 'sql'
+  | 'url'
+  | 'path'
+  | 'jwt'
+  | 'uuid'
+  | 'hex'
+  | 'stacktrace'
+  | 'text'
+  /** Screenshots. Their `content` is the OCR text, so they're searchable. */
+  | 'image'
 
 export interface StashItem {
   id: number
-  /** clip = captured from the clipboard · note = you wrote it here. */
+  /** clip = captured from the clipboard · note = you wrote it ·
+   *  screenshot = a file Windows saved, linked here. */
   kind: string
   item_type: StashType
   title: string
@@ -146,6 +158,10 @@ export interface StashItem {
   /** Your own text about this clip. Indexed for search. */
   note: string
   tags: string[]
+  /** Screenshots only: where the image lives. Linked, never copied. */
+  file_path: string
+  /** Screenshots only: small data: URI for the card. */
+  thumb: string
   preview: string
   bytes: number
   project_id: number | null
@@ -165,6 +181,7 @@ export type StashFilter =
   | 'all'
   | 'pinned'
   | 'notes'
+  | 'screenshots'
   | 'clips'
   | 'code'
   | 'links'
@@ -192,6 +209,7 @@ export interface StashCounts {
   all: number
   pinned: number
   notes: number
+  screenshots: number
   clips: number
   code: number
   links: number

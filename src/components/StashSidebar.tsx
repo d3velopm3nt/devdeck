@@ -107,6 +107,14 @@ export function StashSidebar() {
           onClick={() => pickGroup('pinned')}
         />
         <Row
+          icon="image"
+          label="Screenshots"
+          tint="text-ok"
+          n={countFor(counts, 'screenshots')}
+          active={f.filter === 'screenshots'}
+          onClick={() => pickGroup('screenshots')}
+        />
+        <Row
           icon="note"
           label="Notes"
           tint="text-indigo-300"

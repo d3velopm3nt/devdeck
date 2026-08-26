@@ -29,6 +29,7 @@ src-tauri/src/
   machine.rs   winget/scoop package management
   setup.rs     project setup, tool detection, repo clone
   stash.rs     clipboard capture (message-only window), classifier, clip vault
+  shots.rs     screenshot watching, Windows OCR, thumbnails
 src/
   App.tsx           shell: top bar → rail → sidebar → surface → bottom bar
   shell/Rail.tsx    primary navigation
@@ -118,6 +119,9 @@ artifacts for release builds only, so CI/PR builds don't need the key.
   tsconfig is references-only (`"files": []`), so `-p tsconfig.json` compiles
   nothing and exits 0 no matter what is broken — a green tick that means
   nothing. `tsc -b` (or `-p tsconfig.app.json`) is the real check.
+- WinRT (`Windows.Media.Ocr`) needs an MTA in the process and a **plain**
+  absolute path — `canonicalize()` returns a `\\?\`-prefixed one that the storage
+  APIs reject. Both failures look identical to "this image has no text".
 - Adding a Tauri **window** means adding its label to
   `capabilities/default.json`. Until you do, every `invoke`/`listen` from that
   window is silently denied and the window just sits there doing nothing.

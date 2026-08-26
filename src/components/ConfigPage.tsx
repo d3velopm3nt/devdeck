@@ -190,7 +190,8 @@ export function ConfigPage() {
           <p className="mt-1 text-[11px] leading-5 text-muted">
             <b>0 keeps everything forever.</b> Pruning only ever removes clips you never touched —
             anything <b>pinned</b>, <b>tagged</b>, carrying a <b>note</b>, or that you{' '}
-            <b>wrote as a note</b> is kept regardless of age.
+            <b>wrote as a note</b> is kept regardless of age. <b>Screenshots are never pruned</b>:
+            they point at files in your Pictures folder, which is what actually decides they exist.
           </p>
 
           <p className="mt-1.5 text-[11px] leading-5 text-muted">

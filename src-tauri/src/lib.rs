@@ -21,6 +21,7 @@ mod scan;
 mod seed;
 mod services;
 mod setup;
+mod shots;
 mod stash;
 
 use std::sync::{Arc, Mutex};
@@ -492,6 +493,7 @@ pub fn run() {
 
             monitor::spawn(app.handle().clone());
             stash::spawn(app.handle().clone());
+            shots::spawn(app.handle().clone());
 
             // Apply retention once on launch, so an app that's been closed for
             // a month still tidies up the moment it opens.
@@ -664,6 +666,7 @@ pub fn run() {
             stash::stash_remember_target,
             stash::stash_prune,
             stash::stash_set_retention,
+            stash::stash_open_file,
             toast_show,
             toast_hide,
             toast_focus,

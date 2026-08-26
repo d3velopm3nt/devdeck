@@ -184,11 +184,16 @@ pub fn open() -> Connection {
 pub const STASH_SCHEMA: &str = r#"
         CREATE TABLE IF NOT EXISTS stash_items (
             id INTEGER PRIMARY KEY,
-            kind TEXT NOT NULL DEFAULT 'clip',     -- clip | screenshot (phase 3)
+            kind TEXT NOT NULL DEFAULT 'clip',     -- clip | note | screenshot
             item_type TEXT NOT NULL DEFAULT 'text',-- json|sql|url|path|jwt|uuid|hex|stacktrace|text
             title TEXT NOT NULL DEFAULT '',
             content TEXT,                          -- NULL when is_secret = 1
             note TEXT NOT NULL DEFAULT '',         -- your own text, indexed for search
+            -- Screenshots: the image stays where Windows put it, so this is a
+            -- link, never a copy. `content` holds the OCR text instead, which
+            -- means the existing FTS triggers index it for free.
+            file_path TEXT NOT NULL DEFAULT '',
+            thumb TEXT NOT NULL DEFAULT '',        -- small data: URI for the list
             preview TEXT NOT NULL DEFAULT '',      -- redacted when is_secret = 1
             bytes INTEGER NOT NULL DEFAULT 0,
             hash TEXT NOT NULL DEFAULT '',         -- content fingerprint, for dedupe
@@ -307,6 +312,25 @@ fn migrate(conn: &Connection) {
             [],
         );
     }
+
+    // Screenshots: link + thumbnail, added after the vault shipped.
+    for (col, ddl) in [
+        ("file_path", "ALTER TABLE stash_items ADD COLUMN file_path TEXT NOT NULL DEFAULT ''"),
+        ("thumb", "ALTER TABLE stash_items ADD COLUMN thumb TEXT NOT NULL DEFAULT ''"),
+    ] {
+        if conn
+            .prepare(&format!("SELECT {col} FROM stash_items LIMIT 1"))
+            .is_err()
+        {
+            let _ = conn.execute(ddl, []);
+        }
+    }
+    // One row per screenshot file, so a rescan can't stash the same one twice.
+    let _ = conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS stash_file ON stash_items(file_path)
+           WHERE file_path <> ''",
+        [],
+    );
 
     // Reshape the full-text index when its column set changes. Dropping the
     // triggers first matters: they reference stash_fts, and a rebuild against

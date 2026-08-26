@@ -314,6 +314,7 @@ export default function App() {
       // refreshes if it's on screen.
       ipc.onStashItem(() => useApp.getState().ingestStashItem()),
       ipc.onStashChanged(() => useApp.getState().ingestStashItem()),
+      ipc.onStashShot(() => useApp.getState().ingestStashItem()),
     ]
     return () => {
       for (const s of subs) void s.then((un) => un())

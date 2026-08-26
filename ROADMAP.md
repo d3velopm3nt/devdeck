@@ -169,9 +169,37 @@ Hard-won notes from building the toast:
 Nothing, except **SQL → save as query**, which is parked with Connections
 (see above). Phase 2 is otherwise done.
 
-### Stash Phase 3 — screenshots
-- [ ] Watch the screenshot folder, store links not copies, thumbnails
-- [ ] OCR text into FTS (Windows has built-in OCR)
+### Stash Phase 3 — screenshots ✅ mostly built
+- [x] Watch the screenshot folder, store links not copies, thumbnails
+- [x] OCR text into FTS (Windows has built-in OCR)
+- [ ] **Win+Shift+S snips** — not captured. Windows saves a snip *nowhere*;
+      it exists only on the clipboard, so "links not copies" cannot apply and
+      we'd have to write the bytes ourselves. Deliberately unresolved: writing
+      every ephemeral snip into your Pictures folder would mean retention
+      later deleting files from Pictures, which shouldn't happen silently.
+      Decide where the bytes live before building this.
+- [x] **Everything already in the folder is imported**, newest first, dated by
+      the file rather than by when we noticed it — so old screenshots slot into
+      the timeline instead of all landing at the top as "just now".
+
+How it works:
+- **It points at the folder; it is not a two-way mirror.** Deleting a picture
+  doesn't reach in and delete rows, and nothing is ever written into your
+  Pictures folder. The folder is where the images live; the vault is an index
+  over them.
+- **Screenshots are exempt from retention.** They link to files that still
+  exist, and most are older than any sane window — pruning would import your
+  history and then quietly delete it again a moment later.
+- `shots.rs` watches the Screenshots known folder (read from the registry, so
+  a relocated folder still works) with `FindFirstChangeNotification` — asleep
+  in the kernel until the directory changes, same principle as the clipboard.
+- The row stores `file_path` (a link — **Stash never copies or deletes your
+  images**, retention removes only the row), a small JPEG `thumb` data URI for
+  the card, and the **OCR text in `content`**, which means the existing FTS
+  triggers index it for free. Searching a word that only appears inside an
+  image just works.
+- OCR that *fails* and an image with *no text* say different things, in the
+  preview and in the Logs. They are not the same event and must never look it.
 
 ---
 

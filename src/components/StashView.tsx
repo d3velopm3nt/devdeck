@@ -22,6 +22,7 @@ const TYPE_STYLE: Record<StashType | 'secret', { cls: string; icon: IconName }> 
   uuid: { cls: 'bg-white/5 text-dim', icon: 'clip' },
   hex: { cls: 'bg-white/5 text-dim', icon: 'clip' },
   text: { cls: 'bg-white/5 text-dim', icon: 'clip' },
+  image: { cls: 'bg-emerald-500/12 text-ok', icon: 'image' },
   secret: { cls: 'bg-amber-500/15 text-warn', icon: 'secret' },
 }
 
@@ -71,10 +72,25 @@ function Card({
           {fmtAgo(item.created_at, now)}
         </span>
       </div>
-      <div className="max-h-[36px] overflow-hidden whitespace-pre-wrap break-all font-mono text-[11px] leading-[1.55] text-dim">
-        {item.preview}
-        {item.is_secret && <span className="ml-2 text-muted">(value not stored)</span>}
-      </div>
+      {item.thumb ? (
+        <>
+          <img
+            src={item.thumb}
+            alt=""
+            className="max-h-[104px] w-full rounded border border-line object-cover object-top"
+          />
+          {item.preview && item.preview !== 'screenshot' && (
+            <div className="mt-1.5 max-h-[24px] overflow-hidden font-mono text-[10.5px] leading-[1.4] text-muted">
+              {item.preview.split('\n')[0]}
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="max-h-[36px] overflow-hidden whitespace-pre-wrap break-all font-mono text-[11px] leading-[1.55] text-dim">
+          {item.preview}
+          {item.is_secret && <span className="ml-2 text-muted">(value not stored)</span>}
+        </div>
+      )}
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
         {item.project_name && (
           <span className="rounded-full border border-indigo-500/30 px-1.5 py-[1px] font-mono text-[9.5px] text-indigo-300">
@@ -192,8 +208,10 @@ function SmartActions({ item, onError }: { item: StashItem; onError: (msg: strin
   useEffect(() => setJwt(null), [item.id])
 
   const content = item.content ?? ''
-  // A flagged clip has no stored value, so there is nothing to act on.
-  if (item.is_secret || !content.trim()) return null
+  // A flagged clip has no stored value, so there is nothing to act on. A
+  // screenshot may legitimately have no text and still be actionable.
+  if (item.is_secret) return null
+  if (!content.trim() && item.kind !== 'screenshot') return null
 
   const run = (fn: () => void | Promise<void>) => () => {
     onError('')
@@ -226,6 +244,20 @@ function SmartActions({ item, onError }: { item: StashItem; onError: (msg: strin
       icon: 'secret',
       title: 'Read the header and claims (shown here only, never stored)',
       onClick: run(() => setJwt(jwt ? null : decodeJwt(content))),
+    })
+  }
+  if (item.kind === 'screenshot' && item.file_path) {
+    acts.push({
+      label: 'Open',
+      icon: 'image',
+      title: 'Open the image in your default viewer',
+      onClick: run(() => ipc.stashOpenFile(item.id)),
+    })
+    acts.push({
+      label: 'Reveal',
+      icon: 'reveal',
+      title: 'Show the file in Explorer',
+      onClick: run(() => ipc.revealInExplorer(item.file_path)),
     })
   }
   if (item.item_type === 'url') {
@@ -480,6 +512,29 @@ function Detail({ item, now }: { item: StashItem; now: number }) {
               </div>
             )}
           </>
+        ) : item.thumb ? (
+          <div>
+            <img
+              src={item.thumb}
+              alt={item.title}
+              className="w-full rounded-lg border border-line bg-panel"
+            />
+            {item.content?.trim() ? (
+              <>
+                <div className="mb-1 mt-3 font-mono text-[9px] uppercase tracking-[0.07em] text-muted">
+                  Text found in this image
+                </div>
+                <pre className="whitespace-pre-wrap break-words rounded-lg border border-line bg-panel px-3.5 py-3 font-mono text-[12px] leading-[1.7] text-body">
+                  {item.content}
+                </pre>
+              </>
+            ) : (
+              <div className="mt-3 text-[11.5px] text-muted">
+                No text was found in this image, so there's nothing to search on beyond its
+                name, project and any note you add.
+              </div>
+            )}
+          </div>
         ) : item.is_secret ? (
           <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3.5 py-3 text-[12px] leading-[1.6] text-body">
             <div className="mb-1 font-semibold text-warn">

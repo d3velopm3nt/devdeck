@@ -425,6 +425,12 @@ pub struct StashItem {
     /// Your own text about this clip. Indexed for search.
     pub note: String,
     pub tags: Vec<String>,
+    /// Screenshots only: where the image actually lives. We link, never copy,
+    /// so deleting the stash row leaves your picture untouched.
+    pub file_path: String,
+    /// Screenshots only: a small data: URI, so the list can draw itself
+    /// without loading full-size images.
+    pub thumb: String,
     pub preview: String,
     pub bytes: i64,
     pub project_id: Option<i64>,
@@ -446,7 +452,8 @@ const LIST_COLS: &str = "i.id, i.kind, i.item_type, i.title, i.preview, i.bytes,
      i.project_name, i.workspace_name, i.source_app, i.is_secret, i.secret_reason, i.pinned, \
      i.created_at, i.used_count, i.note, \
      (SELECT group_concat(g.name, char(31)) FROM stash_item_tags t \
-        JOIN stash_tags g ON g.id = t.tag_id WHERE t.item_id = i.id) AS tags";
+        JOIN stash_tags g ON g.id = t.tag_id WHERE t.item_id = i.id) AS tags, \
+     i.file_path, i.thumb";
 
 fn row_to_item(row: &rusqlite::Row, with_content: bool) -> rusqlite::Result<StashItem> {
     let mut tags: Vec<String> = row
@@ -460,9 +467,11 @@ fn row_to_item(row: &rusqlite::Row, with_content: bool) -> rusqlite::Result<Stas
         kind: row.get(1)?,
         item_type: row.get(2)?,
         title: row.get(3)?,
-        content: if with_content { row.get(17)? } else { None },
+        content: if with_content { row.get(19)? } else { None },
         note: row.get(15)?,
         tags,
+        file_path: row.get(17)?,
+        thumb: row.get(18)?,
         preview: row.get(4)?,
         bytes: row.get(5)?,
         project_id: row.get(6)?,
@@ -631,6 +640,8 @@ pub fn record(app: &tauri::AppHandle, cap: Captured) -> Option<StashItem> {
         content: None,
         note: String::new(),
         tags: Vec::new(),
+        file_path: String::new(),
+        thumb: String::new(),
         preview,
         bytes,
         project_id: ctx.project_id,
@@ -760,6 +771,7 @@ fn list_query(conn: &rusqlite::Connection, q: &StashQuery) -> Result<Vec<StashIt
         "pinned" => wheres.push("i.pinned = 1".into()),
         "secrets" => wheres.push("i.is_secret = 1".into()),
         "notes" => wheres.push("i.kind = 'note'".into()),
+        "screenshots" => wheres.push("i.kind = 'screenshot'".into()),
         other => {
             if let Some(types) = types_in_group(other) {
                 let holes = vec!["?"; types.len()].join(", ");
@@ -835,6 +847,7 @@ pub struct StashCounts {
     pub all: i64,
     pub pinned: i64,
     pub notes: i64,
+    pub screenshots: i64,
     pub clips: i64,
     pub code: i64,
     pub links: i64,
@@ -914,8 +927,47 @@ pub fn stash_counts(db: tauri::State<Db>) -> Result<StashCounts, String> {
             |r| r.get(0),
         )
         .unwrap_or(0);
+    counts.screenshots = conn
+        .query_row(
+            "SELECT COUNT(*) FROM stash_items WHERE kind = 'screenshot'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
     counts.tags = tag_counts(&conn)?;
     Ok(counts)
+}
+
+/// Open a screenshot in whatever views images on this machine. Restricted to
+/// paths this vault already links to, so it can't be turned into a generic
+/// "open anything" by a crafted argument.
+#[tauri::command]
+pub fn stash_open_file(db: tauri::State<Db>, id: i64) -> Result<(), String> {
+    let conn = db.0.lock().unwrap();
+    let path: String = conn
+        .query_row(
+            "SELECT file_path FROM stash_items WHERE id = ?1",
+            params![id],
+            |r| r.get(0),
+        )
+        .map_err(err)?;
+    drop(conn);
+    if path.is_empty() {
+        return Err("This item isn't a file.".into());
+    }
+    if !std::path::Path::new(&path).exists() {
+        return Err(format!("That file is gone: {path}"));
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        std::process::Command::new("explorer.exe")
+            .arg(&path)
+            .creation_flags(0x0800_0000)
+            .spawn()
+            .map_err(err)?;
+    }
+    Ok(())
 }
 
 // ---------- retention ----------
@@ -925,6 +977,11 @@ pub fn stash_counts(db: tauri::State<Db>) -> Result<StashCounts, String> {
 /// something you tagged is worse than one that keeps too much, so pinned
 /// clips, notes you wrote yourself, anything tagged, and anything with a note
 /// attached all survive regardless of age.
+///
+/// Screenshots are exempt outright. They're links to files that still exist
+/// in your Pictures folder, and most are older than any sane retention window
+/// -- pruning them would import your history and then quietly delete it again.
+/// The folder decides what exists; retention only bounds captured text.
 ///
 /// `days <= 0` means keep everything. Returns how many rows went.
 pub fn prune(conn: &rusqlite::Connection, days: i64) -> Result<usize, String> {
@@ -937,6 +994,7 @@ pub fn prune(conn: &rusqlite::Connection, days: i64) -> Result<usize, String> {
             "DELETE FROM stash_items
               WHERE pinned = 0
                 AND kind <> 'note'
+                AND kind <> 'screenshot'
                 AND note = ''
                 AND created_at < ?1
                 AND id NOT IN (SELECT item_id FROM stash_item_tags)",
@@ -1498,6 +1556,14 @@ pub fn stash_set_option(
     };
     let conn = db.0.lock().unwrap();
     crate::db::setting_set_conn(&conn, setting, if value { "1" } else { "0" })
+}
+
+/// The project the UI is sitting in right now, so other capture sources
+/// (screenshots) can stamp their rows with the same context clips get.
+pub fn current_context(app: &tauri::AppHandle) -> Ctx {
+    app.try_state::<std::sync::Arc<StashState>>()
+        .map(|s| s.context())
+        .unwrap_or_default()
 }
 
 /// Show a Tauri window without taking focus. Used for the capture toast: it
@@ -2272,6 +2338,27 @@ mod tests {
         assert!(left.contains(&3), "noted survives");
         assert!(left.contains(&note.id), "a note you wrote survives");
         assert!(!left.contains(&4), "the untouched clip is gone");
+    }
+
+    #[test]
+    fn retention_never_prunes_screenshots() {
+        let conn = seeded();
+        let old_ts = now_millis() - 400 * 24 * 60 * 60 * 1000; // over a year old
+        conn.execute(
+            "INSERT INTO stash_items
+                (kind, item_type, title, content, preview, file_path, created_at)
+             VALUES ('screenshot', 'image', 'old.png', 'some ocr text', 'ocr',
+                     'C:/Users/x/Pictures/Screenshots/old.png', ?1)",
+            params![old_ts],
+        )
+        .unwrap();
+        conn.execute("UPDATE stash_items SET created_at = ?1 WHERE kind = 'clip'", params![old_ts])
+            .unwrap();
+
+        prune(&conn, 30).unwrap();
+        let left = list_query(&conn, &q("screenshots")).unwrap();
+        assert_eq!(left.len(), 1, "a linked screenshot must survive any age");
+        assert_eq!(left[0].file_path, "C:/Users/x/Pictures/Screenshots/old.png");
     }
 
     #[test]

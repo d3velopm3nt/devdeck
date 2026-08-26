@@ -71,6 +71,8 @@ import {
   List,
   StickyNote,
   Tag,
+  Database,
+  Play as PlayIcon,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -140,6 +142,8 @@ export type IconName =
   | 'list'
   | 'note'
   | 'tag'
+  | 'database'
+  | 'query'
 
 const REGISTRY: Record<IconName, LucideIcon> = {
   workspace: Boxes,
@@ -205,6 +209,8 @@ const REGISTRY: Record<IconName, LucideIcon> = {
   list: List,
   note: StickyNote,
   tag: Tag,
+  database: Database,
+  query: PlayIcon,
 }
 
 export function iconFor(name: string): LucideIcon | undefined {

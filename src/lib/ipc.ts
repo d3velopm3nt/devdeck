@@ -14,6 +14,10 @@ import type {
   Recent,
   ServiceDef,
   ShellDef,
+  ConnDef,
+  QueryResult,
+  QueryRun,
+  SavedQuery,
   StashCounts,
   StashEdit,
   StashItem,
@@ -228,6 +232,23 @@ export const appUpdate = () => invoke<void>('app_update')
 export const recentBump = (kind: 'command' | 'service', refId: number) =>
   invoke<void>('recent_bump', { kind, refId })
 export const recentsList = () => invoke<Recent[]>('recents_list')
+
+// ---- connections ----
+export const connList = () => invoke<ConnDef[]>('conn_list')
+export const connSave = (def: ConnDef) => invoke<number>('conn_save', { def })
+export const connDelete = (id: number) => invoke<void>('conn_delete', { id })
+/** Store a password in Windows Credential Manager. '' removes it. */
+export const connSetPassword = (id: number, password: string) =>
+  invoke<void>('conn_set_password', { id, password })
+export const connClearPassword = (id: number) => invoke<void>('conn_clear_password', { id })
+/** `select 1` against the connection — reachable or not, and why. */
+export const connTest = (id: number) => invoke<QueryResult>('conn_test', { id })
+export const connRun = (id: number, sql: string) => invoke<QueryResult>('conn_run', { id, sql })
+export const connQueriesList = () => invoke<SavedQuery[]>('conn_queries_list')
+export const connQuerySave = (query: SavedQuery) => invoke<number>('conn_query_save', { query })
+export const connQueryDelete = (id: number) => invoke<void>('conn_query_delete', { id })
+export const connRunsList = (connectionId: number, limit = 50) =>
+  invoke<QueryRun[]>('conn_runs_list', { connectionId, limit })
 
 // ---- stash ----
 export const stashList = (q: Partial<StashQuery>) =>

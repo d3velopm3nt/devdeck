@@ -129,6 +129,59 @@ export interface Recent {
   count: number
 }
 
+// ---- connections ----
+
+export type ConnEngine = 'postgres' | 'sqlite' | 'sqlserver'
+
+export interface ConnDef {
+  id: number
+  project_id: number | null
+  name: string
+  engine: ConnEngine
+  host: string
+  port: number | null
+  /** For sqlite this is the file path. */
+  database: string
+  username: string
+  sort: number
+  created_at: number
+  /** Whether a password is stored. Never the password itself — there is no
+   *  command that reads one back out. */
+  has_password: boolean
+}
+
+export interface QueryResult {
+  columns: string[]
+  rows: string[][]
+  row_count: number
+  /** True when the grid was cut short. Never a silent truncation. */
+  truncated: boolean
+  ms: number
+  /** Empty on success. */
+  error: string
+  /** The missing client binary, so the UI can offer to install it. */
+  missing_tool: string
+}
+
+export interface SavedQuery {
+  id: number
+  connection_id: number
+  name: string
+  sql: string
+  created_at: number
+}
+
+export interface QueryRun {
+  id: number
+  connection_id: number
+  sql: string
+  ok: boolean
+  row_count: number
+  ms: number
+  error: string
+  ran_at: number
+}
+
 // ---- stash ----
 
 /** Smart type detection (backend classifier). */

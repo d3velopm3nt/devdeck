@@ -11,6 +11,7 @@
 //! New capability areas (git, docker, ssh, plugins…) slot in as new
 //! modules with their own commands/events without touching existing ones.
 
+mod conn;
 mod creds;
 mod db;
 mod git;
@@ -680,6 +681,17 @@ pub fn run() {
             stash::stash_prune,
             stash::stash_set_retention,
             stash::stash_open_file,
+            conn::conn_list,
+            conn::conn_save,
+            conn::conn_delete,
+            conn::conn_set_password,
+            conn::conn_clear_password,
+            conn::conn_test,
+            conn::conn_run,
+            conn::conn_queries_list,
+            conn::conn_query_save,
+            conn::conn_query_delete,
+            conn::conn_runs_list,
             toast_show,
             toast_hide,
             toast_focus,

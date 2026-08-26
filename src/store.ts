@@ -15,6 +15,9 @@ import type {
   Recent,
   ServiceDef,
   ShellDef,
+  ConnDef,
+  QueryResult,
+  SavedQuery,
   StashCounts,
   StashEdit,
   StashFilter,
@@ -27,7 +30,7 @@ import type {
 const LOG_UI_LIMIT = 5000
 
 export type Theme = 'dark' | 'light'
-export type RailView = 'home' | 'projects' | 'stash' | 'machine' | 'settings'
+export type RailView = 'home' | 'projects' | 'stash' | 'connections' | 'machine' | 'settings'
 export type BottomTab = 'logs' | 'processes'
 
 /** What the Stash view is currently showing. `noProject` narrows to clips
@@ -176,6 +179,26 @@ export interface AppState {
   addStashTags: (id: number, input: string) => Promise<void>
   removeStashTag: (id: number, name: string) => Promise<void>
 
+  // Connections — the SQL layer.
+  connections: ConnDef[]
+  connQueries: SavedQuery[]
+  connSelectedId: number | null
+  connSql: string
+  connResult: QueryResult | null
+  connRunning: boolean
+  /** Reachability per connection, shown the way service status is. */
+  connStatus: Record<number, 'ok' | 'bad' | 'unknown' | 'testing'>
+  /** Which connection the editor sheet is on (0 = new), or null when closed. */
+  connEditing: number | null
+  refreshConnections: () => Promise<void>
+  refreshConnQueries: () => Promise<void>
+  selectConnection: (id: number | null) => Promise<void>
+  setConnSql: (sql: string) => void
+  runConnQuery: () => Promise<void>
+  testConnection: (id: number) => Promise<void>
+  openConnEditor: (id: number | null) => void
+  closeConnEditor: () => void
+
   // Machine Setup. Held here rather than in the component because
   // `machine_status` shells out to winget and scoop and takes seconds — with
   // component-local state, every trip to another rail view and back paid that
@@ -219,7 +242,9 @@ let ingestTimer: number | undefined
 const RAIL_KEY = 'devdeck.railView'
 const loadRailView = (): RailView => {
   const v = localStorage.getItem(RAIL_KEY)
-  return v === 'projects' || v === 'stash' || v === 'machine' || v === 'settings' ? v : 'home'
+  return v === 'projects' || v === 'stash' || v === 'connections' || v === 'machine' || v === 'settings'
+    ? v
+    : 'home'
 }
 
 const AW_KEY = 'devdeck.activeWorkspace'
@@ -394,6 +419,8 @@ export const useApp = create<AppState>((set, get) => ({
     })
     document.documentElement.dataset.theme = savedTheme === 'light' ? 'light' : 'dark'
     void get().refreshGit()
+    void get().refreshConnections()
+    void get().refreshConnQueries()
   },
 
   appendLog: (e) =>
@@ -556,6 +583,70 @@ export const useApp = create<AppState>((set, get) => ({
     }))
     await Promise.all([get().refreshStash(), get().refreshStashCounts()])
   },
+
+  connections: [],
+  connQueries: [],
+  connSelectedId: null,
+  connSql: '',
+  connResult: null,
+  connRunning: false,
+  connStatus: {},
+  connEditing: null,
+
+  refreshConnections: async () => {
+    const connections = await ipc.connList()
+    set({ connections })
+    // Keep the selection pointing at something real.
+    const { connSelectedId } = get()
+    if (connSelectedId != null && !connections.some((c) => c.id === connSelectedId)) {
+      await get().selectConnection(connections[0]?.id ?? null)
+    } else if (connSelectedId == null && connections.length > 0) {
+      await get().selectConnection(connections[0].id)
+    }
+  },
+  refreshConnQueries: async () => set({ connQueries: await ipc.connQueriesList() }),
+  selectConnection: async (id) => {
+    set({ connSelectedId: id, connResult: null })
+    if (id != null) await get().refreshConnQueries()
+  },
+  setConnSql: (connSql) => set({ connSql }),
+  runConnQuery: async () => {
+    const { connSelectedId, connSql, connRunning } = get()
+    if (connSelectedId == null || !connSql.trim() || connRunning) return
+    set({ connRunning: true })
+    try {
+      const connResult = await ipc.connRun(connSelectedId, connSql)
+      // A failed query still tells us the connection is unreachable vs merely
+      // wrong, so only a transport-level failure flips the status dot.
+      set((st) => ({
+        connResult,
+        connStatus: connResult.missing_tool
+          ? { ...st.connStatus, [connSelectedId]: 'bad' }
+          : st.connStatus,
+      }))
+    } catch (e) {
+      set({
+        connResult: {
+          columns: [], rows: [], row_count: 0, truncated: false, ms: 0,
+          error: String(e), missing_tool: '',
+        },
+      })
+    } finally {
+      set({ connRunning: false })
+    }
+  },
+  testConnection: async (id) => {
+    set((st) => ({ connStatus: { ...st.connStatus, [id]: 'testing' } }))
+    try {
+      const r = await ipc.connTest(id)
+      set((st) => ({ connStatus: { ...st.connStatus, [id]: r.error ? 'bad' : 'ok' } }))
+      if (r.error) set({ connResult: r })
+    } catch {
+      set((st) => ({ connStatus: { ...st.connStatus, [id]: 'bad' } }))
+    }
+  },
+  openConnEditor: (connEditing) => set({ connEditing }),
+  closeConnEditor: () => set({ connEditing: null }),
 
   machinePkgs: [],
   machineWinget: [],

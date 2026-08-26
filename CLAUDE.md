@@ -30,6 +30,8 @@ src-tauri/src/
   setup.rs     project setup, tool detection, repo clone
   stash.rs     clipboard capture (message-only window), classifier, clip vault
   shots.rs     screenshot watching, Windows OCR, thumbnails
+  conn.rs      Connections: runs psql/sqlite3/sqlcmd, parses CSV, query history
+  creds.rs     Windows Credential Manager — the only place a password exists
 src/
   App.tsx           shell: top bar → rail → sidebar → surface → bottom bar
   shell/Rail.tsx    primary navigation
@@ -45,7 +47,7 @@ src/
 Navigation is **fixed chrome**, not dock panels — this removed a whole class of
 layout-corruption bugs:
 
-- **Rail** — Home · Projects · Stash · Machine · Settings (Connections lands here too)
+- **Rail** — Home · Projects · Stash · Connections · Machine · Settings
 - **Sidebar** — contextual; the Explorer tree on Projects, filters on Stash. No tab chrome.
 - **Surface** — dockview, hosting **only real documents**: terminals, space pages,
   service pages, project setup, welcome

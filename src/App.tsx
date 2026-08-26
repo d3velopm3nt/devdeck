@@ -10,6 +10,9 @@ import { Explorer } from './components/Explorer'
 import { MachineSetup } from './components/MachineSetup'
 import { StashSidebar } from './components/StashSidebar'
 import { StashView } from './components/StashView'
+import { ConnectionsSidebar } from './components/ConnectionsSidebar'
+import { ConnectionsView } from './components/ConnectionsView'
+import { ConnectionEditor } from './components/ConnectionEditor'
 import { ConfigPage } from './components/ConfigPage'
 import { Icon } from './lib/icons'
 import { tauriSelfUpdate } from './lib/updater'
@@ -488,6 +491,11 @@ export default function App() {
             <StashSidebar />
           </aside>
         )}
+        {railView === 'connections' && (
+          <aside className="w-[250px] shrink-0 overflow-hidden border-r border-line">
+            <ConnectionsSidebar />
+          </aside>
+        )}
         <main className="min-w-0 flex-1">
           {railView === 'home' && <Home />}
           {/* The Dock stays mounted (terminals live in it) — just hidden when
@@ -496,6 +504,7 @@ export default function App() {
             <Dock />
           </div>
           {railView === 'stash' && <StashView />}
+          {railView === 'connections' && <ConnectionsView />}
           {railView === 'machine' && <MachineSetup />}
           {railView === 'settings' && <ConfigPage />}
         </main>
@@ -524,8 +533,9 @@ export default function App() {
         <span>{app.hotkey} summons · local-first · SQLite</span>
       </div>
 
-      {/* Slide-over editor sheet */}
+      {/* Slide-over editor sheets */}
       <Sheet />
+      <ConnectionEditor />
 
       {/* Project Setup: prepare-to-run prompt */}
       {app.setupPrompt && (

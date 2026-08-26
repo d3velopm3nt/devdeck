@@ -9,6 +9,7 @@ const ITEMS: Array<{ view: RailView; icon: IconName; label: string }> = [
   { view: 'home', icon: 'home', label: 'Home' },
   { view: 'projects', icon: 'project', label: 'Projects' },
   { view: 'stash', icon: 'stash', label: 'Stash' },
+  { view: 'connections', icon: 'database', label: 'Connections' },
   { view: 'machine', icon: 'machine', label: 'Machine' },
 ]
 

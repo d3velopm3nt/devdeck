@@ -56,10 +56,12 @@ differentiator, it's smaller, and it has no dependency on Connections. The rever
 isn't true — Connections benefits from Stash existing, since SQL clips flow into
 it. Build order:
 
-1. **Stash Phase 1** — capture + vault (below)
-2. **Stash Phase 2** — widget paste surface + type actions
-3. **Connections** — the SQL layer
-4. **Stash Phase 3** — screenshots + OCR
+1. ~~**Stash Phase 1** — capture + vault~~ ✅
+2. ~~**Stash Phase 2** — widget paste surface + type actions~~ ✅
+3. ~~**Connections** — the SQL layer~~ ✅
+4. ~~**Stash Phase 3** — screenshots + OCR~~ ✅
+
+Remaining: Widget peek · Activity stream · business/distribution.
 
 ### Stash Phase 1 — capture + vault ✅ built
 - [x] `stash_items` table + FTS5 virtual table, migration in `db.rs`
@@ -207,18 +209,36 @@ How it works:
 
 Mocks live in `design/`. Open them in a browser; they're clickable.
 
-### Connections — the SQL layer · `design/shell-mock.html#connections`
+### Connections — the SQL layer ✅ built · `design/shell-mock.html#connections`
 Rail item. Connections are first-class entities scoped to a workspace/project.
 
-- [ ] Connection entity: engine (Postgres / SQLite / SQL Server), host, database
-- [ ] Credentials in Windows Credential Manager / DPAPI — never plaintext in SQLite
-- [ ] Live reachable/unreachable status, like services
-- [ ] Saved queries nested under their connection + query history
-- [ ] Query execution by wrapping the CLIs (`psql`, `sqlite3`, `sqlcmd`) through
-      the existing runner; structured results via `--csv`/`--json` output
-- [ ] Results grid as a dockview document (sortable, export CSV, copy)
-- [ ] Machine Setup offers to install a missing client
-- [ ] Query runs emit activity events
+- [x] Connection entity: engine (Postgres / SQLite / SQL Server), host, database
+- [x] Credentials in Windows Credential Manager — never plaintext in SQLite
+- [x] Live reachable/unreachable status, like services
+- [x] Saved queries nested under their connection + durable query history
+- [x] Query execution by wrapping the CLIs (`psql`, `sqlite3`, `sqlcmd`);
+      structured results via `--csv`
+- [x] Results grid, sortable, copy as CSV
+- [x] Machine Setup offers to install a missing client
+- [x] Query runs emit an activity event (`conn:run`)
+
+**The open question is settled: it's a runner, not an IDE.** No schema tree, no
+autocomplete, no transaction management. You write SQL, you get a grid.
+Everything your database can do stays reachable precisely because DevDeck is
+not standing in front of it — the moment this grows a query planner it starts
+losing to a real client.
+
+Decisions worth keeping:
+- **There is no password column, and no command that reads a password back.**
+  Secrets live in Credential Manager under `devdeck:connection:<id>`, are read
+  only to build one command line, and are deleted with their connection.
+  `has_password` tells the UI a secret *exists*; that is all it may know.
+- **Postgres gets its password via `PGPASSWORD`, not a flag** — an argument
+  would put it in every process listing on the machine. There's a test.
+- **Results are capped at 5000 rows and say so.** A runner is not a
+  spreadsheet, and a silent truncation is a lie about your data.
+- **A missing client is named, not swallowed**: "`psql` isn't on your PATH…"
+  with a one-click install, because that's the single most likely failure.
 
 ### Stash — the context-aware vault · `design/stash-mock.html`
 Rail item. One item vault; the clipboard is just a capture source.

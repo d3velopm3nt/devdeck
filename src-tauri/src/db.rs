@@ -169,6 +169,7 @@ pub fn open() -> Connection {
     .expect("create schema");
 
     conn.execute_batch(STASH_SCHEMA).expect("create stash schema");
+    conn.execute_batch(CONN_SCHEMA).expect("create connections schema");
 
     migrate(&conn);
     // Startup recovery has just replayed any leftover WAL; write it into the
@@ -225,6 +226,45 @@ pub const STASH_SCHEMA: &str = r#"
             PRIMARY KEY (item_id, tag_id)
         );
         CREATE INDEX IF NOT EXISTS stash_item_tags_tag ON stash_item_tags(tag_id);
+"#;
+
+/// Connections: the SQL layer. Note what is *not* here -- there is no password
+/// column, and there never will be one. Credentials live in Windows Credential
+/// Manager under `devdeck:connection:<id>`; SQLite holds only the parts of a
+/// connection you would happily read out loud.
+pub const CONN_SCHEMA: &str = r#"
+        CREATE TABLE IF NOT EXISTS connections (
+            id INTEGER PRIMARY KEY,
+            project_id INTEGER REFERENCES nodes(id) ON DELETE SET NULL,
+            name TEXT NOT NULL,
+            engine TEXT NOT NULL DEFAULT 'postgres',  -- postgres | sqlite | sqlserver
+            host TEXT NOT NULL DEFAULT '',
+            port INTEGER,
+            database TEXT NOT NULL DEFAULT '',
+            username TEXT NOT NULL DEFAULT '',
+            sort INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL DEFAULT 0
+        );
+        -- Saved queries hang off their connection; deleting one takes them.
+        CREATE TABLE IF NOT EXISTS conn_queries (
+            id INTEGER PRIMARY KEY,
+            connection_id INTEGER NOT NULL REFERENCES connections(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            sql TEXT NOT NULL,
+            created_at INTEGER NOT NULL DEFAULT 0
+        );
+        -- Every run, so the history is durable rather than a UI buffer.
+        CREATE TABLE IF NOT EXISTS conn_runs (
+            id INTEGER PRIMARY KEY,
+            connection_id INTEGER NOT NULL REFERENCES connections(id) ON DELETE CASCADE,
+            sql TEXT NOT NULL,
+            ok INTEGER NOT NULL DEFAULT 0,
+            row_count INTEGER NOT NULL DEFAULT 0,
+            ms INTEGER NOT NULL DEFAULT 0,
+            error TEXT NOT NULL DEFAULT '',
+            ran_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS conn_runs_conn ON conn_runs(connection_id, ran_at DESC);
 "#;
 
 /// The Stash full-text index: an external-content FTS5 table kept in sync by

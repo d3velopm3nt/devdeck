@@ -11,6 +11,7 @@
 //! New capability areas (git, docker, ssh, plugins…) slot in as new
 //! modules with their own commands/events without touching existing ones.
 
+mod creds;
 mod db;
 mod git;
 mod legacy;
@@ -496,10 +497,22 @@ pub fn run() {
             shots::spawn(app.handle().clone());
 
             // Apply retention once on launch, so an app that's been closed for
-            // a month still tidies up the moment it opens.
+            // a month still tidies up the moment it opens -- and re-check
+            // stored screenshot text against the image guardrail, which
+            // shipped after the OCR that filled those rows.
             if let Some(db) = app.try_state::<db::Db>() {
                 if let Ok(conn) = db.0.lock() {
                     let _ = stash::prune(&conn, stash_retention);
+                    match stash::redact_stored_ocr(&conn) {
+                        Ok(n) if n > 0 => services::push_log(
+                            app.handle(),
+                            -500_000,
+                            "stash",
+                            "system",
+                            format!("redacted text read out of {n} screenshot(s) that may show credentials"),
+                        ),
+                        _ => {}
+                    }
                 }
             }
 

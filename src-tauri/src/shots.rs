@@ -306,7 +306,19 @@ fn record_shot(app: &tauri::AppHandle, path: &Path) -> bool {
     std::thread::sleep(std::time::Duration::from_millis(350));
 
     let text = ocr(app, path);
-    let thumb = thumbnail(path).unwrap_or_default();
+    // Run the image's text through the guardrail *before* any of it reaches
+    // SQLite. A screenshot of a login screen is a credential, and OCR would
+    // otherwise turn it into searchable plaintext -- precisely what this vault
+    // promises never to do.
+    let secret = text.as_deref().and_then(crate::stash::ocr_secret_reason);
+    // No thumbnail either when flagged: that is a second copy of the same
+    // secret, living in a database and rendered in a list you scroll past in
+    // public. The original file is untouched and one click away.
+    let thumb = if secret.is_some() {
+        String::new()
+    } else {
+        thumbnail(path).unwrap_or_default()
+    };
     let name = path
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
@@ -315,18 +327,23 @@ fn record_shot(app: &tauri::AppHandle, path: &Path) -> bool {
 
     // An empty string means "OCR ran and found no text"; None means it could
     // not run. Only the first is safe to store as searchable content.
-    let content = text.clone().unwrap_or_default();
-    let preview = match &text {
-        Some(t) if !t.trim().is_empty() => t
+    let content = if secret.is_some() {
+        String::new()
+    } else {
+        text.clone().unwrap_or_default()
+    };
+    let preview = match (&secret, &text) {
+        (Some(reason), _) => reason.to_string(),
+        (None, Some(t)) if !t.trim().is_empty() => t
             .lines()
             .map(str::trim)
             .filter(|l| !l.is_empty())
             .take(3)
             .collect::<Vec<_>>()
             .join("\n"),
-        Some(_) => "no text found in this image".to_string(),
+        (None, Some(_)) => "no text found in this image".to_string(),
         // Never let "we couldn't look" read as "there's nothing there".
-        None => "couldn't read text from this image".to_string(),
+        (None, None) => "couldn't read text from this image".to_string(),
     };
 
     let ctx = crate::stash::current_context(app);
@@ -338,8 +355,10 @@ fn record_shot(app: &tauri::AppHandle, path: &Path) -> bool {
     let inserted = conn.execute(
         "INSERT OR IGNORE INTO stash_items
             (kind, item_type, title, content, note, preview, bytes, hash, file_path, thumb,
-             project_id, project_name, workspace_name, source_app, created_at)
-         VALUES ('screenshot', 'image', ?1, ?2, '', ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'Screenshots', ?11)",
+             project_id, project_name, workspace_name, source_app, created_at,
+             is_secret, secret_reason)
+         VALUES ('screenshot', 'image', ?1, ?2, '', ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
+                 'Screenshots', ?11, ?12, ?13)",
         params![
             name,
             content,
@@ -352,6 +371,8 @@ fn record_shot(app: &tauri::AppHandle, path: &Path) -> bool {
             ctx.project_name,
             ctx.workspace_name,
             created,
+            secret.is_some() as i64,
+            secret.unwrap_or_default(),
         ],
     );
     drop(conn);

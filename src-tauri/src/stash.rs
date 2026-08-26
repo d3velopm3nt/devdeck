@@ -410,6 +410,36 @@ pub fn secret_reason(text: &str) -> Option<&'static str> {
     None
 }
 
+/// Words that mean "there may be a credential in this picture".
+const OCR_SENSITIVE_WORDS: &[&str] = &[
+    "password", "passwd", "api key", "apikey", "api-key", "secret key", "access key",
+    "client secret", "private key", "bearer ", "credential", "auth token", "access token",
+    "bot token", "connection string", "recovery code", "seed phrase",
+];
+
+/// The guardrail for text lifted *out of an image*.
+///
+/// Deliberately blunter than `secret_reason`. OCR flattens layout, so the
+/// `key: value` shape that rule depends on is usually destroyed -- a
+/// screenshot of a login form comes back as one long line, and the careful
+/// heuristic sails straight past a real password. So for images, the mere
+/// presence of a credential word is enough to withhold the text.
+///
+/// That trades false positives for safety on purpose. A wrongly-flagged
+/// screenshot is still findable by name, date, project and tag, and is one
+/// click from opening. A missed one puts a live password in a searchable
+/// database, which is the exact thing this vault promises never to do.
+pub fn ocr_secret_reason(text: &str) -> Option<&'static str> {
+    if let Some(reason) = secret_reason(text) {
+        return Some(reason);
+    }
+    let lower = text.to_ascii_lowercase();
+    if OCR_SENSITIVE_WORDS.iter().any(|w| lower.contains(w)) {
+        return Some("this image may show a credential");
+    }
+    None
+}
+
 // ---------- rows ----------
 
 #[derive(Serialize, Clone, Debug)]
@@ -968,6 +998,44 @@ pub fn stash_open_file(db: tauri::State<Db>, id: i64) -> Result<(), String> {
             .map_err(err)?;
     }
     Ok(())
+}
+
+/// Re-run the image guardrail over screenshots already stored.
+///
+/// The OCR path shipped before this check existed, so a vault that was
+/// indexed by that build is holding text lifted out of login screens. Running
+/// on every launch is deliberate: it costs one scan, and it means a rule we
+/// tighten later reaches rows captured under the looser one. Returns how many
+/// were redacted.
+pub fn redact_stored_ocr(conn: &rusqlite::Connection) -> Result<usize, String> {
+    let mut stmt = conn
+        .prepare("SELECT id, content FROM stash_items WHERE kind = 'screenshot' AND content <> ''")
+        .map_err(err)?;
+    let rows: Vec<(i64, String)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .map_err(err)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(err)?;
+    drop(stmt);
+
+    let mut redacted = 0usize;
+    for (id, content) in rows {
+        let Some(reason) = ocr_secret_reason(&content) else {
+            continue;
+        };
+        // Drop the text and the thumbnail. The FTS triggers fire on this
+        // UPDATE, so the words leave the search index too -- redacting the
+        // row while leaving it searchable would be no redaction at all.
+        conn.execute(
+            "UPDATE stash_items
+                SET content = '', thumb = '', is_secret = 1, secret_reason = ?1, preview = ?1
+              WHERE id = ?2",
+            params![reason, id],
+        )
+        .map_err(err)?;
+        redacted += 1;
+    }
+    Ok(redacted)
 }
 
 // ---------- retention ----------
@@ -2338,6 +2406,70 @@ mod tests {
         assert!(left.contains(&3), "noted survives");
         assert!(left.contains(&note.id), "a note you wrote survives");
         assert!(!left.contains(&4), "the untouched clip is gone");
+    }
+
+    #[test]
+    fn ocr_text_from_a_login_screen_is_not_indexed() {
+        // Real OCR output: layout is flattened, so the `key: value` shape the
+        // clipboard rule relies on is gone. It still must not be stored.
+        let scraped = "Open an Account: Acme Ltd. Registration Name: Server:                        Account type: Status: Login: Password: hunter2secret Demo";
+        assert!(
+            secret_reason(scraped).is_none(),
+            "precondition: the clipboard rule misses flattened OCR text"
+        );
+        assert!(
+            ocr_secret_reason(scraped).is_some(),
+            "the image rule must catch what the clipboard rule misses"
+        );
+
+        // Vendor token shapes still come through the underlying rule.
+        assert!(ocr_secret_reason("ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8").is_some());
+        // And an ordinary screenshot is left alone.
+        assert!(ocr_secret_reason("Machine Setup  Search & install  winget scoop").is_none());
+    }
+
+    #[test]
+    fn stored_ocr_text_is_redacted_retroactively() {
+        let conn = seeded();
+        conn.execute(
+            "INSERT INTO stash_items
+                (kind, item_type, title, content, preview, thumb, file_path, created_at)
+             VALUES ('screenshot', 'image', 'login.png',
+                     'Server: Login: Password: hunter2secret Demo', 'Server: Login:',
+                     'data:image/jpeg;base64,AAAA', 'C:/x/login.png', ?1)",
+            params![now_millis()],
+        )
+        .unwrap();
+        // A harmless one, to prove the pass is selective.
+        conn.execute(
+            "INSERT INTO stash_items
+                (kind, item_type, title, content, preview, thumb, file_path, created_at)
+             VALUES ('screenshot', 'image', 'ok.png', 'Machine Setup winget scoop',
+                     'Machine Setup', 'data:image/jpeg;base64,BBBB', 'C:/x/ok.png', ?1)",
+            params![now_millis()],
+        )
+        .unwrap();
+
+        assert_eq!(redact_stored_ocr(&conn).unwrap(), 1);
+
+        // The words are gone from the index, not merely hidden in the UI.
+        let found = list_query(
+            &conn,
+            &StashQuery {
+                query: "hunter2secret".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(found.is_empty(), "redacted text must leave the search index");
+
+        let shots = list_query(&conn, &q("screenshots")).unwrap();
+        let flagged = shots.iter().find(|i| i.title == "login.png").unwrap();
+        assert!(flagged.is_secret);
+        assert_eq!(flagged.thumb, "", "the thumbnail is a second copy of the secret");
+        let kept = shots.iter().find(|i| i.title == "ok.png").unwrap();
+        assert!(!kept.is_secret);
+        assert_ne!(kept.thumb, "", "an ordinary screenshot keeps its preview");
     }
 
     #[test]

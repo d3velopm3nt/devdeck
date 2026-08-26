@@ -4,7 +4,12 @@ Living document — what's shipped, what's designed, what's next. Update it as
 things land so we never have to reconstruct state from memory.
 
 **Current version:** 0.2.9 tagged · 0.2.8 last publicly released
-**Current branch:** `main`
+**Current branch:** `main` (`shell-redesign` merged and can be deleted)
+
+> ⚠️ **Blocker:** the GitHub repo is currently **private**. That silently breaks
+> auto-update for every install, `scoop install/update devdeck`, and the website's
+> download links — v0.2.9 is tagged but cannot publish, and the scoop bucket is
+> stuck at 0.2.8. Building is unaffected; only distribution is blocked.
 
 ---
 
@@ -37,6 +42,43 @@ things land so we never have to reconstruct state from memory.
 - [x] **Update-check honesty** — a failed check no longer reports "up to date";
       re-checks hourly and on window focus
 - [x] **Website** — redesign, real screenshots, animated walkthrough
+
+---
+
+## Next up — build order
+
+**Stash before Connections.** Stash is the daily habit-former (you copy things
+hundreds of times a day; you open a SQL client occasionally), it's the real
+differentiator, it's smaller, and it has no dependency on Connections. The reverse
+isn't true — Connections benefits from Stash existing, since SQL clips flow into
+it. Build order:
+
+1. **Stash Phase 1** — capture + vault (below)
+2. **Stash Phase 2** — widget paste surface + type actions
+3. **Connections** — the SQL layer
+4. **Stash Phase 3** — screenshots + OCR
+
+### Stash Phase 1 — capture + vault (start here)
+- [ ] `stash_items` table + FTS5 virtual table, migration in `db.rs`
+- [ ] `stash.rs`: message-only window + `AddClipboardFormatListener`, handle
+      `WM_CLIPBOARDUPDATE` on a dedicated thread (event-driven, never poll)
+- [ ] Honour password-manager exclusions — skip clips carrying
+      `ExcludeClipboardContentFromMonitorProcessing` / `CanIncludeInClipboardHistory`
+- [ ] Classifier: json · sql · url · path · jwt · uuid · hex · stacktrace · text
+- [ ] Secret heuristic → flag it, persist **metadata only, never the value**
+- [ ] Tag each item with the workspace/project active at capture
+- [ ] Dedupe consecutive identical clips; skip oversized payloads
+- [ ] Rail item + Stash view: sidebar filters, list, detail pane, FTS search
+
+### Stash Phase 2 — make it fast
+- [ ] Widget paste surface: `⏎` copy · `⇧⏎` paste · `esc` dismiss
+- [ ] Type-driven actions: prettify/minify, decode JWT, save SQL as query,
+      search logs for a stacktrace, reveal path, run command, open URL
+- [ ] Pin / delete / retention pruning + Settings section
+
+### Stash Phase 3 — screenshots
+- [ ] Watch the screenshot folder, store links not copies, thumbnails
+- [ ] OCR text into FTS (Windows has built-in OCR)
 
 ---
 

@@ -48,6 +48,9 @@ things land so we never have to reconstruct state from memory.
 
 ---
 
+See **[docs/TEST-REPORT.md](docs/TEST-REPORT.md)** for how each shipped piece
+was actually verified — and what was not.
+
 ## Next up — build order
 
 **Stash before Connections.** Stash is the daily habit-former (you copy things

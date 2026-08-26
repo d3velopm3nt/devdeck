@@ -28,6 +28,7 @@ src-tauri/src/
   git.rs       branch, ahead/behind, fetch, ff-only pull
   machine.rs   winget/scoop package management
   setup.rs     project setup, tool detection, repo clone
+  stash.rs     clipboard capture (message-only window), classifier, clip vault
 src/
   App.tsx           shell: top bar → rail → sidebar → surface → bottom bar
   shell/Rail.tsx    primary navigation
@@ -43,8 +44,8 @@ src/
 Navigation is **fixed chrome**, not dock panels — this removed a whole class of
 layout-corruption bugs:
 
-- **Rail** — Home · Projects · Machine · Settings (Connections and Stash land here)
-- **Sidebar** — contextual; the Explorer tree on the Projects view. No tab chrome.
+- **Rail** — Home · Projects · Stash · Machine · Settings (Connections lands here too)
+- **Sidebar** — contextual; the Explorer tree on Projects, filters on Stash. No tab chrome.
 - **Surface** — dockview, hosting **only real documents**: terminals, space pages,
   service pages, project setup, welcome
 - **Bottom bar** — Logs / Processes, global across views
@@ -89,7 +90,7 @@ values to disk.
 
 ```bash
 npm run tauri dev                      # dev app (Vite on 5173 + cargo)
-npx tsc --noEmit -p tsconfig.json      # typecheck — run before committing
+npx tsc -b                             # typecheck — run before committing
 cd src-tauri && cargo check            # Rust check
 npm run tauri build                    # release build (kill any running devdeck first)
 ```
@@ -113,6 +114,13 @@ artifacts for release builds only, so CI/PR builds don't need the key.
 - PowerShell 5.1: use `-UseBasicParsing` on `Invoke-WebRequest` or it errors
   non-interactively. No `&&`/`??`/ternary.
 - Port **5173** must be free before `tauri dev` — a stale Vite blocks the relaunch.
+- **Typecheck with `npx tsc -b`, never `tsc -p tsconfig.json`.** The root
+  tsconfig is references-only (`"files": []`), so `-p tsconfig.json` compiles
+  nothing and exits 0 no matter what is broken — a green tick that means
+  nothing. `tsc -b` (or `-p tsconfig.app.json`) is the real check.
+- Adding a Tauri **window** means adding its label to
+  `capabilities/default.json`. Until you do, every `invoke`/`listen` from that
+  window is silently denied and the window just sits there doing nothing.
 - A running `devdeck.exe` locks the binary and fails a release build.
 - Screenshotting the app: per-window `PrintWindow` with flag `2`
   (`PW_RENDERFULLCONTENT`) for WebView2; force the window topmost first or

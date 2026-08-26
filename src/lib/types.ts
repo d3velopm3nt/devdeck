@@ -128,3 +128,96 @@ export interface Recent {
   ts: number
   count: number
 }
+
+// ---- stash ----
+
+/** Smart type detection (backend classifier). */
+export type StashType = 'json' | 'sql' | 'url' | 'path' | 'jwt' | 'uuid' | 'hex' | 'stacktrace' | 'text'
+
+export interface StashItem {
+  id: number
+  /** clip = captured from the clipboard · note = you wrote it here. */
+  kind: string
+  item_type: StashType
+  title: string
+  /** Only `stashGet` fills this. Always null for a flagged secret — the
+   *  value was never written to disk. */
+  content: string | null
+  /** Your own text about this clip. Indexed for search. */
+  note: string
+  tags: string[]
+  preview: string
+  bytes: number
+  project_id: number | null
+  /** Snapshot of the project name at capture time (survives node deletion). */
+  project_name: string
+  workspace_name: string
+  source_app: string
+  is_secret: boolean
+  secret_reason: string
+  pinned: boolean
+  created_at: number
+  used_count: number
+}
+
+/** Sidebar groups. `secrets` lists flagged clips (metadata only). */
+export type StashFilter =
+  | 'all'
+  | 'pinned'
+  | 'notes'
+  | 'clips'
+  | 'code'
+  | 'links'
+  | 'errors'
+  | 'secrets'
+
+export interface StashQuery {
+  query: string
+  filter: StashFilter
+  item_type: string
+  /** Exact user tag name ('' = any). */
+  tag: string
+  project_id: number | null
+  no_project: boolean
+  limit: number
+}
+
+export interface TagCount {
+  id: number
+  name: string
+  n: number
+}
+
+export interface StashCounts {
+  all: number
+  pinned: number
+  notes: number
+  clips: number
+  code: number
+  links: number
+  errors: number
+  secrets: number
+  types: Array<{ item_type: StashType; n: number }>
+  projects: Array<{ project_id: number | null; name: string; n: number }>
+  tags: TagCount[]
+}
+
+/** Patch for `stashUpdate` — omitted fields are left alone. */
+export interface StashEdit {
+  id: number
+  title?: string
+  content?: string
+  note?: string
+}
+
+export interface StashStatus {
+  enabled: boolean
+  /** False = this SQLite has no FTS5 and search is a substring scan. */
+  fts: boolean
+  /** Show the capture toast when a clip lands. */
+  toast: boolean
+  /** Paste into the app you came from, rather than only copying. Opt-in. */
+  auto_paste: boolean
+  /** Days an untouched clip is kept; 0 = forever. */
+  retention_days: number
+}

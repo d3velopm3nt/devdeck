@@ -8,6 +8,7 @@ import { Icon, type IconName } from '../lib/icons'
 const ITEMS: Array<{ view: RailView; icon: IconName; label: string }> = [
   { view: 'home', icon: 'home', label: 'Home' },
   { view: 'projects', icon: 'project', label: 'Projects' },
+  { view: 'stash', icon: 'stash', label: 'Stash' },
   { view: 'machine', icon: 'machine', label: 'Machine' },
 ]
 

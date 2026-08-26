@@ -37,6 +37,21 @@
         "skipTaskbar": true,
         "visible": false,
         "center": false
+      },
+      {
+        "label": "toast",
+        "title": "Stash capture",
+        "width": 340,
+        "height": 96,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "focus": false,
+        "center": false
       }
     ],
     "security": {

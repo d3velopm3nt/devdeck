@@ -35,3 +35,16 @@ strip = true
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
+
+# Stash's clipboard capture: a message-only window listening for
+# WM_CLIPBOARDUPDATE (event-driven — we never poll the clipboard).
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_System_DataExchange",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_System_Threading",
+    "Win32_UI_WindowsAndMessaging",
+] }

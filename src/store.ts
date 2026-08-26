@@ -15,6 +15,11 @@ import type {
   Recent,
   ServiceDef,
   ShellDef,
+  StashCounts,
+  StashEdit,
+  StashFilter,
+  StashItem,
+  StashStatus,
   SvcState,
   TreeNode,
 } from './lib/types'
@@ -22,8 +27,20 @@ import type {
 const LOG_UI_LIMIT = 5000
 
 export type Theme = 'dark' | 'light'
-export type RailView = 'home' | 'projects' | 'machine' | 'settings'
+export type RailView = 'home' | 'projects' | 'stash' | 'machine' | 'settings'
 export type BottomTab = 'logs' | 'processes'
+
+/** What the Stash view is currently showing. `noProject` narrows to clips
+ *  captured outside any project (the sidebar's "no project" tag). */
+export interface StashFilters {
+  filter: StashFilter
+  itemType: string
+  /** Exact user tag name ('' = any). */
+  tag: string
+  projectId: number | null
+  noProject: boolean
+  query: string
+}
 /** The slide-over editor sheet target: which entity kind, its id (0 = new),
  *  and the project to pre-select for new items. */
 export interface SheetState {
@@ -58,9 +75,10 @@ export interface AppState {
    *  not browsed in the tree. */
   activeWorkspaceId: number | null
   hotkey: string
-  /** Request the Log viewer to filter to a service's output. `n` bumps so
-   *  re-selecting the same service refocuses. */
-  logFocus: { name: string; n: number } | null
+  /** Request the Log viewer to filter its output. `n` bumps so asking for
+   *  the same thing twice still refocuses. `search` also drives its text
+   *  box — that's how a stacktrace clip jumps you to matching log lines. */
+  logFocus: { name: string; n: number; search?: string } | null
   /** App color theme; applied as data-theme on <html>, persisted to settings. */
   theme: Theme
   /** Which rail view the shell is showing. */
@@ -113,6 +131,8 @@ export interface AppState {
   setActiveWorkspace: (id: number | null) => void
   setHotkey: (h: string) => void
   focusServiceLogs: (name: string) => void
+  /** Reveal the Logs tab filtered to `term` across every source. */
+  searchLogs: (term: string) => void
   setTheme: (t: Theme) => Promise<void>
   setRailView: (v: RailView) => void
   openSheet: (s: SheetState) => void
@@ -121,6 +141,53 @@ export interface AppState {
   showBottom: (tab: BottomTab) => void
   setBottomTab: (tab: BottomTab) => void
   setBottomCollapsed: (collapsed: boolean) => void
+
+  // Stash — the clip vault. The list carries previews only; `stashDetail`
+  // holds the one selected row with its full content fetched on demand.
+  stashItems: StashItem[]
+  stashCounts: StashCounts | null
+  stashStatus: StashStatus | null
+  stashFilters: StashFilters
+  stashSelectedId: number | null
+  stashDetail: StashItem | null
+  stashLoading: boolean
+  /** The detail pane is in edit mode. Set when you create a note, so a blank
+   *  one opens ready to type into rather than as an empty card. */
+  stashEditing: boolean
+  setStashEditing: (editing: boolean) => void
+  refreshStash: () => Promise<void>
+  refreshStashCounts: () => Promise<void>
+  refreshStashStatus: () => Promise<void>
+  setStashFilters: (patch: Partial<StashFilters>) => void
+  selectStashItem: (id: number | null) => Promise<void>
+  /** A clip was just captured — re-read the list if the view is showing. */
+  ingestStashItem: () => void
+  toggleStashPin: (id: number) => Promise<void>
+  deleteStashItem: (id: number) => Promise<void>
+  setStashCapture: (enabled: boolean) => Promise<void>
+  /** Save a title/content/note edit. Rejects with the backend's reason when
+   *  the new content is secret-shaped — callers should surface it. */
+  updateStashItem: (edit: StashEdit) => Promise<void>
+  /** Write a note from scratch and select it. */
+  createStashNote: (title: string, content: string) => Promise<void>
+  addStashTags: (id: number, input: string) => Promise<void>
+  removeStashTag: (id: number, name: string) => Promise<void>
+
+  // Machine Setup. Held here rather than in the component because
+  // `machine_status` shells out to winget and scoop and takes seconds — with
+  // component-local state, every trip to another rail view and back paid that
+  // cost again.
+  machinePkgs: ipc.MachinePackage[]
+  machineWinget: string[]
+  machineScoop: string[]
+  machineAvail: { winget: boolean; scoop: boolean }
+  machineLoading: boolean
+  /** 0 = never loaded. Used to skip the slow path on remount. */
+  machineLoadedAt: number
+  /** Seed + list the catalog and read installed state. No-op once loaded
+   *  unless `force`. */
+  loadMachine: (seed: ipc.MachinePackage[], force?: boolean) => Promise<void>
+  refreshMachinePkgs: () => Promise<void>
 
   // Project Setup: a start blocked on a "prepare" prompt (missing tools /
   // bootstrap), plus a passive "install this missing tool" hint from errors.
@@ -146,7 +213,7 @@ const adoptingPorts = new Set<number>()
 const RAIL_KEY = 'devdeck.railView'
 const loadRailView = (): RailView => {
   const v = localStorage.getItem(RAIL_KEY)
-  return v === 'projects' || v === 'machine' || v === 'settings' ? v : 'home'
+  return v === 'projects' || v === 'stash' || v === 'machine' || v === 'settings' ? v : 'home'
 }
 
 const AW_KEY = 'devdeck.activeWorkspace'
@@ -353,6 +420,170 @@ export const useApp = create<AppState>((set, get) => ({
       terminals: st.terminals.map((t) => (t.id === id ? { ...t, alive: false } : t)),
     })),
 
+  stashItems: [],
+  stashCounts: null,
+  stashStatus: null,
+  stashFilters: { filter: 'all', itemType: '', tag: '', projectId: null, noProject: false, query: '' },
+  stashSelectedId: null,
+  stashDetail: null,
+  stashLoading: false,
+  stashEditing: false,
+  setStashEditing: (stashEditing) => set({ stashEditing }),
+
+  refreshStash: async () => {
+    const f = get().stashFilters
+    set({ stashLoading: true })
+    try {
+      const stashItems = await ipc.stashList({
+        query: f.query,
+        filter: f.filter,
+        item_type: f.itemType,
+        tag: f.tag,
+        project_id: f.projectId,
+        no_project: f.noProject,
+      })
+      set({ stashItems })
+      // Keep a selection only while it's still in the list; otherwise fall
+      // back to the newest clip so the detail pane is never stale or blank.
+      const { stashSelectedId } = get()
+      const keep = stashSelectedId != null && stashItems.some((i) => i.id === stashSelectedId)
+      if (!keep) await get().selectStashItem(stashItems[0]?.id ?? null)
+    } finally {
+      set({ stashLoading: false })
+    }
+  },
+  refreshStashCounts: async () => set({ stashCounts: await ipc.stashCounts() }),
+  refreshStashStatus: async () => set({ stashStatus: await ipc.stashStatus() }),
+  setStashFilters: (patch) => {
+    set((st) => ({ stashFilters: { ...st.stashFilters, ...patch } }))
+    void get().refreshStash()
+  },
+  selectStashItem: async (id) => {
+    set({ stashSelectedId: id, stashDetail: null, stashEditing: false })
+    if (id == null) return
+    try {
+      const stashDetail = await ipc.stashGet(id)
+      // A slower fetch for an item you've already navigated away from must
+      // not overwrite the newer selection.
+      if (get().stashSelectedId === id) set({ stashDetail })
+    } catch {
+      /* deleted from under us — the list refresh will catch up */
+    }
+  },
+  ingestStashItem: () => {
+    if (get().railView !== 'stash') return
+    void get().refreshStash()
+    void get().refreshStashCounts()
+    // Another window (the capture toast) may have edited the open item. Patch
+    // the detail in place rather than re-selecting, which would blank it.
+    const id = get().stashSelectedId
+    if (id != null) {
+      void ipc
+        .stashGet(id)
+        .then((d) => {
+          if (get().stashSelectedId === id) set({ stashDetail: d })
+        })
+        .catch(() => {})
+    }
+  },
+  toggleStashPin: async (id) => {
+    const item = get().stashItems.find((i) => i.id === id)
+    if (!item) return
+    await ipc.stashPin(id, !item.pinned)
+    await Promise.all([get().refreshStash(), get().refreshStashCounts()])
+    if (get().stashSelectedId === id) await get().selectStashItem(id)
+  },
+  deleteStashItem: async (id) => {
+    await ipc.stashDelete(id)
+    if (get().stashSelectedId === id) set({ stashSelectedId: null, stashDetail: null })
+    await Promise.all([get().refreshStash(), get().refreshStashCounts()])
+  },
+  setStashCapture: async (enabled) => {
+    await ipc.stashSetEnabled(enabled)
+    await get().refreshStashStatus()
+  },
+  updateStashItem: async (edit) => {
+    // Let the rejection propagate: the editor shows the reason inline, which
+    // is the whole point of refusing a secret rather than silently dropping it.
+    const item = await ipc.stashUpdate(edit)
+    set({ stashDetail: item })
+    await Promise.all([get().refreshStash(), get().refreshStashCounts()])
+  },
+  createStashNote: async (title, content) => {
+    const item = await ipc.stashCreateNote(title, content)
+    // Clear filters that would hide the note you just wrote.
+    set((st) => ({
+      stashFilters: { ...st.stashFilters, filter: 'all', itemType: '', tag: '', query: '' },
+      stashSelectedId: item.id,
+      stashDetail: item,
+    }))
+    await Promise.all([get().refreshStash(), get().refreshStashCounts()])
+    await get().selectStashItem(item.id)
+    set({ stashEditing: true })
+  },
+  // Both tag actions patch `stashDetail` in place from the returned list
+  // rather than re-selecting the item. Re-selecting blanks the detail pane for
+  // a beat, which unmounts the tag input mid-keystroke and loses whatever you
+  // were typing after the comma.
+  addStashTags: async (id, input) => {
+    const tags = await ipc.stashTagAdd(id, [input])
+    set((st) => ({
+      stashDetail: st.stashDetail?.id === id ? { ...st.stashDetail, tags } : st.stashDetail,
+    }))
+    await Promise.all([get().refreshStash(), get().refreshStashCounts()])
+  },
+  removeStashTag: async (id, name) => {
+    const tags = await ipc.stashTagRemove(id, name)
+    set((st) => ({
+      stashDetail: st.stashDetail?.id === id ? { ...st.stashDetail, tags } : st.stashDetail,
+      // Removing the last use prunes the tag, so a filter on it would strand
+      // the view on an empty list.
+      stashFilters:
+        st.stashFilters.tag === name ? { ...st.stashFilters, tag: '' } : st.stashFilters,
+    }))
+    await Promise.all([get().refreshStash(), get().refreshStashCounts()])
+  },
+
+  machinePkgs: [],
+  machineWinget: [],
+  machineScoop: [],
+  machineAvail: { winget: true, scoop: true },
+  machineLoading: false,
+  machineLoadedAt: 0,
+
+  loadMachine: async (seed, force = false) => {
+    if (get().machineLoading) return
+    if (get().machineLoadedAt > 0 && !force) return
+    set({ machineLoading: true })
+    try {
+      // Seeding is INSERT OR IGNORE, so it also picks up newly-shipped
+      // packages on an existing install.
+      await ipc.machinePackagesSeed(seed).catch(() => 0)
+      await get().refreshMachinePkgs()
+      const s = await ipc.machineStatus()
+      set({
+        machineWinget: s.winget.map((x) => x.toLowerCase()),
+        machineScoop: s.scoop.map((x) => x.toLowerCase()),
+        machineAvail: { winget: s.winget_available, scoop: s.scoop_available },
+        machineLoadedAt: Date.now(),
+      })
+    } catch (e) {
+      console.error('machine status failed', e)
+      // Mark it loaded anyway: a failed probe shouldn't re-run the slow path
+      // on every remount. Refresh is one click away.
+      set({ machineLoadedAt: Date.now() })
+    } finally {
+      set({ machineLoading: false })
+    }
+  },
+  refreshMachinePkgs: async () => {
+    try {
+      set({ machinePkgs: await ipc.machinePackagesList() })
+    } catch (e) {
+      console.error(e)
+    }
+  },
+
   setupPrompt: null,
   installHint: null,
   requestStartService: async (svc) => {
@@ -407,4 +638,8 @@ export const useApp = create<AppState>((set, get) => ({
   },
   focusServiceLogs: (name) =>
     set((st) => ({ logFocus: { name, n: (st.logFocus?.n ?? 0) + 1 } })),
+  searchLogs: (term) => {
+    get().showBottom('logs')
+    set((st) => ({ logFocus: { name: 'all', search: term, n: (st.logFocus?.n ?? 0) + 1 } }))
+  },
 }))

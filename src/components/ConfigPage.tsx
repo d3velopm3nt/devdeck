@@ -2,18 +2,85 @@
 // detected shells. Editing individual commands / services / profiles
 // lives in their own dedicated editor pages, opened from the side lists.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import * as ipc from '../lib/ipc'
 import { useApp } from '../store'
 import { loadExampleWorkspace } from '../lib/example'
 import { Icon } from '../lib/icons'
 
+/** A labelled checkbox row, the shape the Git section already uses. */
+function Toggle({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean
+  onChange: (v: boolean) => void
+  label: string
+}) {
+  return (
+    <label className="flex w-fit cursor-pointer items-center gap-2 text-[12px] text-body">
+      <input
+        type="checkbox"
+        className="h-3.5 w-3.5 accent-indigo-500"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      {label}
+    </label>
+  )
+}
+
 export function ConfigPage() {
-  const { hotkey, setHotkey, shells, gitMonitorEnabled, gitMonitorIntervalMin, setGitMonitor, fetchGitStatus, theme, setTheme } = useApp()
+  const { hotkey, setHotkey, shells, gitMonitorEnabled, gitMonitorIntervalMin, setGitMonitor, fetchGitStatus, theme, setTheme, stashStatus, refreshStashStatus, setStashCapture } = useApp()
   const [draft, setDraft] = useState(hotkey)
   const [status, setStatus] = useState<string | null>(null)
   const [seeding, setSeeding] = useState(false)
   const [gitIv, setGitIv] = useState(String(gitMonitorIntervalMin))
+
+  useEffect(() => {
+    void refreshStashStatus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const setStashOption = async (key: 'toast' | 'auto_paste', value: boolean) => {
+    await ipc.stashSetOption(key, value)
+    await refreshStashStatus()
+  }
+
+  // Retention: the input is a draft until you commit it, so typing "3" on the
+  // way to "30" never prunes a month of clips.
+  const [retention, setRetention] = useState('')
+  const [pruned, setPruned] = useState<string | null>(null)
+  const retentionDays = stashStatus?.retention_days
+  useEffect(() => {
+    if (retentionDays != null) setRetention(String(retentionDays))
+  }, [retentionDays])
+
+  const applyRetention = async () => {
+    const days = Math.max(0, Math.round(Number(retention)))
+    if (!Number.isFinite(days)) return setPruned('That needs to be a number of days.')
+    try {
+      const n = await ipc.stashSetRetention(days)
+      await refreshStashStatus()
+      setPruned(
+        days === 0
+          ? 'Keeping every clip, forever.'
+          : `Keeping ${days} days — ${n === 0 ? 'nothing needed removing' : `removed ${n} clip${n === 1 ? '' : 's'}`}.`,
+      )
+    } catch (e) {
+      setPruned(String(e))
+    }
+  }
+
+  const pruneNow = async () => {
+    try {
+      const n = await ipc.stashPrune()
+      setPruned(n === 0 ? 'Nothing to prune.' : `Removed ${n} clip${n === 1 ? '' : 's'}.`)
+    } catch (e) {
+      setPruned(String(e))
+    }
+  }
 
   const apply = async () => {
     try {
@@ -77,6 +144,67 @@ export function ConfigPage() {
             ))}
           </div>
           <p className="mt-1 text-[11px] text-muted">Applies instantly — terminals and panels included.</p>
+        </section>
+
+        <section>
+          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
+            Stash
+          </h3>
+          <div className="space-y-2">
+            <Toggle
+              checked={stashStatus?.enabled ?? true}
+              onChange={(v) => void setStashCapture(v)}
+              label="Capture what I copy"
+            />
+            <Toggle
+              checked={stashStatus?.toast ?? true}
+              onChange={(v) => void setStashOption('toast', v)}
+              label="Show a toast when a clip is captured"
+            />
+            <Toggle
+              checked={stashStatus?.auto_paste ?? false}
+              onChange={(v) => void setStashOption('auto_paste', v)}
+              label="Paste straight into the app I came from (instead of only copying)"
+            />
+          </div>
+
+          <div className="mt-3 flex items-center gap-2">
+            <label className="text-[12px] text-body">Keep clips for</label>
+            <input
+              className="input w-16 text-center"
+              value={retention}
+              onChange={(e) => setRetention(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void applyRetention()
+              }}
+            />
+            <span className="text-[12px] text-body">days</span>
+            <button className="btn-ghost text-[11.5px]" onClick={() => void applyRetention()}>
+              Apply
+            </button>
+            <button className="btn-ghost text-[11.5px]" onClick={() => void pruneNow()}>
+              Prune now
+            </button>
+            {pruned && <span className="text-[11px] text-ok">{pruned}</span>}
+          </div>
+          <p className="mt-1 text-[11px] leading-5 text-muted">
+            <b>0 keeps everything forever.</b> Pruning only ever removes clips you never touched —
+            anything <b>pinned</b>, <b>tagged</b>, carrying a <b>note</b>, or that you{' '}
+            <b>wrote as a note</b> is kept regardless of age.
+          </p>
+
+          <p className="mt-1.5 text-[11px] leading-5 text-muted">
+            Clips are stored in your own SQLite file — nothing leaves this machine. Anything
+            shaped like a key, token or password is flagged and{' '}
+            <b className="text-warn">its value is never written to disk</b>, and content your
+            password manager marks sensitive is skipped entirely.
+            <br />
+            Auto-paste synthesises <code>Ctrl+V</code> into whichever window had focus before
+            DevDeck. It's off by default, and Windows can refuse the focus change — when that
+            happens the clip is still on your clipboard and DevDeck says so rather than
+            pretending it pasted. <code>⇧⏎</code> in the widget pastes once regardless of this
+            setting.
+          </p>
         </section>
 
         <section>

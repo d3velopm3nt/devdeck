@@ -61,6 +61,16 @@ import {
   ArrowDown,
   ChevronUp,
   ArrowRightLeft,
+  Archive,
+  Clipboard,
+  Code,
+  Link,
+  Image,
+  ShieldAlert,
+  Copy,
+  List,
+  StickyNote,
+  Tag,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -120,6 +130,16 @@ export type IconName =
   | 'arrow-down'
   | 'caret-up'
   | 'convert'
+  | 'stash'
+  | 'clip'
+  | 'code'
+  | 'link'
+  | 'image'
+  | 'secret'
+  | 'copy'
+  | 'list'
+  | 'note'
+  | 'tag'
 
 const REGISTRY: Record<IconName, LucideIcon> = {
   workspace: Boxes,
@@ -175,6 +195,16 @@ const REGISTRY: Record<IconName, LucideIcon> = {
   'arrow-down': ArrowDown,
   'caret-up': ChevronUp,
   convert: ArrowRightLeft,
+  stash: Archive,
+  clip: Clipboard,
+  code: Code,
+  link: Link,
+  image: Image,
+  secret: ShieldAlert,
+  copy: Copy,
+  list: List,
+  note: StickyNote,
+  tag: Tag,
 }
 
 export function iconFor(name: string): LucideIcon | undefined {

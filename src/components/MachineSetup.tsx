@@ -9,6 +9,7 @@ import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialo
 import * as ipc from '../lib/ipc'
 import { Icon } from '../lib/icons'
 import { PACKAGES, BUNDLES, CATEGORY_LABELS, type PkgCategory } from '../lib/machineCatalog'
+import { useApp } from '../store'
 
 type Pkg = ipc.MachinePackage
 type ItemStatus = 'installing' | 'ok' | 'failed'
@@ -39,14 +40,28 @@ interface Draft {
 const blankDraft = (): Draft => ({ isCustom: true, id: '', name: '', source: 'winget', category: 'custom', blurb: '', elevate: false })
 
 export function MachineSetup() {
-  const [pkgs, setPkgs] = useState<Pkg[]>([])
-  const [winget, setWinget] = useState<Set<string>>(new Set())
-  const [scoop, setScoop] = useState<Set<string>>(new Set())
-  const [avail, setAvail] = useState<{ winget: boolean; scoop: boolean }>({ winget: true, scoop: true })
+  // Catalog + installed state live in the store: this page's status probe
+  // shells out to winget and scoop, so re-running it on every remount made
+  // leaving the page and coming back feel broken.
+  const {
+    machinePkgs: pkgs,
+    machineWinget,
+    machineScoop,
+    machineAvail: avail,
+    machineLoading: loading,
+    machineLoadedAt,
+    loadMachine,
+    refreshMachinePkgs,
+  } = useApp()
+  // A *first* load has nothing to show yet, so the page says so. A later
+  // refresh keeps the current list on screen and only spins the button —
+  // blanking a page you were reading is worse than a stale number for a second.
+  const firstLoad = loading && machineLoadedAt === 0
+  const winget = useMemo(() => new Set(machineWinget), [machineWinget])
+  const scoop = useMemo(() => new Set(machineScoop), [machineScoop])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [live, setLive] = useState<Map<string, ItemStatus>>(new Map())
   const [installing, setInstalling] = useState(false)
-  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [source, setSource] = useState<'all' | 'winget' | 'scoop'>('all')
   const [tab, setTab] = useState<'search' | 'bundles'>('search')
@@ -57,44 +72,27 @@ export function MachineSetup() {
   const [info, setInfo] = useState<string | null>(null)
   const [infoLoading, setInfoLoading] = useState(false)
 
-  const reloadPkgs = async () => {
-    try {
-      setPkgs(await ipc.machinePackagesList())
-    } catch (e) {
-      console.error(e)
-    }
-  }
-
-  const refreshStatus = async () => {
-    setLoading(true)
-    try {
-      const s = await ipc.machineStatus()
-      setWinget(new Set(s.winget.map((x) => x.toLowerCase())))
-      setScoop(new Set(s.scoop.map((x) => x.toLowerCase())))
-      setAvail({ winget: s.winget_available, scoop: s.scoop_available })
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const reloadPkgs = refreshMachinePkgs
+  /** Re-probe winget/scoop. Always forced — you clicked Refresh. */
+  const refreshStatus = () => loadMachine(SEED, true)
 
   useEffect(() => {
-    // Seed curated packages on first run (adds any newly-shipped ones on later
-    // runs), then load the user's editable catalog.
-    void ipc.machinePackagesSeed(SEED).then(reloadPkgs).catch(reloadPkgs)
-    void refreshStatus()
+    // No-op when it's already loaded, which is what makes returning to this
+    // page instant instead of a multi-second stall.
+    void loadMachine(SEED)
     const subs = [
       ipc.onMachineItem((e) => setLive((m) => new Map(m).set(e.id, e.status))),
       ipc.onMachineDone(() => {
         setInstalling(false)
         setScoopInstalling(false)
+        // An install changes what's installed, so this one must re-probe.
         void refreshStatus()
       }),
     ]
     return () => {
       for (const s of subs) void s.then((un) => un())
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const visiblePkgs = useMemo(() => pkgs.filter((p) => !p.hidden), [pkgs])
@@ -301,12 +299,15 @@ export function MachineSetup() {
         </div>
       )}
 
-      {/* stats — above the tabs */}
-      <div className="flex flex-wrap gap-2 px-5 py-3">
-        <Stat n={installedCount} label="Installed" color="text-ok" dot="bg-emerald-400" />
-        <Stat n={selectableSelected.length} label="Selected to install" color="text-indigo-300" dot="bg-indigo-400" />
-        <Stat n={visiblePkgs.length - installedCount} label="Available" color="text-body" dot="bg-faint" />
-      </div>
+      {/* stats — above the tabs. Withheld until we actually know: "0 installed"
+          is a claim, and it would be a false one. */}
+      {!firstLoad && (
+        <div className="flex flex-wrap gap-2 px-5 py-3">
+          <Stat n={installedCount} label="Installed" color="text-ok" dot="bg-emerald-400" />
+          <Stat n={selectableSelected.length} label="Selected to install" color="text-indigo-300" dot="bg-indigo-400" />
+          <Stat n={visiblePkgs.length - installedCount} label="Available" color="text-body" dot="bg-faint" />
+        </div>
+      )}
 
       {/* tabs */}
       <div className="flex items-center gap-1 border-b border-line px-5">
@@ -330,7 +331,16 @@ export function MachineSetup() {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6">
-        {tab === 'bundles' ? (
+        {firstLoad ? (
+          <div className="flex h-full flex-col items-center justify-center gap-3 py-16 text-center">
+            <Icon name="spinner" size={22} spin className="text-indigo-400" />
+            <div className="text-[13px] font-medium text-ink">Checking what's installed…</div>
+            <div className="max-w-sm text-[11.5px] leading-5 text-muted">
+              Asking winget and scoop for their package lists. This is slow the first time —
+              it stays loaded while the app is open, so coming back here is instant.
+            </div>
+          </div>
+        ) : tab === 'bundles' ? (
           <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-4">
             {BUNDLES.map((b) => {
               const total = b.packages.length

@@ -8,6 +8,8 @@ import { Rail } from './shell/Rail'
 import { Home } from './components/Home'
 import { Explorer } from './components/Explorer'
 import { MachineSetup } from './components/MachineSetup'
+import { StashSidebar } from './components/StashSidebar'
+import { StashView } from './components/StashView'
 import { ConfigPage } from './components/ConfigPage'
 import { Icon } from './lib/icons'
 import { tauriSelfUpdate } from './lib/updater'
@@ -249,6 +251,20 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [app.gitMonitorEnabled, app.gitMonitorIntervalMin, app.activeWorkspaceId])
 
+  // Stash stamps every captured clip with the project you were in when you
+  // copied it — that context is the whole point of the vault. Only the main
+  // window pushes it; the widget runs a separate store instance and would
+  // otherwise fight this one over the same backend slot.
+  const stashProject = app.selectedProject()
+  const stashWorkspace = app.activeWorkspace()
+  useEffect(() => {
+    void ipc.stashSetContext(
+      stashProject?.id ?? null,
+      stashProject?.name ?? '',
+      stashWorkspace?.name ?? '',
+    )
+  }, [stashProject?.id, stashProject?.name, stashWorkspace?.name])
+
   useEffect(() => {
     void app.bootstrap()
     const subs = [
@@ -294,6 +310,10 @@ export default function App() {
       }),
       // After a pull finishes, re-read local git status (counts change).
       ipc.onGitDone(() => void useApp.getState().refreshGit()),
+      // A clip was captured, or the capture toast edited one — the Stash view
+      // refreshes if it's on screen.
+      ipc.onStashItem(() => useApp.getState().ingestStashItem()),
+      ipc.onStashChanged(() => useApp.getState().ingestStashItem()),
     ]
     return () => {
       for (const s of subs) void s.then((un) => un())
@@ -462,6 +482,11 @@ export default function App() {
             <Explorer />
           </aside>
         )}
+        {railView === 'stash' && (
+          <aside className="w-[230px] shrink-0 overflow-hidden border-r border-line">
+            <StashSidebar />
+          </aside>
+        )}
         <main className="min-w-0 flex-1">
           {railView === 'home' && <Home />}
           {/* The Dock stays mounted (terminals live in it) — just hidden when
@@ -469,6 +494,7 @@ export default function App() {
           <div className={railView === 'projects' ? 'h-full' : 'hidden'}>
             <Dock />
           </div>
+          {railView === 'stash' && <StashView />}
           {railView === 'machine' && <MachineSetup />}
           {railView === 'settings' && <ConfigPage />}
         </main>

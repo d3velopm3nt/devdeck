@@ -168,12 +168,87 @@ pub fn open() -> Connection {
     )
     .expect("create schema");
 
+    conn.execute_batch(STASH_SCHEMA).expect("create stash schema");
+
     migrate(&conn);
     // Startup recovery has just replayed any leftover WAL; write it into the
     // main file straight away so devdeck.sqlite is a complete standalone copy.
     checkpoint(&conn);
     conn
 }
+
+/// Stash: the context-aware clip vault. `content` is NULL for anything the
+/// secret heuristic flagged -- those rows are metadata only, the value never
+/// reaches the disk (see stash.rs). Split out as a const so the schema and
+/// its full-text index can be exercised against an in-memory database.
+pub const STASH_SCHEMA: &str = r#"
+        CREATE TABLE IF NOT EXISTS stash_items (
+            id INTEGER PRIMARY KEY,
+            kind TEXT NOT NULL DEFAULT 'clip',     -- clip | screenshot (phase 3)
+            item_type TEXT NOT NULL DEFAULT 'text',-- json|sql|url|path|jwt|uuid|hex|stacktrace|text
+            title TEXT NOT NULL DEFAULT '',
+            content TEXT,                          -- NULL when is_secret = 1
+            note TEXT NOT NULL DEFAULT '',         -- your own text, indexed for search
+            preview TEXT NOT NULL DEFAULT '',      -- redacted when is_secret = 1
+            bytes INTEGER NOT NULL DEFAULT 0,
+            hash TEXT NOT NULL DEFAULT '',         -- content fingerprint, for dedupe
+            project_id INTEGER REFERENCES nodes(id) ON DELETE SET NULL,
+            project_name TEXT NOT NULL DEFAULT '', -- snapshot: survives the node
+            workspace_name TEXT NOT NULL DEFAULT '',
+            source_app TEXT NOT NULL DEFAULT '',
+            is_secret INTEGER NOT NULL DEFAULT 0,
+            secret_reason TEXT NOT NULL DEFAULT '',
+            pinned INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL,
+            used_count INTEGER NOT NULL DEFAULT 0,
+            last_used_at INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS stash_created ON stash_items(created_at DESC);
+        CREATE INDEX IF NOT EXISTS stash_project ON stash_items(project_id);
+
+        -- User tags. NOCASE so "Bug" and "bug" are one tag; the first spelling
+        -- you type is the one kept. A tag with no items left is pruned, so the
+        -- sidebar only ever offers tags that lead somewhere.
+        CREATE TABLE IF NOT EXISTS stash_tags (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            created_at INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS stash_item_tags (
+            item_id INTEGER NOT NULL REFERENCES stash_items(id) ON DELETE CASCADE,
+            tag_id INTEGER NOT NULL REFERENCES stash_tags(id) ON DELETE CASCADE,
+            PRIMARY KEY (item_id, tag_id)
+        );
+        CREATE INDEX IF NOT EXISTS stash_item_tags_tag ON stash_item_tags(tag_id);
+"#;
+
+/// The Stash full-text index: an external-content FTS5 table kept in sync by
+/// triggers, over title + content + your note. Secrets index as an empty
+/// string for content, since theirs is NULL -- so a flagged clip stays
+/// findable by its title and note without its value ever entering the index.
+pub const STASH_FTS_SCHEMA: &str = r#"
+        CREATE VIRTUAL TABLE IF NOT EXISTS stash_fts
+            USING fts5(title, content, note, content='stash_items', content_rowid='id');
+        CREATE TRIGGER IF NOT EXISTS stash_fts_ai AFTER INSERT ON stash_items BEGIN
+            INSERT INTO stash_fts(rowid, title, content, note)
+                VALUES (new.id, new.title, coalesce(new.content, ''), new.note);
+        END;
+        CREATE TRIGGER IF NOT EXISTS stash_fts_ad AFTER DELETE ON stash_items BEGIN
+            INSERT INTO stash_fts(stash_fts, rowid, title, content, note)
+                VALUES ('delete', old.id, old.title, coalesce(old.content, ''), old.note);
+        END;
+        CREATE TRIGGER IF NOT EXISTS stash_fts_au AFTER UPDATE ON stash_items BEGIN
+            INSERT INTO stash_fts(stash_fts, rowid, title, content, note)
+                VALUES ('delete', old.id, old.title, coalesce(old.content, ''), old.note);
+            INSERT INTO stash_fts(rowid, title, content, note)
+                VALUES (new.id, new.title, coalesce(new.content, ''), new.note);
+        END;
+"#;
+
+/// Bump when STASH_FTS_SCHEMA's columns change -- the index is dropped and
+/// rebuilt, since `CREATE VIRTUAL TABLE IF NOT EXISTS` won't reshape one that
+/// already exists (and a stale index silently returns wrong results).
+const STASH_FTS_VERSION: &str = "2";
 
 /// Fold the write-ahead log into the main database file and reset it, so
 /// devdeck.sqlite alone holds every workspace, project, command and service.
@@ -218,6 +293,46 @@ fn migrate(conn: &Connection) {
             [],
         );
     }
+    // Stash full-text index. FTS5 is compiled into the bundled SQLite, but a
+    // build without it must not take the whole app down on startup -- so this
+    // runs on its own and the outcome is remembered. When it fails, search
+    // degrades to a substring scan and the UI says so, rather than quietly
+    // returning nothing.
+    // Stash notes: added after the vault shipped, so existing rows need the
+    // column before the FTS triggers below can reference it.
+    let has_note = conn.prepare("SELECT note FROM stash_items LIMIT 1").is_ok();
+    if !has_note {
+        let _ = conn.execute(
+            "ALTER TABLE stash_items ADD COLUMN note TEXT NOT NULL DEFAULT ''",
+            [],
+        );
+    }
+
+    // Reshape the full-text index when its column set changes. Dropping the
+    // triggers first matters: they reference stash_fts, and a rebuild against
+    // the old shape would fail halfway and leave a half-indexed vault.
+    let fts_v = setting_get_conn(conn, "stash_fts_v").ok().flatten();
+    if fts_v.as_deref() != Some(STASH_FTS_VERSION) {
+        let _ = conn.execute_batch(
+            "DROP TRIGGER IF EXISTS stash_fts_ai;
+             DROP TRIGGER IF EXISTS stash_fts_ad;
+             DROP TRIGGER IF EXISTS stash_fts_au;
+             DROP TABLE IF EXISTS stash_fts;",
+        );
+    }
+    let fts_ok = conn.execute_batch(STASH_FTS_SCHEMA).is_ok();
+    if fts_ok && fts_v.as_deref() != Some(STASH_FTS_VERSION) {
+        // Repopulate from stash_items, then record the version -- only after a
+        // clean rebuild, so a failure here retries on the next launch.
+        if conn
+            .execute("INSERT INTO stash_fts(stash_fts) VALUES ('rebuild')", [])
+            .is_ok()
+        {
+            let _ = setting_set_conn(conn, "stash_fts_v", STASH_FTS_VERSION);
+        }
+    }
+    crate::stash::set_fts_available(fts_ok);
+
     let done = setting_get_conn(conn, "model_v2").ok().flatten().is_some();
     if !done {
         // Old 'space' nodes become projects (they were the app-grouping

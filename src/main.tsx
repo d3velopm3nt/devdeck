@@ -4,15 +4,21 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import './index.css'
 import App from './App.tsx'
 import { CommandWidget } from './widget/CommandWidget'
+import { CaptureToast } from './widget/CaptureToast'
 
-// The same bundle serves both windows; the window label selects the UI.
-let isWidget = false
+// The same bundle serves every window; the window label selects the UI.
+let label = 'main'
 try {
-  isWidget = getCurrentWindow().label === 'widget'
+  label = getCurrentWindow().label
 } catch {
-  isWidget = false
+  label = 'main'
 }
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>{isWidget ? <CommandWidget /> : <App />}</StrictMode>,
-)
+// The toast floats over other apps, so its page must not paint a background
+// behind the card (see index.css).
+if (label === 'toast') document.documentElement.dataset.window = 'toast'
+
+const ui =
+  label === 'widget' ? <CommandWidget /> : label === 'toast' ? <CaptureToast /> : <App />
+
+createRoot(document.getElementById('root')!).render(<StrictMode>{ui}</StrictMode>)

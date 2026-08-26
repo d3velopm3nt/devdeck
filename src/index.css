@@ -105,6 +105,15 @@ body,
   font-family: 'Segoe UI', system-ui, sans-serif;
 }
 
+/* The capture toast is a transparent, undecorated window: it has to float
+   over whatever app you were typing in, so the page itself must not paint a
+   background behind its rounded card. */
+html[data-window='toast'],
+html[data-window='toast'] body,
+html[data-window='toast'] #root {
+  background: transparent;
+}
+
 /* shared control styles */
 .input {
   @apply rounded border border-line2 bg-page px-2 py-1 text-ink outline-none placeholder:text-faint focus:border-indigo-500;

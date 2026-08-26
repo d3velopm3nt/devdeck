@@ -12,7 +12,7 @@ import { getCurrentWindow, currentMonitor } from '@tauri-apps/api/window'
 import { LogicalPosition } from '@tauri-apps/api/dpi'
 import * as ipc from '../lib/ipc'
 import { useApp } from '../store'
-import type { SvcState, TreeNode } from '../lib/types'
+import type { StashItem, SvcState, TreeNode } from '../lib/types'
 import { findNode, resolveDir } from '../lib/tree'
 import { widgetOpenTerminal, widgetRunCommand, serviceDir } from './widgetActions'
 
@@ -182,7 +182,7 @@ export function CommandWidget() {
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Record<string, boolean>>({})
   const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState<'all' | 'commands' | 'services' | 'projects' | 'spaces'>('all')
+  const [filter, setFilter] = useState<'all' | 'stash' | 'commands' | 'services' | 'projects' | 'spaces'>('all')
   const [selIndex, setSelIndex] = useState(0)
   const [density, setDensity] = useState<Density>('compact')
   const [recentCount, setRecentCount] = useState(3)
@@ -1124,20 +1124,44 @@ function BrowseBody({ model, app, d, spaceId, spaceName, expanded, toggleExpand,
 function SearchBody({ model, app, d, query, setQuery, filter, setFilter, selIndex, setSelIndex, searchRef, statusOf, onRun, onToggle, selectSpace }: {
   model: ReturnType<typeof buildModelType>; app: ReturnType<typeof useApp.getState>; d: D
   query: string; setQuery: (q: string) => void
-  filter: 'all' | 'commands' | 'services' | 'projects' | 'spaces'; setFilter: (f: 'all' | 'commands' | 'services' | 'projects' | 'spaces') => void
+  filter: 'all' | 'stash' | 'commands' | 'services' | 'projects' | 'spaces'; setFilter: (f: 'all' | 'stash' | 'commands' | 'services' | 'projects' | 'spaces') => void
   selIndex: number; setSelIndex: (n: number) => void; searchRef: React.RefObject<HTMLInputElement | null>
   statusOf: (it: Item) => string; onRun: (it: Item) => void; onToggle: (it: Item) => void; selectSpace: (id: number) => void
 }) {
   useEffect(() => searchRef.current?.focus(), [searchRef])
-  type Entry = { kind: string; item?: Item; space?: { id: number; name: string; color: string }; name: string }
+  type Entry = { kind: string; item?: Item; space?: { id: number; name: string; color: string }; clip?: StashItem; name: string }
+  const [clips, setClips] = useState<StashItem[]>([])
+  const [hint, setHint] = useState('')
   const entries: Entry[] = useMemo(() => {
     const out: Entry[] = []
     model.itemsById.forEach((it) => out.push({ kind: it.kind, item: it, name: it.name }))
     model.spaces.forEach((sp) => out.push({ kind: 'space', space: sp, name: sp.name }))
     return out
   }, [model])
+
+  // Stash lives in SQLite, not in the widget's in-memory model, so this arm
+  // of the search is a debounced backend query (FTS, notes and tags included).
+  useEffect(() => {
+    if (filter !== 'stash') return
+    let alive = true
+    const id = window.setTimeout(() => {
+      void ipc
+        .stashList({ query, limit: 12 })
+        .then((r) => alive && setClips(r))
+        .catch(() => alive && setClips([]))
+    }, 120)
+    return () => {
+      alive = false
+      window.clearTimeout(id)
+    }
+  }, [filter, query])
+  useEffect(() => setHint(''), [query, filter])
+
   const results = useMemo(() => {
     const q = query.trim().toLowerCase()
+    if (filter === 'stash') {
+      return clips.map((c) => ({ kind: 'clip', clip: c, name: c.title } as Entry))
+    }
     let list = entries
     if (filter === 'commands') list = list.filter((e) => e.kind === 'command')
     else if (filter === 'services') list = list.filter((e) => e.kind === 'service')
@@ -1145,9 +1169,30 @@ function SearchBody({ model, app, d, query, setQuery, filter, setFilter, selInde
     else if (filter === 'projects') list = list.filter((e) => e.kind === 'space')
     if (q) list = list.filter((e) => e.name.toLowerCase().includes(q))
     return list.slice(0, 12)
-  }, [entries, query, filter])
-  const exec = (e: Entry) => {
-    if (e.kind === 'command' && e.item) onRun(e.item)
+  }, [entries, query, filter, clips])
+
+  const execClip = async (clip: StashItem, paste: boolean) => {
+    if (clip.is_secret) {
+      setHint('Flagged as a secret — its value was never stored, so there’s nothing to paste')
+      return
+    }
+    try {
+      const r = await ipc.stashPaste(clip.id, paste)
+      if (paste && !r.pasted) {
+        // Say what actually happened. Windows can refuse the foreground
+        // change, and claiming a paste that didn't land is worse than useless.
+        setHint('Copied — Windows wouldn’t hand focus back, so press Ctrl+V yourself')
+        return
+      }
+      await ipc.widgetHide()
+    } catch (e) {
+      setHint(String(e))
+    }
+  }
+
+  const exec = (e: Entry, paste = false) => {
+    if (e.kind === 'clip' && e.clip) void execClip(e.clip, paste)
+    else if (e.kind === 'command' && e.item) onRun(e.item)
     else if (e.kind === 'service' && e.item) onToggle(e.item)
     else if (e.kind === 'space' && e.space) selectSpace(e.space.id)
   }
@@ -1165,10 +1210,10 @@ function SearchBody({ model, app, d, query, setQuery, filter, setFilter, selInde
             onKeyDown={(e) => {
               if (e.key === 'ArrowDown') { e.preventDefault(); setSelIndex(Math.min(selIndex + 1, results.length - 1)) }
               else if (e.key === 'ArrowUp') { e.preventDefault(); setSelIndex(Math.max(selIndex - 1, 0)) }
-              else if (e.key === 'Enter') { e.preventDefault(); const r = results[selIndex]; if (r) exec(r) }
-              else if (e.key === 'Escape') setQuery('')
+              else if (e.key === 'Enter') { e.preventDefault(); const r = results[selIndex]; if (r) exec(r, e.shiftKey) }
+              else if (e.key === 'Escape') { if (query) setQuery(''); else void ipc.widgetHide() }
             }}
-            placeholder="Search commands, services, spaces…"
+            placeholder={filter === 'stash' ? 'Search everything you’ve copied…' : 'Search commands, services, spaces…'}
             style={css("flex:1;min-width:0;border:none;background:transparent;outline:none;color:#E7EAF0;font-family:Geist,sans-serif;font-size:13px")} />
           <kbd style={css("flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:10px;color:#656C7A;padding:2px 5px;border-radius:5px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08)")}>{app.hotkey}</kbd>
         </div>
@@ -1178,11 +1223,17 @@ function SearchBody({ model, app, d, query, setQuery, filter, setFilter, selInde
           ))}
         </div>
       </div>
-      <div style={css(`padding:2px ${d.padX}px 4px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:#656C7A;font-weight:600`)}>{query ? 'Results' : 'Frequent & recent'}</div>
+      <div style={css(`padding:2px ${d.padX}px 4px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:#656C7A;font-weight:600`)}>{filter === 'stash' ? (query ? 'Clips' : 'Latest clips') : query ? 'Results' : 'Frequent & recent'}</div>
+      {hint && <div style={css(`padding:0 ${d.padX}px 6px;font-size:11px;color:#FBBF24;line-height:1.45`)}>{hint}</div>}
       <div style={css(`padding:0 ${d.padX}px ${d.padX}px;display:flex;flex-direction:column;gap:3px`)}>
         {results.length === 0 && <div style={css('padding:26px 10px;text-align:center;color:#5a6070;font-size:12.5px')}>No matches{query ? ` for “${query}”` : ''}</div>}
         {results.map((e, i) => {
-          const [tc, tb, tag] = kindTag[e.kind] || ['#9BA3B2', 'rgba(255,255,255,0.07)', e.kind]
+          const clip = e.clip
+          const [tc, tb, tag] = clip
+            ? clip.is_secret
+              ? ['#FBBF24', 'rgba(251,191,36,0.15)', 'secret']
+              : ['#8E9CFF', 'rgba(124,140,248,0.14)', clip.item_type]
+            : kindTag[e.kind] || ['#9BA3B2', 'rgba(255,255,255,0.07)', e.kind]
           const sel = i === selIndex
           const it = e.item
           const isSvc = e.kind === 'service'
@@ -1190,9 +1241,15 @@ function SearchBody({ model, app, d, query, setQuery, filter, setFilter, selInde
           const [sc, anim] = isSvc ? statusMeta(st) : ['', 'none']
           const iconColor = e.kind === 'space' ? e.space!.color : (it?.iconColor || tc)
           const iconBg = e.kind === 'space' ? 'rgba(244,114,182,0.14)' : (it?.iconBg || tb)
-          const meta = it ? it.projectName + ' · ' + it.type : 'Space'
+          const meta = clip
+            ? [clip.project_name, clip.tags.join(' · '), clip.note]
+                .filter(Boolean)
+                .join('  ·  ') || clip.preview.split('\n')[0]
+            : it
+              ? it.projectName + ' · ' + it.type
+              : 'Space'
           return (
-            <button key={e.kind + (it?.id ?? e.space!.id) + i} onMouseEnter={() => setSelIndex(i)} onClick={() => exec(e)}
+            <button key={e.kind + (clip?.id ?? it?.id ?? e.space?.id ?? i) + i} onMouseEnter={() => setSelIndex(i)} onClick={(ev) => exec(e, ev.shiftKey)}
               style={css(`display:flex;align-items:center;gap:9px;padding:${d.padY}px 8px;min-height:${d.rowMinH}px;border-radius:9px;cursor:pointer;text-align:left;width:100%;border:1px solid ${sel ? 'rgba(124,140,248,0.4)' : 'rgba(255,255,255,0.04)'};background:${sel ? 'rgba(124,140,248,0.1)' : 'rgba(255,255,255,0.022)'}`)}>
               <div style={css(`width:${d.icon}px;height:${d.icon}px;border-radius:${d.rad}px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-weight:600;font-size:11px;color:${iconColor};background:${iconBg}`)}>{e.name[0]?.toUpperCase()}</div>
               <div style={css('flex:1;min-width:0')}>
@@ -1208,6 +1265,14 @@ function SearchBody({ model, app, d, query, setQuery, filter, setFilter, selInde
           )
         })}
       </div>
+      {filter === 'stash' && (
+        <div style={css(`display:flex;gap:12px;padding:7px ${d.padX}px;border-top:1px solid rgba(255,255,255,0.06);font-family:'JetBrains Mono',monospace;font-size:9.5px;color:#656C7A`)}>
+          <span>↑↓ navigate</span>
+          <span>⏎ copy</span>
+          <span>⇧⏎ paste</span>
+          <span>esc dismiss</span>
+        </div>
+      )}
     </>
   )
 }

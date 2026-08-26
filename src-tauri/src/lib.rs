@@ -21,6 +21,7 @@ mod scan;
 mod seed;
 mod services;
 mod setup;
+mod stash;
 
 use std::sync::{Arc, Mutex};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
@@ -31,6 +32,10 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 /// Show + focus the quick-access widget window (positioning it near the
 /// top-right of the primary monitor the first time).
 fn show_widget(app: &tauri::AppHandle) {
+    // Snapshot where the keyboard was *before* we take it, so ⇧⏎ in the
+    // widget can paste back into that window. Must happen first: once our
+    // window is up, the app you came from is no longer the foreground one.
+    stash::remember_target();
     if let Some(win) = app.get_webview_window("widget") {
         // Park it near the top-right on show if it's off-screen/unset.
         if let Ok(Some(monitor)) = win.primary_monitor() {
@@ -73,6 +78,52 @@ fn widget_show(app: tauri::AppHandle) {
 fn widget_hide(app: tauri::AppHandle) {
     if let Some(win) = app.get_webview_window("widget") {
         let _ = win.hide();
+    }
+}
+
+/// Park the capture toast just above the tray, at the bottom-right of the
+/// primary monitor, and show it *without* stealing focus — it appears while
+/// you're typing in another app.
+#[tauri::command]
+fn toast_show(app: tauri::AppHandle, width: f64, height: f64) {
+    place_and_show_toast(&app, width, height);
+}
+
+/// The toast's default size. Kept next to the placement so the Rust side can
+/// raise the window itself on capture rather than waiting for the hidden
+/// webview to ask -- a window that only appears once its JS happens to be
+/// subscribed is a toast you can't rely on.
+pub(crate) const TOAST_SIZE: (f64, f64) = (340.0, 92.0);
+
+pub(crate) fn place_and_show_toast(app: &tauri::AppHandle, width: f64, height: f64) {
+    let Some(win) = app.get_webview_window("toast") else {
+        return;
+    };
+    let _ = win.set_size(tauri::LogicalSize::new(width, height));
+    if let Ok(Some(monitor)) = win.primary_monitor() {
+        let scale = monitor.scale_factor();
+        let size = monitor.size().to_logical::<f64>(scale);
+        let x = (size.width - width - 18.0).max(0.0);
+        // 64px clears a standard taskbar without needing the work-area rect.
+        let y = (size.height - height - 64.0).max(0.0);
+        let _ = win.set_position(tauri::LogicalPosition::new(x, y));
+    }
+    stash::show_window_without_focus(&win);
+}
+
+#[tauri::command]
+fn toast_hide(app: tauri::AppHandle) {
+    if let Some(win) = app.get_webview_window("toast") {
+        stash::hide_window(&win);
+    }
+}
+
+/// Take focus — only once you've clicked into the toast to configure a clip,
+/// which is the one moment you do want it focused.
+#[tauri::command]
+fn toast_focus(app: tauri::AppHandle) {
+    if let Some(win) = app.get_webview_window("toast") {
+        let _ = win.set_focus();
     }
 }
 
@@ -407,11 +458,48 @@ pub fn run() {
                 .flatten()
                 .is_none();
 
+            // Stash: capture and the capture toast are on unless turned off;
+            // auto-paste is off until you opt in.
+            let flag = |key: &str, default: bool| {
+                db::setting_get_conn(&conn, key)
+                    .ok()
+                    .flatten()
+                    .map(|v| v != "0")
+                    .unwrap_or(default)
+            };
+            let stash_on = flag("stash_capture", true);
+            let stash_toast = flag("stash_toast", true);
+            let stash_auto_paste = flag("stash_auto_paste", false);
+            let stash_retention = db::setting_get_conn(&conn, "stash_retention_days")
+                .ok()
+                .flatten()
+                .and_then(|v| v.parse::<i64>().ok())
+                .unwrap_or(stash::DEFAULT_RETENTION_DAYS);
+
             app.manage(db::Db(Mutex::new(conn)));
             app.manage(Arc::new(pty::PtyManager::default()));
             app.manage(Arc::new(services::ServiceManager::default()));
 
+            let stash_state = Arc::new(stash::StashState::default());
+            {
+                use std::sync::atomic::Ordering::Relaxed;
+                stash_state.enabled.store(stash_on, Relaxed);
+                stash_state.toast.store(stash_toast, Relaxed);
+                stash_state.auto_paste.store(stash_auto_paste, Relaxed);
+                stash_state.retention_days.store(stash_retention, Relaxed);
+            }
+            app.manage(stash_state);
+
             monitor::spawn(app.handle().clone());
+            stash::spawn(app.handle().clone());
+
+            // Apply retention once on launch, so an app that's been closed for
+            // a month still tidies up the moment it opens.
+            if let Some(db) = app.try_state::<db::Db>() {
+                if let Ok(conn) = db.0.lock() {
+                    let _ = stash::prune(&conn, stash_retention);
+                }
+            }
 
             let handle = app.handle().clone();
             // Map legacy "ctrl+shift+Space" spec to the plugin's format.
@@ -555,6 +643,30 @@ pub fn run() {
             git::git_info,
             git::git_fetch,
             git::git_pull,
+            stash::stash_list,
+            stash::stash_get,
+            stash::stash_counts,
+            stash::stash_update,
+            stash::stash_create_note,
+            stash::stash_tags_list,
+            stash::stash_tag_add,
+            stash::stash_tag_remove,
+            stash::stash_tag_delete,
+            stash::stash_pin,
+            stash::stash_delete,
+            stash::stash_mark_used,
+            stash::stash_set_context,
+            stash::stash_status,
+            stash::stash_set_enabled,
+            stash::stash_set_option,
+            stash::stash_copy,
+            stash::stash_paste,
+            stash::stash_remember_target,
+            stash::stash_prune,
+            stash::stash_set_retention,
+            toast_show,
+            toast_hide,
+            toast_focus,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DevDeck");

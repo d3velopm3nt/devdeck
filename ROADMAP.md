@@ -42,6 +42,9 @@ things land so we never have to reconstruct state from memory.
 - [x] **Update-check honesty** — a failed check no longer reports "up to date";
       re-checks hourly and on window focus
 - [x] **Website** — redesign, real screenshots, animated walkthrough
+- [x] **Stash Phase 1** — event-driven clipboard capture, classifier, secret
+      guardrail, auto project tag, and the vault view (rail → sidebar → list +
+      detail, FTS5 search)
 
 ---
 
@@ -58,23 +61,113 @@ it. Build order:
 3. **Connections** — the SQL layer
 4. **Stash Phase 3** — screenshots + OCR
 
-### Stash Phase 1 — capture + vault (start here)
-- [ ] `stash_items` table + FTS5 virtual table, migration in `db.rs`
-- [ ] `stash.rs`: message-only window + `AddClipboardFormatListener`, handle
+### Stash Phase 1 — capture + vault ✅ built
+- [x] `stash_items` table + FTS5 virtual table, migration in `db.rs`
+- [x] `stash.rs`: message-only window + `AddClipboardFormatListener`, handle
       `WM_CLIPBOARDUPDATE` on a dedicated thread (event-driven, never poll)
-- [ ] Honour password-manager exclusions — skip clips carrying
+- [x] Honour password-manager exclusions — skip clips carrying
       `ExcludeClipboardContentFromMonitorProcessing` / `CanIncludeInClipboardHistory`
-- [ ] Classifier: json · sql · url · path · jwt · uuid · hex · stacktrace · text
-- [ ] Secret heuristic → flag it, persist **metadata only, never the value**
-- [ ] Tag each item with the workspace/project active at capture
-- [ ] Dedupe consecutive identical clips; skip oversized payloads
-- [ ] Rail item + Stash view: sidebar filters, list, detail pane, FTS search
+- [x] Classifier: json · sql · url · path · jwt · uuid · hex · stacktrace · text
+- [x] Secret heuristic → flag it, persist **metadata only, never the value**
+- [x] Tag each item with the workspace/project active at capture
+- [x] Dedupe consecutive identical clips; skip oversized payloads
+- [x] Rail item + Stash view: sidebar filters, list, detail pane, FTS search
+- [x] Edit a clip's name and text; a note field on every item, indexed for search
+- [x] Standalone notes (`kind = 'note'`) — items you write, that never touched
+      the clipboard
+- [x] User tags: many per item, created as you type, comma-separates several at
+      once, sidebar filter, pruned when the last item drops them. Search matches
+      tag names too.
+
+Notes for whoever picks up Phase 2:
+- Search says which search it is — `full-text · FTS5` vs `substring search` — so a
+  SQLite without FTS5 can never masquerade as full-text that found nothing.
+- Copy arms an echo guard (`stash_mark_used`) *before* writing the clipboard, so
+  copying a clip back out doesn't stash it again.
+- The capture pill in the search bar pauses/resumes capture (`stash_capture`).
+- The frontend pushes the active project via `stash_set_context` from `App.tsx`
+  only — the widget window runs its own store and would otherwise fight it.
+- The secret guardrail applies to **hand-edits too**: `stash_update` and
+  `stash_create_note` reject secret-shaped content and return the reason for the
+  UI to show. "Never writes a secret to disk" has no exceptions, or it isn't a
+  promise. A false positive is recoverable — edit the clip and save a value that
+  doesn't trip the heuristic, which clears the flag.
+- `STASH_FTS_VERSION` in `db.rs` gates a drop-and-rebuild of the FTS index.
+  Bump it whenever the indexed columns change; `CREATE VIRTUAL TABLE IF NOT
+  EXISTS` will not reshape an existing one, and a stale index returns wrong
+  results rather than erroring.
 
 ### Stash Phase 2 — make it fast
-- [ ] Widget paste surface: `⏎` copy · `⇧⏎` paste · `esc` dismiss
-- [ ] Type-driven actions: prettify/minify, decode JWT, save SQL as query,
-      search logs for a stacktrace, reveal path, run command, open URL
-- [ ] Pin / delete / retention pruning + Settings section
+- [x] Widget paste surface: a `stash` filter in the widget's search — `↑↓`
+      navigate · `⏎` copy · `⇧⏎` paste · `esc` dismiss
+- [x] **Capture toast** — a third window (`toast`) that appears bottom-right
+      when a clip lands, with *Configure* for name / tags / note. Shown via
+      `SW_SHOWNOACTIVATE` so it never steals focus mid-keystroke.
+- [x] Clipboard writes moved to Rust (`stash_copy`) — the webview's clipboard
+      API needs a focused document, and the widget deliberately has none
+- [x] Auto-paste as an opt-in setting; `⇧⏎` forces it for one paste
+- [x] Settings → Stash: capture · toast · auto-paste
+- [x] Pin / delete — landed with Phase 1 (the sidebar needs the Pinned filter)
+- [x] Type-driven actions, in the detail pane, only ever shown for types they
+      apply to: **json** prettify / minify · **jwt** decode (header, claims,
+      expiry — displayed only) · **url** open · **path** reveal in Explorer ·
+      **stacktrace** search the logs · **text** send to terminal
+- [ ] **SQL → save as query** — deferred on purpose: saved queries belong to
+      Connections, and there's no `queries` table yet. Building one here would
+      front-run that design. Pick it up with Connections.
+- [x] Retention pruning + its Settings row — a day count (0 = forever), an
+      *Apply* that prunes immediately and reports how many went, and a
+      *Prune now*. Runs at startup and, for an app left open, at most hourly
+      off the capture path (no timer thread for one DELETE).
+
+**Retention exempts anything you signalled you care about** — pinned, tagged,
+carrying a note, or written as a note — regardless of age. A vault that quietly
+eats something you tagged is worse than one that keeps too much, so the
+exemptions are the point, not a detail. Two tests pin it in both directions.
+
+More notes:
+- *Send to terminal* types the command in but does **not** press Enter. A stash
+  is full of text copied from places you didn't write; one click should not run
+  it. The tooltip says so.
+- *Prettify / minify* rewrite the clip through `stash_update`, so they re-derive
+  preview/size/hash and pass the same secret guardrail as any other edit.
+- Decoding a JWT is display-only. It's still a bearer credential — we store the
+  token because the roadmap calls for it, but nothing decoded is persisted.
+- **The JWT type and the secret guardrail collided.** The entropy fallback in
+  `secret_reason` was swallowing every JWT before `classify` ever saw one, so
+  `item_type` was `text`, no value was stored, and the decode action could
+  never appear — a feature that was dead on arrival. `!is_jwt(t)` now exempts
+  recognisable JWTs from *that one rule*; vendor prefixes and every other
+  heuristic still apply, and anything merely random-looking is still flagged.
+  This is a real trade-off (a JWT on disk is a credential on disk) and it is
+  one line to reverse — see the comment in `secret_reason`.
+- The stacktrace search picks the *last* line for a Python traceback (the
+  exception) and the *first* for everything else, because
+  "Traceback (most recent call last):" is the one line guaranteed to be useless.
+
+Hard-won notes from building the toast:
+- **A new window needs a capability entry.** `capabilities/default.json` lists
+  windows explicitly; until `toast` was added there every `invoke` and `listen`
+  from it was silently denied, so the window existed and did nothing.
+- **Rust raises the toast, not the toast's own JS.** It lives in a window
+  that's hidden until the moment it's needed, and a hidden webview is not
+  something to depend on for "did you see the event?". `record()` calls
+  `place_and_show_toast` directly; the JS only renders.
+- **Show and hide must both be raw Win32.** We show with `SW_SHOWNOACTIVATE`
+  to avoid stealing focus, which leaves Tauri's own visibility state stale —
+  so `hide()` can decide the window is already hidden and no-op, stranding the
+  toast on screen. `hide_raw` (`SW_HIDE`) keeps the pair symmetric.
+- **Auto-dismiss is a polled deadline, not a `setTimeout`.** The toast window
+  never has focus, and browsers throttle timers hard in unfocused windows — a
+  single 6s timeout may simply never fire.
+- **The clipboard is held for as little as possible.** Resolving the source
+  app (`OpenProcess` + `QueryFullProcessImageName`) takes far longer than the
+  read, and doing it with the clipboard still open is enough to make another
+  app's copy fail.
+
+### Stash Phase 2 — what's left
+Nothing, except **SQL → save as query**, which is parked with Connections
+(see above). Phase 2 is otherwise done.
 
 ### Stash Phase 3 — screenshots
 - [ ] Watch the screenshot folder, store links not copies, thumbnails
@@ -102,14 +195,14 @@ Rail item. Connections are first-class entities scoped to a workspace/project.
 ### Stash — the context-aware vault · `design/stash-mock.html`
 Rail item. One item vault; the clipboard is just a capture source.
 
-- [ ] `stash_items` table + **SQLite FTS5** index over all content
-- [ ] **Clipboard capture** via `AddClipboardFormatListener` (event-driven, no polling)
-- [ ] **Auto project tag** — every item records the workspace/project active at
+- [x] `stash_items` table + **SQLite FTS5** index over all content
+- [x] **Clipboard capture** via `AddClipboardFormatListener` (event-driven, no polling)
+- [x] **Auto project tag** — every item records the workspace/project active at
       capture time. This is the differentiator; no other clipboard manager has it.
-- [ ] **Smart type detection**: json · sql · url · path · jwt · uuid · hex · stacktrace · text
+- [x] **Smart type detection**: json · sql · url · path · jwt · uuid · hex · stacktrace · text
 - [ ] **Type-driven actions**: prettify/minify JSON, decode JWT, save SQL as a query,
       search logs for a stacktrace, reveal a path, run a command, open a URL
-- [ ] **Secrets guardrail** — key/token/password shapes are flagged and their value
+- [x] **Secrets guardrail** — key/token/password shapes are flagged and their value
       is *never written to disk*; clipboard content excluded by password managers
       is skipped entirely
 - [ ] **Retention** — pinned forever, unpinned pruned after 30 days (configurable)
@@ -121,6 +214,36 @@ Rail item. One item vault; the clipboard is just a capture source.
 - [ ] Anything started in the app makes the widget peek — **without stealing focus**
 - [ ] Auto-collapse back to the icon once healthy; always pop on a crash
 - [ ] Settings toggle for people who want it quiet
+
+### Accounts / password manager — idea, not designed yet
+Raised: it'd be useful to store and manage accounts (username / email, password)
+in DevDeck. Real need — Connections already has to solve credentials, and the
+Machine manifest wedge implies onboarding a machine's logins too.
+
+The fork in the road, to settle **before** any code:
+
+- **Integrate** an existing manager — `bw` (Bitwarden CLI) or `keepassxc-cli`,
+  shelled through the existing runner the way `machine.rs` drives winget/scoop.
+  DevDeck stores a *reference* to an entry; the secret is fetched on demand,
+  used, and dropped. Machine Setup already knows how to install the client.
+- **Build** a vault of our own — master password, Argon2id, an authenticated
+  cipher, memory hygiene, lock timeout, clipboard clearing, backup/restore, and
+  a written threat model. A different product with a much higher bar, and a
+  breach here costs users their accounts, not their afternoon.
+
+Recommendation: **integrate, don't build.** It composes with Connections and
+Stash instead of contradicting them — Stash's whole trust story is *"a secret's
+value never reaches our disk"*, and a homegrown vault in the same app inverts
+that on day one. If we ever do store something ourselves, it goes in Windows
+Credential Manager / DPAPI, per the rule already in `CLAUDE.md`.
+
+- [ ] Decide integrate vs build (see above)
+- [ ] If integrating: detect `bw` / `keepassxc-cli`, unlock flow, entry picker,
+      "fill from vault" on a Connection, never persist the fetched secret
+- [ ] Accounts as first-class items scoped to a workspace/project (the
+      *reference*, plus username/URL/notes — which are not secrets)
+- [ ] Stash ties in: a flagged clip could offer "save this to your vault"
+      instead of being dropped on the floor
 
 ### Activity stream
 - [ ] One `activity` event stream (service started, query ran, repo pulled, clip
@@ -167,3 +290,7 @@ Decisions from the monetisation conversation.
 - Terminal commands: an old report that commands don't type into the terminal —
   deprioritised, needs reproduction
 - No durable run history yet (see Activity stream)
+- Machine Setup used to re-probe winget/scoop on every remount with no visible
+  loading state; its catalog + installed list now live in the store (loaded
+  once per session, `Refresh` forces a re-probe) and a first load says what
+  it's waiting on. Other slow pages should follow the same shape.

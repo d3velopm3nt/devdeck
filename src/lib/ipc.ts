@@ -14,6 +14,12 @@ import type {
   Recent,
   ServiceDef,
   ShellDef,
+  StashCounts,
+  StashEdit,
+  StashItem,
+  StashQuery,
+  StashStatus,
+  TagCount,
   SvcState,
   TreeNode,
 } from './types'
@@ -222,6 +228,89 @@ export const appUpdate = () => invoke<void>('app_update')
 export const recentBump = (kind: 'command' | 'service', refId: number) =>
   invoke<void>('recent_bump', { kind, refId })
 export const recentsList = () => invoke<Recent[]>('recents_list')
+
+// ---- stash ----
+export const stashList = (q: Partial<StashQuery>) =>
+  invoke<StashItem[]>('stash_list', {
+    q: {
+      query: q.query ?? '',
+      filter: q.filter ?? 'all',
+      item_type: q.item_type ?? '',
+      tag: q.tag ?? '',
+      project_id: q.project_id ?? null,
+      no_project: q.no_project ?? false,
+      limit: q.limit ?? 300,
+    },
+  })
+/** Full row including `content` — the list omits it to stay small. */
+export const stashGet = (id: number) => invoke<StashItem>('stash_get', { id })
+/** Edit title / content / note. Rejects secret-shaped content with a reason. */
+export const stashUpdate = (edit: StashEdit) => invoke<StashItem>('stash_update', { edit })
+/** Write a note from scratch — an item that never touched the clipboard. */
+export const stashCreateNote = (title: string, content: string) =>
+  invoke<StashItem>('stash_create_note', { title, content })
+
+// ---- stash tags ----
+export const stashTagsList = () => invoke<TagCount[]>('stash_tags_list')
+/** Each entry may itself be comma-separated, so one box can add several. */
+export const stashTagAdd = (id: number, names: string[]) =>
+  invoke<string[]>('stash_tag_add', { id, names })
+export const stashTagRemove = (id: number, name: string) =>
+  invoke<string[]>('stash_tag_remove', { id, name })
+/** Remove a tag from every item at once. */
+export const stashTagDelete = (tagId: number) => invoke<void>('stash_tag_delete', { tagId })
+export const stashCounts = () => invoke<StashCounts>('stash_counts')
+export const stashPin = (id: number, pinned: boolean) => invoke<void>('stash_pin', { id, pinned })
+export const stashDelete = (id: number) => invoke<void>('stash_delete', { id })
+/** Bump usage + arm the echo guard so copying doesn't re-capture the clip. */
+export const stashMarkUsed = (id: number) => invoke<void>('stash_mark_used', { id })
+/** Tell the capture thread which project it should stamp new clips with. */
+export const stashSetContext = (
+  projectId: number | null,
+  projectName: string,
+  workspaceName: string,
+) => invoke<void>('stash_set_context', { projectId, projectName, workspaceName })
+export const stashStatus = () => invoke<StashStatus>('stash_status')
+export const stashSetEnabled = (enabled: boolean) => invoke<void>('stash_set_enabled', { enabled })
+/** `toast` = show the capture toast · `auto_paste` = paste, don't just copy. */
+export const stashSetOption = (key: 'toast' | 'auto_paste', value: boolean) =>
+  invoke<void>('stash_set_option', { key, value })
+/** Prune now using the saved window. Resolves with the number removed. */
+export const stashPrune = () => invoke<number>('stash_prune')
+/** Save a retention window (days; 0 = forever) and apply it immediately. */
+export const stashSetRetention = (days: number) => invoke<number>('stash_set_retention', { days })
+export function onStashItem(cb: (item: StashItem) => void): Promise<UnlistenFn> {
+  return listen<StashItem>('stash:item', (e) => cb(e.payload))
+}
+
+// ---- stash copy / paste ----
+export interface PasteResult {
+  copied: boolean
+  /** True only when the keystroke really reached another window — a false
+   *  here is "it's on your clipboard", never a pretend paste. */
+  pasted: boolean
+}
+/** Write a clip to the clipboard from the backend. Works from an unfocused
+ *  window, unlike the webview's clipboard API. */
+export const stashCopy = (id: number) => invoke<void>('stash_copy', { id })
+/** Copy, and paste into the app you came from when auto-paste is on (or when
+ *  `force` — that's ⇧⏎, an explicit ask). */
+export const stashPaste = (id: number, force = false) =>
+  invoke<PasteResult>('stash_paste', { id, force })
+/** Snapshot the foreground window before DevDeck takes focus. */
+export const stashRememberTarget = () => invoke<void>('stash_remember_target')
+
+// ---- capture toast window ----
+export const toastShow = (width: number, height: number) =>
+  invoke<void>('toast_show', { width, height })
+export const toastHide = () => invoke<void>('toast_hide')
+export const toastFocus = () => invoke<void>('toast_focus')
+
+/** Another window changed a stash item — tell whoever is displaying them. */
+export const emitStashChanged = () => emit('devdeck:stash-changed', {})
+export function onStashChanged(cb: () => void): Promise<UnlistenFn> {
+  return listen('devdeck:stash-changed', () => cb())
+}
 
 // ---- cross-window: app tour (widget drives the main window) ----
 export type TourAction = 'workspace' | 'project' | 'command' | 'service' | 'profile' | 'open-main'

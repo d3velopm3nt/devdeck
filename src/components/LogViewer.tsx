@@ -45,9 +45,12 @@ export function LogViewer() {
     if (follow) endRef.current?.scrollIntoView({ behavior: 'auto' })
   }, [filtered.length, follow])
 
-  // "View logs" from the sidebar focuses this panel on one service.
+  // "View logs" from the sidebar focuses this panel on one service; a
+  // stacktrace clip in Stash focuses it on the error text instead.
   useEffect(() => {
-    if (logFocus) setSource(logFocus.name)
+    if (!logFocus) return
+    setSource(logFocus.name)
+    if (logFocus.search != null) setSearch(logFocus.search)
   }, [logFocus])
 
   const toggleLevel = (lv: LogLevel) =>

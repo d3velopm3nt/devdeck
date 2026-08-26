@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DevDeck Stash — design mock</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  :root{
+    --bg:#0a0c11; --panel:#0f131a; --panel2:#141922; --raise:#171d28;
+    --line:#212a36; --line-soft:#171d26;
+    --ink:#e8ecf3; --dim:#9ba4b2; --muted:#69727f;
+    --accent:#7c8cf8; --accent2:#aab4ff; --run:#4ade80; --warn:#fbbf24; --err:#f87171; --cyan:#46b7f0; --viol:#a78bfa;
+    --sans:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
+    --mono:"Cascadia Code","Cascadia Mono",ui-monospace,Consolas,monospace;
+  }
+  html,body{margin:0;height:100%}
+  body{background:#07090d;color:var(--ink);font:13px/1.5 var(--sans);-webkit-font-smoothing:antialiased;
+       display:flex;flex-direction:column;align-items:center;gap:10px;padding:18px;min-height:100vh}
+  .mono{font-family:var(--mono)}
+  .i{width:1em;height:1em;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round;display:inline-block;vertical-align:-.13em}
+
+  .mockbar{width:min(1240px,100%);display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .mockbar b{color:var(--dim);font-weight:500}
+  .mockbar .views{margin-left:auto;display:flex;gap:6px}
+  .vbtn{padding:4px 10px;border:1px solid var(--line);border-radius:6px;color:var(--dim);cursor:pointer;text-decoration:none;font-family:var(--mono);font-size:11px}
+  .vbtn.on{border-color:var(--accent);color:var(--accent2)}
+
+  .app{position:relative;width:min(1240px,100%);height:790px;border:1px solid var(--line);border-radius:12px;overflow:hidden;
+       background:var(--bg);box-shadow:0 30px 80px rgba(0,0,0,.6);display:flex;flex-direction:column}
+  .native{height:30px;flex-shrink:0;display:flex;align-items:center;gap:8px;padding:0 12px;background:#0b0e15;border-bottom:1px solid var(--line-soft);font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .native .d{width:9px;height:9px;border-radius:50%;background:#2a3342}
+  .native .d1{background:#e0555044}.native .d2{background:#e0a94044}.native .d3{background:#4ade8044}
+  .shell{flex:1;display:flex;min-height:0}
+
+  /* rail */
+  .rail{width:52px;flex-shrink:0;background:#090b10;border-right:1px solid var(--line-soft);display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:4px}
+  .rlogo{font-family:var(--mono);font-weight:700;color:var(--accent);font-size:14px;margin-bottom:10px}
+  .ritem{position:relative;width:40px;height:40px;border-radius:9px;display:grid;place-items:center;color:var(--muted);cursor:pointer;font-size:17px}
+  .ritem.on{color:var(--ink);background:var(--raise)}
+  .ritem.on::before{content:"";position:absolute;left:-6px;top:9px;bottom:9px;width:2.5px;border-radius:2px;background:var(--accent)}
+  .rail .sp{flex:1}
+
+  /* sidebar */
+  .sidebar{width:230px;flex-shrink:0;background:#0a0d14;border-right:1px solid var(--line-soft);display:flex;flex-direction:column;min-height:0}
+  .sbhead{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line-soft)}
+  .sbhead .t{font-size:12.5px;font-weight:600}
+  .sbhead .i{color:var(--accent);font-size:14px}
+  .sbody{flex:1;overflow:auto;padding:8px 6px}
+  .cat{padding:10px 8px 4px;font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .frow{display:flex;align-items:center;gap:9px;padding:5px 8px;border-radius:6px;color:var(--dim);font-size:12.5px;cursor:pointer}
+  .frow:hover{background:rgba(255,255,255,.03)}
+  .frow.on{background:var(--raise);color:var(--ink)}
+  .frow .i{font-size:13px}
+  .frow .n{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--muted)}
+  .tags{display:flex;flex-wrap:wrap;gap:5px;padding:4px 8px}
+  .tag{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:999px;border:1px solid var(--line);color:var(--dim);cursor:pointer}
+  .tag:hover{border-color:var(--line);background:rgba(255,255,255,.03)}
+  .tag.proj{border-color:rgba(124,140,248,.35);color:var(--accent2)}
+  .tag.on{background:rgba(124,140,248,.16);border-color:transparent;color:var(--accent2)}
+
+  /* main */
+  .center{flex:1;display:flex;flex-direction:column;min-width:0}
+  .searchbar{display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:1px solid var(--line-soft);background:#0b0e15}
+  .sbox{flex:1;display:flex;align-items:center;gap:8px;background:#0b0f16;border:1px solid var(--line);border-radius:8px;padding:7px 11px}
+  .sbox input{flex:1;background:none;border:0;outline:0;color:var(--ink);font:12.5px var(--sans)}
+  .sbox .hint{font-family:var(--mono);font-size:9.5px;color:var(--muted)}
+  .capture{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;color:var(--run);padding:5px 10px;border:1px solid rgba(74,222,128,.28);border-radius:8px;background:rgba(74,222,128,.07)}
+  .capture i{width:7px;height:7px;border-radius:50%;background:var(--run);animation:pulse 2s infinite}
+  @keyframes pulse{50%{opacity:.35}}
+
+  .split{flex:1;display:flex;min-height:0}
+  .list{width:44%;border-right:1px solid var(--line-soft);overflow:auto;padding:8px}
+  .card{border:1px solid var(--line-soft);border-radius:10px;background:var(--panel);padding:9px 11px;margin-bottom:7px;cursor:pointer}
+  .card:hover{border-color:var(--line)}
+  .card.on{border-color:rgba(124,140,248,.5);background:var(--panel2);box-shadow:0 0 0 1px rgba(124,140,248,.25)}
+  .card .top{display:flex;align-items:center;gap:7px;margin-bottom:5px}
+  .kind{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:2px 6px;border-radius:5px}
+  .k-json{background:rgba(70,183,240,.14);color:var(--cyan)}
+  .k-sql{background:rgba(167,139,250,.14);color:var(--viol)}
+  .k-url{background:rgba(124,140,248,.14);color:var(--accent2)}
+  .k-err{background:rgba(248,113,113,.14);color:var(--err)}
+  .k-img{background:rgba(74,222,128,.13);color:var(--run)}
+  .k-txt{background:rgba(255,255,255,.06);color:var(--dim)}
+  .k-secret{background:rgba(251,191,36,.15);color:var(--warn)}
+  .card .when{margin-left:auto;font-family:var(--mono);font-size:9.5px;color:var(--muted)}
+  .card .pin{color:var(--warn);font-size:11px}
+  .card .body{font-family:var(--mono);font-size:11px;line-height:1.55;color:var(--dim);max-height:34px;overflow:hidden;white-space:pre-wrap;word-break:break-all}
+  .card .meta{display:flex;align-items:center;gap:6px;margin-top:6px}
+  .chip{font-family:var(--mono);font-size:9.5px;padding:1px 6px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+  .chip.proj{border-color:rgba(124,140,248,.3);color:var(--accent2)}
+  .thumb{width:100%;height:74px;border-radius:7px;border:1px solid var(--line);background:
+     linear-gradient(135deg,#12161f,#0d1017);display:grid;place-items:center;color:var(--muted);font-family:var(--mono);font-size:10px;margin-top:4px}
+
+  /* detail */
+  .detail{flex:1;display:flex;flex-direction:column;min-width:0;background:#0b0e15}
+  .dhead{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line-soft)}
+  .dhead .tt{min-width:0}
+  .dhead .tt b{font-size:13.5px;display:block}
+  .dhead .tt span{font-family:var(--mono);font-size:10px;color:var(--muted)}
+  .dactions{margin-left:auto;display:flex;gap:6px;flex-shrink:0}
+  .btn{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;border-radius:8px;padding:7px 11px;
+       color:var(--dim);border:1px solid var(--line);background:none;cursor:pointer}
+  .btn:hover{border-color:#3a4557;color:var(--ink)}
+  .btn.pri{background:var(--accent);color:#0a0c11;border-color:var(--accent)}
+  .dbody{flex:1;overflow:auto;padding:14px}
+  .code{border:1px solid var(--line-soft);border-radius:10px;background:#0b0f16;padding:12px 14px;font-family:var(--mono);font-size:12px;line-height:1.75;white-space:pre-wrap;word-break:break-word}
+  .k{color:#c792ea}.s{color:#c3e88d}.n{color:#f78c6c}.key{color:#82aaff}.c{color:#546e7a}
+  .drow{display:flex;gap:10px;margin-top:12px}
+  .dcell{flex:1;border:1px solid var(--line-soft);border-radius:9px;background:var(--panel);padding:9px 11px}
+  .dcell .k2{font-family:var(--mono);font-size:9px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+  .dcell .v{margin-top:3px;font-size:12.5px;color:var(--ink)}
+  .smart{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+  .smartbtn{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;padding:6px 10px;border-radius:8px;
+            border:1px solid rgba(124,140,248,.3);background:rgba(124,140,248,.09);color:var(--accent2);cursor:pointer}
+
+  /* secret notice */
+  .notice{margin-top:12px;border:1px solid rgba(251,191,36,.3);background:rgba(251,191,36,.06);border-radius:9px;padding:10px 12px;font-size:12px;color:var(--dim);line-height:1.55}
+  .notice b{color:var(--warn)}
+
+  /* widget */
+  .wwrap{position:absolute;right:26px;bottom:26px;z-index:30}
+  .widget{width:330px;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:linear-gradient(180deg,#131722,#0e1119);box-shadow:0 26px 60px rgba(0,0,0,.6)}
+  .wsearch{display:flex;align-items:center;gap:9px;padding:11px 12px;border-bottom:1px solid var(--line-soft)}
+  .wsearch .q{flex:1;font-size:13px;color:var(--ink)}
+  .wsearch .cursor{width:1.5px;height:15px;background:var(--accent);display:inline-block;animation:blink 1.1s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+  .wrow{display:flex;align-items:center;gap:9px;padding:8px 11px;border-left:2px solid transparent}
+  .wrow.sel{background:rgba(124,140,248,.1);border-left-color:var(--accent)}
+  .wrow .ic{width:24px;height:24px;border-radius:7px;display:grid;place-items:center;flex:none;font-size:12px}
+  .wrow .tx{flex:1;min-width:0}
+  .wrow .tx b{display:block;font-size:12px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .wrow .tx span{font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+  .wrow kbd{font-family:var(--mono);font-size:9px;padding:2px 5px;border-radius:4px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--dim)}
+  .wfoot{display:flex;align-items:center;gap:12px;padding:8px 11px;border-top:1px solid var(--line-soft);background:rgba(0,0,0,.2);font-family:var(--mono);font-size:9.5px;color:var(--muted)}
+
+  .caption{width:min(1240px,100%);font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.7}
+  .caption b{color:var(--accent2);font-weight:500}
+
+  [data-view] .view{display:none}
+  body[data-view="stash"] .view.stash{display:flex}
+  body[data-view="widget"] .view.stash{display:flex}
+  body[data-view="widget"] .wwrap{display:block}
+  .wwrap{display:none}
+</style>
+</head>
+<body data-view="stash">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="home" viewBox="0 0 24 24"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></symbol>
+  <symbol id="box" viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></symbol>
+  <symbol id="db" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></symbol>
+  <symbol id="layers" viewBox="0 0 24 24"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></symbol>
+  <symbol id="monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></symbol>
+  <symbol id="settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="clip" viewBox="0 0 24 24"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></symbol>
+  <symbol id="code" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></symbol>
+  <symbol id="link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7L12 19"/></symbol>
+  <symbol id="image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-4.35-4.35a2 2 0 0 0-2.83 0L6 18"/></symbol>
+  <symbol id="alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></symbol>
+  <symbol id="search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="star" viewBox="0 0 24 24"><polygon points="12 2 15 9 22 9.3 16.5 13.8 18.3 21 12 17 5.7 21 7.5 13.8 2 9.3 9 9"/></symbol>
+  <symbol id="copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16V4a2 2 0 0 1 2-2h10"/></symbol>
+  <symbol id="wand" viewBox="0 0 24 24"><path d="m15 4 5 5L9 20l-5-5z"/><path d="M18 2v4M20 4h-4M4 14v4M6 16H2"/></symbol>
+  <symbol id="shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></symbol>
+  <symbol id="terminal" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></symbol>
+  <symbol id="all" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></symbol>
+</svg>
+
+<div class="mockbar">
+  <b>design/stash-mock.html</b> · context-aware clip vault
+  <div class="views">
+    <a class="vbtn on" href="#stash">stash view</a>
+    <a class="vbtn" href="#widget">widget paste</a>
+  </div>
+</div>
+
+<div class="app">
+  <div class="native"><span class="d d1"></span><span class="d d2"></span><span class="d d3"></span><b style="margin-left:4px;font-weight:500">DevDeck</b></div>
+  <div class="shell view stash">
+    <nav class="rail">
+      <div class="rlogo">❯_</div>
+      <div class="ritem"><svg class="i"><use href="#home"/></svg></div>
+      <div class="ritem"><svg class="i"><use href="#box"/></svg></div>
+      <div class="ritem"><svg class="i"><use href="#db"/></svg></div>
+      <div class="ritem on"><svg class="i"><use href="#layers"/></svg></div>
+      <div class="ritem"><svg class="i"><use href="#monitor"/></svg></div>
+      <div class="sp"></div>
+      <div class="ritem"><svg class="i"><use href="#settings"/></svg></div>
+    </nav>
+
+    <aside class="sidebar">
+      <div class="sbhead"><svg class="i"><use href="#layers"/></svg><span class="t">Stash</span></div>
+      <div class="sbody">
+        <div class="frow on"><svg class="i"><use href="#all"/></svg> All items <span class="n">1,284</span></div>
+        <div class="frow"><svg class="i" style="color:var(--warn)"><use href="#star"/></svg> Pinned <span class="n">18</span></div>
+        <div class="cat">Types</div>
+        <div class="frow"><svg class="i"><use href="#clip"/></svg> Clips <span class="n">903</span></div>
+        <div class="frow"><svg class="i" style="color:var(--viol)"><use href="#code"/></svg> Code &amp; SQL <span class="n">211</span></div>
+        <div class="frow"><svg class="i" style="color:var(--accent2)"><use href="#link"/></svg> Links <span class="n">96</span></div>
+        <div class="frow"><svg class="i" style="color:var(--run)"><use href="#image"/></svg> Screenshots <span class="n">54</span></div>
+        <div class="frow"><svg class="i" style="color:var(--err)"><use href="#alert"/></svg> Errors <span class="n">20</span></div>
+        <div class="cat">Captured in</div>
+        <div class="tags">
+          <span class="tag proj on">storefront</span>
+          <span class="tag proj">api-gateway</span>
+          <span class="tag proj">infra</span>
+          <span class="tag">no project</span>
+        </div>
+        <div class="cat">Smart tags</div>
+        <div class="tags">
+          <span class="tag">json</span><span class="tag">sql</span><span class="tag">url</span>
+          <span class="tag">path</span><span class="tag">jwt</span><span class="tag">uuid</span>
+          <span class="tag">hex</span><span class="tag">stacktrace</span>
+        </div>
+      </div>
+    </aside>
+
+    <div class="center">
+      <div class="searchbar">
+        <div class="sbox">
+          <svg class="i" style="color:var(--muted)"><use href="#search"/></svg>
+          <input value="connection string" readonly />
+          <span class="hint">full-text · FTS5</span>
+        </div>
+        <span class="capture"><i></i> capturing</span>
+      </div>
+
+      <div class="split">
+        <div class="list">
+          <div class="card on">
+            <div class="top"><span class="kind k-json">json</span><span class="pin">★</span><span class="when">2m ago</span></div>
+            <div class="body">{ "db": { "host": "db.staging.acme.io", "port": 5432, "user": "app_rw" } }</div>
+            <div class="meta"><span class="chip proj">storefront</span><span class="chip">2.1 KB</span></div>
+          </div>
+          <div class="card">
+            <div class="top"><span class="kind k-secret">secret · hidden</span><span class="when">6m ago</span></div>
+            <div class="body">••••••••••••••••••••••••••••  <span style="color:var(--muted)">(value not stored)</span></div>
+            <div class="meta"><span class="chip proj">storefront</span><span class="chip">looks like an API key</span></div>
+          </div>
+          <div class="card">
+            <div class="top"><span class="kind k-sql">sql</span><span class="when">14m ago</span></div>
+            <div class="body">select o.id, c.name from orders o join customers c on c.id = o.customer_id where o.total &gt; 1000</div>
+            <div class="meta"><span class="chip proj">storefront</span><span class="chip">→ save as query</span></div>
+          </div>
+          <div class="card">
+            <div class="top"><span class="kind k-err">stacktrace</span><span class="when">28m ago</span></div>
+            <div class="body">TypeError: Cannot read properties of undefined (reading 'map')
+    at OrdersTable (src/views/Orders.tsx:42:19)</div>
+            <div class="meta"><span class="chip proj">storefront</span><span class="chip">→ search logs</span></div>
+          </div>
+          <div class="card">
+            <div class="top"><span class="kind k-img">screenshot</span><span class="when">1h ago</span></div>
+            <div class="thumb">Screenshot 2026-08-26 141207.png · linked, not copied</div>
+            <div class="meta"><span class="chip proj">api-gateway</span><span class="chip">OCR indexed</span></div>
+          </div>
+          <div class="card">
+            <div class="top"><span class="kind k-url">url</span><span class="when">3h ago</span></div>
+            <div class="body">http://localhost:3000/orders?status=failed</div>
+            <div class="meta"><span class="chip proj">storefront</span><span class="chip">→ service “web”</span></div>
+          </div>
+          <div class="card">
+            <div class="top"><span class="kind k-txt">text</span><span class="when">yesterday</span></div>
+            <div class="body">pnpm dlx shadcn-ui@latest add dialog</div>
+            <div class="meta"><span class="chip proj">storefront</span><span class="chip">→ run in terminal</span></div>
+          </div>
+        </div>
+
+        <div class="detail">
+          <div class="dhead">
+            <span class="kind k-json">json</span>
+            <div class="tt"><b>Staging DB config</b><span>captured 2m ago · storefront · 2.1 KB</span></div>
+            <div class="dactions">
+              <button class="btn"><svg class="i"><use href="#star"/></svg> Pin</button>
+              <button class="btn pri"><svg class="i"><use href="#copy"/></svg> Copy <kbd style="font-family:var(--mono);font-size:9px;opacity:.7">⏎</kbd></button>
+            </div>
+          </div>
+          <div class="dbody">
+            <div class="code"><span class="c">// auto-formatted preview</span>
+{
+  <span class="key">"db"</span>: {
+    <span class="key">"host"</span>: <span class="s">"db.staging.acme.io"</span>,
+    <span class="key">"port"</span>: <span class="n">5432</span>,
+    <span class="key">"user"</span>: <span class="s">"app_rw"</span>,
+    <span class="key">"pool"</span>: { <span class="key">"min"</span>: <span class="n">2</span>, <span class="key">"max"</span>: <span class="n">10</span> }
+  }
+}</div>
+
+            <div class="smart">
+              <span class="smartbtn"><svg class="i"><use href="#wand"/></svg> Prettify</span>
+              <span class="smartbtn"><svg class="i"><use href="#wand"/></svg> Minify</span>
+              <span class="smartbtn"><svg class="i"><use href="#db"/></svg> Open as connection</span>
+              <span class="smartbtn"><svg class="i"><use href="#terminal"/></svg> Paste into terminal</span>
+            </div>
+
+            <div class="drow">
+              <div class="dcell"><div class="k2">Captured while in</div><div class="v" style="color:var(--accent2)">storefront</div></div>
+              <div class="dcell"><div class="k2">Source app</div><div class="v">Code.exe</div></div>
+              <div class="dcell"><div class="k2">Used</div><div class="v">4 times</div></div>
+            </div>
+
+            <div class="notice">
+              <b>Privacy by default.</b> Clips are stored in your local SQLite file — nothing leaves the machine.
+              Anything shaped like a key, token or password is <b>flagged and its value is never written to disk</b>;
+              content marked sensitive by your password manager is skipped entirely.
+              Unpinned clips are pruned after 30 days.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- widget paste surface -->
+  <div class="wwrap">
+    <div class="widget">
+      <div class="wsearch">
+        <svg class="i" style="color:var(--muted)"><use href="#search"/></svg>
+        <span class="q">conn<span class="cursor"></span></span>
+        <kbd style="font-family:var(--mono);font-size:9px;padding:2px 5px;border-radius:4px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--dim)">stash</kbd>
+      </div>
+      <div class="wrow sel">
+        <span class="ic k-json"><svg class="i"><use href="#code"/></svg></span>
+        <span class="tx"><b>Staging DB config</b><span>json · storefront · 2m ago</span></span>
+        <kbd>⏎</kbd>
+      </div>
+      <div class="wrow">
+        <span class="ic k-sql"><svg class="i"><use href="#code"/></svg></span>
+        <span class="tx"><b>top-orders.sql</b><span>sql · storefront · 14m</span></span>
+      </div>
+      <div class="wrow">
+        <span class="ic k-url"><svg class="i"><use href="#link"/></svg></span>
+        <span class="tx"><b>localhost:3000/orders</b><span>url · storefront · 3h</span></span>
+      </div>
+      <div class="wrow">
+        <span class="ic k-txt"><svg class="i"><use href="#clip"/></svg></span>
+        <span class="tx"><b>pnpm dlx shadcn-ui add dialog</b><span>text · storefront · yesterday</span></span>
+      </div>
+      <div class="wfoot"><span>↑↓ navigate</span><span>⏎ copy</span><span>⇧⏎ paste</span><span>esc dismiss</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="caption">
+  <b>The idea:</b> one vault, many item types — every clip auto-tagged with the project you were in when you copied it.<br />
+  <b>The differentiator:</b> no other clipboard manager knows you were working in <i>storefront</i> at 14:32. That's what makes “that connection string from the tyrex bug” findable six weeks later.<br />
+  <b>The trust rule:</b> secrets are detected and never persisted; everything is local SQLite + FTS5.
+</div>
+
+<script>
+  function apply(v){
+    document.body.dataset.view = v
+    document.querySelectorAll('.vbtn').forEach(function(b){ b.classList.toggle('on', b.getAttribute('href') === '#'+v) })
+  }
+  window.addEventListener('hashchange', function(){ apply((location.hash||'#stash').slice(1)) })
+  apply((location.hash||'#stash').slice(1))
+</script>
+</body>
+</html>

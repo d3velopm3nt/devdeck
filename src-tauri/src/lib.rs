@@ -11,6 +11,7 @@
 //! New capability areas (git, docker, ssh, plugins…) slot in as new
 //! modules with their own commands/events without touching existing ones.
 
+mod activity;
 mod conn;
 mod creds;
 mod db;
@@ -53,6 +54,52 @@ fn show_widget(app: &tauri::AppHandle) {
         let _ = win.show();
         let _ = win.set_focus();
     }
+}
+
+/// Bring the widget into view *without* taking the keyboard, and hide it
+/// again after a moment. Something you started elsewhere shouldn't yank focus
+/// out of whatever you're typing in — that's the whole point of a peek.
+///
+/// A crash always peeks; a healthy start peeks only until it looks fine.
+pub(crate) fn widget_peek(app: &tauri::AppHandle, sticky: bool) {
+    let Some(win) = app.get_webview_window("widget") else {
+        return;
+    };
+    // Already up and being used — leave it alone rather than resize or
+    // re-place a window you're mid-interaction with.
+    if win.is_visible().unwrap_or(false) && !win.is_minimized().unwrap_or(false) {
+        return;
+    }
+    if let Ok(Some(monitor)) = win.primary_monitor() {
+        let scale = monitor.scale_factor();
+        let size = monitor.size().to_logical::<f64>(scale);
+        if let Ok(w) = win.outer_size().map(|s| s.to_logical::<f64>(scale)) {
+            let x = (size.width - w.width - 24.0).max(0.0);
+            let _ = win.set_position(tauri::LogicalPosition::new(x, 48.0));
+        }
+    }
+    stash::show_window_without_focus(&win);
+
+    if sticky {
+        return;
+    }
+    // Auto-collapse: a healthy start is worth a glance, not a window that
+    // stays in your way. A crash passes sticky = true and stays put.
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(6));
+        if let Some(win) = app.get_webview_window("widget") {
+            // Don't snatch it away if you started interacting with it.
+            if !win.is_focused().unwrap_or(false) {
+                stash::hide_window(&win);
+            }
+        }
+    });
+}
+
+#[tauri::command]
+fn widget_peek_cmd(app: tauri::AppHandle, sticky: bool) {
+    widget_peek(&app, sticky);
 }
 
 fn toggle_widget(app: &tauri::AppHandle) {
@@ -595,6 +642,7 @@ pub fn run() {
             widget_show,
             widget_hide,
             widget_resize,
+            widget_peek_cmd,
             focus_main,
             reveal_in_explorer,
             open_url,
@@ -692,6 +740,9 @@ pub fn run() {
             conn::conn_query_save,
             conn::conn_query_delete,
             conn::conn_runs_list,
+            activity::activity_list,
+            activity::activity_clear,
+            activity::service_runs,
             toast_show,
             toast_hide,
             toast_focus,

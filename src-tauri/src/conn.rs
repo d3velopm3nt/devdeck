@@ -435,6 +435,19 @@ pub fn conn_run(
     );
     drop(conn);
 
+    crate::activity::record(
+        &app,
+        "query",
+        format!("query on {}", def.name),
+        if result.error.is_empty() {
+            format!("{} rows in {}ms", result.row_count, result.ms)
+        } else {
+            result.error.lines().next().unwrap_or("failed").to_string()
+        },
+        result.error.is_empty(),
+        Some(id),
+    );
+
     // A query run is a thing that happened, like a service starting.
     let _ = app.emit(
         "conn:run",

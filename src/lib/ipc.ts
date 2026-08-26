@@ -14,7 +14,9 @@ import type {
   Recent,
   ServiceDef,
   ShellDef,
+  Activity,
   ConnDef,
+  ServiceRun,
   QueryResult,
   QueryRun,
   SavedQuery,
@@ -213,6 +215,9 @@ export const widgetResize = (width: number, height: number) =>
   invoke<void>('widget_resize', { width, height })
 
 export const focusMain = () => invoke<void>('focus_main')
+/** Bring the widget into view without taking the keyboard. `sticky` keeps it
+ *  up (a crash); otherwise it collapses itself after a few seconds. */
+export const widgetPeek = (sticky = false) => invoke<void>('widget_peek_cmd', { sticky })
 
 // ---- self-update ----
 export interface UpdateInfo {
@@ -232,6 +237,16 @@ export const appUpdate = () => invoke<void>('app_update')
 export const recentBump = (kind: 'command' | 'service', refId: number) =>
   invoke<void>('recent_bump', { kind, refId })
 export const recentsList = () => invoke<Recent[]>('recents_list')
+
+// ---- activity ----
+export const activityList = (limit = 60) => invoke<Activity[]>('activity_list', { limit })
+export const activityClear = () => invoke<void>('activity_clear')
+/** Durable run history for one service: start, stop, duration, exit code. */
+export const serviceRuns = (serviceId: number, limit = 25) =>
+  invoke<ServiceRun[]>('service_runs', { serviceId, limit })
+export function onActivity(cb: (a: Activity) => void): Promise<UnlistenFn> {
+  return listen<Activity>('activity:new', (e) => cb(e.payload))
+}
 
 // ---- connections ----
 export const connList = () => invoke<ConnDef[]>('conn_list')

@@ -685,6 +685,18 @@ pub fn record(app: &tauri::AppHandle, cap: Captured) -> Option<StashItem> {
         used_count: 0,
     };
     let _ = app.emit("stash:item", item.clone());
+    crate::activity::record(
+        app,
+        "clip",
+        if item.is_secret {
+            format!("flagged a clip — {}", item.secret_reason)
+        } else {
+            format!("stashed {}", item.item_type)
+        },
+        item.title.clone(),
+        true,
+        Some(item.id),
+    );
     // Raise the toast from here rather than letting its window ask. The toast
     // lives in a window that is hidden until this moment, and a hidden
     // webview is not a reliable thing to depend on for "did you notice the

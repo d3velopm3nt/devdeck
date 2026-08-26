@@ -115,8 +115,72 @@ pub fn push_log(
     let _ = app.emit("svc:log", entry);
 }
 
+/// The widget-peek setting. Read per event rather than cached so toggling it
+/// in Settings takes effect immediately.
+fn peek_enabled(app: &tauri::AppHandle) -> bool {
+    app.try_state::<crate::db::Db>()
+        .and_then(|db| {
+            db.0.lock()
+                .ok()
+                .and_then(|c| crate::db::setting_get_conn(&c, "widget_peek").ok().flatten())
+        })
+        .map(|v| v != "0")
+        .unwrap_or(true)
+}
+
 fn emit_status(app: &tauri::AppHandle, state: &SvcState) {
     let _ = app.emit("svc:status", state.clone());
+    // Every service transition passes through here, so this is the one place
+    // the activity stream needs to hook -- rather than each call site
+    // remembering to log, and one of them eventually forgetting.
+    // Peek the widget on anything that starts or breaks -- without focus.
+    // A crash is sticky; a healthy start collapses itself after a beat.
+    if peek_enabled(app) {
+        match state.status {
+            SvcStatus::Running => crate::widget_peek(app, false),
+            SvcStatus::Crashed => crate::widget_peek(app, true),
+            SvcStatus::Stopped => {}
+        }
+    }
+    match state.status {
+        SvcStatus::Running => {
+            crate::activity::run_started(app, state.id);
+            crate::activity::record(
+                app,
+                "service",
+                format!("{} started", state.name),
+                String::new(),
+                true,
+                Some(state.id),
+            );
+        }
+        SvcStatus::Crashed => {
+            let code = state.exit_code.map(|c| c as i64);
+            crate::activity::run_ended(app, state.id, code, true);
+            crate::activity::record(
+                app,
+                "service",
+                format!("{} crashed", state.name),
+                match code {
+                    Some(c) => format!("exit code {c}"),
+                    None => String::new(),
+                },
+                false,
+                Some(state.id),
+            );
+        }
+        SvcStatus::Stopped => {
+            crate::activity::run_ended(app, state.id, state.exit_code.map(|c| c as i64), false);
+            crate::activity::record(
+                app,
+                "service",
+                format!("{} stopped", state.name),
+                String::new(),
+                true,
+                Some(state.id),
+            );
+        }
+    }
 }
 
 /// Basename (lowercase, no extension) of a shell path, for dispatch.

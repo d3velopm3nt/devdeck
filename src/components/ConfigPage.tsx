@@ -50,6 +50,17 @@ export function ConfigPage() {
 
   // Retention: the input is a draft until you commit it, so typing "3" on the
   // way to "30" never prunes a month of clips.
+  // Widget peek lives in settings rather than stash status, so it is read
+  // and written directly.
+  const [peek, setPeekState] = useState(true)
+  useEffect(() => {
+    void ipc.settingGet('widget_peek').then((v) => setPeekState(v == null ? true : v !== '0'))
+  }, [])
+  const setPeek = async (v: boolean) => {
+    setPeekState(v)
+    await ipc.settingSet('widget_peek', v ? '1' : '0')
+  }
+
   const [retention, setRetention] = useState('')
   const [pruned, setPruned] = useState<string | null>(null)
   const retentionDays = stashStatus?.retention_days
@@ -162,6 +173,11 @@ export function ConfigPage() {
               label="Show a toast when a clip is captured"
             />
             <Toggle
+              checked={peek}
+              onChange={(v) => void setPeek(v)}
+              label="Peek the widget when a service starts or crashes"
+            />
+            <Toggle
               checked={stashStatus?.auto_paste ?? false}
               onChange={(v) => void setStashOption('auto_paste', v)}
               label="Paste straight into the app I came from (instead of only copying)"
@@ -199,6 +215,10 @@ export function ConfigPage() {
             shaped like a key, token or password is flagged and{' '}
             <b className="text-warn">its value is never written to disk</b>, and content your
             password manager marks sensitive is skipped entirely.
+            <br />
+            The widget <b>peeks without taking focus</b> when a service starts, and stays put
+            when one crashes — a window that grabs the keyboard mid-keystroke is worse than no
+            notification at all.
             <br />
             Auto-paste synthesises <code>Ctrl+V</code> into whichever window had focus before
             DevDeck. It's off by default, and Windows can refuse the focus change — when that

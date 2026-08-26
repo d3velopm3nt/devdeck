@@ -170,6 +170,10 @@ pub fn open() -> Connection {
 
     conn.execute_batch(STASH_SCHEMA).expect("create stash schema");
     conn.execute_batch(CONN_SCHEMA).expect("create connections schema");
+    conn.execute_batch(ACTIVITY_SCHEMA)
+        .expect("create activity schema");
+    // A run that was "running" when the app was killed did not survive.
+    crate::activity::close_orphan_runs(&conn);
 
     migrate(&conn);
     // Startup recovery has just replayed any leftover WAL; write it into the
@@ -226,6 +230,34 @@ pub const STASH_SCHEMA: &str = r#"
             PRIMARY KEY (item_id, tag_id)
         );
         CREATE INDEX IF NOT EXISTS stash_item_tags_tag ON stash_item_tags(tag_id);
+"#;
+
+/// One activity stream, plus durable per-service run history. Home's feed
+/// used to be derived from `recents`, which only remembers the *last* time
+/// something ran -- so two runs looked like one and a crash looked like
+/// nothing. These record each occurrence and survive a restart.
+pub const ACTIVITY_SCHEMA: &str = r#"
+        CREATE TABLE IF NOT EXISTS activity (
+            id INTEGER PRIMARY KEY,
+            kind TEXT NOT NULL,   -- service|query|git|clip|screenshot|setup|update
+            title TEXT NOT NULL,
+            detail TEXT NOT NULL DEFAULT '',
+            ok INTEGER NOT NULL DEFAULT 1,
+            ref_id INTEGER,
+            project_name TEXT NOT NULL DEFAULT '',
+            ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS activity_ts ON activity(ts DESC);
+        CREATE TABLE IF NOT EXISTS service_runs (
+            id INTEGER PRIMARY KEY,
+            service_id INTEGER NOT NULL,
+            started_at INTEGER NOT NULL,
+            ended_at INTEGER,
+            exit_code INTEGER,
+            outcome TEXT NOT NULL DEFAULT 'running'  -- running|stopped|crashed
+        );
+        CREATE INDEX IF NOT EXISTS service_runs_svc
+            ON service_runs(service_id, started_at DESC);
 "#;
 
 /// Connections: the SQL layer. Note what is *not* here -- there is no password

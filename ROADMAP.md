@@ -64,7 +64,9 @@ it. Build order:
 3. ~~**Connections** — the SQL layer~~ ✅
 4. ~~**Stash Phase 3** — screenshots + OCR~~ ✅
 
-Remaining: Widget peek · Activity stream · business/distribution.
+**Every engineering item on this roadmap is now built.** What remains is
+business and distribution — decisions that are the owner's to make rather than
+things to be implemented past. See *Business / distribution* below.
 
 ### Stash Phase 1 — capture + vault ✅ built
 - [x] `stash_items` table + FTS5 virtual table, migration in `db.rs`
@@ -306,7 +308,15 @@ Credential Manager / DPAPI, per the rule already in `CLAUDE.md`.
 
 ## Business / distribution
 
-Decisions from the monetisation conversation.
+Decisions from the monetisation conversation. **These are deliberately not
+built.** Each one needs a call only the owner can make — a licence choice has
+legal consequences, a payment vendor picks a key format, and cutting a release
+publishes to other people's machines. Guessing at any of them and writing code
+around the guess is worse than leaving them open.
+
+The one with a live cost is the first: while the repo is private, every
+existing install silently loses auto-update, `scoop update devdeck` fails, and
+the website's download links point at nothing.
 
 - [ ] **Repo back to public** — blocks auto-update, scoop, and the website download
       links while private
@@ -320,7 +330,10 @@ Decisions from the monetisation conversation.
 - [ ] **Launch**: demo GIF in the README → Show HN → Reddit → winget submission →
       awesome-* list PRs → Product Hunt → dev.to writeup
 - [ ] **Team wedge** (the actual revenue bet): shareable machine manifests —
-      "onboard a new developer's machine in one click, reproducibly"
+      "onboard a new developer's machine in one click, reproducibly".
+      *The mechanism already ships*: Machine Setup exports and imports a
+      manifest today. What's missing is the product around it — sharing,
+      versioning, and the licence that makes it the paid tier.
 
 ---
 
@@ -340,7 +353,6 @@ Decisions from the monetisation conversation.
 - Command Widget hasn't been migrated to the icon registry or the theme tokens
 - Terminal commands: an old report that commands don't type into the terminal —
   deprioritised, needs reproduction
-- No durable run history yet (see Activity stream)
 - Machine Setup used to re-probe winget/scoop on every remount with no visible
   loading state; its catalog + installed list now live in the store (loaded
   once per session, `Refresh` forces a re-probe) and a first load says what

@@ -18,6 +18,7 @@ import type {
   ConnDef,
   QueryResult,
   SavedQuery,
+  Activity,
   StashCounts,
   StashEdit,
   StashFilter,
@@ -178,6 +179,11 @@ export interface AppState {
   createStashNote: (title: string, content: string) => Promise<void>
   addStashTags: (id: number, input: string) => Promise<void>
   removeStashTag: (id: number, name: string) => Promise<void>
+
+  /** The activity stream — every source writes to it, everything reads it. */
+  activity: Activity[]
+  refreshActivity: () => Promise<void>
+  pushActivity: (a: Activity) => void
 
   // Connections — the SQL layer.
   connections: ConnDef[]
@@ -419,6 +425,7 @@ export const useApp = create<AppState>((set, get) => ({
     })
     document.documentElement.dataset.theme = savedTheme === 'light' ? 'light' : 'dark'
     void get().refreshGit()
+    void get().refreshActivity()
     void get().refreshConnections()
     void get().refreshConnQueries()
   },
@@ -583,6 +590,10 @@ export const useApp = create<AppState>((set, get) => ({
     }))
     await Promise.all([get().refreshStash(), get().refreshStashCounts()])
   },
+
+  activity: [],
+  refreshActivity: async () => set({ activity: await ipc.activityList(60) }),
+  pushActivity: (a) => set((st) => ({ activity: [a, ...st.activity].slice(0, 60) })),
 
   connections: [],
   connQueries: [],

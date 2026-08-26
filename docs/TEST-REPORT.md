@@ -264,6 +264,40 @@ now instant" needs clicking the rail, which the automation could not do.
 
 ---
 
+## Activity stream
+
+One table every source writes to — services, queries, pulls, clips,
+screenshots — so Home, the widget and usage ranking read the same stream.
+
+**Verified live.** Copying two things produced two `clip` rows with the right
+kind, outcome and detail, within a second, and they appeared in Home's feed.
+
+This replaces a feed derived from `recents`, which only stores *the last time*
+something ran: two runs looked like one, and a crash looked like nothing at
+all. Service transitions hook `emit_status`, the single chokepoint they all
+pass through, rather than each call site remembering to log.
+
+Per-service run history is durable — start, stop, duration, exit code — and
+open runs are closed at startup, because a run that was "running" when the app
+was killed did not survive and saying otherwise is a lie the history then
+repeats forever.
+
+---
+
+## Widget peek
+
+The widget comes into view when a service starts or crashes, **without taking
+the keyboard**. A healthy start collapses itself after a few seconds; a crash
+is sticky. It leaves a widget you already have open alone, and won't snatch
+away one you've started interacting with.
+
+**Verified by typecheck and by reuse**: the show-without-focus primitive is the
+same one measured for the capture toast, where foreground-unchanged and
+focus-not-taken were confirmed against the real window. The service-triggered
+path itself needs a service to start, which is click-driven.
+
+---
+
 ## What is not verified
 
 Stated plainly, because a report that only lists successes is not a report.
@@ -275,10 +309,18 @@ Stated plainly, because a report that only lists successes is not a report.
 | Machine Setup caching / loading pane | **Typecheck only.** Click-driven. |
 | Connections: a real query round-trip | **Untested.** No client installed here. |
 | The widget's stash paste surface | **Typecheck only.** Needs the widget summoned and driven. |
+| Widget peek on a service start | **Typecheck only.** The underlying no-focus show is measured; this trigger is not. |
 
 ---
 
 ## Still open on the roadmap
+
+**Every engineering item is built.** What remains is business and distribution
+— a licence choice with legal consequences, a payment vendor that picks a key
+format, and a release that publishes to other people's machines. Those are the
+owner's calls; writing code around a guess at them would be worse than leaving
+them open.
+
 
 - **Win+Shift+S snips.** Windows saves them nowhere — they exist only on the
   clipboard — so capturing one means writing the bytes somewhere. Auto-saving

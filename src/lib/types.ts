@@ -129,6 +129,33 @@ export interface Recent {
   count: number
 }
 
+// ---- activity ----
+
+/** One thing the app did. Every source writes here, so Home, the widget and
+ *  usage ranking all read the same stream. */
+export interface Activity {
+  id: number
+  /** service | query | git | clip | screenshot | setup | update */
+  kind: string
+  title: string
+  detail: string
+  /** False marks a failure — a crash, a failed query. */
+  ok: boolean
+  ref_id: number | null
+  project_name: string
+  ts: number
+}
+
+export interface ServiceRun {
+  id: number
+  service_id: number
+  started_at: number
+  ended_at: number | null
+  exit_code: number | null
+  /** running | stopped | crashed */
+  outcome: string
+}
+
 // ---- connections ----
 
 export type ConnEngine = 'postgres' | 'sqlite' | 'sqlserver'

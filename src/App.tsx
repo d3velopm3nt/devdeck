@@ -318,6 +318,8 @@ export default function App() {
       ipc.onStashItem(() => useApp.getState().ingestStashItem()),
       ipc.onStashChanged(() => useApp.getState().ingestStashItem()),
       ipc.onStashShot(() => useApp.getState().ingestStashItem()),
+      // One stream: services, queries, pulls, clips and screenshots all land here.
+      ipc.onActivity((a) => useApp.getState().pushActivity(a)),
     ]
     return () => {
       for (const s of subs) void s.then((un) => un())

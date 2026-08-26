@@ -209,6 +209,14 @@ pub fn git_pull(app: tauri::AppHandle, dir: String) -> Result<(), String> {
             "system",
             if ok { "pull complete.".into() } else { "pull failed — see the log (a diverged branch can't fast-forward).".to_string() },
         );
+        crate::activity::record(
+            &app,
+            "git",
+            if ok { "pulled" } else { "pull failed" },
+            String::new(),
+            ok,
+            None,
+        );
         let _ = app.emit("git:done", ok);
     });
     Ok(())

@@ -378,6 +378,17 @@ fn record_shot(app: &tauri::AppHandle, path: &Path) -> bool {
     drop(conn);
 
     if matches!(inserted, Ok(n) if n > 0) {
+        crate::activity::record(
+            app,
+            "screenshot",
+            match secret {
+                Some(reason) => format!("screenshot withheld — {reason}"),
+                None => "stashed a screenshot".to_string(),
+            },
+            name.clone(),
+            secret.is_none(),
+            None,
+        );
         let _ = app.emit("stash:shot", path_str);
         true
     } else {

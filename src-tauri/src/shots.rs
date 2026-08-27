@@ -565,6 +565,39 @@ fn import_existing(app: &tauri::AppHandle, dir: &Path) {
     }
 }
 
+/// Watch the Windows screenshots folder for new images.
+pub fn spawn(app: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        let Some(dir) = screenshots_dir() else { return };
+        if !dir.is_dir() {
+            // Windows creates it on the first Win+PrtScn. Nothing to watch yet
+            // -- picked up next launch rather than us creating a folder.
+            return;
+        }
+        // Everything already in the folder belongs in the vault, newest
+        // first. Deliberately *not* a two-way mirror: deleting a picture
+        // doesn't reach in and delete rows, and this never writes to your
+        // Pictures folder.
+        import_existing(&app, &dir);
+
+        loop {
+            #[cfg(windows)]
+            if !wait_for_change(&dir) {
+                std::thread::sleep(std::time::Duration::from_secs(5));
+                continue;
+            }
+            #[cfg(not(windows))]
+            std::thread::sleep(std::time::Duration::from_secs(5));
+
+            // record_shot skips anything already stored, so a plain re-list
+            // is enough -- and self-correcting if a change was missed.
+            for path in list_images(&dir) {
+                record_shot(&app, &path);
+            }
+        }
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -620,37 +653,4 @@ mod tests {
         assert!(w >= 1 && h >= 1, "got {w}x{h}");
         assert!(w <= THUMB_W && h <= THUMB_H, "got {w}x{h}");
     }
-}
-
-/// Watch the Windows screenshots folder for new images.
-pub fn spawn(app: tauri::AppHandle) {
-    std::thread::spawn(move || {
-        let Some(dir) = screenshots_dir() else { return };
-        if !dir.is_dir() {
-            // Windows creates it on the first Win+PrtScn. Nothing to watch yet
-            // -- picked up next launch rather than us creating a folder.
-            return;
-        }
-        // Everything already in the folder belongs in the vault, newest
-        // first. Deliberately *not* a two-way mirror: deleting a picture
-        // doesn't reach in and delete rows, and this never writes to your
-        // Pictures folder.
-        import_existing(&app, &dir);
-
-        loop {
-            #[cfg(windows)]
-            if !wait_for_change(&dir) {
-                std::thread::sleep(std::time::Duration::from_secs(5));
-                continue;
-            }
-            #[cfg(not(windows))]
-            std::thread::sleep(std::time::Duration::from_secs(5));
-
-            // record_shot skips anything already stored, so a plain re-list
-            // is enough -- and self-correcting if a change was missed.
-            for path in list_images(&dir) {
-                record_shot(&app, &path);
-            }
-        }
-    });
 }

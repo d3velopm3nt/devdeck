@@ -505,20 +505,138 @@ fn detect_make(dir: &Path, c: &mut Ctx) {
 }
 
 /// Run every detector against one directory.
+// ---------- the extension point ----------
+//
+// Adding a language or tool is one of two jobs, depending on how much thinking
+// it needs.
+//
+// **If a marker file is enough**, add a row to `MARKER_DETECTORS` below. No
+// code: state the file, the commands it implies, and which of them are
+// long-running.
+//
+// **If it needs to look inside files** — which dependency is present, whether
+// this is a test project, which runner the project uses — write a
+// `fn(&Path, &mut Ctx)` and add it to `DETECTORS`. `Ctx` already handles
+// naming, the relative directory, and the service flag, so a detector only
+// decides *what* to offer.
+//
+// Either way, add a fixture test. The bar for a new detector is that it only
+// fires when a marker proves the toolchain is in use — a scan that offers
+// commands a repo can't run teaches you to ignore the list.
+
+/// One command a marker file implies: name, command, and whether it's
+/// long-running.
+type MarkerCmd = (&'static str, &'static str, bool);
+
+/// Ecosystems that need no logic beyond "this file exists".
+struct MarkerDetector {
+    /// Any one of these files present in a directory fires the detector.
+    markers: &'static [&'static str],
+    group: &'static str,
+    manager: &'static str,
+    commands: &'static [MarkerCmd],
+}
+
+/// Deploy and infrastructure tooling — the "…and ship it" half of build, run,
+/// test, deploy. Each is keyed to a config file that only exists when the tool
+/// is genuinely wired up.
+const MARKER_DETECTORS: &[MarkerDetector] = &[
+    MarkerDetector {
+        markers: &["fly.toml"],
+        group: "deploy",
+        manager: "fly",
+        commands: &[("deploy", "fly deploy", false), ("status", "fly status", false), ("logs", "fly logs", true)],
+    },
+    MarkerDetector {
+        markers: &["vercel.json", ".vercel"],
+        group: "deploy",
+        manager: "vercel",
+        commands: &[("deploy", "vercel deploy", false), ("deploy prod", "vercel deploy --prod", false)],
+    },
+    MarkerDetector {
+        markers: &["wrangler.toml", "wrangler.jsonc", "wrangler.json"],
+        group: "deploy",
+        manager: "wrangler",
+        commands: &[("deploy", "wrangler deploy", false), ("dev", "wrangler dev", true)],
+    },
+    MarkerDetector {
+        markers: &["serverless.yml", "serverless.yaml"],
+        group: "deploy",
+        manager: "serverless",
+        commands: &[("deploy", "serverless deploy", false)],
+    },
+    MarkerDetector {
+        markers: &["netlify.toml"],
+        group: "deploy",
+        manager: "netlify",
+        commands: &[("deploy", "netlify deploy --prod", false), ("dev", "netlify dev", true)],
+    },
+    MarkerDetector {
+        markers: &["Dockerfile"],
+        group: "docker",
+        manager: "docker",
+        commands: &[("docker build", "docker build -t app .", false)],
+    },
+    MarkerDetector {
+        markers: &["main.tf"],
+        group: "terraform",
+        manager: "terraform",
+        commands: &[
+            ("init", "terraform init", false),
+            ("plan", "terraform plan", false),
+            ("apply", "terraform apply", false),
+        ],
+    },
+    MarkerDetector {
+        markers: &["Chart.yaml"],
+        group: "helm",
+        manager: "helm",
+        commands: &[("template", "helm template .", false), ("upgrade", "helm upgrade --install app .", false)],
+    },
+];
+
+fn run_marker_detectors(dir: &Path, c: &mut Ctx) {
+    let names = file_names(dir);
+    for d in MARKER_DETECTORS {
+        if !d.markers.iter().any(|m| names.iter().any(|n| n == m)) {
+            continue;
+        }
+        for (name, command, service) in d.commands {
+            if *service {
+                c.service(name, *command, d.group, d.manager);
+            } else {
+                c.add(name, *command, d.group, d.manager);
+            }
+        }
+    }
+}
+
+/// A detector that needs to read files, not just see them.
+type Detector = fn(&Path, &mut Ctx);
+
+/// Every ecosystem with real logic behind it. Order is the order commands
+/// appear, so the thing you most likely want is near the top.
+const DETECTORS: &[(&str, Detector)] = &[
+    ("node", detect_node),
+    ("python", detect_python),
+    ("dotnet", detect_dotnet),
+    ("gradle", detect_gradle),
+    ("maven", detect_maven),
+    ("rust", detect_rust),
+    ("go", detect_go),
+    ("flutter", detect_flutter),
+    ("php", detect_php),
+    ("ruby", detect_ruby),
+    ("docker", detect_docker),
+    ("make", detect_make),
+];
+
 fn detect_dir(dir: &Path, rel: &str, out: &mut Vec<DetectedCommand>) {
     let mut c = Ctx { rel, out };
-    detect_node(dir, &mut c);
-    detect_python(dir, &mut c);
-    detect_dotnet(dir, &mut c);
-    detect_gradle(dir, &mut c);
-    detect_maven(dir, &mut c);
-    detect_rust(dir, &mut c);
-    detect_go(dir, &mut c);
-    detect_flutter(dir, &mut c);
-    detect_php(dir, &mut c);
-    detect_ruby(dir, &mut c);
-    detect_docker(dir, &mut c);
-    detect_make(dir, &mut c);
+    for (_name, detect) in DETECTORS {
+        detect(dir, &mut c);
+    }
+    run_marker_detectors(dir, &mut c);
 }
 
 fn skippable(name: &str) -> bool {
@@ -673,6 +791,28 @@ mod tests {
         assert!(c.iter().any(|x| x == ".\\gradlew installDebug"));
         assert!(c.iter().any(|x| x == "adb logcat"));
         assert!(!c.iter().any(|x| x == "gradle build"), "the wrapper pins the version");
+    }
+
+    #[test]
+    fn marker_detectors_cover_deploy_tooling() {
+        let t = Tmp::new("deploy");
+        t.file("fly.toml", "app = 'x'")
+            .file("Dockerfile", "FROM scratch")
+            .file("package.json", r#"{"scripts":{"build":"tsc"}}"#);
+        let c = cmds(&t.scan());
+        assert!(c.iter().any(|x| x == "fly deploy"), "{c:?}");
+        assert!(c.iter().any(|x| x == "docker build -t app ."));
+        // Still only what's present: no terraform here.
+        assert!(!c.iter().any(|x| x.starts_with("terraform")));
+    }
+
+    #[test]
+    fn every_detector_is_reachable() {
+        // A detector added to the list but never wired is silent, and silence
+        // looks exactly like "this repo doesn't use that toolchain".
+        assert_eq!(DETECTORS.len(), 12, "update this when adding a detector");
+        assert!(MARKER_DETECTORS.iter().all(|d| !d.commands.is_empty()));
+        assert!(MARKER_DETECTORS.iter().all(|d| !d.markers.is_empty()));
     }
 
     #[test]

@@ -340,6 +340,29 @@ Three judgement calls worth noting, each with a test:
 - **Python is invoked the way the project expects** — `poetry run …`,
   `uv run …`, `pipenv run …` — rather than assuming a bare `python`.
 
+**The scan now runs on open**, rather than waiting for a click whose answer
+was never anything but yes. It stops at *showing* you: rows arrive
+pre-selected, but writing a dozen commands into your config unasked is a
+different act from listing what's there, and only one of them is reversible
+with a glance.
+
+**Adding a language is a two-tier extension point**, and that is deliberate:
+
+- *If a marker file is enough* — add a row to `MARKER_DETECTORS`. No code:
+  the file, the commands it implies, which are long-running. Deploy tooling
+  (fly, vercel, wrangler, serverless, netlify, terraform, helm, Dockerfile)
+  is all defined this way.
+- *If it needs to read files* — which dependency is present, whether this is
+  a test project, which runner the project uses — write an
+  `fn(&Path, &mut Ctx)` and add it to `DETECTORS`. `Ctx` handles naming, the
+  relative directory and the service flag, so a detector only decides *what*
+  to offer.
+
+What it is **not**: user-extensible without a rebuild. Adding an ecosystem is
+a code change, not a config file. That's a deliberate stopping point, not an
+oversight — the Machine Setup catalog is DB-backed and user-editable, and the
+same treatment here is a reasonable next step if it's wanted.
+
 Commands found in a subfolder are created with that folder as their `cwd`.
 Without it, a command from `apps/web` would silently execute at the repo root.
 

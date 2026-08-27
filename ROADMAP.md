@@ -256,20 +256,28 @@ Rail item. One item vault; the clipboard is just a capture source.
 - [x] **Auto project tag** — every item records the workspace/project active at
       capture time. This is the differentiator; no other clipboard manager has it.
 - [x] **Smart type detection**: json · sql · url · path · jwt · uuid · hex · stacktrace · text
-- [ ] **Type-driven actions**: prettify/minify JSON, decode JWT, save SQL as a query,
-      search logs for a stacktrace, reveal a path, run a command, open a URL
+- [x] **Type-driven actions**: prettify/minify JSON, decode JWT, search logs for
+      a stacktrace, reveal a path, send to a terminal, open a URL. *Save SQL as
+      a query* is the one exception — parked with Connections.
 - [x] **Secrets guardrail** — key/token/password shapes are flagged and their value
       is *never written to disk*; clipboard content excluded by password managers
       is skipped entirely
-- [ ] **Retention** — pinned forever, unpinned pruned after 30 days (configurable)
-- [ ] **Widget paste surface** — summon → type → `⏎` copy, `⇧⏎` paste, `esc` dismiss
-- [ ] Screenshots: watch the screenshot folder, store *links* not copies, thumbnail
-- [ ] Later: OCR screenshot text into FTS (Windows has built-in OCR)
+- [x] **Retention** — configurable, and exempting anything pinned, tagged,
+      noted, written by hand, or linking to a screenshot file
+- [x] **Widget paste surface** — summon → type → `⏎` copy, `⇧⏎` paste, `esc` dismiss
+- [x] Screenshots: watch the folder, store *links* not copies, thumbnails
+- [x] OCR screenshot text into FTS — and through the secret guardrail, which it
+      was originally bypassing
 
-### Widget peek
-- [ ] Anything started in the app makes the widget peek — **without stealing focus**
-- [ ] Auto-collapse back to the icon once healthy; always pop on a crash
-- [ ] Settings toggle for people who want it quiet
+### Widget peek ✅ built
+- [x] Anything started in the app makes the widget peek — **without stealing focus**
+- [x] Auto-collapse once healthy; a crash is sticky and stays put
+- [x] Settings toggle for people who want it quiet
+
+Hooked to `emit_status`, the one chokepoint every service transition passes
+through — rather than each call site remembering to peek, and one of them
+eventually forgetting. It won't touch a widget you already have open, and
+won't snatch away one you've started interacting with.
 
 ### User-editable scan rules — designed, not built
 
@@ -353,11 +361,18 @@ Credential Manager / DPAPI, per the rule already in `CLAUDE.md`.
 - [ ] Stash ties in: a flagged clip could offer "save this to your vault"
       instead of being dropped on the floor
 
-### Activity stream
-- [ ] One `activity` event stream (service started, query ran, repo pulled, clip
-      captured) feeding: Home's feed, the widget, and usage ranking
-- [ ] Durable per-run service history (start/stop, duration, exit code) surviving
-      restarts — the service page is already shaped to display it
+### Activity stream ✅ built
+- [x] One `activity` stream — services, queries, pulls, clips, screenshots —
+      feeding Home's feed, with the widget and usage ranking reading the same table
+- [x] Durable per-run service history (start/stop, duration, exit code)
+      surviving restarts
+
+Home's feed was derived from `recents`, which only stores *the last time*
+something ran — so two runs looked like one and a crash looked like nothing at
+all. Every source now writes one row per occurrence, with its outcome. Open
+runs are closed at startup: a run that was "running" when the app was killed
+did not survive, and saying otherwise is a lie the history then repeats
+forever.
 
 ---
 

@@ -64,9 +64,12 @@ it. Build order:
 3. ~~**Connections** — the SQL layer~~ ✅
 4. ~~**Stash Phase 3** — screenshots + OCR~~ ✅
 
-**Every engineering item on this roadmap is now built.** What remains is
-business and distribution — decisions that are the owner's to make rather than
-things to be implemented past. See *Business / distribution* below.
+Every engineering item that was on this roadmap when the cycle started is
+built. Two things have been added since, both deliberately scoped rather than
+rushed: **user-editable scan rules** (below) and the **accounts / password
+manager** question. Everything else remaining is business and distribution —
+decisions that are the owner's to make rather than things to be implemented
+past. See *Business / distribution*.
 
 ### Stash Phase 1 — capture + vault ✅ built
 - [x] `stash_items` table + FTS5 virtual table, migration in `db.rs`
@@ -268,6 +271,58 @@ Rail item. One item vault; the clipboard is just a capture source.
 - [ ] Auto-collapse back to the icon once healthy; always pop on a crash
 - [ ] Settings toggle for people who want it quiet
 
+### User-editable scan rules — designed, not built
+
+The repo scanner knows twelve ecosystems plus a table of deploy tools, and
+adding a thirteenth is a code change. That's the wrong shape for this product:
+**Machine Setup already seeds its curated catalog into SQLite and makes every
+entry yours to edit, hide or extend.** The scanner should work the same way, so
+your in-house toolchain is a first-class citizen rather than a pull request.
+
+The precedent matters — it's the same trade already made once, and it worked:
+ship an opinionated default, keep it in the database, let people disagree with
+it locally.
+
+**Shape.** A `scan_rules` table, curated rules seeded `INSERT OR IGNORE` on
+first run, so new shipped rules arrive on upgrade without overwriting your
+edits (exactly how `machine_packages` behaves):
+
+```
+id · name · enabled · custom · sort
+markers      -- any of these filenames present fires the rule
+excludes     -- …unless one of these is also present
+commands     -- [{ name, command, service }]
+group        -- badge/grouping, e.g. "deploy"
+manager      -- badge, e.g. "fly"
+```
+
+That covers everything `MARKER_DETECTORS` does today, which is most of the
+surface. The dozen logic-bearing detectors — Python's runner detection, .NET's
+test-vs-web distinction, Gradle's module rule — stay in Rust, because they read
+*inside* files and no reasonable config format expresses "is this csproj a test
+project". So it's a hybrid, and the roadmap should say so rather than promising
+a plugin system it won't deliver.
+
+**Why it's worth doing**
+- An in-house tool (`./scripts/deploy.sh`, a bespoke task runner, a company
+  CLI) becomes discoverable without touching DevDeck's source.
+- Turning off rules you find noisy is a per-machine preference, not an issue.
+- It's the natural home for team-shareable rules later — the same manifest
+  wedge as Machine Setup.
+
+**Open questions, worth settling before building**
+- **Where does a rule's command run?** Marker rules currently inherit the
+  directory the marker was found in. Some rules will want the project root
+  instead; that needs to be expressible.
+- **How much do we let a rule assert?** A marker list is safe. Letting a rule
+  grep file contents starts recreating a config language, and badly.
+- **Import/export.** Sharing a ruleset is the obvious follow-on, and it should
+  reuse the machine-manifest format rather than inventing a second one.
+- **The bar stays the same:** a rule must only fire when a marker proves the
+  toolchain is in use. A user-editable list makes it easier to violate that,
+  and a scan that offers commands the repo can't run teaches you to ignore the
+  whole list.
+
 ### Accounts / password manager — idea, not designed yet
 Raised: it'd be useful to store and manage accounts (username / email, password)
 in DevDeck. Real need — Connections already has to solve credentials, and the
@@ -351,10 +406,11 @@ the website's download links point at nothing.
 ## Known gaps
 
 - Command Widget hasn't been migrated to the icon registry or the theme tokens
-- The repo scanner now walks 4 levels deep and knows .NET, Python, Rust, Go,
-  Android/Gradle, Maven, Flutter, PHP, Ruby, Docker Compose and Make. Adding an
-  ecosystem is one `detect_*` function plus a fixture test; the bar is that a
-  command is only offered when a marker file proves the toolchain is in use.
+- The repo scanner walks 4 levels deep and knows .NET, Python, Rust, Go,
+  Android/Gradle, Maven, Flutter, PHP, Ruby, Docker Compose, Make and a table
+  of deploy tools. Adding an ecosystem is a row in `MARKER_DETECTORS` (data) or
+  one `detect_*` function (logic), plus a fixture test — but either way it's a
+  **rebuild**. See *User-editable scan rules* for the fix.
 - Terminal commands: an old report that commands don't type into the terminal —
   deprioritised, needs reproduction
 - Machine Setup used to re-probe winget/scoop on every remount with no visible

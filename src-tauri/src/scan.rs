@@ -702,7 +702,6 @@ fn detect_make(dir: &Path, c: &mut Ctx) {
     }
 }
 
-/// Run every detector against one directory.
 // ---------- the extension point ----------
 //
 // Adding a language or tool is one of two jobs, depending on how much thinking
@@ -845,6 +844,7 @@ const DETECTORS: &[(&str, Detector)] = &[
     ("make", detect_make),
 ];
 
+/// Run every detector against one directory.
 fn detect_dir(dir: &Path, rel: &str, out: &mut Vec<DetectedCommand>) {
     let mut c = Ctx { rel, out };
     for (_name, detect) in DETECTORS {

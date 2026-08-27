@@ -259,7 +259,7 @@ pub fn suggest_install(line: String) -> Option<RequiredTool> {
         // env: node: No such file or directory
         let before = &line[..i];
         before
-            .rsplit(|c| c == ':' || c == ' ')
+            .rsplit([':', ' '])
             .find(|s| !s.trim().is_empty())
             .unwrap_or("")
             .trim()

@@ -991,7 +991,7 @@ pub fn stash_counts(db: tauri::State<Db>) -> Result<StashCounts, String> {
         .into_iter()
         .map(|(item_type, n)| TypeCount { item_type, n })
         .collect();
-    counts.types.sort_by(|a, b| b.n.cmp(&a.n));
+    counts.types.sort_by_key(|t| std::cmp::Reverse(t.n));
 
     let mut stmt = conn
         .prepare(
@@ -1411,7 +1411,7 @@ fn update_item(conn: &rusqlite::Connection, edit: &StashEdit) -> Result<StashIte
         )
         .map_err(err)?;
     }
-    item_by_id(&conn, edit.id)
+    item_by_id(conn, edit.id)
 }
 
 /// Write a note from scratch — an item that never touched the clipboard.
@@ -2103,6 +2103,18 @@ mod tests {
         assert!(secret_reason("9f2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d").is_none());
     }
 
+    /// One seed row: item_type, title, content, is_secret, pinned,
+    /// project_id, project_name.
+    type SeedRow = (
+        &'static str,
+        &'static str,
+        Option<&'static str>,
+        i64,
+        i64,
+        Option<i64>,
+        &'static str,
+    );
+
     /// A database with the real schema, holding the clips below.
     fn seeded() -> rusqlite::Connection {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
@@ -2119,7 +2131,7 @@ mod tests {
             .expect("FTS5 must be available in the bundled SQLite");
         set_fts_available(true);
 
-        let rows: &[(&str, &str, Option<&str>, i64, i64, Option<i64>, &str)] = &[
+        let rows: &[SeedRow] = &[
             // item_type, title, content, is_secret, pinned, project_id, project_name
             (
                 "json",

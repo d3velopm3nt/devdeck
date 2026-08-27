@@ -2,7 +2,7 @@
 //!
 //!  * `git_info`   — branch + ahead/behind from *local* refs. No network.
 //!  * `git_fetch`  — a quiet, non-interactive `git fetch`, then fresh status.
-//!                   This is how monitoring learns there are changes to pull.
+//!    This is how monitoring learns there are changes to pull.
 //!  * `git_pull`   — `git pull --ff-only`, streaming to the Logs bus.
 //!
 //! Fetch/pull run with `GIT_TERMINAL_PROMPT=0` so a private repo without

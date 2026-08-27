@@ -1145,3 +1145,54 @@ mod probe {
         }
     }
 }
+
+#[cfg(test)]
+mod workspace_tests {
+    use super::*;
+    use std::fs;
+
+    struct Tmp(std::path::PathBuf);
+    impl Tmp {
+        fn new(tag: &str) -> Self {
+            let mut p = std::env::temp_dir();
+            p.push(format!("devdeck-ws-{tag}-{}", std::process::id()));
+            let _ = fs::remove_dir_all(&p);
+            fs::create_dir_all(&p).unwrap();
+            Tmp(p)
+        }
+        fn file(&self, rel: &str, body: &str) -> &Self {
+            let p = self.0.join(rel);
+            fs::create_dir_all(p.parent().unwrap()).unwrap();
+            fs::write(p, body).unwrap();
+            self
+        }
+        fn scan(&self) -> Vec<DetectedCommand> {
+            scan_project(self.0.to_string_lossy().to_string()).unwrap()
+        }
+    }
+    impl Drop for Tmp {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn workspace_children_inherit_the_root_manager() {
+        let t = Tmp::new("pnpm");
+        t.file("pnpm-lock.yaml", "lockfileVersion: '9.0'")
+            .file("package.json", r#"{"scripts":{"build":"tsc"}}"#)
+            .file("apps/web/package.json", r#"{"scripts":{"dev":"vite"}}"#)
+            .file("apps/api/package.json", r#"{"scripts":{"dev":"nest start"}}"#);
+        let out = t.scan();
+
+        let managers: Vec<&str> = out.iter().map(|c| c.manager.as_str()).collect();
+        println!("managers seen: {managers:?}");
+        for c in &out {
+            println!("  {:<20} {:<28} mgr={} group={}", c.name, c.command, c.manager, c.group);
+        }
+        assert!(
+            !managers.contains(&"npm"),
+            "sub-packages of a pnpm workspace must not be reported as npm: {managers:?}"
+        );
+    }
+}

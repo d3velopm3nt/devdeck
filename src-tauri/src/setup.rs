@@ -255,7 +255,8 @@ pub fn suggest_install(line: String) -> Option<RequiredTool> {
         // PowerShell: The term 'pnpm' is not recognized...
         let after = &line[i + 10..];
         after.split('\'').next().unwrap_or("").to_string()
-    } else if let Some(i) = l.find("no such file or directory") {
+    } else {
+        let i = l.find("no such file or directory")?;
         // env: node: No such file or directory
         let before = &line[..i];
         before
@@ -264,8 +265,6 @@ pub fn suggest_install(line: String) -> Option<RequiredTool> {
             .unwrap_or("")
             .trim()
             .to_string()
-    } else {
-        return None;
     };
     let bin = bin.trim().trim_end_matches(".exe").to_ascii_lowercase();
     if bin.is_empty() {

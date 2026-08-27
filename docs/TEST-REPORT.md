@@ -298,6 +298,53 @@ path itself needs a service to start, which is click-driven.
 
 ---
 
+## Repo scan — more than Node, more than the root
+
+The scanner had two problems: it only really understood `package.json`, and it
+only looked at the repository root. A `backend/` + `android/` + `apps/web`
+layout — the normal shape — produced almost nothing.
+
+**Verified live** against a synthetic monorepo, run through the shipped
+command. 39 commands across 8 directories, each carrying the folder it must run
+in:
+
+```
+(root)           npm      cmd      npm run build
+(root)           docker   service  docker compose -f docker-compose.yml up
+Backend.Api      dotnet   service  dotnet watch run --project "Backend.Api.csproj"
+Backend.Tests    dotnet   cmd      dotnet test "Backend.Tests.csproj"
+android          gradle   cmd      .\gradlew assembleDebug
+android          adb      service  adb logcat
+apps/web         pnpm     service  pnpm dev
+desktop          cargo    cmd      cargo clippy --all-targets
+services/api     python   service  python manage.py runserver
+services/billing python   service  poetry run uvicorn main:app --reload
+```
+
+And against **this** repository, where it now finds the `src-tauri` cargo
+commands the root-only scan missed entirely.
+
+Detectors are conservative — a command is only offered when a marker file says
+the toolchain is genuinely in use. Offering `mvn test` for a repo with no
+`pom.xml` trains you to ignore the whole list, so there's a test asserting a
+Node-only repo gets no Maven, Cargo, .NET or PHP rows.
+
+Three judgement calls worth noting, each with a test:
+
+- **A Gradle module is not a project.** The first version treated
+  `android/app/build.gradle` as its own project and produced a duplicate set
+  of commands invoking bare `gradle` instead of the project's wrapper. A
+  Gradle project is where `gradlew` or `settings.gradle` lives.
+- **A .NET test project is not something you `dotnet run`.** Test projects get
+  `dotnet test`; web projects additionally get `dotnet watch run`.
+- **Python is invoked the way the project expects** — `poetry run …`,
+  `uv run …`, `pipenv run …` — rather than assuming a bare `python`.
+
+Commands found in a subfolder are created with that folder as their `cwd`.
+Without it, a command from `apps/web` would silently execute at the repo root.
+
+---
+
 ## What is not verified
 
 Stated plainly, because a report that only lists successes is not a report.

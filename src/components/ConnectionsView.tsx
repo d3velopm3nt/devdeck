@@ -18,11 +18,17 @@ const ENGINE_LABEL: Record<string, string> = {
   sqlserver: 'SQL Server',
 }
 
-/** The install id for each client, so a missing one is one click from fixed. */
-const CLIENT_PKG: Record<string, { id: string; source: string }> = {
-  psql: { id: 'PostgreSQL.PostgreSQL', source: 'winget' },
-  sqlite3: { id: 'SQLite.SQLite', source: 'winget' },
-  sqlcmd: { id: 'Microsoft.SQLServer.SQLCmd', source: 'winget' },
+/**
+ * The install id for each client, so a missing one is one click from fixed.
+ * These are exact winget ids and were checked against `winget show --exact`;
+ * an id that doesn't resolve turns the fix-it button into a dead end, which
+ * is worse than not offering one.
+ */
+const CLIENT_PKG: Record<string, { id: string; source: string; label: string }> = {
+  // PostgreSQL is versioned in winget — there is no unversioned id.
+  psql: { id: 'PostgreSQL.PostgreSQL.17', source: 'winget', label: 'PostgreSQL 17' },
+  sqlite3: { id: 'SQLite.SQLite', source: 'winget', label: 'SQLite' },
+  sqlcmd: { id: 'Microsoft.Sqlcmd', source: 'winget', label: 'Sqlcmd Tools' },
 }
 
 function ResultGrid({
@@ -283,7 +289,8 @@ export function ConnectionsView() {
                   void ipc.machineInstall([pkg]).then(() => ipc.onMachineDone(() => void ipc.refreshPath()))
                 }}
               >
-                <Icon name="download" size={12} /> Install {connResult.missing_tool}
+                <Icon name="download" size={12} /> Install{' '}
+                {CLIENT_PKG[connResult.missing_tool].label}
               </button>
             )}
           </div>

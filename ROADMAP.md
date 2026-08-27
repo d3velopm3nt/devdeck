@@ -351,6 +351,10 @@ the website's download links point at nothing.
 ## Known gaps
 
 - Command Widget hasn't been migrated to the icon registry or the theme tokens
+- The repo scanner now walks 4 levels deep and knows .NET, Python, Rust, Go,
+  Android/Gradle, Maven, Flutter, PHP, Ruby, Docker Compose and Make. Adding an
+  ecosystem is one `detect_*` function plus a fixture test; the bar is that a
+  command is only offered when a marker file proves the toolchain is in use.
 - Terminal commands: an old report that commands don't type into the terminal —
   deprioritised, needs reproduction
 - Machine Setup used to re-probe winget/scoop on every remount with no visible

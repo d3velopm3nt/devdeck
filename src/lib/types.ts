@@ -97,8 +97,14 @@ export interface DetectedCommand {
   name: string
   command: string
   group: string
-  /** npm|pnpm|yarn|bun|cargo|go|dotnet|make|composer|python */
+  /** npm|pnpm|yarn|bun|cargo|go|dotnet|gradle|maven|python|php|ruby|docker|… */
   manager: string
+  /** Subdirectory relative to the scanned root ('' = the root). Where the
+   *  command has to run — without it a command found in `apps/web` would
+   *  execute at the repo root. */
+  dir: string
+  /** The scanner thinks this is long-running (dev server, watcher). */
+  service: boolean
 }
 
 export interface ProcStat {

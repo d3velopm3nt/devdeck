@@ -1,0 +1,327 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root{
+      --app:#0b0e14; --page:#0d1017; --panel:#11141c; --raise:#151923; --menu:#1a1f2b; --hover:#232b3b;
+      --soft:rgba(30,41,59,.4);
+      --line:#1e293b; --line2:#334155; --line3:#64748b;
+      --ink:#e2e8f0; --body:#cbd5e1; --dim:#94a3b8; --muted:#64748b; --faint:#475569;
+      --accent:#818cf8; --ok:#4ade80; --warn:#fbbf24; --err:#f87171; --info:#38bdf8; --viol:#a78bfa;
+      --mono:ui-monospace,Consolas,'Cascadia Mono',monospace;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--app);color:var(--body);}
+    a{color:var(--accent);text-decoration:none;} a:hover{color:#a5b4fc;}
+    .railb{position:relative;display:flex;height:40px;width:40px;align-items:center;justify-content:center;border-radius:8px;color:var(--muted);cursor:pointer;}
+    .railb:hover{background:rgba(35,43,59,.5);color:var(--dim);}
+    .railon{background:var(--raise);color:var(--ink);}
+    .railon::before{content:'';position:absolute;left:-7px;top:8px;bottom:8px;width:2.5px;border-radius:2px;background:#6366f1;}
+    .nav{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;color:var(--dim);cursor:pointer;font-size:12.5px;}
+    .nav:hover{background:var(--hover);color:var(--ink);}
+    .navon{background:var(--raise);color:var(--ink);font-weight:600;}
+    .card{background:var(--raise);border:1px solid var(--line);border-radius:6px;}
+    .chip{display:inline-flex;align-items:center;gap:5px;border-radius:4px;padding:2px 7px;font-size:10.5px;font-weight:600;}
+    .gh{border:1px solid var(--line2);background:var(--soft);color:var(--body);border-radius:4px;padding:4px 10px;font-size:12px;cursor:pointer;}
+    .gh:hover{border-color:var(--line3);color:var(--ink);}
+    .seg{padding:3px 9px;border-radius:4px;font-size:11px;cursor:pointer;color:var(--muted);border:none;background:none;font-family:inherit;}
+    .seg:hover{color:var(--ink);}
+    .feat:hover{border-color:var(--line2);}
+    .att:hover{background:var(--hover);}
+  </style>
+</helmet>
+
+<div style="width:1440px;height:900px;display:flex;flex-direction:column;background:var(--app);font-size:12px;">
+
+  <div style="display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);background:var(--panel);padding:6px 8px;flex-shrink:0;">
+    <span style="font-size:13px;font-weight:600;color:var(--ink);margin-right:4px;">DevDeck</span>
+    <button class="gh">Terminal</button>
+    <button class="gh">Services</button>
+    <div style="flex:1"></div>
+    <span class="chip" style="background:rgba(16,185,129,.1);color:var(--ok);">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+      main
+    </span>
+    <button class="gh">Check for updates</button>
+  </div>
+
+  <div style="flex:1;display:flex;min-height:0;">
+
+    <div style="width:52px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:4px;border-right:1px solid var(--line);background:var(--app);padding:8px 0;">
+      <div class="railb" title="Home"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 10v10h14V10"/></svg></div>
+      <div class="railb" title="Projects"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
+      <div class="railb" title="Stash"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M9 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3"/></svg></div>
+      <div class="railb" title="Connections"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg></div>
+      <div class="railb" title="Machine"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg></div>
+      <div class="railb railon" title="AI Workspace">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/><path d="M18.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></svg>
+        <span style="position:absolute;right:3px;top:3px;height:7px;width:7px;border-radius:50%;border:2px solid var(--app);background:#34d399;"></span>
+      </div>
+      <div style="flex:1"></div>
+      <div class="railb" title="Settings"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M18.9 14.3a1.5 1.5 0 0 0 .3 1.7l.1.1a1.9 1.9 0 1 1-2.7 2.7l-.1-.1a1.5 1.5 0 0 0-2.6 1.1v.2a1.9 1.9 0 1 1-3.8 0v-.1a1.5 1.5 0 0 0-2.6-1.1l-.1.1a1.9 1.9 0 1 1-2.7-2.7l.1-.1a1.5 1.5 0 0 0-1.1-2.6h-.2a1.9 1.9 0 1 1 0-3.8h.1a1.5 1.5 0 0 0 1.1-2.6l-.1-.1a1.9 1.9 0 1 1 2.7-2.7l.1.1a1.5 1.5 0 0 0 2.6-1.1v-.2a1.9 1.9 0 1 1 3.8 0v.1a1.5 1.5 0 0 0 2.6 1.1l.1-.1a1.9 1.9 0 1 1 2.7 2.7l-.1.1a1.5 1.5 0 0 0 1.1 2.6h.2a1.9 1.9 0 1 1 0 3.8h-.1a1.5 1.5 0 0 0-1.4.9z"/></svg></div>
+    </div>
+
+    <div style="width:224px;flex-shrink:0;display:flex;flex-direction:column;border-right:1px solid var(--line);background:var(--app);">
+      <div style="display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);padding:10px 12px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/></svg>
+        <span style="font-size:12.5px;font-weight:600;color:var(--ink);">AI Workspace</span>
+      </div>
+      <div style="padding:6px;display:flex;flex-direction:column;gap:1px;">
+        <div class="nav navon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>Overview</div>
+        <div class="nav"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Projects<span style="margin-left:auto;font-size:10.5px;color:var(--faint);">3</span></div>
+        <div class="nav"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Features<span style="margin-left:auto;font-size:10.5px;color:var(--faint);">7</span></div>
+        <div class="nav"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V4M9 14h.01M15 14h.01"/></svg>Agents<span style="margin-left:auto;display:inline-flex;align-items:center;gap:4px;font-size:10.5px;color:var(--ok);"><span style="height:6px;width:6px;border-radius:50%;background:#34d399;"></span>4</span></div>
+        <div class="nav"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Activity</div>
+        <div class="nav"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>Conflicts<span style="margin-left:auto;font-size:10.5px;font-weight:700;color:var(--warn);">2</span></div>
+        <div class="nav"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 1 5 5l-9.3 9.3-5-5z"/><path d="m9 11 4 4"/></svg>Tools</div>
+      </div>
+
+      <div style="margin-top:8px;border-top:1px solid var(--line);padding:10px 12px 6px;">
+        <div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin-bottom:6px;">Projects</div>
+        <div class="nav" style="padding-left:6px;"><span style="height:7px;width:7px;border-radius:50%;background:#34d399;"></span>TyreX<span style="margin-left:auto;font-size:10.5px;color:var(--faint);">3</span></div>
+        <div class="nav" style="padding-left:6px;"><span style="height:7px;width:7px;border-radius:50%;background:#34d399;"></span>Depot API<span style="margin-left:auto;font-size:10.5px;color:var(--faint);">1</span></div>
+        <div class="nav" style="padding-left:6px;"><span style="height:7px;width:7px;border-radius:50%;background:var(--faint);"></span>Fleet Web</div>
+      </div>
+    </div>
+
+    <div style="flex:1;min-width:0;overflow:hidden;background:var(--page);padding:18px 20px;">
+
+      <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:16px;">
+        <div style="min-width:0;">
+          <div style="font-size:19px;font-weight:600;color:var(--ink);letter-spacing:-.01em;">AI Workspace</div>
+          <div style="font-size:12px;color:var(--dim);margin-top:3px;">Shared context and coordination for humans and AI agents.</div>
+        </div>
+        <div style="flex:1"></div>
+        <button class="gh" style="display:inline-flex;align-items:center;gap:6px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          Search
+          <span style="color:var(--faint);font-size:10px;border:1px solid var(--line2);border-radius:3px;padding:0 4px;">Ctrl K</span>
+        </button>
+        <button style="border:none;background:#4f46e5;color:#fff;border-radius:4px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M5 3l14 9-14 9z"/></svg>
+          Start AI work
+        </button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(5, minmax(0, 1fr));gap:10px;margin-bottom:18px;">
+        <div class="card" style="padding:11px 13px;">
+          <div style="font-size:10.5px;color:var(--muted);margin-bottom:7px;">Active projects</div>
+          <div style="font-size:23px;font-weight:600;color:var(--ink);line-height:1;">3</div>
+        </div>
+        <div class="card" style="padding:11px 13px;">
+          <div style="font-size:10.5px;color:var(--muted);margin-bottom:7px;">Active features</div>
+          <div style="font-size:23px;font-weight:600;color:var(--ink);line-height:1;">7</div>
+        </div>
+        <div class="card" style="padding:11px 13px;">
+          <div style="font-size:10.5px;color:var(--muted);margin-bottom:7px;">Active agents</div>
+          <div style="display:flex;align-items:baseline;gap:7px;">
+            <div style="font-size:23px;font-weight:600;color:var(--ink);line-height:1;">4</div>
+            <span style="display:inline-flex;align-items:center;gap:4px;font-size:10.5px;color:var(--ok);"><span style="height:6px;width:6px;border-radius:50%;background:#34d399;"></span>working</span>
+          </div>
+        </div>
+        <div class="card" style="padding:11px 13px;border-color:rgba(251,191,36,.28);">
+          <div style="font-size:10.5px;color:var(--muted);margin-bottom:7px;">Open conflicts</div>
+          <div style="display:flex;align-items:center;gap:7px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+            <div style="font-size:23px;font-weight:600;color:var(--ink);line-height:1;">2</div>
+            <span style="font-size:10.5px;color:var(--warn);align-self:flex-end;padding-bottom:2px;">1 high</span>
+          </div>
+        </div>
+        <div class="card" style="padding:11px 13px;">
+          <div style="font-size:10.5px;color:var(--muted);margin-bottom:7px;">Needs attention</div>
+          <div style="display:flex;align-items:center;gap:7px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
+            <div style="font-size:23px;font-weight:600;color:var(--ink);line-height:1;">5</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) 372px;gap:16px;">
+
+        <div style="min-width:0;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px;">
+            <span style="font-size:12.5px;font-weight:600;color:var(--ink);">Active work</span>
+            <span style="font-size:11px;color:var(--faint);">2 features · 4 agents</span>
+          </div>
+
+          <div class="card feat" style="padding:13px 14px;margin-bottom:10px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;flex-wrap:wrap;">
+              <span style="font-size:13.5px;font-weight:600;color:var(--ink);">Offline Synchronisation</span>
+              <span class="chip" style="background:rgba(99,102,241,.16);color:#a5b4fc;">In Progress</span>
+              <span class="chip" style="background:rgba(74,222,128,.12);color:var(--ok);">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2"><path d="m4 12 5 5L20 6"/></svg>Context fresh</span>
+              <span class="chip" style="background:rgba(251,191,36,.14);color:var(--warn);">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>1 conflict</span>
+              <div style="flex:1"></div>
+              <span style="font-size:10.5px;color:var(--faint);">4 min ago</span>
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:11px;font-family:var(--mono);">TyreX · packages/sync · api/sync · apps/mobile</div>
+
+            <div style="display:flex;flex-direction:column;gap:7px;">
+              <div style="display:flex;align-items:center;gap:9px;">
+                <span style="height:20px;width:20px;flex-shrink:0;border-radius:5px;background:rgba(167,139,250,.18);color:#c4b5fd;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;">CL</span>
+                <span style="font-size:12px;color:var(--ink);width:58px;flex-shrink:0;">Claude</span>
+                <span style="font-size:11.5px;color:var(--dim);flex:1;min-width:0;">Implementing conflict resolution</span>
+                <span class="chip" style="background:rgba(74,222,128,.1);color:var(--ok);"><span style="height:5px;width:5px;border-radius:50%;background:#34d399;"></span>Working</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:9px;">
+                <span style="height:20px;width:20px;flex-shrink:0;border-radius:5px;background:rgba(56,189,248,.18);color:#7dd3fc;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;">CU</span>
+                <span style="font-size:12px;color:var(--ink);width:58px;flex-shrink:0;">Cursor</span>
+                <span style="font-size:11.5px;color:var(--dim);flex:1;min-width:0;">Building sync status UI</span>
+                <span class="chip" style="background:rgba(74,222,128,.1);color:var(--ok);"><span style="height:5px;width:5px;border-radius:50%;background:#34d399;"></span>Working</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:9px;">
+                <span style="height:20px;width:20px;flex-shrink:0;border-radius:5px;background:rgba(148,163,184,.16);color:var(--dim);font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;">QA</span>
+                <span style="font-size:12px;color:var(--ink);width:58px;flex-shrink:0;">QA Agent</span>
+                <span style="font-size:11.5px;color:var(--dim);flex:1;min-width:0;">Running integration tests</span>
+                <span class="chip" style="background:rgba(248,113,113,.12);color:var(--err);"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4"><path d="M6 6l12 12M18 6 6 18"/></svg>2 failed</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card feat" style="padding:13px 14px;margin-bottom:10px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;flex-wrap:wrap;">
+              <span style="font-size:13.5px;font-weight:600;color:var(--ink);">Gate Tracking</span>
+              <span class="chip" style="background:rgba(167,139,250,.16);color:#c4b5fd;">Review</span>
+              <span class="chip" style="background:rgba(251,191,36,.14);color:var(--warn);">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Context stale</span>
+              <div style="flex:1"></div>
+              <span style="font-size:10.5px;color:var(--faint);">51 min ago</span>
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:11px;font-family:var(--mono);">TyreX · services/gates</div>
+            <div style="display:flex;align-items:center;gap:9px;">
+              <span style="height:20px;width:20px;flex-shrink:0;border-radius:5px;background:rgba(251,191,36,.16);color:#fcd34d;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;">CX</span>
+              <span style="font-size:12px;color:var(--ink);width:58px;flex-shrink:0;">Codex</span>
+              <span style="font-size:11.5px;color:var(--dim);flex:1;min-width:0;">Awaiting review of the RFID read handler</span>
+              <span class="chip" style="background:rgba(148,163,184,.14);color:var(--dim);"><span style="height:5px;width:5px;border-radius:50%;background:var(--muted);"></span>Waiting</span>
+            </div>
+          </div>
+
+          <div class="card" style="padding:12px 14px;border-style:dashed;display:flex;align-items:center;gap:11px;">
+            <span style="height:26px;width:26px;flex-shrink:0;border-radius:6px;background:var(--soft);display:flex;align-items:center;justify-content:center;color:var(--muted);">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+            </span>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:12px;color:var(--body);">Tyre Lifecycle has no active work</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px;">Start an agent and DevDeck keeps its context in sync with everyone else.</div>
+            </div>
+            <button class="gh">Start agent</button>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:16px;min-width:0;">
+
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px;">
+              <span style="font-size:12.5px;font-weight:600;color:var(--ink);">Needs attention</span>
+              <span style="font-size:10px;font-weight:700;color:var(--warn);background:rgba(251,191,36,.14);border-radius:9px;padding:1px 6px;">5</span>
+            </div>
+            <div class="card" style="overflow:hidden;">
+              <sc-for list="{{attention}}" as="a" hint-placeholder-count="5">
+                <div class="att" style="display:flex;gap:9px;padding:9px 11px;border-bottom:1px solid var(--line);cursor:pointer;">
+                  <span style="height:6px;width:6px;border-radius:50%;margin-top:5px;flex-shrink:0;{{a.dot}}"></span>
+                  <div style="min-width:0;">
+                    <div style="font-size:11.5px;color:var(--ink);line-height:1.4;">{{a.title}}</div>
+                    <div style="font-size:10.5px;color:var(--muted);margin-top:2px;">{{a.meta}}</div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="min-height:0;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px;">
+              <span style="font-size:12.5px;font-weight:600;color:var(--ink);">Recent activity</span>
+              <div style="flex:1"></div>
+              <div style="display:flex;gap:1px;background:var(--soft);border:1px solid var(--line);border-radius:5px;padding:2px;">
+                <sc-for list="{{filters}}" as="f" hint-placeholder-count="4">
+                  <button class="seg" style="{{f.style}}" onClick="{{f.pick}}">{{f.label}}</button>
+                </sc-for>
+              </div>
+            </div>
+            <div class="card" style="padding:5px 0;">
+              <sc-for list="{{events}}" as="e" hint-placeholder-count="6">
+                <div style="display:flex;gap:9px;align-items:flex-start;padding:6px 11px;">
+                  <span style="font-family:var(--mono);font-size:10.5px;color:var(--faint);width:32px;flex-shrink:0;padding-top:2px;">{{e.time}}</span>
+                  <span style="height:18px;width:18px;flex-shrink:0;border-radius:4px;display:flex;align-items:center;justify-content:center;{{e.iconStyle}}">{{e.glyph}}</span>
+                  <span style="font-size:11.5px;color:var(--body);line-height:1.45;">{{e.text}}</span>
+                </div>
+              </sc-for>
+              <sc-if value="{{empty}}" hint-placeholder-val="{{false}}">
+                <div style="padding:16px 11px;text-align:center;font-size:11.5px;color:var(--muted);">No activity of this kind in the last hour.</div>
+              </sc-if>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:16px;border-top:1px solid var(--line);background:var(--panel);padding:4px 12px;font-size:11px;color:var(--muted);flex-shrink:0;">
+    <span>Logs</span><span>Processes</span>
+    <div style="flex:1"></div>
+    <span style="display:inline-flex;align-items:center;gap:5px;"><span style="height:6px;width:6px;border-radius:50%;background:#34d399;"></span>4 agents working</span>
+    <span>TyreX · main</span>
+    <span style="color:var(--warn);">2 conflicts</span>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { filter: 'All' };
+  }
+  renderVals() {
+    const all = [
+      { time: '21:42', kind: 'Agents',  glyph: 'CL', text: 'Claude changed SyncResult in packages/sync/types.ts' },
+      { time: '21:43', kind: 'Context', glyph: '◇', text: 'Feature context updated — cb94da1' },
+      { time: '21:44', kind: 'Context', glyph: '◇', text: 'Cursor received context delta (3 sections)' },
+      { time: '21:47', kind: 'Agents',  glyph: 'QA', text: 'QA integration tests failed — 2 of 34' },
+      { time: '21:49', kind: 'Human',   glyph: 'JJ', text: 'JayJay resolved the conflict on SyncResult' },
+      { time: '21:51', kind: 'Git',     glyph: '⌥', text: 'Commit cb94da1 — conflict strategy updated' },
+    ];
+    const tint = {
+      Agents:  'background:rgba(167,139,250,.18);color:#c4b5fd;font-size:8.5px;font-weight:700;',
+      Context: 'background:rgba(56,189,248,.18);color:#7dd3fc;font-size:10px;',
+      Human:   'background:rgba(74,222,128,.16);color:#86efac;font-size:8.5px;font-weight:700;',
+      Git:     'background:rgba(148,163,184,.16);color:#cbd5e1;font-size:10px;',
+    };
+    const f = this.state.filter;
+    const events = all
+      .filter(function (e) { return f === 'All' || e.kind === f; })
+      .map(function (e) {
+        return { time: e.time, glyph: e.glyph, text: e.text, iconStyle: tint[e.kind] };
+      });
+
+    const self = this;
+    const filters = ['All', 'Agents', 'Context', 'Git'].map(function (label) {
+      return {
+        label: label,
+        style: label === f ? 'background:#151923;color:#e2e8f0;font-weight:600;' : '',
+        pick: function () { self.setState({ filter: label }); },
+      };
+    });
+
+    const attention = [
+      { dot: 'background:#f87171;', title: 'Claude and Codex are both editing SyncResult', meta: 'Offline Synchronisation · 2 min ago' },
+      { dot: 'background:#fbbf24;', title: 'Context changed while Cursor was working', meta: 'Cursor is 2 commits behind · 6 min ago' },
+      { dot: 'background:#fbbf24;', title: 'QA integration tests failed', meta: '2 of 34 · pull sync path · 9 min ago' },
+      { dot: 'background:#94a3b8;', title: '2 decisions require review', meta: 'Offline Synchronisation · Gate Tracking' },
+      { dot: 'background:#94a3b8;', title: 'Gate Tracking context is stale', meta: 'Last refreshed 6 days ago' },
+    ];
+
+    return { events: events, filters: filters, attention: attention, empty: events.length === 0 };
+  }
+}
+</script>
+</body>
+</html>

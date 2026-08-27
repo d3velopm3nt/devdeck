@@ -12,6 +12,7 @@
 //! modules with their own commands/events without touching existing ones.
 
 mod activity;
+mod aiw;
 mod conn;
 mod creds;
 mod db;
@@ -30,6 +31,7 @@ mod stash;
 use std::sync::{Arc, Mutex};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::Emitter;
 use tauri::Manager;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
@@ -553,6 +555,14 @@ pub fn run() {
         stash_state.retention_days.store(stash_retention, Relaxed);
     }
 
+    // One workspace for the process. The bus is attached to the AppHandle in
+    // setup() so events also reach the UI; it works fully without that, which
+    // is what lets the whole thing be tested headless.
+    let aiw_workspace = std::sync::Arc::new(aiw::state::Workspace::new());
+    // Subscribers can only be installed once the workspace is shared.
+    aiw::state::Workspace::install_handlers(&aiw_workspace);
+    let aiw_for_setup = aiw_workspace.clone();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -563,7 +573,20 @@ pub fn run() {
         .manage(Arc::new(pty::PtyManager::default()))
         .manage(Arc::new(services::ServiceManager::default()))
         .manage(stash_state)
+        // The AI Workspace. Registered here with the rest of the state so the
+        // first invoke from a webview cannot arrive before it exists.
+        .manage(aiw_workspace)
         .setup(move |app| {
+            // Give the AI Workspace bus a way out to the UI. The closure lives
+            // here, in the shell, so the bus itself stays free of Tauri — which
+            // is both cleaner layering and what keeps the test binary linkable.
+            let emit_handle = app.handle().clone();
+            aiw_for_setup
+                .bus
+                .attach_sink(move |ev| {
+                    let _ = emit_handle.emit("aiw:event", ev.clone());
+                });
+
             monitor::spawn(app.handle().clone());
             stash::spawn(app.handle().clone());
             shots::spawn(app.handle().clone());
@@ -771,6 +794,39 @@ pub fn run() {
             toast_show,
             toast_hide,
             toast_focus,
+            aiw::commands::aiw_projects,
+            aiw::commands::aiw_register_project,
+            aiw::commands::aiw_features,
+            aiw::commands::aiw_create_feature,
+            aiw::commands::aiw_work_items,
+            aiw::commands::aiw_context,
+            aiw::commands::aiw_context_raw,
+            aiw::commands::aiw_context_compare,
+            aiw::commands::aiw_agents,
+            aiw::commands::aiw_sessions,
+            aiw::commands::aiw_session,
+            aiw::commands::aiw_claims,
+            aiw::commands::aiw_start_agent,
+            aiw::commands::aiw_conflicts,
+            aiw::commands::aiw_resolve_conflict,
+            aiw::commands::aiw_decisions,
+            aiw::commands::aiw_activity,
+            aiw::commands::aiw_event_chain,
+            aiw::commands::aiw_git_history,
+            aiw::commands::aiw_tools,
+            aiw::commands::aiw_permissions,
+            aiw::commands::aiw_set_permission,
+            aiw::commands::aiw_providers,
+            aiw::commands::aiw_test_runs,
+            aiw::commands::aiw_knowledge_tree,
+            aiw::commands::aiw_read_file,
+            aiw::commands::aiw_write_file,
+            aiw::commands::aiw_run_demo,
+            aiw::commands::aiw_models,
+            aiw::commands::aiw_configure_provider,
+            aiw::commands::aiw_app_status,
+            aiw::commands::aiw_changed_since,
+            aiw::commands::aiw_reset,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DevDeck");

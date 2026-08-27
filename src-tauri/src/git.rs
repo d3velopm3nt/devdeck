@@ -43,7 +43,11 @@ pub struct GitInfo {
 }
 
 /// Run `git -C <dir> <args>` and return trimmed stdout, or None on failure.
-fn run_git(dir: &Path, args: &[&str]) -> Option<String> {
+///
+/// Public because the AI Workspace builds its context checkpoints on the same
+/// git plumbing; duplicating the no-window / no-prompt handling elsewhere is
+/// how one of the two copies ends up hanging on a credential prompt.
+pub fn run_git(dir: &Path, args: &[&str]) -> Option<String> {
     let mut cmd = Command::new("git");
     cmd.arg("-C")
         .arg(dir)
@@ -240,5 +244,198 @@ pub fn git_pull(app: tauri::AppHandle, dir: String) -> Result<(), String> {
         );
         let _ = app.emit("git:done", ok);
     });
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// AI Workspace support: commits as context versions
+// ---------------------------------------------------------------------------
+//
+// The AI Workspace treats a commit as the version of a feature's context. An
+// agent records the commit it started from, and "what changed since my
+// checkpoint?" is answered by diffing that commit against HEAD. All of it goes
+// through `run_git` above so there is one place that knows how to invoke git
+// safely.
+
+/// One entry of `git log`, shaped for the Git History screen.
+#[derive(Serialize, Clone, Debug, Default)]
+pub struct GitCommit {
+    pub sha: String,
+    pub short: String,
+    pub subject: String,
+    pub author: String,
+    pub when: String,
+    /// Paths touched by this commit, relative to the repo root.
+    pub files: Vec<String>,
+    /// True when the commit touched anything under `.devdeck` — i.e. it moved
+    /// the context, not just the code.
+    pub context_updated: bool,
+}
+
+/// The commit HEAD points at, full sha. `None` when `dir` is not a repo or has
+/// no commits yet — an empty repo is a normal state, not an error.
+pub fn head_commit(dir: &Path) -> Option<String> {
+    run_git(dir, &["rev-parse", "HEAD"]).filter(|s| !s.is_empty())
+}
+
+pub fn short_sha(sha: &str) -> String {
+    sha.chars().take(7).collect()
+}
+
+/// Recent commits, newest first.
+pub fn log_entries(dir: &Path, limit: usize) -> Vec<GitCommit> {
+    // Unit separator between fields, record separator between commits: commit
+    // subjects contain every printable character, so splitting on anything
+    // typeable would corrupt the parse.
+    let fmt = "--pretty=format:%H\x1f%s\x1f%an\x1f%aI\x1e";
+    let n = format!("-{limit}");
+    let Some(out) = run_git(dir, &["log", &n, fmt]) else {
+        return vec![];
+    };
+    out.split('\x1e')
+        .map(str::trim)
+        .filter(|c| !c.is_empty())
+        .filter_map(|chunk| {
+            let mut parts = chunk.split('\x1f');
+            let sha = parts.next()?.trim().to_string();
+            let subject = parts.next().unwrap_or_default().to_string();
+            let author = parts.next().unwrap_or_default().to_string();
+            let when = parts.next().unwrap_or_default().to_string();
+            let files = files_in_commit(dir, &sha);
+            let context_updated = files.iter().any(|f| f.starts_with(".devdeck/"));
+            Some(GitCommit {
+                short: short_sha(&sha),
+                sha,
+                subject,
+                author,
+                when,
+                files,
+                context_updated,
+            })
+        })
+        .collect()
+}
+
+pub fn files_in_commit(dir: &Path, sha: &str) -> Vec<String> {
+    run_git(
+        dir,
+        &[
+            "show",
+            "--name-only",
+            "--pretty=format:",
+            "--no-renames",
+            sha,
+        ],
+    )
+    .map(|o| {
+        o.lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .map(|l| l.to_string())
+            .collect()
+    })
+    .unwrap_or_default()
+}
+
+/// Paths that differ between two commits. This is the primitive the context
+/// delta is built on.
+pub fn changed_between(dir: &Path, from: &str, to: &str) -> Vec<String> {
+    run_git(dir, &["diff", "--name-only", &format!("{from}..{to}")])
+        .map(|o| {
+            o.lines()
+                .map(str::trim)
+                .filter(|l| !l.is_empty())
+                .map(|l| l.to_string())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Uncommitted paths (staged or not), so "changed since checkpoint" still
+/// reports work an agent has done but not committed.
+pub fn dirty_files(dir: &Path) -> Vec<String> {
+    run_git(dir, &["status", "--porcelain"])
+        .map(|o| {
+            o.lines()
+                .filter_map(|l| l.get(3..).map(|p| p.trim().to_string()))
+                .filter(|p| !p.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// A file's contents at a commit, for comparing context across versions.
+pub fn file_at(dir: &Path, sha: &str, rel_path: &str) -> Option<String> {
+    run_git(dir, &["show", &format!("{sha}:{rel_path}")])
+}
+
+/// Stage everything under `paths` and commit, tagging the commit with who and
+/// what it was for. The trailers are how a commit is later attributed back to
+/// an agent, feature and session in the Git History screen.
+pub fn commit_with_metadata(
+    dir: &Path,
+    message: &str,
+    paths: &[String],
+    agent: Option<&str>,
+    feature: Option<&str>,
+    work_item: Option<&str>,
+    session: Option<&str>,
+) -> Result<String, String> {
+    if paths.is_empty() {
+        return Err("nothing to commit".into());
+    }
+    let mut add: Vec<&str> = vec!["add", "--"];
+    for p in paths {
+        add.push(p.as_str());
+    }
+    run_git(dir, &add).ok_or_else(|| "git add failed".to_string())?;
+
+    let mut msg = String::from(message);
+    msg.push_str("\n\n");
+    if let Some(a) = agent {
+        msg.push_str(&format!("DevDeck-Agent: {a}\n"));
+    }
+    if let Some(f) = feature {
+        msg.push_str(&format!("DevDeck-Feature: {f}\n"));
+    }
+    if let Some(w) = work_item {
+        msg.push_str(&format!("DevDeck-Work-Item: {w}\n"));
+    }
+    if let Some(s) = session {
+        msg.push_str(&format!("DevDeck-Session: {s}\n"));
+    }
+
+    run_git(dir, &["commit", "-m", &msg])
+        .ok_or_else(|| "git commit failed (nothing staged, or hooks refused)".to_string())?;
+    head_commit(dir).ok_or_else(|| "commit succeeded but HEAD is unreadable".to_string())
+}
+
+/// Trailer values parsed back out of a commit message.
+pub fn commit_trailers(dir: &Path, sha: &str) -> std::collections::HashMap<String, String> {
+    let mut out = std::collections::HashMap::new();
+    let Some(body) = run_git(dir, &["log", "-1", "--pretty=format:%B", sha]) else {
+        return out;
+    };
+    for line in body.lines() {
+        if let Some((k, v)) = line.split_once(": ") {
+            let k = k.trim();
+            if let Some(name) = k.strip_prefix("DevDeck-") {
+                out.insert(name.to_lowercase(), v.trim().to_string());
+            }
+        }
+    }
+    out
+}
+
+/// Initialise a repo if there isn't one, so a freshly created fixture project
+/// has commits to checkpoint against.
+pub fn ensure_repo(dir: &Path) -> Result<(), String> {
+    if run_git(dir, &["rev-parse", "--is-inside-work-tree"]).as_deref() == Some("true") {
+        return Ok(());
+    }
+    run_git(dir, &["init"]).ok_or_else(|| "git init failed".to_string())?;
+    // Identity is required for a commit and may be absent in CI.
+    run_git(dir, &["config", "user.email", "devdeck@local"]);
+    run_git(dir, &["config", "user.name", "DevDeck"]);
     Ok(())
 }

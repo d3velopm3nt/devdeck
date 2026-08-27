@@ -1,0 +1,614 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root{
+      --app:#0b0e14; --page:#0d1017; --panel:#11141c; --raise:#151923; --menu:#1a1f2b; --hover:#232b3b;
+      --soft:rgba(30,41,59,.4);
+      --line:#1e293b; --line2:#334155; --line3:#64748b;
+      --ink:#e2e8f0; --body:#cbd5e1; --dim:#94a3b8; --muted:#64748b; --faint:#475569;
+      --accent:#818cf8; --ok:#4ade80; --warn:#fbbf24; --err:#f87171; --info:#38bdf8; --viol:#a78bfa;
+      --mono:ui-monospace,Consolas,'Cascadia Mono',monospace;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--app);color:var(--body);}
+    a{color:var(--accent);text-decoration:none;} a:hover{color:#a5b4fc;}
+    .railb{position:relative;display:flex;height:40px;width:40px;align-items:center;justify-content:center;border-radius:8px;color:var(--muted);cursor:pointer;}
+    .railb:hover{background:rgba(35,43,59,.5);color:var(--dim);}
+    .railon{background:var(--raise);color:var(--ink);}
+    .railon::before{content:'';position:absolute;left:-7px;top:8px;bottom:8px;width:2.5px;border-radius:2px;background:#6366f1;}
+    .card{background:var(--raise);border:1px solid var(--line);border-radius:6px;}
+    .chip{display:inline-flex;align-items:center;gap:5px;border-radius:4px;padding:2px 7px;font-size:10.5px;font-weight:600;}
+    .gh{border:1px solid var(--line2);background:var(--soft);color:var(--body);border-radius:4px;padding:4px 10px;font-size:11.5px;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px;}
+    .gh:hover{border-color:var(--line3);color:var(--ink);}
+    .tab{position:relative;padding:7px 11px;font-size:12px;color:var(--muted);cursor:pointer;border:none;background:none;font-family:inherit;white-space:nowrap;}
+    .tab:hover{color:var(--ink);}
+    .fnav{display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:4px;color:var(--dim);cursor:pointer;font-size:11.5px;}
+    .fnav:hover{background:var(--hover);color:var(--ink);}
+    .fnavon{background:var(--raise);color:var(--ink);font-weight:600;}
+    .row:hover{background:var(--hover);}
+    h4{margin:0 0 8px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);}
+    .scroll{overflow-y:auto;scrollbar-width:thin;scrollbar-color:#334155 transparent;}
+  </style>
+</helmet>
+
+<div style="width:1440px;height:900px;display:flex;flex-direction:column;background:var(--app);font-size:12px;">
+
+  <div style="display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);background:var(--panel);padding:6px 8px;flex-shrink:0;">
+    <span style="font-size:13px;font-weight:600;color:var(--ink);margin-right:4px;">DevDeck</span>
+    <button class="gh">Terminal</button>
+    <button class="gh">Services</button>
+    <div style="flex:1"></div>
+    <span class="chip" style="background:rgba(16,185,129,.1);color:var(--ok);">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+      main
+    </span>
+    <button class="gh">Check for updates</button>
+  </div>
+
+  <div style="flex:1;display:flex;min-height:0;">
+
+    <div style="width:52px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:4px;border-right:1px solid var(--line);background:var(--app);padding:8px 0;">
+      <div class="railb"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 10v10h14V10"/></svg></div>
+      <div class="railb"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
+      <div class="railb"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M9 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3"/></svg></div>
+      <div class="railb"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg></div>
+      <div class="railb"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg></div>
+      <div class="railb railon">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/><path d="M18.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></svg>
+        <span style="position:absolute;right:3px;top:3px;height:7px;width:7px;border-radius:50%;border:2px solid var(--app);background:#34d399;"></span>
+      </div>
+      <div style="flex:1"></div>
+      <div class="railb"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M18.9 14.3a1.5 1.5 0 0 0 .3 1.7l.1.1a1.9 1.9 0 1 1-2.7 2.7l-.1-.1a1.5 1.5 0 0 0-2.6 1.1v.2a1.9 1.9 0 1 1-3.8 0v-.1a1.5 1.5 0 0 0-2.6-1.1l-.1.1a1.9 1.9 0 1 1-2.7-2.7l.1-.1a1.5 1.5 0 0 0-1.1-2.6h-.2a1.9 1.9 0 1 1 0-3.8h.1a1.5 1.5 0 0 0 1.1-2.6l-.1-.1a1.9 1.9 0 1 1 2.7-2.7l.1.1a1.5 1.5 0 0 0 2.6-1.1v-.2a1.9 1.9 0 1 1 3.8 0v.1a1.5 1.5 0 0 0 2.6 1.1l.1-.1a1.9 1.9 0 1 1 2.7 2.7l-.1.1a1.5 1.5 0 0 0 1.1 2.6h.2a1.9 1.9 0 1 1 0 3.8h-.1a1.5 1.5 0 0 0-1.4.9z"/></svg></div>
+    </div>
+
+    <!-- LEFT: feature navigation -->
+    <div style="width:196px;flex-shrink:0;display:flex;flex-direction:column;border-right:1px solid var(--line);background:var(--app);">
+      <div style="display:flex;align-items:center;gap:7px;border-bottom:1px solid var(--line);padding:10px 11px;">
+        <span style="height:7px;width:7px;border-radius:50%;background:#34d399;flex-shrink:0;"></span>
+        <span style="font-size:12.5px;font-weight:600;color:var(--ink);">TyreX</span>
+        <svg style="margin-left:auto;" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
+      <div class="scroll" style="padding:7px 6px;flex:1;">
+        <div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);padding:2px 8px 6px;">In progress</div>
+        <div class="fnav fnavon">
+          <span style="height:6px;width:6px;border-radius:50%;background:#818cf8;flex-shrink:0;"></span>
+          <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Offline Sync</span>
+          <span style="font-size:10px;color:var(--warn);font-weight:700;">1</span>
+        </div>
+        <div class="fnav">
+          <span style="height:6px;width:6px;border-radius:50%;background:#818cf8;flex-shrink:0;"></span>
+          <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Tyre Lifecycle</span>
+        </div>
+        <div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);padding:10px 8px 6px;">Review</div>
+        <div class="fnav">
+          <span style="height:6px;width:6px;border-radius:50%;background:#a78bfa;flex-shrink:0;"></span>
+          <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Gate Tracking</span>
+          <span style="font-size:10px;color:var(--warn);font-weight:700;">1</span>
+        </div>
+        <div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);padding:10px 8px 6px;">Planned</div>
+        <div class="fnav"><span style="height:6px;width:6px;border-radius:50%;background:var(--faint);flex-shrink:0;"></span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Depot Handover</span></div>
+        <div class="fnav"><span style="height:6px;width:6px;border-radius:50%;background:var(--faint);flex-shrink:0;"></span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Audit Trail</span></div>
+        <div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);padding:10px 8px 6px;">Completed</div>
+        <div class="fnav" style="opacity:.62;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3"><path d="m4 12 5 5L20 6"/></svg><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Stock Take</span></div>
+        <div class="fnav" style="opacity:.62;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3"><path d="m4 12 5 5L20 6"/></svg><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Driver Login</span></div>
+      </div>
+      <div style="border-top:1px solid var(--line);padding:7px 8px;">
+        <button class="gh" style="width:100%;justify-content:center;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>New feature</button>
+      </div>
+    </div>
+
+    <!-- CENTER: feature workspace -->
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:var(--page);">
+
+      <div style="padding:14px 18px 0;border-bottom:1px solid var(--line);flex-shrink:0;">
+        <div style="display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted);margin-bottom:5px;">
+          <span>TyreX</span>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>
+          <span>Features</span>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>
+          <span style="color:var(--dim);">Offline Synchronisation</span>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:11px;flex-wrap:wrap;">
+          <span style="font-size:18px;font-weight:600;color:var(--ink);letter-spacing:-.01em;">Offline Synchronisation</span>
+          <span class="chip" style="background:rgba(99,102,241,.16);color:#a5b4fc;">In Progress</span>
+          <span class="chip" style="background:rgba(74,222,128,.12);color:var(--ok);">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2"><path d="m4 12 5 5L20 6"/></svg>Context fresh</span>
+          <span class="chip" style="background:rgba(148,163,184,.14);color:var(--dim);font-family:var(--mono);font-weight:500;">cb94da1</span>
+          <div style="flex:1"></div>
+          <div style="display:flex;align-items:center;gap:-4px;">
+            <span style="height:21px;width:21px;border-radius:5px;background:rgba(167,139,250,.2);color:#c4b5fd;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;border:1.5px solid var(--page);">CL</span>
+            <span style="height:21px;width:21px;border-radius:5px;background:rgba(56,189,248,.2);color:#7dd3fc;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;border:1.5px solid var(--page);margin-left:-5px;">CU</span>
+            <span style="height:21px;width:21px;border-radius:5px;background:rgba(148,163,184,.18);color:var(--dim);font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;border:1.5px solid var(--page);margin-left:-5px;">QA</span>
+            <span style="font-size:11px;color:var(--muted);margin-left:8px;">3 active</span>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;">
+          <button style="border:none;background:#4f46e5;color:#fff;border-radius:4px;padding:5px 11px;font-size:11.5px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-family:inherit;">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M5 3l14 9-14 9z"/></svg>Start work
+          </button>
+          <button class="gh">Assign agent</button>
+          <button class="gh">Add task</button>
+          <button class="gh">Record decision</button>
+          <button class="gh">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg>Check context
+          </button>
+          <button class="gh" style="padding:4px 7px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>
+        </div>
+
+        <div style="display:flex;gap:2px;">
+          <sc-for list="{{tabs}}" as="t" hint-placeholder-count="7">
+            <button class="tab" style="{{t.style}}" onClick="{{t.pick}}">{{t.label}}<span style="{{t.badgeStyle}}">{{t.badge}}</span></button>
+          </sc-for>
+        </div>
+      </div>
+
+      <div class="scroll" style="flex:1;padding:16px 18px;">
+
+        <sc-if value="{{isOverview}}" hint-placeholder-val="{{true}}">
+          <div>
+            <div style="margin-bottom:16px;">
+              <h4>Goal</h4>
+              <div style="font-size:12.5px;line-height:1.6;color:var(--body);max-width:760px;">
+                Allow each TyreX site to keep operating without internet connectivity, and synchronise cleanly when the connection returns.
+              </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:14px;margin-bottom:16px;">
+              <div>
+                <h4>Current state</h4>
+                <div class="card" style="padding:10px 12px;">
+                  <div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:11.5px;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3"><path d="m4 12 5 5L20 6"/></svg>
+                    <span style="color:var(--body);">Local queue implemented</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:11.5px;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3"><path d="m4 12 5 5L20 6"/></svg>
+                    <span style="color:var(--body);">Push sync implemented</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:11.5px;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg>
+                    <span style="color:var(--dim);">Pull synchronisation incomplete</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:11.5px;">
+                    <span style="height:12px;width:12px;display:flex;align-items:center;justify-content:center;"><span style="height:7px;width:7px;border-radius:50%;background:#818cf8;"></span></span>
+                    <span style="color:var(--body);">Conflict resolution in progress</span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h4>Related areas</h4>
+                <div class="card" style="padding:10px 12px;display:flex;flex-wrap:wrap;gap:5px;">
+                  <span class="chip" style="background:var(--soft);color:var(--dim);font-family:var(--mono);font-weight:500;">packages/sync</span>
+                  <span class="chip" style="background:var(--soft);color:var(--dim);font-family:var(--mono);font-weight:500;">api/sync</span>
+                  <span class="chip" style="background:var(--soft);color:var(--dim);font-family:var(--mono);font-weight:500;">apps/mobile</span>
+                  <span class="chip" style="background:var(--soft);color:var(--dim);font-family:var(--mono);font-weight:500;">services/queue</span>
+                  <span class="chip" style="background:var(--soft);color:var(--dim);font-family:var(--mono);font-weight:500;">db/migrations</span>
+                </div>
+              </div>
+            </div>
+
+            <div style="margin-bottom:16px;">
+              <h4>Active work</h4>
+              <div style="display:flex;flex-direction:column;gap:8px;">
+                <div class="card" style="padding:11px 13px;">
+                  <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px;">
+                    <span style="height:22px;width:22px;flex-shrink:0;border-radius:5px;background:rgba(167,139,250,.18);color:#c4b5fd;font-size:9.5px;font-weight:700;display:flex;align-items:center;justify-content:center;">CL</span>
+                    <span style="font-size:12.5px;font-weight:600;color:var(--ink);">Claude</span>
+                    <span class="chip" style="background:rgba(74,222,128,.1);color:var(--ok);"><span style="height:5px;width:5px;border-radius:50%;background:#34d399;"></span>Working</span>
+                    <div style="flex:1"></div>
+                    <span style="font-size:10.5px;color:var(--faint);">checkpoint 2 min ago</span>
+                  </div>
+                  <div style="font-size:12px;color:var(--body);margin-bottom:6px;">Implement conflict resolution</div>
+                  <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                    <span class="chip" style="background:var(--soft);color:var(--muted);font-family:var(--mono);font-weight:500;">packages/sync</span>
+                    <span class="chip" style="background:var(--soft);color:var(--muted);font-family:var(--mono);font-weight:500;">api/sync</span>
+                  </div>
+                </div>
+
+                <div class="card" style="padding:11px 13px;">
+                  <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px;">
+                    <span style="height:22px;width:22px;flex-shrink:0;border-radius:5px;background:rgba(56,189,248,.18);color:#7dd3fc;font-size:9.5px;font-weight:700;display:flex;align-items:center;justify-content:center;">CU</span>
+                    <span style="font-size:12.5px;font-weight:600;color:var(--ink);">Cursor</span>
+                    <span class="chip" style="background:rgba(74,222,128,.1);color:var(--ok);"><span style="height:5px;width:5px;border-radius:50%;background:#34d399;"></span>Working</span>
+                    <div style="flex:1"></div>
+                    <span style="font-size:10.5px;color:var(--warn);">context 2 commits behind</span>
+                  </div>
+                  <div style="font-size:12px;color:var(--body);margin-bottom:6px;">Build sync status UI</div>
+                  <div style="display:flex;gap:5px;flex-wrap:wrap;">
+                    <span class="chip" style="background:var(--soft);color:var(--muted);font-family:var(--mono);font-weight:500;">apps/mobile</span>
+                  </div>
+                </div>
+
+                <div class="card" style="padding:11px 13px;">
+                  <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px;">
+                    <span style="height:22px;width:22px;flex-shrink:0;border-radius:5px;background:rgba(148,163,184,.16);color:var(--dim);font-size:9.5px;font-weight:700;display:flex;align-items:center;justify-content:center;">QA</span>
+                    <span style="font-size:12.5px;font-weight:600;color:var(--ink);">QA Agent</span>
+                    <span class="chip" style="background:rgba(148,163,184,.14);color:var(--dim);"><span style="height:5px;width:5px;border-radius:50%;background:var(--muted);"></span>Waiting</span>
+                    <div style="flex:1"></div>
+                    <span style="font-size:10.5px;color:var(--err);">2 of 34 failed</span>
+                  </div>
+                  <div style="font-size:12px;color:var(--body);">Integration testing — blocked on pull sync landing</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:14px;">
+              <div>
+                <h4>Open questions</h4>
+                <div class="card" style="padding:4px 0;">
+                  <div class="row" style="padding:8px 12px;border-bottom:1px solid var(--line);font-size:11.5px;color:var(--body);line-height:1.45;">Should a queued write survive a site reinstall, or is a reset acceptable?</div>
+                  <div class="row" style="padding:8px 12px;font-size:11.5px;color:var(--body);line-height:1.45;">What is the retention window for unsynced records before we warn the operator?</div>
+                </div>
+              </div>
+              <div>
+                <h4>Important decisions</h4>
+                <div class="card" style="padding:4px 0;">
+                  <div class="row" style="padding:8px 12px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;">
+                    <span class="chip" style="background:rgba(74,222,128,.12);color:var(--ok);">Approved</span>
+                    <span style="font-size:11.5px;color:var(--body);flex:1;min-width:0;">Server-authoritative conflict resolution</span>
+                  </div>
+                  <div class="row" style="padding:8px 12px;display:flex;align-items:center;gap:8px;">
+                    <span class="chip" style="background:rgba(74,222,128,.12);color:var(--ok);">Approved</span>
+                    <span style="font-size:11.5px;color:var(--body);flex:1;min-width:0;">Queue writes in SQLite, not IndexedDB</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{isWork}}" hint-placeholder-val="{{false}}">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:11px;">
+              <h4 style="margin:0;">Work items</h4>
+              <div style="flex:1"></div>
+              <button class="gh"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>Add task</button>
+            </div>
+            <div class="card" style="overflow:hidden;">
+              <sc-for list="{{work}}" as="w" hint-placeholder-count="4">
+                <div class="row" style="display:flex;align-items:center;gap:10px;padding:10px 13px;border-bottom:1px solid var(--line);">
+                  <span style="height:20px;width:20px;flex-shrink:0;border-radius:5px;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;{{w.avatar}}">{{w.initials}}</span>
+                  <div style="flex:1;min-width:0;">
+                    <div style="font-size:12px;color:var(--ink);">{{w.title}}</div>
+                    <div style="font-size:10.5px;color:var(--muted);margin-top:2px;font-family:var(--mono);">{{w.areas}}</div>
+                  </div>
+                  <span class="chip" style="{{w.statusStyle}}">{{w.status}}</span>
+                  <span style="font-size:10.5px;color:var(--faint);width:74px;text-align:right;">{{w.who}}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-top:10px;">Claim and release are how agents avoid stepping on each other — an unclaimed item is fair game for any agent with the right tools.</div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{isContext}}" hint-placeholder-val="{{false}}">
+          <div>
+            <div class="card" style="padding:13px 15px;margin-bottom:13px;display:flex;align-items:center;gap:16px;">
+              <div>
+                <div style="font-size:10.5px;color:var(--muted);">Context commit</div>
+                <div style="font-size:13px;color:var(--ink);font-family:var(--mono);margin-top:3px;">cb94da1</div>
+              </div>
+              <div style="width:1px;height:28px;background:var(--line);"></div>
+              <div>
+                <div style="font-size:10.5px;color:var(--muted);">Estimated size</div>
+                <div style="font-size:13px;color:var(--ink);margin-top:3px;">2,840 tokens</div>
+              </div>
+              <div style="width:1px;height:28px;background:var(--line);"></div>
+              <div>
+                <div style="font-size:10.5px;color:var(--muted);">Last updated</div>
+                <div style="font-size:13px;color:var(--ink);margin-top:3px;">2 min ago</div>
+              </div>
+              <div style="flex:1"></div>
+              <button class="gh">Open inspector</button>
+              <button class="gh">Compare</button>
+            </div>
+            <div style="font-size:11.5px;color:var(--dim);line-height:1.6;max-width:720px;">
+              This is the summary view. The full breakdown of what each agent receives — every section, its token cost, and whether it is included, inherited or excluded — lives in the Context Inspector.
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{isActivity}}" hint-placeholder-val="{{false}}">
+          <div class="card" style="padding:5px 0;">
+            <sc-for list="{{feed}}" as="e" hint-placeholder-count="7">
+              <div style="display:flex;gap:10px;align-items:flex-start;padding:7px 13px;">
+                <span style="font-family:var(--mono);font-size:10.5px;color:var(--faint);width:34px;flex-shrink:0;padding-top:2px;">{{e.time}}</span>
+                <span style="height:18px;width:18px;flex-shrink:0;border-radius:4px;display:flex;align-items:center;justify-content:center;{{e.iconStyle}}">{{e.glyph}}</span>
+                <span style="font-size:11.5px;color:var(--body);line-height:1.5;">{{e.text}}</span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{isDecisions}}" hint-placeholder-val="{{false}}">
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div class="card" style="padding:13px 15px;">
+              <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px;">
+                <span style="font-size:13px;font-weight:600;color:var(--ink);">Server-authoritative conflict resolution</span>
+                <span class="chip" style="background:rgba(74,222,128,.12);color:var(--ok);">Approved</span>
+                <div style="flex:1"></div>
+                <span style="font-size:10.5px;color:var(--faint);">Today · JayJay</span>
+              </div>
+              <div style="font-size:11.5px;color:var(--dim);line-height:1.55;margin-bottom:9px;max-width:700px;">
+                Offline sites may have unreliable clocks, so the server decides the winner rather than trusting a client timestamp.
+              </div>
+              <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;">
+                <span style="font-size:10.5px;color:var(--muted);margin-right:2px;">Impacts</span>
+                <span class="chip" style="background:var(--soft);color:var(--dim);font-weight:500;">Sync engine</span>
+                <span class="chip" style="background:var(--soft);color:var(--dim);font-weight:500;">API reconciliation</span>
+                <span class="chip" style="background:var(--soft);color:var(--dim);font-weight:500;">Mobile UI</span>
+              </div>
+            </div>
+
+            <div class="card" style="padding:13px 15px;">
+              <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px;">
+                <span style="font-size:13px;font-weight:600;color:var(--ink);">Queue writes in SQLite, not IndexedDB</span>
+                <span class="chip" style="background:rgba(74,222,128,.12);color:var(--ok);">Approved</span>
+                <div style="flex:1"></div>
+                <span style="font-size:10.5px;color:var(--faint);">3 days ago · Claude</span>
+              </div>
+              <div style="font-size:11.5px;color:var(--dim);line-height:1.55;max-width:700px;">
+                The depot tablets already ship SQLite and survive a hard power cut without index corruption.
+              </div>
+            </div>
+
+            <div class="card" style="padding:13px 15px;opacity:.72;">
+              <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px;">
+                <span style="font-size:13px;font-weight:600;color:var(--dim);text-decoration:line-through;">Trust the client timestamp</span>
+                <span class="chip" style="background:rgba(148,163,184,.14);color:var(--muted);">Superseded</span>
+                <div style="flex:1"></div>
+                <span style="font-size:10.5px;color:var(--faint);">Superseded today</span>
+              </div>
+              <div style="font-size:11.5px;color:var(--muted);line-height:1.55;">Kept on the record — a superseded decision explains why the current one exists.</div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{isConflicts}}" hint-placeholder-val="{{false}}">
+          <div class="card" style="border-color:rgba(251,191,36,.3);padding:13px 15px;">
+            <div style="display:flex;align-items:center;gap:9px;margin-bottom:9px;">
+              <span class="chip" style="background:rgba(251,191,36,.16);color:var(--warn);">HIGH</span>
+              <span style="font-size:13px;font-weight:600;color:var(--ink);">Shared interface changed</span>
+              <div style="flex:1"></div>
+              <span style="font-size:10.5px;color:var(--faint);">2 min ago</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:11px;background:var(--page);border:1px solid var(--line);border-radius:5px;padding:9px 11px;">
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:10.5px;color:var(--muted);margin-bottom:3px;">Claude changed</div>
+                <div style="font-size:12px;color:#fca5a5;font-family:var(--mono);">SyncResult</div>
+              </div>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:10.5px;color:var(--muted);margin-bottom:3px;">Cursor depends on</div>
+                <div style="font-size:12px;color:#7dd3fc;font-family:var(--mono);">SyncResult</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;">
+              <button class="gh">Inspect</button>
+              <button class="gh">Notify agents</button>
+              <button class="gh">Resolve</button>
+              <button class="gh" style="margin-left:auto;">Dismiss</button>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{isGit}}" hint-placeholder-val="{{false}}">
+          <div class="card" style="overflow:hidden;">
+            <sc-for list="{{commits}}" as="c" hint-placeholder-count="4">
+              <div class="row" style="display:flex;align-items:flex-start;gap:11px;padding:10px 13px;border-bottom:1px solid var(--line);">
+                <span style="font-family:var(--mono);font-size:11px;color:var(--accent);width:52px;flex-shrink:0;padding-top:1px;">{{c.sha}}</span>
+                <div style="flex:1;min-width:0;">
+                  <div style="font-size:12px;color:var(--ink);">{{c.msg}}</div>
+                  <div style="font-size:10.5px;color:var(--muted);margin-top:3px;">{{c.meta}}</div>
+                </div>
+                <sc-if value="{{c.ctx}}" hint-placeholder-val="{{true}}">
+                  <span class="chip" style="background:rgba(56,189,248,.12);color:#7dd3fc;">context updated</span>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+      </div>
+    </div>
+
+    <!-- RIGHT: live agent + context panel -->
+    <div style="width:332px;flex-shrink:0;display:flex;flex-direction:column;border-left:1px solid var(--line);background:var(--panel);">
+      <div style="display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);padding:10px 12px;flex-shrink:0;">
+        <span style="height:7px;width:7px;border-radius:50%;background:#34d399;"></span>
+        <span style="font-size:12.5px;font-weight:600;color:var(--ink);">Live</span>
+        <div style="flex:1"></div>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="m13 17 5-5-5-5M6 17l5-5-5-5"/></svg>
+      </div>
+
+      <div class="scroll" style="flex:1;padding:12px;">
+
+        <div style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.28);border-radius:6px;padding:11px 12px;margin-bottom:13px;">
+          <div style="display:flex;align-items:center;gap:7px;margin-bottom:7px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+            <span style="font-size:11.5px;font-weight:600;color:var(--warn);">Claude wants to work here</span>
+          </div>
+          <div style="font-size:11.5px;color:var(--body);line-height:1.5;margin-bottom:5px;">Implement conflict resolution</div>
+          <div style="font-size:11px;color:var(--dim);line-height:1.5;margin-bottom:8px;">Intent: add server-authoritative reconciliation.</div>
+          <div style="font-size:10.5px;color:var(--muted);margin-bottom:4px;">Expected areas</div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;">
+            <span class="chip" style="background:var(--soft);color:var(--dim);font-family:var(--mono);font-weight:500;">packages/sync</span>
+            <span class="chip" style="background:var(--soft);color:var(--dim);font-family:var(--mono);font-weight:500;">api/sync</span>
+          </div>
+          <div style="font-size:10.5px;color:var(--warn);line-height:1.5;margin-bottom:9px;">Overlap: Cursor is using packages/sync/types.ts</div>
+          <div style="display:flex;gap:5px;">
+            <button style="border:none;background:#4f46e5;color:#fff;border-radius:4px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">Allow</button>
+            <button class="gh" style="font-size:11px;">Warn</button>
+            <button class="gh" style="font-size:11px;">Redirect</button>
+            <button class="gh" style="font-size:11px;">Block</button>
+          </div>
+        </div>
+
+        <div style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);margin-bottom:8px;">Agents on this feature</div>
+
+        <div class="card" style="padding:10px 11px;margin-bottom:8px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;">
+            <span style="height:21px;width:21px;flex-shrink:0;border-radius:5px;background:rgba(167,139,250,.18);color:#c4b5fd;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;">CL</span>
+            <span style="font-size:12px;font-weight:600;color:var(--ink);">Claude</span>
+            <span class="chip" style="background:rgba(74,222,128,.1);color:var(--ok);"><span style="height:5px;width:5px;border-radius:50%;background:#34d399;"></span>Working</span>
+          </div>
+          <div style="font-size:11px;color:var(--dim);line-height:1.5;margin-bottom:8px;">Implementing conflict resolution</div>
+          <div style="display:flex;gap:10px;font-size:10.5px;color:var(--muted);margin-bottom:8px;">
+            <span>24 min</span><span>3 files</span><span style="color:var(--ok);">context current</span>
+          </div>
+          <div style="display:flex;gap:5px;">
+            <button class="gh" style="font-size:10.5px;padding:3px 8px;">View work</button>
+            <button class="gh" style="font-size:10.5px;padding:3px 8px;">Message</button>
+            <button class="gh" style="font-size:10.5px;padding:3px 8px;margin-left:auto;">Pause</button>
+          </div>
+        </div>
+
+        <div class="card" style="padding:10px 11px;margin-bottom:8px;border-color:rgba(251,191,36,.25);">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;">
+            <span style="height:21px;width:21px;flex-shrink:0;border-radius:5px;background:rgba(56,189,248,.18);color:#7dd3fc;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;">CU</span>
+            <span style="font-size:12px;font-weight:600;color:var(--ink);">Cursor</span>
+            <span class="chip" style="background:rgba(74,222,128,.1);color:var(--ok);"><span style="height:5px;width:5px;border-radius:50%;background:#34d399;"></span>Working</span>
+          </div>
+          <div style="font-size:11px;color:var(--dim);line-height:1.5;margin-bottom:8px;">Building sync status UI</div>
+          <div style="display:flex;gap:10px;font-size:10.5px;color:var(--muted);margin-bottom:8px;">
+            <span>11 min</span><span>2 files</span><span style="color:var(--warn);">2 commits behind</span>
+          </div>
+          <div style="display:flex;gap:5px;">
+            <button class="gh" style="font-size:10.5px;padding:3px 8px;">Send delta</button>
+            <button class="gh" style="font-size:10.5px;padding:3px 8px;">Message</button>
+          </div>
+        </div>
+
+        <div class="card" style="padding:10px 11px;margin-bottom:13px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;">
+            <span style="height:21px;width:21px;flex-shrink:0;border-radius:5px;background:rgba(148,163,184,.16);color:var(--dim);font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;">QA</span>
+            <span style="font-size:12px;font-weight:600;color:var(--ink);">QA Agent</span>
+            <span class="chip" style="background:rgba(148,163,184,.14);color:var(--dim);"><span style="height:5px;width:5px;border-radius:50%;background:var(--muted);"></span>Waiting</span>
+          </div>
+          <div style="font-size:11px;color:var(--dim);line-height:1.5;">Integration tests — 2 of 34 failing on the pull sync path</div>
+        </div>
+
+        <div style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);margin-bottom:8px;">Context</div>
+        <div class="card" style="padding:11px 12px;">
+          <div style="display:flex;align-items:center;gap:7px;margin-bottom:9px;">
+            <span class="chip" style="background:rgba(74,222,128,.12);color:var(--ok);">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2"><path d="m4 12 5 5L20 6"/></svg>Fresh</span>
+            <span style="font-size:11px;color:var(--muted);font-family:var(--mono);">cb94da1</span>
+            <div style="flex:1"></div>
+            <span style="font-size:11px;color:var(--dim);">2,840 tok</span>
+          </div>
+          <div style="display:flex;height:5px;border-radius:3px;overflow:hidden;gap:2px;margin-bottom:8px;">
+            <div style="width:11%;background:#818cf8;"></div>
+            <div style="width:30%;background:#38bdf8;"></div>
+            <div style="width:22%;background:#a78bfa;"></div>
+            <div style="width:15%;background:#4ade80;"></div>
+            <div style="flex:1;background:var(--line2);"></div>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px 10px;font-size:10.5px;color:var(--muted);">
+            <span style="display:inline-flex;align-items:center;gap:4px;"><span style="height:6px;width:6px;border-radius:2px;background:#818cf8;"></span>Project 320</span>
+            <span style="display:inline-flex;align-items:center;gap:4px;"><span style="height:6px;width:6px;border-radius:2px;background:#38bdf8;"></span>Feature 840</span>
+            <span style="display:inline-flex;align-items:center;gap:4px;"><span style="height:6px;width:6px;border-radius:2px;background:#a78bfa;"></span>Requirements 620</span>
+            <span style="display:inline-flex;align-items:center;gap:4px;"><span style="height:6px;width:6px;border-radius:2px;background:#4ade80;"></span>Decisions 430</span>
+          </div>
+          <button class="gh" style="width:100%;justify-content:center;margin-top:10px;">Open Context Inspector</button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:16px;border-top:1px solid var(--line);background:var(--panel);padding:4px 12px;font-size:11px;color:var(--muted);flex-shrink:0;">
+    <span>Logs</span><span>Processes</span>
+    <div style="flex:1"></div>
+    <span style="display:inline-flex;align-items:center;gap:5px;"><span style="height:6px;width:6px;border-radius:50%;background:#34d399;"></span>3 agents on this feature</span>
+    <span>TyreX · main</span>
+    <span style="color:var(--warn);">1 conflict</span>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { tab: 'Overview' };
+  }
+  renderVals() {
+    const self = this;
+    const cur = this.state.tab;
+    const defs = [
+      { label: 'Overview' }, { label: 'Work', badge: '4' }, { label: 'Context' },
+      { label: 'Activity' }, { label: 'Decisions', badge: '3' },
+      { label: 'Conflicts', badge: '1', warn: true }, { label: 'Git' },
+    ];
+    const tabs = defs.map(function (d) {
+      const on = d.label === cur;
+      return {
+        label: d.label,
+        badge: d.badge ? ' ' + d.badge : '',
+        badgeStyle: d.badge
+          ? (d.warn ? 'color:#fbbf24;font-weight:700;font-size:10px;' : 'color:#475569;font-size:10px;')
+          : 'display:none;',
+        style: on
+          ? 'color:#e2e8f0;font-weight:600;box-shadow:inset 0 -2px 0 #6366f1;'
+          : '',
+        pick: function () { self.setState({ tab: d.label }); },
+      };
+    });
+
+    const work = [
+      { initials: 'CL', avatar: 'background:rgba(167,139,250,.18);color:#c4b5fd;', title: 'Conflict resolution', areas: 'packages/sync · api/sync', status: 'In Progress', statusStyle: 'background:rgba(99,102,241,.16);color:#a5b4fc;', who: 'Claude' },
+      { initials: 'CU', avatar: 'background:rgba(56,189,248,.18);color:#7dd3fc;', title: 'Sync status UI', areas: 'apps/mobile', status: 'In Progress', statusStyle: 'background:rgba(99,102,241,.16);color:#a5b4fc;', who: 'Cursor' },
+      { initials: 'QA', avatar: 'background:rgba(148,163,184,.16);color:#94a3b8;', title: 'Integration tests', areas: 'tests/sync', status: 'Waiting', statusStyle: 'background:rgba(148,163,184,.14);color:#94a3b8;', who: 'QA Agent' },
+      { initials: '—', avatar: 'background:rgba(148,163,184,.1);color:#475569;', title: 'Pull synchronisation', areas: 'packages/sync', status: 'Unclaimed', statusStyle: 'background:rgba(148,163,184,.1);color:#64748b;', who: 'unassigned' },
+    ];
+
+    const tint = {
+      agent:   'background:rgba(167,139,250,.18);color:#c4b5fd;font-size:8.5px;font-weight:700;',
+      context: 'background:rgba(56,189,248,.18);color:#7dd3fc;font-size:10px;',
+      human:   'background:rgba(74,222,128,.16);color:#86efac;font-size:8.5px;font-weight:700;',
+      git:     'background:rgba(148,163,184,.16);color:#cbd5e1;font-size:10px;',
+    };
+    const feed = [
+      { time: '21:38', glyph: 'CL', iconStyle: tint.agent,   text: 'Claude claimed “Conflict resolution”' },
+      { time: '21:40', glyph: 'CU', iconStyle: tint.agent,   text: 'Cursor claimed “Sync status UI”' },
+      { time: '21:42', glyph: 'CL', iconStyle: tint.agent,   text: 'Claude modified SyncResult in packages/sync/types.ts' },
+      { time: '21:43', glyph: '◇',  iconStyle: tint.context, text: 'Feature context updated — cb94da1' },
+      { time: '21:44', glyph: '◇',  iconStyle: tint.context, text: 'Cursor detected a context delta (3 sections)' },
+      { time: '21:47', glyph: 'QA', iconStyle: tint.agent,   text: 'QA integration tests failed — 2 of 34' },
+      { time: '21:49', glyph: 'JJ', iconStyle: tint.human,   text: 'JayJay resolved the conflict on SyncResult' },
+      { time: '21:51', glyph: '⌥',  iconStyle: tint.git,     text: 'Commit cb94da1 — conflict strategy updated' },
+    ];
+
+    const commits = [
+      { sha: 'cb94da1', msg: 'Conflict strategy updated', meta: 'Claude · 2 files changed · 2 min ago', ctx: true },
+      { sha: '81c3f29', msg: 'Sync API implemented', meta: 'Cursor · 7 files changed · 3 h ago', ctx: false },
+      { sha: '4f0ab77', msg: 'Queue writes moved to SQLite', meta: 'Claude · 4 files changed · 3 days ago', ctx: true },
+      { sha: 'a20d514', msg: 'Feature scaffolded', meta: 'JayJay · 6 files changed · 5 days ago', ctx: true },
+    ];
+
+    return {
+      tabs: tabs, work: work, feed: feed, commits: commits,
+      isOverview:  cur === 'Overview',
+      isWork:      cur === 'Work',
+      isContext:   cur === 'Context',
+      isActivity:  cur === 'Activity',
+      isDecisions: cur === 'Decisions',
+      isConflicts: cur === 'Conflicts',
+      isGit:       cur === 'Git',
+    };
+  }
+}
+</script>
+</body>
+</html>

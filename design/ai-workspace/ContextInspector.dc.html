@@ -1,0 +1,392 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root{
+      --app:#0b0e14; --page:#0d1017; --panel:#11141c; --raise:#151923; --menu:#1a1f2b; --hover:#232b3b;
+      --soft:rgba(30,41,59,.4);
+      --line:#1e293b; --line2:#334155; --line3:#64748b;
+      --ink:#e2e8f0; --body:#cbd5e1; --dim:#94a3b8; --muted:#64748b; --faint:#475569;
+      --accent:#818cf8; --ok:#4ade80; --warn:#fbbf24; --err:#f87171; --info:#38bdf8; --viol:#a78bfa;
+      --mono:ui-monospace,Consolas,'Cascadia Mono',monospace;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--app);color:var(--body);}
+    a{color:var(--accent);text-decoration:none;} a:hover{color:#a5b4fc;}
+    .railb{position:relative;display:flex;height:40px;width:40px;align-items:center;justify-content:center;border-radius:8px;color:var(--muted);cursor:pointer;}
+    .railb:hover{background:rgba(35,43,59,.5);color:var(--dim);}
+    .railon{background:var(--raise);color:var(--ink);}
+    .railon::before{content:'';position:absolute;left:-7px;top:8px;bottom:8px;width:2.5px;border-radius:2px;background:#6366f1;}
+    .card{background:var(--raise);border:1px solid var(--line);border-radius:6px;}
+    .chip{display:inline-flex;align-items:center;gap:5px;border-radius:4px;padding:2px 7px;font-size:10.5px;font-weight:600;}
+    .gh{border:1px solid var(--line2);background:var(--soft);color:var(--body);border-radius:4px;padding:4px 10px;font-size:11.5px;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px;}
+    .gh:hover{border-color:var(--line3);color:var(--ink);}
+    .sec{width:100%;text-align:left;border:none;background:none;font-family:inherit;cursor:pointer;display:flex;align-items:center;gap:9px;padding:9px 12px;}
+    .sec:hover{background:var(--hover);}
+    .seg{padding:3px 10px;border-radius:4px;font-size:11px;cursor:pointer;color:var(--muted);border:none;background:none;font-family:inherit;}
+    .seg:hover{color:var(--ink);}
+    .scroll{overflow-y:auto;scrollbar-width:thin;scrollbar-color:#334155 transparent;}
+    h4{margin:0 0 8px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);}
+    pre{margin:0;font-family:var(--mono);font-size:11px;line-height:1.65;color:var(--body);white-space:pre-wrap;}
+  </style>
+</helmet>
+
+<div style="width:1440px;height:900px;display:flex;flex-direction:column;background:var(--app);font-size:12px;">
+
+  <div style="display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);background:var(--panel);padding:6px 8px;flex-shrink:0;">
+    <span style="font-size:13px;font-weight:600;color:var(--ink);margin-right:4px;">DevDeck</span>
+    <button class="gh">Terminal</button>
+    <button class="gh">Services</button>
+    <div style="flex:1"></div>
+    <span class="chip" style="background:rgba(16,185,129,.1);color:var(--ok);">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+      main
+    </span>
+    <button class="gh">Check for updates</button>
+  </div>
+
+  <div style="flex:1;display:flex;min-height:0;">
+
+    <div style="width:52px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:4px;border-right:1px solid var(--line);background:var(--app);padding:8px 0;">
+      <div class="railb"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 10v10h14V10"/></svg></div>
+      <div class="railb"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
+      <div class="railb"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M9 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3"/></svg></div>
+      <div class="railb"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg></div>
+      <div class="railb"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg></div>
+      <div class="railb railon">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/><path d="M18.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></svg>
+        <span style="position:absolute;right:3px;top:3px;height:7px;width:7px;border-radius:50%;border:2px solid var(--app);background:#34d399;"></span>
+      </div>
+      <div style="flex:1"></div>
+      <div class="railb"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M18.9 14.3a1.5 1.5 0 0 0 .3 1.7l.1.1a1.9 1.9 0 1 1-2.7 2.7l-.1-.1a1.5 1.5 0 0 0-2.6 1.1v.2a1.9 1.9 0 1 1-3.8 0v-.1a1.5 1.5 0 0 0-2.6-1.1l-.1.1a1.9 1.9 0 1 1-2.7-2.7l.1-.1a1.5 1.5 0 0 0-1.1-2.6h-.2a1.9 1.9 0 1 1 0-3.8h.1a1.5 1.5 0 0 0 1.1-2.6l-.1-.1a1.9 1.9 0 1 1 2.7-2.7l.1.1a1.5 1.5 0 0 0 2.6-1.1v-.2a1.9 1.9 0 1 1 3.8 0v.1a1.5 1.5 0 0 0 2.6 1.1l.1-.1a1.9 1.9 0 1 1 2.7 2.7l-.1.1a1.5 1.5 0 0 0 1.1 2.6h.2a1.9 1.9 0 1 1 0 3.8h-.1a1.5 1.5 0 0 0-1.4.9z"/></svg></div>
+    </div>
+
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:var(--page);">
+
+      <div style="padding:14px 18px 13px;border-bottom:1px solid var(--line);flex-shrink:0;">
+        <div style="display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted);margin-bottom:5px;">
+          <span>TyreX</span>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>
+          <span>Offline Synchronisation</span>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>
+          <span style="color:var(--dim);">Context</span>
+        </div>
+
+        <div style="display:flex;align-items:flex-end;gap:14px;">
+          <div>
+            <div style="font-size:18px;font-weight:600;color:var(--ink);letter-spacing:-.01em;">Context Inspector</div>
+            <div style="font-size:12px;color:var(--dim);margin-top:3px;">Exactly what an agent receives when it starts work on this feature.</div>
+          </div>
+          <div style="flex:1"></div>
+          <button class="gh">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3v5h5"/><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/></svg>
+            View raw context
+          </button>
+          <button class="gh">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+            Compare context
+          </button>
+        </div>
+      </div>
+
+      <div style="flex:1;display:flex;min-height:0;">
+
+        <!-- left: budget + sections -->
+        <div class="scroll" style="flex:1;min-width:0;padding:15px 18px;">
+
+          <div class="card" style="padding:13px 15px;margin-bottom:15px;">
+            <div style="display:flex;align-items:center;gap:18px;margin-bottom:12px;">
+              <div>
+                <div style="font-size:10.5px;color:var(--muted);">Feature</div>
+                <div style="font-size:12.5px;color:var(--ink);margin-top:3px;">Offline Synchronisation</div>
+              </div>
+              <div style="width:1px;height:28px;background:var(--line);"></div>
+              <div>
+                <div style="font-size:10.5px;color:var(--muted);">Context commit</div>
+                <div style="font-size:12.5px;color:var(--accent);margin-top:3px;font-family:var(--mono);">cb94da1</div>
+              </div>
+              <div style="width:1px;height:28px;background:var(--line);"></div>
+              <div>
+                <div style="font-size:10.5px;color:var(--muted);">Last updated</div>
+                <div style="font-size:12.5px;color:var(--ink);margin-top:3px;">2 min ago</div>
+              </div>
+              <div style="width:1px;height:28px;background:var(--line);"></div>
+              <div>
+                <div style="font-size:10.5px;color:var(--muted);">Estimated size</div>
+                <div style="font-size:12.5px;color:var(--ink);margin-top:3px;">{{total}} tokens</div>
+              </div>
+              <div style="flex:1"></div>
+              <span class="chip" style="background:rgba(74,222,128,.12);color:var(--ok);">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2"><path d="m4 12 5 5L20 6"/></svg>Fresh</span>
+            </div>
+
+            <div style="display:flex;height:7px;border-radius:4px;overflow:hidden;gap:2px;margin-bottom:9px;">
+              <sc-for list="{{bars}}" as="b" hint-placeholder-count="5">
+                <div style="{{b.style}}"></div>
+              </sc-for>
+              <div style="flex:1;background:var(--line);"></div>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:5px 14px;font-size:10.5px;color:var(--muted);">
+              <sc-for list="{{bars}}" as="b" hint-placeholder-count="5">
+                <span style="display:inline-flex;align-items:center;gap:5px;"><span style="height:7px;width:7px;border-radius:2px;{{b.swatch}}"></span>{{b.label}}</span>
+              </sc-for>
+              <span style="margin-left:auto;color:var(--faint);">of a 12,000-token window</span>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px;">
+            <h4 style="margin:0;">Sections</h4>
+            <div style="flex:1"></div>
+            <span style="font-size:10.5px;color:var(--faint);">click a row to expand · toggle to include or exclude</span>
+          </div>
+
+          <div class="card" style="overflow:hidden;">
+            <sc-for list="{{sections}}" as="s" hint-placeholder-count="8">
+              <div style="border-bottom:1px solid var(--line);">
+                <button class="sec" onClick="{{s.toggle}}">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2.4" style="{{s.caret}}"><path d="m9 6 6 6-6 6"/></svg>
+                  <span style="font-size:12px;flex:1;min-width:0;{{s.titleStyle}}">{{s.title}}</span>
+                  <span class="chip" style="{{s.tagStyle}}">{{s.tag}}</span>
+                  <span style="font-size:11px;font-family:var(--mono);width:56px;text-align:right;{{s.tokStyle}}">{{s.tokens}}</span>
+                  <span style="width:30px;height:16px;border-radius:9px;position:relative;flex-shrink:0;{{s.switchTrack}}">
+                    <span style="position:absolute;top:2px;height:12px;width:12px;border-radius:50%;background:#e2e8f0;{{s.switchKnob}}"></span>
+                  </span>
+                </button>
+                <sc-if value="{{s.open}}" hint-placeholder-val="{{false}}">
+                  <div style="padding:2px 14px 12px 32px;">
+                    <div style="font-size:11px;color:var(--muted);margin-bottom:7px;font-family:var(--mono);">{{s.path}}</div>
+                    <div style="background:var(--page);border:1px solid var(--line);border-radius:5px;padding:10px 12px;">
+                      <pre>{{s.body}}</pre>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="margin-top:14px;">
+            <h4>Excluded from this context</h4>
+            <div class="card" style="padding:4px 0;opacity:.75;">
+              <div style="display:flex;align-items:center;gap:9px;padding:8px 12px;border-bottom:1px solid var(--line);">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2.2"><path d="M6 6l12 12M18 6 6 18"/></svg>
+                <span style="font-size:11.5px;color:var(--dim);flex:1;">Other TyreX features</span>
+                <span style="font-size:10.5px;color:var(--faint);">6 features · ~9,400 tok</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:9px;padding:8px 12px;border-bottom:1px solid var(--line);">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2.2"><path d="M6 6l12 12M18 6 6 18"/></svg>
+                <span style="font-size:11.5px;color:var(--dim);flex:1;">Old sessions</span>
+                <span style="font-size:10.5px;color:var(--faint);">31 sessions</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:9px;padding:8px 12px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2.2"><path d="M6 6l12 12M18 6 6 18"/></svg>
+                <span style="font-size:11.5px;color:var(--dim);flex:1;">Workspace general knowledge</span>
+                <span style="font-size:10.5px;color:var(--faint);">~4,100 tok</span>
+              </div>
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-top:9px;line-height:1.55;max-width:640px;">
+              Exclusions are the point. A small, relevant context is what keeps an agent accurate — everything above is deliberately withheld and can be pulled in per session.
+            </div>
+          </div>
+        </div>
+
+        <!-- right: raw file -->
+        <div style="width:472px;flex-shrink:0;display:flex;flex-direction:column;border-left:1px solid var(--line);background:var(--panel);">
+          <div style="display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);padding:9px 12px;flex-shrink:0;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><path d="M14 3v5h5"/><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/></svg>
+            <span style="font-size:11.5px;color:var(--ink);font-family:var(--mono);">.devdeck/features/offline-sync/context.md</span>
+            <div style="flex:1"></div>
+            <div style="display:flex;gap:1px;background:var(--soft);border:1px solid var(--line);border-radius:5px;padding:2px;">
+              <sc-for list="{{views}}" as="v" hint-placeholder-count="2">
+                <button class="seg" style="{{v.style}}" onClick="{{v.pick}}">{{v.label}}</button>
+              </sc-for>
+            </div>
+          </div>
+
+          <div class="scroll" style="flex:1;padding:12px 14px;">
+            <sc-if value="{{isRaw}}" hint-placeholder-val="{{true}}">
+              <div>
+                <div style="background:rgba(129,140,248,.06);border:1px solid rgba(129,140,248,.22);border-radius:5px;padding:10px 12px;margin-bottom:11px;">
+                  <div style="font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--accent);margin-bottom:7px;">YAML frontmatter</div>
+                  <pre style="color:var(--dim);">id: offline-sync
+type: feature-context
+status: in-progress
+updated: 2026-08-28T21:43:11Z
+owners: [claude, cursor, qa]
+commit: cb94da1</pre>
+                </div>
+                <pre># Offline Synchronisation — context
+
+## Goal
+Allow each TyreX site to keep operating without
+internet connectivity, and synchronise cleanly
+when the connection returns.
+
+## Current state
+- Local queue implemented
+- Push sync implemented
+- Pull synchronisation incomplete
+- Conflict resolution in progress
+
+## Rules
+- The server is authoritative on conflict.
+- Never trust a client timestamp for ordering.
+- A queued write must survive a hard power cut.
+
+## Open questions
+- Should a queued write survive a site reinstall?
+- Retention window before warning the operator?
+</pre>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{isRendered}}" hint-placeholder-val="{{false}}">
+              <div style="font-size:12px;line-height:1.65;color:var(--body);">
+                <div style="font-size:15px;font-weight:600;color:var(--ink);margin-bottom:10px;">Offline Synchronisation — context</div>
+                <div style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);margin:14px 0 6px;">Goal</div>
+                <div>Allow each TyreX site to keep operating without internet connectivity, and synchronise cleanly when the connection returns.</div>
+                <div style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);margin:14px 0 6px;">Current state</div>
+                <div style="padding-left:14px;">
+                  <div style="margin-bottom:3px;">• Local queue implemented</div>
+                  <div style="margin-bottom:3px;">• Push sync implemented</div>
+                  <div style="margin-bottom:3px;">• Pull synchronisation incomplete</div>
+                  <div>• Conflict resolution in progress</div>
+                </div>
+                <div style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);margin:14px 0 6px;">Rules</div>
+                <div style="padding-left:14px;">
+                  <div style="margin-bottom:3px;">• The server is authoritative on conflict.</div>
+                  <div style="margin-bottom:3px;">• Never trust a client timestamp for ordering.</div>
+                  <div>• A queued write must survive a hard power cut.</div>
+                </div>
+                <div style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);margin:14px 0 6px;">Open questions</div>
+                <div style="padding-left:14px;">
+                  <div style="margin-bottom:3px;">• Should a queued write survive a site reinstall?</div>
+                  <div>• Retention window before warning the operator?</div>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+
+          <div style="border-top:1px solid var(--line);padding:9px 12px;display:flex;align-items:center;gap:6px;flex-shrink:0;">
+            <span style="font-size:10.5px;color:var(--muted);">It is a normal file on disk — edit it anywhere.</span>
+            <div style="flex:1"></div>
+            <button class="gh" style="font-size:11px;">Edit</button>
+            <button class="gh" style="font-size:11px;">History</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:16px;border-top:1px solid var(--line);background:var(--panel);padding:4px 12px;font-size:11px;color:var(--muted);flex-shrink:0;">
+    <span>Logs</span><span>Processes</span>
+    <div style="flex:1"></div>
+    <span>context cb94da1</span>
+    <span>{{total}} tokens</span>
+    <span>TyreX · main</span>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      open: { 'Project rules': true },
+      off: {},
+      view: 'Raw',
+    };
+  }
+  renderVals() {
+    const self = this;
+    const defs = [
+      { title: 'Project rules', tag: 'Inherited', tokens: 320, path: '.devdeck/project.md → rules',
+        body: '- Every site runs offline-first; the network is a bonus.\n- No customer data leaves the depot unencrypted.\n- Migrations are forward-only.' },
+      { title: 'Feature context', tag: 'Manual', tokens: 840, path: '.devdeck/features/offline-sync/context.md',
+        body: '# Offline Synchronisation — context\n\n## Goal\nAllow each TyreX site to keep operating without\ninternet connectivity…' },
+      { title: 'Requirements', tag: 'Manual', tokens: 620, path: '.devdeck/features/offline-sync/requirements.md',
+        body: 'R1 · A site must function with no connectivity for 72 h.\nR2 · No write may be lost on power failure.\nR3 · Sync must be resumable mid-transfer.' },
+      { title: 'Relevant decisions', tag: 'Generated', tokens: 430, path: '.devdeck/decisions/ (2 linked)',
+        body: 'ADR-014 Server-authoritative conflict resolution (approved)\nADR-011 Queue writes in SQLite, not IndexedDB (approved)' },
+      { title: 'Active work', tag: 'Generated', tokens: 280, path: 'derived from open work items',
+        body: 'Claude   · conflict resolution · packages/sync, api/sync\nCursor   · sync status UI     · apps/mobile\nQA Agent · integration tests   · waiting' },
+      { title: 'Recent changes', tag: 'Generated', tokens: 210, path: 'git log — last 5 commits touching this feature',
+        body: 'cb94da1 conflict strategy updated (Claude)\n81c3f29 sync API implemented (Cursor)' },
+      { title: 'Open questions', tag: 'Manual', tokens: 140, path: '.devdeck/features/offline-sync/context.md → questions',
+        body: '- Should a queued write survive a site reinstall?\n- Retention window before warning the operator?' },
+    ];
+
+    const tagStyles = {
+      Inherited: 'background:rgba(129,140,248,.16);color:#a5b4fc;',
+      Manual:    'background:rgba(56,189,248,.14);color:#7dd3fc;',
+      Generated: 'background:rgba(148,163,184,.14);color:#94a3b8;',
+    };
+
+    let total = 0;
+    const sections = defs.map(function (d) {
+      const isOff = !!self.state.off[d.title];
+      if (!isOff) total += d.tokens;
+      const isOpen = !!self.state.open[d.title];
+      return {
+        title: d.title,
+        tag: d.tag,
+        tokens: isOff ? '—' : d.tokens.toLocaleString(),
+        path: d.path,
+        body: d.body,
+        open: isOpen,
+        caret: isOpen ? 'transform:rotate(90deg);' : '',
+        titleStyle: isOff ? 'color:#64748b;text-decoration:line-through;' : 'color:#e2e8f0;',
+        tagStyle: isOff ? 'background:rgba(148,163,184,.1);color:#475569;' : tagStyles[d.tag],
+        tokStyle: isOff ? 'color:#475569;' : 'color:#94a3b8;',
+        switchTrack: isOff ? 'background:#334155;' : 'background:#4f46e5;',
+        switchKnob: isOff ? 'left:2px;' : 'left:16px;',
+        toggle: function () {
+          const open = Object.assign({}, self.state.open);
+          open[d.title] = !open[d.title];
+          self.setState({ open: open });
+        },
+      };
+    });
+
+    const barDefs = [
+      { label: 'Project 320', w: 320, c: '#818cf8' },
+      { label: 'Feature 840', w: 840, c: '#38bdf8' },
+      { label: 'Requirements 620', w: 620, c: '#a78bfa' },
+      { label: 'Decisions 430', w: 430, c: '#4ade80' },
+      { label: 'Generated 630', w: 630, c: '#64748b' },
+    ];
+    const bars = barDefs.map(function (b) {
+      return {
+        label: b.label,
+        style: 'width:' + (b.w / 12000 * 100).toFixed(1) + '%;background:' + b.c + ';',
+        swatch: 'background:' + b.c + ';',
+      };
+    });
+
+    const views = ['Raw', 'Rendered'].map(function (label) {
+      return {
+        label: label,
+        style: label === self.state.view ? 'background:#151923;color:#e2e8f0;font-weight:600;' : '',
+        pick: function () { self.setState({ view: label }); },
+      };
+    });
+
+    return {
+      sections: sections,
+      bars: bars,
+      views: views,
+      total: total.toLocaleString(),
+      isRaw: this.state.view === 'Raw',
+      isRendered: this.state.view === 'Rendered',
+    };
+  }
+}
+</script>
+</body>
+</html>

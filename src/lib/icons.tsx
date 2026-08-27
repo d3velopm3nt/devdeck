@@ -8,6 +8,13 @@
 // emoji until they're switched over.
 
 import {
+  Bot,
+  Sparkle,
+  TriangleAlert,
+  Diamond,
+  Gavel,
+  Pause,
+  GitCommitHorizontal,
   Boxes,
   Box,
   Folder,
@@ -144,6 +151,13 @@ export type IconName =
   | 'tag'
   | 'database'
   | 'query'
+  | 'ai'
+  | 'agent'
+  | 'context'
+  | 'decision'
+  | 'conflict'
+  | 'pause'
+  | 'commit'
 
 const REGISTRY: Record<IconName, LucideIcon> = {
   workspace: Boxes,
@@ -211,6 +225,14 @@ const REGISTRY: Record<IconName, LucideIcon> = {
   tag: Tag,
   database: Database,
   query: PlayIcon,
+  // AI Workspace. Semantic names, so swapping the glyph is one line.
+  ai: Sparkle,
+  agent: Bot,
+  context: Diamond,
+  decision: Gavel,
+  conflict: TriangleAlert,
+  pause: Pause,
+  commit: GitCommitHorizontal,
 }
 
 export function iconFor(name: string): LucideIcon | undefined {

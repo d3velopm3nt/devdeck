@@ -1,0 +1,35 @@
+{
+  "artboards": [
+    { "file": "Overview.dc.html",         "x": 0,    "y": 0,    "w": 1440, "h": 900, "title": "1 · AI Workspace Overview" },
+    { "file": "Main.dc.html",             "x": 1560, "y": 0,    "w": 1440, "h": 900, "title": "2 · Feature Detail" },
+    { "file": "ContextInspector.dc.html", "x": 3120, "y": 0,    "w": 1440, "h": 900, "title": "3 · Context Inspector" },
+    { "file": "Conflicts.dc.html",        "x": 4680, "y": 0,    "w": 1440, "h": 900, "title": "4 · Conflict Center" },
+    { "file": "Agents.dc.html",           "x": 0,    "y": 1080, "w": 1440, "h": 900, "title": "5 · Agents" },
+    { "file": "Features.dc.html",         "x": 1560, "y": 1080, "w": 1440, "h": 900, "title": "6 · Features" },
+    { "file": "Activity.dc.html",         "x": 3120, "y": 1080, "w": 1440, "h": 900, "title": "7 · Activity" }
+  ],
+  "annotations": [
+    {
+      "id": "the-four",
+      "x": 0,
+      "y": -150,
+      "w": 620,
+      "text": "The four priority screens — top row.\nEverything is built on DevDeck's real tokens, lifted from src/index.css: Segoe UI, the #0b0e14 / #11141c / #151923 surface ramp, the 52px rail with its 2.5px indigo active bar, 11–13px type."
+    },
+    {
+      "id": "interactive",
+      "x": 660,
+      "y": -150,
+      "w": 560,
+      "text": "Controls work — click them.\nFeature Detail has 7 live tabs. The Context Inspector expands sections and toggles them in and out of the budget. Conflicts, Features and Activity all filter."
+    },
+    {
+      "id": "supporting",
+      "x": 0,
+      "y": 2030,
+      "w": 620,
+      "text": "Supporting screens — second row.\nAgents carries the permission matrix; Features has a working table/card toggle; Activity filters by event kind."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

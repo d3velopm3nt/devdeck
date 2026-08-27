@@ -1061,6 +1061,42 @@ pub fn stash_open_file(db: tauri::State<Db>, id: i64) -> Result<(), String> {
     Ok(())
 }
 
+/// The full-quality picture for the detail pane, sized for the box it will be
+/// drawn in (device pixels — the caller has already multiplied by the display
+/// scale). Reads the linked file, never the stored thumbnail: the thumbnail is
+/// a card-sized JPEG and blowing it up is what made the preview look soft.
+///
+/// Restricted to paths this vault links to, same as `stash_open_file`, and a
+/// flagged row refuses outright — its picture is the secret.
+#[tauri::command]
+pub fn stash_image(
+    db: tauri::State<Db>,
+    id: i64,
+    max_width: u32,
+    max_height: u32,
+) -> Result<crate::shots::DetailImage, String> {
+    let conn = db.0.lock().unwrap();
+    let (path, secret, reason): (String, i64, String) = conn
+        .query_row(
+            "SELECT file_path, is_secret, secret_reason FROM stash_items WHERE id = ?1",
+            params![id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .map_err(err)?;
+    drop(conn);
+    if secret != 0 {
+        return Err(format!("{reason} — this image isn't shown."));
+    }
+    if path.is_empty() {
+        return Err("This item isn't a file.".into());
+    }
+    let p = std::path::Path::new(&path);
+    if !p.exists() {
+        return Err(format!("That file is gone: {path}"));
+    }
+    crate::shots::detail_image(p, max_width, max_height)
+}
+
 /// Re-run the image guardrail over screenshots already stored.
 ///
 /// The OCR path shipped before this check existed, so a vault that was

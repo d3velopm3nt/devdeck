@@ -315,6 +315,22 @@ export const stashSetOption = (key: 'toast' | 'auto_paste', value: boolean) =>
 export const stashPrune = () => invoke<number>('stash_prune')
 /** Open a linked screenshot in the default image viewer. */
 export const stashOpenFile = (id: number) => invoke<void>('stash_open_file', { id })
+
+/** A screenshot decoded for the detail pane. `width`/`height` are what the
+ *  data URI really contains, so the pane can refuse to stretch past them. */
+export interface StashImage {
+  uri: string
+  width: number
+  height: number
+  natural_width: number
+  natural_height: number
+}
+/** Full-quality image for the detail pane, rendered to fit a box given in
+ *  **device** pixels — multiply your CSS box by `devicePixelRatio` first, or
+ *  you get a preview that is soft on every scaled display. Reads the linked
+ *  file, not the card thumbnail. */
+export const stashImage = (id: number, maxWidth: number, maxHeight: number) =>
+  invoke<StashImage>('stash_image', { id, maxWidth, maxHeight })
 /** Save a retention window (days; 0 = forever) and apply it immediately. */
 export const stashSetRetention = (days: number) => invoke<number>('stash_set_retention', { days })
 export function onStashItem(cb: (item: StashItem) => void): Promise<UnlistenFn> {

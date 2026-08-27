@@ -17,8 +17,17 @@ use std::path::{Path, PathBuf};
 
 /// Files we'll consider. Windows writes PNG; a few tools write JPEG.
 const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg"];
-/// Thumbnails are for a ~260px-wide card, so this is generous at 2x.
-const THUMB_WIDTH: u32 = 520;
+/// Thumbnails fill a small card tile — roughly 132x84 CSS px. Bounding *both*
+/// edges at ~3x that matters more than it looks: bounding only the width let a
+/// tall screenshot come out 520x1040, and the card then had to throw four
+/// fifths of it away to fit. Fit inside this box and the whole shot survives.
+const THUMB_W: u32 = 400;
+const THUMB_H: u32 = 260;
+/// Thumbnails are drawn small; 84 is past the point where more bytes show.
+const THUMB_QUALITY: u8 = 84;
+/// Ceiling on what the detail pane may ask for, so a bad `max_width` can't
+/// turn into a 40MB data URI over the IPC bridge.
+const DETAIL_MAX_EDGE: u32 = 4096;
 
 /// Where Windows saves screenshots. The Screenshots known folder can be
 /// relocated, so ask the registry first and only then fall back to the
@@ -117,17 +126,125 @@ pub fn is_image(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+/// The largest size that fits inside `max_w` x `max_h` keeping the aspect
+/// ratio — and **never bigger than the source**.
+///
+/// Two rules, both learned the hard way:
+///
+/// * *Fit, don't crop.* Anything that bounds one edge and lets the other run
+///   hands the UI an image it can only show by cutting most of it off.
+/// * *Never upscale.* Stretching a small capture up to a target box is how a
+///   preview goes soft; if the source is smaller than the box, that is the
+///   size it gets drawn at.
+pub fn fit_within(w: u32, h: u32, max_w: u32, max_h: u32) -> (u32, u32) {
+    if w == 0 || h == 0 || max_w == 0 || max_h == 0 {
+        return (w.max(1), h.max(1));
+    }
+    if w <= max_w && h <= max_h {
+        return (w, h);
+    }
+    // Scale by the tighter of the two axes, in f64 so a 4K shot doesn't
+    // overflow the integer maths on the way.
+    let scale = (max_w as f64 / w as f64).min(max_h as f64 / h as f64);
+    (
+        ((w as f64 * scale).round() as u32).max(1),
+        ((h as f64 * scale).round() as u32).max(1),
+    )
+}
+
 /// A small JPEG data URI for the card list. Generated once at capture so the
 /// list never has to load full-size screenshots to draw itself.
 pub fn thumbnail(path: &Path) -> Option<String> {
     let img = image::open(path).ok()?;
-    let thumb = img.thumbnail(THUMB_WIDTH, THUMB_WIDTH * 4);
+    let (w, h) = fit_within(img.width(), img.height(), THUMB_W, THUMB_H);
+    // `DynamicImage::thumbnail` is the fast, low-quality path; at these sizes
+    // the difference between it and a proper Lanczos resample is the
+    // difference between readable UI text and mush.
+    let small = if (w, h) == (img.width(), img.height()) {
+        img
+    } else {
+        img.resize_exact(w, h, image::imageops::FilterType::Lanczos3)
+    };
+    encode_jpeg(&small, THUMB_QUALITY)
+}
+
+fn encode_jpeg(img: &image::DynamicImage, quality: u8) -> Option<String> {
+    let rgb = img.to_rgb8();
     let mut buf = std::io::Cursor::new(Vec::new());
-    thumb
-        .to_rgb8()
-        .write_to(&mut buf, image::ImageFormat::Jpeg)
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, quality)
+        .encode_image(&rgb)
         .ok()?;
     Some(format!("data:image/jpeg;base64,{}", b64(&buf.into_inner())))
+}
+
+/// What the detail pane gets: the picture at the size it will actually be
+/// drawn, in device pixels, and **losslessly**.
+///
+/// The card thumbnail is deliberately tiny, and blowing it up to fill a
+/// several-hundred-pixel pane was exactly why the preview looked soft. So this
+/// goes back to the original file every time:
+///
+/// * asked for a box the image already fits inside → the original bytes,
+///   untouched, so a PNG screenshot stays pixel-for-pixel what Windows saved;
+/// * bigger than the box → one Lanczos downscale re-encoded as PNG, still
+///   lossless, so text edges survive the trip.
+///
+/// `max_w`/`max_h` are **device** pixels: the caller multiplies its CSS box by
+/// the display scale, which is the other half of why previews looked soft on a
+/// 150% display.
+pub fn detail_image(path: &Path, max_w: u32, max_h: u32) -> Result<DetailImage, String> {
+    let max_w = max_w.clamp(1, DETAIL_MAX_EDGE);
+    let max_h = max_h.clamp(1, DETAIL_MAX_EDGE);
+    let img = image::open(path).map_err(|e| format!("couldn't read that image: {e}"))?;
+    let (nw, nh) = (img.width(), img.height());
+    let (w, h) = fit_within(nw, nh, max_w, max_h);
+
+    if (w, h) == (nw, nh) {
+        if let Ok(bytes) = std::fs::read(path) {
+            let mime = match path
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e.to_ascii_lowercase())
+                .as_deref()
+            {
+                Some("jpg") | Some("jpeg") => "image/jpeg",
+                _ => "image/png",
+            };
+            return Ok(DetailImage {
+                uri: format!("data:{mime};base64,{}", b64(&bytes)),
+                width: w,
+                height: h,
+                natural_width: nw,
+                natural_height: nh,
+            });
+        }
+    }
+
+    let small = img.resize_exact(w, h, image::imageops::FilterType::Lanczos3);
+    let mut buf = std::io::Cursor::new(Vec::new());
+    small
+        .to_rgba8()
+        .write_to(&mut buf, image::ImageFormat::Png)
+        .map_err(|e| format!("couldn't re-encode that image: {e}"))?;
+    Ok(DetailImage {
+        uri: format!("data:image/png;base64,{}", b64(&buf.into_inner())),
+        width: w,
+        height: h,
+        natural_width: nw,
+        natural_height: nh,
+    })
+}
+
+/// A decoded screenshot plus the geometry the UI needs to draw it honestly.
+/// `width`/`height` are what the data URI really contains — the pane must not
+/// stretch past that, or we are back to an upscaled blur.
+#[derive(serde::Serialize)]
+pub struct DetailImage {
+    pub uri: String,
+    pub width: u32,
+    pub height: u32,
+    pub natural_width: u32,
+    pub natural_height: u32,
 }
 
 /// Minimal base64 — one small dependency avoided.
@@ -445,6 +562,63 @@ fn import_existing(app: &tauri::AppHandle, dir: &Path) {
             "system",
             format!("read {added} of {total} screenshots from {}", dir.display()),
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The regression that started this: bounding only the width let a tall
+    /// screenshot stay four times taller than the card, and the card then
+    /// cropped away everything below the first fifth. Fit bounds *both* edges.
+    #[test]
+    fn tall_shots_fit_inside_the_card_box() {
+        let (w, h) = fit_within(800, 1600, THUMB_W, THUMB_H);
+        assert!(w <= THUMB_W && h <= THUMB_H, "got {w}x{h}");
+        assert_eq!((w, h), (130, 260));
+    }
+
+    #[test]
+    fn wide_shots_fit_inside_the_card_box() {
+        let (w, h) = fit_within(2560, 1440, THUMB_W, THUMB_H);
+        assert!(w <= THUMB_W && h <= THUMB_H, "got {w}x{h}");
+        assert_eq!((w, h), (400, 225));
+    }
+
+    /// Aspect ratio has to survive, or "fit" is just a differently-shaped crop.
+    #[test]
+    fn aspect_ratio_survives() {
+        for (w, h) in [(2560u32, 1440u32), (800, 1600), (3840, 2160), (1024, 768)] {
+            let (fw, fh) = fit_within(w, h, THUMB_W, THUMB_H);
+            let src = w as f64 / h as f64;
+            let out = fw as f64 / fh as f64;
+            assert!((src - out).abs() < 0.02, "{w}x{h} -> {fw}x{fh}");
+        }
+    }
+
+    /// Upscaling is what makes a preview blurry, so fitting never does it.
+    #[test]
+    fn small_images_are_left_alone() {
+        assert_eq!(fit_within(120, 90, THUMB_W, THUMB_H), (120, 90));
+        assert_eq!(fit_within(400, 260, THUMB_W, THUMB_H), (400, 260));
+        // Detail pane: a small capture in a big pane stays its own size.
+        assert_eq!(fit_within(640, 400, 2400, 2400), (640, 400));
+    }
+
+    /// Only one edge over the limit still has to scale the other one down.
+    #[test]
+    fn one_edge_over_still_scales_both() {
+        let (w, h) = fit_within(1200, 100, THUMB_W, THUMB_H);
+        assert_eq!((w, h), (400, 33));
+    }
+
+    #[test]
+    fn degenerate_sizes_never_panic_or_return_zero() {
+        assert_eq!(fit_within(0, 0, THUMB_W, THUMB_H), (1, 1));
+        let (w, h) = fit_within(20000, 3, THUMB_W, THUMB_H);
+        assert!(w >= 1 && h >= 1, "got {w}x{h}");
+        assert!(w <= THUMB_W && h <= THUMB_H, "got {w}x{h}");
     }
 }
 

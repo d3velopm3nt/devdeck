@@ -729,6 +729,7 @@ pub fn run() {
             stash::stash_prune,
             stash::stash_set_retention,
             stash::stash_open_file,
+            stash::stash_image,
             conn::conn_list,
             conn::conn_save,
             conn::conn_delete,

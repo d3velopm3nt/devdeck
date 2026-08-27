@@ -73,18 +73,23 @@ function Card({
         </span>
       </div>
       {item.thumb ? (
-        <>
-          <img
-            src={item.thumb}
-            alt=""
-            className="max-h-[104px] w-full rounded border border-line object-cover object-top"
-          />
-          {item.preview && item.preview !== 'screenshot' && (
-            <div className="mt-1.5 max-h-[24px] overflow-hidden font-mono text-[10.5px] leading-[1.4] text-muted">
-              {item.preview.split('\n')[0]}
-            </div>
-          )}
-        </>
+        // A small tile, and `object-contain` so you see the whole shot. The
+        // old card filled its width with `object-cover`, which on a tall
+        // screenshot meant showing the top fifth of it and nothing else —
+        // a stranger's random fragment where a recognisable picture should be.
+        <div className="flex items-start gap-2.5">
+          <div className="flex h-[76px] w-[124px] shrink-0 items-center justify-center overflow-hidden rounded border border-line bg-soft">
+            <img src={item.thumb} alt="" className="max-h-full max-w-full object-contain" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[11.5px] text-body">{item.title}</div>
+            {item.preview && item.preview !== 'screenshot' && (
+              <div className="mt-1 max-h-[44px] overflow-hidden whitespace-pre-wrap break-all font-mono text-[10.5px] leading-[1.45] text-muted">
+                {item.preview}
+              </div>
+            )}
+          </div>
+        </div>
       ) : (
         <div className="max-h-[36px] overflow-hidden whitespace-pre-wrap break-all font-mono text-[11px] leading-[1.55] text-dim">
           {item.preview}
@@ -330,6 +335,96 @@ function SmartActions({ item, onError }: { item: StashItem; onError: (msg: strin
   )
 }
 
+/**
+ * The screenshot itself, at full quality.
+ *
+ * The card thumbnail is a ~400px JPEG built for a 124px tile. This pane used
+ * to render that same thumbnail at `w-full`, which is a 2-3x upscale of an
+ * already-lossy image — the entire reason previews looked soft. So we go back
+ * to the original file and ask the backend for exactly the box we're drawing
+ * into, in device pixels, and never stretch past what came back.
+ */
+function ShotPreview({ item }: { item: StashItem }) {
+  const box = useRef<HTMLDivElement>(null)
+  const [img, setImg] = useState<ipc.StashImage | null>(null)
+  const [error, setError] = useState('')
+  // Device pixels we need. Re-measured on resize so widening the window
+  // re-fetches instead of quietly upscaling what we already have.
+  const [want, setWant] = useState(0)
+
+  const measure = () => {
+    const dpr = window.devicePixelRatio || 1
+    const css = box.current?.clientWidth || 640
+    return Math.max(360, Math.round(css * dpr))
+  }
+
+  useEffect(() => {
+    setImg(null)
+    setError('')
+    setWant(measure())
+  }, [item.id])
+
+  useEffect(() => {
+    const el = box.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => {
+      const next = measure()
+      // Only when we'd actually be upscaling — not on every stray pixel.
+      setWant((cur) => (next > cur * 1.1 ? next : cur))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  useEffect(() => {
+    if (!want) return
+    let dead = false
+    // A tall shot still needs a ceiling, or a phone-shaped capture arrives as
+    // a needlessly enormous data URI.
+    ipc
+      .stashImage(item.id, want, want * 2)
+      .then((r) => !dead && setImg(r))
+      .catch((e) => !dead && setError(String(e)))
+    return () => {
+      dead = true
+    }
+  }, [item.id, want])
+
+  const dpr = window.devicePixelRatio || 1
+  // Never wider than the pixels we actually hold: the fix for the blur is as
+  // much this cap as it is the higher-resolution fetch.
+  const capPx = img ? Math.round(img.width / dpr) : 0
+
+  return (
+    <div ref={box}>
+      {error ? (
+        // Failure honesty: a broken load must not silently fall back to the
+        // blurry thumbnail and look like the picture we meant to show.
+        <div className="rounded-lg border border-red-500/30 bg-red-500/5 px-3.5 py-2.5 text-[12px] leading-[1.6] text-err">
+          Couldn't show this image: {error}
+        </div>
+      ) : img ? (
+        <>
+          <img
+            src={img.uri}
+            alt={item.title}
+            style={{ maxWidth: `min(100%, ${capPx}px)` }}
+            className="h-auto rounded-lg border border-line bg-panel"
+          />
+          <div className="mt-1 font-mono text-[9.5px] text-muted">
+            {img.natural_width} × {img.natural_height} px
+            {img.width < img.natural_width ? ' · shown scaled to fit' : ''}
+          </div>
+        </>
+      ) : (
+        <div className="flex h-[200px] items-center justify-center rounded-lg border border-line bg-panel font-mono text-[10.5px] text-muted">
+          loading image…
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Cell({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
     <div className="flex-1 rounded-lg border border-line bg-panel px-3 py-2">
@@ -514,11 +609,7 @@ function Detail({ item, now }: { item: StashItem; now: number }) {
           </>
         ) : item.thumb ? (
           <div>
-            <img
-              src={item.thumb}
-              alt={item.title}
-              className="w-full rounded-lg border border-line bg-panel"
-            />
+            <ShotPreview item={item} />
             {item.content?.trim() ? (
               <>
                 <div className="mb-1 mt-3 font-mono text-[9px] uppercase tracking-[0.07em] text-muted">

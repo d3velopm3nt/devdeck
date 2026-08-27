@@ -98,7 +98,31 @@ pub fn open() -> Connection {
         -- drops that sidecar -- a roaming-profile sync, a cleanup tool, copying
         -- just the .sqlite -- then looks exactly like "my workspaces vanished".
         PRAGMA wal_autocheckpoint = 32;
+        "#,
+    )
+    .expect("pragmas");
+    conn.execute_batch(CORE_SCHEMA).expect("create schema");
 
+    conn.execute_batch(STASH_SCHEMA)
+        .expect("create stash schema");
+    conn.execute_batch(CONN_SCHEMA)
+        .expect("create connections schema");
+    conn.execute_batch(ACTIVITY_SCHEMA)
+        .expect("create activity schema");
+    // A run that was "running" when the app was killed did not survive.
+    crate::activity::close_orphan_runs(&conn);
+
+    migrate(&conn);
+    // Startup recovery has just replayed any leftover WAL; write it into the
+    // main file straight away so devdeck.sqlite is a complete standalone copy.
+    checkpoint(&conn);
+    conn
+}
+
+/// The core model: the node hierarchy plus everything hanging off it. Split
+/// out as a const (like the schemas below) so the full boot sequence an
+/// upgrade replays can be exercised against an in-memory database.
+pub const CORE_SCHEMA: &str = r#"
         CREATE TABLE IF NOT EXISTS nodes (
             id INTEGER PRIMARY KEY,
             parent_id INTEGER REFERENCES nodes(id) ON DELETE CASCADE,
@@ -164,25 +188,7 @@ pub fn open() -> Connection {
             hidden INTEGER NOT NULL DEFAULT 0,   -- 1 = curated pkg removed by user
             sort INTEGER NOT NULL DEFAULT 0
         );
-        "#,
-    )
-    .expect("create schema");
-
-    conn.execute_batch(STASH_SCHEMA)
-        .expect("create stash schema");
-    conn.execute_batch(CONN_SCHEMA)
-        .expect("create connections schema");
-    conn.execute_batch(ACTIVITY_SCHEMA)
-        .expect("create activity schema");
-    // A run that was "running" when the app was killed did not survive.
-    crate::activity::close_orphan_runs(&conn);
-
-    migrate(&conn);
-    // Startup recovery has just replayed any leftover WAL; write it into the
-    // main file straight away so devdeck.sqlite is a complete standalone copy.
-    checkpoint(&conn);
-    conn
-}
+"#;
 
 /// Stash: the context-aware clip vault. `content` is NULL for anything the
 /// secret heuristic flagged -- those rows are metadata only, the value never
@@ -979,4 +985,106 @@ pub fn recents_list(db: tauri::State<Db>) -> Result<Vec<Recent>, String> {
 
 pub(crate) fn err<E: std::fmt::Display>(e: E) -> String {
     e.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Everything `open()` does to an existing database, minus the PRAGMAs and
+    /// the on-disk path -- i.e. exactly what the first launch after an upgrade
+    /// replays.
+    fn boot(conn: &Connection) {
+        conn.execute_batch(CORE_SCHEMA).expect("core schema");
+        conn.execute_batch(STASH_SCHEMA).expect("stash schema");
+        conn.execute_batch(CONN_SCHEMA).expect("conn schema");
+        conn.execute_batch(ACTIVITY_SCHEMA)
+            .expect("activity schema");
+        migrate(conn);
+    }
+
+    fn read_tree(conn: &Connection) -> Vec<Node> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, parent_id, kind, name, path, rel_path, sort, color
+                 FROM nodes ORDER BY sort, id",
+            )
+            .expect("tree_list prepares");
+        stmt.query_map([], row_to_node)
+            .expect("tree_list runs")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("every row decodes")
+    }
+
+    /// "My workspaces vanished after the update" was never the database, and
+    /// this is the assertion that keeps it that way: a tree saved by an older
+    /// DevDeck survives the boot migrations and is still readable through the
+    /// exact query `tree_list` uses.
+    #[test]
+    fn upgrading_an_old_database_keeps_its_workspaces() {
+        let conn = Connection::open_in_memory().unwrap();
+        // The pre-v2 shape: no rel_path, no color, and the old
+        // workspace -> space -> project nesting.
+        conn.execute_batch(
+            r#"
+            CREATE TABLE nodes (
+                id INTEGER PRIMARY KEY,
+                parent_id INTEGER REFERENCES nodes(id) ON DELETE CASCADE,
+                kind TEXT NOT NULL,
+                name TEXT NOT NULL,
+                path TEXT,
+                sort INTEGER NOT NULL DEFAULT 0
+            );
+            INSERT INTO nodes (id, parent_id, kind, name, path) VALUES
+                (1, NULL, 'workspace', 'Innotrack', NULL),
+                (2, 1,    'space',     'x-platform', 'C:\repos\x-platform'),
+                (3, 2,    'project',   'api',       NULL);
+            "#,
+        )
+        .unwrap();
+
+        boot(&conn);
+
+        let nodes = read_tree(&conn);
+        assert_eq!(nodes.len(), 3, "the migration must not drop a single node");
+        assert_eq!(nodes[0].kind, "workspace");
+        assert_eq!(nodes[0].name, "Innotrack");
+        // v2 model: the old grouping 'space' becomes the project, and an old
+        // leaf 'project' becomes a folder inside it.
+        assert_eq!(nodes[1].kind, "project");
+        assert_eq!(nodes[1].path.as_deref(), Some(r"C:\repos\x-platform"));
+        assert_eq!(nodes[2].kind, "folder");
+        // The columns added by migrations must decode, not error: a NULL in
+        // either would make tree_list fail and the deck render empty.
+        assert_eq!(nodes[1].rel_path, "");
+        assert!(nodes[1].color.is_none());
+    }
+
+    /// Migrations run on every open, so the second launch after an upgrade has
+    /// to be a no-op rather than a reshuffle -- the v2 pass would otherwise
+    /// demote every project to a folder on each start.
+    #[test]
+    fn booting_again_changes_nothing() {
+        let conn = Connection::open_in_memory().unwrap();
+        boot(&conn);
+        conn.execute(
+            "INSERT INTO nodes (id, parent_id, kind, name, path, rel_path)
+             VALUES (1, NULL, 'workspace', 'Innotrack', NULL, ''),
+                    (2, 1, 'project', 'x-platform', 'C:\\repos\\x-platform', '')",
+            [],
+        )
+        .unwrap();
+
+        let before = read_tree(&conn);
+        boot(&conn);
+        boot(&conn);
+        let after = read_tree(&conn);
+
+        assert_eq!(after.len(), before.len());
+        for (a, b) in after.iter().zip(before.iter()) {
+            assert_eq!(a.id, b.id);
+            assert_eq!(a.kind, b.kind, "kinds must survive a repeated migration");
+            assert_eq!(a.name, b.name);
+        }
+    }
 }

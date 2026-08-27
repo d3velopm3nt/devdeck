@@ -73,6 +73,14 @@ export interface AppState {
   /** Minutes between background fetches when monitoring is on. */
   gitMonitorIntervalMin: number
 
+  /** Why the last workspace/tree read failed, or null when it succeeded. An
+   *  empty deck and a *failed* read must never look the same: the Explorer
+   *  shows this instead of "No workspaces yet", so a load that didn't happen
+   *  can't be mistaken for data that isn't there. */
+  treeError: string | null
+  /** A tree read is in flight and we have nothing to show yet. */
+  treeLoading: boolean
+
   // ui
   selectedNodeId: number | null
   /** The workspace the Explorer is currently showing. Workspaces are switched,
@@ -119,6 +127,9 @@ export interface AppState {
   /** Persist + apply the git-monitor settings. */
   setGitMonitor: (enabled: boolean, intervalMin: number) => Promise<void>
   bootstrap: () => Promise<void>
+  /** Re-run the startup load. Wired to the Explorer's "Retry" button and to
+   *  the automatic retry after a failed first read. */
+  retryBootstrap: () => Promise<void>
 
   // event ingestion
   appendLog: (e: LogEntry) => void
@@ -272,6 +283,23 @@ const resolveActiveWs = (nodes: TreeNode[], current: number | null): number | nu
   return workspaces[0]?.id ?? null
 }
 
+const errText = (e: unknown) => (e instanceof Error ? e.message : String(e))
+
+// A first read can lose a race with the backend's own startup. Retrying on a
+// short backoff means an existing workspace still appears on its own, without
+// the user having to create a new one to jog the tree — while `treeError`
+// keeps saying, honestly, that the load has not succeeded yet.
+const TREE_RETRY_MS = [300, 900, 2500]
+let treeRetryTimer: number | undefined
+let treeRetries = 0
+const scheduleTreeRetry = () => {
+  const delay = TREE_RETRY_MS[treeRetries]
+  if (delay == null) return
+  treeRetries += 1
+  window.clearTimeout(treeRetryTimer)
+  treeRetryTimer = window.setTimeout(() => void useApp.getState().refreshTree(), delay)
+}
+
 export const useApp = create<AppState>((set, get) => ({
   nodes: [],
   commands: [],
@@ -287,6 +315,8 @@ export const useApp = create<AppState>((set, get) => ({
   gitByNode: {},
   gitMonitorEnabled: true,
   gitMonitorIntervalMin: 5,
+  treeError: null,
+  treeLoading: true,
   selectedNodeId: null,
   activeWorkspaceId: loadActiveWs(),
   hotkey: 'ctrl+shift+Space',
@@ -328,11 +358,23 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   refreshTree: async () => {
-    const nodes = await ipc.treeList()
-    const activeWorkspaceId = resolveActiveWs(nodes, get().activeWorkspaceId)
-    persistActiveWs(activeWorkspaceId)
-    set({ nodes, activeWorkspaceId })
-    void get().refreshGit()
+    set({ treeLoading: true })
+    try {
+      const nodes = await ipc.treeList()
+      const activeWorkspaceId = resolveActiveWs(nodes, get().activeWorkspaceId)
+      persistActiveWs(activeWorkspaceId)
+      treeRetries = 0
+      window.clearTimeout(treeRetryTimer)
+      set({ nodes, activeWorkspaceId, treeError: null, treeLoading: false })
+      void get().refreshGit()
+    } catch (e) {
+      // Keep whatever we already had on screen and say the read failed. The
+      // one thing we must never do is fall through to `nodes: []`, which
+      // renders as "No workspaces yet" over a database that still has them.
+      console.error('devdeck: could not read the workspace tree', e)
+      set({ treeError: errText(e), treeLoading: false })
+      scheduleTreeRetry()
+    }
   },
   refreshCommands: async () => set({ commands: await ipc.commandsList() }),
   refreshServices: async () => set({ services: await ipc.servicesList() }),
@@ -384,29 +426,45 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   bootstrap: async () => {
-    const [nodes, commands, services, profiles, layouts, shells, terminals, states, logs, recents, hotkey, gitEnabled, gitInterval, savedTheme] =
+    // Every load stands on its own. This used to be one `Promise.all` over
+    // fourteen calls destructured into a single `set` — so *any* one of them
+    // rejecting threw the whole thing away, left `nodes` at its `[]` default,
+    // and painted "No workspaces yet" over an intact database. Nothing then
+    // retried, which is why creating a workspace (and its `refreshTree`) was
+    // what made the existing one reappear.
+    //
+    // The tree is read through `refreshTree`, which owns `treeError` and the
+    // retry; the rest degrade to their empty value and log, because a missing
+    // shell list should not be able to hide your projects.
+    const soft = <T,>(p: Promise<T>, empty: T, what: string): Promise<T> =>
+      p.then(
+        (v) => v,
+        (e) => {
+          console.error(`devdeck: startup load failed (${what})`, e)
+          return empty
+        },
+      )
+
+    const tree = get().refreshTree()
+    const [commands, services, profiles, layouts, shells, terminals, states, logs, recents, hotkey, gitEnabled, gitInterval, savedTheme] =
       await Promise.all([
-        ipc.treeList(),
-        ipc.commandsList(),
-        ipc.servicesList(),
-        ipc.profilesList(),
-        ipc.layoutsList(),
-        ipc.shellsDetect(),
-        ipc.ptyList(),
-        ipc.svcStates(),
-        ipc.logsRecent(2000),
-        ipc.recentsList(),
-        ipc.settingGet('hotkey'),
-        ipc.settingGet('git_monitor_enabled'),
-        ipc.settingGet('git_monitor_interval_min'),
-        ipc.settingGet('app_theme'),
+        soft(ipc.commandsList(), [], 'commands'),
+        soft(ipc.servicesList(), [], 'services'),
+        soft(ipc.profilesList(), [], 'profiles'),
+        soft(ipc.layoutsList(), [], 'layouts'),
+        soft(ipc.shellsDetect(), [], 'shells'),
+        soft(ipc.ptyList(), [], 'terminals'),
+        soft(ipc.svcStates(), [], 'service states'),
+        soft(ipc.logsRecent(2000), [], 'logs'),
+        soft(ipc.recentsList(), [], 'recents'),
+        soft(ipc.settingGet('hotkey'), null, 'hotkey'),
+        soft(ipc.settingGet('git_monitor_enabled'), null, 'git monitor'),
+        soft(ipc.settingGet('git_monitor_interval_min'), null, 'git interval'),
+        soft(ipc.settingGet('app_theme'), null, 'theme'),
       ])
     const svcStates: Record<number, SvcState> = {}
     for (const s of states) svcStates[s.id] = s
-    const activeWorkspaceId = resolveActiveWs(nodes, get().activeWorkspaceId)
-    persistActiveWs(activeWorkspaceId)
     set({
-      nodes,
       commands,
       services,
       profiles,
@@ -416,7 +474,6 @@ export const useApp = create<AppState>((set, get) => ({
       svcStates,
       logs,
       recents,
-      activeWorkspaceId,
       hotkey: hotkey ?? 'ctrl+shift+Space',
       // Default monitoring on; only an explicit '0' disables it.
       gitMonitorEnabled: gitEnabled == null ? true : gitEnabled !== '0',
@@ -424,10 +481,15 @@ export const useApp = create<AppState>((set, get) => ({
       theme: savedTheme === 'light' ? 'light' : 'dark',
     })
     document.documentElement.dataset.theme = savedTheme === 'light' ? 'light' : 'dark'
-    void get().refreshGit()
+    await tree
     void get().refreshActivity()
     void get().refreshConnections()
     void get().refreshConnQueries()
+  },
+  retryBootstrap: async () => {
+    treeRetries = 0
+    window.clearTimeout(treeRetryTimer)
+    await get().bootstrap()
   },
 
   appendLog: (e) =>

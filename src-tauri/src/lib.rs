@@ -486,60 +486,84 @@ fn app_update(app: tauri::AppHandle) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Open SQLite and read the startup settings *before* building the app, so
+    // every piece of state can be handed to `Builder::manage` instead of to
+    // `setup`.
+    //
+    // This ordering is load-bearing, not tidiness. Tauri's own setup creates
+    // each configured window -- and its webview -- BEFORE it calls ours
+    // (tauri::app::setup → WebviewWindowBuilder::from_config → then the user
+    // hook), and wry pumps the Windows message loop while every WebView2
+    // controller is created (webview2_com::wait_with_pump runs a full
+    // GetMessage/DispatchMessage loop). So while the widget and toast webviews
+    // are being built, the main window's very first `invoke` can already be
+    // dispatched into the backend -- with our setup hook not yet run.
+    //
+    // Anything managed inside that hook does not exist yet at that moment, and
+    // Tauri answers `tree_list` / `commands_list` / `pty_list` / ... with
+    // "state not managed". The frontend's startup load then fails and DevDeck
+    // paints an empty deck over a database that still holds every workspace.
+    // The window is widest on the first launch after an upgrade: the binary is
+    // cold, the WAL left by the killed old process has to be replayed, and the
+    // schema migrations below run for real.
+    //
+    // State registered on the builder is in the AppManager before any window
+    // exists (tauri::app::Builder::build passes `self.state` into
+    // AppManager::with_handlers), which closes the race outright.
+    let conn = db::open();
+    legacy::import_if_needed(&conn);
+
+    // Re-register the saved global hotkey on startup.
+    let hotkey = db::setting_get_conn(&conn, "hotkey")
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| "ctrl+shift+Space".into());
+
+    // First run (no completed tour) → show the widget with its guided
+    // setup tour.
+    let first_run = db::setting_get_conn(&conn, "widget_tour_done")
+        .ok()
+        .flatten()
+        .is_none();
+
+    // Stash: capture and the capture toast are on unless turned off;
+    // auto-paste is off until you opt in.
+    let flag = |key: &str, default: bool| {
+        db::setting_get_conn(&conn, key)
+            .ok()
+            .flatten()
+            .map(|v| v != "0")
+            .unwrap_or(default)
+    };
+    let stash_on = flag("stash_capture", true);
+    let stash_toast = flag("stash_toast", true);
+    let stash_auto_paste = flag("stash_auto_paste", false);
+    let stash_retention = db::setting_get_conn(&conn, "stash_retention_days")
+        .ok()
+        .flatten()
+        .and_then(|v| v.parse::<i64>().ok())
+        .unwrap_or(stash::DEFAULT_RETENTION_DAYS);
+
+    let stash_state = Arc::new(stash::StashState::default());
+    {
+        use std::sync::atomic::Ordering::Relaxed;
+        stash_state.enabled.store(stash_on, Relaxed);
+        stash_state.toast.store(stash_toast, Relaxed);
+        stash_state.auto_paste.store(stash_auto_paste, Relaxed);
+        stash_state.retention_days.store(stash_retention, Relaxed);
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .setup(|app| {
-            let conn = db::open();
-            legacy::import_if_needed(&conn);
-
-            // Re-register the saved global hotkey on startup.
-            let hotkey = db::setting_get_conn(&conn, "hotkey")
-                .ok()
-                .flatten()
-                .unwrap_or_else(|| "ctrl+shift+Space".into());
-
-            // First run (no completed tour) → show the widget with its guided
-            // setup tour.
-            let first_run = db::setting_get_conn(&conn, "widget_tour_done")
-                .ok()
-                .flatten()
-                .is_none();
-
-            // Stash: capture and the capture toast are on unless turned off;
-            // auto-paste is off until you opt in.
-            let flag = |key: &str, default: bool| {
-                db::setting_get_conn(&conn, key)
-                    .ok()
-                    .flatten()
-                    .map(|v| v != "0")
-                    .unwrap_or(default)
-            };
-            let stash_on = flag("stash_capture", true);
-            let stash_toast = flag("stash_toast", true);
-            let stash_auto_paste = flag("stash_auto_paste", false);
-            let stash_retention = db::setting_get_conn(&conn, "stash_retention_days")
-                .ok()
-                .flatten()
-                .and_then(|v| v.parse::<i64>().ok())
-                .unwrap_or(stash::DEFAULT_RETENTION_DAYS);
-
-            app.manage(db::Db(Mutex::new(conn)));
-            app.manage(Arc::new(pty::PtyManager::default()));
-            app.manage(Arc::new(services::ServiceManager::default()));
-
-            let stash_state = Arc::new(stash::StashState::default());
-            {
-                use std::sync::atomic::Ordering::Relaxed;
-                stash_state.enabled.store(stash_on, Relaxed);
-                stash_state.toast.store(stash_toast, Relaxed);
-                stash_state.auto_paste.store(stash_auto_paste, Relaxed);
-                stash_state.retention_days.store(stash_retention, Relaxed);
-            }
-            app.manage(stash_state);
-
+        // Managed here, not in `setup` — see the note at the top of `run`.
+        .manage(db::Db(Mutex::new(conn)))
+        .manage(Arc::new(pty::PtyManager::default()))
+        .manage(Arc::new(services::ServiceManager::default()))
+        .manage(stash_state)
+        .setup(move |app| {
             monitor::spawn(app.handle().clone());
             stash::spawn(app.handle().clone());
             shots::spawn(app.handle().clone());

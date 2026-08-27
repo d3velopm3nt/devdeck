@@ -120,6 +120,7 @@ export function Home() {
   const {
     nodes, services, svcStates, stats, terminals, logs, recents, commands, gitByNode, activity,
     activeWorkspaceId, showBottom, focusServiceLogs, servicePort, requestStartService,
+    treeError, treeLoading, retryBootstrap,
   } = useApp()
 
   const [now, setNow] = useState(() => Date.now())
@@ -267,6 +268,26 @@ export function Home() {
       </div>
 
       <div className="flex-1 space-y-4 overflow-auto p-3">
+        {/* A failed read must not read as "you have nothing". */}
+        {treeError && (
+          <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-[12px] leading-5">
+            <div className="flex items-center gap-1.5 font-medium text-err">
+              <Icon name="alert" size={14} className="shrink-0" />
+              Couldn’t load your workspaces
+            </div>
+            <p className="mt-1 text-muted">
+              Nothing has been deleted — this dashboard is showing less than you have. Your
+              workspaces and projects are still in the local database.
+            </p>
+            <p className="mt-1 break-words font-mono text-[11px] text-faint">{treeError}</p>
+            <button
+              className="btn-primary mt-2 inline-flex items-center gap-1.5 text-[12px]"
+              onClick={() => void retryBootstrap()}
+            >
+              <Icon name="update" size={13} spin={treeLoading} /> Retry
+            </button>
+          </div>
+        )}
         {/* spaces, grouped by workspace */}
         {workspaces.length > 0 && (
           <div className="space-y-3">

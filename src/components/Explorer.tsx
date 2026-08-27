@@ -85,7 +85,7 @@ export function Explorer() {
     selectedNodeId, setSelectedNode,
     activeWorkspaceId, activeWorkspace, setActiveWorkspace,
     refreshTree, refreshCommands, refreshServices, refreshProfiles, focusServiceLogs, servicePort,
-    requestStartService,
+    requestStartService, treeError, treeLoading, retryBootstrap,
   } = useApp()
   // The tree shows the active workspace's projects/folders — workspaces
   // themselves are switched from the header, not browsed in the tree.
@@ -691,7 +691,32 @@ export function Explorer() {
           setMenu({ x: e.clientX, y: e.clientY, target: { type: 'node', node: null } })
         }}
       >
-        {workspaces.length === 0 ? (
+        {treeError ? (
+          /* A read that failed is not an empty deck. Saying "No workspaces
+             yet" here would be the update-checker mistake again: reporting a
+             failure as a clean, empty success. */
+          <div className="p-3 text-[12px] leading-5">
+            <div className="flex items-center gap-1.5 font-medium text-err">
+              <Icon name="alert" size={14} className="shrink-0" />
+              Couldn’t load your workspaces
+            </div>
+            <p className="mt-1.5 text-muted">
+              Nothing has been deleted — this is a read that failed, not an empty deck. Your
+              workspaces and projects are still in the local database.
+            </p>
+            <p className="mt-1.5 break-words font-mono text-[11px] text-faint">{treeError}</p>
+            <button
+              className="btn-primary mt-3 flex w-full items-center justify-center gap-1.5 text-[12px]"
+              onClick={() => void retryBootstrap()}
+            >
+              <Icon name="update" size={14} spin={treeLoading} /> Retry
+            </button>
+          </div>
+        ) : treeLoading && nodes.length === 0 ? (
+          <div className="flex items-center gap-1.5 p-3 text-[12px] text-muted">
+            <Icon name="update" size={13} spin /> Loading your workspaces…
+          </div>
+        ) : workspaces.length === 0 ? (
           <div className="p-3 text-[12px] leading-5 text-muted">
             <p>
               No workspaces yet. A workspace groups related projects. Create one, then add projects

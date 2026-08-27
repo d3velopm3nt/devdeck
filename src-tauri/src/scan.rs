@@ -74,6 +74,10 @@ struct Ctx<'a> {
     /// Path relative to the scan root, e.g. `apps/web`. Empty at the root.
     rel: &'a str,
     out: &'a mut Vec<DetectedCommand>,
+    /// JS package manager from the nearest ancestor lockfile. A workspace
+    /// member has no lockfile of its own, so without this every `apps/*`
+    /// package would be reported as npm regardless of what the repo uses.
+    js_ws: Option<&'static str>,
 }
 
 impl Ctx<'_> {
@@ -148,16 +152,23 @@ fn read_lower(p: &Path) -> String {
 
 // ---------- JavaScript ----------
 
-/// The JS package manager, inferred from the lockfile (defaults to npm).
-fn js_manager(dir: &Path) -> &'static str {
+/// The JS package manager declared by a lockfile in *this exact* directory.
+///
+/// `None` means "this folder doesn't say" — which is the normal case for a
+/// workspace member, where the lockfile lives at the repo root. Callers fall
+/// back to the inherited workspace manager rather than assuming npm; guessing
+/// npm inside a pnpm workspace hands you commands that run the wrong tool.
+fn js_lockfile(dir: &Path) -> Option<&'static str> {
     if dir.join("pnpm-lock.yaml").exists() {
-        "pnpm"
+        Some("pnpm")
     } else if dir.join("yarn.lock").exists() {
-        "yarn"
+        Some("yarn")
     } else if dir.join("bun.lockb").exists() || dir.join("bun.lock").exists() {
-        "bun"
+        Some("bun")
+    } else if dir.join("package-lock.json").exists() {
+        Some("npm")
     } else {
-        "npm"
+        None
     }
 }
 
@@ -187,7 +198,10 @@ fn detect_node(dir: &Path, c: &mut Ctx) {
     let Some(json) = read_json(&dir.join("package.json")) else {
         return;
     };
-    let mgr = js_manager(dir);
+    // Own lockfile wins; otherwise inherit the workspace's. Only if nothing
+    // anywhere claims this tree do we fall back to npm.
+    let own = js_lockfile(dir);
+    let mgr = own.or(c.js_ws).unwrap_or("npm");
     let group = format!("{mgr} scripts");
     if let Some(scripts) = json.get("scripts").and_then(|s| s.as_object()) {
         for name in scripts.keys() {
@@ -199,7 +213,11 @@ fn detect_node(dir: &Path, c: &mut Ctx) {
             }
         }
     }
-    if !dir.join("node_modules").exists() {
+    // A workspace member installs from the repo root, not from its own
+    // folder — one `install` per package.json is just noise you have to
+    // un-tick every scan.
+    let workspace_member = own.is_none() && c.js_ws.is_some();
+    if !workspace_member && !dir.join("node_modules").exists() {
         let install = if mgr == "npm" {
             "npm install".to_string()
         } else {
@@ -845,8 +863,8 @@ const DETECTORS: &[(&str, Detector)] = &[
 ];
 
 /// Run every detector against one directory.
-fn detect_dir(dir: &Path, rel: &str, out: &mut Vec<DetectedCommand>) {
-    let mut c = Ctx { rel, out };
+fn detect_dir(dir: &Path, rel: &str, out: &mut Vec<DetectedCommand>, js_ws: Option<&'static str>) {
+    let mut c = Ctx { rel, out, js_ws };
     for (_name, detect) in DETECTORS {
         detect(dir, &mut c);
     }
@@ -859,8 +877,16 @@ fn skippable(name: &str) -> bool {
     name.starts_with('.') || SKIP_DIRS.iter().any(|s| s.eq_ignore_ascii_case(name))
 }
 
-fn walk(dir: &Path, rel: String, depth: usize, out: &mut Vec<DetectedCommand>) {
-    detect_dir(dir, &rel, out);
+fn walk(
+    dir: &Path,
+    rel: String,
+    depth: usize,
+    out: &mut Vec<DetectedCommand>,
+    js_ws: Option<&'static str>,
+) {
+    // A lockfile here defines the manager for everything beneath it.
+    let js_ws = js_lockfile(dir).or(js_ws);
+    detect_dir(dir, &rel, out, js_ws);
     if depth >= MAX_DEPTH || out.len() >= MAX_RESULTS {
         return;
     }
@@ -881,7 +907,7 @@ fn walk(dir: &Path, rel: String, depth: usize, out: &mut Vec<DetectedCommand>) {
         } else {
             format!("{rel}/{name}")
         };
-        walk(&path, child_rel, depth + 1, out);
+        walk(&path, child_rel, depth + 1, out, js_ws);
     }
 }
 
@@ -892,7 +918,7 @@ pub fn scan_project(dir: String) -> Result<Vec<DetectedCommand>, String> {
         return Err(format!("Not a folder: {dir}"));
     }
     let mut out: Vec<DetectedCommand> = Vec::new();
-    walk(d, String::new(), 0, &mut out);
+    walk(d, String::new(), 0, &mut out, None);
 
     // The same command in the same folder can be found twice (a Makefile
     // target that shadows an npm script, say). Keep the first.
@@ -959,6 +985,63 @@ mod tests {
         // Names are disambiguated by folder, or three `dev` rows look identical.
         assert_eq!(web.name, "web dev");
         assert!(web.service, "a dev script is long-running");
+    }
+
+    /// A workspace keeps its lockfile at the root, so every member folder
+    /// looks manager-less. Guessing npm there mislabels the row *and* hands
+    /// you a command that runs the wrong tool.
+    #[test]
+    fn workspace_members_inherit_the_root_manager() {
+        let t = Tmp::new("pnpmws");
+        t.file("pnpm-lock.yaml", "lockfileVersion: '9.0'")
+            .file("package.json", r#"{"scripts":{"build":"tsc"}}"#)
+            .file("apps/web/package.json", r#"{"scripts":{"dev":"vite"}}"#)
+            .file("apps/api/package.json", r#"{"scripts":{"dev":"nest start"}}"#);
+        let out = t.scan();
+
+        assert!(
+            out.iter().all(|c| c.manager != "npm"),
+            "no row may claim npm in a pnpm workspace: {:?}",
+            cmds(&out)
+        );
+        let web = out.iter().find(|c| c.name == "web dev").unwrap();
+        assert_eq!(web.command, "pnpm dev");
+        assert_eq!(web.manager, "pnpm");
+    }
+
+    /// One `install` per package.json is the duplication people actually see.
+    #[test]
+    fn a_workspace_offers_exactly_one_install() {
+        let t = Tmp::new("wsinstall");
+        t.file("yarn.lock", "")
+            .file("package.json", r#"{"scripts":{"build":"tsc"}}"#)
+            .file("apps/web/package.json", r#"{"scripts":{"dev":"vite"}}"#)
+            .file("apps/api/package.json", r#"{"scripts":{"dev":"nest"}}"#);
+        let out = t.scan();
+
+        let installs: Vec<&str> = out
+            .iter()
+            .filter(|c| c.command.ends_with("install"))
+            .map(|c| c.command.as_str())
+            .collect();
+        assert_eq!(installs, vec!["yarn install"], "one install, at the root");
+    }
+
+    /// Independent sibling repos are not a workspace — each keeps its own
+    /// manager, so inheritance must not leak across an un-locked parent.
+    #[test]
+    fn sibling_repos_keep_their_own_managers() {
+        let t = Tmp::new("siblings");
+        t.file("web/package.json", r#"{"scripts":{"dev":"vite"}}"#)
+            .file("web/pnpm-lock.yaml", "lockfileVersion: '9.0'")
+            .file("api/package.json", r#"{"scripts":{"dev":"nest"}}"#)
+            .file("api/bun.lockb", "");
+        let out = t.scan();
+
+        let web = out.iter().find(|c| c.name == "web dev").unwrap();
+        let api = out.iter().find(|c| c.name == "api dev").unwrap();
+        assert_eq!(web.manager, "pnpm");
+        assert_eq!(api.manager, "bun");
     }
 
     #[test]
@@ -1143,56 +1226,5 @@ mod probe {
                 c.command
             );
         }
-    }
-}
-
-#[cfg(test)]
-mod workspace_tests {
-    use super::*;
-    use std::fs;
-
-    struct Tmp(std::path::PathBuf);
-    impl Tmp {
-        fn new(tag: &str) -> Self {
-            let mut p = std::env::temp_dir();
-            p.push(format!("devdeck-ws-{tag}-{}", std::process::id()));
-            let _ = fs::remove_dir_all(&p);
-            fs::create_dir_all(&p).unwrap();
-            Tmp(p)
-        }
-        fn file(&self, rel: &str, body: &str) -> &Self {
-            let p = self.0.join(rel);
-            fs::create_dir_all(p.parent().unwrap()).unwrap();
-            fs::write(p, body).unwrap();
-            self
-        }
-        fn scan(&self) -> Vec<DetectedCommand> {
-            scan_project(self.0.to_string_lossy().to_string()).unwrap()
-        }
-    }
-    impl Drop for Tmp {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
-        }
-    }
-
-    #[test]
-    fn workspace_children_inherit_the_root_manager() {
-        let t = Tmp::new("pnpm");
-        t.file("pnpm-lock.yaml", "lockfileVersion: '9.0'")
-            .file("package.json", r#"{"scripts":{"build":"tsc"}}"#)
-            .file("apps/web/package.json", r#"{"scripts":{"dev":"vite"}}"#)
-            .file("apps/api/package.json", r#"{"scripts":{"dev":"nest start"}}"#);
-        let out = t.scan();
-
-        let managers: Vec<&str> = out.iter().map(|c| c.manager.as_str()).collect();
-        println!("managers seen: {managers:?}");
-        for c in &out {
-            println!("  {:<20} {:<28} mgr={} group={}", c.name, c.command, c.manager, c.group);
-        }
-        assert!(
-            !managers.contains(&"npm"),
-            "sub-packages of a pnpm workspace must not be reported as npm: {managers:?}"
-        );
     }
 }

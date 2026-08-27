@@ -207,7 +207,17 @@ fn build_command(def: &ConnDef, sql: &str) -> std::process::Command {
                 Some(p) => format!("{},{}", def.host, p),
                 None => def.host.clone(),
             };
-            cmd.args(["-S", &server, "-d", &def.database, "-s", ",", "-W", "-Q", sql]);
+            cmd.args([
+                "-S",
+                &server,
+                "-d",
+                &def.database,
+                "-s",
+                ",",
+                "-W",
+                "-Q",
+                sql,
+            ]);
             if def.username.is_empty() {
                 cmd.arg("-E"); // trusted connection
             } else {
@@ -615,6 +625,9 @@ mod tests {
             .map(|a| a.to_string_lossy().to_string())
             .collect();
         assert!(args.iter().all(|a| a != "-P" && !a.contains("password")));
-        assert!(args.contains(&"--csv".to_string()), "we ask for parseable output");
+        assert!(
+            args.contains(&"--csv".to_string()),
+            "we ask for parseable output"
+        );
     }
 }

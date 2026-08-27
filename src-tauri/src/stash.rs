@@ -188,10 +188,14 @@ fn is_path(s: &str) -> bool {
     }
     let b = s.as_bytes();
     // C:\… or C:/…
-    let drive = b.len() > 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && (b[2] == b'\\' || b[2] == b'/');
+    let drive = b.len() > 3
+        && b[0].is_ascii_alphabetic()
+        && b[1] == b':'
+        && (b[2] == b'\\' || b[2] == b'/');
     let unc = s.starts_with("\\\\");
-    let posix = (s.starts_with('/') || s.starts_with("./") || s.starts_with("../") || s.starts_with("~/"))
-        && s.len() > 2;
+    let posix =
+        (s.starts_with('/') || s.starts_with("./") || s.starts_with("../") || s.starts_with("~/"))
+            && s.len() > 2;
     drive || unc || posix
 }
 
@@ -215,14 +219,28 @@ fn is_stacktrace(s: &str) -> bool {
 
 fn is_sql(s: &str) -> bool {
     let lower = s.trim_start().to_ascii_lowercase();
-    let first = lower.split(|c: char| c.is_whitespace()).next().unwrap_or("");
+    let first = lower
+        .split(|c: char| c.is_whitespace())
+        .next()
+        .unwrap_or("");
     let starts = matches!(
         first,
-        "select" | "insert" | "update" | "delete" | "create" | "alter" | "drop" | "with" | "truncate" | "explain"
+        "select"
+            | "insert"
+            | "update"
+            | "delete"
+            | "create"
+            | "alter"
+            | "drop"
+            | "with"
+            | "truncate"
+            | "explain"
     );
-    let body = [" from ", " into ", " set ", " table ", " values", " where ", " join "]
-        .iter()
-        .any(|k| lower.contains(k));
+    let body = [
+        " from ", " into ", " set ", " table ", " values", " where ", " join ",
+    ]
+    .iter()
+    .any(|k| lower.contains(k));
     starts && body
 }
 
@@ -314,9 +332,26 @@ const TOKEN_PREFIXES: &[(&str, usize, &str)] = &[
 
 /// Words that make the right-hand side of a `key = value` a credential.
 const SECRET_KEYS: &[&str] = &[
-    "password", "passwd", "pwd", "secret", "token", "apikey", "api_key", "api-key", "accesskey",
-    "access_key", "access-key", "secretkey", "secret_key", "client_secret", "clientsecret",
-    "authorization", "auth_token", "private_key", "privatekey", "connectionstring",
+    "password",
+    "passwd",
+    "pwd",
+    "secret",
+    "token",
+    "apikey",
+    "api_key",
+    "api-key",
+    "accesskey",
+    "access_key",
+    "access-key",
+    "secretkey",
+    "secret_key",
+    "client_secret",
+    "clientsecret",
+    "authorization",
+    "auth_token",
+    "private_key",
+    "privatekey",
+    "connectionstring",
 ];
 
 /// Values that are obviously placeholders, not real credentials.
@@ -412,9 +447,23 @@ pub fn secret_reason(text: &str) -> Option<&'static str> {
 
 /// Words that mean "there may be a credential in this picture".
 const OCR_SENSITIVE_WORDS: &[&str] = &[
-    "password", "passwd", "api key", "apikey", "api-key", "secret key", "access key",
-    "client secret", "private key", "bearer ", "credential", "auth token", "access token",
-    "bot token", "connection string", "recovery code", "seed phrase",
+    "password",
+    "passwd",
+    "api key",
+    "apikey",
+    "api-key",
+    "secret key",
+    "access key",
+    "client secret",
+    "private key",
+    "bearer ",
+    "credential",
+    "auth token",
+    "access token",
+    "bot token",
+    "connection string",
+    "recovery code",
+    "seed phrase",
 ];
 
 /// The guardrail for text lifted *out of an image*.
@@ -1185,11 +1234,7 @@ pub fn stash_tag_add(
     tag_add(&conn, id, &names)
 }
 
-fn tag_add(
-    conn: &rusqlite::Connection,
-    id: i64,
-    names: &[String],
-) -> Result<Vec<String>, String> {
+fn tag_add(conn: &rusqlite::Connection, id: i64, names: &[String]) -> Result<Vec<String>, String> {
     for raw in names {
         for tag in parse_tags(raw) {
             conn.execute(
@@ -1456,9 +1501,11 @@ pub fn stash_mark_used(
     )
     .map_err(err)?;
     let h: Option<String> = conn
-        .query_row("SELECT hash FROM stash_items WHERE id = ?1", params![id], |r| {
-            r.get(0)
-        })
+        .query_row(
+            "SELECT hash FROM stash_items WHERE id = ?1",
+            params![id],
+            |r| r.get(0),
+        )
         .ok();
     drop(conn);
     if let (Some(h), Ok(mut echo)) = (h, state.echo.lock()) {
@@ -1689,19 +1736,21 @@ pub fn spawn(app: tauri::AppHandle) {
 mod win {
     use super::{record, Captured, APP};
     use std::ffi::c_void;
-    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, HGLOBAL, HWND, LPARAM, LRESULT, WPARAM};
+    use windows_sys::Win32::Foundation::{
+        CloseHandle, HANDLE, HGLOBAL, HWND, LPARAM, LRESULT, WPARAM,
+    };
     use windows_sys::Win32::System::DataExchange::{
         AddClipboardFormatListener, CloseClipboard, EmptyClipboard, GetClipboardData,
         GetClipboardOwner, IsClipboardFormatAvailable, OpenClipboard, RegisterClipboardFormatW,
         SetClipboardData,
     };
     use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
+    use windows_sys::Win32::System::Memory::{GlobalAlloc, GMEM_MOVEABLE};
     use windows_sys::Win32::System::Memory::{GlobalLock, GlobalSize, GlobalUnlock};
     use windows_sys::Win32::System::Threading::{
         OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
         PROCESS_QUERY_LIMITED_INFORMATION,
     };
-    use windows_sys::Win32::System::Memory::{GlobalAlloc, GMEM_MOVEABLE};
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
         SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
     };
@@ -1726,7 +1775,9 @@ mod win {
     fn exclusion_formats() -> (u32, u32) {
         unsafe {
             (
-                RegisterClipboardFormatW(wide("ExcludeClipboardContentFromMonitorProcessing").as_ptr()),
+                RegisterClipboardFormatW(
+                    wide("ExcludeClipboardContentFromMonitorProcessing").as_ptr(),
+                ),
                 RegisterClipboardFormatW(wide("CanIncludeInClipboardHistory").as_ptr()),
             )
         }
@@ -2021,7 +2072,10 @@ mod tests {
     #[test]
     fn classifies_the_common_shapes() {
         assert_eq!(classify("{\"a\": 1}"), "json");
-        assert_eq!(classify("https://localhost:3000/orders?status=failed"), "url");
+        assert_eq!(
+            classify("https://localhost:3000/orders?status=failed"),
+            "url"
+        );
         assert_eq!(classify("select id from orders where total > 10"), "sql");
         assert_eq!(classify("C:\\Work\\devdeck\\src\\main.rs"), "path");
         assert_eq!(classify("f47ac10b-58cc-4372-a567-0e02b2c3d479"), "uuid");
@@ -2067,9 +2121,33 @@ mod tests {
 
         let rows: &[(&str, &str, Option<&str>, i64, i64, Option<i64>, &str)] = &[
             // item_type, title, content, is_secret, pinned, project_id, project_name
-            ("json", "staging db config", Some(r#"{"host":"db.staging.acme.io"}"#), 0, 1, Some(1), "storefront"),
-            ("sql", "top orders", Some("select id from orders"), 0, 0, Some(1), "storefront"),
-            ("url", "failed orders", Some("http://localhost:3000/orders"), 0, 0, Some(2), "api-gateway"),
+            (
+                "json",
+                "staging db config",
+                Some(r#"{"host":"db.staging.acme.io"}"#),
+                0,
+                1,
+                Some(1),
+                "storefront",
+            ),
+            (
+                "sql",
+                "top orders",
+                Some("select id from orders"),
+                0,
+                0,
+                Some(1),
+                "storefront",
+            ),
+            (
+                "url",
+                "failed orders",
+                Some("http://localhost:3000/orders"),
+                0,
+                0,
+                Some(2),
+                "api-gateway",
+            ),
             // Captured outside any project, and flagged: content was never stored.
             ("text", "looks like an API key", None, 1, 0, None, ""),
         ];
@@ -2241,7 +2319,10 @@ mod tests {
 
         // Removing the last use prunes the tag rather than leaving a dead one.
         tag_remove(&conn, 2, "slow query").unwrap();
-        assert!(!tag_counts(&conn).unwrap().iter().any(|t| t.name == "slow query"));
+        assert!(!tag_counts(&conn)
+            .unwrap()
+            .iter()
+            .any(|t| t.name == "slow query"));
     }
 
     #[test]
@@ -2324,7 +2405,10 @@ mod tests {
             },
         )
         .unwrap_err();
-        assert!(err.contains("GitHub token"), "reason should be specific: {err}");
+        assert!(
+            err.contains("GitHub token"),
+            "reason should be specific: {err}"
+        );
 
         // The clip is untouched — no partial write.
         let item = item_by_id(&conn, 1).unwrap();
@@ -2371,12 +2455,19 @@ mod tests {
         // Header {"alg":"HS256"} . payload {"sub":"user-42"} . signature
         let jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyLTQyIn0.s1gn4tur3_v4lu3_here";
         // Kept, so the decode action has something to work with.
-        assert_eq!(secret_reason(jwt), None, "a JWT must not be swallowed by the entropy rule");
+        assert_eq!(
+            secret_reason(jwt),
+            None,
+            "a JWT must not be swallowed by the entropy rule"
+        );
         assert_eq!(classify(jwt), "jwt");
 
         // The same length and entropy, but not JWT-shaped: still flagged.
         let opaque = "k3Jx9QvBn2LpZr7Wt4Ys8Hd1Fg6Mc0Ae5Ui3Ob";
-        assert!(secret_reason(opaque).is_some(), "an opaque token must still be flagged");
+        assert!(
+            secret_reason(opaque).is_some(),
+            "an opaque token must still be flagged"
+        );
     }
 
     #[test]
@@ -2473,12 +2564,18 @@ mod tests {
             },
         )
         .unwrap();
-        assert!(found.is_empty(), "redacted text must leave the search index");
+        assert!(
+            found.is_empty(),
+            "redacted text must leave the search index"
+        );
 
         let shots = list_query(&conn, &q("screenshots")).unwrap();
         let flagged = shots.iter().find(|i| i.title == "login.png").unwrap();
         assert!(flagged.is_secret);
-        assert_eq!(flagged.thumb, "", "the thumbnail is a second copy of the secret");
+        assert_eq!(
+            flagged.thumb, "",
+            "the thumbnail is a second copy of the secret"
+        );
         let kept = shots.iter().find(|i| i.title == "ok.png").unwrap();
         assert!(!kept.is_secret);
         assert_ne!(kept.thumb, "", "an ordinary screenshot keeps its preview");
@@ -2496,8 +2593,11 @@ mod tests {
             params![old_ts],
         )
         .unwrap();
-        conn.execute("UPDATE stash_items SET created_at = ?1 WHERE kind = 'clip'", params![old_ts])
-            .unwrap();
+        conn.execute(
+            "UPDATE stash_items SET created_at = ?1 WHERE kind = 'clip'",
+            params![old_ts],
+        )
+        .unwrap();
 
         prune(&conn, 30).unwrap();
         let left = list_query(&conn, &q("screenshots")).unwrap();
@@ -2519,10 +2619,16 @@ mod tests {
 
     #[test]
     fn fts_expression_survives_punctuation() {
-        assert_eq!(fts_expr("conn string"), Some("\"conn\"* \"string\"*".into()));
+        assert_eq!(
+            fts_expr("conn string"),
+            Some("\"conn\"* \"string\"*".into())
+        );
         assert_eq!(fts_expr("  "), None);
         // Punctuation-only tokens are dropped and quotes stripped, so no
         // amount of punctuation can escape into FTS5 syntax.
-        assert_eq!(fts_expr("\"; drop table --"), Some("\"drop\"* \"table\"*".into()));
+        assert_eq!(
+            fts_expr("\"; drop table --"),
+            Some("\"drop\"* \"table\"*".into())
+        );
     }
 }

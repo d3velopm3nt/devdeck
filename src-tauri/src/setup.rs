@@ -119,7 +119,11 @@ fn tool(binary: &str) -> Option<RequiredTool> {
     })
 }
 
-fn push_tool(tools: &mut Vec<RequiredTool>, seen: &mut std::collections::HashSet<String>, binary: &str) {
+fn push_tool(
+    tools: &mut Vec<RequiredTool>,
+    seen: &mut std::collections::HashSet<String>,
+    binary: &str,
+) {
     if seen.insert(binary.to_string()) {
         if let Some(t) = tool(binary) {
             tools.push(t);
@@ -219,7 +223,11 @@ pub fn detect_project_setup(dir: String) -> ProjectSetup {
     }
 
     let ready = tools.iter().all(|t| t.installed) && steps.iter().all(|s| s.done);
-    ProjectSetup { tools, steps, ready }
+    ProjectSetup {
+        tools,
+        steps,
+        ready,
+    }
 }
 
 /// Given one line of a command's output, suggest an installable tool if it
@@ -230,12 +238,19 @@ pub fn suggest_install(line: String) -> Option<RequiredTool> {
     // Extract the offending binary name from common shells' phrasings.
     let bin = if let Some(i) = l.find("is not recognized") {
         // cmd.exe: 'pnpm' is not recognized as an internal or external command
-        line[..i].trim().trim_matches(|c| c == '\'' || c == '"' || c == ' ').to_string()
+        line[..i]
+            .trim()
+            .trim_matches(|c| c == '\'' || c == '"' || c == ' ')
+            .to_string()
     } else if let Some(rest) = l.strip_prefix("command not found: ") {
         rest.split_whitespace().next().unwrap_or("").to_string()
     } else if let Some(i) = l.find(": command not found") {
         // bash: pnpm: command not found
-        line[..i].split_whitespace().last().unwrap_or("").to_string()
+        line[..i]
+            .split_whitespace()
+            .last()
+            .unwrap_or("")
+            .to_string()
     } else if let Some(i) = l.find("the term '") {
         // PowerShell: The term 'pnpm' is not recognized...
         let after = &line[i + 10..];
@@ -243,7 +258,12 @@ pub fn suggest_install(line: String) -> Option<RequiredTool> {
     } else if let Some(i) = l.find("no such file or directory") {
         // env: node: No such file or directory
         let before = &line[..i];
-        before.rsplit(|c| c == ':' || c == ' ').find(|s| !s.trim().is_empty()).unwrap_or("").trim().to_string()
+        before
+            .rsplit(|c| c == ':' || c == ' ')
+            .find(|s| !s.trim().is_empty())
+            .unwrap_or("")
+            .trim()
+            .to_string()
     } else {
         return None;
     };
@@ -255,7 +275,9 @@ pub fn suggest_install(line: String) -> Option<RequiredTool> {
 }
 
 fn stream(app: &tauri::AppHandle, name: &str, mut cmd: Command) -> bool {
-    cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     if let Some(p) = resolved_path() {
         cmd.env("PATH", p);
     }
@@ -287,7 +309,13 @@ fn stream(app: &tauri::AppHandle, name: &str, mut cmd: Command) -> bool {
             ok
         }
         Err(e) => {
-            services::push_log(app, SETUP_LOG_ID, name, "stderr", format!("failed to launch: {e}"));
+            services::push_log(
+                app,
+                SETUP_LOG_ID,
+                name,
+                "stderr",
+                format!("failed to launch: {e}"),
+            );
             false
         }
     }
@@ -317,19 +345,37 @@ pub fn clone_repo(app: tauri::AppHandle, url: String, parent: String) -> Result<
     }
     let target = Path::new(&parent).join(&name);
     if target.exists()
-        && target.read_dir().map(|mut d| d.next().is_some()).unwrap_or(false)
+        && target
+            .read_dir()
+            .map(|mut d| d.next().is_some())
+            .unwrap_or(false)
     {
-        return Err(format!("“{}” already exists and isn't empty.", target.display()));
+        return Err(format!(
+            "“{}” already exists and isn't empty.",
+            target.display()
+        ));
     }
     let target_str = target.to_string_lossy().to_string();
 
-    services::push_log(&app, SETUP_LOG_ID, "git clone", "system", format!("cloning {url} → {target_str}"));
+    services::push_log(
+        &app,
+        SETUP_LOG_ID,
+        "git clone",
+        "system",
+        format!("cloning {url} → {target_str}"),
+    );
     let mut cmd = Command::new("git");
     cmd.args(["clone", "--progress", &url, &target_str]);
     if !stream(&app, "git clone", cmd) {
         return Err("git clone failed — see the Logs.".into());
     }
-    services::push_log(&app, SETUP_LOG_ID, "git clone", "system", "clone complete.".into());
+    services::push_log(
+        &app,
+        SETUP_LOG_ID,
+        "git clone",
+        "system",
+        "clone complete.".into(),
+    );
     Ok(target_str)
 }
 
@@ -347,7 +393,13 @@ pub fn run_project_setup(
         let mut ok = true;
 
         for t in &tools {
-            services::push_log(&app, SETUP_LOG_ID, "project setup", "system", format!("installing {} …", t.pkg_id));
+            services::push_log(
+                &app,
+                SETUP_LOG_ID,
+                "project setup",
+                "system",
+                format!("installing {} …", t.pkg_id),
+            );
             let line = if t.source == "scoop" {
                 format!("scoop install {}", t.pkg_id)
             } else {
@@ -376,10 +428,22 @@ pub fn run_project_setup(
         if let Some(p) = resolved_path() {
             std::env::set_var("PATH", p);
         }
-        services::push_log(&app, SETUP_LOG_ID, "project setup", "system", "refreshed PATH".into());
+        services::push_log(
+            &app,
+            SETUP_LOG_ID,
+            "project setup",
+            "system",
+            "refreshed PATH".into(),
+        );
 
         for step in &steps {
-            services::push_log(&app, SETUP_LOG_ID, "project setup", "system", format!("running: {step}"));
+            services::push_log(
+                &app,
+                SETUP_LOG_ID,
+                "project setup",
+                "system",
+                format!("running: {step}"),
+            );
             let mut cmd = Command::new("cmd");
             #[cfg(windows)]
             {
@@ -404,7 +468,11 @@ pub fn run_project_setup(
             SETUP_LOG_ID,
             "project setup",
             "system",
-            if ok { "setup complete.".into() } else { "setup finished with errors — see the log.".to_string() },
+            if ok {
+                "setup complete.".into()
+            } else {
+                "setup finished with errors — see the log.".to_string()
+            },
         );
         let _ = app.emit("setup:done", ok);
     });

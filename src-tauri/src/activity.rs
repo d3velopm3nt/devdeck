@@ -163,16 +163,19 @@ pub fn service_runs(
         )
         .map_err(err)?;
     let rows = stmt
-        .query_map(params![service_id, if limit > 0 { limit } else { 25 }], |r| {
-            Ok(ServiceRun {
-                id: r.get(0)?,
-                service_id: r.get(1)?,
-                started_at: r.get(2)?,
-                ended_at: r.get(3)?,
-                exit_code: r.get(4)?,
-                outcome: r.get(5)?,
-            })
-        })
+        .query_map(
+            params![service_id, if limit > 0 { limit } else { 25 }],
+            |r| {
+                Ok(ServiceRun {
+                    id: r.get(0)?,
+                    service_id: r.get(1)?,
+                    started_at: r.get(2)?,
+                    ended_at: r.get(3)?,
+                    exit_code: r.get(4)?,
+                    outcome: r.get(5)?,
+                })
+            },
+        )
         .map_err(err)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(err)?;

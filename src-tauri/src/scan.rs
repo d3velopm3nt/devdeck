@@ -27,10 +27,30 @@ const MAX_RESULTS: usize = 250;
 /// Directories that never contain a project you want to run, and always
 /// contain thousands of files. Skipping these is most of the performance.
 const SKIP_DIRS: &[&str] = &[
-    "node_modules", "target", "dist", "build", "out", "bin", "obj", "vendor",
-    "venv", "env", "__pycache__", "site-packages", "coverage", "Pods",
-    "DerivedData", "Debug", "Release", "artifacts", "packages", "bower_components",
-    "tmp", "temp", "logs", "migrations",
+    "node_modules",
+    "target",
+    "dist",
+    "build",
+    "out",
+    "bin",
+    "obj",
+    "vendor",
+    "venv",
+    "env",
+    "__pycache__",
+    "site-packages",
+    "coverage",
+    "Pods",
+    "DerivedData",
+    "Debug",
+    "Release",
+    "artifacts",
+    "packages",
+    "bower_components",
+    "tmp",
+    "temp",
+    "logs",
+    "migrations",
 ];
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -72,7 +92,14 @@ impl Ctx<'_> {
         self.push(name, command, group, manager, true);
     }
 
-    fn push(&mut self, name: &str, command: impl Into<String>, group: &str, manager: &str, service: bool) {
+    fn push(
+        &mut self,
+        name: &str,
+        command: impl Into<String>,
+        group: &str,
+        manager: &str,
+        service: bool,
+    ) {
         if self.out.len() >= MAX_RESULTS {
             return;
         }
@@ -147,8 +174,13 @@ fn js_run(mgr: &str, script: &str) -> String {
 /// Script names that are long-running by convention.
 fn js_is_service(name: &str) -> bool {
     let n = name.to_ascii_lowercase();
-    n == "dev" || n == "start" || n == "serve" || n == "watch" || n.starts_with("dev:")
-        || n.starts_with("start:") || n.starts_with("serve:")
+    n == "dev"
+        || n == "start"
+        || n == "serve"
+        || n == "watch"
+        || n.starts_with("dev:")
+        || n.starts_with("start:")
+        || n.starts_with("serve:")
 }
 
 fn detect_node(dir: &Path, c: &mut Ctx) {
@@ -168,7 +200,11 @@ fn detect_node(dir: &Path, c: &mut Ctx) {
         }
     }
     if !dir.join("node_modules").exists() {
-        let install = if mgr == "npm" { "npm install".to_string() } else { format!("{mgr} install") };
+        let install = if mgr == "npm" {
+            "npm install".to_string()
+        } else {
+            format!("{mgr} install")
+        };
         c.add("install", install, &group, mgr);
     }
 }
@@ -210,17 +246,52 @@ fn detect_python(dir: &Path, c: &mut Ctx) {
     } else if pyproject.contains("[tool.poetry]") {
         c.add("install", "poetry install", "python", "poetry");
     } else if has("requirements.txt") {
-        c.add("install", "pip install -r requirements.txt", "python", "pip");
+        c.add(
+            "install",
+            "pip install -r requirements.txt",
+            "python",
+            "pip",
+        );
     }
 
     // Django is the one that most rewards knowing the framework.
     if has("manage.py") {
-        c.service("runserver", format!("{runner}python manage.py runserver"), "django", "python");
-        c.add("migrate", format!("{runner}python manage.py migrate"), "django", "python");
-        c.add("makemigrations", format!("{runner}python manage.py makemigrations"), "django", "python");
-        c.add("createsuperuser", format!("{runner}python manage.py createsuperuser"), "django", "python");
-        c.add("shell", format!("{runner}python manage.py shell"), "django", "python");
-        c.add("collectstatic", format!("{runner}python manage.py collectstatic --noinput"), "django", "python");
+        c.service(
+            "runserver",
+            format!("{runner}python manage.py runserver"),
+            "django",
+            "python",
+        );
+        c.add(
+            "migrate",
+            format!("{runner}python manage.py migrate"),
+            "django",
+            "python",
+        );
+        c.add(
+            "makemigrations",
+            format!("{runner}python manage.py makemigrations"),
+            "django",
+            "python",
+        );
+        c.add(
+            "createsuperuser",
+            format!("{runner}python manage.py createsuperuser"),
+            "django",
+            "python",
+        );
+        c.add(
+            "shell",
+            format!("{runner}python manage.py shell"),
+            "django",
+            "python",
+        );
+        c.add(
+            "collectstatic",
+            format!("{runner}python manage.py collectstatic --noinput"),
+            "django",
+            "python",
+        );
     }
 
     // ASGI/WSGI servers: only offered when the dependency is actually present.
@@ -230,10 +301,20 @@ fn detect_python(dir: &Path, c: &mut Ctx) {
             .find(|m| names.iter().any(|n| n == &format!("{m}.py")))
             .copied()
             .unwrap_or("main");
-        c.service("uvicorn", format!("{runner}uvicorn {module}:app --reload"), "python", "python");
+        c.service(
+            "uvicorn",
+            format!("{runner}uvicorn {module}:app --reload"),
+            "python",
+            "python",
+        );
     }
     if deps.contains("flask") && !has("manage.py") {
-        c.service("flask run", format!("{runner}flask run --debug"), "python", "python");
+        c.service(
+            "flask run",
+            format!("{runner}flask run --debug"),
+            "python",
+            "python",
+        );
     }
     if deps.contains("streamlit") {
         let entry = ["app.py", "main.py", "streamlit_app.py"]
@@ -241,7 +322,12 @@ fn detect_python(dir: &Path, c: &mut Ctx) {
             .find(|f| names.iter().any(|n| n == *f))
             .copied()
             .unwrap_or("app.py");
-        c.service("streamlit", format!("{runner}streamlit run {entry}"), "python", "python");
+        c.service(
+            "streamlit",
+            format!("{runner}streamlit run {entry}"),
+            "python",
+            "python",
+        );
     }
     if deps.contains("pytest") {
         c.add("test", format!("{runner}pytest"), "python", "pytest");
@@ -251,7 +337,12 @@ fn detect_python(dir: &Path, c: &mut Ctx) {
     if !has("manage.py") {
         for entry in ["main.py", "app.py", "run.py", "bot.py"] {
             if names.iter().any(|n| n == entry) {
-                c.add(entry.trim_end_matches(".py"), format!("{runner}python {entry}"), "python", "python");
+                c.add(
+                    entry.trim_end_matches(".py"),
+                    format!("{runner}python {entry}"),
+                    "python",
+                    "python",
+                );
                 break;
             }
         }
@@ -290,11 +381,23 @@ fn detect_dotnet(dir: &Path, c: &mut Ctx) {
         })
         .cloned()
         .collect();
-    let sln = names.iter().find(|n| n.to_ascii_lowercase().ends_with(".sln"));
+    let sln = names
+        .iter()
+        .find(|n| n.to_ascii_lowercase().ends_with(".sln"));
 
     if let Some(sln) = sln {
-        c.add("build", format!("dotnet build \"{sln}\""), "dotnet", "dotnet");
-        c.add("restore", format!("dotnet restore \"{sln}\""), "dotnet", "dotnet");
+        c.add(
+            "build",
+            format!("dotnet build \"{sln}\""),
+            "dotnet",
+            "dotnet",
+        );
+        c.add(
+            "restore",
+            format!("dotnet restore \"{sln}\""),
+            "dotnet",
+            "dotnet",
+        );
         c.add("test", format!("dotnet test \"{sln}\""), "dotnet", "dotnet");
     }
 
@@ -308,19 +411,44 @@ fn detect_dotnet(dir: &Path, c: &mut Ctx) {
         let is_web = body.contains("microsoft.net.sdk.web") || body.contains("aspnetcore");
 
         if is_test {
-            c.add(&format!("test {stem}"), format!("dotnet test \"{proj}\""), "dotnet", "dotnet");
+            c.add(
+                &format!("test {stem}"),
+                format!("dotnet test \"{proj}\""),
+                "dotnet",
+                "dotnet",
+            );
             continue;
         }
         // `dotnet watch` is the one people actually live in for web projects.
         if is_web {
-            c.service(&format!("watch {stem}"), format!("dotnet watch run --project \"{proj}\""), "dotnet", "dotnet");
+            c.service(
+                &format!("watch {stem}"),
+                format!("dotnet watch run --project \"{proj}\""),
+                "dotnet",
+                "dotnet",
+            );
         }
-        c.add(&format!("run {stem}"), format!("dotnet run --project \"{proj}\""), "dotnet", "dotnet");
+        c.add(
+            &format!("run {stem}"),
+            format!("dotnet run --project \"{proj}\""),
+            "dotnet",
+            "dotnet",
+        );
         if sln.is_none() {
-            c.add(&format!("build {stem}"), format!("dotnet build \"{proj}\""), "dotnet", "dotnet");
+            c.add(
+                &format!("build {stem}"),
+                format!("dotnet build \"{proj}\""),
+                "dotnet",
+                "dotnet",
+            );
         }
         if body.contains("entityframeworkcore") {
-            c.add(&format!("ef update {stem}"), format!("dotnet ef database update --project \"{proj}\""), "dotnet", "dotnet");
+            c.add(
+                &format!("ef update {stem}"),
+                format!("dotnet ef database update --project \"{proj}\""),
+                "dotnet",
+                "dotnet",
+            );
         }
     }
 }
@@ -351,16 +479,46 @@ fn detect_gradle(dir: &Path, c: &mut Ctx) {
     let body: String = build_files.iter().map(|p| read_lower(p)).collect();
     let is_android = body.contains("com.android.application")
         || body.contains("com.android.library")
-        || dir.join("app").join("src").join("main").join("AndroidManifest.xml").exists();
+        || dir
+            .join("app")
+            .join("src")
+            .join("main")
+            .join("AndroidManifest.xml")
+            .exists();
     let is_spring = body.contains("org.springframework.boot");
 
     if is_android {
-        c.add("assembleDebug", format!("{g} assembleDebug"), "android", "gradle");
-        c.add("installDebug", format!("{g} installDebug"), "android", "gradle");
-        c.add("assembleRelease", format!("{g} assembleRelease"), "android", "gradle");
-        c.add("bundleRelease", format!("{g} bundleRelease"), "android", "gradle");
+        c.add(
+            "assembleDebug",
+            format!("{g} assembleDebug"),
+            "android",
+            "gradle",
+        );
+        c.add(
+            "installDebug",
+            format!("{g} installDebug"),
+            "android",
+            "gradle",
+        );
+        c.add(
+            "assembleRelease",
+            format!("{g} assembleRelease"),
+            "android",
+            "gradle",
+        );
+        c.add(
+            "bundleRelease",
+            format!("{g} bundleRelease"),
+            "android",
+            "gradle",
+        );
         c.add("lint", format!("{g} lint"), "android", "gradle");
-        c.add("unit tests", format!("{g} testDebugUnitTest"), "android", "gradle");
+        c.add(
+            "unit tests",
+            format!("{g} testDebugUnitTest"),
+            "android",
+            "gradle",
+        );
         c.add("clean", format!("{g} clean"), "android", "gradle");
         // Handy enough to be worth offering, and it isn't obvious.
         c.add("devices", "adb devices", "android", "adb");
@@ -383,11 +541,21 @@ fn detect_maven(dir: &Path, c: &mut Ctx) {
     let m = if wrapper { ".\\mvnw" } else { "mvn" };
     let body = read_lower(&dir.join("pom.xml"));
     if body.contains("spring-boot") {
-        c.service("spring-boot:run", format!("{m} spring-boot:run"), "maven", "maven");
+        c.service(
+            "spring-boot:run",
+            format!("{m} spring-boot:run"),
+            "maven",
+            "maven",
+        );
     }
     c.add("package", format!("{m} package"), "maven", "maven");
     c.add("test", format!("{m} test"), "maven", "maven");
-    c.add("clean install", format!("{m} clean install"), "maven", "maven");
+    c.add(
+        "clean install",
+        format!("{m} clean install"),
+        "maven",
+        "maven",
+    );
 }
 
 // ---------- everything else ----------
@@ -446,7 +614,12 @@ fn detect_php(dir: &Path, c: &mut Ctx) {
     if let Some(json) = read_json(&dir.join("composer.json")) {
         if let Some(scripts) = json.get("scripts").and_then(|s| s.as_object()) {
             for name in scripts.keys() {
-                c.add(name, format!("composer run-script {name}"), "composer", "composer");
+                c.add(
+                    name,
+                    format!("composer run-script {name}"),
+                    "composer",
+                    "composer",
+                );
             }
         }
         if !dir.join("vendor").exists() {
@@ -473,14 +646,37 @@ fn detect_ruby(dir: &Path, c: &mut Ctx) {
 
 fn detect_docker(dir: &Path, c: &mut Ctx) {
     let names = file_names(dir);
-    let compose = names
-        .iter()
-        .find(|n| matches!(n.as_str(), "docker-compose.yml" | "docker-compose.yaml" | "compose.yml" | "compose.yaml"));
+    let compose = names.iter().find(|n| {
+        matches!(
+            n.as_str(),
+            "docker-compose.yml" | "docker-compose.yaml" | "compose.yml" | "compose.yaml"
+        )
+    });
     if let Some(file) = compose {
-        c.service("compose up", format!("docker compose -f {file} up"), "docker", "docker");
-        c.add("compose down", format!("docker compose -f {file} down"), "docker", "docker");
-        c.service("compose logs", format!("docker compose -f {file} logs -f"), "docker", "docker");
-        c.add("compose build", format!("docker compose -f {file} build"), "docker", "docker");
+        c.service(
+            "compose up",
+            format!("docker compose -f {file} up"),
+            "docker",
+            "docker",
+        );
+        c.add(
+            "compose down",
+            format!("docker compose -f {file} down"),
+            "docker",
+            "docker",
+        );
+        c.service(
+            "compose logs",
+            format!("docker compose -f {file} logs -f"),
+            "docker",
+            "docker",
+        );
+        c.add(
+            "compose build",
+            format!("docker compose -f {file} build"),
+            "docker",
+            "docker",
+        );
     }
 }
 
@@ -496,7 +692,9 @@ fn detect_make(dir: &Path, c: &mut Ctx) {
             let target = line[..idx].trim();
             if !target.is_empty()
                 && !target.starts_with('.')
-                && target.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+                && target
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
             {
                 c.add(target, format!("make {target}"), "make", "make");
             }
@@ -545,19 +743,29 @@ const MARKER_DETECTORS: &[MarkerDetector] = &[
         markers: &["fly.toml"],
         group: "deploy",
         manager: "fly",
-        commands: &[("deploy", "fly deploy", false), ("status", "fly status", false), ("logs", "fly logs", true)],
+        commands: &[
+            ("deploy", "fly deploy", false),
+            ("status", "fly status", false),
+            ("logs", "fly logs", true),
+        ],
     },
     MarkerDetector {
         markers: &["vercel.json", ".vercel"],
         group: "deploy",
         manager: "vercel",
-        commands: &[("deploy", "vercel deploy", false), ("deploy prod", "vercel deploy --prod", false)],
+        commands: &[
+            ("deploy", "vercel deploy", false),
+            ("deploy prod", "vercel deploy --prod", false),
+        ],
     },
     MarkerDetector {
         markers: &["wrangler.toml", "wrangler.jsonc", "wrangler.json"],
         group: "deploy",
         manager: "wrangler",
-        commands: &[("deploy", "wrangler deploy", false), ("dev", "wrangler dev", true)],
+        commands: &[
+            ("deploy", "wrangler deploy", false),
+            ("dev", "wrangler dev", true),
+        ],
     },
     MarkerDetector {
         markers: &["serverless.yml", "serverless.yaml"],
@@ -569,7 +777,10 @@ const MARKER_DETECTORS: &[MarkerDetector] = &[
         markers: &["netlify.toml"],
         group: "deploy",
         manager: "netlify",
-        commands: &[("deploy", "netlify deploy --prod", false), ("dev", "netlify dev", true)],
+        commands: &[
+            ("deploy", "netlify deploy --prod", false),
+            ("dev", "netlify dev", true),
+        ],
     },
     MarkerDetector {
         markers: &["Dockerfile"],
@@ -591,7 +802,10 @@ const MARKER_DETECTORS: &[MarkerDetector] = &[
         markers: &["Chart.yaml"],
         group: "helm",
         manager: "helm",
-        commands: &[("template", "helm template .", false), ("upgrade", "helm upgrade --install app .", false)],
+        commands: &[
+            ("template", "helm template .", false),
+            ("upgrade", "helm upgrade --install app .", false),
+        ],
     },
 ];
 
@@ -662,7 +876,11 @@ fn walk(dir: &Path, rel: String, depth: usize, out: &mut Vec<DetectedCommand>) {
     // Stable order, so the same repo always scans the same way.
     subdirs.sort_by(|a, b| a.0.cmp(&b.0));
     for (name, path) in subdirs {
-        let child_rel = if rel.is_empty() { name } else { format!("{rel}/{name}") };
+        let child_rel = if rel.is_empty() {
+            name
+        } else {
+            format!("{rel}/{name}")
+        };
         walk(&path, child_rel, depth + 1, out);
     }
 }
@@ -746,7 +964,8 @@ mod tests {
     #[test]
     fn python_gets_more_than_a_build_command() {
         let t = Tmp::new("py");
-        t.file("manage.py", "").file("requirements.txt", "django\npytest\n");
+        t.file("manage.py", "")
+            .file("requirements.txt", "django\npytest\n");
         let c = cmds(&t.scan());
         assert!(c.iter().any(|x| x == "python manage.py runserver"));
         assert!(c.iter().any(|x| x == "python manage.py migrate"));
@@ -761,7 +980,8 @@ mod tests {
             .file("manage.py", "");
         let c = cmds(&t.scan());
         assert!(
-            c.iter().any(|x| x == "poetry run python manage.py runserver"),
+            c.iter()
+                .any(|x| x == "poetry run python manage.py runserver"),
             "poetry projects must be run through poetry: {c:?}"
         );
     }
@@ -769,15 +989,26 @@ mod tests {
     #[test]
     fn dotnet_finds_each_project_and_knows_tests_from_apps() {
         let t = Tmp::new("dotnet");
-        t.file("Api/Api.csproj", "<Project Sdk=\"Microsoft.NET.Sdk.Web\"></Project>")
-            .file("Api.Tests/Api.Tests.csproj", "<Project><PackageReference Include=\"xunit\" /></Project>");
+        t.file(
+            "Api/Api.csproj",
+            "<Project Sdk=\"Microsoft.NET.Sdk.Web\"></Project>",
+        )
+        .file(
+            "Api.Tests/Api.Tests.csproj",
+            "<Project><PackageReference Include=\"xunit\" /></Project>",
+        );
         let c = cmds(&t.scan());
-        assert!(c.iter().any(|x| x.contains("dotnet run --project \"Api.csproj\"")));
+        assert!(c
+            .iter()
+            .any(|x| x.contains("dotnet run --project \"Api.csproj\"")));
         // A web project earns a watch command; a test project earns none.
         assert!(c.iter().any(|x| x.contains("dotnet watch run")));
-        assert!(c.iter().any(|x| x.contains("dotnet test \"Api.Tests.csproj\"")));
+        assert!(c
+            .iter()
+            .any(|x| x.contains("dotnet test \"Api.Tests.csproj\"")));
         assert!(
-            !c.iter().any(|x| x.contains("dotnet run --project \"Api.Tests.csproj\"")),
+            !c.iter()
+                .any(|x| x.contains("dotnet run --project \"Api.Tests.csproj\"")),
             "a test project is not something you `dotnet run`"
         );
     }
@@ -785,12 +1016,18 @@ mod tests {
     #[test]
     fn android_uses_the_wrapper_and_offers_android_commands() {
         let t = Tmp::new("android");
-        t.file("gradlew.bat", "").file("app/build.gradle", "apply plugin: 'com.android.application'");
+        t.file("gradlew.bat", "").file(
+            "app/build.gradle",
+            "apply plugin: 'com.android.application'",
+        );
         let c = cmds(&t.scan());
         assert!(c.iter().any(|x| x == ".\\gradlew assembleDebug"), "{c:?}");
         assert!(c.iter().any(|x| x == ".\\gradlew installDebug"));
         assert!(c.iter().any(|x| x == "adb logcat"));
-        assert!(!c.iter().any(|x| x == "gradle build"), "the wrapper pins the version");
+        assert!(
+            !c.iter().any(|x| x == "gradle build"),
+            "the wrapper pins the version"
+        );
     }
 
     #[test]
@@ -820,7 +1057,10 @@ mod tests {
         let t = Tmp::new("gmodule");
         t.file("gradlew.bat", "")
             .file("settings.gradle", "include ':app'")
-            .file("app/build.gradle", "apply plugin: 'com.android.application'");
+            .file(
+                "app/build.gradle",
+                "apply plugin: 'com.android.application'",
+            );
         let out = t.scan();
         // app/ is a module of the root Gradle project, not a project itself.
         assert!(
@@ -849,13 +1089,22 @@ mod tests {
     fn noise_directories_are_never_walked() {
         let t = Tmp::new("noise");
         t.file("package.json", r#"{"scripts":{"build":"tsc"}}"#)
-            .file("node_modules/pkg/package.json", r#"{"scripts":{"evil":"rm -rf /"}}"#)
+            .file(
+                "node_modules/pkg/package.json",
+                r#"{"scripts":{"evil":"rm -rf /"}}"#,
+            )
             .file(".git/package.json", r#"{"scripts":{"nope":"x"}}"#)
             .file("target/package.json", r#"{"scripts":{"nope":"x"}}"#);
         let c = cmds(&t.scan());
         assert!(c.iter().any(|x| x == "npm run build"));
-        assert!(!c.iter().any(|x| x.contains("evil")), "walked node_modules: {c:?}");
-        assert!(!c.iter().any(|x| x.contains("nope")), "walked a hidden/build dir");
+        assert!(
+            !c.iter().any(|x| x.contains("evil")),
+            "walked node_modules: {c:?}"
+        );
+        assert!(
+            !c.iter().any(|x| x.contains("nope")),
+            "walked a hidden/build dir"
+        );
     }
 
     #[test]

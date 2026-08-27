@@ -168,8 +168,10 @@ pub fn open() -> Connection {
     )
     .expect("create schema");
 
-    conn.execute_batch(STASH_SCHEMA).expect("create stash schema");
-    conn.execute_batch(CONN_SCHEMA).expect("create connections schema");
+    conn.execute_batch(STASH_SCHEMA)
+        .expect("create stash schema");
+    conn.execute_batch(CONN_SCHEMA)
+        .expect("create connections schema");
     conn.execute_batch(ACTIVITY_SCHEMA)
         .expect("create activity schema");
     // A run that was "running" when the app was killed did not survive.
@@ -387,8 +389,14 @@ fn migrate(conn: &Connection) {
 
     // Screenshots: link + thumbnail, added after the vault shipped.
     for (col, ddl) in [
-        ("file_path", "ALTER TABLE stash_items ADD COLUMN file_path TEXT NOT NULL DEFAULT ''"),
-        ("thumb", "ALTER TABLE stash_items ADD COLUMN thumb TEXT NOT NULL DEFAULT ''"),
+        (
+            "file_path",
+            "ALTER TABLE stash_items ADD COLUMN file_path TEXT NOT NULL DEFAULT ''",
+        ),
+        (
+            "thumb",
+            "ALTER TABLE stash_items ADD COLUMN thumb TEXT NOT NULL DEFAULT ''",
+        ),
     ] {
         if conn
             .prepare(&format!("SELECT {col} FROM stash_items LIMIT 1"))

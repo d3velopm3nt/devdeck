@@ -120,9 +120,11 @@ pub fn push_log(
 fn peek_enabled(app: &tauri::AppHandle) -> bool {
     app.try_state::<crate::db::Db>()
         .and_then(|db| {
-            db.0.lock()
-                .ok()
-                .and_then(|c| crate::db::setting_get_conn(&c, "widget_peek").ok().flatten())
+            db.0.lock().ok().and_then(|c| {
+                crate::db::setting_get_conn(&c, "widget_peek")
+                    .ok()
+                    .flatten()
+            })
         })
         .map(|v| v != "0")
         .unwrap_or(true)

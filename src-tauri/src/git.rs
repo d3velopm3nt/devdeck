@@ -79,7 +79,12 @@ fn read_status(d: &Path) -> GitInfo {
 
     let upstream = run_git(
         d,
-        &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
+        &[
+            "rev-parse",
+            "--abbrev-ref",
+            "--symbolic-full-name",
+            "@{upstream}",
+        ],
     )
     .filter(|s| !s.is_empty());
 
@@ -159,7 +164,13 @@ pub fn git_pull(app: tauri::AppHandle, dir: String) -> Result<(), String> {
     let dir_owned = dir.clone();
     std::thread::spawn(move || {
         let d = Path::new(&dir_owned);
-        services::push_log(&app, GIT_LOG_ID, "git pull", "system", format!("git pull --ff-only  ({dir_owned})"));
+        services::push_log(
+            &app,
+            GIT_LOG_ID,
+            "git pull",
+            "system",
+            format!("git pull --ff-only  ({dir_owned})"),
+        );
 
         let mut cmd = Command::new("git");
         cmd.arg("-C")
@@ -197,7 +208,13 @@ pub fn git_pull(app: tauri::AppHandle, dir: String) -> Result<(), String> {
                 ok
             }
             Err(e) => {
-                services::push_log(&app, GIT_LOG_ID, "git pull", "stderr", format!("failed to launch: {e}"));
+                services::push_log(
+                    &app,
+                    GIT_LOG_ID,
+                    "git pull",
+                    "stderr",
+                    format!("failed to launch: {e}"),
+                );
                 false
             }
         };
@@ -207,7 +224,11 @@ pub fn git_pull(app: tauri::AppHandle, dir: String) -> Result<(), String> {
             GIT_LOG_ID,
             "git pull",
             "system",
-            if ok { "pull complete.".into() } else { "pull failed — see the log (a diverged branch can't fast-forward).".to_string() },
+            if ok {
+                "pull complete.".into()
+            } else {
+                "pull failed — see the log (a diverged branch can't fast-forward).".to_string()
+            },
         );
         crate::activity::record(
             &app,

@@ -36,6 +36,11 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
   // Per-row port for service rows, so an imported dev server keeps its port and
   // you don't re-enter it. Seeded from guessPort; '' means no port.
   const [ports, setPorts] = useState<Map<string, string>>(new Map())
+  // Managers the user has switched off. Empty = show everything. A polyglot
+  // repo legitimately has npm *and* cargo *and* make, so this is a filter
+  // rather than a single choice — but it lets you cut a scan down to the one
+  // toolchain you actually came to wire up.
+  const [mgrOff, setMgrOff] = useState<Set<string>>(new Set())
   const [scanning, setScanning] = useState(false)
   const [scanErr, setScanErr] = useState<string | null>(null)
   const [result, setResult] = useState<{ added: number; updated: number; failed: number } | null>(null)
@@ -191,7 +196,9 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
     })
 
   const addSelected = async () => {
-    const rows = (scan ?? []).filter((r) => picked.has(keyOf(r)))
+    // Filtered-out rows are never added, even if they were picked before the
+    // filter changed — what you see is what gets written.
+    const rows = (scan ?? []).filter((r) => !mgrOff.has(r.manager) && picked.has(keyOf(r)))
     let added = 0
     let updated = 0
     let failed = 0
@@ -239,7 +246,38 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
     props.api.close()
   }
 
-  const newCount = (scan ?? []).filter((r) => rowStatus(r) === 'new').length
+  // One tally per detected manager, biggest first, so the chip row reads as
+  // "this is a pnpm repo that also has cargo and make" at a glance.
+  const managers = (() => {
+    const by = new Map<string, { id: string; total: number; fresh: number }>()
+    for (const r of scan ?? []) {
+      const e = by.get(r.manager) ?? { id: r.manager, total: 0, fresh: 0 }
+      e.total += 1
+      if (rowStatus(r) === 'new') e.fresh += 1
+      by.set(r.manager, e)
+    }
+    return [...by.values()].sort((a, b) => b.total - a.total || a.id.localeCompare(b.id))
+  })()
+
+  // What the list actually shows, and therefore what every count, bulk action
+  // and the Add button operate on. Nothing hidden is ever silently added.
+  const shown = (scan ?? []).filter((r) => !mgrOff.has(r.manager))
+
+  const toggleMgr = (id: string) => {
+    const next = new Set(mgrOff)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setMgrOff(next)
+    // Drop selections that just went out of view, so "N selected" always
+    // matches what you can see. Hiding a row must not smuggle it into Add.
+    setPicked((p) => {
+      const keep = new Set<string>()
+      for (const r of scan ?? []) if (!next.has(r.manager) && p.has(keyOf(r))) keep.add(keyOf(r))
+      return keep
+    })
+  }
+
+  const newCount = shown.filter((r) => rowStatus(r) === 'new').length
 
   return (
     <EditorShell
@@ -317,21 +355,69 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
                 <div className="mt-3 text-[11px] text-muted">No scripts found — check the base path points at the repo root.</div>
               ) : (
                 <div className="mt-3 space-y-1.5">
+                  {/* Toolchain filter. In a monorepo a scan spans several
+                      managers at once; narrowing to one is usually the first
+                      thing you want to do. */}
+                  {managers.length > 1 && (
+                    <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-line2 bg-soft p-1.5">
+                      <span className="pl-1 pr-0.5 text-[10px] font-medium uppercase tracking-wide text-faint">Toolchain</span>
+                      {managers.map((m) => {
+                        const b = pmBadge(m.id)
+                        const on = !mgrOff.has(m.id)
+                        const accent = b?.color ?? '#9BA3B2'
+                        return (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => toggleMgr(m.id)}
+                            title={`${m.total} row${m.total === 1 ? '' : 's'} from ${m.id}${m.fresh ? ` · ${m.fresh} new` : ''} — click to ${on ? 'hide' : 'show'}`}
+                            className={`group inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] leading-none transition-all ${
+                              on ? 'border-line3 text-ink' : 'border-line2 text-muted hover:text-body'
+                            }`}
+                            style={on ? { background: b?.bg ?? 'rgba(255,255,255,0.06)', borderColor: accent } : undefined}
+                          >
+                            <span
+                              className={`h-1.5 w-1.5 rounded-full transition-all ${on ? '' : 'opacity-40'}`}
+                              style={{ background: accent, boxShadow: on ? `0 0 6px ${accent}` : undefined }}
+                            />
+                            <span className="font-semibold" style={on ? { color: accent } : undefined}>
+                              {b?.label ?? m.id}
+                            </span>
+                            <span className={`rounded px-1 py-px font-mono text-[9.5px] ${on ? 'bg-black/25 text-ink' : 'bg-black/15 text-faint'}`}>{m.total}</span>
+                          </button>
+                        )
+                      })}
+                      {mgrOff.size > 0 && (
+                        <button type="button" className="ml-auto pr-1 text-[10.5px] text-dim hover:text-ink" onClick={() => { setMgrOff(new Set()) }}>
+                          Show all
+                        </button>
+                      )}
+                    </div>
+                  )}
+
                   <div className="flex items-center gap-3 text-[11px] text-dim">
-                    <button className="hover:text-ink" onClick={() => setPicked(new Set(scan.filter((r) => rowStatus(r) === 'new').map(keyOf)))}>
+                    <button className="hover:text-ink" onClick={() => setPicked(new Set(shown.filter((r) => rowStatus(r) === 'new').map(keyOf)))}>
                       Select new ({newCount})
                     </button>
-                    <button className="hover:text-ink" title="Also select same-name commands whose command changed, to override them" onClick={() => setPicked(new Set(scan.filter((r) => rowStatus(r) !== 'added').map(keyOf)))}>
+                    <button className="hover:text-ink" title="Also select same-name commands whose command changed, to override them" onClick={() => setPicked(new Set(shown.filter((r) => rowStatus(r) !== 'added').map(keyOf)))}>
                       Select all + override
                     </button>
                     <button className="hover:text-ink" onClick={() => setPicked(new Set())}>
                       Clear
                     </button>
-                    <span className="ml-auto">{picked.size} selected</span>
+                    <span className="ml-auto">
+                      {picked.size} selected
+                      {mgrOff.size > 0 && <span className="ml-1.5 text-faint">· {shown.length} of {scan.length} shown</span>}
+                    </span>
                   </div>
 
                   <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
-                    {scan.map((r) => {
+                    {shown.length === 0 && (
+                      <div className="rounded border border-dashed border-line2 px-2 py-3 text-center text-[11px] text-muted">
+                        Every toolchain is hidden — {scan.length} rows filtered out.
+                      </div>
+                    )}
+                    {shown.map((r) => {
                       const st = rowStatus(r)
                       const on = picked.has(keyOf(r))
                       const b = pmBadge(r.manager)
@@ -413,7 +499,7 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
                   <div className="flex items-center gap-3">
                     <button className="btn-primary mt-1 text-[12px]" disabled={picked.size === 0} onClick={() => void addSelected()}>
                       {(() => {
-                        const rows = scan.filter((r) => picked.has(keyOf(r)))
+                        const rows = shown.filter((r) => picked.has(keyOf(r)))
                         const a = rows.filter((r) => rowStatus(r) === 'new').length
                         const u = rows.filter((r) => rowStatus(r) === 'changed').length
                         return `Add ${a}${u ? ` · override ${u}` : ''}`

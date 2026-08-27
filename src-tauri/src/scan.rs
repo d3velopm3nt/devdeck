@@ -996,7 +996,10 @@ mod tests {
         t.file("pnpm-lock.yaml", "lockfileVersion: '9.0'")
             .file("package.json", r#"{"scripts":{"build":"tsc"}}"#)
             .file("apps/web/package.json", r#"{"scripts":{"dev":"vite"}}"#)
-            .file("apps/api/package.json", r#"{"scripts":{"dev":"nest start"}}"#);
+            .file(
+                "apps/api/package.json",
+                r#"{"scripts":{"dev":"nest start"}}"#,
+            );
         let out = t.scan();
 
         assert!(

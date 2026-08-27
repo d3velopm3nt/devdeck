@@ -1,7 +1,7 @@
 {
   "name": "devdeck",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.3.1",
   "type": "module",
   "description": "A local-first development command center for Windows: run your whole stack, watch every service, and jump into any terminal.",
   "license": "MIT",

@@ -11,6 +11,7 @@ import { findNode, projectOf, subtreeIds } from '../lib/tree'
 import { nodeColor, avatarLabel, projectUsage, rankSpaces } from '../lib/spaces'
 import { fmtAgo, fmtUptime } from '../lib/time'
 import type { LogEntry, ProcStat, TreeNode } from '../lib/types'
+import { HomeAttention } from './HomeAttention'
 
 function hexA(hex: string, a: number): string {
   const n = parseInt(hex.slice(1), 16)
@@ -267,7 +268,8 @@ export function Home() {
         </button>
       </div>
 
-      <div className="flex-1 space-y-4 overflow-auto p-3">
+      <div className="flex min-h-0 flex-1">
+      <div className="min-w-0 flex-1 space-y-4 overflow-auto p-3">
         {/* A failed read must not read as "you have nothing". */}
         {treeError && (
           <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-[12px] leading-5">
@@ -502,6 +504,12 @@ export function Home() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* What needs you, across every workspace. Outside the scroll container
+          on purpose: an approval that scrolls out of sight is one you do not
+          answer, and the agent waiting on it times out. */}
+      <HomeAttention />
       </div>
     </div>
   )

@@ -7,6 +7,7 @@ import { UpdateBar, type UpState } from './components/UpdateBar'
 import { Rail } from './shell/Rail'
 import { WorkspaceTabs } from './shell/WorkspaceTabs'
 import { SectionTabs } from './shell/SectionTabs'
+import { WindowControls } from './shell/WindowControls'
 import { AgentCluster, NotificationBell, AccountChip } from './shell/TopBarStatus'
 import { Home } from './components/Home'
 import { Explorer } from './components/Explorer'
@@ -350,7 +351,12 @@ export default function App() {
           whether anything is waiting. Terminal moved for the same reason: it
           opens a terminal somewhere, so it belongs to a project, not to the
           app. */}
-      <div className="flex items-stretch border-b border-line bg-panel">
+      {/* The window has no native frame, so this row is the title bar: empty
+          space in it drags the window, double-click maximises, and the three
+          controls live at its right end. Interactive children are unaffected —
+          Tauri only starts a drag when the element you pressed carries the
+          attribute itself. */}
+      <div className="flex items-stretch border-b border-line bg-panel" data-tauri-drag-region>
         <Menu
           label={
             <span className="inline-flex items-center gap-1.5">
@@ -495,7 +501,7 @@ export default function App() {
 
         <WorkspaceTabs />
 
-        <div className="ml-auto flex items-center gap-2.5 px-2">
+        <div className="ml-auto flex items-center gap-2.5 pl-2 pr-1">
           <AgentCluster />
           {/* The widget has a global hotkey, but a hotkey you have to remember
               is not a way in. It keeps a button. */}
@@ -521,6 +527,8 @@ export default function App() {
           <NotificationBell />
           <AccountChip />
         </div>
+
+        <WindowControls />
       </div>
 
       {/* The active project and its sections. Shown wherever a project view

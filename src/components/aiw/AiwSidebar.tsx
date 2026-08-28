@@ -1,27 +1,53 @@
-// AI Workspace contextual sidebar: the module's sections, plus the projects it
-// knows about. Fixed chrome, like the Explorer and the Connections sidebar —
-// navigation is never a dock panel.
+// The AI Workspace sidebar.
+//
+// Two things changed here, and the second is why the first was possible.
+//
+// **The projects list is gone.** It used to sit at the bottom of this sidebar,
+// which meant the app had two lists of the same repos and picking one in the
+// Explorer told this one nothing. The Explorer and the section row now answer
+// "which project"; this answers "what about all of them".
+//
+// **Ten flat items became three groups.** Watch is what moves, Record is what
+// accumulates, Set up is what you configure once. Setup came out of a buried
+// Settings page for one reason worth stating: with it hidden, agents quietly
+// running the mock provider looked exactly like agents doing real work.
+//
+// Above all of it sits what is happening right now, because the first thing
+// you want from this screen is who is working and who is stuck — not which
+// page to open.
 
 import { useEffect } from 'react'
 import { Icon, type IconName } from '../../lib/icons'
 import { useAiw, type AiwPage } from '../../lib/aiwStore'
-import { aiw } from '../../lib/aiw'
+import { aiw, initials } from '../../lib/aiw'
 
-// Surfaces you *watch* live in the nav; anything you configure once lives
-// under Settings, which is what keeps this list readable as the module grows.
-const SECTIONS: Array<{ page: AiwPage; icon: IconName; label: string }> = [
-  { page: 'chat', icon: 'ai', label: 'Assistant' },
-  { page: 'overview', icon: 'layout', label: 'Overview' },
-  { page: 'features', icon: 'list', label: 'Features' },
-  { page: 'context', icon: 'context', label: 'Context' },
-  { page: 'agents', icon: 'agent', label: 'Agents' },
-  { page: 'activity', icon: 'history', label: 'Activity' },
-  { page: 'conflicts', icon: 'conflict', label: 'Conflicts' },
-  { page: 'decisions', icon: 'decision', label: 'Decisions' },
-  { page: 'git', icon: 'commit', label: 'Git' },
-  { page: 'tests', icon: 'ok', label: 'Tests' },
-  { page: 'knowledge', icon: 'note', label: 'Knowledge' },
+type Item = { page: AiwPage; icon: IconName; label: string }
+
+const GROUPS: Array<{ title: string; items: Item[] }> = [
+  {
+    // Things that move.
+    title: 'Watch',
+    items: [
+      { page: 'agents', icon: 'agent', label: 'Agents' },
+      { page: 'activity', icon: 'history', label: 'Activity' },
+      { page: 'conflicts', icon: 'conflict', label: 'Conflicts' },
+      { page: 'tests', icon: 'ok', label: 'Tests' },
+    ],
+  },
+  {
+    // Things that accumulate.
+    title: 'Record',
+    items: [
+      { page: 'features', icon: 'list', label: 'Features' },
+      { page: 'context', icon: 'context', label: 'Context' },
+      { page: 'decisions', icon: 'decision', label: 'Decisions' },
+      { page: 'knowledge', icon: 'note', label: 'Knowledge' },
+      { page: 'git', icon: 'commit', label: 'Git' },
+    ],
+  },
 ]
+
+const num = (n: number) => ({ n, tone: 'text-faint' })
 
 export function AiwSidebar() {
   const a = useAiw()
@@ -37,22 +63,41 @@ export function AiwSidebar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const activeAgents = a.sessions.filter((s) => s.status === 'working' || s.status === 'planning').length
+  const working = a.sessions.filter((s) => s.status === 'working' || s.status === 'planning')
   const openConflicts = a.conflicts.filter((c) => !c.resolved).length
+  const scripted = a.agents.filter((x) => x.id !== 'assistant' && x.provider === 'mock').length
 
   const count = (p: AiwPage): { n: number; tone: string } | null => {
-    if (p === 'features') return { n: a.features.length, tone: 'text-faint' }
-    if (p === 'agents') return { n: activeAgents, tone: activeAgents ? 'text-ok' : 'text-faint' }
+    if (p === 'features') return num(a.features.length)
+    if (p === 'agents') return working.length ? { n: working.length, tone: 'text-ok' } : num(0)
     if (p === 'conflicts')
-      return { n: openConflicts, tone: openConflicts ? 'text-warn font-semibold' : 'text-faint' }
-    if (p === 'decisions') return { n: a.decisions.length, tone: 'text-faint' }
-    if (p === 'tests') return { n: a.testRuns.length, tone: 'text-faint' }
+      return openConflicts ? { n: openConflicts, tone: 'text-warn font-semibold' } : num(0)
+    if (p === 'decisions') return num(a.decisions.length)
+    if (p === 'tests') return num(a.testRuns.length)
     return null
+  }
+
+  const row = ({ page, icon, label }: Item) => {
+    const c = count(page)
+    const on = a.page === page
+    return (
+      <button
+        key={page}
+        className={`flex items-center gap-2 rounded px-2 py-[5px] text-left text-[12px] ${
+          on ? 'bg-raise font-semibold text-ink' : 'text-dim hover:bg-hover hover:text-ink'
+        }`}
+        onClick={() => a.setPage(page)}
+      >
+        <Icon name={icon} size={13} className={on ? 'text-indigo-400' : ''} />
+        {label}
+        {c && c.n > 0 && <span className={`ml-auto text-[10px] ${c.tone}`}>{c.n}</span>}
+      </button>
+    )
   }
 
   return (
     <div className="flex h-full flex-col bg-app">
-      <div className="flex items-center gap-2 border-b border-line px-3 py-2.5">
+      <div className="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2">
         <Icon name="ai" size={14} className="text-indigo-400" />
         <span className="text-[12.5px] font-semibold text-ink">AI Workspace</span>
         <button
@@ -64,80 +109,124 @@ export function AiwSidebar() {
         </button>
       </div>
 
-      <div className="flex flex-col gap-px p-1.5">
-        {SECTIONS.map((s) => {
-          const c = count(s.page)
-          const on = a.page === s.page
-          return (
-            <button
-              key={s.page}
-              className={`flex items-center gap-2 rounded px-2 py-1.5 text-left text-[12.5px] ${
-                on ? 'bg-raise font-semibold text-ink' : 'text-dim hover:bg-hover hover:text-ink'
-              }`}
-              onClick={() => a.setPage(s.page)}
-            >
-              <Icon name={s.icon} size={14} />
-              {s.label}
-              {c && c.n > 0 && <span className={`ml-auto text-[10.5px] ${c.tone}`}>{c.n}</span>}
-            </button>
-          )
-        })}
-      </div>
-
-      <div className="mt-1 border-t border-line px-1.5 pb-1 pt-1.5">
-        <button
-          className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[12.5px] ${
-            a.page === 'settings'
-              ? 'bg-raise font-semibold text-ink'
-              : 'text-dim hover:bg-hover hover:text-ink'
-          }`}
-          onClick={() => a.setPage('settings')}
-        >
-          <Icon name="settings" size={14} />
-          Settings
-        </button>
-      </div>
-
-      <div className="mt-1 border-t border-line px-3 pb-1.5 pt-2.5">
-        <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
-          Projects
+      {/* Right now — above the navigation, because it is the only part that
+          changes minute to minute. */}
+      <div className="shrink-0 border-b border-line bg-page px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          <span className="text-[9.5px] font-semibold uppercase tracking-[0.07em] text-faint">
+            Right now
+          </span>
+          <span className="ml-auto text-[10px] text-muted">
+            {a.projects.length} project{a.projects.length === 1 ? '' : 's'}
+          </span>
         </div>
-        {a.projects.length === 0 && (
-          <div className="px-1 py-2 text-[11.5px] leading-5 text-muted">
-            No projects yet. Run the demo to create two, or register a folder that has a
-            <span className="font-mono"> .devdeck</span>.
+
+        {working.length === 0 && a.approvals.length === 0 ? (
+          <div className="mt-1.5 text-[11px] text-muted">Nothing running.</div>
+        ) : (
+          <div className="mt-2 flex flex-col gap-1.5">
+            {a.approvals.map((r) => (
+              <button
+                key={r.id}
+                className="flex items-center gap-2 text-left"
+                title={r.detail}
+                onClick={() => a.setPage('agents')}
+              >
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-500/16 text-[8px] font-bold text-warn">
+                  {initials(a.agents.find((x) => x.id === r.agent_id)?.name ?? r.agent_id)}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-[11.5px] text-body">{r.summary}</span>
+                <span className="shrink-0 text-[9.5px] font-semibold text-warn">waiting</span>
+              </button>
+            ))}
+            {working.map((s) => (
+              <button
+                key={s.id}
+                className="flex items-center gap-2 text-left"
+                onClick={() => a.setPage('agents')}
+              >
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/16 text-[8px] font-bold text-ok">
+                  {initials(s.agent_name)}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-[11.5px] text-body">
+                  {s.agent_name}
+                </span>
+                <span className="shrink-0 text-[9.5px] text-muted">{s.feature_id}</span>
+              </button>
+            ))}
           </div>
         )}
-        {a.projects.map((p) => (
-          <button
-            key={p.id}
-            className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[12px] ${
-              a.projectId === p.id ? 'bg-raise text-ink' : 'text-dim hover:bg-hover hover:text-ink'
-            }`}
-            onClick={() => void a.selectProject(p.id)}
-            title={p.root}
-          >
-            <span
-              className={`h-[7px] w-[7px] shrink-0 rounded-full ${
-                p.active_agents > 0 ? 'bg-emerald-400' : 'bg-faint'
-              }`}
-            />
-            <span className="min-w-0 flex-1 truncate">{p.name}</span>
-            {p.open_conflicts > 0 && (
-              <span className="text-[10px] font-semibold text-warn">{p.open_conflicts}</span>
-            )}
-          </button>
-        ))}
       </div>
 
-      <div className="flex-1" />
+      <div className="min-h-0 flex-1 overflow-auto pb-2">
+        <div className="px-1.5 pt-2">
+          <button
+            className={`flex w-full items-center gap-2 rounded px-2 py-[5px] text-left text-[12px] ${
+              a.page === 'overview'
+                ? 'bg-raise font-semibold text-ink'
+                : 'text-dim hover:bg-hover hover:text-ink'
+            }`}
+            onClick={() => a.setPage('overview')}
+          >
+            <Icon
+              name="layout"
+              size={13}
+              className={a.page === 'overview' ? 'text-indigo-400' : ''}
+            />
+            Overview
+          </button>
+        </div>
 
-      <div className="border-t border-line p-2">
+        {GROUPS.map((g) => (
+          <div key={g.title} className="mt-1.5">
+            <div className="px-3 pb-1 pt-2 text-[9.5px] font-semibold uppercase tracking-[0.07em] text-faint">
+              {g.title}
+            </div>
+            <div className="flex flex-col gap-px px-1.5">{g.items.map(row)}</div>
+          </div>
+        ))}
+
+        {/* Set up, promoted out of a Settings page. "4 mock" is the difference
+            between real work and fixture output, and it was invisible while it
+            lived two clicks away. */}
+        <div className="mt-1.5">
+          <div className="px-3 pb-1 pt-2 text-[9.5px] font-semibold uppercase tracking-[0.07em] text-faint">
+            Set up
+          </div>
+          <div className="flex flex-col gap-px px-1.5">
+            <button
+              className={`flex items-center gap-2 rounded px-2 py-[5px] text-left text-[12px] ${
+                a.page === 'settings'
+                  ? 'bg-raise font-semibold text-ink'
+                  : 'text-dim hover:bg-hover hover:text-ink'
+              }`}
+              onClick={() => a.setPage('settings')}
+            >
+              <Icon
+                name="settings"
+                size={13}
+                className={a.page === 'settings' ? 'text-indigo-400' : ''}
+              />
+              Providers &amp; agents
+              {scripted > 0 && (
+                <span
+                  className="ml-auto rounded bg-amber-500/14 px-1 text-[9.5px] font-semibold text-warn"
+                  title={`${scripted} agent${scripted === 1 ? '' : 's'} still run the mock provider, which follows a script instead of thinking`}
+                >
+                  {scripted} mock
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="shrink-0 border-t border-line p-2">
         <button
           className="btn-primary flex w-full items-center justify-center gap-1.5 text-[11.5px]"
           disabled={a.demoRunning}
           onClick={() => void a.runDemo()}
-          title="Create the TyreX and AssetX fixture projects and run the full multi-agent scenario"
+          title="Create the TyreX and AssetX projects and run the full multi-agent scenario"
         >
           {a.demoRunning ? (
             <>

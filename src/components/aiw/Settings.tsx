@@ -15,9 +15,9 @@ import { ModelPicker } from './ModelPicker'
 type Tab = 'providers' | 'agents' | 'tools'
 
 const TABS: Array<{ id: Tab; icon: IconName; label: string; blurb: string }> = [
-  { id: 'providers', icon: 'ai', label: 'Providers', blurb: 'Connect a model' },
-  { id: 'agents', icon: 'agent', label: 'Agents', blurb: 'Who runs on what' },
-  { id: 'tools', icon: 'tool', label: 'Tools', blurb: 'What each agent may touch' },
+  { id: 'providers', icon: 'ai', label: 'Providers', blurb: 'Connect an AI service' },
+  { id: 'agents', icon: 'agent', label: 'Agents', blurb: 'Who uses which model' },
+  { id: 'tools', icon: 'tool', label: 'Tools', blurb: 'What each agent is allowed to do' },
 ]
 
 // ---------------------------------------------------------------------------
@@ -44,7 +44,10 @@ function AgentProviders() {
     setError(null)
     try {
       await aiw.setAgentProvider(ag.id, d.provider, d.model)
-      await a.refresh()
+      // The agent list, not the project refresh: that one is per-project and
+      // never reloaded agents, so the row kept showing the old value with
+      // Apply still lit — which looks exactly like a save that failed.
+      await a.reloadAgents()
       setDrafts({ ...drafts, [ag.id]: d })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -60,12 +63,13 @@ function AgentProviders() {
       <div className="mb-3 flex items-start gap-2.5 rounded-md border border-line bg-raise px-3.5 py-3">
         <Icon name="info" size={13} className="mt-px shrink-0 text-indigo-400" />
         <div className="text-[11.5px] leading-[1.6] text-dim">
-          Connecting a provider changes nothing on its own — this is where it takes effect. An agent
-          stays on <span className="text-ink">Mock</span> until you point it somewhere else, so you
-          can move one agent to a real model and leave the rest deterministic.
+          Setting up a provider doesn&rsquo;t put anyone to work — this is where you choose who
+          uses it. Every agent starts on <span className="text-ink">Mock</span>, which follows a
+          fixed script instead of thinking, so you can try one agent on a real model and leave the
+          others alone.
           {realCount > 0 && (
             <span className="ml-1 text-ok">
-              {realCount} of {a.agents.length} are on a real provider.
+              {realCount} of {a.agents.length} are using a real model.
             </span>
           )}
         </div>
@@ -154,8 +158,8 @@ function AgentProviders() {
       </div>
 
       <div className="mt-2.5 text-[11px] leading-[1.55] text-muted">
-        A provider that isn&rsquo;t set up is listed but not selectable — an agent pointed at
-        nothing fails mid-run, which is the least useful moment to find out.
+        Providers you haven&rsquo;t set up yet are shown but can&rsquo;t be chosen. Set one up
+        under Providers first, or the agent will stop halfway through its first job.
       </div>
     </>
   )
@@ -165,6 +169,13 @@ function AgentProviders() {
 // Tools — the permission matrix
 // ---------------------------------------------------------------------------
 
+const PERMISSION_LABELS: Array<[string, string]> = [
+  ['full', 'Allowed'],
+  ['read', 'Look only'],
+  ['approval', 'Ask first'],
+  ['none', 'Off'],
+]
+
 function ToolPermissions() {
   const a = useAiw()
   return (
@@ -172,11 +183,12 @@ function ToolPermissions() {
       <div className="mb-3 flex items-start gap-2.5 rounded-md border border-line bg-raise px-3.5 py-3">
         <Icon name="info" size={13} className="mt-px shrink-0 text-indigo-400" />
         <div className="text-[11.5px] leading-[1.6] text-dim">
-          Tools are the only way an agent reaches the machine. Permissions fail closed: an unknown
-          agent gets nothing, <span className="text-ink">Read</span> refuses writes, and{' '}
-          <span className="text-ink">Approval</span> stops the agent mid-turn and asks you — it is
-          never a silent yes. If nobody answers within 90 seconds the call is refused, not
-          granted.
+          Tools are the only way an agent can touch your machine, and anything not granted here is
+          refused. <span className="text-ink">Full</span> lets it go ahead,{' '}
+          <span className="text-ink">Read</span> lets it look but not change anything,{' '}
+          <span className="text-ink">Ask</span> stops the agent and checks with you first, and{' '}
+          <span className="text-ink">None</span> hides the tool completely. Nothing is ever approved
+          on your behalf — if you&rsquo;re away for 90 seconds, the answer is no.
         </div>
       </div>
 
@@ -214,9 +226,13 @@ function ToolPermissions() {
                     value={perm.toLowerCase()}
                     onChange={(e) => void a.setPermission(agentId, row.tool, e.target.value)}
                   >
-                    {['full', 'read', 'approval', 'none'].map((p) => (
-                      <option key={p} value={p}>
-                        {p}
+                    {/* The stored values stay as they are; only the labels are
+                        in plain English. `approval` reading as "Ask first" is
+                        the difference between a setting you understand and one
+                        you leave alone. */}
+                    {PERMISSION_LABELS.map(([v, label]) => (
+                      <option key={v} value={v}>
+                        {label}
                       </option>
                     ))}
                   </select>
@@ -228,10 +244,10 @@ function ToolPermissions() {
       </div>
 
       <div className="mt-2.5 text-[11px] leading-[1.55] text-muted">
-        An action that can never be allowed is left out of what the model is offered entirely,
-        rather than advertised and then denied — offering a read-only agent a write it can never
-        call wastes a turn. <span className="text-dim">Approval</span> is offered, because it is
-        genuinely callable; the model is told the call may pause for a human.
+        Agents are only shown the tools they can actually use, so they don&rsquo;t waste a turn
+        asking for something that was always going to be refused. Anything set to{' '}
+        <span className="text-dim">Ask</span> is offered, and the agent is told it may have to wait
+        for you.
       </div>
     </>
   )
@@ -249,7 +265,7 @@ export function Settings() {
         <div className="mb-3">
           <div className="text-[18px] font-semibold tracking-[-0.01em] text-ink">Settings</div>
           <div className="mt-0.5 text-[12px] text-dim">
-            How the AI Workspace is wired up — models, who uses them, and what they may touch.
+            Which AI services you use, who uses them, and what they&rsquo;re allowed to do.
           </div>
         </div>
         <div className="flex gap-0.5">

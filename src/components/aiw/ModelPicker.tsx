@@ -2,23 +2,25 @@
 //
 // Typing `anthropic/claude-sonnet-4.5` from memory is a good way to configure
 // an agent that fails on its first turn, so the list is fetched from the
-// provider itself. Two rules keep that honest:
+// provider itself. The list is the default and the only thing on screen;
+// typing one by hand is available, but you have to ask for it.
+//
+// Two rules keep it honest:
 //
 //   1. **Never an empty dropdown.** Every provider ships a small built-in list,
 //      so a failed lookup still leaves something to choose from.
-//   2. **Never a stale list presented as fresh.** The backend says whether the
-//      answer actually came from the provider, and this shows the difference.
-//      A built-in list passed off as a lookup is the same lie as an update
-//      checker reporting "up to date" when it could not reach the server.
+//   2. **Never a stale list shown as a fresh one.** The backend says whether
+//      the answer really came from the provider, and this shows the difference.
 //
-// Free text stays available: gateways add models faster than directories list
-// them, and a picker that cannot express an unlisted model is a downgrade.
+// Whatever is currently set always appears in the list, even when the provider
+// has never heard of it. A select with no matching option renders blank, which
+// would make a configured model look like no model at all.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Icon } from '../../lib/icons'
-import { aiw, type ModelCatalog } from '../../lib/aiw'
+import { aiw, type ModelCatalog, type ModelInfo } from '../../lib/aiw'
 
-const CUSTOM = '__custom__'
+const TYPE_IT = '__type__'
 
 export function ModelPicker({
   providerId,
@@ -31,15 +33,12 @@ export function ModelPicker({
   value: string
   onChange: (model: string) => void
   hint?: string
-  /** Table rows have no room for the note; the title attribute carries it. */
+  /** Table rows have no room for a note; the tooltip carries it instead. */
   compact?: boolean
 }) {
   const [catalog, setCatalog] = useState<ModelCatalog | null>(null)
   const [loading, setLoading] = useState(false)
-  // Sticky rather than derived: once you choose Custom, the field must not snap
-  // back to the dropdown just because what you typed happens to match a listed
-  // id halfway through typing it.
-  const [custom, setCustom] = useState(false)
+  const [typing, setTyping] = useState(false)
 
   const load = useCallback(async () => {
     if (!providerId) return
@@ -47,11 +46,7 @@ export function ModelPicker({
     try {
       setCatalog(await aiw.models(providerId))
     } catch (e) {
-      setCatalog({
-        models: [],
-        live: false,
-        note: e instanceof Error ? e.message : String(e),
-      })
+      setCatalog({ models: [], live: false, note: e instanceof Error ? e.message : String(e) })
     } finally {
       setLoading(false)
     }
@@ -61,17 +56,24 @@ export function ModelPicker({
     void load()
   }, [load])
 
-  const models = catalog?.models ?? []
-  // An unlisted value is a real state, not an error: a model the directory does
-  // not know about still has to be selectable and visible.
+  const models = useMemo(() => catalog?.models ?? [], [catalog])
   const unlisted = value !== '' && !models.some((m) => m.id === value)
-  const asText = custom || unlisted
+
+  // The current value first when the provider does not offer it, so it shows
+  // rather than leaving the select blank.
+  const options: ModelInfo[] = useMemo(
+    () => (unlisted ? [{ id: value, name: value }, ...models] : models),
+    [unlisted, value, models],
+  )
+
+  const status = describe(catalog, loading, unlisted, hint)
 
   return (
     <div>
       <div className="flex items-center gap-1.5">
-        {asText ? (
+        {typing ? (
           <input
+            autoFocus
             className="input min-w-0 flex-1 font-mono text-[11.5px]"
             value={value}
             placeholder="model id"
@@ -81,91 +83,86 @@ export function ModelPicker({
           <select
             className="input min-w-0 flex-1 text-[11.5px]"
             value={value}
+            title={compact ? status?.text : undefined}
             onChange={(e) => {
-              if (e.target.value === CUSTOM) {
-                setCustom(true)
+              if (e.target.value === TYPE_IT) {
+                setTyping(true)
                 return
               }
               onChange(e.target.value)
             }}
           >
             {value === '' && <option value="">Choose a model…</option>}
-            {models.map((m) => (
+            {options.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name}
                 {m.context_window ? ` · ${Math.round(m.context_window / 1000)}k` : ''}
               </option>
             ))}
-            <option value={CUSTOM}>Type it myself…</option>
+            <option value={TYPE_IT}>Type one in…</option>
           </select>
         )}
 
-        <button
-          className="btn-ghost shrink-0 px-1.5 text-[11px]"
-          title={loading ? 'Looking up models…' : 'Look up the models this provider offers'}
-          disabled={loading || !providerId}
-          onClick={() => void load()}
-        >
-          <Icon name={loading ? 'spinner' : 'update'} size={12} className={loading ? 'animate-spin' : ''} />
-        </button>
-
-        {asText && models.length > 0 && (
+        {typing ? (
           <button
-            className="btn-ghost shrink-0 text-[10.5px]"
-            title="Go back to the list"
+            className="btn-ghost shrink-0 whitespace-nowrap text-[10.5px]"
+            title="Go back to the list of models"
             onClick={() => {
-              setCustom(false)
-              // Leaving an unlisted value behind would put the select into a
-              // state with no matching option, which renders as blank.
-              if (unlisted) onChange(models[0].id)
+              setTyping(false)
+              // An empty box would leave the select with nothing selected.
+              if (!value && options.length > 0) onChange(options[0].id)
             }}
           >
-            List
+            Back to list
+          </button>
+        ) : (
+          <button
+            className="btn-ghost shrink-0 px-1.5 text-[11px]"
+            title={loading ? 'Loading…' : 'Check for new models'}
+            disabled={loading || !providerId}
+            onClick={() => void load()}
+          >
+            <Icon
+              name={loading ? 'spinner' : 'update'}
+              size={12}
+              className={loading ? 'animate-spin' : ''}
+            />
           </button>
         )}
       </div>
 
-      {!compact && <Note catalog={catalog} loading={loading} unlisted={unlisted} hint={hint} />}
+      {!compact && status && (
+        <div className={`mt-1 text-[10.5px] leading-[1.5] ${status.tone}`}>{status.text}</div>
+      )}
     </div>
   )
 }
 
-function Note({
-  catalog,
-  loading,
-  unlisted,
-  hint,
-}: {
-  catalog: ModelCatalog | null
-  loading: boolean
-  unlisted: boolean
-  hint?: string
-}) {
-  if (loading) {
-    return <div className="mt-1 text-[10.5px] text-faint">Asking the provider…</div>
-  }
+function describe(
+  catalog: ModelCatalog | null,
+  loading: boolean,
+  unlisted: boolean,
+  hint?: string,
+): { text: string; tone: string } | null {
+  if (loading) return { text: 'Loading models…', tone: 'text-faint' }
+
+  // A built-in list shown as though it came from the provider would be a
+  // failed lookup reading as a successful one.
   if (catalog && !catalog.live) {
-    return (
-      <div className="mt-1 text-[10.5px] leading-[1.5] text-warn">
-        Showing the built-in list — the lookup failed
-        {catalog.note ? `: ${catalog.note}` : '.'}
-      </div>
-    )
+    const why = catalog.note ? ` (${catalog.note})` : ''
+    return {
+      text: `Couldn't load the list, so these are the ones we already knew about${why}.`,
+      tone: 'text-warn',
+    }
   }
   if (unlisted) {
-    return (
-      <div className="mt-1 text-[10.5px] text-dim">
-        Not in the provider&rsquo;s list. That is fine if you know it exists — it will fail on the
-        first turn if it doesn&rsquo;t.
-      </div>
-    )
+    return {
+      text: "This one isn't in the provider's list. That's fine if you know it's right.",
+      tone: 'text-dim',
+    }
   }
   if (catalog?.live) {
-    return (
-      <div className="mt-1 text-[10.5px] text-faint">
-        {catalog.models.length} models, live from the provider.
-      </div>
-    )
+    return { text: `${catalog.models.length} models available.`, tone: 'text-faint' }
   }
-  return hint ? <div className="mt-1 text-[10.5px] text-faint">{hint}</div> : null
+  return hint ? { text: hint, tone: 'text-faint' } : null
 }

@@ -562,12 +562,12 @@ impl LLMProvider for MockProvider {
         Self::ID
     }
     fn name(&self) -> &str {
-        "Mock (deterministic)"
+        "Mock (no AI)"
     }
     fn list_models(&self) -> Vec<ModelInfo> {
         vec![ModelInfo {
             id: "mock-1".into(),
-            name: "Deterministic script".into(),
+            name: "Scripted replies".into(),
             context_window: Some(12_000),
         }]
     }

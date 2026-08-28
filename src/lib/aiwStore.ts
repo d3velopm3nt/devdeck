@@ -101,6 +101,7 @@ interface AiwState {
   selectFeature: (id: string | null) => Promise<void>
   bootstrap: () => Promise<void>
   refresh: () => Promise<void>
+  reloadAgents: () => Promise<void>
   refreshApprovals: () => Promise<void>
   pushChat: (e: ChatEvent) => void
   loadConversations: () => Promise<void>
@@ -211,6 +212,20 @@ export const useAiw = create<AiwState>((set, get) => ({
       ])
       set({ workItems, decisions })
       await get().refreshContext()
+    } catch (e) {
+      set({ error: say(e) })
+    }
+  },
+
+  // Agents and the permission matrix are workspace-wide, so `refresh` — which
+  // is per-project and does nothing at all without one selected — never
+  // reloaded them. Saving an agent's model then left the old value on screen
+  // with the Apply button still lit, which is indistinguishable from a save
+  // that failed.
+  reloadAgents: async () => {
+    try {
+      const [agents, permissions] = await Promise.all([aiw.agents(), aiw.permissions()])
+      set({ agents, permissions })
     } catch (e) {
       set({ error: say(e) })
     }

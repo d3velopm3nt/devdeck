@@ -1010,3 +1010,192 @@ mod tests {
         assert_eq!(estimate_tokens(&long), 100);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Exporting context to the files other tools read
+// ---------------------------------------------------------------------------
+
+/// Markers around the region DevDeck owns in an agent file.
+///
+/// A `CLAUDE.md` is usually hand-written and carefully tuned, so DevDeck writes
+/// into a delimited block and leaves everything else exactly as it found it.
+/// Overwriting the whole file would be the kind of "helpful" that loses work.
+pub const EXPORT_BEGIN: &str = "<!-- devdeck:begin -->";
+pub const EXPORT_END: &str = "<!-- devdeck:end -->";
+
+/// Agent files DevDeck knows how to write into. These are the conventional
+/// names the common CLI agents already read.
+pub const AGENT_FILES: &[&str] = &["CLAUDE.md", "AGENTS.md", ".cursorrules"];
+
+/// Splice `block` into `existing` between the markers.
+///
+/// - No markers: the block is appended, and everything already there survives.
+/// - Markers present: only the region between them is replaced.
+/// - A begin with no end: treated as no block at all and appended, because
+///   guessing where a truncated block ends risks eating real content.
+pub fn splice_managed_block(existing: &str, block: &str) -> String {
+    let body = format!("{EXPORT_BEGIN}\n{}\n{EXPORT_END}", block.trim());
+
+    if let Some(start) = existing.find(EXPORT_BEGIN) {
+        if let Some(end_at) = existing[start..].find(EXPORT_END) {
+            let end = start + end_at + EXPORT_END.len();
+            let mut out = String::with_capacity(existing.len() + body.len());
+            out.push_str(&existing[..start]);
+            out.push_str(&body);
+            out.push_str(&existing[end..]);
+            return out;
+        }
+    }
+
+    if existing.trim().is_empty() {
+        return format!("{body}\n");
+    }
+    format!("{}\n\n{body}\n", existing.trim_end())
+}
+
+/// What DevDeck writes into an agent file for one feature.
+///
+/// Deliberately the *assembled* context, not the raw files: the whole point is
+/// that another tool gets the same narrowed view an agent would, rather than
+/// being pointed at the repo and left to work it out.
+pub fn export_block(ctx: &AssembledContext, feature_name: &str) -> String {
+    let mut out = String::new();
+    out.push_str(
+        "<!-- Managed by DevDeck. Edits inside this block are replaced on the next export;\n     \
+         everything outside it is left alone. -->\n\n",
+    );
+    out.push_str(&format!("# Current feature: {feature_name}\n\n"));
+
+    for s in ctx.sections.iter().filter(|s| s.inclusion.included()) {
+        out.push_str(&format!("## {}\n\n{}\n\n", s.title, s.body.trim()));
+    }
+
+    let excluded: Vec<&str> = ctx
+        .sections
+        .iter()
+        .filter(|s| !s.inclusion.included())
+        .map(|s| s.title.as_str())
+        .collect();
+    if !excluded.is_empty() {
+        // Naming the exclusions matters as much here as in the inspector: a
+        // reader should know this is a deliberate slice, not the whole story.
+        out.push_str(&format!(
+            "## Deliberately not included\n\n{}\n\nAsk if you need any of it.\n\n",
+            excluded
+                .iter()
+                .map(|e| format!("- {e}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        ));
+    }
+
+    if let Some(commit) = &ctx.commit {
+        out.push_str(&format!(
+            "---\n\nDevDeck context for `{}` at `{}` — {} tokens.\n",
+            ctx.feature_id,
+            &commit[..commit.len().min(7)],
+            ctx.total_tokens
+        ));
+    }
+    out
+}
+
+impl ContextService {
+    /// Write a feature's assembled context into an agent file at the project
+    /// root, preserving whatever was already there.
+    pub fn export_to_agent_file(
+        deck: &Deck,
+        ctx: &AssembledContext,
+        feature_name: &str,
+        filename: &str,
+    ) -> Result<String, String> {
+        if !AGENT_FILES.contains(&filename) {
+            return Err(format!(
+                "'{filename}' is not one of the agent files DevDeck writes ({})",
+                AGENT_FILES.join(", ")
+            ));
+        }
+        let path = deck.root.join(filename);
+        let existing = std::fs::read_to_string(&path).unwrap_or_default();
+        let merged = splice_managed_block(&existing, &export_block(ctx, feature_name));
+        std::fs::write(&path, merged).map_err(|e| format!("{filename}: {e}"))?;
+        Ok(deck.rel(&path))
+    }
+}
+
+#[cfg(test)]
+mod export_tests {
+    use super::*;
+
+    #[test]
+    fn an_empty_file_gets_just_the_block() {
+        let out = splice_managed_block("", "hello");
+        assert!(out.starts_with(EXPORT_BEGIN));
+        assert!(out.trim().ends_with(EXPORT_END));
+        assert!(out.contains("hello"));
+    }
+
+    /// The property that matters: a hand-written CLAUDE.md must survive.
+    #[test]
+    fn hand_written_content_above_and_below_is_preserved() {
+        let existing = format!(
+            "# House rules\n\nAlways run the tests.\n\n{EXPORT_BEGIN}\nold context\n{EXPORT_END}\n\n\
+             # Notes\n\nDon't touch the parser.\n"
+        );
+        let out = splice_managed_block(&existing, "new context");
+
+        assert!(
+            out.contains("Always run the tests."),
+            "content above was lost"
+        );
+        assert!(
+            out.contains("Don't touch the parser."),
+            "content below was lost"
+        );
+        assert!(out.contains("new context"));
+        assert!(
+            !out.contains("old context"),
+            "the old block should be replaced"
+        );
+        assert_eq!(out.matches(EXPORT_BEGIN).count(), 1, "no duplicate blocks");
+    }
+
+    #[test]
+    fn a_file_with_no_block_keeps_everything_and_gains_one() {
+        let out = splice_managed_block("# My rules\n\nBe careful.\n", "context");
+        assert!(out.contains("Be careful."));
+        assert!(out.contains(EXPORT_BEGIN));
+        assert_eq!(out.matches(EXPORT_BEGIN).count(), 1);
+    }
+
+    /// A truncated block is ambiguous. Appending is the safe reading; guessing
+    /// where it ended could delete real content.
+    #[test]
+    fn a_begin_marker_with_no_end_is_not_treated_as_a_block() {
+        let existing = format!("# Rules\n\n{EXPORT_BEGIN}\nhalf a block, no end marker\n");
+        let out = splice_managed_block(&existing, "fresh");
+
+        assert!(
+            out.contains("half a block, no end marker"),
+            "nothing was eaten"
+        );
+        assert!(out.contains("fresh"));
+        assert_eq!(out.matches(EXPORT_END).count(), 1);
+    }
+
+    #[test]
+    fn exporting_twice_does_not_grow_the_file() {
+        let once = splice_managed_block("# Rules\n", "a");
+        let twice = splice_managed_block(&once, "b");
+        assert_eq!(twice.matches(EXPORT_BEGIN).count(), 1);
+        assert!(twice.contains("# Rules"));
+        assert!(twice.contains("b") && !twice.contains("\na\n"));
+    }
+
+    #[test]
+    fn only_the_known_agent_files_are_writable() {
+        // Guards against being pointed at, say, src/main.rs.
+        assert!(AGENT_FILES.contains(&"CLAUDE.md"));
+        assert!(!AGENT_FILES.contains(&"package.json"));
+    }
+}

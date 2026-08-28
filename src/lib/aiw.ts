@@ -401,6 +401,9 @@ export const aiw = {
     invoke<{ id: string; name: string; context_window?: number }[]>('aiw_models', { providerId }),
   testRuns: (projectId?: string) => invoke<TestRun[]>('aiw_test_runs', { projectId }),
 
+  exportContext: (projectId: string, featureId: string, filename: string) =>
+    invoke<string>('aiw_export_context', { projectId, featureId, filename }),
+  agentFiles: () => invoke<string[]>('aiw_agent_files'),
   knowledgeTree: (projectId: string) => invoke<string[]>('aiw_knowledge_tree', { projectId }),
   readFile: (projectId: string, path: string) =>
     invoke<string>('aiw_read_file', { projectId, path }),

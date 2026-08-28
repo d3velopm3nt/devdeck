@@ -497,6 +497,41 @@ pub fn aiw_test_runs(ws: Ws, project_id: Option<String>) -> Vec<TestRun> {
     ws.test_runs(project_id.as_deref())
 }
 
+/// Write a feature's assembled context into an agent file at the project root
+/// (CLAUDE.md, AGENTS.md, .cursorrules), so any tool working in this repo gets
+/// the same narrowed view a DevDeck agent would.
+///
+/// Only the delimited DevDeck block is replaced — a hand-written file keeps
+/// everything else.
+#[tauri::command]
+pub fn aiw_export_context(
+    ws: Ws,
+    project_id: String,
+    feature_id: String,
+    filename: String,
+) -> Result<String, String> {
+    let p = ws
+        .project(&project_id)
+        .ok_or_else(|| format!("unknown project '{project_id}'"))?;
+    let deck = p.deck();
+    let active = ws.active_work_lines(&project_id, &feature_id);
+    let ctx = ContextService::assemble(&deck, &project_id, &feature_id, None, &active)?;
+    let name = deck
+        .feature(&feature_id)
+        .map(|f| f.meta.name)
+        .unwrap_or_else(|_| feature_id.clone());
+    ContextService::export_to_agent_file(&deck, &ctx, &name, &filename)
+}
+
+/// The agent files DevDeck knows how to write into.
+#[tauri::command]
+pub fn aiw_agent_files() -> Vec<String> {
+    super::context::AGENT_FILES
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
+}
+
 #[tauri::command]
 pub fn aiw_knowledge_tree(ws: Ws, project_id: String) -> Result<Vec<String>, String> {
     let p = ws

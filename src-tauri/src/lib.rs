@@ -839,6 +839,8 @@ pub fn run() {
             aiw::commands::aiw_set_permission,
             aiw::commands::aiw_providers,
             aiw::commands::aiw_test_runs,
+            aiw::commands::aiw_export_context,
+            aiw::commands::aiw_agent_files,
             aiw::commands::aiw_knowledge_tree,
             aiw::commands::aiw_read_file,
             aiw::commands::aiw_write_file,

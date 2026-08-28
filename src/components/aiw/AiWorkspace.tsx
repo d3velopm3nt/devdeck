@@ -904,6 +904,20 @@ function ContextInspector() {
       .catch((e) => setErr(e instanceof Error ? e.message : String(e)))
   }, [a.projectId, a.featureId])
 
+  const [exportTo, setExportTo] = useState('CLAUDE.md')
+  const [exported, setExported] = useState<{ ok: boolean; text: string } | null>(null)
+
+  const doExport = async () => {
+    if (!a.projectId || !a.featureId) return
+    setExported(null)
+    try {
+      const path = await aiw.exportContext(a.projectId, a.featureId, exportTo)
+      setExported({ ok: true, text: `Written to ${path}` })
+    } catch (e) {
+      setExported({ ok: false, text: e instanceof Error ? e.message : String(e) })
+    }
+  }
+
   const compare = async () => {
     if (!a.projectId || !a.featureId) return
     const base = a.commits[a.commits.length - 1]
@@ -944,6 +958,28 @@ function ContextInspector() {
         subtitle="Exactly what an agent receives when it starts work on this feature."
         right={
           <>
+            <div
+              className="flex items-center gap-1 rounded border border-line2 bg-soft px-1 py-0.5"
+              title="Write this feature's context into a file other agent tools already read"
+            >
+              <select
+                className="border-none bg-transparent px-1 py-0.5 text-[11px] text-body outline-none"
+                value={exportTo}
+                onChange={(e) => setExportTo(e.target.value)}
+              >
+                {['CLAUDE.md', 'AGENTS.md', '.cursorrules'].map((f) => (
+                  <option key={f} value={f}>
+                    {f}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="rounded px-1.5 py-0.5 text-[11px] text-dim hover:bg-hover hover:text-ink"
+                onClick={() => void doExport()}
+              >
+                Export
+              </button>
+            </div>
             <select
               className="input text-[11.5px]"
               value={a.featureId ?? ''}
@@ -968,6 +1004,23 @@ function ContextInspector() {
 
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1 overflow-auto p-5">
+          {exported && (
+            <div
+              className={`mb-3 rounded border px-3 py-2 text-[11.5px] leading-5 ${
+                exported.ok
+                  ? 'border-emerald-500/28 bg-emerald-500/6 text-ok'
+                  : 'border-red-500/30 bg-red-500/5 text-err'
+              }`}
+            >
+              {exported.text}
+              {exported.ok && (
+                <span className="ml-1 text-dim">
+                  — only the DevDeck block was replaced; anything else in that file is untouched.
+                </span>
+              )}
+            </div>
+          )}
+
           <div className="mb-4 rounded-md border border-line bg-raise px-4 py-3">
             <div className="mb-3 flex items-center gap-4">
               <Meta label="Feature" value={ctx.feature_id} />

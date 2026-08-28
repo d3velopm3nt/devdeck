@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react'
 import { Icon, type IconName } from '../../lib/icons'
 import { useAiw, type AiwPage } from '../../lib/aiwStore'
+import { Providers } from './Providers'
 import { CAPTURE_FEATURE, CAPTURE_PAGE } from '../../lib/devCapture'
 import {
   aiw,
@@ -1756,6 +1757,8 @@ export function AiWorkspace() {
       return <Knowledge />
     case 'tests':
       return <Tests />
+    case 'providers':
+      return <Providers />
     default:
       return <Overview />
   }

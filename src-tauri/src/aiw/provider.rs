@@ -32,6 +32,28 @@ pub struct ProviderHealth {
 }
 
 /// What the runtime asks a provider to do.
+/// The result of one tool call, as the next turn sees it.
+#[derive(Clone, Debug, Default)]
+pub struct Observation {
+    /// The provider's id for the call this answers. Empty for the mock, which
+    /// has no wire protocol to correlate with.
+    pub call_id: String,
+    pub tool: String,
+    pub action: String,
+    pub ok: bool,
+    pub output: String,
+}
+
+impl Observation {
+    pub fn text(&self) -> String {
+        if self.ok {
+            self.output.clone()
+        } else {
+            format!("ERROR: {}", self.output)
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct AgentRequest {
     pub agent_id: String,
@@ -49,8 +71,13 @@ pub struct AgentRequest {
     /// are already filtered by permission, so a read-only agent is never
     /// offered a write it would be refused.
     pub tools: Vec<ToolDefinition>,
-    /// Results of the tool calls made so far this turn, fed back in.
-    pub observations: Vec<String>,
+    /// Results of the tool calls made so far, fed back in.
+    ///
+    /// These carry the call they answer. A bare list of strings was enough for
+    /// a scripted mock and loses the link a real model needs: without the id it
+    /// cannot tell which result belongs to which call, and a turn with several
+    /// tool calls becomes guesswork.
+    pub observations: Vec<Observation>,
     /// Which turn of the loop this is, from 0.
     pub turn: u32,
 }
@@ -268,7 +295,10 @@ impl MockProvider {
                 actions: vec![AgentAction::Done {
                     summary: format!(
                         "Ran the suite. {}",
-                        req.observations.last().cloned().unwrap_or_default()
+                        req.observations
+                            .last()
+                            .map(|o| o.text())
+                            .unwrap_or_default()
                     ),
                 }],
                 complete: true,
@@ -288,7 +318,10 @@ impl MockProvider {
                 complete: false,
             },
             _ => {
-                let saw_outcome = req.observations.iter().any(|o| o.contains("outcome"));
+                let saw_outcome = req
+                    .observations
+                    .iter()
+                    .any(|o| o.text().contains("outcome"));
                 AgentResponse {
                     message: if saw_outcome {
                         "Implementation matches the server-authoritative decision.".into()
@@ -527,10 +560,36 @@ pub fn to_actions(calls: &[RawToolCall]) -> Vec<Result<AgentAction, (String, Str
 // Real providers
 // ---------------------------------------------------------------------------
 
+/// Cap a provider's error body so a huge HTML error page doesn't fill the UI.
+fn truncate(s: &str, n: usize) -> String {
+    if s.chars().count() <= n {
+        s.to_string()
+    } else {
+        s.chars().take(n).collect::<String>() + "…"
+    }
+}
+
+/// Where a provider's key lives in Windows Credential Manager.
+///
+/// `creds.rs` is the only place a secret exists in this codebase, so these
+/// configs hold the *target* to look one up by rather than the key itself. No
+/// struct that reaches SQLite, a log line or the frontend can then carry a key
+/// even by accident; it is fetched at call time and dropped straight after.
+pub fn key_target(provider_id: &str) -> String {
+    format!("devdeck:aiw:{provider_id}")
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct AnthropicConfig {
-    pub api_key: Option<String>,
+    /// Credential Manager target, not the key.
+    pub key_target: String,
     pub model: String,
+}
+
+impl AnthropicConfig {
+    fn api_key(&self) -> Option<String> {
+        crate::creds::get(&self.key_target)
+    }
 }
 
 /// Anthropic adapter.
@@ -572,7 +631,7 @@ impl LLMProvider for AnthropicProvider {
         ]
     }
     fn run(&self, _request: &AgentRequest) -> Result<AgentResponse, String> {
-        if self.config.api_key.is_none() {
+        if self.config.api_key().is_none() {
             return Err("Anthropic provider has no API key configured".into());
         }
         // Deliberately not implemented in this slice. It returns an explicit
@@ -581,7 +640,7 @@ impl LLMProvider for AnthropicProvider {
         Err("Anthropic transport not implemented in this build — use the Mock provider".into())
     }
     fn health(&self) -> ProviderHealth {
-        let configured = self.config.api_key.is_some();
+        let configured = crate::creds::exists(&self.config.key_target);
         ProviderHealth {
             ok: false,
             configured,
@@ -610,16 +669,22 @@ impl LLMProvider for AnthropicProvider {
 pub struct OpenAICompatibleConfig {
     pub name: String,
     pub base_url: String,
-    /// Read by the HTTP transport when one is implemented. Present now because
-    /// the whole point of this struct is that adding a provider is
-    /// configuration rather than code.
-    #[allow(dead_code)]
-    pub api_key: Option<String>,
+    /// Credential Manager target, not the key. See `key_target`.
+    pub key_target: String,
     pub model: String,
-    #[allow(dead_code)]
     pub headers: Vec<(String, String)>,
-    #[allow(dead_code)]
     pub timeout_secs: Option<u64>,
+}
+
+impl OpenAICompatibleConfig {
+    fn api_key(&self) -> Option<String> {
+        crate::creds::get(&self.key_target)
+    }
+
+    /// `{base_url}/chat/completions`, tolerating a trailing slash.
+    pub fn endpoint(&self) -> String {
+        format!("{}/chat/completions", self.base_url.trim_end_matches('/'))
+    }
 }
 
 pub struct OpenAICompatibleProvider {
@@ -630,6 +695,114 @@ impl OpenAICompatibleProvider {
     pub const ID: &'static str = "openai-compatible";
     pub fn new(config: OpenAICompatibleConfig) -> Self {
         Self { config }
+    }
+
+    /// The chat messages for one turn.
+    ///
+    /// Assembled context is a *system* message, not a user one: it is standing
+    /// instruction rather than a request, and models weight the two
+    /// differently. Tool results come back as `tool` messages carrying the id
+    /// of the call they answer — which is what the structured observations are
+    /// for.
+    pub fn messages(&self, request: &AgentRequest) -> serde_json::Value {
+        let mut msgs = vec![
+            serde_json::json!({
+                "role": "system",
+                "content": format!(
+                    "{}\n\n# Context\n\n{}",
+                    request.system.trim(),
+                    request.context.trim()
+                ),
+            }),
+            serde_json::json!({
+                "role": "user",
+                "content": format!("Your task: {}", request.goal),
+            }),
+        ];
+
+        for o in &request.observations {
+            if o.call_id.is_empty() {
+                // No id to correlate with, so it can only be narration.
+                msgs.push(serde_json::json!({
+                    "role": "user",
+                    "content": format!("Result of {}.{}: {}", o.tool, o.action, o.text()),
+                }));
+            } else {
+                msgs.push(serde_json::json!({
+                    "role": "tool",
+                    "tool_call_id": o.call_id,
+                    "content": o.text(),
+                }));
+            }
+        }
+
+        serde_json::Value::Array(msgs)
+    }
+
+    /// POST a body and return the response text, or a message worth showing.
+    fn post(&self, body: &serde_json::Value) -> Result<String, String> {
+        let timeout = std::time::Duration::from_secs(self.config.timeout_secs.unwrap_or(120));
+        let client = reqwest::blocking::Client::builder()
+            .timeout(timeout)
+            .build()
+            .map_err(|e| format!("could not build an HTTP client: {e}"))?;
+
+        let mut req = client
+            .post(self.config.endpoint())
+            .header("content-type", "application/json");
+        // Custom headers first: some gateways authenticate by header, and a
+        // bearer token should only be added on top of whatever they need.
+        for (k, v) in &self.config.headers {
+            req = req.header(k.as_str(), v.as_str());
+        }
+        if let Some(key) = self.config.api_key() {
+            req = req.bearer_auth(key);
+        }
+
+        let response = req
+            .json(body)
+            .send()
+            .map_err(|e| format!("{}: {e}", self.config.endpoint()))?;
+
+        let status = response.status();
+        let text = response
+            .text()
+            .map_err(|e| format!("could not read the response body: {e}"))?;
+
+        if !status.is_success() {
+            // The provider's own message says far more than a status code
+            // ("model not found", "insufficient quota"), so it is surfaced
+            // rather than swallowed.
+            return Err(format!(
+                "{} returned {status}: {}",
+                self.name(),
+                truncate(&text, 400)
+            ));
+        }
+        Ok(text)
+    }
+
+    /// A cheap round trip to prove the endpoint, key and model all work.
+    /// This is what the Test button in the UI calls.
+    pub fn probe(&self) -> Result<String, String> {
+        let body = serde_json::json!({
+            "model": self.config.model,
+            "messages": [{ "role": "user", "content": "Reply with the single word: ready" }],
+            "max_tokens": 16,
+        });
+        let text = self.post(&body)?;
+        let json: serde_json::Value = serde_json::from_str(&text)
+            .map_err(|e| format!("{} returned invalid JSON: {e}", self.name()))?;
+        let (reply, _) = from_openai_response(&json);
+        Ok(if reply.trim().is_empty() {
+            format!("{} answered.", self.config.model)
+        } else {
+            format!(
+                "{} answered: {}",
+                self.config.model,
+                truncate(reply.trim(), 120)
+            )
+        })
     }
 }
 
@@ -655,24 +828,73 @@ impl LLMProvider for OpenAICompatibleProvider {
             }]
         }
     }
-    fn run(&self, _request: &AgentRequest) -> Result<AgentResponse, String> {
+    fn run(&self, request: &AgentRequest) -> Result<AgentResponse, String> {
         if self.config.base_url.is_empty() {
             return Err("OpenAI-compatible provider has no base URL configured".into());
         }
-        Err(
-            "OpenAI-compatible transport not implemented in this build — use the Mock provider"
-                .into(),
-        )
+        if self.config.model.is_empty() {
+            return Err("OpenAI-compatible provider has no model configured".into());
+        }
+
+        let body = serde_json::json!({
+            "model": self.config.model,
+            "messages": self.messages(request),
+            "tools": to_openai_tools(&request.tools),
+            "tool_choice": "auto",
+        });
+
+        let text = self.post(&body)?;
+        let json: serde_json::Value = serde_json::from_str(&text)
+            .map_err(|e| format!("{} returned invalid JSON: {e}", self.name()))?;
+
+        let (message, calls) = from_openai_response(&json);
+        let mut actions = Vec::new();
+        let mut rejected = Vec::new();
+        for outcome in to_actions(&calls) {
+            match outcome {
+                Ok(a) => actions.push(a),
+                // A call that does not parse is fed back as text so the model
+                // can correct itself, rather than failing the whole turn.
+                Err((id, why)) => rejected.push(format!("tool call {id} was rejected: {why}")),
+            }
+        }
+
+        // Nothing to run and nothing rejected means the model is finished.
+        let complete = actions.is_empty() && rejected.is_empty();
+        if complete && !message.trim().is_empty() {
+            actions.push(AgentAction::Done {
+                summary: message.clone(),
+            });
+        }
+
+        Ok(AgentResponse {
+            message: if rejected.is_empty() {
+                message
+            } else {
+                format!("{message}\n{}", rejected.join("\n"))
+            },
+            actions,
+            complete,
+        })
     }
     fn health(&self) -> ProviderHealth {
+        // A key is optional here: local servers and some gateways take none.
         let configured = !self.config.base_url.is_empty() && !self.config.model.is_empty();
         ProviderHealth {
-            ok: false,
+            // Configured is as much as can be claimed without a round trip.
+            // "Test" in the UI is what actually proves it.
+            ok: configured,
             configured,
             detail: if configured {
                 format!(
-                    "Configured for {} ({}); transport not implemented in this build.",
-                    self.config.name, self.config.model
+                    "{} at {} — {}",
+                    self.config.model,
+                    self.config.base_url,
+                    if self.config.api_key().is_some() {
+                        "key saved"
+                    } else {
+                        "no key (fine for a local server)"
+                    }
                 )
             } else {
                 "Base URL and model are required.".into()
@@ -684,6 +906,9 @@ impl LLMProvider for OpenAICompatibleProvider {
 /// Holds the providers this install knows about.
 pub struct ProviderRegistry {
     providers: Vec<Box<dyn LLMProvider>>,
+    /// A typed copy of the OpenAI-compatible provider's config, so a probe can
+    /// be run without downcasting a trait object.
+    openai: Option<OpenAICompatibleConfig>,
 }
 
 impl Default for ProviderRegistry {
@@ -698,12 +923,23 @@ impl ProviderRegistry {
     pub fn new() -> Self {
         Self {
             providers: vec![Box::new(MockProvider)],
+            openai: None,
         }
     }
 
     pub fn register(&mut self, p: Box<dyn LLMProvider>) {
         self.providers.retain(|e| e.id() != p.id());
         self.providers.push(p);
+    }
+
+    /// Remember the OpenAI-compatible config alongside the trait object.
+    pub fn register_openai(&mut self, config: OpenAICompatibleConfig) {
+        self.openai = Some(config.clone());
+        self.register(Box::new(OpenAICompatibleProvider::new(config)));
+    }
+
+    pub fn openai_compatible(&self) -> Option<OpenAICompatibleProvider> {
+        self.openai.clone().map(OpenAICompatibleProvider::new)
     }
 
     pub fn get(&self, id: &str) -> Option<&dyn LLMProvider> {
@@ -808,16 +1044,26 @@ Offline sync."
         assert!(!h.ok && !h.configured, "no key must not look configured");
         assert!(a.run(&req("developer", "x", 0)).is_err());
 
+        // Anthropic's transport is still unimplemented, so it reports not-ok
+        // even with a key. OpenAI-compatible now has one, so a configured
+        // instance reports ok — meaning "pointed somewhere plausible", which is
+        // as much as can be claimed without a round trip. Proving it is what
+        // the Test button does.
         let o = OpenAICompatibleProvider::new(OpenAICompatibleConfig {
             name: "OpenRouter".into(),
             base_url: "https://openrouter.ai/api/v1".into(),
             model: "some/model".into(),
             ..Default::default()
         });
-        // Configured but not implemented — and it says exactly that, rather
-        // than pretending to be ok.
         assert!(o.health().configured);
-        assert!(!o.health().ok);
+        assert!(o.health().ok);
+
+        let unset = OpenAICompatibleProvider::new(OpenAICompatibleConfig::default());
+        assert!(
+            !unset.health().configured,
+            "no base URL or model is not configured"
+        );
+        assert!(!unset.health().ok);
     }
 
     #[test]
@@ -987,5 +1233,166 @@ mod wire_tests {
         );
         assert!(!json.contains("terminal_run"));
         assert!(json.contains("files_read"));
+    }
+}
+
+#[cfg(test)]
+mod transport_tests {
+    use super::*;
+
+    fn cfg() -> OpenAICompatibleConfig {
+        OpenAICompatibleConfig {
+            name: "OpenRouter".into(),
+            base_url: "https://openrouter.ai/api/v1".into(),
+            // A target that will not exist, so no key is found and nothing in
+            // these tests can depend on a real credential.
+            key_target: key_target("test-openai-none"),
+            model: "anthropic/claude-sonnet-4.5".into(),
+            headers: vec![("X-Team".into(), "platform".into())],
+            timeout_secs: Some(30),
+        }
+    }
+
+    fn req() -> AgentRequest {
+        AgentRequest {
+            agent_id: "dev-a".into(),
+            role: "developer".into(),
+            model: "anthropic/claude-sonnet-4.5".into(),
+            system: "You implement work items.".into(),
+            context: "## Feature context\n\nOffline sync.".into(),
+            goal: "Implement conflict resolution".into(),
+            tools: crate::aiw::tools::definitions_for("dev-a", &{
+                let mut m = crate::aiw::tools::PermissionMatrix::default();
+                for t in crate::aiw::tools::registry() {
+                    m.set("dev-a", &t.id, crate::aiw::tools::Permission::Full);
+                }
+                m
+            }),
+            observations: vec![],
+            turn: 0,
+        }
+    }
+
+    #[test]
+    fn the_endpoint_tolerates_a_trailing_slash() {
+        let mut c = cfg();
+        assert_eq!(
+            c.endpoint(),
+            "https://openrouter.ai/api/v1/chat/completions"
+        );
+        c.base_url = "https://openrouter.ai/api/v1/".into();
+        assert_eq!(
+            c.endpoint(),
+            "https://openrouter.ai/api/v1/chat/completions"
+        );
+    }
+
+    /// Assembled context belongs in the system message, not a user turn: it is
+    /// standing instruction rather than a request, and models weight them
+    /// differently.
+    #[test]
+    fn context_is_a_system_message_and_the_goal_is_the_user_turn() {
+        let p = OpenAICompatibleProvider::new(cfg());
+        let msgs = p.messages(&req());
+        let msgs = msgs.as_array().unwrap();
+
+        assert_eq!(msgs[0]["role"], "system");
+        let system = msgs[0]["content"].as_str().unwrap();
+        assert!(system.contains("You implement work items"));
+        assert!(
+            system.contains("Offline sync"),
+            "context must be in the system message"
+        );
+
+        assert_eq!(msgs[1]["role"], "user");
+        assert!(msgs[1]["content"]
+            .as_str()
+            .unwrap()
+            .contains("Implement conflict resolution"));
+    }
+
+    /// The reason observations are structured: a result must be linked to the
+    /// call it answers, or a turn with several tool calls is guesswork.
+    #[test]
+    fn a_tool_result_is_returned_against_the_call_it_answers() {
+        let p = OpenAICompatibleProvider::new(cfg());
+        let mut r = req();
+        r.observations = vec![
+            Observation {
+                call_id: "call_abc".into(),
+                tool: "files".into(),
+                action: "read".into(),
+                ok: true,
+                output: "export type SyncResult = {}".into(),
+            },
+            // No id — the mock's shape. It can only be narration.
+            Observation {
+                call_id: String::new(),
+                tool: "git".into(),
+                action: "status".into(),
+                ok: false,
+                output: "not a repo".into(),
+            },
+        ];
+
+        let msgs = p.messages(&r);
+        let msgs = msgs.as_array().unwrap();
+        let tool_msg = msgs.iter().find(|m| m["role"] == "tool").unwrap();
+        assert_eq!(tool_msg["tool_call_id"], "call_abc");
+        assert!(tool_msg["content"].as_str().unwrap().contains("SyncResult"));
+
+        let narrated = msgs
+            .iter()
+            .filter(|m| m["role"] == "user")
+            .find(|m| m["content"].as_str().unwrap().contains("git.status"))
+            .expect("an un-correlated result is narrated instead");
+        assert!(
+            narrated["content"]
+                .as_str()
+                .unwrap()
+                .contains("ERROR: not a repo"),
+            "a failed result must read as a failure"
+        );
+    }
+
+    #[test]
+    fn an_unconfigured_transport_refuses_before_touching_the_network() {
+        let mut c = cfg();
+        c.base_url.clear();
+        let e = OpenAICompatibleProvider::new(c).run(&req()).unwrap_err();
+        assert!(e.contains("base URL"), "got: {e}");
+
+        let mut c = cfg();
+        c.model.clear();
+        let e = OpenAICompatibleProvider::new(c).run(&req()).unwrap_err();
+        assert!(e.contains("model"), "got: {e}");
+    }
+
+    #[test]
+    fn a_configured_provider_reports_what_it_is_pointed_at() {
+        let h = OpenAICompatibleProvider::new(cfg()).health();
+        assert!(h.configured);
+        assert!(h.detail.contains("claude-sonnet-4.5"));
+        assert!(h.detail.contains("openrouter.ai"));
+        // No key was stored for this target, and it says so rather than
+        // implying one is present.
+        assert!(h.detail.contains("no key"), "got: {}", h.detail);
+    }
+
+    #[test]
+    fn the_key_lives_in_credential_manager_not_in_the_config() {
+        // The only key-shaped thing on the config is a lookup target. This is
+        // the property that keeps secrets out of SQLite, logs and IPC.
+        let c = cfg();
+        let debug = format!("{c:?}");
+        assert!(debug.contains("key_target"));
+        assert!(
+            !debug.contains("sk-") && !debug.to_lowercase().contains("api_key"),
+            "a config must not carry a secret: {debug}"
+        );
+        assert_eq!(
+            key_target("openai-compatible"),
+            "devdeck:aiw:openai-compatible"
+        );
     }
 }

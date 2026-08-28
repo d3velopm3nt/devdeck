@@ -825,11 +825,105 @@ pub fn aiw_changed_since(ws: Ws, session_id: String) -> Result<Vec<String>, Stri
     Ok(ContextService::changed_since(&project.deck(), &checkpoint))
 }
 
+/// Where provider configuration (not keys) is remembered.
+pub const PROVIDERS_KEY: &str = "aiw.providerConfigs";
+
 /// Point DevDeck at a real provider. Nothing else in the workspace changes —
 /// same runtime, same tools, same context, same events.
+///
+/// The key goes to Windows Credential Manager inside `configure_provider`; what
+/// gets written here is only the non-secret configuration.
 #[tauri::command]
-pub fn aiw_configure_provider(ws: Ws, config: ProviderConfig) -> Result<(), String> {
-    ws.configure_provider(config)
+pub fn aiw_configure_provider(
+    ws: Ws,
+    db: tauri::State<crate::db::Db>,
+    config: ProviderConfig,
+) -> Result<(), String> {
+    ws.configure_provider(config.clone())?;
+
+    // Replace this kind's entry, keeping the others.
+    let mut saved = {
+        let conn = db.0.lock().unwrap();
+        saved_provider_configs(&conn)
+    };
+    saved.retain(|c| c.kind != config.kind);
+    let mut stored = config;
+    // Belt and braces: the field is skip_serializing, and it is cleared here
+    // too. A key must not reach the database by any route.
+    stored.api_key = None;
+    saved.push(stored);
+
+    let json = serde_json::to_string(&saved).map_err(|e| e.to_string())?;
+    let conn = db.0.lock().unwrap();
+    crate::db::setting_set_conn(&conn, PROVIDERS_KEY, &json)
+}
+
+pub fn saved_provider_configs(conn: &rusqlite::Connection) -> Vec<ProviderConfig> {
+    crate::db::setting_get_conn(conn, PROVIDERS_KEY)
+        .ok()
+        .flatten()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+/// The saved configuration, for the setup form. Never includes a key — the UI
+/// is told *that* one is saved, never what it is.
+#[derive(Serialize, Clone, Debug)]
+pub struct ProviderSetup {
+    pub kind: String,
+    pub name: String,
+    pub base_url: String,
+    pub model: String,
+    pub headers: Vec<(String, String)>,
+    pub timeout_secs: Option<u64>,
+    /// Whether a key is stored in Credential Manager for this provider.
+    pub has_key: bool,
+}
+
+#[tauri::command]
+pub fn aiw_provider_setups(db: tauri::State<crate::db::Db>) -> Vec<ProviderSetup> {
+    let conn = db.0.lock().unwrap();
+    saved_provider_configs(&conn)
+        .into_iter()
+        .map(|c| ProviderSetup {
+            has_key: crate::creds::exists(&super::provider::key_target(&c.kind)),
+            kind: c.kind,
+            name: c.name,
+            base_url: c.base_url,
+            model: c.model,
+            headers: c.headers,
+            timeout_secs: c.timeout_secs,
+        })
+        .collect()
+}
+
+/// Actually call the provider. `health()` can only say "configured"; this is
+/// the difference between believing it works and knowing.
+#[tauri::command]
+pub fn aiw_provider_test(ws: Ws, provider_id: String) -> Result<String, String> {
+    use super::provider::OpenAICompatibleProvider;
+    let reg = ws.providers.lock().unwrap();
+    let p = reg
+        .get(&provider_id)
+        .ok_or_else(|| format!("'{provider_id}' is not configured"))?;
+
+    if provider_id == OpenAICompatibleProvider::ID {
+        // Downcast-free: ask the registry for the concrete probe.
+        return ws.probe_openai_compatible();
+    }
+    let h = p.health();
+    if h.ok {
+        Ok(h.detail)
+    } else {
+        Err(h.detail)
+    }
+}
+
+/// Forget a provider's key. The configuration stays so the form still shows
+/// what was set up.
+#[tauri::command]
+pub fn aiw_provider_forget_key(ws: Ws, provider_id: String) -> bool {
+    ws.forget_provider_key(&provider_id)
 }
 
 /// The application the process tool started, if any.

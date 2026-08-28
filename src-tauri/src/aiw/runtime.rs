@@ -280,7 +280,7 @@ impl AgentRuntime {
         let deck = project.deck();
 
         // -- 5. the loop ---------------------------------------------------
-        let mut observations: Vec<String> = Vec::new();
+        let mut observations: Vec<super::provider::Observation> = Vec::new();
         let mut files_touched: Vec<String> = Vec::new();
         let mut summary = String::new();
         let mut turns = 0u32;
@@ -335,10 +335,18 @@ impl AgentRuntime {
                             project
                                 .tools
                                 .execute(&ws.bus, &agent.id, &scope, call, Some(&claimed));
-                        observations.push(if result.ok {
-                            result.output.clone()
-                        } else {
-                            format!("ERROR: {}", result.error.clone().unwrap_or_default())
+                        observations.push(super::provider::Observation {
+                            // The mock has no wire protocol to correlate with;
+                            // a real provider's calls carry their own id.
+                            call_id: String::new(),
+                            tool: call.tool.clone(),
+                            action: call.action.clone(),
+                            ok: result.ok,
+                            output: if result.ok {
+                                result.output.clone()
+                            } else {
+                                result.error.clone().unwrap_or_default()
+                            },
                         });
                         ws.update_session(&session_id, |s| {
                             s.transcript.push(TranscriptEntry {
@@ -493,7 +501,13 @@ impl AgentRuntime {
                                     },
                                 );
                             }
-                            Err(e) => observations.push(format!("ERROR: {e}")),
+                            Err(e) => observations.push(super::provider::Observation {
+                                call_id: String::new(),
+                                tool: "decision".into(),
+                                action: "record".into(),
+                                ok: false,
+                                output: e,
+                            }),
                         }
                     }
 
@@ -512,7 +526,13 @@ impl AgentRuntime {
                                     .caused_by(&claimed),
                                 );
                             }
-                            Err(e) => observations.push(format!("ERROR: {e}")),
+                            Err(e) => observations.push(super::provider::Observation {
+                                call_id: String::new(),
+                                tool: "decision".into(),
+                                action: "record".into(),
+                                ok: false,
+                                output: e,
+                            }),
                         }
                     }
 

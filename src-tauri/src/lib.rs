@@ -570,6 +570,14 @@ pub fn run() {
             let n = aiw_workspace.restore(&saved);
             eprintln!("[aiw] restored {n} of {} projects", saved.len());
         }
+        // Re-register configured providers. Keys are not here -- each provider
+        // looks its own up in Credential Manager when it needs it.
+        for cfg in aiw::commands::saved_provider_configs(&conn) {
+            let kind = cfg.kind.clone();
+            if let Err(e) = aiw_workspace.configure_provider(cfg) {
+                eprintln!("[aiw] could not restore provider '{kind}': {e}");
+            }
+        }
     }
     let aiw_for_setup = aiw_workspace.clone();
 
@@ -834,6 +842,9 @@ pub fn run() {
             aiw::commands::aiw_run_demo,
             aiw::commands::aiw_models,
             aiw::commands::aiw_configure_provider,
+            aiw::commands::aiw_provider_setups,
+            aiw::commands::aiw_provider_test,
+            aiw::commands::aiw_provider_forget_key,
             aiw::commands::aiw_app_status,
             aiw::commands::aiw_changed_since,
             aiw::commands::aiw_reset,

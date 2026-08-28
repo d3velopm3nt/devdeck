@@ -289,6 +289,29 @@ export interface ProviderHealth {
   configured: boolean
 }
 
+/// Saved provider configuration. Never carries a key — the UI is told only
+/// *that* one is stored, never what it is.
+export interface ProviderSetup {
+  kind: string
+  name: string
+  base_url: string
+  model: string
+  headers: [string, string][]
+  timeout_secs?: number
+  has_key: boolean
+}
+
+export interface ProviderConfigInput {
+  kind: string
+  name: string
+  baseUrl: string
+  /** Sent once, stored in Windows Credential Manager. Empty = keep the saved one. */
+  apiKey?: string
+  model: string
+  headers: [string, string][]
+  timeoutSecs?: number
+}
+
 export interface DemoResult {
   tyrex_root: string
   assetx_root: string
@@ -356,6 +379,24 @@ export const aiw = {
   setPermission: (agentId: string, tool: string, permission: string) =>
     invoke<void>('aiw_set_permission', { agentId, tool, permission }),
   providers: () => invoke<[string, string, ProviderHealth][]>('aiw_providers'),
+  providerSetups: () => invoke<ProviderSetup[]>('aiw_provider_setups'),
+  configureProvider: (c: ProviderConfigInput) =>
+    invoke<void>('aiw_configure_provider', {
+      config: {
+        kind: c.kind,
+        name: c.name,
+        base_url: c.baseUrl,
+        api_key: c.apiKey ?? null,
+        model: c.model,
+        headers: c.headers,
+        timeout_secs: c.timeoutSecs ?? null,
+      },
+    }),
+  testProvider: (providerId: string) => invoke<string>('aiw_provider_test', { providerId }),
+  forgetProviderKey: (providerId: string) =>
+    invoke<boolean>('aiw_provider_forget_key', { providerId }),
+  models: (providerId: string) =>
+    invoke<{ id: string; name: string; context_window?: number }[]>('aiw_models', { providerId }),
   testRuns: (projectId?: string) => invoke<TestRun[]>('aiw_test_runs', { projectId }),
 
   knowledgeTree: (projectId: string) => invoke<string[]>('aiw_knowledge_tree', { projectId }),

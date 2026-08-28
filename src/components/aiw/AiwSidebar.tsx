@@ -19,6 +19,7 @@ const SECTIONS: Array<{ page: AiwPage; icon: IconName; label: string }> = [
   { page: 'tests', icon: 'ok', label: 'Tests' },
   { page: 'knowledge', icon: 'note', label: 'Knowledge' },
   { page: 'tools', icon: 'tool', label: 'Tools' },
+  { page: 'providers', icon: 'ai', label: 'Providers' },
 ]
 
 export function AiwSidebar() {

@@ -37,7 +37,7 @@ import {
 export type AiwPage =
   | 'overview' | 'features' | 'feature' | 'context' | 'agents'
   | 'conflicts' | 'activity' | 'decisions' | 'git' | 'tools'
-  | 'knowledge' | 'tests'
+  | 'knowledge' | 'tests' | 'providers'
 
 interface AiwState {
   ready: boolean

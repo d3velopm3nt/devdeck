@@ -19,8 +19,7 @@ use super::context::{
 use super::deck::Deck;
 use super::events::{new_id, EventBus, EventType, SharedBus};
 use super::provider::{
-    AnthropicConfig, AnthropicProvider, OpenAICompatibleConfig, OpenAICompatibleProvider,
-    ProviderRegistry,
+    AnthropicConfig, AnthropicProvider, OpenAICompatibleConfig, ProviderRegistry,
 };
 use super::tools::{Permission, PermissionMatrix, ToolService};
 
@@ -136,7 +135,10 @@ pub struct ProviderConfig {
     pub name: String,
     #[serde(default)]
     pub base_url: String,
-    #[serde(default)]
+    /// Supplied once when configuring; moved straight into Credential Manager
+    /// and never persisted. `skip_serializing` so it cannot be written back out
+    /// by accident.
+    #[serde(default, skip_serializing)]
     pub api_key: Option<String>,
     #[serde(default)]
     pub model: String,
@@ -260,12 +262,23 @@ impl Workspace {
 
     /// Point the workspace at a real LLM. Everything above this line is
     /// unchanged by it — that is the claim the provider seam exists to make.
+    ///
+    /// The key, if one was supplied, goes to Windows Credential Manager and is
+    /// dropped here. It is never written to SQLite, never returned over IPC and
+    /// never kept in the provider's config — only the target to look it up by.
     pub fn configure_provider(&self, cfg: ProviderConfig) -> Result<(), String> {
+        let target = super::provider::key_target(&cfg.kind);
+        // An empty key means "leave whatever is saved alone", so someone can
+        // change the model without retyping their key.
+        if let Some(k) = cfg.api_key.as_deref().filter(|k| !k.is_empty()) {
+            crate::creds::set(&target, &cfg.kind, k)?;
+        }
+
         let mut reg = self.providers.lock().unwrap();
         match cfg.kind.as_str() {
             "anthropic" => {
                 reg.register(Box::new(AnthropicProvider::new(AnthropicConfig {
-                    api_key: cfg.api_key.filter(|k| !k.is_empty()),
+                    key_target: target,
                     model: cfg.model,
                 })));
                 Ok(())
@@ -274,20 +287,35 @@ impl Workspace {
                 if cfg.base_url.trim().is_empty() {
                     return Err("an OpenAI-compatible provider needs a base URL".into());
                 }
-                reg.register(Box::new(OpenAICompatibleProvider::new(
-                    OpenAICompatibleConfig {
-                        name: cfg.name,
-                        base_url: cfg.base_url,
-                        api_key: cfg.api_key.filter(|k| !k.is_empty()),
-                        model: cfg.model,
-                        headers: cfg.headers,
-                        timeout_secs: cfg.timeout_secs,
-                    },
-                )));
+                reg.register_openai(OpenAICompatibleConfig {
+                    name: cfg.name,
+                    base_url: cfg.base_url,
+                    key_target: target,
+                    model: cfg.model,
+                    headers: cfg.headers,
+                    timeout_secs: cfg.timeout_secs,
+                });
                 Ok(())
             }
             other => Err(format!("unknown provider kind '{other}'")),
         }
+    }
+
+    /// Run the OpenAI-compatible provider's round-trip probe, if one is
+    /// configured. Kept here because the registry owns the concrete types;
+    /// commands should not be downcasting trait objects.
+    pub fn probe_openai_compatible(&self) -> Result<String, String> {
+        let reg = self.providers.lock().unwrap();
+        match reg.openai_compatible() {
+            Some(p) => p.probe(),
+            None => Err("no OpenAI-compatible provider is configured".into()),
+        }
+    }
+
+    /// Forget a provider's saved key. The configuration stays, so the form
+    /// still shows what was set up — only the secret goes.
+    pub fn forget_provider_key(&self, kind: &str) -> bool {
+        crate::creds::delete(&super::provider::key_target(kind))
     }
 
     // -- projects ---------------------------------------------------------

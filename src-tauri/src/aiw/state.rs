@@ -336,6 +336,30 @@ impl Workspace {
     /// Run the OpenAI-compatible provider's round-trip probe, if one is
     /// configured. Kept here because the registry owns the concrete types;
     /// commands should not be downcasting trait objects.
+    /// What a provider offers, asked of the provider itself.
+    ///
+    /// Falls back to the built-in list when the lookup fails, and says so: an
+    /// empty dropdown is useless, and a stale one presented as fresh is worse
+    /// than useless. The lock is released before the request, for the same
+    /// reason every other call here does.
+    pub fn model_catalog(&self, id: &str) -> super::provider::ModelCatalog {
+        let p = { self.providers.lock().unwrap().get(id) };
+        let Some(p) = p else {
+            return super::provider::ModelCatalog::fallback(
+                Vec::new(),
+                format!("'{id}' is not configured"),
+            );
+        };
+        match p.fetch_models() {
+            Ok(models) if !models.is_empty() => super::provider::ModelCatalog::live(models),
+            Ok(_) => super::provider::ModelCatalog::fallback(
+                p.list_models(),
+                "the provider returned an empty list",
+            ),
+            Err(e) => super::provider::ModelCatalog::fallback(p.list_models(), e),
+        }
+    }
+
     /// Make a real request against a configured provider, for the Test button.
     ///
     /// The lock is taken once, only to clone the concrete provider out, and is

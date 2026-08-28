@@ -13,6 +13,7 @@
 import { useEffect, useState } from 'react'
 import { Icon } from '../../lib/icons'
 import { aiw, type ProviderHealth, type ProviderSetup } from '../../lib/aiw'
+import { ModelPicker } from './ModelPicker'
 
 /** Abstract marks in each provider's rough hue — recognisable in a grid
  *  without borrowing anyone's trademark. Swap for real logos with a licence. */
@@ -451,13 +452,27 @@ export function ProviderCards({ onChanged }: { onChanged?: () => void }) {
 
           <div className="mb-3">
             <Label>Model</Label>
-            <input
-              className="input w-full font-mono text-[11.5px]"
-              value={model}
-              placeholder={def.model}
-              onChange={(e) => setModel(e.target.value)}
-            />
-            <Hint>{def.modelHint}</Hint>
+            {/* The lookup needs a configured provider to ask. Before the first
+                save there is nothing to ask, so the field stays plain text
+                rather than showing an empty dropdown and a failed lookup. */}
+            {connected ? (
+              <ModelPicker
+                providerId={def.id}
+                value={model}
+                onChange={setModel}
+                hint={def.modelHint}
+              />
+            ) : (
+              <>
+                <input
+                  className="input w-full font-mono text-[11.5px]"
+                  value={model}
+                  placeholder={def.model}
+                  onChange={(e) => setModel(e.target.value)}
+                />
+                <Hint>{def.modelHint} Save once and the list becomes selectable.</Hint>
+              </>
+            )}
           </div>
 
           {!def.local && (

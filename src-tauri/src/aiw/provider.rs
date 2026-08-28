@@ -145,10 +145,55 @@ pub struct AgentResponse {
 /// `run` is one turn, not one session: the runtime owns the loop so that tool
 /// results, context changes and checkpoints are handled identically no matter
 /// who is answering.
+/// What a provider offers, and where the answer came from.
+///
+/// `live` is the load-bearing field. Every provider ships a small built-in list
+/// so the UI is never empty, and presenting that as if it had been fetched
+/// would be the same lie the update checker used to tell — a failed lookup
+/// reading as a successful one. When a fetch fails you get the built-in list
+/// *and* the reason, and the UI says so.
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct ModelCatalog {
+    pub models: Vec<ModelInfo>,
+    /// True only when these came back from the provider just now.
+    pub live: bool,
+    /// Why they did not, when they did not.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub note: String,
+}
+
+impl ModelCatalog {
+    pub fn live(models: Vec<ModelInfo>) -> Self {
+        Self {
+            models,
+            live: true,
+            note: String::new(),
+        }
+    }
+
+    pub fn fallback(models: Vec<ModelInfo>, why: impl Into<String>) -> Self {
+        Self {
+            models,
+            live: false,
+            note: why.into(),
+        }
+    }
+}
+
 pub trait LLMProvider: Send + Sync {
     fn id(&self) -> &str;
     fn name(&self) -> &str;
+    /// The built-in list. Always available, never a network call.
     fn list_models(&self) -> Vec<ModelInfo>;
+
+    /// Ask the provider what it actually offers.
+    ///
+    /// Defaults to "there is no directory to ask", which is the truth for the
+    /// mock and for anything that does not publish one — better than silently
+    /// handing back the built-in list and calling it a lookup.
+    fn fetch_models(&self) -> Result<Vec<ModelInfo>, String> {
+        Err("this provider does not publish a model list".into())
+    }
     fn run(&self, request: &AgentRequest) -> Result<AgentResponse, String>;
 
     /// Same turn, but reporting visible text as it arrives.
@@ -628,6 +673,80 @@ pub struct RawToolCall {
 /// Text blocks become the message; `tool_use` blocks become calls. A response
 /// with neither is not an error — it is a model that had nothing to do.
 #[allow(dead_code)]
+/// `{"data":[{"id":"...","name":"...","context_length":123}]}`
+///
+/// Sorted by id, because the order providers return is neither stable nor
+/// meaningful and a list that reshuffles between refreshes is hard to use.
+pub fn parse_openai_models(body: &serde_json::Value) -> Vec<ModelInfo> {
+    let Some(list) = body.get("data").and_then(|d| d.as_array()) else {
+        return Vec::new();
+    };
+    let mut out: Vec<ModelInfo> = list
+        .iter()
+        .filter_map(|m| {
+            let id = m.get("id").and_then(|i| i.as_str())?.to_string();
+            if id.is_empty() {
+                return None;
+            }
+            let name = m
+                .get("name")
+                .and_then(|n| n.as_str())
+                .filter(|n| !n.is_empty())
+                .unwrap_or(&id)
+                .to_string();
+            // OpenRouter says `context_length`; OpenAI-shaped servers often say
+            // nothing at all. Absent is absent, not zero.
+            let context_window = m
+                .get("context_length")
+                .or_else(|| m.get("context_window"))
+                .and_then(|c| c.as_u64())
+                .map(|c| c as u32)
+                .filter(|c| *c > 0);
+            Some(ModelInfo {
+                id,
+                name,
+                context_window,
+            })
+        })
+        .collect();
+    out.sort_by(|a, b| a.id.cmp(&b.id));
+    out.dedup_by(|a, b| a.id == b.id);
+    out
+}
+
+/// `{"data":[{"id":"claude-...","display_name":"Claude ..."}]}`
+///
+/// Anthropic does not publish context windows here, so they stay absent rather
+/// than being guessed.
+pub fn parse_anthropic_models(body: &serde_json::Value) -> Vec<ModelInfo> {
+    let Some(list) = body.get("data").and_then(|d| d.as_array()) else {
+        return Vec::new();
+    };
+    let mut out: Vec<ModelInfo> = list
+        .iter()
+        .filter_map(|m| {
+            let id = m.get("id").and_then(|i| i.as_str())?.to_string();
+            if id.is_empty() {
+                return None;
+            }
+            let name = m
+                .get("display_name")
+                .and_then(|n| n.as_str())
+                .filter(|n| !n.is_empty())
+                .unwrap_or(&id)
+                .to_string();
+            Some(ModelInfo {
+                id,
+                name,
+                context_window: None,
+            })
+        })
+        .collect();
+    // Newest first is what Anthropic returns and what you want; keep it.
+    out.dedup_by(|a, b| a.id == b.id);
+    out
+}
+
 /// Build the `messages` array for Anthropic's Messages API.
 ///
 /// Three ways this differs from the OpenAI shape, each of which is a 400 if you
@@ -1215,9 +1334,36 @@ impl AnthropicProvider {
         Ok(text)
     }
 
+    /// `GET /v1/models` — Anthropic's directory. Same auth as everything else
+    /// here: `x-api-key` plus the version header.
+    pub fn fetch(&self) -> Result<Vec<ModelInfo>, String> {
+        let key = self
+            .config
+            .api_key()
+            .ok_or_else(|| "no API key configured".to_string())?;
+        let url = "https://api.anthropic.com/v1/models?limit=100";
+        let client = self.client()?;
+        let response = client
+            .get(url)
+            .header("anthropic-version", ANTHROPIC_VERSION)
+            .header("x-api-key", key)
+            .send()
+            .map_err(|e| format!("{url}: {e}"))?;
+        let status = response.status();
+        let text = response
+            .text()
+            .map_err(|e| format!("could not read the model list: {e}"))?;
+        if !status.is_success() {
+            return Err(format!("Anthropic returned {status}"));
+        }
+        let json: serde_json::Value = serde_json::from_str(&text)
+            .map_err(|e| format!("Anthropic returned invalid JSON: {e}"))?;
+        Ok(parse_anthropic_models(&json))
+    }
+
     /// A real round trip, for the Test button.
     ///
-    ///  can only report what is configured; saying a provider works
+    /// `health()` can only report what is configured; saying a provider works
     /// without ever calling it is the exact shape of failure the update checker
     /// once had, where unreachable was reported as up to date.
     pub fn probe(&self) -> Result<String, String> {
@@ -1305,6 +1451,10 @@ impl LLMProvider for AnthropicProvider {
             },
         ]
     }
+    fn fetch_models(&self) -> Result<Vec<ModelInfo>, String> {
+        self.fetch()
+    }
+
     fn run(&self, request: &AgentRequest) -> Result<AgentResponse, String> {
         let body = self.body(request, false)?;
         let text = self.post(&body)?;
@@ -1545,6 +1695,34 @@ impl OpenAICompatibleProvider {
         Ok(acc.finish())
     }
 
+    /// `GET {base}/models` — the OpenAI directory endpoint, which OpenRouter,
+    /// Ollama, LM Studio and most gateways implement.
+    pub fn fetch(&self) -> Result<Vec<ModelInfo>, String> {
+        if self.config.base_url.trim().is_empty() {
+            return Err("no base URL configured".into());
+        }
+        let url = format!("{}/models", self.config.base_url.trim_end_matches('/'));
+        let client = self.client()?;
+        let mut req = client.get(&url);
+        for (k, v) in &self.config.headers {
+            req = req.header(k.as_str(), v.as_str());
+        }
+        if let Some(key) = self.config.api_key() {
+            req = req.bearer_auth(key);
+        }
+        let response = req.send().map_err(|e| format!("{url}: {e}"))?;
+        let status = response.status();
+        let text = response
+            .text()
+            .map_err(|e| format!("could not read the model list: {e}"))?;
+        if !status.is_success() {
+            return Err(format!("{url} returned {status}"));
+        }
+        let json: serde_json::Value =
+            serde_json::from_str(&text).map_err(|e| format!("{url} returned invalid JSON: {e}"))?;
+        Ok(parse_openai_models(&json))
+    }
+
     /// A cheap round trip to prove the endpoint, key and model all work.
     /// This is what the Test button in the UI calls.
     pub fn probe(&self) -> Result<String, String> {
@@ -1591,6 +1769,10 @@ impl LLMProvider for OpenAICompatibleProvider {
             }]
         }
     }
+    fn fetch_models(&self) -> Result<Vec<ModelInfo>, String> {
+        self.fetch()
+    }
+
     fn run(&self, request: &AgentRequest) -> Result<AgentResponse, String> {
         if self.config.base_url.is_empty() {
             return Err("OpenAI-compatible provider has no base URL configured".into());
@@ -2035,6 +2217,106 @@ mod transport_tests {
             turn: 0,
             history: vec![],
         }
+    }
+
+    // -- model lookup ------------------------------------------------------
+
+    #[test]
+    fn openai_style_models_are_parsed_and_sorted() {
+        let body = serde_json::json!({
+            "data": [
+                { "id": "openai/gpt-5", "name": "GPT-5", "context_length": 400000 },
+                { "id": "anthropic/claude-sonnet-4.5", "context_length": 200000 },
+                { "id": "meta-llama/llama-4" }
+            ]
+        });
+        let m = parse_openai_models(&body);
+        assert_eq!(m.len(), 3);
+        // Sorted, because the order a gateway returns is neither stable nor
+        // meaningful and a list that reshuffles between refreshes is unusable.
+        assert_eq!(m[0].id, "anthropic/claude-sonnet-4.5");
+        assert_eq!(m[2].id, "openai/gpt-5");
+        // No name means the id is the label — never an empty row.
+        assert_eq!(m[0].name, "anthropic/claude-sonnet-4.5");
+        assert_eq!(m[2].name, "GPT-5");
+        // Absent is absent, not zero.
+        assert_eq!(m[1].context_window, None);
+        assert_eq!(m[2].context_window, Some(400_000));
+    }
+
+    #[test]
+    fn anthropic_models_use_their_display_names_and_keep_their_order() {
+        let body = serde_json::json!({
+            "data": [
+                { "id": "claude-opus-4-5", "display_name": "Claude Opus 4.5" },
+                { "id": "claude-sonnet-4-5", "display_name": "Claude Sonnet 4.5" }
+            ]
+        });
+        let m = parse_anthropic_models(&body);
+        assert_eq!(m.len(), 2);
+        assert_eq!(m[0].id, "claude-opus-4-5");
+        assert_eq!(m[0].name, "Claude Opus 4.5");
+        // Anthropic does not publish context windows here, so they stay absent
+        // rather than being guessed at.
+        assert!(m.iter().all(|x| x.context_window.is_none()));
+    }
+
+    /// A shape that is not what we expected must produce an empty list, not a
+    /// panic and not a row of blanks.
+    #[test]
+    fn an_unexpected_model_payload_yields_nothing_rather_than_junk() {
+        for body in [
+            serde_json::json!({}),
+            serde_json::json!({ "data": "nope" }),
+            serde_json::json!({ "data": [{ "no_id": true }, { "id": "" }] }),
+        ] {
+            assert!(parse_openai_models(&body).is_empty(), "{body}");
+            assert!(parse_anthropic_models(&body).is_empty(), "{body}");
+        }
+    }
+
+    /// The distinction the whole feature rests on. A built-in list handed back
+    /// as though it had been fetched is the same lie the update checker used to
+    /// tell, and the UI has no way to know unless the answer carries it.
+    #[test]
+    fn a_catalog_says_whether_it_was_actually_fetched() {
+        let live = ModelCatalog::live(vec![ModelInfo {
+            id: "x".into(),
+            name: "X".into(),
+            context_window: None,
+        }]);
+        assert!(live.live);
+        assert!(live.note.is_empty());
+
+        let fell_back = ModelCatalog::fallback(vec![], "the key was rejected");
+        assert!(!fell_back.live);
+        assert!(
+            fell_back.note.contains("rejected"),
+            "a fallback has to say why"
+        );
+    }
+
+    /// Nothing that cannot reach a directory should claim to have one.
+    #[test]
+    fn a_provider_with_no_directory_says_so_rather_than_faking_one() {
+        let e = MockProvider.fetch_models().unwrap_err();
+        assert!(e.contains("does not publish"), "{e}");
+        // But it still has a built-in list, so the dropdown is never empty.
+        assert_eq!(MockProvider.list_models().len(), 1);
+    }
+
+    #[test]
+    fn fetching_models_without_configuration_fails_before_the_network() {
+        let p = AnthropicProvider::new(AnthropicConfig {
+            key_target: key_target("anthropic-test-nokey"),
+            model: "claude-sonnet-4-5".into(),
+        });
+        assert!(p.fetch().unwrap_err().contains("API key"));
+
+        let mut c = cfg();
+        c.base_url = String::new();
+        let o = OpenAICompatibleProvider::new(c);
+        assert!(o.fetch().unwrap_err().contains("base URL"));
     }
 
     // -- anthropic ---------------------------------------------------------

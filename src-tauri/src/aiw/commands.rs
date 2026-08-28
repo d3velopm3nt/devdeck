@@ -911,13 +911,9 @@ pub async fn aiw_run_demo(
 pub async fn aiw_models(
     ws: Ws<'_>,
     provider_id: String,
-) -> Result<Vec<super::provider::ModelInfo>, String> {
+) -> Result<super::provider::ModelCatalog, String> {
     let w = ws.inner().clone();
-    blocking(move || {
-        let p = w.providers.lock().unwrap().get(&provider_id);
-        p.map(|p| p.list_models()).unwrap_or_default()
-    })
-    .await
+    blocking(move || w.model_catalog(&provider_id)).await
 }
 
 /// "What changed since this session's checkpoint?" — the question an agent asks

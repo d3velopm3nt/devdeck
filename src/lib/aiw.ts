@@ -366,6 +366,24 @@ export interface AssistantReply {
   turns: number
 }
 
+export interface ModelInfo {
+  id: string
+  name: string
+  context_window?: number
+}
+
+/** Models a provider offers, and whether the answer is actually from it.
+ *
+ * `live` is the load-bearing field: every provider ships a built-in list so the
+ * dropdown is never empty, and showing that as though it had been fetched would
+ * be a failed lookup reading as a successful one.
+ */
+export interface ModelCatalog {
+  models: ModelInfo[]
+  live: boolean
+  note?: string
+}
+
 /** What the assistant knows about you. Personal store, never a repo. */
 /** Progress while a reply is still being produced.
  *
@@ -487,8 +505,7 @@ export const aiw = {
     invoke<AgentDef>('aiw_set_agent_provider', { agentId, provider, model }),
   forgetProviderKey: (providerId: string) =>
     invoke<boolean>('aiw_provider_forget_key', { providerId }),
-  models: (providerId: string) =>
-    invoke<{ id: string; name: string; context_window?: number }[]>('aiw_models', { providerId }),
+  models: (providerId: string) => invoke<ModelCatalog>('aiw_models', { providerId }),
   testRuns: (projectId?: string) => invoke<TestRun[]>('aiw_test_runs', { projectId }),
 
   exportContext: (projectId: string, featureId: string, filename: string) =>

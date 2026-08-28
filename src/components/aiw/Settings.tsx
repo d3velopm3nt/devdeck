@@ -10,6 +10,7 @@ import { Icon, type IconName } from '../../lib/icons'
 import { useAiw } from '../../lib/aiwStore'
 import { aiw, type AgentDef, type ProviderHealth } from '../../lib/aiw'
 import { ProviderCards } from './ProviderCards'
+import { ModelPicker } from './ModelPicker'
 
 type Tab = 'providers' | 'agents' | 'tools'
 
@@ -120,12 +121,15 @@ function AgentProviders() {
               </div>
 
               <div className="px-3 py-2.5">
-                <input
-                  className="input w-full font-mono text-[11px]"
+                {/* Keyed on the provider so switching one resets the list —
+                    otherwise you keep an OpenRouter id after moving the agent
+                    to Anthropic, and it fails on the first turn. */}
+                <ModelPicker
+                  key={`${ag.id}:${d.provider}`}
+                  compact
+                  providerId={d.provider}
                   value={d.model}
-                  onChange={(e) =>
-                    setDrafts({ ...drafts, [ag.id]: { ...d, model: e.target.value } })
-                  }
+                  onChange={(model) => setDrafts({ ...drafts, [ag.id]: { ...d, model } })}
                 />
               </div>
 

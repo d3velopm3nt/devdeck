@@ -11,6 +11,9 @@ import { MachineSetup } from './components/MachineSetup'
 import { StashSidebar } from './components/StashSidebar'
 import { StashView } from './components/StashView'
 import { ConnectionsSidebar } from './components/ConnectionsSidebar'
+import { CAPTURE_RAIL } from './lib/devCapture'
+import { AiwSidebar } from './components/aiw/AiwSidebar'
+import { AiWorkspace } from './components/aiw/AiWorkspace'
 import { ConnectionsView } from './components/ConnectionsView'
 import { ConnectionEditor } from './components/ConnectionEditor'
 import { ConfigPage } from './components/ConfigPage'
@@ -103,6 +106,12 @@ export default function App() {
   const node = app.selectedNode()
   const nodeDir = resolveDir(app.nodes, node)
   const railView = app.railView
+
+  // Screenshot harness (temporary): applied at runtime so a hot module
+  // update takes effect without a full reload.
+  useEffect(() => {
+    if (CAPTURE_RAIL && railView !== CAPTURE_RAIL) app.setRailView(CAPTURE_RAIL as typeof railView)
+  })
 
   // Apply the theme to <html> whenever it changes (bootstrap also sets it).
   useEffect(() => {
@@ -498,6 +507,11 @@ export default function App() {
             <ConnectionsSidebar />
           </aside>
         )}
+        {railView === 'aiworkspace' && (
+          <aside className="w-[224px] shrink-0 overflow-hidden border-r border-line">
+            <AiwSidebar />
+          </aside>
+        )}
         <main className="min-w-0 flex-1">
           {railView === 'home' && <Home />}
           {/* The Dock stays mounted (terminals live in it) — just hidden when
@@ -507,6 +521,7 @@ export default function App() {
           </div>
           {railView === 'stash' && <StashView />}
           {railView === 'connections' && <ConnectionsView />}
+          {railView === 'aiworkspace' && <AiWorkspace />}
           {railView === 'machine' && <MachineSetup />}
           {railView === 'settings' && <ConfigPage />}
         </main>

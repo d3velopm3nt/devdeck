@@ -561,6 +561,16 @@ pub fn run() {
     let aiw_workspace = std::sync::Arc::new(aiw::state::Workspace::new());
     // Subscribers can only be installed once the workspace is shared.
     aiw::state::Workspace::install_handlers(&aiw_workspace);
+    // Re-register whatever this install was pointed at last time. Without this
+    // the project list is lost on every restart, which looks exactly like the
+    // projects themselves being gone.
+    {
+        let saved = aiw::commands::saved_projects(&conn);
+        if !saved.is_empty() {
+            let n = aiw_workspace.restore(&saved);
+            eprintln!("[aiw] restored {n} of {} projects", saved.len());
+        }
+    }
     let aiw_for_setup = aiw_workspace.clone();
 
     tauri::Builder::default()

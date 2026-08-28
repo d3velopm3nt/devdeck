@@ -175,6 +175,17 @@ impl ProjectHandle {
     }
 }
 
+/// A registered project, as persisted. The `.devdeck` directories are the
+/// durable truth about their *contents*; this records which of them this
+/// install has been pointed at, so restarting DevDeck does not lose your
+/// project list.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct RegisteredProject {
+    pub id: String,
+    pub name: String,
+    pub root: String,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ProjectSummary {
     pub id: String,
@@ -301,6 +312,38 @@ impl Workspace {
 
     pub fn project(&self, id: &str) -> Option<Arc<ProjectHandle>> {
         self.projects.lock().unwrap().get(id).cloned()
+    }
+
+    /// Everything needed to re-register these projects after a restart.
+    pub fn registered(&self) -> Vec<RegisteredProject> {
+        let projects = self.projects.lock().unwrap();
+        let mut v: Vec<RegisteredProject> = projects
+            .values()
+            .map(|p| RegisteredProject {
+                id: p.id.clone(),
+                name: p.name.clone(),
+                root: p.root.to_string_lossy().to_string(),
+            })
+            .collect();
+        v.sort_by(|a, b| a.id.cmp(&b.id));
+        v
+    }
+
+    /// Re-register a saved list, skipping anything whose directory has gone.
+    /// A project folder that was deleted or is on a disconnected drive should
+    /// disappear quietly rather than failing the whole startup.
+    pub fn restore(&self, saved: &[RegisteredProject]) -> usize {
+        let mut n = 0;
+        for p in saved {
+            let path = PathBuf::from(&p.root);
+            if path.is_dir() {
+                self.register_project(&p.id, &p.name, path);
+                n += 1;
+            } else {
+                eprintln!("[aiw] skipping '{}' — {} is gone", p.id, p.root);
+            }
+        }
+        n
     }
 
     pub fn project_ids(&self) -> Vec<String> {

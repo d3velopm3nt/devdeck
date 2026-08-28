@@ -15,7 +15,8 @@ use super::events::DomainEvent;
 use super::provider::ProviderHealth;
 use super::runtime::{AgentRuntime, SessionOutcome, StartAgentCommand};
 use super::state::{
-    AgentDef, ProjectSummary, ProviderConfig, Session, TestRun, WorkClaim, Workspace,
+    AgentDef, ProjectSummary, ProviderConfig, RegisteredProject, Session, TestRun, WorkClaim,
+    Workspace,
 };
 use super::tools::{registry, Permission, ToolInfo};
 use crate::git;
@@ -34,6 +35,7 @@ pub fn aiw_projects(ws: Ws) -> Vec<ProjectSummary> {
 #[tauri::command]
 pub fn aiw_register_project(
     ws: Ws,
+    db: tauri::State<crate::db::Db>,
     id: String,
     name: String,
     root: String,
@@ -47,10 +49,38 @@ pub fn aiw_register_project(
         deck.init(&id, &name)?;
     }
     ws.register_project(&id, &name, path);
+    persist_projects(&ws, &db);
     ws.summaries()
         .into_iter()
         .find(|p| p.id == id)
         .ok_or_else(|| "project registered but not readable".to_string())
+}
+
+/// Where the registered-project list lives. Only the list — the projects
+/// themselves are their `.devdeck` directories.
+pub const PROJECTS_KEY: &str = "aiw.projects";
+
+fn persist_projects(ws: &Arc<Workspace>, db: &tauri::State<crate::db::Db>) {
+    let list = ws.registered();
+    let Ok(json) = serde_json::to_string(&list) else {
+        return;
+    };
+    let conn = db.0.lock().unwrap();
+    if let Err(e) = crate::db::setting_set_conn(&conn, PROJECTS_KEY, &json) {
+        // Honest: losing the list means the projects vanish on restart, so say
+        // so rather than failing silently.
+        eprintln!("[aiw] could not save the project list: {e}");
+    }
+}
+
+/// Read the saved list. Returns empty when nothing has been registered yet,
+/// which is a normal first-run state rather than an error.
+pub fn saved_projects(conn: &rusqlite::Connection) -> Vec<RegisteredProject> {
+    crate::db::setting_get_conn(conn, PROJECTS_KEY)
+        .ok()
+        .flatten()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -745,7 +775,11 @@ pub fn run_demo(ws: &Arc<Workspace>, base: PathBuf) -> Result<DemoResult, String
 }
 
 #[tauri::command]
-pub fn aiw_run_demo(ws: Ws, base_dir: Option<String>) -> Result<DemoResult, String> {
+pub fn aiw_run_demo(
+    ws: Ws,
+    db: tauri::State<crate::db::Db>,
+    base_dir: Option<String>,
+) -> Result<DemoResult, String> {
     let base = match base_dir {
         Some(d) => PathBuf::from(d),
         None => dirs::config_dir()
@@ -758,7 +792,9 @@ pub fn aiw_run_demo(ws: Ws, base_dir: Option<String>) -> Result<DemoResult, Stri
     let _ = std::fs::remove_dir_all(&base);
     let ws: Arc<Workspace> = (*ws).clone();
     ws.reset_runtime_state();
-    run_demo(&ws, base)
+    let result = run_demo(&ws, base)?;
+    persist_projects(&ws, &db);
+    Ok(result)
 }
 
 /// Models a provider offers. The Start AI Work screen needs this to let you

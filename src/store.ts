@@ -31,7 +31,14 @@ import type {
 const LOG_UI_LIMIT = 5000
 
 export type Theme = 'dark' | 'light'
-export type RailView = 'home' | 'projects' | 'stash' | 'connections' | 'machine' | 'settings'
+export type RailView =
+  | 'home'
+  | 'projects'
+  | 'stash'
+  | 'connections'
+  | 'aiworkspace'
+  | 'machine'
+  | 'settings'
 export type BottomTab = 'logs' | 'processes'
 
 /** What the Stash view is currently showing. `noProject` narrows to clips
@@ -256,12 +263,26 @@ const adoptingPorts = new Set<number>()
 /** Trailing-edge timer for `ingestStashItem`. */
 let ingestTimer: number | undefined
 
+import { CAPTURE_RAIL } from './lib/devCapture'
+
 const RAIL_KEY = 'devdeck.railView'
+/// Every rail view, in one place. The old hand-written comparison chain did not
+/// include new views, so a view added later would be written to localStorage,
+/// fail validation on the next launch, and silently drop the user back to Home.
+const RAIL_VIEWS: readonly RailView[] = [
+  'home',
+  'projects',
+  'stash',
+  'connections',
+  'aiworkspace',
+  'machine',
+  'settings',
+]
+
 const loadRailView = (): RailView => {
-  const v = localStorage.getItem(RAIL_KEY)
-  return v === 'projects' || v === 'stash' || v === 'connections' || v === 'machine' || v === 'settings'
-    ? v
-    : 'home'
+  if (CAPTURE_RAIL) return CAPTURE_RAIL as RailView
+  const v = localStorage.getItem(RAIL_KEY) as RailView | null
+  return v && RAIL_VIEWS.includes(v) ? v : 'home'
 }
 
 const AW_KEY = 'devdeck.activeWorkspace'

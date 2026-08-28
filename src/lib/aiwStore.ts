@@ -11,6 +11,12 @@
 
 import { create } from 'zustand'
 import {
+  CAPTURE_AUTORUN,
+  CAPTURE_FEATURE,
+  CAPTURE_PAGE,
+  CAPTURE_PROJECT,
+} from './devCapture'
+import {
   aiw,
   type AgentDef,
   type AiProject,
@@ -80,7 +86,7 @@ export const useAiw = create<AiwState>((set, get) => ({
   loading: false,
   error: null,
 
-  page: 'overview',
+  page: (CAPTURE_PAGE || 'overview') as AiwPage,
   projectId: null,
   featureId: null,
 
@@ -104,6 +110,11 @@ export const useAiw = create<AiwState>((set, get) => ({
   setPage: (page) => set({ page }),
 
   bootstrap: async () => {
+    // React runs effects twice in dev (StrictMode). Without this guard the
+    // demo runs twice, and the second run wipes the fixture directory out from
+    // under the first run's state — which shows up as a project list with no
+    // features in it.
+    if (get().loading || get().ready) return
     set({ loading: true, error: null })
     try {
       const [projects, agents, tools, permissions] = await Promise.all([
@@ -113,8 +124,16 @@ export const useAiw = create<AiwState>((set, get) => ({
         aiw.permissions(),
       ])
       set({ projects, agents, tools, permissions, ready: true, loading: false })
-      const first = projects[0]?.id ?? null
-      if (first) await get().selectProject(first)
+      // Screenshot harness: always rebuild, so each capture is self-contained.
+      // Guarding on an empty project list stopped working once the registered
+      // list became durable, which is exactly the behaviour we wanted.
+      if (CAPTURE_AUTORUN) {
+        await get().runDemo()
+      }
+      const all = get().projects.length ? get().projects : projects
+      const wanted = CAPTURE_PROJECT || all[0]?.id || null
+      if (wanted) await get().selectProject(wanted)
+      if (CAPTURE_FEATURE) await get().selectFeature(CAPTURE_FEATURE)
     } catch (e) {
       // Honest failure: the screens render this instead of an empty state that
       // would read as "you have no projects".
@@ -183,6 +202,7 @@ export const useAiw = create<AiwState>((set, get) => ({
   },
 
   runDemo: async () => {
+    if (get().demoRunning) return
     set({ demoRunning: true, error: null })
     try {
       await aiw.runDemo()
@@ -245,6 +265,10 @@ export const useAiw = create<AiwState>((set, get) => ({
   pushEvent: (e) => {
     const { projectId, events } = get()
     if (projectId && e.project_id && e.project_id !== projectId) return
+    // The same event can arrive twice: once live from the bus and once in the
+    // history that refresh() fetches. Without this the feed renders duplicate
+    // React keys and silently drops rows.
+    if (events.some((x) => x.id === e.id)) return
     set({ events: [e, ...events].slice(0, 500) })
   },
 }))

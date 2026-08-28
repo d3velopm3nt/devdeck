@@ -3,6 +3,16 @@
 //! Every one of these is thin: validate, call a service, return. Business logic
 //! that leaks up into a command is logic the tests can't reach without a
 //! window, so it stays below this line.
+//!
+//! **Threading.** A plain `#[tauri::command] fn` runs on the *main* thread in
+//! Tauri v2 — only `async fn` or `#[tauri::command(async)]` is dispatched to a
+//! worker. Anything here that talks to a network, runs an agent, or waits on a
+//! human is therefore marked `(async)`, or it freezes the window while it works.
+//!
+//! For the approval flow this is not cosmetic: `aiw_send_message` blocks while
+//! a tool call waits for a person, and `aiw_resolve_approval` is what unblocks
+//! it. On the main thread the second could never run while the first was
+//! waiting, so every approval would deadlock and then time out.
 
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -327,7 +337,7 @@ pub fn aiw_claims(ws: Ws, project_id: Option<String>, active_only: bool) -> Vec<
     ws.claims_for(project_id.as_deref(), active_only)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn aiw_start_agent(ws: Ws, cmd: StartAgentCommand) -> Result<SessionOutcome, String> {
     let ws: Arc<Workspace> = (*ws).clone();
     AgentRuntime::run(&ws, &cmd)
@@ -420,7 +430,7 @@ pub struct AttributedCommit {
     pub session: Option<String>,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn aiw_git_history(
     ws: Ws,
     project_id: String,
@@ -509,7 +519,7 @@ pub fn aiw_test_runs(ws: Ws, project_id: Option<String>) -> Vec<TestRun> {
 ///
 /// Only the delimited DevDeck block is replaced — a hand-written file keeps
 /// everything else.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn aiw_export_context(
     ws: Ws,
     project_id: String,
@@ -815,7 +825,7 @@ pub fn run_demo(ws: &Arc<Workspace>, base: PathBuf) -> Result<DemoResult, String
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn aiw_run_demo(
     ws: Ws,
     db: tauri::State<crate::db::Db>,
@@ -840,7 +850,7 @@ pub fn aiw_run_demo(
 
 /// Models a provider offers. The Start AI Work screen needs this to let you
 /// pick one, and it is the same call for the mock and for a real provider.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn aiw_models(ws: Ws, provider_id: String) -> Vec<super::provider::ModelInfo> {
     ws.providers
         .lock()
@@ -940,7 +950,7 @@ pub fn aiw_provider_setups(db: tauri::State<crate::db::Db>) -> Vec<ProviderSetup
 
 /// Actually call the provider. `health()` can only say "configured"; this is
 /// the difference between believing it works and knowing.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn aiw_provider_test(ws: Ws, provider_id: String) -> Result<String, String> {
     use super::provider::OpenAICompatibleProvider;
     let reg = ws.providers.lock().unwrap();
@@ -951,6 +961,11 @@ pub fn aiw_provider_test(ws: Ws, provider_id: String) -> Result<String, String> 
     if provider_id == OpenAICompatibleProvider::ID {
         // Downcast-free: ask the registry for the concrete probe.
         return ws.probe_openai_compatible();
+    }
+    if provider_id == super::provider::AnthropicProvider::ID {
+        // A real round trip. Reporting health() here would call a provider
+        // working without ever having called it.
+        return ws.probe_anthropic();
     }
     let h = p.health();
     if h.ok {
@@ -1049,7 +1064,7 @@ pub fn aiw_focus_conversation(
 /// Synchronous, and can take a while: a turn may involve several provider
 /// round-trips and a tool call that stops to ask you for approval. Tauri runs
 /// this on a worker thread, so the window stays live throughout.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn aiw_send_message(
     app: tauri::AppHandle,
     ws: Ws,
@@ -1154,13 +1169,13 @@ pub fn aiw_forget_memory(ws: Ws, id: String) -> Result<bool, String> {
 }
 
 /// Tool calls waiting on a human right now.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn aiw_pending_approvals(ws: Ws) -> Vec<ApprovalRequest> {
     ws.pending_approvals()
 }
 
 /// Answer one. The agent is blocked on this, so it takes effect immediately.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn aiw_resolve_approval(ws: Ws, id: String, decision: Decision) -> Result<(), String> {
     ws.resolve_approval(&id, decision)
 }

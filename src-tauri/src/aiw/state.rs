@@ -20,9 +20,7 @@ use super::context::{
 };
 use super::deck::Deck;
 use super::events::{new_id, EventBus, EventType, SharedBus};
-use super::provider::{
-    AnthropicConfig, AnthropicProvider, OpenAICompatibleConfig, ProviderRegistry,
-};
+use super::provider::{AnthropicConfig, OpenAICompatibleConfig, ProviderRegistry};
 use super::tools::{Permission, PermissionMatrix, ToolService};
 
 /// An agent definition — who it is, what it may do. Durable ones live in
@@ -300,10 +298,10 @@ impl Workspace {
         let mut reg = self.providers.lock().unwrap();
         match cfg.kind.as_str() {
             "anthropic" => {
-                reg.register(Box::new(AnthropicProvider::new(AnthropicConfig {
+                reg.register_anthropic(AnthropicConfig {
                     key_target: target,
                     model: cfg.model,
-                })));
+                });
                 Ok(())
             }
             "openai-compatible" => {
@@ -327,6 +325,15 @@ impl Workspace {
     /// Run the OpenAI-compatible provider's round-trip probe, if one is
     /// configured. Kept here because the registry owns the concrete types;
     /// commands should not be downcasting trait objects.
+    /// A real round trip against Anthropic, for the Test button.
+    pub fn probe_anthropic(&self) -> Result<String, String> {
+        let reg = self.providers.lock().unwrap();
+        match reg.anthropic() {
+            Some(p) => p.probe(),
+            None => Err("no Anthropic provider is configured".into()),
+        }
+    }
+
     pub fn probe_openai_compatible(&self) -> Result<String, String> {
         let reg = self.providers.lock().unwrap();
         match reg.openai_compatible() {

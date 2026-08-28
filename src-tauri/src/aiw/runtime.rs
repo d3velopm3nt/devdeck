@@ -338,11 +338,13 @@ impl AgentRuntime {
                                 .tools
                                 .execute(&ws.bus, &agent.id, &scope, call, Some(&claimed));
                         observations.push(super::provider::Observation {
-                            // The mock has no wire protocol to correlate with;
-                            // a real provider's calls carry their own id.
-                            call_id: String::new(),
+                            // Empty for the mock, which has no wire protocol;
+                            // a real provider's calls carry their own id, and
+                            // the result has to reference it.
+                            call_id: call.call_id.clone(),
                             tool: call.tool.clone(),
                             action: call.action.clone(),
+                            args: call.args.clone(),
                             ok: result.ok,
                             output: if result.ok {
                                 result.output.clone()
@@ -507,6 +509,9 @@ impl AgentRuntime {
                                 call_id: String::new(),
                                 tool: "decision".into(),
                                 action: "record".into(),
+                                // Not a tool call, so there are no arguments
+                                // to echo back.
+                                args: serde_json::Value::Null,
                                 ok: false,
                                 output: e,
                             }),
@@ -532,6 +537,9 @@ impl AgentRuntime {
                                 call_id: String::new(),
                                 tool: "decision".into(),
                                 action: "record".into(),
+                                // Not a tool call, so there are no arguments
+                                // to echo back.
+                                args: serde_json::Value::Null,
                                 ok: false,
                                 output: e,
                             }),

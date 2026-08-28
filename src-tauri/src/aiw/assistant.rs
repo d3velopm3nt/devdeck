@@ -404,9 +404,10 @@ impl Assistant {
                             message: msg,
                         });
                         observations.push(Observation {
-                            call_id: String::new(),
+                            call_id: call.call_id.clone(),
                             tool: call.tool.clone(),
                             action: call.action.clone(),
+                            args: call.args.clone(),
                             ok,
                             output,
                         });
@@ -425,6 +426,7 @@ impl Assistant {
                             call_id: String::new(),
                             tool: "assistant".into(),
                             action: "unsupported".into(),
+                            args: serde_json::Value::Null,
                             ok: false,
                             output: format!(
                                 "{} is not something the assistant does directly — \

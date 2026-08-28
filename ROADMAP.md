@@ -82,7 +82,7 @@ all work.
 - [x] Event bus, `.devdeck` schema, context assembly, checkpoints, staleness
 - [x] Conflict detection driven by events, not polling
 - [x] Tool registry + permission matrix, failing closed
-- [x] Provider seam: Mock, OpenAI-compatible (live), Anthropic (stubbed)
+- [x] Provider seam: Mock, OpenAI-compatible and Anthropic native, all live
 - [x] Credentials via Windows Credential Manager, never SQLite
 - [x] Provider setup UI, agent→provider assignment, Settings page
 - [x] Context export to `CLAUDE.md` / `AGENTS.md`
@@ -92,17 +92,21 @@ all work.
       specialists. Chat surface, durable conversations, memory.
 - [x] **The store split** — personal state lives outside every repo, enforced
       by refusing to create the store inside one.
+- [x] **Anthropic native transport** — Messages API, x-api-key, reconstructed
+      tool_use/tool_result turns, and its own SSE accumulator (indexed blocks,
+      not OpenAI's delta shape). Test does a real round trip.
+- [x] **Blocking commands moved off the main thread** — a plain
+      `#[tauri::command] fn` runs on the main thread in Tauri v2, so the
+      approval wait froze the window and could never be answered.
 - [x] **Streaming** — SSE on the OpenAI-compatible path, deltas and tool
       steps to the UI on their own channel. Providers that cannot stream fall
       back to one late chunk and nothing downstream can tell.
 
 What is left, in the order it matters:
 
-1. **The Anthropic transport** — returns an explicit error today rather than
-   pretending. The OpenAI-compatible path covers Claude via OpenRouter.
-2. **Delegated sessions are fire-and-forget** — started on a thread, visible in
+1. **Delegated sessions are fire-and-forget** — started on a thread, visible in
    Activity, but the chat does not learn when one finishes.
-3. **The life half** — calendar, mail, notes. Needs no new store; needs new
+2. **The life half** — calendar, mail, notes. Needs no new store; needs new
    tools pointed at the personal one. Deliberately not started: the work half
    had to be real first.
 
@@ -463,8 +467,8 @@ the website's download links point at nothing.
   **rebuild**. See *User-editable scan rules* for the fix.
 - AI Workspace: a delegated session's completion never reaches the conversation
   (it shows in Activity, but the assistant will not tell you dev-a finished);
-  streaming is only on the OpenAI-compatible path; the Anthropic
-  transport is unimplemented (it errors explicitly rather than pretending)
+  the Anthropic transport is written against the documented wire format but has
+  not been run against the live API
 - Terminal commands: an old report that commands don't type into the terminal —
   deprioritised, needs reproduction
 - Machine Setup used to re-probe winget/scoop on every remount with no visible

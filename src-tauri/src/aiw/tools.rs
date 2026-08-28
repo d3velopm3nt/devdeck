@@ -110,6 +110,15 @@ pub struct ToolCall {
     pub action: String,
     #[serde(default)]
     pub args: serde_json::Value,
+    /// The provider's own id for this call, when it has one.
+    ///
+    /// Carried rather than dropped because a result has to be sent back
+    /// *referencing* the call it answers. OpenAI tolerates a narrated result;
+    /// Anthropic rejects a `tool_result` whose `tool_use_id` does not match a
+    /// block it actually sent, so losing this makes multi-turn tool use
+    /// impossible there. Empty for the mock, which has no wire protocol.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub call_id: String,
 }
 
 impl ToolCall {
@@ -118,6 +127,7 @@ impl ToolCall {
             tool: tool.to_string(),
             action: action.to_string(),
             args,
+            call_id: String::new(),
         }
     }
     fn arg_str(&self, key: &str) -> Option<String> {

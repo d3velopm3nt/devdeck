@@ -117,7 +117,6 @@ const DEFS: Def[] = [
     tint: '217,119,87',
     model: 'claude-sonnet-4-5',
     modelHint: 'Exactly as Anthropic names it.',
-    unavailable: true,
   },
   {
     id: 'nvidia',

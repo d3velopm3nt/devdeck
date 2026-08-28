@@ -40,6 +40,12 @@ pub struct Observation {
     pub call_id: String,
     pub tool: String,
     pub action: String,
+    /// The arguments the call was made with.
+    ///
+    /// Needed to reconstruct Anthropic's preceding assistant turn: a
+    /// `tool_result` is only valid alongside the `tool_use` block it answers,
+    /// and that block carries its input.
+    pub args: serde_json::Value,
     pub ok: bool,
     pub output: String,
 }
@@ -620,6 +626,193 @@ pub struct RawToolCall {
 /// Text blocks become the message; `tool_use` blocks become calls. A response
 /// with neither is not an error — it is a model that had nothing to do.
 #[allow(dead_code)]
+/// Build the `messages` array for Anthropic's Messages API.
+///
+/// Three ways this differs from the OpenAI shape, each of which is a 400 if you
+/// get it wrong rather than a silent degradation:
+///
+/// 1. **`system` is not a message.** It is a top-level field, so it is not here.
+/// 2. **A result must reference a call that was actually sent.** A
+///    `tool_result` is only valid when the *preceding assistant turn* contains
+///    a `tool_use` block with the same id — so that turn is reconstructed from
+///    the observations rather than assumed.
+/// 3. **Results are user turns.** They are not a third role.
+///
+/// Observations with no id came from something that was never a wire tool call
+/// (a rejected action, the mock). They cannot be `tool_result` blocks, so they
+/// go in as plain text instead of being dropped.
+pub fn anthropic_messages(request: &AgentRequest) -> serde_json::Value {
+    let mut msgs: Vec<serde_json::Value> = Vec::new();
+
+    for t in &request.history {
+        msgs.push(serde_json::json!({ "role": t.role, "content": t.content }));
+    }
+
+    msgs.push(serde_json::json!({
+        "role": "user",
+        "content": if request.history.is_empty() {
+            format!("Your task: {}", request.goal)
+        } else {
+            request.goal.clone()
+        },
+    }));
+
+    let (correlated, loose): (Vec<_>, Vec<_>) = request
+        .observations
+        .iter()
+        .partition(|o| !o.call_id.is_empty());
+
+    if !correlated.is_empty() {
+        // The assistant turn that made the calls, rebuilt.
+        let uses: Vec<serde_json::Value> = correlated
+            .iter()
+            .map(|o| {
+                serde_json::json!({
+                    "type": "tool_use",
+                    "id": o.call_id,
+                    "name": super::tools::wire_name(&o.tool, &o.action),
+                    "input": if o.args.is_null() { serde_json::json!({}) } else { o.args.clone() },
+                })
+            })
+            .collect();
+        msgs.push(serde_json::json!({ "role": "assistant", "content": uses }));
+
+        let results: Vec<serde_json::Value> = correlated
+            .iter()
+            .map(|o| {
+                serde_json::json!({
+                    "type": "tool_result",
+                    "tool_use_id": o.call_id,
+                    "content": o.text(),
+                    "is_error": !o.ok,
+                })
+            })
+            .collect();
+        msgs.push(serde_json::json!({ "role": "user", "content": results }));
+    }
+
+    for o in loose {
+        msgs.push(serde_json::json!({
+            "role": "user",
+            "content": format!("Result of {}.{}: {}", o.tool, o.action, o.text()),
+        }));
+    }
+
+    serde_json::Value::Array(msgs)
+}
+
+/// Accumulates Anthropic's SSE stream.
+///
+/// A different protocol from OpenAI's, not a variant of it: content arrives as
+/// *indexed blocks* that open, receive deltas and close. Text comes as
+/// `text_delta`; a tool call's arguments come as `input_json_delta` carrying a
+/// `partial_json` string, split at arbitrary points exactly like OpenAI's — but
+/// the id and name arrive on `content_block_start`, not in the deltas.
+#[derive(Default)]
+pub struct AnthropicStreamAccumulator {
+    text: String,
+    /// block index -> (id, name, raw argument text so far)
+    blocks: std::collections::BTreeMap<u64, (String, String, String)>,
+    done: bool,
+}
+
+impl AnthropicStreamAccumulator {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn finished(&self) -> bool {
+        self.done
+    }
+
+    pub fn push_line(&mut self, line: &str) -> Option<String> {
+        // Anthropic sends `event:` and `data:` pairs. The type is repeated
+        // inside the JSON, so the `event:` line can be ignored entirely.
+        let payload = line.trim().strip_prefix("data:")?;
+        let chunk: serde_json::Value = serde_json::from_str(payload.trim()).ok()?;
+        self.push_chunk(&chunk)
+    }
+
+    pub fn push_chunk(&mut self, chunk: &serde_json::Value) -> Option<String> {
+        let kind = chunk.get("type").and_then(|t| t.as_str())?;
+        let index = chunk.get("index").and_then(|i| i.as_u64()).unwrap_or(0);
+
+        match kind {
+            "content_block_start" => {
+                let block = chunk.get("content_block")?;
+                if block.get("type").and_then(|t| t.as_str()) == Some("tool_use") {
+                    let slot = self.blocks.entry(index).or_default();
+                    slot.0 = block
+                        .get("id")
+                        .and_then(|i| i.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                    slot.1 = block
+                        .get("name")
+                        .and_then(|n| n.as_str())
+                        .unwrap_or_default()
+                        .to_string();
+                }
+                None
+            }
+            "content_block_delta" => {
+                let delta = chunk.get("delta")?;
+                match delta.get("type").and_then(|t| t.as_str()) {
+                    Some("text_delta") => {
+                        let t = delta.get("text").and_then(|t| t.as_str())?;
+                        if t.is_empty() {
+                            return None;
+                        }
+                        self.text.push_str(t);
+                        Some(t.to_string())
+                    }
+                    Some("input_json_delta") => {
+                        let p = delta.get("partial_json").and_then(|p| p.as_str())?;
+                        self.blocks.entry(index).or_default().2.push_str(p);
+                        None
+                    }
+                    _ => None,
+                }
+            }
+            // `message_stop` is the end. `message_delta` carries stop_reason and
+            // usage, neither of which changes what was said.
+            "message_stop" => {
+                self.done = true;
+                None
+            }
+            // An overloaded or rate-limited stream ends with an error event.
+            // Treating it as a clean end would present a truncated answer as a
+            // complete one.
+            "error" => {
+                self.done = true;
+                None
+            }
+            _ => None,
+        }
+    }
+
+    pub fn finish(self) -> (String, Vec<RawToolCall>, Vec<String>) {
+        let mut calls = Vec::new();
+        let mut dropped = Vec::new();
+        for (_, (id, name, raw)) in self.blocks {
+            if name.is_empty() {
+                continue;
+            }
+            let trimmed = raw.trim();
+            let parsed = if trimmed.is_empty() {
+                Some(serde_json::json!({}))
+            } else {
+                serde_json::from_str::<serde_json::Value>(trimmed).ok()
+            };
+            match parsed {
+                Some(input) => calls.push(RawToolCall { id, name, input }),
+                None => dropped.push(name),
+            }
+        }
+        (self.text, calls, dropped)
+    }
+}
+
 pub fn from_anthropic_response(body: &serde_json::Value) -> (String, Vec<RawToolCall>) {
     let mut text = String::new();
     let mut calls = Vec::new();
@@ -871,7 +1064,10 @@ pub fn to_actions(calls: &[RawToolCall]) -> Vec<Result<AgentAction, (String, Str
     calls
         .iter()
         .map(|c| match super::tools::parse_tool_call(&c.name, &c.input) {
-            Ok(call) => Ok(AgentAction::Tool(call)),
+            Ok(mut call) => {
+                call.call_id = c.id.clone();
+                Ok(AgentAction::Tool(call))
+            }
             Err(e) => Err((c.id.clone(), e)),
         })
         .collect()
@@ -907,6 +1103,15 @@ pub struct AnthropicConfig {
     pub model: String,
 }
 
+/// Anthropic's API version header. Required on every request; the API is
+/// explicitly versioned by date rather than by URL path.
+const ANTHROPIC_VERSION: &str = "2023-06-01";
+const ANTHROPIC_ENDPOINT: &str = "https://api.anthropic.com/v1/messages";
+/// `max_tokens` is required here, unlike OpenAI's, where it is optional.
+/// Generous enough not to truncate a real answer; it caps nothing that matters
+/// because the model stops when it is done.
+const ANTHROPIC_MAX_TOKENS: u32 = 8192;
+
 impl AnthropicConfig {
     fn api_key(&self) -> Option<String> {
         crate::creds::get(&self.key_target)
@@ -927,6 +1132,153 @@ impl AnthropicProvider {
     pub const ID: &'static str = "anthropic";
     pub fn new(config: AnthropicConfig) -> Self {
         Self { config }
+    }
+}
+
+impl AnthropicProvider {
+    fn body(&self, request: &AgentRequest, stream: bool) -> Result<serde_json::Value, String> {
+        if self.config.model.is_empty() {
+            return Err("Anthropic provider has no model configured".into());
+        }
+        if !crate::creds::exists(&self.config.key_target) {
+            return Err("Anthropic provider has no API key configured".into());
+        }
+        let mut body = serde_json::json!({
+            "model": self.config.model,
+            "max_tokens": ANTHROPIC_MAX_TOKENS,
+            // Top-level, not a message: this is the first thing that differs
+            // from the OpenAI shape, and sending it as a message is a 400.
+            "system": format!(
+                "{}
+
+# Context
+
+{}",
+                request.system.trim(),
+                request.context.trim()
+            ),
+            "messages": anthropic_messages(request),
+            "stream": stream,
+        });
+        // An empty tools array is rejected, where OpenAI simply ignores it.
+        let tools = to_anthropic_tools(&request.tools);
+        if tools.as_array().is_some_and(|t| !t.is_empty()) {
+            body["tools"] = tools;
+        }
+        Ok(body)
+    }
+
+    fn client(&self) -> Result<reqwest::blocking::Client, String> {
+        reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(180))
+            .build()
+            .map_err(|e| format!("could not build an HTTP client: {e}"))
+    }
+
+    /// Anthropic authenticates with `x-api-key`, not a bearer token.
+    fn request(
+        &self,
+        client: &reqwest::blocking::Client,
+    ) -> Result<reqwest::blocking::RequestBuilder, String> {
+        let key = self
+            .config
+            .api_key()
+            .ok_or_else(|| "Anthropic provider has no API key configured".to_string())?;
+        Ok(client
+            .post(ANTHROPIC_ENDPOINT)
+            .header("content-type", "application/json")
+            .header("anthropic-version", ANTHROPIC_VERSION)
+            .header("x-api-key", key))
+    }
+
+    fn post(&self, body: &serde_json::Value) -> Result<String, String> {
+        let client = self.client()?;
+        let response = self
+            .request(&client)?
+            .json(body)
+            .send()
+            .map_err(|e| format!("{ANTHROPIC_ENDPOINT}: {e}"))?;
+        let status = response.status();
+        let text = response
+            .text()
+            .map_err(|e| format!("could not read the response body: {e}"))?;
+        if !status.is_success() {
+            // Anthropic's own message is far more useful than the status
+            // ("credit balance is too low", "model not found").
+            return Err(format!(
+                "Anthropic returned {status}: {}",
+                truncate(&text, 400)
+            ));
+        }
+        Ok(text)
+    }
+
+    /// A real round trip, for the Test button.
+    ///
+    ///  can only report what is configured; saying a provider works
+    /// without ever calling it is the exact shape of failure the update checker
+    /// once had, where unreachable was reported as up to date.
+    pub fn probe(&self) -> Result<String, String> {
+        if self.config.model.is_empty() {
+            return Err("No model chosen.".into());
+        }
+        let body = serde_json::json!({
+            "model": self.config.model,
+            "max_tokens": 16,
+            "messages": [{ "role": "user", "content": "Reply with the single word: ready" }],
+        });
+        let text = self.post(&body)?;
+        let json: serde_json::Value = serde_json::from_str(&text)
+            .map_err(|e| format!("Anthropic returned invalid JSON: {e}"))?;
+        let (reply, _) = from_anthropic_response(&json);
+        Ok(if reply.trim().is_empty() {
+            format!("{} answered.", self.config.model)
+        } else {
+            format!(
+                "{} answered: {}",
+                self.config.model,
+                truncate(reply.trim(), 120)
+            )
+        })
+    }
+
+    fn stream(
+        &self,
+        body: &serde_json::Value,
+        on_delta: &dyn Fn(&str),
+    ) -> Result<(String, Vec<RawToolCall>, Vec<String>), String> {
+        use std::io::BufRead;
+
+        let client = self.client()?;
+        let response = self
+            .request(&client)?
+            .json(body)
+            .send()
+            .map_err(|e| format!("{ANTHROPIC_ENDPOINT}: {e}"))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let text = response.text().unwrap_or_default();
+            return Err(format!(
+                "Anthropic returned {status}: {}",
+                truncate(&text, 400)
+            ));
+        }
+
+        let mut acc = AnthropicStreamAccumulator::new();
+        for line in std::io::BufReader::new(response).lines() {
+            // A read error mid-stream is not fatal: what arrived is a real
+            // partial answer, and `finish` drops any half-written tool call
+            // rather than running it.
+            let Ok(line) = line else { break };
+            if let Some(fresh) = acc.push_line(&line) {
+                on_delta(&fresh);
+            }
+            if acc.finished() {
+                break;
+            }
+        }
+        Ok(acc.finish())
     }
 }
 
@@ -951,31 +1303,39 @@ impl LLMProvider for AnthropicProvider {
             },
         ]
     }
-    fn run(&self, _request: &AgentRequest) -> Result<AgentResponse, String> {
-        if self.config.api_key().is_none() {
-            return Err("Anthropic provider has no API key configured".into());
-        }
-        // Deliberately not implemented in this slice. It returns an explicit
-        // error rather than a plausible-looking empty response, so a
-        // half-configured provider can never be mistaken for a working one.
-        Err("Anthropic transport not implemented in this build — use the Mock provider".into())
+    fn run(&self, request: &AgentRequest) -> Result<AgentResponse, String> {
+        let body = self.body(request, false)?;
+        let text = self.post(&body)?;
+        let json: serde_json::Value = serde_json::from_str(&text)
+            .map_err(|e| format!("Anthropic returned invalid JSON: {e}"))?;
+        let (message, calls) = from_anthropic_response(&json);
+        Ok(assemble(message, &calls, &[]))
     }
+
+    fn run_streaming(
+        &self,
+        request: &AgentRequest,
+        on_delta: &dyn Fn(&str),
+    ) -> Result<AgentResponse, String> {
+        let body = self.body(request, true)?;
+        let (message, calls, dropped) = self.stream(&body, on_delta)?;
+        Ok(assemble(message, &calls, &dropped))
+    }
+
     fn health(&self) -> ProviderHealth {
-        let configured = crate::creds::exists(&self.config.key_target);
+        let has_key = crate::creds::exists(&self.config.key_target);
+        let configured = has_key && !self.config.model.is_empty();
         ProviderHealth {
-            ok: false,
+            // Configured is as much as can be claimed without a round trip.
+            // "Test" in the UI is what actually proves it.
+            ok: configured,
             configured,
-            detail: if configured {
-                format!(
-                    "Key present for '{}'; transport not implemented in this build.",
-                    if self.config.model.is_empty() {
-                        "(no model set)"
-                    } else {
-                        &self.config.model
-                    }
-                )
-            } else {
+            detail: if !has_key {
                 "No API key configured.".into()
+            } else if self.config.model.is_empty() {
+                "Key saved, but no model chosen.".into()
+            } else {
+                format!("Key saved, using {}.", self.config.model)
             },
         }
     }
@@ -1291,6 +1651,8 @@ pub struct ProviderRegistry {
     /// A typed copy of the OpenAI-compatible provider's config, so a probe can
     /// be run without downcasting a trait object.
     openai: Option<OpenAICompatibleConfig>,
+    /// The same, for Anthropic.
+    anthropic: Option<AnthropicConfig>,
 }
 
 impl Default for ProviderRegistry {
@@ -1306,6 +1668,7 @@ impl ProviderRegistry {
         Self {
             providers: vec![Box::new(MockProvider)],
             openai: None,
+            anthropic: None,
         }
     }
 
@@ -1315,6 +1678,11 @@ impl ProviderRegistry {
     }
 
     /// Remember the OpenAI-compatible config alongside the trait object.
+    pub fn register_anthropic(&mut self, config: AnthropicConfig) {
+        self.anthropic = Some(config.clone());
+        self.register(Box::new(AnthropicProvider::new(config)));
+    }
+
     pub fn register_openai(&mut self, config: OpenAICompatibleConfig) {
         self.openai = Some(config.clone());
         self.register(Box::new(OpenAICompatibleProvider::new(config)));
@@ -1322,6 +1690,10 @@ impl ProviderRegistry {
 
     pub fn openai_compatible(&self) -> Option<OpenAICompatibleProvider> {
         self.openai.clone().map(OpenAICompatibleProvider::new)
+    }
+
+    pub fn anthropic(&self) -> Option<AnthropicProvider> {
+        self.anthropic.clone().map(AnthropicProvider::new)
     }
 
     pub fn get(&self, id: &str) -> Option<&dyn LLMProvider> {
@@ -1656,6 +2028,202 @@ mod transport_tests {
         }
     }
 
+    // -- anthropic ---------------------------------------------------------
+
+    fn obs(call_id: &str, tool: &str, action: &str, ok: bool) -> Observation {
+        Observation {
+            call_id: call_id.into(),
+            tool: tool.into(),
+            action: action.into(),
+            args: serde_json::json!({ "path": "a.ts" }),
+            ok,
+            output: if ok {
+                "contents".into()
+            } else {
+                "denied".into()
+            },
+        }
+    }
+
+    /// The rule that makes or breaks multi-turn tool use: a `tool_result` is
+    /// only valid when the preceding assistant turn contains the matching
+    /// `tool_use`. Anthropic rejects the request outright otherwise, where
+    /// OpenAI would simply carry on.
+    #[test]
+    fn a_tool_result_is_preceded_by_the_call_it_answers() {
+        let mut r = req();
+        r.observations = vec![obs("toolu_1", "files", "read", true)];
+
+        let msgs = anthropic_messages(&r);
+        let msgs = msgs.as_array().unwrap();
+
+        let assistant = msgs
+            .iter()
+            .position(|m| m["role"] == "assistant")
+            .expect("the assistant turn must be reconstructed");
+        let result_turn = msgs
+            .iter()
+            .position(|m| m["role"] == "user" && m["content"][0]["type"] == "tool_result")
+            .expect("the result must be a user turn");
+        assert!(assistant < result_turn, "the call has to come first");
+
+        let use_block = &msgs[assistant]["content"][0];
+        assert_eq!(use_block["type"], "tool_use");
+        assert_eq!(use_block["id"], "toolu_1");
+        assert_eq!(use_block["name"], "files_read");
+        // The input has to be echoed back, not invented.
+        assert_eq!(use_block["input"]["path"], "a.ts");
+        assert_eq!(msgs[result_turn]["content"][0]["tool_use_id"], "toolu_1");
+    }
+
+    #[test]
+    fn a_failed_tool_result_is_flagged_as_an_error_not_as_output() {
+        let mut r = req();
+        r.observations = vec![obs("toolu_2", "terminal", "run", false)];
+        let msgs = anthropic_messages(&r);
+        let result = msgs
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|m| m["content"][0]["type"] == "tool_result")
+            .unwrap()
+            .clone();
+        assert_eq!(result["content"][0]["is_error"], true);
+    }
+
+    /// The mock, and rejected actions, produce observations with no wire id.
+    /// They cannot be `tool_result` blocks — but dropping them would lose the
+    /// only record of what happened.
+    #[test]
+    fn an_observation_with_no_call_id_survives_as_text() {
+        let mut r = req();
+        let mut o = obs("", "decision", "record", false);
+        o.output = "could not record".into();
+        r.observations = vec![o];
+
+        let msgs = anthropic_messages(&r);
+        let msgs = msgs.as_array().unwrap();
+        assert!(
+            !msgs
+                .iter()
+                .any(|m| m["content"][0]["type"] == "tool_result"),
+            "no id means no tool_result block"
+        );
+        assert!(
+            msgs.iter().any(|m| m["content"]
+                .as_str()
+                .is_some_and(|c| c.contains("could not record"))),
+            "but it must still reach the model"
+        );
+    }
+
+    #[test]
+    fn the_system_prompt_is_never_a_message() {
+        let r = req();
+        let msgs = anthropic_messages(&r);
+        for m in msgs.as_array().unwrap() {
+            assert_ne!(m["role"], "system", "system is a top-level field here");
+        }
+    }
+
+    /// Anthropic streams indexed blocks that open, receive deltas and close —
+    /// a different protocol from OpenAI's, not a variant of it.
+    #[test]
+    fn anthropic_text_deltas_accumulate() {
+        let mut acc = AnthropicStreamAccumulator::new();
+        let mut live = String::new();
+        for l in [
+            r#"data: {"type":"message_start","message":{"id":"msg_1"}}"#,
+            r#"data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"#,
+            r#"data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"I'll "}}"#,
+            r#"data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"delegate."}}"#,
+            r#"data: {"type":"content_block_stop","index":0}"#,
+            r#"data: {"type":"message_stop"}"#,
+        ] {
+            if let Some(t) = acc.push_line(l) {
+                live.push_str(&t);
+            }
+        }
+        assert!(acc.finished());
+        assert_eq!(live, "I'll delegate.");
+        assert_eq!(acc.finish().0, "I'll delegate.");
+    }
+
+    /// The id and name arrive on `content_block_start`; the arguments arrive
+    /// afterwards as `partial_json`, split at arbitrary points.
+    #[test]
+    fn an_anthropic_tool_call_is_reassembled_from_partial_json() {
+        let mut acc = AnthropicStreamAccumulator::new();
+        for l in [
+            r#"data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_9","name":"delegate_start"}}"#,
+            r#"data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"agent_i"}}"#,
+            r#"data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"d\":\"dev-a\"}"}}"#,
+            r#"data: {"type":"message_stop"}"#,
+        ] {
+            acc.push_line(l);
+        }
+        let (_, calls, dropped) = acc.finish();
+        assert!(dropped.is_empty(), "nothing should have been unparsable");
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].id, "toolu_9");
+        assert_eq!(calls[0].name, "delegate_start");
+        assert_eq!(calls[0].input["agent_id"], "dev-a");
+    }
+
+    /// Text and a tool call arrive on different block indexes in the same
+    /// message; they must not bleed into each other.
+    #[test]
+    fn text_and_a_tool_call_in_one_message_stay_separate() {
+        let mut acc = AnthropicStreamAccumulator::new();
+        for l in [
+            r#"data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Reading it."}}"#,
+            r#"data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"t1","name":"files_read"}}"#,
+            r#"data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"path\":\"a.ts\"}"}}"#,
+            r#"data: {"type":"message_stop"}"#,
+        ] {
+            acc.push_line(l);
+        }
+        let (text, calls, _) = acc.finish();
+        assert_eq!(text, "Reading it.");
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].input["path"], "a.ts");
+    }
+
+    /// An overloaded stream ends with an error event. Treating that as a clean
+    /// finish would present a truncated answer as a complete one.
+    #[test]
+    fn an_error_event_ends_the_stream_and_drops_the_half_written_call() {
+        let mut acc = AnthropicStreamAccumulator::new();
+        for l in [
+            r#"data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"starting"}}"#,
+            r#"data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"t","name":"terminal_run"}}"#,
+            r#"data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"command"}}"#,
+            r#"data: {"type":"error","error":{"type":"overloaded_error"}}"#,
+        ] {
+            acc.push_line(l);
+        }
+        assert!(acc.finished(), "an error ends the stream");
+        let (text, calls, dropped) = acc.finish();
+        assert_eq!(text, "starting", "what did arrive is still real");
+        assert!(calls.is_empty(), "a half-written call must not run");
+        assert_eq!(dropped, vec!["terminal_run".to_string()]);
+    }
+
+    /// Without a key or a model the provider must refuse before making a
+    /// request, and say which piece is missing.
+    #[test]
+    fn anthropic_refuses_to_call_out_half_configured() {
+        let p = AnthropicProvider::new(AnthropicConfig {
+            key_target: key_target("anthropic-test-missing"),
+            model: String::new(),
+        });
+        let e = p.run(&req()).unwrap_err();
+        assert!(e.contains("model"), "should name the missing piece: {e}");
+        let h = p.health();
+        assert!(!h.ok);
+        assert!(!h.configured);
+    }
+
     // -- streaming ---------------------------------------------------------
 
     /// A provider that cannot stream must still work, and the caller must not
@@ -1911,6 +2479,7 @@ mod transport_tests {
                 call_id: "call_abc".into(),
                 tool: "files".into(),
                 action: "read".into(),
+                args: serde_json::json!({ "path": "types.ts" }),
                 ok: true,
                 output: "export type SyncResult = {}".into(),
             },
@@ -1919,6 +2488,7 @@ mod transport_tests {
                 call_id: String::new(),
                 tool: "git".into(),
                 action: "status".into(),
+                args: serde_json::Value::Null,
                 ok: false,
                 output: "not a repo".into(),
             },

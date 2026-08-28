@@ -4,10 +4,20 @@
 //! that leaks up into a command is logic the tests can't reach without a
 //! window, so it stays below this line.
 //!
-//! **Threading.** A plain `#[tauri::command] fn` runs on the *main* thread in
-//! Tauri v2 — only `async fn` or `#[tauri::command(async)]` is dispatched to a
-//! worker. Anything here that talks to a network, runs an agent, or waits on a
-//! human is therefore marked `(async)`, or it freezes the window while it works.
+//! **Threading**, which has two parts and needs both.
+//!
+//! A plain `#[tauri::command] fn` runs on the *main* thread in Tauri v2 — only
+//! `async fn` or `#[tauri::command(async)]` is dispatched off it. So anything
+//! that talks to a network, runs an agent, or waits on a human must be one of
+//! those, or it freezes the window while it works.
+//!
+//! But getting off the main thread is not enough: `(async)` lands the body on a
+//! Tokio worker, and `reqwest::blocking` builds and drops its own runtime
+//! internally. Dropping a runtime inside an async context panics outright.
+//! Anything that might reach the network therefore goes one step further, into
+//! `blocking(...)`, which hands the work to the pool where blocking is legal.
+//! The commands left on `(async)` alone are the ones that only touch files,
+//! `git` via `std::process`, or memory.
 //!
 //! For the approval flow this is not cosmetic: `aiw_send_message` blocks while
 //! a tool call waits for a person, and `aiw_resolve_approval` is what unblocks
@@ -42,6 +52,26 @@ type Ws<'a> = tauri::State<'a, Arc<Workspace>>;
 // ---------------------------------------------------------------------------
 // Projects & features
 // ---------------------------------------------------------------------------
+
+/// Run blocking work off the async runtime.
+///
+/// `#[tauri::command(async)]` executes the body on a Tokio worker, and
+/// `reqwest::blocking` builds and drops its own runtime internally. Dropping a
+/// runtime inside an async context panics outright — "Cannot drop a runtime in
+/// a context where blocking is not allowed" — so anything that might reach the
+/// network has to go to the blocking pool, where it is permitted.
+///
+/// This is the other half of moving these commands off the main thread: getting
+/// off it is not enough, they have to land somewhere blocking is legal.
+async fn blocking<T, F>(f: F) -> Result<T, String>
+where
+    F: FnOnce() -> T + Send + 'static,
+    T: Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(f)
+        .await
+        .map_err(|e| format!("the task did not finish: {e}"))
+}
 
 #[tauri::command]
 pub fn aiw_projects(ws: Ws) -> Vec<ProjectSummary> {
@@ -337,10 +367,10 @@ pub fn aiw_claims(ws: Ws, project_id: Option<String>, active_only: bool) -> Vec<
     ws.claims_for(project_id.as_deref(), active_only)
 }
 
-#[tauri::command(async)]
-pub fn aiw_start_agent(ws: Ws, cmd: StartAgentCommand) -> Result<SessionOutcome, String> {
-    let ws: Arc<Workspace> = (*ws).clone();
-    AgentRuntime::run(&ws, &cmd)
+#[tauri::command]
+pub async fn aiw_start_agent(ws: Ws<'_>, cmd: StartAgentCommand) -> Result<SessionOutcome, String> {
+    let w: Arc<Workspace> = (*ws).clone();
+    blocking(move || AgentRuntime::run(&w, &cmd)).await?
 }
 
 // ---------------------------------------------------------------------------
@@ -825,10 +855,10 @@ pub fn run_demo(ws: &Arc<Workspace>, base: PathBuf) -> Result<DemoResult, String
     })
 }
 
-#[tauri::command(async)]
-pub fn aiw_run_demo(
-    ws: Ws,
-    db: tauri::State<crate::db::Db>,
+#[tauri::command]
+pub async fn aiw_run_demo(
+    ws: Ws<'_>,
+    db: tauri::State<'_, crate::db::Db>,
     base_dir: Option<String>,
 ) -> Result<DemoResult, String> {
     let base = match base_dir {
@@ -842,22 +872,33 @@ pub fn aiw_run_demo(
     // commits and the delta is meaningless.
     let _ = std::fs::remove_dir_all(&base);
     let ws: Arc<Workspace> = (*ws).clone();
-    ws.reset_runtime_state();
-    let result = run_demo(&ws, base)?;
+
+    // On the blocking pool: the demo runs real sessions, and an agent pointed
+    // at a real provider would reach the network from here.
+    let running = ws.clone();
+    let result = blocking(move || {
+        running.reset_runtime_state();
+        run_demo(&running, base)
+    })
+    .await??;
+
     persist_projects(&ws, &db);
     Ok(result)
 }
 
 /// Models a provider offers. The Start AI Work screen needs this to let you
 /// pick one, and it is the same call for the mock and for a real provider.
-#[tauri::command(async)]
-pub fn aiw_models(ws: Ws, provider_id: String) -> Vec<super::provider::ModelInfo> {
-    ws.providers
-        .lock()
-        .unwrap()
-        .get(&provider_id)
-        .map(|p| p.list_models())
-        .unwrap_or_default()
+#[tauri::command]
+pub async fn aiw_models(
+    ws: Ws<'_>,
+    provider_id: String,
+) -> Result<Vec<super::provider::ModelInfo>, String> {
+    let w = ws.inner().clone();
+    blocking(move || {
+        let p = w.providers.lock().unwrap().get(&provider_id);
+        p.map(|p| p.list_models()).unwrap_or_default()
+    })
+    .await
 }
 
 /// "What changed since this session's checkpoint?" — the question an agent asks
@@ -950,9 +991,10 @@ pub fn aiw_provider_setups(db: tauri::State<crate::db::Db>) -> Vec<ProviderSetup
 
 /// Actually call the provider. `health()` can only say "configured"; this is
 /// the difference between believing it works and knowing.
-#[tauri::command(async)]
-pub fn aiw_provider_test(ws: Ws, provider_id: String) -> Result<String, String> {
-    ws.test_provider(&provider_id)
+#[tauri::command]
+pub async fn aiw_provider_test(ws: Ws<'_>, provider_id: String) -> Result<String, String> {
+    let w = ws.inner().clone();
+    blocking(move || w.test_provider(&provider_id)).await?
 }
 
 /// Forget a provider's key. The configuration stays so the form still shows
@@ -1044,23 +1086,28 @@ pub fn aiw_focus_conversation(
 /// Synchronous, and can take a while: a turn may involve several provider
 /// round-trips and a tool call that stops to ask you for approval. Tauri runs
 /// this on a worker thread, so the window stays live throughout.
-#[tauri::command(async)]
-pub fn aiw_send_message(
+#[tauri::command]
+pub async fn aiw_send_message(
     app: tauri::AppHandle,
-    ws: Ws,
+    ws: Ws<'_>,
     conversation_id: String,
     text: String,
 ) -> Result<AssistantReply, String> {
     let workspace = ws.inner().clone();
-    // Progress goes out on its own channel rather than through the event bus:
-    // token deltas are not facts about the project, and a few hundred of them
-    // would bury the log that makes the workspace auditable.
-    let sink = move |e: ChatEvent| {
-        // A dropped progress event is not worth failing a reply over — the
-        // conversation on disk is the record, and the UI re-reads it at the end.
-        let _ = app.emit("aiw:chat", e);
-    };
-    Assistant::send(&workspace, ws.convs()?, &conversation_id, &text, &sink)
+    blocking(move || {
+        // Progress goes out on its own channel rather than through the event
+        // bus: token deltas are not facts about the project, and a few hundred
+        // of them would bury the log that makes the workspace auditable.
+        let sink = move |e: ChatEvent| {
+            // A dropped progress event is not worth failing a reply over — the
+            // conversation on disk is the record, and the UI re-reads it at
+            // the end.
+            let _ = app.emit("aiw:chat", e);
+        };
+        let convs = workspace.convs()?;
+        Assistant::send(&workspace, convs, &conversation_id, &text, &sink)
+    })
+    .await?
 }
 
 /// Where your conversations and notes actually live.

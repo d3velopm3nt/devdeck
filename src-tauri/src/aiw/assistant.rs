@@ -630,11 +630,28 @@ impl Assistant {
                     }
                 });
 
+                // Say when the agent behind this is scripted. "I have put
+                // Developer A on it" is a claim about real work; if the
+                // provider is the mock, the work is a fixture, and the
+                // transcript is the only place that would ever say so.
+                let scripted = ws
+                    .agent(&agent_id)
+                    .is_some_and(|a| a.provider == super::provider::MockProvider::ID);
+                let caveat = if scripted {
+                    format!(
+                        " NOTE: {agent_id} is on the mock provider, so this session runs a \
+                         script and produces fixture output, not real work. Say so plainly in \
+                         your reply. Point it at a real provider under Settings to change that."
+                    )
+                } else {
+                    String::new()
+                };
+
                 (
                     true,
                     format!(
                         "Started {agent_id} on {feature_id} (session {session_id}). \
-                         It runs in the background; check Activity for progress."
+                         It runs in the background; check Activity for progress.{caveat}"
                     ),
                 )
             }

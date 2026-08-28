@@ -581,6 +581,9 @@ pub fn run() {
         // After the providers exist, not before -- an assignment to a provider
         // that has not been registered yet is refused.
         aiw_workspace.restore_agent_providers(&aiw::commands::saved_agent_providers(&conn));
+        // After the agents exist, so saved grants land on the current default
+        // set rather than being applied to nothing.
+        aiw_workspace.restore_permissions(&aiw::commands::saved_permissions(&conn));
     }
     let aiw_for_setup = aiw_workspace.clone();
 

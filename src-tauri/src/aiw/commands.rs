@@ -523,14 +523,33 @@ pub fn aiw_permissions(ws: Ws) -> Vec<PermissionRow> {
         .collect()
 }
 
+/// Where the permission matrix is remembered.
+pub const PERMISSIONS_KEY: &str = "aiw.permissions";
+
+/// Change one grant, and remember it.
+///
+/// Without persisting, every tightening was undone by the next restart, which
+/// quietly turned the permission matrix into a suggestion.
 #[tauri::command]
 pub fn aiw_set_permission(
     ws: Ws,
+    db: tauri::State<crate::db::Db>,
     agent_id: String,
     tool: String,
     permission: String,
 ) -> Result<(), String> {
-    ws.set_permission(&agent_id, &tool, &permission)
+    ws.set_permission(&agent_id, &tool, &permission)?;
+    let json = serde_json::to_string(&ws.permission_grants()).map_err(|e| e.to_string())?;
+    let conn = db.0.lock().unwrap();
+    crate::db::setting_set_conn(&conn, PERMISSIONS_KEY, &json)
+}
+
+pub fn saved_permissions(conn: &rusqlite::Connection) -> Vec<(String, String, String)> {
+    crate::db::setting_get_conn(conn, PERMISSIONS_KEY)
+        .ok()
+        .flatten()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
 }
 
 #[tauri::command]

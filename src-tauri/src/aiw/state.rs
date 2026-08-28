@@ -203,9 +203,11 @@ pub struct ProjectSummary {
 }
 
 /// How long an agent waits for a human before giving up and being refused.
-/// Long enough to walk to the kettle, short enough that a forgotten prompt does
-/// not leave an agent wedged.
-const APPROVAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(180);
+///
+/// Someone at the keyboard answers in seconds. The only thing a longer window
+/// buys is a longer stall when nobody is there, so this is the shortest span
+/// that still covers reading the prompt and thinking about it.
+const APPROVAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(90);
 
 /// The whole AI Workspace.
 pub struct Workspace {
@@ -242,10 +244,19 @@ impl Default for Workspace {
 
 impl Workspace {
     pub fn new() -> Self {
+        Self::with_approval_timeout(APPROVAL_TIMEOUT)
+    }
+
+    /// A workspace whose approval prompts expire after .
+    ///
+    /// Tests use a few hundred milliseconds. Without this they wait out the
+    /// real window on every gated call, which turned a 26-second suite into a
+    /// six-minute one — and a slow suite is one people stop running.
+    pub fn with_approval_timeout(timeout: std::time::Duration) -> Self {
         Self {
             bus: Arc::new(EventBus::new()),
             conflicts: ConflictService::new(),
-            approvals: Arc::new(ApprovalBroker::new(APPROVAL_TIMEOUT)),
+            approvals: Arc::new(ApprovalBroker::new(timeout)),
             conversations: std::sync::OnceLock::new(),
             providers: Mutex::new(ProviderRegistry::new()),
             reconciler: Box::new(DeterministicReconciler),
@@ -543,6 +554,40 @@ impl Workspace {
         // or a permission change would appear to work and change nothing.
         self.rebuild_tool_services();
         Ok(())
+    }
+
+    /// Every grant, flattened, for persistence.
+    pub fn permission_grants(&self) -> Vec<(String, String, String)> {
+        let mut out = Vec::new();
+        for a in self.agents.lock().unwrap().iter() {
+            for (tool, perm) in &a.permissions {
+                out.push((a.id.clone(), tool.clone(), perm.clone()));
+            }
+        }
+        out.sort();
+        out
+    }
+
+    /// Re-apply saved grants over the defaults.
+    ///
+    /// Overlaid rather than replacing, so a tool or agent added in a later
+    /// version arrives with its intended default instead of nothing — and a
+    /// grant for something that no longer exists is skipped rather than
+    /// resurrecting it.
+    pub fn restore_permissions(&self, saved: &[(String, String, String)]) {
+        let known: std::collections::HashSet<String> =
+            super::tools::registry().into_iter().map(|t| t.id).collect();
+        let mut agents = self.agents.lock().unwrap();
+        for (agent_id, tool, perm) in saved {
+            if !known.contains(tool) {
+                continue;
+            }
+            if let Some(a) = agents.iter_mut().find(|a| &a.id == agent_id) {
+                a.permissions.insert(tool.clone(), perm.clone());
+            }
+        }
+        drop(agents);
+        self.rebuild_tool_services();
     }
 
     pub fn permission_matrix(&self) -> PermissionMatrix {
@@ -876,8 +921,14 @@ pub fn default_agents() -> Vec<AgentDef> {
             permissions: perms(&[
                 ("files", "full"),
                 ("git", "full"),
-                ("terminal", "full"),
-                ("process", "full"),
+                // Approval, not full. Writing code and committing it stays
+                // inside the project; running a command does not. This was
+                // harmless when a deterministic mock was behind it and is not
+                // once a real model is choosing the command, so the default is
+                // the one you would pick if you thought about it — which is the
+                // only default worth shipping.
+                ("terminal", "approval"),
+                ("process", "approval"),
                 ("tests", "full"),
                 ("knowledge", "full"),
             ]),
@@ -892,8 +943,14 @@ pub fn default_agents() -> Vec<AgentDef> {
             permissions: perms(&[
                 ("files", "full"),
                 ("git", "full"),
-                ("terminal", "full"),
-                ("process", "full"),
+                // Approval, not full. Writing code and committing it stays
+                // inside the project; running a command does not. This was
+                // harmless when a deterministic mock was behind it and is not
+                // once a real model is choosing the command, so the default is
+                // the one you would pick if you thought about it — which is the
+                // only default worth shipping.
+                ("terminal", "approval"),
+                ("process", "approval"),
                 ("tests", "full"),
                 ("knowledge", "full"),
             ]),
@@ -911,8 +968,13 @@ pub fn default_agents() -> Vec<AgentDef> {
                 // useful, QA silently editing the code under test is not.
                 ("files", "read"),
                 ("git", "read"),
-                ("terminal", "full"),
-                ("process", "full"),
+                // QA's job is to run things, so these are the tools it exists
+                // for — which is exactly why they are worth being asked about.
+                ("terminal", "approval"),
+                ("process", "approval"),
+                // Running the suite is the one it does constantly; prompting
+                // for every test run would train you to click Allow without
+                // reading, which is worse than not asking.
                 ("tests", "full"),
                 ("knowledge", "full"),
             ]),

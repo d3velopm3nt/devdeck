@@ -36,7 +36,12 @@ impl Drop for Tmp {
 }
 
 fn ws() -> Arc<Workspace> {
-    let w = Arc::new(Workspace::new());
+    // A short approval window. Nothing here is watching for a prompt, so the
+    // real one would just be dead time: it is the difference between a
+    // 26-second suite and a six-minute one.
+    let w = Arc::new(Workspace::with_approval_timeout(
+        std::time::Duration::from_millis(200),
+    ));
     // Same call the app makes at startup; without it the event-driven services
     // are never subscribed and half the behaviour under test cannot happen.
     Workspace::install_handlers(&w);
@@ -731,7 +736,12 @@ fn wait_for_prompt(w: &Arc<Workspace>) -> super::approval::ApprovalRequest {
 fn approval_fixture() -> (Tmp, Arc<Workspace>, PathBuf, ToolCall) {
     let t = Tmp::new("approve");
     let (tyrex, _) = seed_demo(&t.0).unwrap();
-    let w = ws();
+    // Long enough for the answering thread to get there, short enough that a
+    // broken answer path fails the test rather than stalling the suite.
+    let w = Arc::new(Workspace::with_approval_timeout(
+        std::time::Duration::from_secs(15),
+    ));
+    Workspace::install_handlers(&w);
     w.register_project("tyrex", "TyreX", tyrex.clone());
     w.set_permission("qa", "files", "approval").unwrap();
     let call = ToolCall::new(
@@ -1251,4 +1261,173 @@ fn a_running_agent_does_not_hold_the_provider_registry() {
         .join()
         .unwrap()
         .expect("the agent should still finish");
+}
+
+// ---------------------------------------------------------------------------
+// Defaults, and remembering what you change
+// ---------------------------------------------------------------------------
+
+/// The defaults were written when a deterministic mock was the only provider,
+/// where unrestricted terminal access was harmless. With a real model choosing
+/// the command it is not, so anything that runs a command has to ask.
+#[test]
+fn nobody_gets_to_run_a_command_without_asking() {
+    let w = ws();
+    let m = w.permission_matrix();
+    for agent in ["dev-a", "dev-b", "qa", ASSISTANT_ID] {
+        for tool in ["terminal", "process"] {
+            let p = m.get(agent, tool);
+            assert!(
+                !matches!(p, super::tools::Permission::Full),
+                "{agent} may run {tool} unprompted by default ({p:?})"
+            );
+        }
+    }
+}
+
+/// Not everything should ask, or you learn to click Allow without reading.
+/// Writing code and committing it stays inside the project; running the suite
+/// is what the developers do constantly.
+#[test]
+fn the_work_itself_is_not_gated_behind_a_prompt() {
+    let w = ws();
+    let m = w.permission_matrix();
+    for tool in ["files", "git", "tests"] {
+        assert!(
+            matches!(m.get("dev-a", tool), super::tools::Permission::Full),
+            "a developer should not need permission to {tool}"
+        );
+    }
+    // QA stays read-only on files: reporting a defect is useful, silently
+    // editing the code under test is not.
+    assert!(matches!(
+        m.get("qa", "files"),
+        super::tools::Permission::Read
+    ));
+}
+
+/// The orchestrator delegates; it does not implement. That is what makes the
+/// specialists' permissions mean anything.
+#[test]
+fn the_assistant_still_cannot_write_code_itself() {
+    let w = ws();
+    let m = w.permission_matrix();
+    assert!(matches!(
+        m.get(ASSISTANT_ID, "files"),
+        super::tools::Permission::Read
+    ));
+    assert!(matches!(
+        m.get(ASSISTANT_ID, "delegate"),
+        super::tools::Permission::Full
+    ));
+}
+
+/// Saved grants are overlaid on the current defaults, not swapped in for them:
+/// a tool added in a later version must arrive with its intended default rather
+/// than with nothing.
+#[test]
+fn restoring_permissions_keeps_defaults_for_anything_not_saved() {
+    let w = ws();
+    w.set_permission("dev-a", "terminal", "full").unwrap();
+    let saved = w.permission_grants();
+    assert!(saved.contains(&(
+        "dev-a".to_string(),
+        "terminal".to_string(),
+        "full".to_string()
+    )));
+
+    // A fresh workspace, as after a restart.
+    let fresh = ws();
+    assert!(
+        !matches!(
+            fresh.permission_matrix().get("dev-a", "terminal"),
+            super::tools::Permission::Full
+        ),
+        "the default is the tightened one"
+    );
+    fresh.restore_permissions(&saved);
+    assert!(
+        matches!(
+            fresh.permission_matrix().get("dev-a", "terminal"),
+            super::tools::Permission::Full
+        ),
+        "a choice you made must survive a restart, or the matrix is a suggestion"
+    );
+    // And everything not in the saved set still has its default.
+    assert!(matches!(
+        fresh.permission_matrix().get("qa", "files"),
+        super::tools::Permission::Read
+    ));
+}
+
+/// A grant for a tool that no longer exists must not resurrect it.
+#[test]
+fn a_saved_grant_for_an_unknown_tool_is_ignored() {
+    let w = ws();
+    w.restore_permissions(&[("dev-a".into(), "telepathy".into(), "full".into())]);
+    let defs = super::tools::definitions_for("dev-a", &w.permission_matrix());
+    assert!(!defs.iter().any(|d| d.name.starts_with("telepathy")));
+}
+
+/// Restoring must actually reach the live tool services, not just the agent
+/// list — a permission change that stops at the model is one that appears to
+/// work and changes nothing.
+#[test]
+fn restored_permissions_reach_the_running_tool_services() {
+    let t = Tmp::new("restoreperm");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    w.register_project("tyrex", "TyreX", tyrex.clone());
+
+    let scope = super::events::EventScope::project("tyrex");
+    let call = ToolCall::new(
+        TOOL_FILES,
+        "write",
+        serde_json::json!({ "path": "restored.txt", "content": "yes" }),
+    );
+    assert!(
+        !w.project("tyrex")
+            .unwrap()
+            .tools
+            .execute(&w.bus, "qa", &scope, &call, None)
+            .ok,
+        "QA starts read-only"
+    );
+
+    w.restore_permissions(&[("qa".into(), "files".into(), "full".into())]);
+    assert!(
+        w.project("tyrex")
+            .unwrap()
+            .tools
+            .execute(&w.bus, "qa", &scope, &call, None)
+            .ok,
+        "a restored grant must reach the live tool service"
+    );
+}
+
+/// "I've put Developer A on it" is a claim about real work. If the agent is on
+/// the mock, the session produces a fixture, and the transcript is the only
+/// place that would ever say so.
+#[test]
+fn delegating_to_a_scripted_agent_says_that_it_is_scripted() {
+    let t = Tmp::new("scripted");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    w.register_project("tyrex", "TyreX", tyrex);
+    let c = convs(&t);
+    let conv = c.create(Some("tyrex")).unwrap();
+
+    Assistant::send(&w, &c, &conv.id, "start work on offline sync", &quiet).unwrap();
+
+    let saved = c.load(&conv.id).unwrap();
+    let step = saved
+        .messages
+        .iter()
+        .find(|m| m.tool.as_deref() == Some("delegate.start"))
+        .expect("it should have delegated");
+    assert!(
+        step.text.contains("mock provider") && step.text.contains("fixture"),
+        "a scripted session must not read as real work: {}",
+        step.text
+    );
 }

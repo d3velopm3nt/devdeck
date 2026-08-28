@@ -223,6 +223,11 @@ export function Chat() {
   const conv = a.conversation
   const assistant = a.agents.find((x) => x.id === 'assistant')
   const onMock = !assistant || assistant.provider === 'mock'
+  // Connecting a provider points the *assistant* at it, and nothing else.
+  // The specialists stay on the mock until each is moved, so "I've put
+  // Developer A on it" can be a true sentence about a scripted agent
+  // producing fixture output. This is the only place that would say so.
+  const scripted = a.agents.filter((x) => x.id !== 'assistant' && x.provider === 'mock')
 
   const submit = () => {
     const text = draft.trim()
@@ -303,6 +308,31 @@ export function Chat() {
             >
               Retry
             </button>
+          </div>
+        )}
+
+        {!onMock && scripted.length > 0 && (
+          <div className="flex shrink-0 items-start gap-2.5 border-b border-amber-500/25 bg-amber-500/[0.06] px-5 py-2.5">
+            <Icon name="alert" size={12} className="mt-px shrink-0 text-warn" />
+            <div className="text-[11px] leading-[1.55] text-dim">
+              <span className="text-warn">
+                {scripted.length === a.agents.length - 1
+                  ? 'Every agent I delegate to is'
+                  : `${scripted.length} of the agents I delegate to ${
+                      scripted.length === 1 ? 'is' : 'are'
+                    }`}{' '}
+                still on the mock provider
+              </span>{' '}
+              &mdash; work handed to {scripted.map((x) => x.name).join(', ')} runs a script and
+              produces fixture output, not real code. Point them at a provider under{' '}
+              <button
+                className="text-indigo-300 underline-offset-2 hover:underline"
+                onClick={() => a.setPage('settings')}
+              >
+                Settings &rarr; Agents
+              </button>
+              .
+            </div>
           </div>
         )}
 

@@ -171,7 +171,7 @@ function ToolPermissions() {
           Tools are the only way an agent reaches the machine. Permissions fail closed: an unknown
           agent gets nothing, <span className="text-ink">Read</span> refuses writes, and{' '}
           <span className="text-ink">Approval</span> stops the agent mid-turn and asks you — it is
-          never a silent yes. If nobody answers within three minutes the call is refused, not
+          never a silent yes. If nobody answers within 90 seconds the call is refused, not
           granted.
         </div>
       </div>

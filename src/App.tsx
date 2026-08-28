@@ -5,6 +5,8 @@ import { SetupModal } from './components/SetupModal'
 import { Sheet } from './components/Sheet'
 import { UpdateBar, type UpState } from './components/UpdateBar'
 import { Rail } from './shell/Rail'
+import { WorkspaceTabs } from './shell/WorkspaceTabs'
+import { AgentCluster, NotificationBell, AccountChip } from './shell/TopBarStatus'
 import { Home } from './components/Home'
 import { Explorer } from './components/Explorer'
 import { MachineSetup } from './components/MachineSetup'
@@ -341,72 +343,90 @@ export default function App() {
 
   return (
     <div className="flex h-screen flex-col bg-app text-body">
-      {/* Top bar */}
-      <div className="flex items-center gap-2 border-b border-line bg-panel px-2 py-1.5">
-        <span className="mr-1 select-none text-[13px] font-semibold text-ink">
-          <span className="text-indigo-400">❯_</span> DevDeck
-        </span>
-
-        <Menu label={<><Icon name="add" size={13} /> Terminal</>} accent>
+      {/* Top bar: the app menu, then the workspaces, then what needs you.
+          Launch, Layout and Widget folded into the menu — they are things you
+          *start*, and they were sitting in the corner you look at to find out
+          whether anything is waiting. Terminal moved for the same reason: it
+          opens a terminal somewhere, so it belongs to a project, not to the
+          app. */}
+      <div className="flex items-stretch border-b border-line bg-panel">
+        <Menu
+          label={
+            <span className="inline-flex items-center gap-1.5">
+              <span className="text-indigo-400">❯_</span> DevDeck
+            </span>
+          }
+        >
           {(close) => (
             <>
-              {app.shells.map((s) => (
+              <div className="px-2 py-1 text-[9.5px] font-semibold uppercase tracking-[0.06em] text-faint">
+                New terminal
+              </div>
+              {app.shells.map((sh) => (
                 <button
-                  key={s.command}
+                  key={sh.command}
                   className="menu-item inline-flex items-center gap-1.5"
                   onClick={() => {
                     close()
                     app.setRailView('projects')
-                    void openTerminal(s.command, nodeDir || undefined)
+                    void openTerminal(sh.command, nodeDir || undefined)
                   }}
                 >
-                  <Icon name="terminal" size={13} /> {s.name}
+                  <Icon name="terminal" size={13} /> {sh.name}
                   {node && <span className="ml-1 text-muted">in {node.name}</span>}
                 </button>
               ))}
-              {liveTerms.length > 0 && <div className="my-1 border-t border-line" />}
-              {liveTerms.map((t) => (
-                <button
-                  key={t.id}
-                  className="menu-item"
-                  onClick={() => {
-                    close()
-                    app.setRailView('projects')
-                    openSingleton(`terminal-${t.id}`, 'terminal', t.title)
-                  }}
-                >
-                  <span className="inline-flex items-center gap-1.5"><Icon name="terminal" size={13} /> #{t.id} {t.title}</span>
-                </button>
-              ))}
-            </>
-          )}
-        </Menu>
 
-        <Menu label={<><Icon name="service" size={13} /> Launch</>}>
-          {(close) => (
-            <>
-              {app.profiles.length === 0 && (
-                <div className="px-2 py-1 text-[11px] text-muted">no profiles yet</div>
+              {/* Open terminals stay reachable from here until the document
+                  tab row lands; without it a terminal you scrolled away from
+                  has no way back. */}
+              {liveTerms.length > 0 && (
+                <>
+                  <div className="my-1 border-t border-line" />
+                  <div className="px-2 py-1 text-[9.5px] font-semibold uppercase tracking-[0.06em] text-faint">
+                    Open terminals
+                  </div>
+                  {liveTerms.map((t) => (
+                    <button
+                      key={t.id}
+                      className="menu-item inline-flex items-center gap-1.5"
+                      onClick={() => {
+                        close()
+                        app.setRailView('projects')
+                        openSingleton(`terminal-${t.id}`, 'terminal', t.title)
+                      }}
+                    >
+                      <Icon name="terminal" size={13} /> #{t.id} {t.title}
+                    </button>
+                  ))}
+                </>
               )}
-              {app.profiles.map((p) => (
-                <button
-                  key={p.id}
-                  className="menu-item inline-flex items-center gap-1.5"
-                  onClick={() => {
-                    close()
-                    void launchProfile(p)
-                  }}
-                >
-                  <Icon name="service" size={13} /> {p.name}
-                </button>
-              ))}
-            </>
-          )}
-        </Menu>
 
-        <Menu label="Layout">
-          {(close) => (
-            <>
+              {app.profiles.length > 0 && (
+                <>
+                  <div className="my-1 border-t border-line" />
+                  <div className="px-2 py-1 text-[9.5px] font-semibold uppercase tracking-[0.06em] text-faint">
+                    Launch
+                  </div>
+                  {app.profiles.map((pr) => (
+                    <button
+                      key={pr.id}
+                      className="menu-item inline-flex items-center gap-1.5"
+                      onClick={() => {
+                        close()
+                        void launchProfile(pr)
+                      }}
+                    >
+                      <Icon name="service" size={13} /> {pr.name}
+                    </button>
+                  ))}
+                </>
+              )}
+
+              <div className="my-1 border-t border-line" />
+              <div className="px-2 py-1 text-[9.5px] font-semibold uppercase tracking-[0.06em] text-faint">
+                Layout
+              </div>
               <button
                 className="menu-item"
                 onClick={() => {
@@ -429,7 +449,6 @@ export default function App() {
               >
                 Reset to default
               </button>
-              <div className="my-1 border-t border-line" />
               {app.layouts
                 .filter((l) => !l.name.startsWith('__autosave'))
                 .map((l) => (
@@ -445,31 +464,53 @@ export default function App() {
                     <Icon name="layout" size={13} /> {l.name}
                   </button>
                 ))}
+
+              <div className="my-1 border-t border-line" />
+              <button
+                className="menu-item inline-flex items-center gap-1.5"
+                onClick={() => {
+                  close()
+                  void ipc.widgetToggle()
+                }}
+              >
+                <Icon name="widget" size={13} /> Command widget
+                <span className="ml-auto text-[10px] text-faint">{app.hotkey}</span>
+              </button>
+              <button
+                className="menu-item inline-flex items-center gap-1.5"
+                onClick={() => {
+                  close()
+                  void checkUpdate()
+                }}
+              >
+                <Icon name="update" size={13} /> Check for updates
+                {update && <span className="ml-auto text-[10px] text-faint">v{update.current}</span>}
+              </button>
             </>
           )}
         </Menu>
 
-        <div className="flex-1" />
-        {node && (
-          <span className="flex items-center gap-1 rounded bg-emerald-500/10 px-2 py-0.5 text-[11px] text-ok" title={nodeDir}>
-            <Icon name={node.kind === 'folder' ? 'folder' : 'project'} size={12} /> {node.name}
-          </span>
-        )}
-        <button
-          className="btn-ghost flex items-center gap-1 text-[12px]"
-          title={`Toggle the floating Command Widget  ·  ${app.hotkey}`}
-          onClick={() => void ipc.widgetToggle()}
-        >
-          <Icon name="widget" size={13} /> Widget
-        </button>
-        <button
-          className={`flex items-center gap-1 text-[12px] ${upState === 'available' ? 'rounded bg-amber-500/15 px-2 py-0.5 font-medium text-warn hover:bg-amber-500/25' : 'btn-ghost'}`}
-          title={upState === 'available' ? `Update available — v${update?.latest}` : `DevDeck ${update ? 'v' + update.current : ''} — check for updates`}
-          onClick={() => checkUpdate()}
-        >
-          <Icon name="update" size={13} spin={upState === 'checking' || upState === 'updating'} />
-          {upState === 'available' ? `Update · v${update?.latest}` : ''}
-        </button>
+        <div className="my-2 w-px shrink-0 bg-line" />
+
+        <WorkspaceTabs />
+
+        <div className="ml-auto flex items-center gap-2.5 px-2">
+          <AgentCluster />
+          {/* An update is the one thing here worth interrupting for, so it
+              keeps a visible pill rather than living only in the menu. */}
+          {upState === 'available' && (
+            <button
+              className="flex items-center gap-1 rounded bg-amber-500/15 px-2 py-0.5 text-[11.5px] font-medium text-warn hover:bg-amber-500/25"
+              title={`Update available — v${update?.latest}`}
+              onClick={() => checkUpdate()}
+            >
+              <Icon name="update" size={12} /> v{update?.latest}
+            </button>
+          )}
+          <div className="h-4 w-px bg-line" />
+          <NotificationBell />
+          <AccountChip />
+        </div>
       </div>
 
       {/* Self-update status bar */}

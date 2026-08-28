@@ -97,6 +97,103 @@ fn resolved_path() -> Option<String> {
     }
 }
 
+/// Who is signed in to GitHub, according to the `gh` CLI.
+///
+/// Read rather than stored: an identity kept in our own database is one that
+/// can disagree with the one that actually pushes. `gh` already owns this, so
+/// the only honest source is `gh` itself.
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
+pub struct GithubUser {
+    /// Empty when nobody is signed in, or `gh` is not installed.
+    pub login: String,
+    pub name: String,
+    pub avatar_url: String,
+    /// Why there is no login, in words worth showing.
+    pub reason: String,
+}
+
+/// `gh api user` — one call, and it fails fast when unauthenticated.
+///
+/// Never guesses from `git config user.name`: that is a commit signature you
+/// can set to anything, not proof of who you are signed in as. Showing it as
+/// an account would be a lie the moment the two differ.
+#[tauri::command]
+pub fn github_user() -> GithubUser {
+    if !on_path("gh") {
+        return GithubUser {
+            reason: "the GitHub CLI (gh) is not installed".into(),
+            ..Default::default()
+        };
+    }
+
+    let mut cmd = Command::new("gh");
+    cmd.args(["api", "user"]).stdin(Stdio::null());
+    no_window(&mut cmd);
+
+    let out = match cmd.output() {
+        Ok(o) => o,
+        Err(e) => {
+            return GithubUser {
+                reason: format!("could not run gh: {e}"),
+                ..Default::default()
+            }
+        }
+    };
+
+    if !out.status.success() {
+        // gh puts "You are not logged into any GitHub hosts" on stderr, which
+        // is more useful than an exit code.
+        let err = String::from_utf8_lossy(&out.stderr);
+        let first = err.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+        return GithubUser {
+            reason: if first.is_empty() {
+                "not signed in to GitHub".into()
+            } else {
+                first.trim().to_string()
+            },
+            ..Default::default()
+        };
+    }
+
+    let body = String::from_utf8_lossy(&out.stdout);
+    let json: serde_json::Value = match serde_json::from_str(&body) {
+        Ok(v) => v,
+        Err(e) => {
+            return GithubUser {
+                reason: format!("gh returned something unreadable: {e}"),
+                ..Default::default()
+            }
+        }
+    };
+
+    let get = |k: &str| {
+        json.get(k)
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string()
+    };
+    let login = get("login");
+    if login.is_empty() {
+        return GithubUser {
+            reason: "gh answered without a login".into(),
+            ..Default::default()
+        };
+    }
+    GithubUser {
+        name: {
+            let n = get("name");
+            if n.is_empty() {
+                login.clone()
+            } else {
+                n
+            }
+        },
+        avatar_url: get("avatar_url"),
+        login,
+        reason: String::new(),
+    }
+}
+
 /// Is `binary` resolvable on the *current* (possibly just-refreshed) PATH?
 fn on_path(binary: &str) -> bool {
     let mut cmd = Command::new("where");

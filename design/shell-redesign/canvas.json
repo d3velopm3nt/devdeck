@@ -1,0 +1,197 @@
+{
+  "pages": [
+    {
+      "id": "page-3",
+      "name": "AI Workspace"
+    },
+    {
+      "id": "page-2",
+      "name": "Home"
+    },
+    {
+      "id": "page-1",
+      "name": "Shell"
+    }
+  ],
+  "artboards": [
+    {
+      "file": "Home.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "Home — all workspaces",
+      "page": "page-2"
+    },
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "The shell",
+      "page": "page-1"
+    },
+    {
+      "file": "Notifications.dc.html",
+      "x": 1560,
+      "y": 0,
+      "w": 900,
+      "h": 840,
+      "title": "Notifications",
+      "page": "page-1"
+    },
+    {
+      "file": "TopBar.dc.html",
+      "x": 0,
+      "y": 1060,
+      "w": 1040,
+      "h": 560,
+      "title": "Menus and scoping",
+      "page": "page-1"
+    },
+    {
+      "file": "AiSidebar.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "AI Workspace — sidebar expanded",
+      "page": "page-3"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "home-what",
+      "x": 0,
+      "y": -270,
+      "w": 470,
+      "page": "page-2",
+      "text": "HOME — the first, pinned workspace tab.\n\nEvery workspace, what is running in it, who is working, and what needs you. It is the only surface that is not scoped to one workspace, which is why it sits beside them rather than inside one.\n\nClicking a project card opens that workspace's tab on that project."
+    },
+    {
+      "id": "home-right",
+      "x": 520,
+      "y": -270,
+      "w": 440,
+      "page": "page-2",
+      "text": "RIGHT COLUMN — needs you, then activity.\n\nApprovals carry their countdown and are answerable here, without opening the workspace they belong to. Every row names its workspace and project.\n\nBelow it, the activity stream from the whole machine, newest first."
+    },
+    {
+      "id": "home-topbar",
+      "x": 1010,
+      "y": -270,
+      "w": 440,
+      "page": "page-2",
+      "text": "TOP BAR — Launch, Widget and Terminal are gone.\n\nLaunch and Widget move into the DevDeck menu (Widget already has a global hotkey). Terminal is project-scoped, so it belongs on the project's row, not up here.\n\nWhat replaces them: who is working, what needs you, and who you are."
+    },
+    {
+      "id": "home-account",
+      "x": 1010,
+      "y": 380,
+      "w": 440,
+      "page": "page-2",
+      "text": "THE AVATAR IS THE GITHUB USER.\n\nThere is no DevDeck account and no sync — inventing one would promise something the app does not do. This is the identity that actually acts here: clone, fetch, push.\n\nIt is not stored anywhere yet; it would come from `gh auth status`. The green dot means authenticated. No GitHub glyph: lucide has no brand icons, so the codebase uses GitBranch."
+    },
+    {
+      "id": "rail",
+      "x": -470,
+      "y": 300,
+      "w": 430,
+      "page": "page-1",
+      "text": "RAIL - same icons, regrouped.\n\nTop: Home, Projects, AI Workspace, Connections.\nBottom, stacked: Stash, Machine, Settings.\n\nAI Workspace keeps its Sparkle and its own page - it is the fleet across every project, which a single project's tabs cannot show."
+    },
+    {
+      "id": "workspace-tabs",
+      "x": 0,
+      "y": -250,
+      "w": 470,
+      "page": "page-1",
+      "text": "WORKSPACES ARE TABS.\n\nEach tab keeps its own selected project, section and open documents. The green dot means something is running in a workspace you are not looking at.\n\nThree rows, three jobs: workspaces, the project's sections, open documents."
+    },
+    {
+      "id": "explorer",
+      "x": 520,
+      "y": -250,
+      "w": 430,
+      "page": "page-1",
+      "text": "EXPLORER — live first.\n\nRunning services and working agents pin under the project. The full configured set stays behind the Services and Commands folders, because that is also where you go to START a stopped one.\n\nRank, not filter."
+    },
+    {
+      "id": "paths",
+      "x": 990,
+      "y": -250,
+      "w": 430,
+      "page": "page-1",
+      "text": "PATHS — one is stored, one is not.\n\nNode.path is the local repo root and the only path in the schema. There is no remote-URL column; clone_repo takes a URL and never keeps it.\n\nSo the GitHub line is DERIVED from `git remote get-url origin`."
+    },
+    {
+      "id": "notif",
+      "x": 1560,
+      "y": -250,
+      "w": 430,
+      "page": "page-1",
+      "text": "NOTIFICATIONS — workspace-wide.\n\nApprovals are the only rows with a deadline. Suggestions never colour the badge — a bell that goes amber for 'storybook isn't running' teaches you to ignore it when an agent is genuinely stuck."
+    },
+    {
+      "id": "shell-open",
+      "x": 1080,
+      "y": 1060,
+      "w": 400,
+      "page": "page-1",
+      "text": "Still open:\n\nNow that the Explorer is permanent chrome, does the rail still need a Projects entry? It would open the same tree that is already on screen.\n\nAlso: 13 sections is more than one row holds - group them (Run / Code / Agents)?"
+    },
+    {
+      "id": "aiw-what",
+      "x": 0,
+      "y": -300,
+      "w": 470,
+      "page": "page-3",
+      "text": "WHAT THE AI WORKSPACE IS NOW.\n\nThe fleet: every agent across every project in the workspace, plus the setup. A single project's tabs cannot show you that, which is why this stays a rail destination rather than folding away.\n\nSo the division is clean — project tabs are THIS project's AI work, this is ALL of it."
+    },
+    {
+      "id": "aiw-live",
+      "x": 520,
+      "y": -300,
+      "w": 430,
+      "page": "page-3",
+      "text": "LIVE, ABOVE NAVIGATION.\n\nThe first thing you want from this screen is who is working and who is stuck — not which page to open. So 'Right now' sits above the nav, showing each agent, its project and how long the waiting one has left.\n\nIt is the only part that changes minute to minute."
+    },
+    {
+      "id": "aiw-groups",
+      "x": 990,
+      "y": -300,
+      "w": 460,
+      "page": "page-3",
+      "text": "TEN FLAT ITEMS BECOME THREE GROUPS.\n\nWatch (Agents, Activity, Conflicts, Tests) — things that move.\nRecord (Features, Context, Decisions, Knowledge) — things that accumulate.\nSet up (Providers, Agents & models, Tools) — things you configure once.\n\nSetup comes out of a buried Settings page, so '4 mock' is visible without going looking. That was invisible before and it is the difference between real work and fixture output."
+    },
+    {
+      "id": "aiw-projects",
+      "x": 990,
+      "y": 320,
+      "w": 460,
+      "page": "page-3",
+      "text": "THE PROJECTS LIST IS GONE.\n\nIt used to sit at the bottom of this sidebar. The Explorer and the workspace tabs already answer 'which project', and two lists of the same repos is exactly what this redesign undoes.\n\nInstead every row here names its project, and the Agents table groups by it."
+    },
+    {
+      "id": "aiw-collapse",
+      "x": -500,
+      "y": 100,
+      "w": 430,
+      "page": "page-3",
+      "text": "EXPANDED is what you see here (264px).\n\nThe chevron in the header collapses it to the rail's 52px: group icons only, badges kept, 'Right now' becomes three stacked avatars. Nothing is lost, only named."
+    },
+    {
+      "id": "shell-topbar",
+      "x": 990,
+      "y": 320,
+      "w": 430,
+      "page": "page-1",
+      "text": "TOP BAR now matches Home: Launch and Widget moved into the DevDeck menu, Terminal onto the project row.\n\nWhat replaced them, right to left: the signed-in GitHub user, what needs you, and who is working."
+    }
+  ],
+  "launch": {
+    "view": "canvas",
+    "page": "page-3"
+  }
+}

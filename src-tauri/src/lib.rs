@@ -856,6 +856,7 @@ pub fn run() {
             aiw::commands::aiw_set_agent_provider,
             aiw::commands::aiw_app_status,
             aiw::commands::aiw_changed_since,
+            setup::github_user,
             aiw::commands::aiw_conversations,
             aiw::commands::aiw_conversation,
             aiw::commands::aiw_new_conversation,

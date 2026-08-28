@@ -170,6 +170,18 @@ export function onSetupDone(cb: (ok: boolean) => void): Promise<UnlistenFn> {
 }
 export const cloneRepo = (url: string, parent: string) => invoke<string>('clone_repo', { url, parent })
 
+/** Who is signed in to GitHub, per the `gh` CLI. */
+export interface GithubUser {
+  /** Empty when nobody is signed in, or gh is not installed. */
+  login: string
+  name: string
+  avatar_url: string
+  /** Why there is no login, in words worth showing. */
+  reason: string
+}
+
+export const githubUser = () => invoke<GithubUser>('github_user')
+
 // ---- git ----
 export interface GitInfo {
   is_repo: boolean

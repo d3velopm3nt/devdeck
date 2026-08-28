@@ -365,7 +365,7 @@ export default function App() {
               {app.shells.map((sh) => (
                 <button
                   key={sh.command}
-                  className="menu-item inline-flex items-center gap-1.5"
+                  className="menu-item"
                   onClick={() => {
                     close()
                     app.setRailView('projects')
@@ -389,7 +389,7 @@ export default function App() {
                   {liveTerms.map((t) => (
                     <button
                       key={t.id}
-                      className="menu-item inline-flex items-center gap-1.5"
+                      className="menu-item"
                       onClick={() => {
                         close()
                         app.setRailView('projects')
@@ -411,7 +411,7 @@ export default function App() {
                   {app.profiles.map((pr) => (
                     <button
                       key={pr.id}
-                      className="menu-item inline-flex items-center gap-1.5"
+                      className="menu-item"
                       onClick={() => {
                         close()
                         void launchProfile(pr)
@@ -454,7 +454,7 @@ export default function App() {
                 .map((l) => (
                   <button
                     key={l.id}
-                    className="menu-item inline-flex items-center gap-1.5"
+                    className="menu-item"
                     onClick={() => {
                       close()
                       app.setRailView('projects')
@@ -467,7 +467,7 @@ export default function App() {
 
               <div className="my-1 border-t border-line" />
               <button
-                className="menu-item inline-flex items-center gap-1.5"
+                className="menu-item"
                 onClick={() => {
                   close()
                   void ipc.widgetToggle()
@@ -477,7 +477,7 @@ export default function App() {
                 <span className="ml-auto text-[10px] text-faint">{app.hotkey}</span>
               </button>
               <button
-                className="menu-item inline-flex items-center gap-1.5"
+                className="menu-item"
                 onClick={() => {
                   close()
                   void checkUpdate()
@@ -496,6 +496,15 @@ export default function App() {
 
         <div className="ml-auto flex items-center gap-2.5 px-2">
           <AgentCluster />
+          {/* The widget has a global hotkey, but a hotkey you have to remember
+              is not a way in. It keeps a button. */}
+          <button
+            className="flex items-center rounded p-1 text-dim hover:bg-hover hover:text-ink"
+            title={`Toggle the floating Command Widget  ·  ${app.hotkey}`}
+            onClick={() => void ipc.widgetToggle()}
+          >
+            <Icon name="widget" size={15} />
+          </button>
           {/* An update is the one thing here worth interrupting for, so it
               keeps a visible pill rather than living only in the menu. */}
           {upState === 'available' && (

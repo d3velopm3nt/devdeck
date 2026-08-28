@@ -1431,3 +1431,114 @@ fn delegating_to_a_scripted_agent_says_that_it_is_scripted() {
         step.text
     );
 }
+
+// ---------------------------------------------------------------------------
+// One project list
+//
+// The AI Workspace used to keep its own registry — string ids, a JSON blob in
+// settings, no link to `nodes`. "TyreX" here and a `tyrex` project in the
+// Explorer were two unrelated records that happened to share a folder.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn syncing_adopts_every_project_and_forgets_the_ones_that_went() {
+    let t = Tmp::new("sync");
+    let (tyrex, assetx) = seed_demo(&t.0).unwrap();
+    let w = ws();
+
+    let changed = w.sync_projects(&[
+        ("7".into(), "TyreX".into(), tyrex.clone()),
+        ("9".into(), "AssetX".into(), assetx.clone()),
+    ]);
+    assert_eq!(changed, 2);
+    assert!(w.project("7").is_some());
+    assert!(w.project("9").is_some());
+
+    // Delete one in the Explorer and it must leave here too. A project that
+    // lingered would be the split registry all over again.
+    let changed = w.sync_projects(&[("7".into(), "TyreX".into(), tyrex.clone())]);
+    assert_eq!(changed, 1, "one eviction, no re-registration");
+    assert!(w.project("7").is_some());
+    assert!(
+        w.project("9").is_none(),
+        "a removed project must not linger"
+    );
+}
+
+/// A handle owns the running-app state, so rebuilding it on every sync would
+/// forget which apps an agent had started.
+#[test]
+fn an_unchanged_project_keeps_its_handle() {
+    let t = Tmp::new("stable");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+
+    let wanted = vec![("7".to_string(), "TyreX".to_string(), tyrex.clone())];
+    w.sync_projects(&wanted);
+    let first = w.project("7").unwrap();
+
+    assert_eq!(
+        w.sync_projects(&wanted),
+        0,
+        "nothing changed, nothing to do"
+    );
+    let again = w.project("7").unwrap();
+    assert!(
+        Arc::ptr_eq(&first, &again),
+        "the same project must keep the same handle across a sync"
+    );
+
+    // A rename is a real change and does rebuild.
+    let renamed = vec![("7".to_string(), "Tyre Exchange".to_string(), tyrex)];
+    assert_eq!(w.sync_projects(&renamed), 1);
+    assert_eq!(w.project("7").unwrap().name, "Tyre Exchange");
+}
+
+/// Moving a project on disk has to move where its agents read and write, or
+/// they would keep operating on the old folder.
+#[test]
+fn a_moved_project_gets_a_new_root() {
+    let t = Tmp::new("moved");
+    let (tyrex, assetx) = seed_demo(&t.0).unwrap();
+    let w = ws();
+
+    w.sync_projects(&[("7".into(), "TyreX".into(), tyrex)]);
+    assert_eq!(
+        w.sync_projects(&[("7".into(), "TyreX".into(), assetx.clone())]),
+        1
+    );
+    assert_eq!(w.project("7").unwrap().root, assetx);
+}
+
+/// `.devdeck` is keyed by the folder, not by the id we happen to call a
+/// project. That is why re-identifying projects during the merge could not lose
+/// a feature, a decision or a commit.
+#[test]
+fn re_identifying_a_project_keeps_everything_on_disk() {
+    let t = Tmp::new("reid");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+
+    w.sync_projects(&[("tyrex".into(), "TyreX".into(), tyrex.clone())]);
+    let before = w.project("tyrex").unwrap().deck().feature_slugs();
+    assert!(!before.is_empty(), "the fixture has features");
+
+    // The same folder, under the id a node would give it.
+    w.sync_projects(&[("42".into(), "TyreX".into(), tyrex)]);
+    assert!(w.project("tyrex").is_none());
+    let after = w.project("42").unwrap().deck().feature_slugs();
+    assert_eq!(
+        before, after,
+        "the same folder still holds the same features"
+    );
+}
+
+/// A project node with no path has no root to resolve against. Registering one
+/// produces an agent that fails on its first file read, rather than a project
+/// that is visibly not set up yet — so the sync leaves it out.
+#[test]
+fn a_project_with_no_path_is_not_adopted() {
+    let w = ws();
+    assert_eq!(w.sync_projects(&[]), 0);
+    assert!(w.summaries().is_empty());
+}

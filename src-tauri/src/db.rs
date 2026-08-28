@@ -471,9 +471,65 @@ fn row_to_node(row: &rusqlite::Row) -> rusqlite::Result<Node> {
 
 // ---------- tree ----------
 
-#[tauri::command]
-pub fn tree_list(db: tauri::State<Db>) -> Result<Vec<Node>, String> {
-    let conn = db.0.lock().unwrap();
+/// The workspace the demo puts its projects in, created once and reused.
+///
+/// Its own workspace rather than whichever you happen to be looking at: the
+/// demo deletes and re-seeds its folders on every run, and doing that inside
+/// your real workspace would put throwaway projects next to yours.
+pub fn demo_workspace(conn: &Connection) -> Result<i64, String> {
+    if let Ok(id) = conn.query_row(
+        "SELECT id FROM nodes WHERE parent_id IS NULL AND kind = 'workspace' AND name = ?1",
+        params!["Demo"],
+        |r| r.get::<_, i64>(0),
+    ) {
+        return Ok(id);
+    }
+    conn.execute(
+        "INSERT INTO nodes (parent_id, kind, name, path) VALUES (NULL, 'workspace', 'Demo', NULL)",
+        [],
+    )
+    .map_err(err)?;
+    Ok(conn.last_insert_rowid())
+}
+
+/// A project node at `path` under `parent`, matched on the path rather than the
+/// name: the path is what makes two records the same project, and re-running
+/// the demo must reuse the node rather than pile up duplicates beside it.
+pub fn upsert_project(
+    conn: &Connection,
+    parent: i64,
+    name: &str,
+    path: &std::path::Path,
+) -> Result<i64, String> {
+    let p = path.to_string_lossy().to_string();
+    if let Ok(id) = conn.query_row(
+        "SELECT id FROM nodes WHERE kind = 'project' AND path = ?1",
+        params![p],
+        |r| r.get::<_, i64>(0),
+    ) {
+        conn.execute(
+            "UPDATE nodes SET name = ?1 WHERE id = ?2",
+            params![name, id],
+        )
+        .map_err(err)?;
+        return Ok(id);
+    }
+    conn.execute(
+        "INSERT INTO nodes (parent_id, kind, name, path) VALUES (?1, 'project', ?2, ?3)",
+        params![parent, name, p],
+    )
+    .map_err(err)?;
+    Ok(conn.last_insert_rowid())
+}
+
+/// Every node, straight from a connection.
+///
+/// The command below is the same query behind Tauri's `State`. This exists
+/// because the AI Workspace has to read the tree during startup, before there
+/// is a command to call — and because a project list assembled from anywhere
+/// but this table is a second source of truth, which is exactly what the
+/// merge removed.
+pub fn nodes_on(conn: &Connection) -> Result<Vec<Node>, String> {
     let mut stmt = conn
         .prepare("SELECT id, parent_id, kind, name, path, rel_path, sort, color FROM nodes ORDER BY sort, id")
         .map_err(err)?;
@@ -483,6 +539,12 @@ pub fn tree_list(db: tauri::State<Db>) -> Result<Vec<Node>, String> {
         .collect::<Result<Vec<_>, _>>()
         .map_err(err)?;
     Ok(nodes)
+}
+
+#[tauri::command]
+pub fn tree_list(db: tauri::State<Db>) -> Result<Vec<Node>, String> {
+    let conn = db.0.lock().unwrap();
+    nodes_on(&conn)
 }
 
 #[tauri::command]

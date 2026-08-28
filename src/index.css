@@ -127,8 +127,13 @@ html[data-window='toast'] #root {
 .btn-danger {
   @apply rounded bg-red-600/80 px-2.5 py-1 text-white hover:bg-red-500 disabled:opacity-50;
 }
+/* A menu row is a flex line, not a block: an icon inside a block-level button
+   wraps onto its own line above the label, and every caller then has to
+   remember to add `inline-flex` — which loses to this rule's `display`
+   anyway. Owning the layout here makes every menu align by default, and lets
+   a trailing `ml-auto` shortcut hint sit where it belongs. */
 .menu-item {
-  @apply block w-full rounded px-2 py-1.5 text-left text-[12px] text-body hover:bg-indigo-600/40 hover:text-ink;
+  @apply flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[12px] text-body hover:bg-indigo-600/40 hover:text-ink;
 }
 
 /* Dockview: one theme class, all colors driven by our tokens so it follows

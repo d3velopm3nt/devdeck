@@ -565,10 +565,13 @@ pub fn run() {
     // the project list is lost on every restart, which looks exactly like the
     // projects themselves being gone.
     {
-        let saved = aiw::commands::saved_projects(&conn);
-        if !saved.is_empty() {
-            let n = aiw_workspace.restore(&saved);
-            eprintln!("[aiw] restored {n} of {} projects", saved.len());
+        // Projects come from the node tree, not from a list of our own. There
+        // is nothing to "restore": the Explorer's projects ARE the AI
+        // Workspace's projects, so every one of them is AI-capable from the
+        // first launch without anything to opt into.
+        let n = aiw::commands::sync_projects_from_tree(&aiw_workspace, &conn);
+        if n > 0 {
+            eprintln!("[aiw] {n} project(s) picked up from the tree");
         }
         // Re-register configured providers. Keys are not here -- each provider
         // looks its own up in Credential Manager when it needs it.
@@ -819,7 +822,6 @@ pub fn run() {
             toast_hide,
             toast_focus,
             aiw::commands::aiw_projects,
-            aiw::commands::aiw_register_project,
             aiw::commands::aiw_features,
             aiw::commands::aiw_create_feature,
             aiw::commands::aiw_work_items,
@@ -857,6 +859,7 @@ pub fn run() {
             aiw::commands::aiw_app_status,
             aiw::commands::aiw_changed_since,
             setup::github_user,
+            aiw::commands::aiw_sync_projects,
             aiw::commands::aiw_conversations,
             aiw::commands::aiw_conversation,
             aiw::commands::aiw_new_conversation,

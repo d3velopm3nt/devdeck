@@ -434,8 +434,9 @@ export type ApprovalDecision = 'allow' | 'allow-always' | 'deny' | 'deny-always'
 
 export const aiw = {
   projects: () => invoke<AiProject[]>('aiw_projects'),
-  registerProject: (id: string, name: string, root: string) =>
-    invoke<AiProject>('aiw_register_project', { id, name, root }),
+  /** Re-read the project tree. Call after anything adds, renames or removes a
+   *  project, so the Explorer and the AI Workspace cannot drift apart. */
+  syncProjects: () => invoke<AiProject[]>('aiw_sync_projects'),
 
   features: (projectId: string) => invoke<FeatureRow[]>('aiw_features', { projectId }),
   createFeature: (projectId: string, name: string, goal: string, areas: string[]) =>

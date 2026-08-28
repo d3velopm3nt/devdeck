@@ -41,8 +41,7 @@ use super::events::DomainEvent;
 use super::provider::ProviderHealth;
 use super::runtime::{AgentRuntime, SessionOutcome, StartAgentCommand};
 use super::state::{
-    AgentDef, ProjectSummary, ProviderConfig, RegisteredProject, Session, TestRun, WorkClaim,
-    Workspace,
+    AgentDef, ProjectSummary, ProviderConfig, Session, TestRun, WorkClaim, Workspace,
 };
 use super::tools::{registry, Permission, ToolInfo};
 use crate::git;
@@ -74,59 +73,64 @@ where
 }
 
 #[tauri::command]
-pub fn aiw_projects(ws: Ws) -> Vec<ProjectSummary> {
+pub fn aiw_projects(ws: Ws, db: tauri::State<crate::db::Db>) -> Vec<ProjectSummary> {
+    // Sync before answering. The alternative is a list that is correct only
+    // until someone adds a project, and a stale one here is indistinguishable
+    // from the split registry we just removed.
+    {
+        let conn = db.0.lock().unwrap();
+        sync_projects_from_tree(&ws, &conn);
+    }
     ws.summaries()
 }
 
-#[tauri::command]
-pub fn aiw_register_project(
-    ws: Ws,
-    db: tauri::State<crate::db::Db>,
-    id: String,
-    name: String,
-    root: String,
-) -> Result<ProjectSummary, String> {
-    let path = PathBuf::from(&root);
-    if !path.is_dir() {
-        return Err(format!("not a directory: {root}"));
-    }
-    let deck = Deck::new(path.clone());
-    if !deck.exists() {
-        deck.init(&id, &name)?;
-    }
-    ws.register_project(&id, &name, path);
-    persist_projects(&ws, &db);
-    ws.summaries()
-        .into_iter()
-        .find(|p| p.id == id)
-        .ok_or_else(|| "project registered but not readable".to_string())
-}
-
-/// Where the registered-project list lives. Only the list — the projects
-/// themselves are their `.devdeck` directories.
-pub const PROJECTS_KEY: &str = "aiw.projects";
-
-fn persist_projects(ws: &Arc<Workspace>, db: &tauri::State<crate::db::Db>) {
-    let list = ws.registered();
-    let Ok(json) = serde_json::to_string(&list) else {
-        return;
+/// Point the AI Workspace at every project in the node tree.
+///
+/// The AI Workspace used to keep its own list — string ids, a JSON blob in
+/// settings, no link to `nodes`. So "TyreX" here and a `tyrex` project in the
+/// Explorer were two unrelated records that happened to share a folder, and
+/// registering one told the other nothing.
+///
+/// The tree is the truth now, and a project's AI id is simply its node id as a
+/// string. Two consequences worth knowing:
+///
+/// * **Adoption is automatic.** Every project node is AI-capable; nothing to
+///   opt into, and no second place to add a project.
+/// * **Nothing durable moved.** `.devdeck` is keyed by the folder on disk, not
+///   by this id, so re-identifying projects loses no feature, decision or
+///   commit — only the in-memory session scoping, which is per-run anyway.
+///
+/// A project node with no `path` is skipped: there is no root to resolve
+/// against, and registering one would produce an agent that fails on its first
+/// file read rather than a project that is visibly not set up yet.
+pub fn sync_projects_from_tree(ws: &Arc<Workspace>, conn: &rusqlite::Connection) -> usize {
+    let nodes = match crate::db::nodes_on(conn) {
+        Ok(n) => n,
+        Err(e) => {
+            eprintln!("[aiw] could not read the project tree: {e}");
+            return 0;
+        }
     };
-    let conn = db.0.lock().unwrap();
-    if let Err(e) = crate::db::setting_set_conn(&conn, PROJECTS_KEY, &json) {
-        // Honest: losing the list means the projects vanish on restart, so say
-        // so rather than failing silently.
-        eprintln!("[aiw] could not save the project list: {e}");
-    }
+    let wanted: Vec<(String, String, PathBuf)> = nodes
+        .into_iter()
+        .filter(|n| n.kind == "project")
+        .filter_map(|n| {
+            let root = n.path.filter(|p| !p.trim().is_empty())?;
+            Some((n.id.to_string(), n.name, PathBuf::from(root)))
+        })
+        .collect();
+    ws.sync_projects(&wanted)
 }
 
-/// Read the saved list. Returns empty when nothing has been registered yet,
-/// which is a normal first-run state rather than an error.
-pub fn saved_projects(conn: &rusqlite::Connection) -> Vec<RegisteredProject> {
-    crate::db::setting_get_conn(conn, PROJECTS_KEY)
-        .ok()
-        .flatten()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
+/// Re-read the tree. The frontend calls this after anything that adds, renames
+/// or removes a project, so the two views cannot drift within a session.
+#[tauri::command]
+pub fn aiw_sync_projects(ws: Ws, db: tauri::State<crate::db::Db>) -> Vec<ProjectSummary> {
+    {
+        let conn = db.0.lock().unwrap();
+        sync_projects_from_tree(&ws, &conn);
+    }
+    ws.summaries()
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -781,10 +785,28 @@ pub struct DemoResult {
 
 /// Run the full multi-agent scenario. This is the demo *and* the acceptance
 /// path — the UI button and the E2E test call the same function.
+/// The demo, on two projects of its own making.
+///
+/// Kept for the tests, which want a fixture rather than a tree: they call this
+/// with stable ids and never sync, so nothing evicts them. The command below
+/// creates real project nodes instead, because after the merge a demo whose
+/// projects are invisible in the Explorer would be demonstrating the very
+/// split this removed.
+#[cfg(test)]
 pub fn run_demo(ws: &Arc<Workspace>, base: PathBuf) -> Result<DemoResult, String> {
     let (tyrex, assetx) = seed_demo(&base)?;
-    ws.register_project("tyrex", "TyreX", tyrex.clone());
-    ws.register_project("assetx", "AssetX", assetx.clone());
+    run_demo_on(ws, ("tyrex", "TyreX", tyrex), ("assetx", "AssetX", assetx))
+}
+
+pub fn run_demo_on(
+    ws: &Arc<Workspace>,
+    a: (&str, &str, PathBuf),
+    b: (&str, &str, PathBuf),
+) -> Result<DemoResult, String> {
+    let (tyrex_id, tyrex_name, tyrex) = a;
+    let (assetx_id, assetx_name, assetx) = b;
+    ws.register_project(tyrex_id, tyrex_name, tyrex.clone());
+    ws.register_project(assetx_id, assetx_name, assetx.clone());
 
     let feature = "offline-synchronisation";
     let mut outcomes = Vec::new();
@@ -793,7 +815,7 @@ pub fn run_demo(ws: &Arc<Workspace>, base: PathBuf) -> Result<DemoResult, String
     outcomes.push(AgentRuntime::run(
         ws,
         &StartAgentCommand {
-            project_id: "tyrex".into(),
+            project_id: tyrex_id.into(),
             feature_id: feature.into(),
             agent_id: "architect".into(),
             work_item_id: None,
@@ -810,7 +832,7 @@ pub fn run_demo(ws: &Arc<Workspace>, base: PathBuf) -> Result<DemoResult, String
     let dev_b = AgentRuntime::begin(
         ws,
         &StartAgentCommand {
-            project_id: "tyrex".into(),
+            project_id: tyrex_id.into(),
             feature_id: feature.into(),
             agent_id: "dev-b".into(),
             work_item_id: Some("wi-ui".into()),
@@ -824,7 +846,7 @@ pub fn run_demo(ws: &Arc<Workspace>, base: PathBuf) -> Result<DemoResult, String
     outcomes.push(AgentRuntime::run(
         ws,
         &StartAgentCommand {
-            project_id: "tyrex".into(),
+            project_id: tyrex_id.into(),
             feature_id: feature.into(),
             agent_id: "dev-a".into(),
             work_item_id: Some("wi-conflict".into()),
@@ -841,7 +863,7 @@ pub fn run_demo(ws: &Arc<Workspace>, base: PathBuf) -> Result<DemoResult, String
     outcomes.push(AgentRuntime::run(
         ws,
         &StartAgentCommand {
-            project_id: "tyrex".into(),
+            project_id: tyrex_id.into(),
             feature_id: feature.into(),
             agent_id: "qa".into(),
             work_item_id: Some("wi-tests".into()),
@@ -855,7 +877,7 @@ pub fn run_demo(ws: &Arc<Workspace>, base: PathBuf) -> Result<DemoResult, String
     outcomes.push(AgentRuntime::run(
         ws,
         &StartAgentCommand {
-            project_id: "assetx".into(),
+            project_id: assetx_id.into(),
             feature_id: "asset-register".into(),
             agent_id: "dev-a".into(),
             work_item_id: None,
@@ -869,7 +891,7 @@ pub fn run_demo(ws: &Arc<Workspace>, base: PathBuf) -> Result<DemoResult, String
         tyrex_root: tyrex.to_string_lossy().to_string(),
         assetx_root: assetx.to_string_lossy().to_string(),
         outcomes,
-        conflicts: ws.conflicts.list(Some("tyrex"), true),
+        conflicts: ws.conflicts.list(Some(tyrex_id), true),
         events: ws.bus.count(),
     })
 }
@@ -892,16 +914,36 @@ pub async fn aiw_run_demo(
     let _ = std::fs::remove_dir_all(&base);
     let ws: Arc<Workspace> = (*ws).clone();
 
+    // Seed the folders first, then give them real project nodes. The demo used
+    // to register two projects only the AI Workspace could see, which after the
+    // merge would be a demonstration of the split it just removed — and the
+    // next sync would evict them anyway.
+    let seeded = {
+        let base = base.clone();
+        blocking(move || seed_demo(&base)).await??
+    };
+    let (tyrex_id, assetx_id) = {
+        let conn = db.0.lock().unwrap();
+        let ws_node = crate::db::demo_workspace(&conn)?;
+        let t = crate::db::upsert_project(&conn, ws_node, "TyreX", &seeded.0)?;
+        let a = crate::db::upsert_project(&conn, ws_node, "AssetX", &seeded.1)?;
+        sync_projects_from_tree(&ws, &conn);
+        (t.to_string(), a.to_string())
+    };
+
     // On the blocking pool: the demo runs real sessions, and an agent pointed
     // at a real provider would reach the network from here.
     let running = ws.clone();
     let result = blocking(move || {
         running.reset_runtime_state();
-        run_demo(&running, base)
+        run_demo_on(
+            &running,
+            (&tyrex_id, "TyreX", seeded.0),
+            (&assetx_id, "AssetX", seeded.1),
+        )
     })
     .await??;
 
-    persist_projects(&ws, &db);
     Ok(result)
 }
 

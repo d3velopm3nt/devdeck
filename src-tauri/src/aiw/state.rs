@@ -177,17 +177,6 @@ impl ProjectHandle {
     }
 }
 
-/// A registered project, as persisted. The `.devdeck` directories are the
-/// durable truth about their *contents*; this records which of them this
-/// install has been pointed at, so restarting DevDeck does not lose your
-/// project list.
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct RegisteredProject {
-    pub id: String,
-    pub name: String,
-    pub root: String,
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ProjectSummary {
     pub id: String,
@@ -200,6 +189,8 @@ pub struct ProjectSummary {
     pub branch: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub commit: Option<String>,
+    /// Whether the project has a `.devdeck` folder yet.
+    pub has_deck: bool,
 }
 
 /// How long an agent waits for a human before giving up and being refused.
@@ -434,40 +425,42 @@ impl Workspace {
         handle
     }
 
+    /// Make the registry match `wanted` exactly: register what is new, keep
+    /// what is unchanged, drop what has gone.
+    ///
+    /// Wholesale rather than additive, because the tree is the truth now. A
+    /// project deleted from the Explorer that lingered here would keep showing
+    /// up in the AI Workspace — two lists disagreeing, which is the thing this
+    /// merge exists to end.
+    ///
+    /// Handles are kept for projects whose id and root are unchanged: a
+    /// `ProjectHandle` owns the running-app state, and rebuilding it on every
+    /// sync would forget which apps an agent has started.
+    pub fn sync_projects(&self, wanted: &[(String, String, PathBuf)]) -> usize {
+        let mut changed = 0usize;
+        {
+            let mut projects = self.projects.lock().unwrap();
+            let keep: std::collections::HashSet<&str> =
+                wanted.iter().map(|(id, _, _)| id.as_str()).collect();
+            let before = projects.len();
+            projects.retain(|id, _| keep.contains(id.as_str()));
+            changed += before - projects.len();
+        }
+        for (id, name, root) in wanted {
+            let same = self
+                .project(id)
+                .is_some_and(|p| &p.root == root && &p.name == name);
+            if same {
+                continue;
+            }
+            self.register_project(id, name, root.clone());
+            changed += 1;
+        }
+        changed
+    }
+
     pub fn project(&self, id: &str) -> Option<Arc<ProjectHandle>> {
         self.projects.lock().unwrap().get(id).cloned()
-    }
-
-    /// Everything needed to re-register these projects after a restart.
-    pub fn registered(&self) -> Vec<RegisteredProject> {
-        let projects = self.projects.lock().unwrap();
-        let mut v: Vec<RegisteredProject> = projects
-            .values()
-            .map(|p| RegisteredProject {
-                id: p.id.clone(),
-                name: p.name.clone(),
-                root: p.root.to_string_lossy().to_string(),
-            })
-            .collect();
-        v.sort_by(|a, b| a.id.cmp(&b.id));
-        v
-    }
-
-    /// Re-register a saved list, skipping anything whose directory has gone.
-    /// A project folder that was deleted or is on a disconnected drive should
-    /// disappear quietly rather than failing the whole startup.
-    pub fn restore(&self, saved: &[RegisteredProject]) -> usize {
-        let mut n = 0;
-        for p in saved {
-            let path = PathBuf::from(&p.root);
-            if path.is_dir() {
-                self.register_project(&p.id, &p.name, path);
-                n += 1;
-            } else {
-                eprintln!("[aiw] skipping '{}' — {} is gone", p.id, p.root);
-            }
-        }
-        n
     }
 
     pub fn project_ids(&self) -> Vec<String> {
@@ -494,6 +487,11 @@ impl Workspace {
                         .filter(|s| s.status.active())
                         .count(),
                     open_conflicts: self.conflicts.open(Some(&p.id)).len(),
+                    // Adopted, but nothing has written to it yet. Worth
+                    // distinguishing: every project is AI-capable now, so
+                    // "no features" and "never used by an agent" look the
+                    // same until something says otherwise.
+                    has_deck: deck.exists(),
                     branch: info.branch,
                     commit: crate::git::head_commit(&p.root).map(|c| crate::git::short_sha(&c)),
                 })

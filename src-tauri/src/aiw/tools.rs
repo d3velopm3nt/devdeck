@@ -11,6 +11,9 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+use std::sync::Arc;
+
+use super::approval::{request_for, ApprovalBroker, Outcome};
 use super::events::{DomainEvent, EventBus, EventScope, EventType};
 
 #[cfg(windows)]
@@ -402,15 +405,31 @@ pub fn definitions_for(agent: &str, permissions: &PermissionMatrix) -> Vec<ToolD
             let allowed = match (permission, action.access) {
                 (Permission::Full, _) => true,
                 (Permission::Read, Access::Read) => true,
-                // Approval is not a silent yes, so it is not advertised either.
+                // Advertised now that approval is a real prompt rather than a
+                // refusal. An action a person can say yes to is genuinely
+                // callable, so hiding it would only deny the model a tool it is
+                // allowed to ask for. Permissions that can never be satisfied
+                // are still left out entirely.
+                (Permission::Approval, _) => true,
                 _ => false,
             };
             if !allowed {
                 continue;
             }
+            // Say so in the description. A model told a call may pause for a
+            // human asks once and waits, rather than reading the delay as a
+            // failure and retrying around it.
+            let description = if matches!(permission, Permission::Approval) {
+                format!(
+                    "{} — {} (requires human approval; the call waits for an answer)",
+                    tool.name, action.description
+                )
+            } else {
+                format!("{} — {}", tool.name, action.description)
+            };
             out.push(ToolDefinition {
                 name: wire_name(&tool.id, &action.name),
-                description: format!("{} — {}", tool.name, action.description),
+                description,
                 input_schema: action.params,
             });
         }
@@ -494,6 +513,10 @@ pub struct ToolService {
     pub root: PathBuf,
     pub project_id: String,
     pub permissions: PermissionMatrix,
+    /// Where `Approval` goes to ask a person. The default refuses immediately,
+    /// so a service built without an approval surface behaves exactly as it did
+    /// before rather than blocking against a queue nobody reads.
+    pub approvals: Arc<ApprovalBroker>,
     /// Processes started by the process tool, keyed by project.
     pub apps: std::sync::Mutex<HashMap<String, RunningApp>>,
 }
@@ -504,8 +527,15 @@ impl ToolService {
             root: root.into(),
             project_id: project_id.to_string(),
             permissions,
+            approvals: Arc::new(ApprovalBroker::immediate_denial()),
             apps: std::sync::Mutex::new(HashMap::new()),
         }
+    }
+
+    /// Route `Approval` through a broker a human is actually watching.
+    pub fn with_approvals(mut self, broker: Arc<ApprovalBroker>) -> Self {
+        self.approvals = broker;
+        self
     }
 
     /// The application this project started, if the process tool ran one.
@@ -550,29 +580,36 @@ impl ToolService {
 
         let permission = self.permissions.get(agent_id, &call.tool);
         let needed = required_access(call);
+
+        // `Approval` is the one level that asks rather than deciding on its
+        // own. Everything else is settled here without blocking.
+        let mut denial: Option<String> = None;
         let allowed = match (permission, needed) {
             (Permission::Full, _) => true,
             (Permission::Read, Access::Read) => true,
-            (Permission::Read, Access::Write) => false,
-            // Approval is not auto-granted: without a human decision recorded,
-            // the safe answer is no. Treating "needs approval" as "yes" would
-            // make the permission meaningless.
-            (Permission::Approval, _) => false,
-            (Permission::None, _) => false,
+            (Permission::Read, Access::Write) => {
+                denial = Some(format!(
+                    "'{}' is read-only for {}; '{}' writes",
+                    call.tool, agent_id, call.action
+                ));
+                false
+            }
+            (Permission::Approval, _) => {
+                let outcome = self.ask_permission(bus, agent_id, scope, call, &requested);
+                if !outcome.allows() {
+                    denial = Some(outcome.reason(&call.tool));
+                }
+                outcome.allows()
+            }
+            (Permission::None, _) => {
+                denial = Some(format!("'{}' is denied for {}", call.tool, agent_id));
+                false
+            }
         };
 
         if !allowed {
-            let reason = match permission {
-                Permission::Approval => format!(
-                    "'{}' requires human approval for {} — not granted",
-                    call.tool, agent_id
-                ),
-                Permission::Read => format!(
-                    "'{}' is read-only for {}; '{}' writes",
-                    call.tool, agent_id, call.action
-                ),
-                _ => format!("'{}' is denied for {}", call.tool, agent_id),
-            };
+            let reason =
+                denial.unwrap_or_else(|| format!("'{}' is denied for {}", call.tool, agent_id));
             let result = ToolResult::failed(call, reason.clone());
             bus.emit(
                 DomainEvent::new(
@@ -631,6 +668,63 @@ impl ToolService {
         }
 
         result
+    }
+
+    /// Ask a person, announcing the request before the wait so the UI learns
+    /// about it while there is still time to answer.
+    fn ask_permission(
+        &self,
+        bus: &EventBus,
+        agent_id: &str,
+        scope: &EventScope,
+        call: &ToolCall,
+        cause: &DomainEvent,
+    ) -> Outcome {
+        let request = request_for(
+            agent_id,
+            &call.tool,
+            &call.action,
+            &call.args,
+            scope.project_id.as_deref(),
+            scope.feature_id.as_deref(),
+            scope.session_id.as_deref(),
+            self.approvals.timeout(),
+        );
+
+        let outcome = self.approvals.ask(request.clone(), |r| {
+            bus.emit(
+                DomainEvent::new(
+                    EventType::ToolApprovalRequested,
+                    scope.clone().with_agent(agent_id),
+                    serde_json::json!({
+                        "approvalId": r.id,
+                        "tool": r.tool,
+                        "action": r.action,
+                        "summary": r.summary,
+                        "detail": r.detail,
+                        "expiresIn": r.expires_in,
+                    }),
+                )
+                .caused_by(cause),
+            );
+        });
+
+        bus.emit(
+            DomainEvent::new(
+                EventType::ToolApprovalResolved,
+                scope.clone().with_agent(agent_id),
+                serde_json::json!({
+                    "approvalId": request.id,
+                    "tool": request.tool,
+                    "summary": request.summary,
+                    "allowed": outcome.allows(),
+                    "outcome": outcome,
+                }),
+            )
+            .caused_by(cause),
+        );
+
+        outcome
     }
 
     fn dispatch(&self, call: &ToolCall) -> ToolResult {
@@ -1033,9 +1127,13 @@ mod tests {
             None,
         );
         assert!(!r.ok);
+        // With no approval surface attached the default broker refuses at once,
+        // and the message says an answer was what was missing rather than
+        // implying the tool itself is off-limits.
+        let why = r.error.unwrap();
         assert!(
-            r.error.unwrap().contains("approval"),
-            "the refusal should say approval is what's missing"
+            why.contains("nobody answered") || why.contains("refused"),
+            "the refusal should say an answer was missing, got: {why}"
         );
     }
 
@@ -1242,13 +1340,32 @@ mod schema_tests {
     }
 
     #[test]
-    fn approval_and_none_advertise_nothing() {
-        for p in [Permission::Approval, Permission::None] {
-            let defs = definitions_for("x", &matrix("x", p));
+    fn none_advertises_nothing() {
+        let defs = definitions_for("x", &matrix("x", Permission::None));
+        assert!(
+            defs.is_empty(),
+            "a permission that can never be satisfied stays hidden, got {}",
+            defs.len()
+        );
+    }
+
+    /// Approval used to advertise nothing, back when it meant "refused".
+    /// Now that it means "ask a person", the action is genuinely callable and
+    /// hiding it would only deny the model a tool it is allowed to ask for.
+    #[test]
+    fn approval_advertises_and_says_it_will_pause() {
+        let defs = definitions_for("x", &matrix("x", Permission::Approval));
+        assert!(!defs.is_empty(), "an approvable action is callable");
+        assert!(
+            defs.iter().any(|d| d.name == "files_write"),
+            "including the writes, which are the whole point of asking"
+        );
+        for d in &defs {
             assert!(
-                defs.is_empty(),
-                "{p:?} should advertise no callables, got {}",
-                defs.len()
+                d.description.contains("requires human approval"),
+                "'{}' must warn that the call waits, or the model reads the                  pause as a failure and retries around it: {}",
+                d.name,
+                d.description
             );
         }
     }

@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react'
 import { Icon, type IconName } from '../../lib/icons'
 import { useAiw, type AiwPage } from '../../lib/aiwStore'
 import { Settings } from './Settings'
+import { ApprovalBar } from './ApprovalBar'
 import { CAPTURE_FEATURE, CAPTURE_PAGE } from '../../lib/devCapture'
 import {
   aiw,
@@ -1678,6 +1679,23 @@ export function AiWorkspace() {
       void a.selectFeature(CAPTURE_FEATURE)
     }
   })
+
+  // Above the page, not on one of them: an agent blocked on approval is stopped
+  // mid-turn against a deadline, so it has to be answerable from wherever you
+  // happen to be — including the error and loading states, which is why the bar
+  // wraps them rather than sitting inside a page.
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <ApprovalBar />
+      <div className="min-h-0 flex-1">
+        <Page />
+      </div>
+    </div>
+  )
+}
+
+function Page() {
+  const a = useAiw()
 
   if (a.error) return <Failure error={a.error} onRetry={() => void a.bootstrap()} />
 

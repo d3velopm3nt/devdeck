@@ -19,6 +19,8 @@ import {
 import {
   aiw,
   type AgentDef,
+  type ApprovalDecision,
+  type ApprovalRequest,
   type AiProject,
   type AssembledContext,
   type Conflict,
@@ -56,6 +58,9 @@ interface AiwState {
   sessions: Session[]
   claims: WorkClaim[]
   conflicts: Conflict[]
+  /// Tool calls blocked on a human right now. Global, not per-project:
+  /// an agent stuck waiting is urgent whichever project it belongs to.
+  approvals: ApprovalRequest[]
   decisions: DecisionRow[]
   events: DomainEvent[]
   commits: GitCommit[]
@@ -71,6 +76,8 @@ interface AiwState {
   selectFeature: (id: string | null) => Promise<void>
   bootstrap: () => Promise<void>
   refresh: () => Promise<void>
+  refreshApprovals: () => Promise<void>
+  resolveApproval: (id: string, decision: ApprovalDecision) => Promise<void>
   refreshContext: () => Promise<void>
   runDemo: () => Promise<void>
   startAgent: (agentId: string, opts?: { workItemId?: string; intent?: string; areas?: string[]; dependsOn?: string[] }) => Promise<void>
@@ -97,6 +104,7 @@ export const useAiw = create<AiwState>((set, get) => ({
   sessions: [],
   claims: [],
   conflicts: [],
+  approvals: [],
   decisions: [],
   events: [],
   commits: [],
@@ -124,6 +132,9 @@ export const useAiw = create<AiwState>((set, get) => ({
         aiw.permissions(),
       ])
       set({ projects, agents, tools, permissions, ready: true, loading: false })
+      // An app that starts up with an agent already blocked has to show it,
+      // rather than waiting for an event that has already been emitted.
+      void get().refreshApprovals()
       // Screenshot harness: always rebuild, so each capture is self-contained.
       // Guarding on an empty project list stopped working once the registered
       // list became durable, which is exactly the behaviour we wanted.
@@ -186,8 +197,37 @@ export const useAiw = create<AiwState>((set, get) => ({
         features, sessions, claims, conflicts, events, commits, testRuns,
         decisions, projects, loading: false, error: null,
       })
+      void get().refreshApprovals()
     } catch (e) {
       set({ error: say(e), loading: false })
+    }
+  },
+
+  refreshApprovals: async () => {
+    try {
+      set({ approvals: await aiw.pendingApprovals() })
+    } catch {
+      // A queue we cannot read is not an empty queue. Leaving the last known
+      // list up is better than showing "nothing to approve" while an agent is
+      // actually sitting there blocked.
+    }
+  },
+
+  resolveApproval: async (id, decision) => {
+    try {
+      await aiw.resolveApproval(id, decision)
+    } catch (e) {
+      // Usually "no longer waiting" — it timed out while the prompt was open.
+      set({ error: say(e) })
+    }
+    await get().refreshApprovals()
+    // `always` moves a permission, so the matrix on screen is now stale.
+    if (decision.endsWith('always')) {
+      try {
+        set({ permissions: await aiw.permissions() })
+      } catch {
+        /* the matrix reloads on the next refresh */
+      }
     }
   },
 
@@ -263,6 +303,12 @@ export const useAiw = create<AiwState>((set, get) => ({
   // Live tail. Capped so a long-running demo can't grow the array without
   // bound; the full history is always a `refresh()` away.
   pushEvent: (e) => {
+    // Approvals are read back from the backend rather than reconstructed from
+    // the event, and before the project filter: the queue is global, and the
+    // backend is the only thing that knows what is still waiting.
+    if (e.type === 'tool.approval.requested' || e.type === 'tool.approval.resolved') {
+      void get().refreshApprovals()
+    }
     const { projectId, events } = get()
     if (projectId && e.project_id && e.project_id !== projectId) return
     // The same event can arrive twice: once live from the bus and once in the

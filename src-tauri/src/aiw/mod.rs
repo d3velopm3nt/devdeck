@@ -18,6 +18,7 @@
 //! agents; `provider` knows nothing about `.devdeck`. That is what makes
 //! swapping the LLM a change to one layer.
 
+pub mod approval;
 pub mod commands;
 pub mod conflict;
 pub mod context;

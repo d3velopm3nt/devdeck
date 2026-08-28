@@ -8,6 +8,7 @@ use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use super::approval::{ApprovalRequest, Decision};
 use super::conflict::Conflict;
 use super::context::{AssembledContext, ContextService};
 use super::deck::{Deck, Requirement, RequirementsMeta, WorkItem, WorkMeta};
@@ -994,6 +995,18 @@ pub fn saved_agent_providers(conn: &rusqlite::Connection) -> Vec<(String, String
 #[tauri::command]
 pub fn aiw_app_status(ws: Ws, project_id: String) -> Option<super::tools::AppStatus> {
     ws.project(&project_id).and_then(|p| p.tools.app_status())
+}
+
+/// Tool calls waiting on a human right now.
+#[tauri::command]
+pub fn aiw_pending_approvals(ws: Ws) -> Vec<ApprovalRequest> {
+    ws.pending_approvals()
+}
+
+/// Answer one. The agent is blocked on this, so it takes effect immediately.
+#[tauri::command]
+pub fn aiw_resolve_approval(ws: Ws, id: String, decision: Decision) -> Result<(), String> {
+    ws.resolve_approval(&id, decision)
 }
 
 #[tauri::command]

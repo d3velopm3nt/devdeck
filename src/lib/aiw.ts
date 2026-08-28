@@ -324,6 +324,27 @@ export interface DemoResult {
 // IPC
 // ---------------------------------------------------------------------------
 
+/** A tool call an agent is blocked on, waiting for a person to answer. */
+export interface ApprovalRequest {
+  id: string
+  agent_id: string
+  tool: string
+  action: string
+  /** One line you can decide on without reading JSON. */
+  summary: string
+  /** The full arguments, for when the summary isn't enough. */
+  detail: string
+  project_id?: string
+  feature_id?: string
+  session_id?: string
+  requested_at: string
+  /** Seconds the agent will wait before giving up and being refused. */
+  expires_in: number
+}
+
+/** `always` variants also move the permission, so the question stops recurring. */
+export type ApprovalDecision = 'allow' | 'allow-always' | 'deny' | 'deny-always'
+
 export const aiw = {
   projects: () => invoke<AiProject[]>('aiw_projects'),
   registerProject: (id: string, name: string, root: string) =>
@@ -409,6 +430,10 @@ export const aiw = {
     invoke<string>('aiw_read_file', { projectId, path }),
   writeFile: (projectId: string, path: string, content: string) =>
     invoke<void>('aiw_write_file', { projectId, path, content }),
+
+  pendingApprovals: () => invoke<ApprovalRequest[]>('aiw_pending_approvals'),
+  resolveApproval: (id: string, decision: ApprovalDecision) =>
+    invoke<void>('aiw_resolve_approval', { id, decision }),
 
   runDemo: (baseDir?: string) => invoke<DemoResult>('aiw_run_demo', { baseDir }),
   reset: () => invoke<void>('aiw_reset'),
@@ -519,6 +544,10 @@ export const describeEvent = (e: DomainEvent): string => {
       return `${agent} ran ${p.tool}.${p.action}`
     case 'tool.failed':
       return `${agent} was refused ${p.tool}.${p.action}${p.denied ? ' (denied)' : ''}`
+    case 'tool.approval.requested':
+      return `${agent} is waiting on you — ${p.summary ?? `${p.tool}.${p.action}`}`
+    case 'tool.approval.resolved':
+      return `${p.allowed ? 'Approved' : 'Refused'} for ${agent} — ${p.summary ?? p.tool}`
     case 'file.changed':
       return `${p.by ?? agent} changed ${p.path}`
     case 'context.changed':

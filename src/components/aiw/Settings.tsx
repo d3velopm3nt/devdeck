@@ -170,9 +170,9 @@ function ToolPermissions() {
         <div className="text-[11.5px] leading-[1.6] text-dim">
           Tools are the only way an agent reaches the machine. Permissions fail closed: an unknown
           agent gets nothing, <span className="text-ink">Read</span> refuses writes, and{' '}
-          <span className="text-ink">Approval</span> is not a silent yes — it refuses until an
-          approval flow exists, and the refusal is recorded as{' '}
-          <span className="font-mono text-[11px]">tool.failed</span>.
+          <span className="text-ink">Approval</span> stops the agent mid-turn and asks you — it is
+          never a silent yes. If nobody answers within three minutes the call is refused, not
+          granted.
         </div>
       </div>
 
@@ -224,8 +224,10 @@ function ToolPermissions() {
       </div>
 
       <div className="mt-2.5 text-[11px] leading-[1.55] text-muted">
-        A refused action is left out of what the model is offered entirely, rather than advertised
-        and then denied — offering a read-only agent a write it can never call wastes a turn.
+        An action that can never be allowed is left out of what the model is offered entirely,
+        rather than advertised and then denied — offering a read-only agent a write it can never
+        call wastes a turn. <span className="text-dim">Approval</span> is offered, because it is
+        genuinely callable; the model is told the call may pause for a human.
       </div>
     </>
   )

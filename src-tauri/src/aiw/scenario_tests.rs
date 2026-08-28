@@ -705,3 +705,199 @@ fn configuring_a_real_provider_changes_nothing_but_the_provider_layer() {
     .unwrap();
     assert_eq!(outcome.status, "Completed");
 }
+
+// ---------------------------------------------------------------------------
+// Approvals
+//
+// `Permission::Approval` used to mean "refused", which was honest but useless:
+// with nothing able to say yes, the only way to let an agent do real work was
+// `Full`, and a permission level nobody can satisfy is one nobody uses. These
+// run the real broker on the real workspace, with a second thread standing in
+// for the person at the keyboard.
+// ---------------------------------------------------------------------------
+
+/// Wait for the agent to actually be blocked, rather than assuming it got there.
+/// Returns the request so a test can assert on what the human was shown.
+fn wait_for_prompt(w: &Arc<Workspace>) -> super::approval::ApprovalRequest {
+    for _ in 0..600 {
+        if let Some(r) = w.pending_approvals().into_iter().next() {
+            return r;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    panic!("no approval was ever requested — the agent was not blocked");
+}
+
+fn approval_fixture() -> (Tmp, Arc<Workspace>, PathBuf, ToolCall) {
+    let t = Tmp::new("approve");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    w.register_project("tyrex", "TyreX", tyrex.clone());
+    w.set_permission("qa", "files", "approval").unwrap();
+    let call = ToolCall::new(
+        TOOL_FILES,
+        "write",
+        serde_json::json!({ "path": "approved.txt", "content": "a human said yes" }),
+    );
+    (t, w, tyrex, call)
+}
+
+#[test]
+fn an_approval_blocks_until_a_human_answers_and_then_the_tool_runs() {
+    let (_t, w, tyrex, call) = approval_fixture();
+    let scope = super::events::EventScope::feature("tyrex", "offline-synchronisation");
+
+    let human = {
+        let w = w.clone();
+        std::thread::spawn(move || {
+            let req = wait_for_prompt(&w);
+            // What the person is asked has to be legible on its own. A prompt
+            // showing raw JSON gets rubber-stamped, which is the same as having
+            // no approval at all.
+            assert_eq!(req.summary, "write approved.txt");
+            assert_eq!(req.agent_id, "qa");
+            assert_eq!(req.project_id.as_deref(), Some("tyrex"));
+            w.resolve_approval(&req.id, super::approval::Decision::Allow)
+                .expect("the waiter should still be there");
+        })
+    };
+
+    let p = w.project("tyrex").unwrap();
+    let r = p.tools.execute(&w.bus, "qa", &scope, &call, None);
+    human.join().unwrap();
+
+    assert!(r.ok, "an approved call runs: {:?}", r.error);
+    assert!(
+        tyrex.join("approved.txt").exists(),
+        "and it really wrote the file"
+    );
+    assert!(saw(&w, EventType::ToolApprovalRequested));
+    assert!(saw(&w, EventType::ToolApprovalResolved));
+    assert!(w.pending_approvals().is_empty(), "the queue is left clean");
+}
+
+#[test]
+fn a_denial_stops_the_write_from_ever_happening() {
+    let (_t, w, tyrex, call) = approval_fixture();
+    let scope = super::events::EventScope::feature("tyrex", "offline-synchronisation");
+
+    let human = {
+        let w = w.clone();
+        std::thread::spawn(move || {
+            let req = wait_for_prompt(&w);
+            w.resolve_approval(&req.id, super::approval::Decision::Deny)
+                .unwrap();
+        })
+    };
+
+    let p = w.project("tyrex").unwrap();
+    let r = p.tools.execute(&w.bus, "qa", &scope, &call, None);
+    human.join().unwrap();
+
+    assert!(!r.ok, "a refused call must not run");
+    assert!(
+        !tyrex.join("approved.txt").exists(),
+        "a denial has to happen before the side effect, not after it"
+    );
+    // The agent is told a person said no, not that the tool is broken —
+    // otherwise it retries a decision that was already made.
+    let why = r.error.unwrap();
+    assert!(
+        why.contains("refused by a human"),
+        "unhelpful reason: {why}"
+    );
+}
+
+/// The point of "always" — otherwise you answer the same question every turn
+/// and start reaching for `Full` just to make it stop.
+#[test]
+fn always_allow_moves_the_permission_so_it_stops_asking() {
+    let (_t, w, tyrex, call) = approval_fixture();
+    let scope = super::events::EventScope::feature("tyrex", "offline-synchronisation");
+
+    let human = {
+        let w = w.clone();
+        std::thread::spawn(move || {
+            let req = wait_for_prompt(&w);
+            w.resolve_approval(&req.id, super::approval::Decision::AllowAlways)
+                .unwrap();
+        })
+    };
+    let first = w
+        .project("tyrex")
+        .unwrap()
+        .tools
+        .execute(&w.bus, "qa", &scope, &call, None);
+    human.join().unwrap();
+    assert!(first.ok, "the answered call runs: {:?}", first.error);
+
+    // Nobody is listening this time. If it still asked, it would sit here for
+    // the full timeout and then be refused — so speed is the assertion.
+    let second_call = ToolCall::new(
+        TOOL_FILES,
+        "write",
+        serde_json::json!({ "path": "again.txt", "content": "no second prompt" }),
+    );
+    let started = std::time::Instant::now();
+    let second =
+        w.project("tyrex")
+            .unwrap()
+            .tools
+            .execute(&w.bus, "qa", &scope, &second_call, None);
+
+    assert!(second.ok, "the second call is no longer gated");
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(5),
+        "it asked again — 'always' did not stick"
+    );
+    assert!(tyrex.join("again.txt").exists());
+}
+
+/// The mirror image: "always deny" has to revoke, not just refuse once.
+#[test]
+fn always_deny_revokes_the_tool_rather_than_refusing_one_call() {
+    let (_t, w, _tyrex, call) = approval_fixture();
+    let scope = super::events::EventScope::feature("tyrex", "offline-synchronisation");
+
+    let human = {
+        let w = w.clone();
+        std::thread::spawn(move || {
+            let req = wait_for_prompt(&w);
+            w.resolve_approval(&req.id, super::approval::Decision::DenyAlways)
+                .unwrap();
+        })
+    };
+    let first = w
+        .project("tyrex")
+        .unwrap()
+        .tools
+        .execute(&w.bus, "qa", &scope, &call, None);
+    human.join().unwrap();
+    assert!(!first.ok);
+
+    let started = std::time::Instant::now();
+    let second = w
+        .project("tyrex")
+        .unwrap()
+        .tools
+        .execute(&w.bus, "qa", &scope, &call, None);
+    assert!(!second.ok, "the tool is gone, not merely refused once");
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(5),
+        "a revoked tool must fail outright rather than prompt again"
+    );
+}
+
+/// A model that is never offered an approvable action can never trigger the
+/// prompt, so the two halves have to agree.
+#[test]
+fn an_approvable_action_is_offered_to_the_model() {
+    let w = ws();
+    w.set_permission("qa", "files", "approval").unwrap();
+    let defs = super::tools::definitions_for("qa", &w.permission_matrix());
+    let write = defs
+        .iter()
+        .find(|d| d.name == "files_write")
+        .expect("an action a human can approve is a callable one");
+    assert!(write.description.contains("requires human approval"));
+}

@@ -58,6 +58,8 @@ pub enum EventType {
     ToolRequested,
     ToolExecuted,
     ToolFailed,
+    ToolApprovalRequested,
+    ToolApprovalResolved,
     ProcessStartRequested,
     ProcessStarted,
     ProcessReady,
@@ -108,6 +110,8 @@ impl EventType {
             ToolRequested => "tool.requested",
             ToolExecuted => "tool.executed",
             ToolFailed => "tool.failed",
+            ToolApprovalRequested => "tool.approval.requested",
+            ToolApprovalResolved => "tool.approval.resolved",
             ProcessStartRequested => "process.start.requested",
             ProcessStarted => "process.started",
             ProcessReady => "process.ready",
@@ -140,7 +144,11 @@ impl EventType {
             AgentStarted | AgentStatusChanged | AgentCompleted | AgentFailed => "Agent",
             SessionStarted | SessionCheckpointed | SessionCompleted => "Session",
             WorkClaimed | WorkUpdated | WorkReleased | WorkCompleted => "Task",
-            ToolRequested | ToolExecuted | ToolFailed => "Tool",
+            ToolRequested
+            | ToolExecuted
+            | ToolFailed
+            | ToolApprovalRequested
+            | ToolApprovalResolved => "Tool",
             ProcessStartRequested
             | ProcessStarted
             | ProcessReady

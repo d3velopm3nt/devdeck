@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, Weak};
 
+use super::approval::{ApprovalBroker, ApprovalRequest, Decision};
 use super::conflict::{ClaimView, ConflictService, WorkView};
 use super::context::{
     ActiveWorkEntry, ActiveWorkView, Checkpoint, ContextReconciler, DeterministicReconciler,
@@ -202,10 +203,18 @@ pub struct ProjectSummary {
     pub commit: Option<String>,
 }
 
+/// How long an agent waits for a human before giving up and being refused.
+/// Long enough to walk to the kettle, short enough that a forgotten prompt does
+/// not leave an agent wedged.
+const APPROVAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(180);
+
 /// The whole AI Workspace.
 pub struct Workspace {
     pub bus: SharedBus,
     pub conflicts: ConflictService,
+    /// Shared by every project's tool service, so one queue holds every
+    /// pending request no matter which agent raised it.
+    pub approvals: Arc<ApprovalBroker>,
     pub providers: Mutex<ProviderRegistry>,
     pub reconciler: Box<dyn ContextReconciler>,
     projects: Mutex<HashMap<String, Arc<ProjectHandle>>>,
@@ -226,6 +235,7 @@ impl Workspace {
         Self {
             bus: Arc::new(EventBus::new()),
             conflicts: ConflictService::new(),
+            approvals: Arc::new(ApprovalBroker::new(APPROVAL_TIMEOUT)),
             providers: Mutex::new(ProviderRegistry::new()),
             reconciler: Box::new(DeterministicReconciler),
             projects: Mutex::new(HashMap::new()),
@@ -329,7 +339,7 @@ impl Workspace {
             id: id.to_string(),
             name: name.to_string(),
             root: root.clone(),
-            tools: ToolService::new(root, id, matrix),
+            tools: ToolService::new(root, id, matrix).with_approvals(self.approvals.clone()),
         });
         self.projects
             .lock()
@@ -504,7 +514,8 @@ impl Workspace {
                     id: old.id.clone(),
                     name: old.name.clone(),
                     root: old.root.clone(),
-                    tools: ToolService::new(old.root.clone(), &old.id, matrix.clone()),
+                    tools: ToolService::new(old.root.clone(), &old.id, matrix.clone())
+                        .with_approvals(self.approvals.clone()),
                 });
                 projects.insert(id, handle);
             }
@@ -681,6 +692,39 @@ impl Workspace {
             .collect()
     }
 
+    /// Requests waiting on a person right now.
+    pub fn pending_approvals(&self) -> Vec<ApprovalRequest> {
+        self.approvals.pending()
+    }
+
+    /// Answer one. "Always" also moves the permission, which is the point of
+    /// offering it — otherwise you answer the same question every turn.
+    pub fn resolve_approval(&self, id: &str, decision: Decision) -> Result<(), String> {
+        let agent_tool = self
+            .approvals
+            .pending()
+            .into_iter()
+            .find(|r| r.id == id)
+            .map(|r| (r.agent_id, r.tool));
+
+        // Move the permission *before* releasing the waiter, so the agent's
+        // next call already sees the new level rather than asking again.
+        if let Some((agent, tool)) = &agent_tool {
+            match decision {
+                Decision::AllowAlways => self.set_permission(agent, tool, "full")?,
+                Decision::DenyAlways => self.set_permission(agent, tool, "none")?,
+                _ => {}
+            }
+        }
+
+        if self.approvals.resolve(id, decision) {
+            Ok(())
+        } else {
+            // Already answered, or it timed out while the prompt was open.
+            Err("that request is no longer waiting — it may have timed out".into())
+        }
+    }
+
     /// Wipe live state. Durable `.devdeck` content is untouched — which is the
     /// whole point, and what the reload test checks.
     pub fn reset_runtime_state(&self) {
@@ -688,6 +732,8 @@ impl Workspace {
         self.claims.lock().unwrap().clear();
         self.tests.lock().unwrap().clear();
         self.conflicts.clear();
+        // Waiters see Abandoned and therefore deny; clearing is never approval.
+        self.approvals.clear();
         self.bus.clear();
     }
 }

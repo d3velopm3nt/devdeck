@@ -853,6 +853,8 @@ pub fn run() {
             aiw::commands::aiw_set_agent_provider,
             aiw::commands::aiw_app_status,
             aiw::commands::aiw_changed_since,
+            aiw::commands::aiw_pending_approvals,
+            aiw::commands::aiw_resolve_approval,
             aiw::commands::aiw_reset,
         ])
         .run(tauri::generate_context!())

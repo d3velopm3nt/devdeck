@@ -10,6 +10,7 @@ import { Icon, type IconName } from '../../lib/icons'
 import { useAiw, type AiwPage } from '../../lib/aiwStore'
 import { Settings } from './Settings'
 import { ApprovalBar } from './ApprovalBar'
+import { Chat } from './Chat'
 import { CAPTURE_FEATURE, CAPTURE_PAGE } from '../../lib/devCapture'
 import {
   aiw,
@@ -1706,6 +1707,11 @@ function Page() {
       </div>
     )
   }
+
+  // The assistant works before any project is registered — it is the thing you
+  // talk to about getting one started, so gating it behind having one would put
+  // the empty state in front of its own cure.
+  if (a.page === 'chat') return <Chat />
 
   if (a.projects.length === 0) {
     return (

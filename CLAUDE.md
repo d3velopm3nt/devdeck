@@ -32,6 +32,7 @@ src-tauri/src/
   shots.rs     screenshot watching, Windows OCR, thumbnails
   conn.rs      Connections: runs psql/sqlite3/sqlcmd, parses CSV, query history
   creds.rs     Windows Credential Manager — the only place a password exists
+  aiw/         AI Workspace (see below)
 src/
   App.tsx           shell: top bar → rail → sidebar → surface → bottom bar
   shell/Rail.tsx    primary navigation
@@ -56,6 +57,44 @@ layout-corruption bugs:
 
 `openSpace` / `openService` / `openNodeSetup` all switch `railView` to `projects`
 first, so links from Home land somewhere visible.
+
+### The AI Workspace (`src-tauri/src/aiw/`)
+
+Agents and an orchestrator working on your projects. Layered, arrow pointing
+down: `deck`/`personal` know nothing about agents, `provider` knows nothing
+about `.devdeck`.
+
+```
+events.rs     the typed bus everything talks through
+deck.rs       `.devdeck` on disk — a project's durable truth, committed
+personal.rs   %APPDATA%\devdeckssistant — *your* durable truth, never committed
+context.rs    assembly, checkpoints, deltas, reconciliation
+conflict.rs   watches events, decides when two pieces of work disagree
+tools.rs      the registry + ToolService. Agents reach the machine only here
+approval.rs   where a tool call goes to ask a person
+provider.rs   LLMProvider trait + Mock / Anthropic / OpenAI-compatible
+runtime.rs    AgentRuntime — the session lifecycle a specialist goes through
+assistant.rs  the orchestrator — the one AI you talk to
+state.rs      Workspace: the live in-memory view
+commands.rs   Tauri entry points, the only thing the UI can call
+```
+
+**The store split is a rule, not a convention.** Project state goes in
+`.devdeck` and is committed. Anything about *the user* — conversations, memory,
+preferences — goes in the personal store, which refuses to be created inside a
+git repository at all. Adding state? Decide which side it belongs on before
+writing it, because the wrong answer puts personal notes in someone's pull
+request.
+
+**Permissions fail closed, and `approval` genuinely asks.** Every agent reaches
+the machine only through `ToolService`, gated by the permission matrix. An
+unknown agent gets nothing; `read` refuses writes; `approval` blocks the
+agent's turn and prompts a human, denying on timeout. The orchestrator is an
+agent like any other — it appears in the matrix and can be revoked.
+
+**The mock is a provider, not a bypass.** Everything works with no API key and
+no network, and the mock refuses an empty context so a broken assembly cannot
+hide behind it. Where it cannot answer honestly, it says so.
 
 ## Conventions that matter
 

@@ -10,6 +10,7 @@ import { aiw } from '../../lib/aiw'
 // Surfaces you *watch* live in the nav; anything you configure once lives
 // under Settings, which is what keeps this list readable as the module grows.
 const SECTIONS: Array<{ page: AiwPage; icon: IconName; label: string }> = [
+  { page: 'chat', icon: 'ai', label: 'Assistant' },
   { page: 'overview', icon: 'layout', label: 'Overview' },
   { page: 'features', icon: 'list', label: 'Features' },
   { page: 'context', icon: 'context', label: 'Context' },

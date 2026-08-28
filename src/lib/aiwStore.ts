@@ -19,6 +19,10 @@ import {
 import {
   aiw,
   type AgentDef,
+  type AssistantReply,
+  type ChatMessage,
+  type ConversationMeta,
+  type ConversationSummary,
   type ApprovalDecision,
   type ApprovalRequest,
   type AiProject,
@@ -37,6 +41,7 @@ import {
 } from './aiw'
 
 export type AiwPage =
+  | 'chat'
   | 'overview' | 'features' | 'feature' | 'context' | 'agents'
   | 'conflicts' | 'activity' | 'decisions' | 'git'
   | 'knowledge' | 'tests' | 'settings'
@@ -61,6 +66,11 @@ interface AiwState {
   /// Tool calls blocked on a human right now. Global, not per-project:
   /// an agent stuck waiting is urgent whichever project it belongs to.
   approvals: ApprovalRequest[]
+  /// The assistant. `conversation` is the open one; `null` until one is picked
+  /// or created.
+  conversations: ConversationSummary[]
+  conversation: ConversationMeta | null
+  sending: boolean
   decisions: DecisionRow[]
   events: DomainEvent[]
   commits: GitCommit[]
@@ -77,6 +87,12 @@ interface AiwState {
   bootstrap: () => Promise<void>
   refresh: () => Promise<void>
   refreshApprovals: () => Promise<void>
+  loadConversations: () => Promise<void>
+  openConversation: (id: string) => Promise<void>
+  newConversation: () => Promise<void>
+  deleteConversation: (id: string) => Promise<void>
+  focusConversation: (projectId?: string) => Promise<void>
+  send: (text: string) => Promise<void>
   resolveApproval: (id: string, decision: ApprovalDecision) => Promise<void>
   refreshContext: () => Promise<void>
   runDemo: () => Promise<void>
@@ -93,7 +109,8 @@ export const useAiw = create<AiwState>((set, get) => ({
   loading: false,
   error: null,
 
-  page: (CAPTURE_PAGE || 'overview') as AiwPage,
+  // The assistant is the surface you use; the rest are surfaces you watch.
+  page: (CAPTURE_PAGE || 'chat') as AiwPage,
   projectId: null,
   featureId: null,
 
@@ -105,6 +122,9 @@ export const useAiw = create<AiwState>((set, get) => ({
   claims: [],
   conflicts: [],
   approvals: [],
+  conversations: [],
+  conversation: null,
+  sending: false,
   decisions: [],
   events: [],
   commits: [],
@@ -135,6 +155,7 @@ export const useAiw = create<AiwState>((set, get) => ({
       // An app that starts up with an agent already blocked has to show it,
       // rather than waiting for an event that has already been emitted.
       void get().refreshApprovals()
+      void get().loadConversations()
       // Screenshot harness: always rebuild, so each capture is self-contained.
       // Guarding on an empty project list stopped working once the registered
       // list became durable, which is exactly the behaviour we wanted.
@@ -228,6 +249,99 @@ export const useAiw = create<AiwState>((set, get) => ({
       } catch {
         /* the matrix reloads on the next refresh */
       }
+    }
+  },
+
+  // -- the assistant ------------------------------------------------------
+
+  loadConversations: async () => {
+    try {
+      set({ conversations: await aiw.conversations() })
+    } catch (e) {
+      set({ error: say(e) })
+    }
+  },
+
+  openConversation: async (id) => {
+    try {
+      set({ conversation: await aiw.conversation(id) })
+    } catch (e) {
+      set({ error: say(e) })
+    }
+  },
+
+  newConversation: async () => {
+    try {
+      // Starts focused on the project you are already looking at. Being asked
+      // "which project?" straight after clicking New is a question the app can
+      // usually answer itself.
+      const conv = await aiw.newConversation(get().projectId ?? undefined)
+      set({ conversation: conv })
+      await get().loadConversations()
+    } catch (e) {
+      set({ error: say(e) })
+    }
+  },
+
+  deleteConversation: async (id) => {
+    try {
+      await aiw.deleteConversation(id)
+      if (get().conversation?.id === id) set({ conversation: null })
+      await get().loadConversations()
+    } catch (e) {
+      set({ error: say(e) })
+    }
+  },
+
+  focusConversation: async (projectId) => {
+    const conv = get().conversation
+    if (!conv) return
+    try {
+      set({ conversation: await aiw.focusConversation(conv.id, projectId) })
+    } catch (e) {
+      set({ error: say(e) })
+    }
+  },
+
+  send: async (text) => {
+    const conv = get().conversation
+    if (!conv || !text.trim() || get().sending) return
+
+    // Show what was said before the round-trip. The reply can take a while —
+    // several provider turns, possibly an approval prompt — and a message that
+    // vanishes until then reads as a dropped one.
+    const pending: ChatMessage = { at: new Date().toISOString(), from: 'user', text: text.trim() }
+    set({
+      sending: true,
+      conversation: { ...conv, messages: [...conv.messages, pending] },
+    })
+
+    try {
+      const reply: AssistantReply = await aiw.sendMessage(conv.id, text.trim())
+      // Re-read rather than splicing the optimistic message: the backend
+      // decided the timestamps, the tool steps and the title, and a transcript
+      // assembled from two sources drifts.
+      const fresh = await aiw.conversation(conv.id)
+      set({ conversation: fresh, sending: false })
+      await get().loadConversations()
+      // Delegation started real sessions; the rest of the workspace is now stale.
+      if (reply.delegated.length > 0) void get().refresh()
+    } catch (e) {
+      // Put the failure in the transcript rather than only in a banner — you
+      // need to see which message did not get through.
+      const failed: ChatMessage = {
+        at: new Date().toISOString(),
+        from: 'tool',
+        text: say(e),
+        tool: 'assistant',
+        ok: false,
+      }
+      const current = get().conversation
+      set({
+        sending: false,
+        error: say(e),
+        conversation: current ? { ...current, messages: [...current.messages, failed] } : current,
+      })
     }
   },
 

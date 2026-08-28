@@ -220,10 +220,13 @@ pub struct Workspace {
     ///
     /// Machine-scoped, not project-scoped: you talk to one assistant about
     /// everything, and what it remembers about you must not be duplicated into
-    /// — or committed with — any repository. `None` when the personal store
-    /// could not be opened, which is a real failure worth reporting rather than
-    /// papering over with an in-memory stand-in that loses your history at exit.
-    pub conversations: Option<Conversations>,
+    /// — or committed with — any repository.
+    ///
+    /// Opened on first use rather than at construction. Constructing a
+    /// workspace should not touch the user's home directory — the test suite
+    /// builds hundreds of them, and none of those has any business creating
+    /// folders in `%APPDATA%`.
+    conversations: std::sync::OnceLock<Result<Conversations, String>>,
     pub providers: Mutex<ProviderRegistry>,
     pub reconciler: Box<dyn ContextReconciler>,
     projects: Mutex<HashMap<String, Arc<ProjectHandle>>>,
@@ -245,12 +248,7 @@ impl Workspace {
             bus: Arc::new(EventBus::new()),
             conflicts: ConflictService::new(),
             approvals: Arc::new(ApprovalBroker::new(APPROVAL_TIMEOUT)),
-            conversations: super::personal::PersonalStore::open()
-                .map(Conversations::new)
-                .map_err(|e| {
-                    eprintln!("[aiw] personal store unavailable, chat disabled: {e}");
-                })
-                .ok(),
+            conversations: std::sync::OnceLock::new(),
             providers: Mutex::new(ProviderRegistry::new()),
             reconciler: Box::new(DeterministicReconciler),
             projects: Mutex::new(HashMap::new()),
@@ -712,10 +710,14 @@ impl Workspace {
     /// An error rather than an empty stand-in: a chat that silently forgets
     /// everything at exit is worse than one that says it cannot start.
     pub fn convs(&self) -> Result<&Conversations, String> {
-        self.conversations.as_ref().ok_or_else(|| {
-            "the personal store could not be opened, so the assistant has nowhere              to keep conversations"
-                .to_string()
-        })
+        self.conversations
+            .get_or_init(|| {
+                super::personal::PersonalStore::open()
+                    .map(Conversations::new)
+                    .map_err(|e| format!("the assistant has nowhere to keep conversations: {e}"))
+            })
+            .as_ref()
+            .map_err(|e| e.clone())
     }
 
     /// Requests waiting on a person right now.

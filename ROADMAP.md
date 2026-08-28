@@ -71,6 +71,40 @@ manager** question. Everything else remaining is business and distribution —
 decisions that are the owner's to make rather than things to be implemented
 past. See *Business / distribution*.
 
+### AI Workspace ✅ built (this cycle, on `feat/ai-workspace`)
+
+Agents and an orchestrator working on your projects, with `.devdeck` as the
+durable, committed source of truth. Built end to end and working against the
+mock provider with no API key; the OpenAI-compatible transport is live, so
+OpenRouter, OpenCode, a local Meridian and anything else speaking that shape
+all work.
+
+- [x] Event bus, `.devdeck` schema, context assembly, checkpoints, staleness
+- [x] Conflict detection driven by events, not polling
+- [x] Tool registry + permission matrix, failing closed
+- [x] Provider seam: Mock, OpenAI-compatible (live), Anthropic (stubbed)
+- [x] Credentials via Windows Credential Manager, never SQLite
+- [x] Provider setup UI, agent→provider assignment, Settings page
+- [x] Context export to `CLAUDE.md` / `AGENTS.md`
+- [x] **Approvals** — `approval` blocks the agent and prompts a human, denying
+      on timeout. Advertised to the model, because it is genuinely callable.
+- [x] **The orchestrator** — one assistant you talk to, which delegates to the
+      specialists. Chat surface, durable conversations, memory.
+- [x] **The store split** — personal state lives outside every repo, enforced
+      by refusing to create the store inside one.
+
+What is left, in the order it matters:
+
+1. **Streaming** — replies arrive whole. On a real provider a long answer looks
+   like a hang. This is the next thing to do.
+2. **The Anthropic transport** — returns an explicit error today rather than
+   pretending. The OpenAI-compatible path covers Claude via OpenRouter.
+3. **Delegated sessions are fire-and-forget** — started on a thread, visible in
+   Activity, but the chat does not learn when one finishes.
+4. **The life half** — calendar, mail, notes. Needs no new store; needs new
+   tools pointed at the personal one. Deliberately not started: the work half
+   had to be real first.
+
 ### Stash Phase 1 — capture + vault ✅ built
 - [x] `stash_items` table + FTS5 virtual table, migration in `db.rs`
 - [x] `stash.rs`: message-only window + `AddClipboardFormatListener`, handle
@@ -426,6 +460,9 @@ the website's download links point at nothing.
   of deploy tools. Adding an ecosystem is a row in `MARKER_DETECTORS` (data) or
   one `detect_*` function (logic), plus a fixture test — but either way it's a
   **rebuild**. See *User-editable scan rules* for the fix.
+- AI Workspace: replies are not streamed, so a slow provider looks like a hang;
+  a delegated session's completion never reaches the conversation; the Anthropic
+  transport is unimplemented (it errors explicitly rather than pretending)
 - Terminal commands: an old report that commands don't type into the terminal —
   deprioritised, needs reproduction
 - Machine Setup used to re-probe winget/scoop on every remount with no visible

@@ -324,6 +324,64 @@ export interface DemoResult {
 // IPC
 // ---------------------------------------------------------------------------
 
+/** Who said a thing in a conversation. `tool` is a step, not a speaker. */
+export type Speaker = 'user' | 'assistant' | 'tool'
+
+export interface ChatMessage {
+  at: string
+  from: Speaker
+  text: string
+  /** `tool.action`, on tool steps only. */
+  tool?: string
+  ok?: boolean
+}
+
+export interface ConversationMeta {
+  id: string
+  title: string
+  started_at: string
+  updated_at: string
+  /** The project in focus. A focus, not a boundary — the assistant works across projects. */
+  project_id?: string
+  messages: ChatMessage[]
+}
+
+export interface ConversationSummary {
+  id: string
+  title: string
+  started_at: string
+  updated_at: string
+  project_id?: string
+  messages: number
+  preview: string
+}
+
+export interface AssistantReply {
+  conversation_id: string
+  reply: string
+  /** What this exchange appended, so the transcript can grow without a refetch. */
+  appended: ChatMessage[]
+  /** Sessions it started, if any. */
+  delegated: string[]
+  turns: number
+}
+
+/** What the assistant knows about you. Personal store, never a repo. */
+export interface ProfileView {
+  preferences: string[]
+  body: string
+  updated_at: string
+}
+
+export interface MemoryView {
+  id: string
+  title: string
+  body: string
+  created_at: string
+  project_id?: string
+  tags: string[]
+}
+
 /** A tool call an agent is blocked on, waiting for a person to answer. */
 export interface ApprovalRequest {
   id: string
@@ -430,6 +488,23 @@ export const aiw = {
     invoke<string>('aiw_read_file', { projectId, path }),
   writeFile: (projectId: string, path: string, content: string) =>
     invoke<void>('aiw_write_file', { projectId, path, content }),
+
+  conversations: () => invoke<ConversationSummary[]>('aiw_conversations'),
+  conversation: (id: string) => invoke<ConversationMeta>('aiw_conversation', { id }),
+  newConversation: (projectId?: string) =>
+    invoke<ConversationMeta>('aiw_new_conversation', { projectId }),
+  deleteConversation: (id: string) => invoke<boolean>('aiw_delete_conversation', { id }),
+  focusConversation: (id: string, projectId?: string) =>
+    invoke<ConversationMeta>('aiw_focus_conversation', { id, projectId }),
+  sendMessage: (conversationId: string, text: string) =>
+    invoke<AssistantReply>('aiw_send_message', { conversationId, text }),
+
+  personalRoot: () => invoke<string>('aiw_personal_root'),
+  profile: () => invoke<ProfileView>('aiw_profile'),
+  saveProfile: (preferences: string[], body: string) =>
+    invoke<ProfileView>('aiw_save_profile', { preferences, body }),
+  memories: () => invoke<MemoryView[]>('aiw_memories'),
+  forgetMemory: (id: string) => invoke<boolean>('aiw_forget_memory', { id }),
 
   pendingApprovals: () => invoke<ApprovalRequest[]>('aiw_pending_approvals'),
   resolveApproval: (id: string, decision: ApprovalDecision) =>

@@ -8,6 +8,7 @@ import { Rail } from './shell/Rail'
 import { WorkspaceTabs } from './shell/WorkspaceTabs'
 import { SectionTabs } from './shell/SectionTabs'
 import { WindowControls } from './shell/WindowControls'
+import { DocumentTabs } from './shell/DocumentTabs'
 import { AgentCluster, NotificationBell, AccountChip } from './shell/TopBarStatus'
 import { Home } from './components/Home'
 import { Explorer } from './components/Explorer'
@@ -536,6 +537,7 @@ export default function App() {
           same project, so the row that moves between them cannot belong to
           only one of the two. */}
       {(railView === 'projects' || railView === 'aiworkspace') && <SectionTabs />}
+      <DocumentTabs />
 
       {/* Self-update status bar */}
       {!upHidden && (

@@ -159,7 +159,26 @@ export function AiwSidebar() {
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto pb-2">
-        <div className="px-1.5 pt-2">
+        {/* Assistant first. Everything below it is a surface you *watch*;
+            this is the one you use, and it is the only place in the app you
+            can talk to the thing. Grouping the sidebar by what-kind-of-page
+            once cost it its entry here, which is a good argument for it not
+            being in a group at all. */}
+        <div className="flex flex-col gap-px px-1.5 pt-2">
+          <button
+            className={`flex w-full items-center gap-2 rounded px-2 py-[5px] text-left text-[12px] ${
+              a.page === 'chat'
+                ? 'bg-raise font-semibold text-ink'
+                : 'text-dim hover:bg-hover hover:text-ink'
+            }`}
+            onClick={() => a.setPage('chat')}
+          >
+            <Icon name="ai" size={13} className={a.page === 'chat' ? 'text-indigo-400' : ''} />
+            Assistant
+            {a.conversations.length > 0 && (
+              <span className="ml-auto text-[10px] text-faint">{a.conversations.length}</span>
+            )}
+          </button>
           <button
             className={`flex w-full items-center gap-2 rounded px-2 py-[5px] text-left text-[12px] ${
               a.page === 'overview'

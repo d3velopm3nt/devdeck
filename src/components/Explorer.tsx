@@ -8,6 +8,7 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import * as ipc from '../lib/ipc'
 import type { CommandDef, NodeKind, ProfileDef, ServiceDef, SvcState, TreeNode } from '../lib/types'
 import { useApp } from '../store'
+import { useAiw } from '../lib/aiwStore'
 import { openEditor, openNodeSetup, openService, openSpace } from '../lib/dock'
 import { focusCommandSession, launchProfile, openTerminal, runCommandInNewTerminal } from '../lib/runner'
 import { resolveDir } from '../lib/tree'
@@ -82,7 +83,7 @@ const CAT_META: Record<Cat, { label: string; icon: string; color: string }> = {
 export function Explorer() {
   const {
     nodes, commands, services, profiles, svcStates, gitByNode,
-    selectedNodeId, setSelectedNode,
+    selectedNodeId, setSelectedNode, setRailView,
     activeWorkspaceId, activeWorkspace, setActiveWorkspace,
     refreshTree, refreshCommands, refreshServices, refreshProfiles, focusServiceLogs, servicePort,
     requestStartService, treeError, treeLoading, retryBootstrap,
@@ -455,6 +456,16 @@ export function Explorer() {
   )
 
   // One category group ("Commands"/"Services"/"Profiles") under a node.
+  // The AI Workspace, read (never written) from here. Projects are the same
+  // records on both sides now, so this is a lookup rather than a second list.
+  const {
+    sessions: aiwSessions,
+    approvals: aiwApprovals,
+    features: aiwFeatures,
+    projectId: aiwProjectId,
+    selectFeature,
+  } = useAiw()
+
   const renderCategory = (node: TreeNode, cat: Cat, count: number, depth: number, rows: ReactNode) => {
     const meta = CAT_META[cat]
     const open = !collapsedCats.has(catKey(node.id, cat))
@@ -486,6 +497,115 @@ export function Explorer() {
           </button>
         </div>
         {open && rows}
+      </div>
+    )
+  }
+
+  /// What is happening in this project right now, and what it is working on.
+  ///
+  /// Above the category folders rather than inside them: those answer "what
+  /// exists", and a running service is a different question from a configured
+  /// one. Ranking rather than filtering, because the folders are also where
+  /// you go to START a stopped service — hiding them would hide the button.
+  ///
+  /// Only rendered for a project, and only when there is something to say, so
+  /// an idle project stays as quiet as it was before.
+  const renderLive = (node: TreeNode, depth: number): ReactNode => {
+    const pid = String(node.id)
+    const agents = aiwSessions.filter(
+      (x) => x.project_id === pid && (x.status === 'working' || x.status === 'planning'),
+    )
+    const waiting = aiwApprovals.filter((r) => r.project_id === pid)
+    if (agents.length === 0 && waiting.length === 0) return null
+
+    const pad = { paddingLeft: `${depth * 14 + 6}px` }
+    return (
+      <div key={`${node.id}-live`}>
+        {waiting.map((r) => (
+          <div
+            key={r.id}
+            className="flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 text-[12px] text-body select-none hover:bg-hover"
+            style={pad}
+            title={r.detail}
+            onClick={() => {
+              setSelectedNode(node.id)
+              setRailView('aiworkspace')
+            }}
+          >
+            <span className="w-5 shrink-0" />
+            <span className="flex w-5 shrink-0 items-center justify-center text-warn">
+              <Icon name="alert" size={12} />
+            </span>
+            <span className="min-w-0 flex-1 truncate">{r.summary}</span>
+            <span className="shrink-0 pr-1 text-[10px] font-semibold text-warn">waiting</span>
+          </div>
+        ))}
+        {agents.map((x) => (
+          <div
+            key={x.id}
+            className="flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 text-[12px] text-body select-none hover:bg-hover"
+            style={pad}
+            title={`${x.agent_name} · ${x.feature_id}`}
+            onClick={() => {
+              setSelectedNode(node.id)
+              setRailView('aiworkspace')
+            }}
+          >
+            <span className="w-5 shrink-0" />
+            <span className="flex w-5 shrink-0 items-center justify-center text-indigo-400">
+              <Icon name="agent" size={12} />
+            </span>
+            <span className="min-w-0 flex-1 truncate">{x.agent_name}</span>
+            <span className="shrink-0 pr-1 text-[10px] text-ok">working</span>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  /// The features this project is working on. Only for the project the AI
+  /// Workspace currently has selected: it loads features one project at a
+  /// time, and drawing an empty list for the others would say "no features"
+  /// when the truth is "not loaded".
+  const renderFeatures = (node: TreeNode, depth: number): ReactNode => {
+    if (aiwProjectId !== String(node.id) || aiwFeatures.length === 0) return null
+    const pad = { paddingLeft: `${depth * 14 + 6}px` }
+    return (
+      <div key={`${node.id}-features`}>
+        <div
+          className="flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[11.5px] font-medium text-dim select-none"
+          style={pad}
+        >
+          <span className="w-5 shrink-0" />
+          <span className="flex w-5 shrink-0 items-center justify-center text-viol">
+            <Icon name="list" size={13} />
+          </span>
+          <span className="flex-1 truncate uppercase tracking-wide">Features</span>
+          <span className="shrink-0 pr-1 text-[10.5px] tabular-nums text-faint">
+            {aiwFeatures.length}
+          </span>
+        </div>
+        {aiwFeatures.slice(0, 8).map((f) => (
+          <div
+            key={f.id}
+            className="flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 text-[12px] text-body select-none hover:bg-hover"
+            style={{ paddingLeft: `${(depth + 1) * 14 + 6}px` }}
+            title={f.goal}
+            onClick={() => {
+              setSelectedNode(node.id)
+              void selectFeature(f.id)
+              setRailView('aiworkspace')
+            }}
+          >
+            <span className="w-5 shrink-0" />
+            <span className="min-w-0 flex-1 truncate">{f.name}</span>
+            {f.conflicts > 0 && (
+              <span className="shrink-0 pr-1 text-[10px] font-semibold text-warn">
+                {f.conflicts}
+              </span>
+            )}
+          </div>
+        ))}
       </div>
     )
   }
@@ -620,7 +740,9 @@ export function Explorer() {
         </div>
         {isOpen && (
           <>
+            {node.kind === 'project' && renderLive(node, depth + 1)}
             {children.map((c) => renderNode(c, depth + 1))}
+            {node.kind === 'project' && renderFeatures(node, depth + 1)}
             {showCommands &&
               renderCategory(
                 node,

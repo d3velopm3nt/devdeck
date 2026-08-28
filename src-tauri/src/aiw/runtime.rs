@@ -301,6 +301,8 @@ impl AgentRuntime {
                 tools: super::tools::definitions_for(&agent.id, &ws.permission_matrix()),
                 observations: observations.clone(),
                 turn,
+                // A goal-driven agent has no conversation to carry.
+                history: Vec::new(),
             };
 
             let response: AgentResponse = {

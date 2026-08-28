@@ -54,6 +54,19 @@ impl Observation {
     }
 }
 
+/// One prior message in a conversation.
+///
+/// The orchestrator is multi-turn with a human in the loop, which the
+/// goal-plus-observations shape cannot express: flattening a conversation into
+/// the system prompt throws away the role alternation models are trained on,
+/// and makes "what did I say three messages ago" a matter of prose.
+#[derive(Clone, Debug)]
+pub struct ChatTurn {
+    /// "user" or "assistant".
+    pub role: String,
+    pub content: String,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct AgentRequest {
     pub agent_id: String,
@@ -80,6 +93,11 @@ pub struct AgentRequest {
     pub observations: Vec<Observation>,
     /// Which turn of the loop this is, from 0.
     pub turn: u32,
+    /// Earlier messages in this conversation, oldest first.
+    ///
+    /// Empty for the goal-driven agents, which have no conversation — their
+    /// whole input is context plus a goal. Only the orchestrator fills it.
+    pub history: Vec<ChatTurn>,
 }
 
 /// A step the provider wants taken.
@@ -150,6 +168,7 @@ impl MockProvider {
             "developer" => Self::developer(req),
             "qa" => Self::qa(req),
             "reviewer" => Self::reviewer(req),
+            "orchestrator" => Self::orchestrator(req),
             _ => AgentResponse {
                 message: format!("No script for role '{role}'."),
                 actions: vec![AgentAction::Done {
@@ -157,6 +176,108 @@ impl MockProvider {
                 }],
                 complete: true,
             },
+        }
+    }
+
+    /// The orchestrator, scripted.
+    ///
+    /// Deterministic like the rest of the mock, and deliberately not clever:
+    /// it exists so the chat, the delegation path and the conversation store
+    /// can be exercised end to end with no API key and no network. What it
+    /// must never do is *pretend* — an answer it cannot support says so.
+    fn orchestrator(req: &AgentRequest) -> AgentResponse {
+        // A second turn means tool results came back; report them and stop.
+        if req.turn > 0 {
+            let summary = req
+                .observations
+                .iter()
+                .map(|o| {
+                    if o.ok {
+                        o.output.lines().next().unwrap_or("done").to_string()
+                    } else {
+                        format!("{}.{} failed: {}", o.tool, o.action, o.output)
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
+            return AgentResponse {
+                message: if summary.is_empty() {
+                    "Done.".into()
+                } else {
+                    summary
+                },
+                actions: vec![AgentAction::Done {
+                    summary: "handled".into(),
+                }],
+                complete: true,
+            };
+        }
+
+        let goal = req.goal.to_lowercase();
+        let wants_work = [
+            "start",
+            "implement",
+            "build",
+            "work on",
+            "get going",
+            "kick off",
+        ]
+        .iter()
+        .any(|k| goal.contains(k));
+        let wants_memory = ["remember", "note that", "keep in mind"]
+            .iter()
+            .any(|k| goal.contains(k));
+
+        if wants_memory {
+            return AgentResponse {
+                message: "Noting that.".into(),
+                actions: vec![AgentAction::Tool(ToolCall::new(
+                    "memory",
+                    "save",
+                    serde_json::json!({
+                        "title": truncate_words(&req.goal, 8),
+                        "body": req.goal,
+                    }),
+                ))],
+                complete: false,
+            };
+        }
+
+        if wants_work {
+            if let Some(feature) = first_feature(&req.context) {
+                return AgentResponse {
+                    message: format!("I'll put Developer A on {feature}."),
+                    actions: vec![AgentAction::Tool(ToolCall::new(
+                        "delegate",
+                        "start",
+                        serde_json::json!({
+                            "agent_id": "dev-a",
+                            "feature_id": feature,
+                            "intent": req.goal,
+                        }),
+                    ))],
+                    complete: false,
+                };
+            }
+            return AgentResponse {
+                message: "There is no feature in this project to start work on yet.                           Create one and I'll delegate it."
+                    .into(),
+                actions: vec![AgentAction::Done {
+                    summary: "nothing to delegate".into(),
+                }],
+                complete: true,
+            };
+        }
+
+        // The honest default. A mock that improvised an answer here would make
+        // the chat look like it works when nothing behind it does.
+        AgentResponse {
+            message: "I'm running on the mock provider, so I can coordinate but not think:                       ask me to start work on a feature, or to remember something.                       Connect a real provider in Settings to have an actual conversation."
+                .into(),
+            actions: vec![AgentAction::Done {
+                summary: "answered".into(),
+            }],
+            complete: true,
         }
     }
 
@@ -340,6 +461,29 @@ impl MockProvider {
             }
         }
     }
+}
+
+/// The first feature slug listed in an assembled context, if any.
+fn first_feature(context: &str) -> Option<String> {
+    let mut in_features = false;
+    for line in context.lines() {
+        if line.trim() == "Features:" {
+            in_features = true;
+            continue;
+        }
+        if in_features {
+            let t = line.trim();
+            match t.strip_prefix("- ") {
+                Some(slug) if !slug.is_empty() => return Some(slug.to_string()),
+                _ => return None,
+            }
+        }
+    }
+    None
+}
+
+fn truncate_words(s: &str, n: usize) -> String {
+    s.split_whitespace().take(n).collect::<Vec<_>>().join(" ")
 }
 
 impl LLMProvider for MockProvider {
@@ -705,20 +849,32 @@ impl OpenAICompatibleProvider {
     /// of the call they answer — which is what the structured observations are
     /// for.
     pub fn messages(&self, request: &AgentRequest) -> serde_json::Value {
-        let mut msgs = vec![
-            serde_json::json!({
-                "role": "system",
-                "content": format!(
-                    "{}\n\n# Context\n\n{}",
-                    request.system.trim(),
-                    request.context.trim()
-                ),
-            }),
-            serde_json::json!({
-                "role": "user",
-                "content": format!("Your task: {}", request.goal),
-            }),
-        ];
+        let mut msgs = vec![serde_json::json!({
+            "role": "system",
+            "content": format!(
+                "{}\n\n# Context\n\n{}",
+                request.system.trim(),
+                request.context.trim()
+            ),
+        })];
+
+        // Before the current message, so the model sees a conversation rather
+        // than a summary of one.
+        for t in &request.history {
+            msgs.push(serde_json::json!({ "role": t.role, "content": t.content }));
+        }
+
+        msgs.push(serde_json::json!({
+            "role": "user",
+            // A conversation's "goal" is just the latest thing the human said,
+            // and prefixing that with "Your task:" makes it read like an order
+            // rather than a turn.
+            "content": if request.history.is_empty() {
+                format!("Your task: {}", request.goal)
+            } else {
+                request.goal.clone()
+            },
+        }));
 
         for o in &request.observations {
             if o.call_id.is_empty() {
@@ -1270,6 +1426,7 @@ mod transport_tests {
             }),
             observations: vec![],
             turn: 0,
+            history: vec![],
         }
     }
 

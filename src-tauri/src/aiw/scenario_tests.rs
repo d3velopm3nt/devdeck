@@ -901,3 +901,191 @@ fn an_approvable_action_is_offered_to_the_model() {
         .expect("an action a human can approve is a callable one");
     assert!(write.description.contains("requires human approval"));
 }
+
+// ---------------------------------------------------------------------------
+// The orchestrator
+//
+// One assistant you talk to, which hands real work to the specialists. These
+// run the real conversation store, the real permission gate and the real
+// runtime — the mock is a provider, not a bypass.
+// ---------------------------------------------------------------------------
+
+use super::assistant::{Assistant, Conversations, Speaker, ASSISTANT_ID};
+use super::personal::PersonalStore;
+
+fn convs(t: &Tmp) -> Conversations {
+    // A temp root, not the real one: a test must never write into the user's
+    // actual conversation history.
+    let s = PersonalStore::at(t.0.join("personal"));
+    s.ensure().unwrap();
+    Conversations::new(s)
+}
+
+/// The distinction that makes this an orchestrator rather than a chat window.
+#[test]
+fn asking_the_assistant_to_start_work_puts_an_agent_on_it() {
+    let t = Tmp::new("orchestrate");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    w.register_project("tyrex", "TyreX", tyrex);
+    let c = convs(&t);
+
+    let conv = c.create(Some("tyrex")).unwrap();
+    let reply = Assistant::send(&w, &c, &conv.id, "Can you start work on offline sync?").unwrap();
+
+    assert_eq!(
+        reply.delegated.len(),
+        1,
+        "it should have delegated: {reply:?}"
+    );
+    let session = w
+        .session(&reply.delegated[0])
+        .expect("the session it claims to have started must exist");
+    assert_ne!(
+        session.agent_id, ASSISTANT_ID,
+        "it delegates rather than doing it itself"
+    );
+
+    // The transcript records what was actually done, not only what was said.
+    let saved = c.load(&conv.id).unwrap();
+    assert!(
+        saved
+            .messages
+            .iter()
+            .any(|m| m.tool.as_deref() == Some("delegate.start")),
+        "the tool step belongs in the transcript"
+    );
+    assert_eq!(saved.messages.first().unwrap().from, Speaker::User);
+    assert_eq!(saved.messages.last().unwrap().from, Speaker::Assistant);
+}
+
+/// Delegation must not hold the conversation open for the length of a session.
+#[test]
+fn delegating_returns_immediately_rather_than_waiting_for_the_agent() {
+    let t = Tmp::new("nonblocking");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    w.register_project("tyrex", "TyreX", tyrex);
+    let c = convs(&t);
+    let conv = c.create(Some("tyrex")).unwrap();
+
+    let started = std::time::Instant::now();
+    let reply = Assistant::send(&w, &c, &conv.id, "Please start work on it").unwrap();
+    let elapsed = started.elapsed();
+
+    assert_eq!(reply.delegated.len(), 1);
+    assert!(
+        elapsed < std::time::Duration::from_secs(10),
+        "the chat waited for the whole session ({elapsed:?})"
+    );
+}
+
+/// The whole point of the store split.
+#[test]
+fn what_the_assistant_remembers_never_lands_in_the_project() {
+    let t = Tmp::new("memsplit");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    w.register_project("tyrex", "TyreX", tyrex.clone());
+    let c = convs(&t);
+    let conv = c.create(Some("tyrex")).unwrap();
+
+    Assistant::send(&w, &c, &conv.id, "Remember that I prefer ff-only pulls").unwrap();
+
+    let notes = c.store().memories();
+    assert_eq!(notes.len(), 1, "it should have saved a note");
+    assert!(notes[0].body.contains("ff-only"));
+
+    // And nothing of it reached the repository — not the note, not the
+    // conversation. This is the assertion the split exists for.
+    let deck_dump = super::deck::Deck::new(tyrex.clone()).tree().join("\n");
+    assert!(
+        !deck_dump.contains("ff-only") && !deck_dump.contains("conv_"),
+        "personal state leaked into .devdeck:\n{deck_dump}"
+    );
+    let stray = walk(&tyrex)
+        .into_iter()
+        .find(|p| p.to_string_lossy().contains("conv_"));
+    assert!(
+        stray.is_none(),
+        "a conversation file was written into the repo: {stray:?}"
+    );
+}
+
+fn walk(root: &std::path::Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return out;
+    };
+    for e in entries.flatten() {
+        let p = e.path();
+        if p.is_dir() {
+            out.extend(walk(&p));
+        } else {
+            out.push(p);
+        }
+    }
+    out
+}
+
+/// The assistant is an agent, not an exception to the rules.
+#[test]
+fn the_assistant_is_bound_by_the_same_permission_matrix() {
+    let w = ws();
+    let defs = super::tools::definitions_for(ASSISTANT_ID, &w.permission_matrix());
+
+    // It may delegate and remember.
+    assert!(defs.iter().any(|d| d.name == "delegate_start"));
+    assert!(defs.iter().any(|d| d.name == "memory_save"));
+    // It reads code but does not write it — that is what agents are for.
+    assert!(defs.iter().any(|d| d.name == "files_read"));
+    assert!(
+        !defs.iter().any(|d| d.name == "files_write"),
+        "the orchestrator should delegate implementation, not do it"
+    );
+    // And anything that changes the machine has to ask first.
+    let term = defs
+        .iter()
+        .find(|d| d.name.starts_with("terminal_"))
+        .expect("terminal is offered, because a human can approve it");
+    assert!(term.description.contains("requires human approval"));
+
+    // Revoking delegation genuinely removes it.
+    w.set_permission(ASSISTANT_ID, "delegate", "none").unwrap();
+    let after = super::tools::definitions_for(ASSISTANT_ID, &w.permission_matrix());
+    assert!(!after.iter().any(|d| d.name.starts_with("delegate_")));
+}
+
+/// Without a project, the code tools would have no root to resolve against.
+/// Saying so beats offering a model a `files_read` that cannot work.
+#[test]
+fn a_conversation_with_no_project_is_offered_only_what_it_can_use() {
+    let t = Tmp::new("noproject");
+    let w = ws();
+    let c = convs(&t);
+    let conv = c.create(None).unwrap();
+
+    let reply = Assistant::send(&w, &c, &conv.id, "What can you do?").unwrap();
+    assert!(!reply.reply.trim().is_empty(), "it must say something");
+    assert!(reply.delegated.is_empty());
+}
+
+/// A tool an agent cannot dispatch must fail loudly rather than doing something
+/// surprising with the personal store.
+#[test]
+fn a_project_tool_service_refuses_the_assistant_only_tools() {
+    let t = Tmp::new("assistonly");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    let p = w.register_project("tyrex", "TyreX", tyrex);
+    let scope = super::events::EventScope::project("tyrex");
+
+    for tool in ["delegate", "memory"] {
+        let call = ToolCall::new(tool, "list", serde_json::json!({}));
+        let r = p.tools.execute(&w.bus, "dev-a", &scope, &call, None);
+        assert!(
+            !r.ok,
+            "'{tool}' must not run inside a project's tool service"
+        );
+    }
+}

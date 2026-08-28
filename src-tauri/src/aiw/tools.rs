@@ -214,6 +214,23 @@ pub const TOOL_TERMINAL: &str = "terminal";
 pub const TOOL_PROCESS: &str = "process";
 pub const TOOL_TESTS: &str = "tests";
 pub const TOOL_KNOWLEDGE: &str = "knowledge";
+/// Orchestrator-only: hand a piece of work to a specialist agent.
+pub const TOOL_DELEGATE: &str = "delegate";
+/// Orchestrator-only: what the assistant remembers about you, across projects.
+/// Backed by the personal store, never by a project's `.devdeck`.
+pub const TOOL_MEMORY: &str = "memory";
+
+/// Tools the assistant executes itself rather than handing to a project's
+/// `ToolService`.
+///
+/// They are in the registry so they appear in the permission matrix like
+/// everything else — you should be able to see and revoke the orchestrator's
+/// right to spawn agents. They are not *dispatched* here because one needs the
+/// whole workspace and the other writes to the personal store, and a
+/// project-scoped tool service has no business reaching either.
+pub fn is_assistant_tool(tool: &str) -> bool {
+    tool == TOOL_DELEGATE || tool == TOOL_MEMORY
+}
 
 /// Shorthand for a JSON Schema object.
 fn schema(props: serde_json::Value, required: &[&str]) -> serde_json::Value {
@@ -384,6 +401,70 @@ pub fn registry() -> Vec<ToolInfo> {
                 schema(serde_json::json!({ "query": { "type": "string" } }), &[]),
             )],
         },
+        ToolInfo {
+            id: TOOL_DELEGATE.into(),
+            name: "Delegate".into(),
+            description: "Hand work to a specialist agent and check on it".into(),
+            actions: vec![
+                act(
+                    "start",
+                    "Start a specialist agent on a feature. Returns immediately                      with a session id; the agent keeps working in the background.",
+                    Access::Write,
+                    schema(
+                        serde_json::json!({
+                            "agent_id": { "type": "string", "description": "Which agent, e.g. dev-a, qa, architect." },
+                            "feature_id": { "type": "string", "description": "Feature slug the work belongs to." },
+                            "work_item_id": { "type": "string", "description": "Optional work item within the feature." },
+                            "intent": { "type": "string", "description": "One line describing what it should achieve." }
+                        }),
+                        &["agent_id", "feature_id"],
+                    ),
+                ),
+                act(
+                    "status",
+                    "Sessions that are running or have recently finished.",
+                    Access::Read,
+                    schema(serde_json::json!({}), &[]),
+                ),
+            ],
+        },
+        ToolInfo {
+            id: TOOL_MEMORY.into(),
+            name: "Memory".into(),
+            description: "Durable notes about you, kept outside any repository".into(),
+            actions: vec![
+                act(
+                    "list",
+                    "Everything currently remembered.",
+                    Access::Read,
+                    schema(serde_json::json!({}), &[]),
+                ),
+                act(
+                    "save",
+                    "Remember something for later. Goes to the personal store,                      never into a project's committed .devdeck.",
+                    Access::Write,
+                    schema(
+                        serde_json::json!({
+                            "title": { "type": "string", "description": "One line naming the note." },
+                            "body": { "type": "string", "description": "What to remember." },
+                            "project_id": { "type": "string", "description": "Optional project this is about." },
+                            "tags": { "type": "array", "items": { "type": "string" } }
+                        }),
+                        &["title", "body"],
+                    ),
+                ),
+                act(
+                    "forget",
+                    "Delete a note by id.",
+                    Access::Write,
+                    schema(
+                        serde_json::json!({ "id": { "type": "string" } }),
+                        &["id"],
+                    ),
+                ),
+            ],
+        },
+
     ]
 }
 
@@ -735,6 +816,13 @@ impl ToolService {
             TOOL_PROCESS => self.process(call),
             TOOL_TESTS => self.tests(call),
             TOOL_KNOWLEDGE => self.knowledge(call),
+            // Reaching here means the assistant did not intercept a tool only
+            // it can run. Failing loudly beats a project-scoped service quietly
+            // doing something with the personal store or the whole workspace.
+            t if is_assistant_tool(t) => ToolResult::failed(
+                call,
+                format!("'{t}' is handled by the assistant, not by a project's tools"),
+            ),
             other => ToolResult::failed(call, format!("unknown tool '{other}'")),
         }
     }

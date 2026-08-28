@@ -13,6 +13,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, Weak};
 
 use super::approval::{ApprovalBroker, ApprovalRequest, Decision};
+use super::assistant::Conversations;
 use super::conflict::{ClaimView, ConflictService, WorkView};
 use super::context::{
     ActiveWorkEntry, ActiveWorkView, Checkpoint, ContextReconciler, DeterministicReconciler,
@@ -215,6 +216,14 @@ pub struct Workspace {
     /// Shared by every project's tool service, so one queue holds every
     /// pending request no matter which agent raised it.
     pub approvals: Arc<ApprovalBroker>,
+    /// The assistant's conversations and memory.
+    ///
+    /// Machine-scoped, not project-scoped: you talk to one assistant about
+    /// everything, and what it remembers about you must not be duplicated into
+    /// — or committed with — any repository. `None` when the personal store
+    /// could not be opened, which is a real failure worth reporting rather than
+    /// papering over with an in-memory stand-in that loses your history at exit.
+    pub conversations: Option<Conversations>,
     pub providers: Mutex<ProviderRegistry>,
     pub reconciler: Box<dyn ContextReconciler>,
     projects: Mutex<HashMap<String, Arc<ProjectHandle>>>,
@@ -236,6 +245,12 @@ impl Workspace {
             bus: Arc::new(EventBus::new()),
             conflicts: ConflictService::new(),
             approvals: Arc::new(ApprovalBroker::new(APPROVAL_TIMEOUT)),
+            conversations: super::personal::PersonalStore::open()
+                .map(Conversations::new)
+                .map_err(|e| {
+                    eprintln!("[aiw] personal store unavailable, chat disabled: {e}");
+                })
+                .ok(),
             providers: Mutex::new(ProviderRegistry::new()),
             reconciler: Box::new(DeterministicReconciler),
             projects: Mutex::new(HashMap::new()),
@@ -692,6 +707,17 @@ impl Workspace {
             .collect()
     }
 
+    /// The conversation store, or why there isn't one.
+    ///
+    /// An error rather than an empty stand-in: a chat that silently forgets
+    /// everything at exit is worse than one that says it cannot start.
+    pub fn convs(&self) -> Result<&Conversations, String> {
+        self.conversations.as_ref().ok_or_else(|| {
+            "the personal store could not be opened, so the assistant has nowhere              to keep conversations"
+                .to_string()
+        })
+    }
+
     /// Requests waiting on a person right now.
     pub fn pending_approvals(&self) -> Vec<ApprovalRequest> {
         self.approvals.pending()
@@ -756,6 +782,33 @@ pub fn default_agents() -> Vec<AgentDef> {
             .collect()
     };
     vec![
+        // The orchestrator. First in the list because it is the one you talk
+        // to; the rest are who it talks to.
+        //
+        // Its permissions are the interesting part: it reads freely, delegates
+        // freely, remembers freely — and anything that changes your machine is
+        // `approval`, so it has to ask. That is the setting the approval prompt
+        // was built for. An assistant that could silently run terminal commands
+        // because it seemed convenient is the thing nobody wants.
+        AgentDef {
+            id: super::assistant::ASSISTANT_ID.into(),
+            name: "Assistant".into(),
+            role: "orchestrator".into(),
+            provider: "mock".into(),
+            model: "mock-1".into(),
+            system: "You are the developer's assistant. You coordinate the team,                      answer questions about the work, and keep track of what matters."
+                .into(),
+            permissions: perms(&[
+                ("delegate", "full"),
+                ("memory", "full"),
+                ("knowledge", "full"),
+                ("files", "read"),
+                ("git", "read"),
+                ("terminal", "approval"),
+                ("tests", "approval"),
+                ("process", "approval"),
+            ]),
+        },
         AgentDef {
             id: "architect".into(),
             name: "Architect".into(),

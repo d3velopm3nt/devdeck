@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use super::approval::{ApprovalRequest, Decision};
+use super::assistant::{Assistant, AssistantReply, ConversationMeta, ConversationSummary};
 use super::conflict::Conflict;
 use super::context::{AssembledContext, ContextService};
 use super::deck::{Deck, Requirement, RequirementsMeta, WorkItem, WorkMeta};
@@ -995,6 +996,148 @@ pub fn saved_agent_providers(conn: &rusqlite::Connection) -> Vec<(String, String
 #[tauri::command]
 pub fn aiw_app_status(ws: Ws, project_id: String) -> Option<super::tools::AppStatus> {
     ws.project(&project_id).and_then(|p| p.tools.app_status())
+}
+
+// ---------------------------------------------------------------------------
+// The assistant
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn aiw_conversations(ws: Ws) -> Result<Vec<ConversationSummary>, String> {
+    Ok(ws.convs()?.list())
+}
+
+#[tauri::command]
+pub fn aiw_conversation(ws: Ws, id: String) -> Result<ConversationMeta, String> {
+    ws.convs()?.load(&id)
+}
+
+#[tauri::command]
+pub fn aiw_new_conversation(
+    ws: Ws,
+    project_id: Option<String>,
+) -> Result<ConversationMeta, String> {
+    ws.convs()?.create(project_id.as_deref())
+}
+
+#[tauri::command]
+pub fn aiw_delete_conversation(ws: Ws, id: String) -> Result<bool, String> {
+    Ok(ws.convs()?.delete(&id))
+}
+
+/// Move which project a conversation is about. The assistant works across
+/// projects, so this is a focus, not a boundary.
+#[tauri::command]
+pub fn aiw_focus_conversation(
+    ws: Ws,
+    id: String,
+    project_id: Option<String>,
+) -> Result<ConversationMeta, String> {
+    let convs = ws.convs()?;
+    let mut conv = convs.load(&id)?;
+    conv.project_id = project_id;
+    convs.save(&conv)?;
+    Ok(conv)
+}
+
+/// Say something to the assistant, and get its answer.
+///
+/// Synchronous, and can take a while: a turn may involve several provider
+/// round-trips and a tool call that stops to ask you for approval. Tauri runs
+/// this on a worker thread, so the window stays live throughout.
+#[tauri::command]
+pub fn aiw_send_message(
+    ws: Ws,
+    conversation_id: String,
+    text: String,
+) -> Result<AssistantReply, String> {
+    let workspace = ws.inner().clone();
+    Assistant::send(&workspace, ws.convs()?, &conversation_id, &text)
+}
+
+/// Where your conversations and notes actually live.
+///
+/// Surfaced rather than kept internal: the store split is only reassuring if
+/// you can see it. "Never committed" is a claim; a path outside every repo is
+/// evidence.
+#[tauri::command]
+pub fn aiw_personal_root(ws: Ws) -> Result<String, String> {
+    Ok(ws.convs()?.store().root().display().to_string())
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
+pub struct ProfileView {
+    pub preferences: Vec<String>,
+    pub body: String,
+    pub updated_at: String,
+}
+
+#[tauri::command]
+pub fn aiw_profile(ws: Ws) -> Result<ProfileView, String> {
+    let doc = ws.convs()?.store().profile();
+    Ok(ProfileView {
+        preferences: doc.meta.preferences,
+        updated_at: doc.meta.updated_at,
+        body: doc.body,
+    })
+}
+
+#[tauri::command]
+pub fn aiw_save_profile(
+    ws: Ws,
+    preferences: Vec<String>,
+    body: String,
+) -> Result<ProfileView, String> {
+    let store = ws.convs()?.store();
+    let doc = super::deck::Doc {
+        meta: super::personal::ProfileMeta {
+            updated_at: super::events::now_iso(),
+            preferences: preferences
+                .into_iter()
+                .filter(|p| !p.trim().is_empty())
+                .collect(),
+        },
+        body,
+    };
+    store.save_profile(&doc)?;
+    Ok(ProfileView {
+        preferences: doc.meta.preferences,
+        updated_at: doc.meta.updated_at,
+        body: doc.body,
+    })
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct MemoryView {
+    pub id: String,
+    pub title: String,
+    pub body: String,
+    pub created_at: String,
+    pub project_id: Option<String>,
+    pub tags: Vec<String>,
+}
+
+#[tauri::command]
+pub fn aiw_memories(ws: Ws) -> Result<Vec<MemoryView>, String> {
+    Ok(ws
+        .convs()?
+        .store()
+        .memories()
+        .into_iter()
+        .map(|d| MemoryView {
+            id: d.meta.id,
+            title: d.meta.title,
+            created_at: d.meta.created_at,
+            project_id: d.meta.project_id,
+            tags: d.meta.tags,
+            body: d.body,
+        })
+        .collect())
+}
+
+#[tauri::command]
+pub fn aiw_forget_memory(ws: Ws, id: String) -> Result<bool, String> {
+    Ok(ws.convs()?.store().forget_memory(&id))
 }
 
 /// Tool calls waiting on a human right now.

@@ -1,0 +1,23 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 1440, "h": 900, "title": "Providers — pick, then set up", "is_interactive": true },
+    { "file": "CardStates.dc.html", "x": 0, "y": 1020, "w": 1180, "h": 520, "title": "Provider card — states" }
+  ],
+  "annotations": [
+    {
+      "id": "click-me",
+      "x": 1520,
+      "y": 40,
+      "w": 300,
+      "text": "Click any provider card — the panel on the right swaps to that provider's setup without moving.\n\nTry Ollama (no key field), Custom endpoint (gains a base URL and headers), and Anthropic (explains why it isn't available yet)."
+    },
+    {
+      "id": "no-tabs",
+      "x": 1520,
+      "y": 250,
+      "w": 300,
+      "text": "The two tabs are gone. OpenAI-compatible vs Anthropic was the wire protocol — DevDeck's concern, not yours. It's now a line of small print under each provider's name."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

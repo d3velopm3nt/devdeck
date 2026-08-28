@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'react'
 import { Icon, type IconName } from '../../lib/icons'
 import { useAiw, type AiwPage } from '../../lib/aiwStore'
-import { Providers } from './Providers'
+import { Settings } from './Settings'
 import { CAPTURE_FEATURE, CAPTURE_PAGE } from '../../lib/devCapture'
 import {
   aiw,
@@ -1351,7 +1351,6 @@ function DecisionList({ rows }: { rows: DecisionRow[] }) {
 
 function Agents() {
   const a = useAiw()
-  const perms = a.permissions
   return (
     <div className="flex h-full flex-col">
       <PageHead title="Agents" subtitle="Who is working right now, on what, and with which context." />
@@ -1404,49 +1403,19 @@ function Agents() {
           )}
         </Section>
 
-        <Section title="Tool permissions">
-          <div className="overflow-hidden rounded-md border border-line bg-raise">
-            <div
-              className="grid border-b border-line bg-soft"
-              style={{ gridTemplateColumns: `132px repeat(${a.agents.length}, minmax(0,1fr))` }}
+        <div className="flex items-start gap-2.5 rounded-md border border-line bg-raise px-3.5 py-3">
+          <Icon name="info" size={13} className="mt-px shrink-0 text-muted" />
+          <div className="text-[11.5px] leading-[1.55] text-dim">
+            Which provider each agent runs on, and what tools it may touch, are configured under{' '}
+            <button
+              className="text-indigo-400 hover:text-indigo-300"
+              onClick={() => a.setPage('settings')}
             >
-              <div className="px-3 py-2" />
-              {a.agents.map((ag) => (
-                <div key={ag.id} className="px-2.5 py-2 text-[10.5px] font-semibold text-dim">
-                  {ag.name}
-                </div>
-              ))}
-            </div>
-            {perms.map((row) => (
-              <div
-                key={row.tool}
-                className="grid border-b border-line last:border-0"
-                style={{ gridTemplateColumns: `132px repeat(${a.agents.length}, minmax(0,1fr))` }}
-              >
-                <div className="px-3 py-1.5 text-[11.5px] text-body">{row.tool}</div>
-                {row.grants.map(([agentId, perm]) => (
-                  <div key={agentId} className="px-2.5 py-1.5">
-                    <select
-                      className="rounded border border-line2 bg-page px-1.5 py-0.5 text-[10.5px] text-body outline-none focus:border-indigo-500"
-                      value={perm.toLowerCase()}
-                      onChange={(e) => void a.setPermission(agentId, row.tool, e.target.value)}
-                    >
-                      {['full', 'read', 'approval', 'none'].map((p) => (
-                        <option key={p} value={p}>
-                          {p}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ))}
-              </div>
-            ))}
+              Settings
+            </button>
+            . This page is the live view: who is working, on what, from which checkpoint.
           </div>
-          <div className="mt-2 text-[11px] text-muted">
-            Changes take effect on the next tool call — a denied tool does not execute, and the
-            refusal is recorded as <span className="font-mono">tool.failed</span>.
-          </div>
-        </Section>
+        </div>
       </div>
     </div>
   )
@@ -1538,51 +1507,6 @@ function Git() {
       <PageHead title="Git" subtitle="Commits are the version layer for context — each one is a checkpoint agents can be measured against." />
       <div className="min-h-0 flex-1 overflow-auto p-5">
         <GitList />
-      </div>
-    </div>
-  )
-}
-
-function Tools() {
-  const a = useAiw()
-  return (
-    <div className="flex h-full flex-col">
-      <PageHead title="Tools" subtitle="The only way an agent reaches the machine." />
-      <div className="min-h-0 flex-1 overflow-auto p-5">
-        <div className="grid grid-cols-2 gap-3">
-          {a.tools.map((t) => {
-            const row = a.permissions.find((p) => p.tool === t.id)
-            return (
-              <div key={t.id} className="rounded-md border border-line bg-raise p-3.5">
-                <div className="mb-1.5 flex items-center gap-2">
-                  <Icon name="tool" size={14} className="text-indigo-400" />
-                  <span className="text-[13px] font-semibold text-ink">{t.name}</span>
-                  <div className="flex-1" />
-                  <Chip className="bg-emerald-500/12 text-ok">enabled</Chip>
-                </div>
-                <div className="mb-2.5 text-[11.5px] leading-5 text-dim">{t.description}</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {row?.grants.map(([agentId, perm]) => (
-                    <Chip
-                      key={agentId}
-                      className={
-                        perm === 'Full'
-                          ? 'bg-emerald-500/12 text-ok'
-                          : perm === 'Read'
-                            ? 'bg-slate-500/14 text-dim'
-                            : perm === 'Approval'
-                              ? 'bg-amber-500/14 text-warn'
-                              : 'bg-slate-500/8 text-faint'
-                      }
-                    >
-                      {agentId}: {perm}
-                    </Chip>
-                  ))}
-                </div>
-              </div>
-            )
-          })}
-        </div>
       </div>
     </div>
   )
@@ -1751,14 +1675,13 @@ export function AiWorkspace() {
       )
     case 'git':
       return <Git />
-    case 'tools':
-      return <Tools />
+    case 'settings':
+      return <Settings />
     case 'knowledge':
       return <Knowledge />
     case 'tests':
       return <Tests />
-    case 'providers':
-      return <Providers />
+
     default:
       return <Overview />
   }

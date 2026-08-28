@@ -7,6 +7,8 @@ import { Icon, type IconName } from '../../lib/icons'
 import { useAiw, type AiwPage } from '../../lib/aiwStore'
 import { aiw } from '../../lib/aiw'
 
+// Surfaces you *watch* live in the nav; anything you configure once lives
+// under Settings, which is what keeps this list readable as the module grows.
 const SECTIONS: Array<{ page: AiwPage; icon: IconName; label: string }> = [
   { page: 'overview', icon: 'layout', label: 'Overview' },
   { page: 'features', icon: 'list', label: 'Features' },
@@ -18,8 +20,6 @@ const SECTIONS: Array<{ page: AiwPage; icon: IconName; label: string }> = [
   { page: 'git', icon: 'commit', label: 'Git' },
   { page: 'tests', icon: 'ok', label: 'Tests' },
   { page: 'knowledge', icon: 'note', label: 'Knowledge' },
-  { page: 'tools', icon: 'tool', label: 'Tools' },
-  { page: 'providers', icon: 'ai', label: 'Providers' },
 ]
 
 export function AiwSidebar() {
@@ -83,7 +83,21 @@ export function AiwSidebar() {
         })}
       </div>
 
-      <div className="mt-2 border-t border-line px-3 pb-1.5 pt-2.5">
+      <div className="mt-1 border-t border-line px-1.5 pb-1 pt-1.5">
+        <button
+          className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[12.5px] ${
+            a.page === 'settings'
+              ? 'bg-raise font-semibold text-ink'
+              : 'text-dim hover:bg-hover hover:text-ink'
+          }`}
+          onClick={() => a.setPage('settings')}
+        >
+          <Icon name="settings" size={14} />
+          Settings
+        </button>
+      </div>
+
+      <div className="mt-1 border-t border-line px-3 pb-1.5 pt-2.5">
         <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint">
           Projects
         </div>

@@ -926,6 +926,35 @@ pub fn aiw_provider_forget_key(ws: Ws, provider_id: String) -> bool {
     ws.forget_provider_key(&provider_id)
 }
 
+/// Where agent→provider assignments are remembered.
+pub const AGENT_PROVIDERS_KEY: &str = "aiw.agentProviders";
+
+/// Point an agent at a provider. Registering a provider does nothing until an
+/// agent is told to use it, so this is the switch that turns a configured
+/// endpoint into a running agent.
+#[tauri::command]
+pub fn aiw_set_agent_provider(
+    ws: Ws,
+    db: tauri::State<crate::db::Db>,
+    agent_id: String,
+    provider: String,
+    model: String,
+) -> Result<AgentDef, String> {
+    let updated = ws.set_agent_provider(&agent_id, &provider, &model)?;
+    let json = serde_json::to_string(&ws.agent_providers()).map_err(|e| e.to_string())?;
+    let conn = db.0.lock().unwrap();
+    crate::db::setting_set_conn(&conn, AGENT_PROVIDERS_KEY, &json)?;
+    Ok(updated)
+}
+
+pub fn saved_agent_providers(conn: &rusqlite::Connection) -> Vec<(String, String, String)> {
+    crate::db::setting_get_conn(conn, AGENT_PROVIDERS_KEY)
+        .ok()
+        .flatten()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
 /// The application the process tool started, if any.
 #[tauri::command]
 pub fn aiw_app_status(ws: Ws, project_id: String) -> Option<super::tools::AppStatus> {

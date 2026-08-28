@@ -393,6 +393,8 @@ export const aiw = {
       },
     }),
   testProvider: (providerId: string) => invoke<string>('aiw_provider_test', { providerId }),
+  setAgentProvider: (agentId: string, provider: string, model: string) =>
+    invoke<AgentDef>('aiw_set_agent_provider', { agentId, provider, model }),
   forgetProviderKey: (providerId: string) =>
     invoke<boolean>('aiw_provider_forget_key', { providerId }),
   models: (providerId: string) =>

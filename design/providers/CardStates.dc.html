@@ -1,0 +1,131 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root{
+      --app:#0b0e14; --page:#0d1017; --raise:#151923; --hover:#232b3b;
+      --soft:rgba(30,41,59,.4);
+      --line:#1e293b; --line2:#334155; --line3:#64748b;
+      --ink:#e2e8f0; --body:#cbd5e1; --dim:#94a3b8; --muted:#64748b; --faint:#475569;
+      --ok:#4ade80; --warn:#fbbf24;
+      --mono:ui-monospace,Consolas,'Cascadia Mono',monospace;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--page);color:var(--body);}
+    a{color:#818cf8;text-decoration:none;} a:hover{color:#a5b4fc;}
+    .pcard{display:flex;gap:11px;align-items:flex-start;text-align:left;border-radius:7px;padding:11px 12px;width:268px;}
+    .pico{height:34px;width:34px;flex-shrink:0;border-radius:8px;display:flex;align-items:center;justify-content:center;}
+    .pname{font-size:12.5px;font-weight:600;color:var(--ink);}
+    .pnote{font-size:10.5px;line-height:1.45;color:var(--muted);margin-top:2px;display:block;}
+    .lbl{font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);margin-bottom:7px;}
+    .why{font-size:10.5px;line-height:1.55;color:var(--muted);margin-top:8px;max-width:268px;}
+  </style>
+</helmet>
+
+<div style="width:1180px;height:520px;background:var(--page);padding:26px 28px;display:flex;flex-direction:column;">
+
+  <div style="margin-bottom:4px;font-size:16px;font-weight:600;color:var(--ink);letter-spacing:-.01em;">Provider card — states</div>
+  <div style="margin-bottom:22px;font-size:12px;color:var(--dim);">
+    One card shape for every provider. Only the mark, the note and the status line change, so the row reads as a set rather than a list of special cases.
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:22px;align-items:start;">
+
+    <div>
+      <div class="lbl">Default</div>
+      <div class="pcard" style="border:1px solid #1e293b;background:#151923;">
+        <span class="pico" style="background:rgba(56,189,248,.14);">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="7.5"/><path d="M12 4.5v15M4.5 12h15"/></svg>
+        </span>
+        <span style="min-width:0;flex:1;display:block;">
+          <span class="pname">OpenAI</span>
+          <span class="pnote">GPT models, direct.</span>
+          <span style="display:block;font-size:10px;margin-top:5px;color:var(--faint);">Not connected</span>
+        </span>
+      </div>
+      <div class="why">Resting state. The mark carries the identity; the border stays neutral so a row of seven doesn't shimmer.</div>
+    </div>
+
+    <div>
+      <div class="lbl">Selected</div>
+      <div class="pcard" style="border:1px solid #818cf8;background:rgba(129,140,248,.07);">
+        <span class="pico" style="background:rgba(129,140,248,.14);">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="2.6"/><path d="M12 4.2v4.8M12 15v4.8M4.2 12h4.8M15 12h4.8"/></svg>
+        </span>
+        <span style="min-width:0;flex:1;display:block;">
+          <span style="display:flex;align-items:center;gap:6px;">
+            <span class="pname">OpenRouter</span>
+            <span style="height:6px;width:6px;border-radius:50%;background:#4ade80;flex-shrink:0;"></span>
+          </span>
+          <span class="pnote">One key, most models. Good first choice.</span>
+          <span style="display:block;font-size:10px;margin-top:5px;color:#4ade80;">Connected</span>
+        </span>
+      </div>
+      <div class="why">Selection borrows the provider's own hue rather than one global accent, so which card is active is legible at a glance without a second indicator.</div>
+    </div>
+
+    <div>
+      <div class="lbl">Local — no key</div>
+      <div class="pcard" style="border:1px solid #1e293b;background:#151923;">
+        <span class="pico" style="background:rgba(74,222,128,.14);">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="11" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
+        </span>
+        <span style="min-width:0;flex:1;display:block;">
+          <span class="pname">Ollama</span>
+          <span class="pnote">Local models. Nothing leaves the machine.</span>
+          <span style="display:block;font-size:10px;margin-top:5px;color:var(--faint);">No key needed</span>
+        </span>
+      </div>
+      <div class="why">"No key needed" is a state, not an absence. Saying it here stops the empty key field on the right reading as something unfinished.</div>
+    </div>
+
+    <div>
+      <div class="lbl">Not available yet</div>
+      <div class="pcard" style="border:1px solid #1e293b;background:#151923;">
+        <span class="pico" style="background:rgba(217,119,87,.14);">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#d97757" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 19 12 5l4.5 14"/><path d="M9.4 14.4h5.2"/></svg>
+        </span>
+        <span style="min-width:0;flex:1;display:block;">
+          <span class="pname">Anthropic</span>
+          <span class="pnote">Claude models, direct from the source.</span>
+          <span style="display:block;font-size:10px;margin-top:5px;color:#fbbf24;">Not available yet</span>
+        </span>
+      </div>
+      <div class="why">Still selectable, and the panel explains why. Greying it out would leave people guessing whether it's broken or coming.</div>
+    </div>
+  </div>
+
+  <div style="flex:1"></div>
+
+  <div style="border-top:1px solid var(--line);padding-top:14px;display:flex;gap:34px;">
+    <div style="max-width:360px;">
+      <div class="lbl">Why cards, not tabs</div>
+      <div style="font-size:11px;line-height:1.6;color:var(--muted);">
+        The old screen split on <span style="font-family:var(--mono);color:var(--dim);">OpenAI-compatible</span> vs
+        <span style="font-family:var(--mono);color:var(--dim);">Anthropic</span> — the wire protocol, which is
+        DevDeck's concern and not yours. Here the protocol is a line of small print under the name, and the thing you pick is the thing you were looking for.
+      </div>
+    </div>
+    <div style="max-width:360px;">
+      <div class="lbl">One shape, one place</div>
+      <div style="font-size:11px;line-height:1.6;color:var(--muted);">
+        Every provider goes through the same form in the same position; only the fields it genuinely needs appear. Local providers lose the key field, custom endpoints gain a base URL and headers.
+      </div>
+    </div>
+    <div style="max-width:300px;">
+      <div class="lbl">The marks</div>
+      <div style="font-size:11px;line-height:1.6;color:var(--muted);">
+        Drawn as abstract glyphs in each provider's rough hue — recognisable in a grid without borrowing anyone's trademark. Swap them for real logos if you have licence to.
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

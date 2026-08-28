@@ -578,6 +578,9 @@ pub fn run() {
                 eprintln!("[aiw] could not restore provider '{kind}': {e}");
             }
         }
+        // After the providers exist, not before -- an assignment to a provider
+        // that has not been registered yet is refused.
+        aiw_workspace.restore_agent_providers(&aiw::commands::saved_agent_providers(&conn));
     }
     let aiw_for_setup = aiw_workspace.clone();
 
@@ -845,6 +848,7 @@ pub fn run() {
             aiw::commands::aiw_provider_setups,
             aiw::commands::aiw_provider_test,
             aiw::commands::aiw_provider_forget_key,
+            aiw::commands::aiw_set_agent_provider,
             aiw::commands::aiw_app_status,
             aiw::commands::aiw_changed_since,
             aiw::commands::aiw_reset,

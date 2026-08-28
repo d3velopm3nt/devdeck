@@ -420,6 +420,56 @@ impl Workspace {
             .cloned()
     }
 
+    /// Point one agent at a different provider and model.
+    ///
+    /// This is the switch that makes a configured provider actually do
+    /// anything: registering OpenRouter changes nothing until an agent is told
+    /// to use it. Validated against the registry, because an agent pointed at a
+    /// provider that does not exist fails at the least useful moment — mid-run,
+    /// after the session has already started.
+    pub fn set_agent_provider(
+        &self,
+        agent_id: &str,
+        provider: &str,
+        model: &str,
+    ) -> Result<AgentDef, String> {
+        if self.providers.lock().unwrap().get(provider).is_none() {
+            return Err(format!(
+                "'{provider}' is not configured — set it up under Providers first"
+            ));
+        }
+        let mut agents = self.agents.lock().unwrap();
+        let Some(a) = agents.iter_mut().find(|a| a.id == agent_id) else {
+            return Err(format!("no agent '{agent_id}'"));
+        };
+        a.provider = provider.to_string();
+        if !model.is_empty() {
+            a.model = model.to_string();
+        }
+        Ok(a.clone())
+    }
+
+    /// Which provider and model each agent is pointed at, for persistence.
+    pub fn agent_providers(&self) -> Vec<(String, String, String)> {
+        self.agents
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|a| (a.id.clone(), a.provider.clone(), a.model.clone()))
+            .collect()
+    }
+
+    /// Re-apply saved assignments, skipping any whose provider has gone.
+    /// A provider that was removed should quietly leave its agents on Mock
+    /// rather than failing startup or pointing them at nothing.
+    pub fn restore_agent_providers(&self, saved: &[(String, String, String)]) {
+        for (id, provider, model) in saved {
+            if let Err(e) = self.set_agent_provider(id, provider, model) {
+                eprintln!("[aiw] leaving '{id}' on its default provider: {e}");
+            }
+        }
+    }
+
     pub fn set_permission(&self, agent_id: &str, tool: &str, perm: &str) -> Result<(), String> {
         {
             let mut agents = self.agents.lock().unwrap();

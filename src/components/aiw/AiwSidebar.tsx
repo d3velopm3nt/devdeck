@@ -240,27 +240,11 @@ export function AiwSidebar() {
         </div>
       </div>
 
-      <div className="shrink-0 border-t border-line p-2">
-        <button
-          className="btn-primary flex w-full items-center justify-center gap-1.5 text-[11.5px]"
-          disabled={a.demoRunning}
-          onClick={() => void a.runDemo()}
-          title="Create the TyreX and AssetX projects and run the full multi-agent scenario"
-        >
-          {a.demoRunning ? (
-            <>
-              <Icon name="spinner" size={12} className="animate-spin" /> Running…
-            </>
-          ) : (
-            <>
-              <Icon name="run" size={11} /> Run mock demo
-            </>
-          )}
-        </button>
-        <div className="mt-1.5 text-center text-[10px] leading-4 text-faint">
-          No API key needed — the mock provider drives the real runtime.
-        </div>
-      </div>
+      {/* The demo button used to live here, pinned to the bottom, where it
+          crowded the Set up group above it. It is still on the Overview empty
+          state, which is the moment you actually want it — with no projects
+          yet. Once you have some, a permanent button that seeds fixtures is
+          closer to a hazard than a shortcut. */}
     </div>
   )
 }

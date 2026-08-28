@@ -10,6 +10,8 @@
 //! disposes. Swapping `MockProvider` for a real model therefore cannot widen
 //! what an agent is able to do.
 
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 
 use super::tools::{ToolCall, ToolDefinition};
@@ -1647,7 +1649,14 @@ impl LLMProvider for OpenAICompatibleProvider {
 
 /// Holds the providers this install knows about.
 pub struct ProviderRegistry {
-    providers: Vec<Box<dyn LLMProvider>>,
+    /// Arc, not Box, so `get` can hand out a handle and the caller can drop the
+    /// registry lock before making a network call.
+    ///
+    /// Returning a borrow forced the lock to be held for the whole model turn:
+    /// every other agent queued behind whoever was talking, and an agent paused
+    /// on an approval prompt held it for the length of the prompt — which made
+    /// the app look hung exactly when you went to look at why.
+    providers: Vec<Arc<dyn LLMProvider>>,
     /// A typed copy of the OpenAI-compatible provider's config, so a probe can
     /// be run without downcasting a trait object.
     openai: Option<OpenAICompatibleConfig>,
@@ -1666,7 +1675,7 @@ impl ProviderRegistry {
     /// key at all.
     pub fn new() -> Self {
         Self {
-            providers: vec![Box::new(MockProvider)],
+            providers: vec![Arc::new(MockProvider)],
             openai: None,
             anthropic: None,
         }
@@ -1674,7 +1683,7 @@ impl ProviderRegistry {
 
     pub fn register(&mut self, p: Box<dyn LLMProvider>) {
         self.providers.retain(|e| e.id() != p.id());
-        self.providers.push(p);
+        self.providers.push(Arc::from(p));
     }
 
     /// Remember the OpenAI-compatible config alongside the trait object.
@@ -1696,8 +1705,8 @@ impl ProviderRegistry {
         self.anthropic.clone().map(AnthropicProvider::new)
     }
 
-    pub fn get(&self, id: &str) -> Option<&dyn LLMProvider> {
-        self.providers.iter().find(|p| p.id() == id).map(|b| &**b)
+    pub fn get(&self, id: &str) -> Option<Arc<dyn LLMProvider>> {
+        self.providers.iter().find(|p| p.id() == id).cloned()
     }
 
     pub fn list(&self) -> Vec<(String, String, ProviderHealth)> {

@@ -306,8 +306,14 @@ impl AgentRuntime {
             };
 
             let response: AgentResponse = {
-                let providers = ws.providers.lock().unwrap();
-                let Some(p) = providers.get(&agent.provider) else {
+                // Cloned out and the lock released before the call: holding
+                // it across a model turn serialises every other agent behind
+                // this one.
+                let p = {
+                    let providers = ws.providers.lock().unwrap();
+                    providers.get(&agent.provider)
+                };
+                let Some(p) = p else {
                     return Err(format!("unknown provider '{}'", agent.provider));
                 };
                 match p.run(&request) {

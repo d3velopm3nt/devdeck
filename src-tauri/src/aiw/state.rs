@@ -325,20 +325,51 @@ impl Workspace {
     /// Run the OpenAI-compatible provider's round-trip probe, if one is
     /// configured. Kept here because the registry owns the concrete types;
     /// commands should not be downcasting trait objects.
-    /// A real round trip against Anthropic, for the Test button.
-    pub fn probe_anthropic(&self) -> Result<String, String> {
-        let reg = self.providers.lock().unwrap();
-        match reg.anthropic() {
-            Some(p) => p.probe(),
-            None => Err("no Anthropic provider is configured".into()),
+    /// Make a real request against a configured provider, for the Test button.
+    ///
+    /// The lock is taken once, only to clone the concrete provider out, and is
+    /// released before anything touches the network. Two reasons, and the first
+    /// one bit: probing while still holding it re-locks the same non-reentrant
+    /// mutex and deadlocks forever. Even without that, a network call under the
+    /// registry lock would stall every agent for its duration.
+    pub fn test_provider(&self, id: &str) -> Result<String, String> {
+        enum Probe {
+            Openai(super::provider::OpenAICompatibleProvider),
+            Anthropic(super::provider::AnthropicProvider),
+            /// Nothing to call; report what is known.
+            Health(super::provider::ProviderHealth),
         }
-    }
 
-    pub fn probe_openai_compatible(&self) -> Result<String, String> {
-        let reg = self.providers.lock().unwrap();
-        match reg.openai_compatible() {
-            Some(p) => p.probe(),
-            None => Err("no OpenAI-compatible provider is configured".into()),
+        let probe = {
+            let reg = self.providers.lock().unwrap();
+            let p = reg
+                .get(id)
+                .ok_or_else(|| format!("'{id}' is not configured"))?;
+            if id == super::provider::OpenAICompatibleProvider::ID {
+                match reg.openai_compatible() {
+                    Some(p) => Probe::Openai(p),
+                    None => return Err("no OpenAI-compatible provider is configured".into()),
+                }
+            } else if id == super::provider::AnthropicProvider::ID {
+                match reg.anthropic() {
+                    Some(p) => Probe::Anthropic(p),
+                    None => return Err("no Anthropic provider is configured".into()),
+                }
+            } else {
+                Probe::Health(p.health())
+            }
+        };
+
+        match probe {
+            Probe::Openai(p) => p.probe(),
+            Probe::Anthropic(p) => p.probe(),
+            Probe::Health(h) => {
+                if h.ok {
+                    Ok(h.detail)
+                } else {
+                    Err(h.detail)
+                }
+            }
         }
     }
 

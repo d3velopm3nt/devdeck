@@ -952,27 +952,7 @@ pub fn aiw_provider_setups(db: tauri::State<crate::db::Db>) -> Vec<ProviderSetup
 /// the difference between believing it works and knowing.
 #[tauri::command(async)]
 pub fn aiw_provider_test(ws: Ws, provider_id: String) -> Result<String, String> {
-    use super::provider::OpenAICompatibleProvider;
-    let reg = ws.providers.lock().unwrap();
-    let p = reg
-        .get(&provider_id)
-        .ok_or_else(|| format!("'{provider_id}' is not configured"))?;
-
-    if provider_id == OpenAICompatibleProvider::ID {
-        // Downcast-free: ask the registry for the concrete probe.
-        return ws.probe_openai_compatible();
-    }
-    if provider_id == super::provider::AnthropicProvider::ID {
-        // A real round trip. Reporting health() here would call a provider
-        // working without ever having called it.
-        return ws.probe_anthropic();
-    }
-    let h = p.health();
-    if h.ok {
-        Ok(h.detail)
-    } else {
-        Err(h.detail)
-    }
+    ws.test_provider(&provider_id)
 }
 
 /// Forget a provider's key. The configuration stays so the form still shows

@@ -1106,3 +1106,149 @@ fn a_project_tool_service_refuses_the_assistant_only_tools() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// Testing a provider
+// ---------------------------------------------------------------------------
+
+/// Run something with a deadline, so a deadlock fails the suite in seconds
+/// instead of hanging it until the harness gives up.
+fn within<T: Send + 'static>(secs: u64, what: &str, f: impl FnOnce() -> T + Send + 'static) -> T {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(f());
+    });
+    match rx.recv_timeout(std::time::Duration::from_secs(secs)) {
+        Ok(v) => v,
+        Err(_) => panic!("{what} did not finish within {secs}s — it is deadlocked"),
+    }
+}
+
+/// The Test button used to hang forever.
+///
+/// The command held the registry lock, then called a probe that locked the same
+/// non-reentrant mutex again. It affected every provider, and it looked like a
+/// slow network rather than a deadlock, which is what made it hard to see.
+#[test]
+fn testing_a_provider_does_not_deadlock_on_the_registry_lock() {
+    let w = ws();
+    // No model, so the probe refuses before any network call — the point is
+    // that it *returns*, not what it says.
+    w.configure_provider(super::state::ProviderConfig {
+        kind: "anthropic".into(),
+        model: String::new(),
+        ..Default::default()
+    })
+    .unwrap();
+
+    let w2 = w.clone();
+    let r = within(10, "Anthropic test", move || w2.test_provider("anthropic"));
+    assert!(r.is_err(), "no model means it cannot succeed");
+    assert!(
+        r.unwrap_err().to_lowercase().contains("model"),
+        "and it should say which piece is missing"
+    );
+}
+
+#[test]
+fn testing_an_openai_compatible_provider_does_not_deadlock_either() {
+    let w = ws();
+    // A port nothing listens on: the probe fails fast and offline, which is
+    // what makes this safe to run anywhere.
+    w.configure_provider(super::state::ProviderConfig {
+        kind: "openai-compatible".into(),
+        name: "Local".into(),
+        base_url: "http://127.0.0.1:1".into(),
+        model: "whatever".into(),
+        ..Default::default()
+    })
+    .unwrap();
+
+    let w2 = w.clone();
+    let r = within(20, "OpenAI-compatible test", move || {
+        w2.test_provider("openai-compatible")
+    });
+    assert!(r.is_err(), "nothing is listening on that port");
+}
+
+/// The registry must be usable while a probe is running, or one slow test
+/// button freezes every agent in the workspace.
+#[test]
+fn the_registry_stays_open_while_a_provider_is_being_tested() {
+    let w = ws();
+    w.configure_provider(super::state::ProviderConfig {
+        kind: "openai-compatible".into(),
+        name: "Local".into(),
+        base_url: "http://127.0.0.1:1".into(),
+        model: "whatever".into(),
+        ..Default::default()
+    })
+    .unwrap();
+
+    let probing = {
+        let w = w.clone();
+        std::thread::spawn(move || w.test_provider("openai-compatible"))
+    };
+    // Something an agent does constantly. If the probe held the lock, this
+    // would block until the network call gave up.
+    let w2 = w.clone();
+    within(5, "reading the agent list during a probe", move || {
+        for _ in 0..50 {
+            let _ = w2.agents();
+        }
+    });
+    let _ = probing.join();
+}
+
+#[test]
+fn testing_a_provider_that_was_never_configured_says_so() {
+    let w = ws();
+    let r = within(5, "unknown provider", move || w.test_provider("nope"));
+    assert!(r.unwrap_err().contains("not configured"));
+}
+
+/// A model turn must not hold the provider registry.
+///
+/// It used to: `get` returned a borrow, so the lock lived for the whole call.
+/// Every other agent queued behind whoever was talking, and an agent paused on
+/// an approval prompt held it for the length of the prompt — so the app looked
+/// hung at exactly the moment you went to find out why.
+#[test]
+fn a_running_agent_does_not_hold_the_provider_registry() {
+    let t = Tmp::new("providerlock");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    w.register_project("tyrex", "TyreX", tyrex);
+
+    let running = {
+        let w = w.clone();
+        std::thread::spawn(move || {
+            AgentRuntime::run(
+                &w,
+                &StartAgentCommand {
+                    project_id: "tyrex".into(),
+                    feature_id: "offline-synchronisation".into(),
+                    agent_id: "dev-a".into(),
+                    work_item_id: None,
+                    intent: Some("hold the lock if you can".into()),
+                    areas: vec![],
+                    depends_on: vec![],
+                },
+            )
+        })
+    };
+
+    // Something a second agent does on every turn. If the first still held the
+    // registry, this would block until it finished.
+    let w2 = w.clone();
+    within(10, "reaching the registry while an agent runs", move || {
+        for _ in 0..200 {
+            let _ = w2.providers.lock().unwrap().get("mock");
+        }
+    });
+
+    running
+        .join()
+        .unwrap()
+        .expect("the agent should still finish");
+}

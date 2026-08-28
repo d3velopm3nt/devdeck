@@ -367,6 +367,17 @@ export interface AssistantReply {
 }
 
 /** What the assistant knows about you. Personal store, never a repo. */
+/** Progress while a reply is still being produced.
+ *
+ * A side channel, not the event bus: token deltas are not facts about the
+ * project, and a few hundred of them would bury the audit log. Lossy by
+ * design — the conversation on disk is the record.
+ */
+export type ChatEvent =
+  | { kind: 'delta'; conversation_id: string; text: string }
+  | { kind: 'step'; conversation_id: string; message: ChatMessage }
+  | { kind: 'done'; conversation_id: string }
+
 export interface ProfileView {
   preferences: string[]
   body: string
@@ -498,6 +509,10 @@ export const aiw = {
     invoke<ConversationMeta>('aiw_focus_conversation', { id, projectId }),
   sendMessage: (conversationId: string, text: string) =>
     invoke<AssistantReply>('aiw_send_message', { conversationId, text }),
+
+  /** Live progress for the assistant. Separate from `onEvent`, deliberately. */
+  onChat: (cb: (e: ChatEvent) => void): Promise<UnlistenFn> =>
+    listen<ChatEvent>('aiw:chat', (e) => cb(e.payload)),
 
   personalRoot: () => invoke<string>('aiw_personal_root'),
   profile: () => invoke<ProfileView>('aiw_profile'),

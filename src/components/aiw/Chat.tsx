@@ -145,6 +145,44 @@ function ConversationList() {
   )
 }
 
+/// The reply as it arrives.
+///
+/// A preview, not the record: when the turn ends the transcript is re-read and
+/// this is dropped, so nothing here has to be reconciled with what was saved.
+/// Until then it is the only thing distinguishing "thinking" from "hung".
+function Live() {
+  const a = useAiw()
+  return (
+    <>
+      {a.streamingSteps.map((m, i) => (
+        <Bubble key={`live-${i}`} m={m} />
+      ))}
+      {a.streaming ? (
+        <div className="flex gap-3 py-2.5">
+          <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-500/15 text-indigo-300">
+            <Icon name="ai" size={12} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="mb-0.5 text-[11.5px] font-semibold text-ink">Assistant</div>
+            <div className="whitespace-pre-wrap break-words text-[12.5px] leading-[1.65] text-body">
+              {a.streaming}
+              {/* A caret, so a pause between tokens still reads as "working". */}
+              <span className="ml-0.5 inline-block h-[13px] w-[2px] translate-y-[2px] animate-pulse bg-indigo-400" />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 py-2.5 pl-9 text-[11.5px] text-muted">
+          <Icon name="spinner" size={12} className="animate-spin" />
+          {a.streamingSteps.length > 0
+            ? 'Working…'
+            : 'Thinking — this can pause to ask your approval.'}
+        </div>
+      )}
+    </>
+  )
+}
+
 // ---------------------------------------------------------------------------
 
 export function Chat() {
@@ -166,6 +204,13 @@ export function Chat() {
     })()
     // Not knowing where the store is should not break the chat.
     aiw.personalRoot().then(setRoot).catch(() => setRoot(null))
+
+    // Live progress for the reply being produced right now.
+    let stopChat: (() => void) | undefined
+    void aiw.onChat((e) => useAiw.getState().pushChat(e)).then((un) => {
+      stopChat = un
+    })
+    return () => stopChat?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -173,7 +218,7 @@ export function Chat() {
   useLayoutEffect(() => {
     const el = scroller.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [a.conversation?.messages.length, a.sending])
+  }, [a.conversation?.messages.length, a.sending, a.streaming, a.streamingSteps.length])
 
   const conv = a.conversation
   const assistant = a.agents.find((x) => x.id === 'assistant')
@@ -237,6 +282,30 @@ export function Chat() {
           </div>
         )}
 
+        {a.chatError && (
+          <div className="flex shrink-0 items-start gap-2.5 border-b border-red-500/25 bg-red-500/[0.06] px-5 py-2.5">
+            <Icon name="alert" size={12} className="mt-px shrink-0 text-err" />
+            <div className="min-w-0 flex-1 text-[11.5px] leading-[1.55] text-err">
+              {a.chatError}
+              {/* The overwhelmingly common cause, and one you cannot guess from
+                  the message Tauri gives back. */}
+              {a.chatError.includes('not found') && (
+                <span className="text-dim">
+                  {' '}
+                  — this usually means the app is running an older build than the
+                  UI. Restart DevDeck.
+                </span>
+              )}
+            </div>
+            <button
+              className="btn-ghost shrink-0 text-[11px]"
+              onClick={() => void a.loadConversations()}
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         <div ref={scroller} className="min-h-0 flex-1 overflow-auto px-5 py-3">
           {!conv ? (
             <div className="flex h-full items-center justify-center text-[12px] text-muted">
@@ -258,12 +327,7 @@ export function Chat() {
               {conv.messages.map((m, i) => (
                 <Bubble key={`${m.at}-${i}`} m={m} />
               ))}
-              {a.sending && (
-                <div className="flex items-center gap-2 py-2.5 pl-9 text-[11.5px] text-muted">
-                  <Icon name="spinner" size={12} className="animate-spin" />
-                  Thinking — this can pause to ask your approval.
-                </div>
-              )}
+              {a.sending && <Live />}
             </div>
           )}
         </div>

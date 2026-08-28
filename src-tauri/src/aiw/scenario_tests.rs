@@ -910,8 +910,11 @@ fn an_approvable_action_is_offered_to_the_model() {
 // runtime — the mock is a provider, not a bypass.
 // ---------------------------------------------------------------------------
 
-use super::assistant::{Assistant, Conversations, Speaker, ASSISTANT_ID};
+use super::assistant::{Assistant, ChatEvent, Conversations, Speaker, ASSISTANT_ID};
 use super::personal::PersonalStore;
+
+/// Nobody is watching. Correctness must not depend on a listener.
+fn quiet(_: ChatEvent) {}
 
 fn convs(t: &Tmp) -> Conversations {
     // A temp root, not the real one: a test must never write into the user's
@@ -931,7 +934,14 @@ fn asking_the_assistant_to_start_work_puts_an_agent_on_it() {
     let c = convs(&t);
 
     let conv = c.create(Some("tyrex")).unwrap();
-    let reply = Assistant::send(&w, &c, &conv.id, "Can you start work on offline sync?").unwrap();
+    let reply = Assistant::send(
+        &w,
+        &c,
+        &conv.id,
+        "Can you start work on offline sync?",
+        &quiet,
+    )
+    .unwrap();
 
     assert_eq!(
         reply.delegated.len(),
@@ -970,7 +980,7 @@ fn delegating_returns_immediately_rather_than_waiting_for_the_agent() {
     let conv = c.create(Some("tyrex")).unwrap();
 
     let started = std::time::Instant::now();
-    let reply = Assistant::send(&w, &c, &conv.id, "Please start work on it").unwrap();
+    let reply = Assistant::send(&w, &c, &conv.id, "Please start work on it", &quiet).unwrap();
     let elapsed = started.elapsed();
 
     assert_eq!(reply.delegated.len(), 1);
@@ -990,7 +1000,14 @@ fn what_the_assistant_remembers_never_lands_in_the_project() {
     let c = convs(&t);
     let conv = c.create(Some("tyrex")).unwrap();
 
-    Assistant::send(&w, &c, &conv.id, "Remember that I prefer ff-only pulls").unwrap();
+    Assistant::send(
+        &w,
+        &c,
+        &conv.id,
+        "Remember that I prefer ff-only pulls",
+        &quiet,
+    )
+    .unwrap();
 
     let notes = c.store().memories();
     assert_eq!(notes.len(), 1, "it should have saved a note");
@@ -1065,7 +1082,7 @@ fn a_conversation_with_no_project_is_offered_only_what_it_can_use() {
     let c = convs(&t);
     let conv = c.create(None).unwrap();
 
-    let reply = Assistant::send(&w, &c, &conv.id, "What can you do?").unwrap();
+    let reply = Assistant::send(&w, &c, &conv.id, "What can you do?", &quiet).unwrap();
     assert!(!reply.reply.trim().is_empty(), "it must say something");
     assert!(reply.delegated.is_empty());
 }

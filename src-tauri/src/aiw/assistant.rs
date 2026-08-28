@@ -100,6 +100,35 @@ pub struct ConversationMeta {
     pub messages: Vec<ChatMessage>,
 }
 
+/// What the UI is told while a reply is still being produced.
+///
+/// Not a domain event: token deltas are not facts about the project, and
+/// putting a few hundred of them through the bus would bury the log that makes
+/// the workspace auditable. This is a side channel, and it is lossy by design
+/// -- the conversation on disk is the record.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum ChatEvent {
+    /// More visible text arrived.
+    Delta {
+        conversation_id: String,
+        text: String,
+    },
+    /// A tool ran. Sent as it happens so a long turn shows progress rather
+    /// than a spinner that could mean anything.
+    Step {
+        conversation_id: String,
+        message: ChatMessage,
+    },
+    /// The turn is over; the transcript on disk is now authoritative.
+    Done { conversation_id: String },
+}
+
+/// Where progress goes. A no-op is a valid sink, and nothing about
+/// correctness may depend on anyone listening: the conversation on disk is the
+/// record, and progress is a courtesy.
+pub type ChatSink<'a> = &'a (dyn Fn(ChatEvent) + Send + Sync);
+
 /// What one `send` produced.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct AssistantReply {
@@ -266,6 +295,7 @@ impl Assistant {
         convs: &Conversations,
         conversation_id: &str,
         text: &str,
+        sink: ChatSink,
     ) -> Result<AssistantReply, String> {
         if text.trim().is_empty() {
             return Err("nothing to send".into());
@@ -303,6 +333,7 @@ impl Assistant {
             });
         }
 
+        let conv_id = conv.id.clone();
         let mut observations: Vec<Observation> = Vec::new();
         let mut delegated: Vec<String> = Vec::new();
         let mut reply = String::new();
@@ -327,7 +358,14 @@ impl Assistant {
                 let p = providers
                     .get(&agent.provider)
                     .ok_or_else(|| format!("unknown provider '{}'", agent.provider))?;
-                p.run(&request)?
+                // Streamed if the provider can; a provider that cannot falls
+                // back to one late chunk, and nothing downstream can tell.
+                p.run_streaming(&request, &|t: &str| {
+                    sink(ChatEvent::Delta {
+                        conversation_id: conv_id.clone(),
+                        text: t.to_string(),
+                    });
+                })?
             };
 
             if !response.message.trim().is_empty() {
@@ -358,7 +396,13 @@ impl Assistant {
                             ok: Some(ok),
                         };
                         conv.messages.push(msg.clone());
-                        appended.push(msg);
+                        appended.push(msg.clone());
+                        // Sent as it happens: a long turn should show what it is
+                        // doing, not a spinner that could mean anything.
+                        sink(ChatEvent::Step {
+                            conversation_id: conv_id.clone(),
+                            message: msg,
+                        });
                         observations.push(Observation {
                             call_id: String::new(),
                             tool: call.tool.clone(),
@@ -427,6 +471,10 @@ impl Assistant {
             )
             .caused_by(&started),
         );
+
+        sink(ChatEvent::Done {
+            conversation_id: conv_id,
+        });
 
         Ok(AssistantReply {
             conversation_id: conv.id,

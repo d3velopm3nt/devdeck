@@ -8,8 +8,12 @@ use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use tauri::Emitter;
+
 use super::approval::{ApprovalRequest, Decision};
-use super::assistant::{Assistant, AssistantReply, ConversationMeta, ConversationSummary};
+use super::assistant::{
+    Assistant, AssistantReply, ChatEvent, ConversationMeta, ConversationSummary,
+};
 use super::conflict::Conflict;
 use super::context::{AssembledContext, ContextService};
 use super::deck::{Deck, Requirement, RequirementsMeta, WorkItem, WorkMeta};
@@ -1047,12 +1051,21 @@ pub fn aiw_focus_conversation(
 /// this on a worker thread, so the window stays live throughout.
 #[tauri::command]
 pub fn aiw_send_message(
+    app: tauri::AppHandle,
     ws: Ws,
     conversation_id: String,
     text: String,
 ) -> Result<AssistantReply, String> {
     let workspace = ws.inner().clone();
-    Assistant::send(&workspace, ws.convs()?, &conversation_id, &text)
+    // Progress goes out on its own channel rather than through the event bus:
+    // token deltas are not facts about the project, and a few hundred of them
+    // would bury the log that makes the workspace auditable.
+    let sink = move |e: ChatEvent| {
+        // A dropped progress event is not worth failing a reply over — the
+        // conversation on disk is the record, and the UI re-reads it at the end.
+        let _ = app.emit("aiw:chat", e);
+    };
+    Assistant::send(&workspace, ws.convs()?, &conversation_id, &text, &sink)
 }
 
 /// Where your conversations and notes actually live.

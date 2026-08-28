@@ -92,16 +92,17 @@ all work.
       specialists. Chat surface, durable conversations, memory.
 - [x] **The store split** — personal state lives outside every repo, enforced
       by refusing to create the store inside one.
+- [x] **Streaming** — SSE on the OpenAI-compatible path, deltas and tool
+      steps to the UI on their own channel. Providers that cannot stream fall
+      back to one late chunk and nothing downstream can tell.
 
 What is left, in the order it matters:
 
-1. **Streaming** — replies arrive whole. On a real provider a long answer looks
-   like a hang. This is the next thing to do.
-2. **The Anthropic transport** — returns an explicit error today rather than
+1. **The Anthropic transport** — returns an explicit error today rather than
    pretending. The OpenAI-compatible path covers Claude via OpenRouter.
-3. **Delegated sessions are fire-and-forget** — started on a thread, visible in
+2. **Delegated sessions are fire-and-forget** — started on a thread, visible in
    Activity, but the chat does not learn when one finishes.
-4. **The life half** — calendar, mail, notes. Needs no new store; needs new
+3. **The life half** — calendar, mail, notes. Needs no new store; needs new
    tools pointed at the personal one. Deliberately not started: the work half
    had to be real first.
 
@@ -460,8 +461,9 @@ the website's download links point at nothing.
   of deploy tools. Adding an ecosystem is a row in `MARKER_DETECTORS` (data) or
   one `detect_*` function (logic), plus a fixture test — but either way it's a
   **rebuild**. See *User-editable scan rules* for the fix.
-- AI Workspace: replies are not streamed, so a slow provider looks like a hang;
-  a delegated session's completion never reaches the conversation; the Anthropic
+- AI Workspace: a delegated session's completion never reaches the conversation
+  (it shows in Activity, but the assistant will not tell you dev-a finished);
+  streaming is only on the OpenAI-compatible path; the Anthropic
   transport is unimplemented (it errors explicitly rather than pretending)
 - Terminal commands: an old report that commands don't type into the terminal —
   deprioritised, needs reproduction

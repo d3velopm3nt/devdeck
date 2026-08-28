@@ -20,6 +20,7 @@ import {
   aiw,
   type AgentDef,
   type AssistantReply,
+  type ChatEvent,
   type ChatMessage,
   type ConversationMeta,
   type ConversationSummary,
@@ -71,6 +72,20 @@ interface AiwState {
   conversations: ConversationSummary[]
   conversation: ConversationMeta | null
   sending: boolean
+  /// The assistant's own failures.
+  ///
+  /// Separate from `error` on purpose: that one gates the whole module behind a
+  /// "could not load the workspace" screen, which is right for a failed
+  /// bootstrap and badly wrong for a failed `send` — one unreachable provider
+  /// should not take down Features, Conflicts and Git, or claim the workspace
+  /// could not be read when it was read fine.
+  chatError: string | null
+  /// The reply currently arriving, token by token. Rendered as the assistant's
+  /// message until the turn ends, at which point the transcript re-read
+  /// replaces it — so this is a preview, never the record.
+  streaming: string
+  /// Tool steps that have already run this turn, shown before the reply lands.
+  streamingSteps: ChatMessage[]
   decisions: DecisionRow[]
   events: DomainEvent[]
   commits: GitCommit[]
@@ -87,6 +102,7 @@ interface AiwState {
   bootstrap: () => Promise<void>
   refresh: () => Promise<void>
   refreshApprovals: () => Promise<void>
+  pushChat: (e: ChatEvent) => void
   loadConversations: () => Promise<void>
   openConversation: (id: string) => Promise<void>
   newConversation: () => Promise<void>
@@ -125,6 +141,9 @@ export const useAiw = create<AiwState>((set, get) => ({
   conversations: [],
   conversation: null,
   sending: false,
+  chatError: null,
+  streaming: '',
+  streamingSteps: [],
   decisions: [],
   events: [],
   commits: [],
@@ -254,19 +273,34 @@ export const useAiw = create<AiwState>((set, get) => ({
 
   // -- the assistant ------------------------------------------------------
 
+  pushChat: (e) => {
+    // Progress for a conversation you have since navigated away from is not
+    // wrong, it is just not yours — dropping it beats splicing another
+    // conversation's tokens into the open one.
+    if (e.conversation_id !== get().conversation?.id) return
+    if (e.kind === 'delta') set({ streaming: get().streaming + e.text })
+    else if (e.kind === 'step') set({ streamingSteps: [...get().streamingSteps, e.message] })
+    else set({ streaming: '', streamingSteps: [] })
+  },
+
   loadConversations: async () => {
     try {
-      set({ conversations: await aiw.conversations() })
+      set({ conversations: await aiw.conversations(), chatError: null })
     } catch (e) {
-      set({ error: say(e) })
+      set({ chatError: say(e) })
     }
   },
 
   openConversation: async (id) => {
     try {
-      set({ conversation: await aiw.conversation(id) })
+      set({
+        conversation: await aiw.conversation(id),
+        chatError: null,
+        streaming: '',
+        streamingSteps: [],
+      })
     } catch (e) {
-      set({ error: say(e) })
+      set({ chatError: say(e) })
     }
   },
 
@@ -276,10 +310,10 @@ export const useAiw = create<AiwState>((set, get) => ({
       // "which project?" straight after clicking New is a question the app can
       // usually answer itself.
       const conv = await aiw.newConversation(get().projectId ?? undefined)
-      set({ conversation: conv })
+      set({ conversation: conv, chatError: null })
       await get().loadConversations()
     } catch (e) {
-      set({ error: say(e) })
+      set({ chatError: say(e) })
     }
   },
 
@@ -289,7 +323,7 @@ export const useAiw = create<AiwState>((set, get) => ({
       if (get().conversation?.id === id) set({ conversation: null })
       await get().loadConversations()
     } catch (e) {
-      set({ error: say(e) })
+      set({ chatError: say(e) })
     }
   },
 
@@ -299,7 +333,7 @@ export const useAiw = create<AiwState>((set, get) => ({
     try {
       set({ conversation: await aiw.focusConversation(conv.id, projectId) })
     } catch (e) {
-      set({ error: say(e) })
+      set({ chatError: say(e) })
     }
   },
 
@@ -313,6 +347,8 @@ export const useAiw = create<AiwState>((set, get) => ({
     const pending: ChatMessage = { at: new Date().toISOString(), from: 'user', text: text.trim() }
     set({
       sending: true,
+      streaming: '',
+      streamingSteps: [],
       conversation: { ...conv, messages: [...conv.messages, pending] },
     })
 
@@ -322,7 +358,15 @@ export const useAiw = create<AiwState>((set, get) => ({
       // decided the timestamps, the tool steps and the title, and a transcript
       // assembled from two sources drifts.
       const fresh = await aiw.conversation(conv.id)
-      set({ conversation: fresh, sending: false })
+      // The preview is dropped the moment the record arrives; keeping both
+      // would show every reply twice.
+      set({
+        conversation: fresh,
+        sending: false,
+        chatError: null,
+        streaming: '',
+        streamingSteps: [],
+      })
       await get().loadConversations()
       // Delegation started real sessions; the rest of the workspace is now stale.
       if (reply.delegated.length > 0) void get().refresh()
@@ -339,7 +383,9 @@ export const useAiw = create<AiwState>((set, get) => ({
       const current = get().conversation
       set({
         sending: false,
-        error: say(e),
+        streaming: '',
+        streamingSteps: [],
+        chatError: say(e),
         conversation: current ? { ...current, messages: [...current.messages, failed] } : current,
       })
     }

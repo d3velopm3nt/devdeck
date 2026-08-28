@@ -142,6 +142,24 @@ pub trait LLMProvider: Send + Sync {
     fn name(&self) -> &str;
     fn list_models(&self) -> Vec<ModelInfo>;
     fn run(&self, request: &AgentRequest) -> Result<AgentResponse, String>;
+
+    /// Same turn, but reporting visible text as it arrives.
+    ///
+    /// Defaults to `run`, so a provider that cannot stream is not obliged to
+    /// pretend: the caller gets one late chunk instead of many early ones, and
+    /// nothing downstream has to know which happened.
+    fn run_streaming(
+        &self,
+        request: &AgentRequest,
+        on_delta: &dyn Fn(&str),
+    ) -> Result<AgentResponse, String> {
+        let r = self.run(request)?;
+        if !r.message.is_empty() {
+            on_delta(&r.message);
+        }
+        Ok(r)
+    }
+
     fn health(&self) -> ProviderHealth;
 }
 
@@ -642,6 +660,165 @@ pub fn from_anthropic_response(body: &serde_json::Value) -> (String, Vec<RawTool
 /// `arguments` is a JSON *string*, not an object — a detail that silently
 /// produces empty arguments if you treat it as one.
 #[allow(dead_code)]
+/// Turn a model's text and calls into an `AgentResponse`.
+///
+/// Shared by the streaming and non-streaming paths deliberately: two copies of
+/// "is this turn finished?" drift, and the one that drifts is always the path
+/// with less test coverage.
+///
+/// `dropped` names tool calls that arrived truncated. They are reported as text
+/// rather than silently ignored -- a model that asked for something and got no
+/// answer at all will usually just ask again.
+fn assemble(message: String, calls: &[RawToolCall], dropped: &[String]) -> AgentResponse {
+    let mut actions = Vec::new();
+    let mut rejected = Vec::new();
+    for outcome in to_actions(calls) {
+        match outcome {
+            Ok(a) => actions.push(a),
+            // A call that does not parse is fed back as text so the model can
+            // correct itself, rather than failing the whole turn.
+            Err((id, why)) => rejected.push(format!("tool call {id} was rejected: {why}")),
+        }
+    }
+    for name in dropped {
+        rejected.push(format!(
+            "tool call {name} arrived incomplete and was not run -- send it again"
+        ));
+    }
+
+    // Nothing to run and nothing rejected means the model is finished.
+    let complete = actions.is_empty() && rejected.is_empty();
+    if complete && !message.trim().is_empty() {
+        actions.push(AgentAction::Done {
+            summary: message.clone(),
+        });
+    }
+
+    AgentResponse {
+        message: if rejected.is_empty() {
+            message
+        } else {
+            format!("{message}\n{}", rejected.join("\n"))
+        },
+        actions,
+        complete,
+    }
+}
+
+/// Accumulates an OpenAI-style SSE stream into a finished response.
+///
+/// Streaming is not "the same JSON, in pieces". Text arrives as deltas, and a
+/// tool call arrives as *fragments keyed by index*: the id and name come once,
+/// on some early chunk, and the arguments arrive as a string split at
+/// arbitrary points — routinely mid-token, mid-escape, mid-UTF-8-character.
+/// Parsing each fragment as JSON, or matching calls by id (which later
+/// fragments omit), both look fine against a short reply and fall apart on a
+/// long one.
+///
+/// So this keys on `index`, appends argument text blindly, and parses only at
+/// the end.
+#[derive(Default)]
+pub struct StreamAccumulator {
+    text: String,
+    /// index -> (id, name, raw argument text so far)
+    calls: std::collections::BTreeMap<u64, (String, String, String)>,
+    done: bool,
+}
+
+impl StreamAccumulator {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn finished(&self) -> bool {
+        self.done
+    }
+
+    /// Feed one raw SSE line. Returns any newly arrived visible text, so a
+    /// caller can forward it without re-diffing the whole buffer.
+    pub fn push_line(&mut self, line: &str) -> Option<String> {
+        let line = line.trim();
+        // Comments (": ping"), blanks and `event:` lines are not data.
+        let payload = line.strip_prefix("data:")?;
+        let payload = payload.trim();
+        if payload == "[DONE]" {
+            self.done = true;
+            return None;
+        }
+        let chunk: serde_json::Value = serde_json::from_str(payload).ok()?;
+        self.push_chunk(&chunk)
+    }
+
+    pub fn push_chunk(&mut self, chunk: &serde_json::Value) -> Option<String> {
+        let delta = chunk
+            .get("choices")
+            .and_then(|c| c.as_array())
+            .and_then(|c| c.first())
+            .and_then(|c| c.get("delta"))?;
+
+        let mut fresh = None;
+        if let Some(t) = delta.get("content").and_then(|c| c.as_str()) {
+            if !t.is_empty() {
+                self.text.push_str(t);
+                fresh = Some(t.to_string());
+            }
+        }
+
+        if let Some(list) = delta.get("tool_calls").and_then(|t| t.as_array()) {
+            for c in list {
+                // Absent index means a single call, which is index 0. Defaulting
+                // to a fresh slot each time would shred the arguments across
+                // entries and produce calls that never parse.
+                let idx = c.get("index").and_then(|i| i.as_u64()).unwrap_or(0);
+                let slot = self.calls.entry(idx).or_default();
+                if let Some(id) = c.get("id").and_then(|i| i.as_str()) {
+                    if !id.is_empty() {
+                        slot.0 = id.to_string();
+                    }
+                }
+                if let Some(f) = c.get("function") {
+                    if let Some(n) = f.get("name").and_then(|n| n.as_str()) {
+                        if !n.is_empty() {
+                            slot.1 = n.to_string();
+                        }
+                    }
+                    if let Some(a) = f.get("arguments").and_then(|a| a.as_str()) {
+                        slot.2.push_str(a);
+                    }
+                }
+            }
+        }
+        fresh
+    }
+
+    /// The accumulated text, and the calls whose arguments actually parse.
+    ///
+    /// A truncated stream leaves an unparsable fragment behind. Dropping it is
+    /// right — a half-written call is not a call, and passing `{}` in its place
+    /// would run a tool with arguments the model never finished choosing.
+    pub fn finish(self) -> (String, Vec<RawToolCall>, Vec<String>) {
+        let mut calls = Vec::new();
+        let mut dropped = Vec::new();
+        for (_, (id, name, raw)) in self.calls {
+            if name.is_empty() {
+                continue;
+            }
+            let trimmed = raw.trim();
+            // No arguments at all is legitimate for a zero-parameter tool.
+            let parsed = if trimmed.is_empty() {
+                Some(serde_json::json!({}))
+            } else {
+                serde_json::from_str::<serde_json::Value>(trimmed).ok()
+            };
+            match parsed {
+                Some(input) => calls.push(RawToolCall { id, name, input }),
+                None => dropped.push(name),
+            }
+        }
+        (self.text, calls, dropped)
+    }
+}
+
 pub fn from_openai_response(body: &serde_json::Value) -> (String, Vec<RawToolCall>) {
     let mut calls = Vec::new();
     let Some(message) = body
@@ -895,14 +1072,28 @@ impl OpenAICompatibleProvider {
         serde_json::Value::Array(msgs)
     }
 
-    /// POST a body and return the response text, or a message worth showing.
-    fn post(&self, body: &serde_json::Value) -> Result<String, String> {
-        let timeout = std::time::Duration::from_secs(self.config.timeout_secs.unwrap_or(120));
-        let client = reqwest::blocking::Client::builder()
-            .timeout(timeout)
-            .build()
-            .map_err(|e| format!("could not build an HTTP client: {e}"))?;
+    /// The request body for one turn. Shared so the streaming and blocking
+    /// paths cannot ask for different things.
+    fn body(&self, request: &AgentRequest, stream: bool) -> serde_json::Value {
+        serde_json::json!({
+            "model": self.config.model,
+            "messages": self.messages(request),
+            "tools": to_openai_tools(&request.tools),
+            "tool_choice": "auto",
+            "stream": stream,
+        })
+    }
 
+    fn client(&self) -> Result<reqwest::blocking::Client, String> {
+        reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(
+                self.config.timeout_secs.unwrap_or(120),
+            ))
+            .build()
+            .map_err(|e| format!("could not build an HTTP client: {e}"))
+    }
+
+    fn request(&self, client: &reqwest::blocking::Client) -> reqwest::blocking::RequestBuilder {
         let mut req = client
             .post(self.config.endpoint())
             .header("content-type", "application/json");
@@ -914,8 +1105,14 @@ impl OpenAICompatibleProvider {
         if let Some(key) = self.config.api_key() {
             req = req.bearer_auth(key);
         }
+        req
+    }
 
-        let response = req
+    /// POST a body and return the response text, or a message worth showing.
+    fn post(&self, body: &serde_json::Value) -> Result<String, String> {
+        let client = self.client()?;
+        let response = self
+            .request(&client)
             .json(body)
             .send()
             .map_err(|e| format!("{}: {e}", self.config.endpoint()))?;
@@ -936,6 +1133,54 @@ impl OpenAICompatibleProvider {
             ));
         }
         Ok(text)
+    }
+
+    /// Stream one turn, calling `on_delta` with each piece of visible text.
+    ///
+    /// Reads the body line by line rather than to completion: the entire point
+    /// is that the first words arrive in a few hundred milliseconds instead of
+    /// after the whole answer, so buffering here would defeat it.
+    fn stream(
+        &self,
+        body: &serde_json::Value,
+        on_delta: &dyn Fn(&str),
+    ) -> Result<(String, Vec<RawToolCall>, Vec<String>), String> {
+        use std::io::BufRead;
+
+        let client = self.client()?;
+        let response = self
+            .request(&client)
+            .json(body)
+            .send()
+            .map_err(|e| format!("{}: {e}", self.config.endpoint()))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            // An error body is small and is JSON, not a stream. Read it whole
+            // so the provider's own explanation survives.
+            let text = response.text().unwrap_or_default();
+            return Err(format!(
+                "{} returned {status}: {}",
+                self.name(),
+                truncate(&text, 400)
+            ));
+        }
+
+        let mut acc = StreamAccumulator::new();
+        let reader = std::io::BufReader::new(response);
+        for line in reader.lines() {
+            // A read error mid-stream is not fatal on its own: whatever has
+            // arrived is still a real partial answer, and `finish` drops any
+            // half-written tool call rather than running it.
+            let Ok(line) = line else { break };
+            if let Some(fresh) = acc.push_line(&line) {
+                on_delta(&fresh);
+            }
+            if acc.finished() {
+                break;
+            }
+        }
+        Ok(acc.finish())
     }
 
     /// A cheap round trip to prove the endpoint, key and model all work.
@@ -992,46 +1237,27 @@ impl LLMProvider for OpenAICompatibleProvider {
             return Err("OpenAI-compatible provider has no model configured".into());
         }
 
-        let body = serde_json::json!({
-            "model": self.config.model,
-            "messages": self.messages(request),
-            "tools": to_openai_tools(&request.tools),
-            "tool_choice": "auto",
-        });
-
-        let text = self.post(&body)?;
+        let text = self.post(&self.body(request, false))?;
         let json: serde_json::Value = serde_json::from_str(&text)
             .map_err(|e| format!("{} returned invalid JSON: {e}", self.name()))?;
 
         let (message, calls) = from_openai_response(&json);
-        let mut actions = Vec::new();
-        let mut rejected = Vec::new();
-        for outcome in to_actions(&calls) {
-            match outcome {
-                Ok(a) => actions.push(a),
-                // A call that does not parse is fed back as text so the model
-                // can correct itself, rather than failing the whole turn.
-                Err((id, why)) => rejected.push(format!("tool call {id} was rejected: {why}")),
-            }
-        }
+        Ok(assemble(message, &calls, &[]))
+    }
 
-        // Nothing to run and nothing rejected means the model is finished.
-        let complete = actions.is_empty() && rejected.is_empty();
-        if complete && !message.trim().is_empty() {
-            actions.push(AgentAction::Done {
-                summary: message.clone(),
-            });
+    fn run_streaming(
+        &self,
+        request: &AgentRequest,
+        on_delta: &dyn Fn(&str),
+    ) -> Result<AgentResponse, String> {
+        if self.config.base_url.is_empty() {
+            return Err("OpenAI-compatible provider has no base URL configured".into());
         }
-
-        Ok(AgentResponse {
-            message: if rejected.is_empty() {
-                message
-            } else {
-                format!("{message}\n{}", rejected.join("\n"))
-            },
-            actions,
-            complete,
-        })
+        if self.config.model.is_empty() {
+            return Err("OpenAI-compatible provider has no model configured".into());
+        }
+        let (message, calls, dropped) = self.stream(&self.body(request, true), on_delta)?;
+        Ok(assemble(message, &calls, &dropped))
     }
     fn health(&self) -> ProviderHealth {
         // A key is optional here: local servers and some gateways take none.
@@ -1428,6 +1654,212 @@ mod transport_tests {
             turn: 0,
             history: vec![],
         }
+    }
+
+    // -- streaming ---------------------------------------------------------
+
+    /// A provider that cannot stream must still work, and the caller must not
+    /// be able to tell which happened beyond the timing.
+    #[test]
+    fn a_non_streaming_provider_still_reports_its_message_once() {
+        let mut req = req();
+        req.role = "orchestrator".into();
+        req.goal = "What can you do?".into();
+
+        let seen = std::sync::Mutex::new(String::new());
+        let response = MockProvider
+            .run_streaming(&req, &|t: &str| seen.lock().unwrap().push_str(t))
+            .unwrap();
+
+        let forwarded = seen.into_inner().unwrap();
+        assert!(
+            !forwarded.is_empty(),
+            "the default must forward the message"
+        );
+        assert_eq!(
+            forwarded, response.message,
+            "what was streamed and what was returned have to agree"
+        );
+    }
+
+    /// The two paths share `assemble` so they cannot disagree about whether a
+    /// turn is finished. This pins that, since the streaming path is the one
+    /// with less coverage and the one that would drift.
+    #[test]
+    fn streamed_and_whole_responses_assemble_identically() {
+        let calls = vec![RawToolCall {
+            id: "call_1".into(),
+            name: "files_read".into(),
+            input: serde_json::json!({ "path": "a.ts" }),
+        }];
+
+        let whole = assemble("Reading it.".into(), &calls, &[]);
+        let streamed = assemble("Reading it.".into(), &calls, &[]);
+        assert_eq!(whole.message, streamed.message);
+        assert_eq!(whole.complete, streamed.complete);
+        assert_eq!(whole.actions.len(), streamed.actions.len());
+
+        // A turn with a tool call is not finished; one with only text is.
+        assert!(!whole.complete, "a pending tool call means more to do");
+        let text_only = assemble("All done.".into(), &[], &[]);
+        assert!(text_only.complete);
+        assert!(matches!(
+            text_only.actions.first(),
+            Some(AgentAction::Done { .. })
+        ));
+    }
+
+    /// A truncated call must reach the model as a retryable message, not vanish.
+    #[test]
+    fn a_dropped_call_is_reported_back_rather_than_swallowed() {
+        let r = assemble("working".into(), &[], &["terminal_run".into()]);
+        assert!(r.message.contains("terminal_run"));
+        assert!(r.message.contains("incomplete"));
+        assert!(
+            !r.complete,
+            "the turn is not over — the model still needs to send it again"
+        );
+    }
+
+    fn feed(acc: &mut StreamAccumulator, lines: &[&str]) -> String {
+        let mut seen = String::new();
+        for l in lines {
+            if let Some(t) = acc.push_line(l) {
+                seen.push_str(&t);
+            }
+        }
+        seen
+    }
+
+    #[test]
+    fn text_deltas_accumulate_and_are_reported_as_they_arrive() {
+        let mut acc = StreamAccumulator::new();
+        let live = feed(
+            &mut acc,
+            &[
+                r#"data: {"choices":[{"delta":{"content":"I'll "}}]}"#,
+                r#"data: {"choices":[{"delta":{"content":"put dev-a "}}]}"#,
+                r#"data: {"choices":[{"delta":{"content":"on it."}}]}"#,
+                "data: [DONE]",
+            ],
+        );
+        assert!(acc.finished());
+        // What the caller can forward is exactly what was added, so a UI can
+        // append rather than re-render the whole buffer.
+        assert_eq!(live, "I'll put dev-a on it.");
+        let (text, calls, dropped) = acc.finish();
+        assert_eq!(text, "I'll put dev-a on it.");
+        assert!(calls.is_empty() && dropped.is_empty());
+    }
+
+    #[test]
+    fn keepalives_and_blank_lines_are_not_data() {
+        let mut acc = StreamAccumulator::new();
+        feed(
+            &mut acc,
+            &[
+                ": ping",
+                "",
+                "event: message",
+                r#"data: {"choices":[{"delta":{"content":"hi"}}]}"#,
+            ],
+        );
+        assert_eq!(acc.finish().0, "hi");
+    }
+
+    /// The failure mode that only shows up on long replies: arguments arrive
+    /// split at arbitrary points, and later fragments carry no id or name.
+    #[test]
+    fn a_tool_call_split_across_fragments_is_reassembled() {
+        let mut acc = StreamAccumulator::new();
+        feed(
+            &mut acc,
+            &[
+                r#"data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"delegate_start","arguments":""}}]}}]}"#,
+                r#"data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"agent_i"}}]}}]}"#,
+                r#"data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"d\":\"dev-a\",\"feature_id"}}]}}]}"#,
+                r#"data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\":\"offline-sync\"}"}}]}}]}"#,
+                "data: [DONE]",
+            ],
+        );
+        let (_, calls, dropped) = acc.finish();
+        assert!(dropped.is_empty(), "nothing should have been unparsable");
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].id, "call_1");
+        assert_eq!(calls[0].name, "delegate_start");
+        assert_eq!(calls[0].input["agent_id"], "dev-a");
+        assert_eq!(calls[0].input["feature_id"], "offline-sync");
+    }
+
+    /// Two calls in one turn must not have their arguments interleaved.
+    #[test]
+    fn parallel_tool_calls_stay_separate() {
+        let mut acc = StreamAccumulator::new();
+        feed(
+            &mut acc,
+            &[
+                r#"data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"a","function":{"name":"files_read","arguments":"{\"path\":"}}]}}]}"#,
+                r#"data: {"choices":[{"delta":{"tool_calls":[{"index":1,"id":"b","function":{"name":"git_status","arguments":"{"}}]}}]}"#,
+                r#"data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"a.ts\"}"}}]}}]}"#,
+                r#"data: {"choices":[{"delta":{"tool_calls":[{"index":1,"function":{"arguments":"}"}}]}}]}"#,
+            ],
+        );
+        let (_, calls, _) = acc.finish();
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0].name, "files_read");
+        assert_eq!(calls[0].input["path"], "a.ts");
+        assert_eq!(calls[1].name, "git_status");
+    }
+
+    /// A missing index means one call, not a new one each chunk.
+    #[test]
+    fn fragments_with_no_index_belong_to_the_same_call() {
+        let mut acc = StreamAccumulator::new();
+        feed(
+            &mut acc,
+            &[
+                r#"data: {"choices":[{"delta":{"tool_calls":[{"id":"c","function":{"name":"git_log","arguments":"{\"limit"}}]}}]}"#,
+                r#"data: {"choices":[{"delta":{"tool_calls":[{"function":{"arguments":"\":5}"}}]}}]}"#,
+            ],
+        );
+        let (_, calls, _) = acc.finish();
+        assert_eq!(calls.len(), 1, "one call, not one per chunk");
+        assert_eq!(calls[0].input["limit"], 5);
+    }
+
+    /// A dropped connection leaves half a call behind. Running it with `{}`
+    /// would execute a tool with arguments the model never finished choosing.
+    #[test]
+    fn a_truncated_call_is_dropped_rather_than_run_with_empty_arguments() {
+        let mut acc = StreamAccumulator::new();
+        feed(
+            &mut acc,
+            &[
+                r#"data: {"choices":[{"delta":{"content":"working on it"}}]}"#,
+                r#"data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"x","function":{"name":"terminal_run","arguments":"{\"command\":\"rm -r"}}]}}]}"#,
+            ],
+        );
+        assert!(!acc.finished(), "the stream never said [DONE]");
+        let (text, calls, dropped) = acc.finish();
+        assert_eq!(text, "working on it", "the text still survives");
+        assert!(calls.is_empty(), "a half-written call is not a call");
+        assert_eq!(dropped, vec!["terminal_run".to_string()]);
+    }
+
+    /// A zero-parameter tool legitimately streams no arguments at all.
+    #[test]
+    fn a_call_with_no_arguments_is_still_a_call() {
+        let mut acc = StreamAccumulator::new();
+        feed(
+            &mut acc,
+            &[
+                r#"data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"z","function":{"name":"git_status"}}]}}]}"#,
+            ],
+        );
+        let (_, calls, dropped) = acc.finish();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].input, serde_json::json!({}));
+        assert!(dropped.is_empty());
     }
 
     #[test]

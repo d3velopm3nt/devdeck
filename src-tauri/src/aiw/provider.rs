@@ -12,7 +12,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::tools::ToolCall;
+use super::tools::{ToolCall, ToolDefinition};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ModelInfo {
@@ -42,10 +42,13 @@ pub struct AgentRequest {
     pub context: String,
     /// The immediate objective (usually the work item title).
     pub goal: String,
-    /// Tool ids this agent may ask for. A provider that asks for anything else
-    /// gets refused at the ToolService, but telling it up front avoids the
-    /// pointless round trip.
-    pub available_tools: Vec<String>,
+    /// The callables this agent may use, with their schemas.
+    ///
+    /// A list of names was enough for a scripted mock and is useless to a real
+    /// model, which cannot emit a valid call without a parameter schema. These
+    /// are already filtered by permission, so a read-only agent is never
+    /// offered a write it would be refused.
+    pub tools: Vec<ToolDefinition>,
     /// Results of the tool calls made so far this turn, fed back in.
     pub observations: Vec<String>,
     /// Which turn of the loop this is, from 0.
@@ -337,7 +340,7 @@ impl LLMProvider for MockProvider {
                 request.model,
                 request.system.split('.').next().unwrap_or("agent").trim(),
                 response.message,
-                request.available_tools.len(),
+                request.tools.len(),
                 request.context.len(),
             );
         }
@@ -350,6 +353,174 @@ impl LLMProvider for MockProvider {
             configured: true,
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Wire translation
+// ---------------------------------------------------------------------------
+//
+// The two shapes every provider needs: tool definitions going out, and tool
+// calls coming back. Kept here, beside the providers, because it is the only
+// place that should know what a model's JSON looks like — nothing below the
+// provider layer has an opinion about wire formats.
+//
+// Neither adapter's transport is implemented yet, but these are: the mapping is
+// the part with the design decisions in it, and it is testable without a
+// network. They are therefore reachable only from tests until a transport
+// calls them, which is what the allows below are for -- not dead code, code
+// whose caller is the next commit.
+
+/// Anthropic's `tools` array: `{name, description, input_schema}`.
+#[allow(dead_code)]
+pub fn to_anthropic_tools(tools: &[ToolDefinition]) -> serde_json::Value {
+    serde_json::Value::Array(
+        tools
+            .iter()
+            .map(|t| {
+                serde_json::json!({
+                    "name": t.name,
+                    "description": t.description,
+                    "input_schema": t.input_schema,
+                })
+            })
+            .collect(),
+    )
+}
+
+/// OpenAI's `tools` array: `{type: "function", function: {name, description, parameters}}`.
+///
+/// The same schema under a different key, which is exactly why this belongs in
+/// one function rather than being written twice.
+#[allow(dead_code)]
+pub fn to_openai_tools(tools: &[ToolDefinition]) -> serde_json::Value {
+    serde_json::Value::Array(
+        tools
+            .iter()
+            .map(|t| {
+                serde_json::json!({
+                    "type": "function",
+                    "function": {
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.input_schema,
+                    }
+                })
+            })
+            .collect(),
+    )
+}
+
+/// A tool call a model asked for, before it has been validated or permitted.
+#[derive(Clone, Debug, PartialEq)]
+#[allow(dead_code)]
+pub struct RawToolCall {
+    /// Provider's id for the call, echoed back with the result.
+    pub id: String,
+    pub name: String,
+    pub input: serde_json::Value,
+}
+
+/// Read tool calls out of an Anthropic `content` array.
+///
+/// Text blocks become the message; `tool_use` blocks become calls. A response
+/// with neither is not an error — it is a model that had nothing to do.
+#[allow(dead_code)]
+pub fn from_anthropic_response(body: &serde_json::Value) -> (String, Vec<RawToolCall>) {
+    let mut text = String::new();
+    let mut calls = Vec::new();
+    let Some(content) = body.get("content").and_then(|c| c.as_array()) else {
+        return (text, calls);
+    };
+    for block in content {
+        match block.get("type").and_then(|t| t.as_str()) {
+            Some("text") => {
+                if let Some(t) = block.get("text").and_then(|t| t.as_str()) {
+                    if !text.is_empty() {
+                        text.push('\n');
+                    }
+                    text.push_str(t);
+                }
+            }
+            Some("tool_use") => calls.push(RawToolCall {
+                id: block
+                    .get("id")
+                    .and_then(|i| i.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+                name: block
+                    .get("name")
+                    .and_then(|n| n.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+                input: block.get("input").cloned().unwrap_or(serde_json::json!({})),
+            }),
+            _ => {}
+        }
+    }
+    (text, calls)
+}
+
+/// Read tool calls out of an OpenAI chat completion.
+///
+/// `arguments` is a JSON *string*, not an object — a detail that silently
+/// produces empty arguments if you treat it as one.
+#[allow(dead_code)]
+pub fn from_openai_response(body: &serde_json::Value) -> (String, Vec<RawToolCall>) {
+    let mut calls = Vec::new();
+    let Some(message) = body
+        .get("choices")
+        .and_then(|c| c.as_array())
+        .and_then(|c| c.first())
+        .and_then(|c| c.get("message"))
+    else {
+        return (String::new(), calls);
+    };
+    let text = message
+        .get("content")
+        .and_then(|c| c.as_str())
+        .unwrap_or_default()
+        .to_string();
+
+    if let Some(list) = message.get("tool_calls").and_then(|t| t.as_array()) {
+        for c in list {
+            let f = c.get("function");
+            let args = f
+                .and_then(|f| f.get("arguments"))
+                .and_then(|a| a.as_str())
+                .and_then(|a| serde_json::from_str::<serde_json::Value>(a).ok())
+                .unwrap_or(serde_json::json!({}));
+            calls.push(RawToolCall {
+                id: c
+                    .get("id")
+                    .and_then(|i| i.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+                name: f
+                    .and_then(|f| f.get("name"))
+                    .and_then(|n| n.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+                input: args,
+            });
+        }
+    }
+    (text, calls)
+}
+
+/// Turn raw calls into actions the runtime can execute.
+///
+/// A call that does not parse becomes an `Err` carrying a message meant for the
+/// model, not the log: it is fed back as the tool result so the model can
+/// correct itself, which is the whole reason the error text is specific.
+#[allow(dead_code)]
+pub fn to_actions(calls: &[RawToolCall]) -> Vec<Result<AgentAction, (String, String)>> {
+    calls
+        .iter()
+        .map(|c| match super::tools::parse_tool_call(&c.name, &c.input) {
+            Ok(call) => Ok(AgentAction::Tool(call)),
+            Err(e) => Err((c.id.clone(), e)),
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -564,7 +735,15 @@ mod tests {
 Offline sync."
                 .into(),
             goal: "do the thing".into(),
-            available_tools: vec!["files".into(), "git".into()],
+            tools: crate::aiw::tools::definitions_for("dev", &{
+                let mut m = crate::aiw::tools::PermissionMatrix::default();
+                m.set(
+                    "dev",
+                    crate::aiw::tools::TOOL_FILES,
+                    crate::aiw::tools::Permission::Full,
+                );
+                m
+            }),
             turn,
             ..Default::default()
         }
@@ -658,5 +837,155 @@ Offline sync."
             r.get(OpenAICompatibleProvider::ID).unwrap().name(),
             "NVIDIA"
         );
+    }
+}
+
+#[cfg(test)]
+mod wire_tests {
+    use super::*;
+    use crate::aiw::tools::{definitions_for, Permission, PermissionMatrix};
+
+    fn full(agent: &str) -> PermissionMatrix {
+        let mut m = PermissionMatrix::default();
+        for t in crate::aiw::tools::registry() {
+            m.set(agent, &t.id, Permission::Full);
+        }
+        m
+    }
+
+    #[test]
+    fn anthropic_and_openai_carry_the_same_schema_under_different_keys() {
+        let defs = definitions_for("dev", &full("dev"));
+        assert!(!defs.is_empty());
+
+        let a = to_anthropic_tools(&defs);
+        let o = to_openai_tools(&defs);
+        let (a, o) = (a.as_array().unwrap(), o.as_array().unwrap());
+        assert_eq!(a.len(), defs.len());
+        assert_eq!(o.len(), defs.len());
+
+        for (i, d) in defs.iter().enumerate() {
+            assert_eq!(a[i]["name"], d.name);
+            assert_eq!(a[i]["input_schema"], d.input_schema);
+
+            assert_eq!(o[i]["type"], "function");
+            assert_eq!(o[i]["function"]["name"], d.name);
+            // Same schema, different key — the reason this lives in one place.
+            assert_eq!(o[i]["function"]["parameters"], d.input_schema);
+        }
+    }
+
+    #[test]
+    fn an_anthropic_response_yields_its_text_and_its_tool_calls() {
+        let body = serde_json::json!({
+            "content": [
+                { "type": "text", "text": "I'll read the sync types first." },
+                { "type": "tool_use", "id": "toolu_01",
+                  "name": "files_read",
+                  "input": { "path": "packages/sync/types.ts" } }
+            ]
+        });
+        let (text, calls) = from_anthropic_response(&body);
+        assert!(text.contains("sync types"));
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].id, "toolu_01");
+        assert_eq!(calls[0].name, "files_read");
+        assert_eq!(calls[0].input["path"], "packages/sync/types.ts");
+    }
+
+    /// OpenAI sends `arguments` as a JSON *string*. Treating it as an object
+    /// silently yields empty arguments and a tool call that does nothing.
+    #[test]
+    fn openai_arguments_are_a_json_string_and_are_parsed_as_one() {
+        let body = serde_json::json!({
+            "choices": [{
+                "message": {
+                    "content": "Reading the file.",
+                    "tool_calls": [{
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "files_read",
+                            "arguments": "{\"path\":\"packages/sync/types.ts\"}"
+                        }
+                    }]
+                }
+            }]
+        });
+        let (text, calls) = from_openai_response(&body);
+        assert_eq!(text, "Reading the file.");
+        assert_eq!(calls.len(), 1);
+        assert_eq!(
+            calls[0].input["path"], "packages/sync/types.ts",
+            "arguments were not parsed out of the JSON string"
+        );
+    }
+
+    #[test]
+    fn a_response_with_no_tool_calls_is_not_an_error() {
+        for body in [
+            serde_json::json!({ "content": [{ "type": "text", "text": "Nothing to do." }] }),
+            serde_json::json!({ "choices": [{ "message": { "content": "Nothing to do." } }] }),
+        ] {
+            let (_, a) = from_anthropic_response(&body);
+            let (_, o) = from_openai_response(&body);
+            assert!(a.is_empty() && o.is_empty());
+        }
+        // And a malformed body yields nothing rather than panicking.
+        let junk = serde_json::json!({ "unexpected": true });
+        assert!(from_anthropic_response(&junk).1.is_empty());
+        assert!(from_openai_response(&junk).1.is_empty());
+    }
+
+    #[test]
+    fn a_valid_call_becomes_an_action_and_a_bad_one_becomes_feedback() {
+        let calls = vec![
+            RawToolCall {
+                id: "ok".into(),
+                name: "files_read".into(),
+                input: serde_json::json!({ "path": "a.ts" }),
+            },
+            RawToolCall {
+                id: "bad-args".into(),
+                name: "files_read".into(),
+                input: serde_json::json!({}),
+            },
+            RawToolCall {
+                id: "bad-name".into(),
+                name: "files_delete".into(),
+                input: serde_json::json!({}),
+            },
+        ];
+        let out = to_actions(&calls);
+        assert!(matches!(out[0], Ok(AgentAction::Tool(_))));
+
+        // Failures carry the provider's call id, so the error can be returned
+        // as that call's result and the model can correct itself.
+        let (id, msg) = out[1].as_ref().unwrap_err();
+        assert_eq!(id, "bad-args");
+        assert!(
+            msg.contains("missing required argument 'path'"),
+            "got: {msg}"
+        );
+
+        let (id, msg) = out[2].as_ref().unwrap_err();
+        assert_eq!(id, "bad-name");
+        assert!(msg.contains("unknown tool"), "got: {msg}");
+    }
+
+    #[test]
+    fn a_read_only_agent_is_advertised_no_writes_on_either_wire() {
+        let mut m = PermissionMatrix::default();
+        for t in crate::aiw::tools::registry() {
+            m.set("qa", &t.id, Permission::Read);
+        }
+        let defs = definitions_for("qa", &m);
+        let json = to_anthropic_tools(&defs).to_string();
+        assert!(
+            !json.contains("files_write"),
+            "a write reached the wire: {json}"
+        );
+        assert!(!json.contains("terminal_run"));
+        assert!(json.contains("files_read"));
     }
 }

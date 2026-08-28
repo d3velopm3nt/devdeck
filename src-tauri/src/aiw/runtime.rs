@@ -296,12 +296,9 @@ impl AgentRuntime {
                 system: agent.system.clone(),
                 context: context.to_prompt(),
                 goal: intent.clone(),
-                available_tools: agent
-                    .permissions
-                    .iter()
-                    .filter(|(_, v)| v.as_str() != "none")
-                    .map(|(k, _)| k.clone())
-                    .collect(),
+                // Filtered by this agent's permissions, so what a provider is
+                // offered is exactly what it is allowed to call.
+                tools: super::tools::definitions_for(&agent.id, &ws.permission_matrix()),
                 observations: observations.clone(),
                 turn,
             };

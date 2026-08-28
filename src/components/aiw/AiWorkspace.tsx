@@ -27,6 +27,11 @@ import {
   type Session,
 } from '../../lib/aiw'
 
+// The window the budget bar is drawn against. An estimate shown as an
+// estimate — it is what makes "2,840 tokens" mean something rather than being
+// a number floating on its own.
+const CONTEXT_WINDOW = 12_000
+
 // ---------------------------------------------------------------------------
 // Small shared pieces
 // ---------------------------------------------------------------------------
@@ -808,7 +813,6 @@ function SessionCard({ s, compact = false }: { s: Session; compact?: boolean }) 
 function ContextBudget({ ctx, onOpen }: { ctx: AssembledContext; onOpen: () => void }) {
   const included = ctx.sections.filter((s) => s.inclusion !== 'excluded')
   const colors = ['bg-indigo-400', 'bg-sky-400', 'bg-violet-400', 'bg-emerald-400', 'bg-slate-400']
-  const window_ = 12000
   return (
     <div className="rounded-md border border-line bg-raise p-3">
       <div className="mb-2 flex items-center gap-2">
@@ -824,7 +828,7 @@ function ContextBudget({ ctx, onOpen }: { ctx: AssembledContext; onOpen: () => v
           <div
             key={s.key}
             className={colors[i % colors.length]}
-            style={{ width: `${Math.max(1, (s.tokens / window_) * 100)}%` }}
+            style={{ width: `${Math.max(1, (s.tokens / CONTEXT_WINDOW) * 100)}%` }}
             title={`${s.title}: ${s.tokens} tokens`}
           />
         ))}
@@ -977,7 +981,49 @@ function ContextInspector() {
                 <Icon name="check" size={10} /> fresh
               </Chip>
             </div>
-            <div className="text-[11px] text-muted">
+            {/* The budget bar. Seeing the included sections against the whole
+                window is the point of the screen: a context that is mostly
+                empty space is a different problem from one that is nearly
+                full, and a table of numbers hides which. */}
+            {(() => {
+              const included = ctx.sections.filter((s) => s.inclusion !== 'excluded')
+              const colors = [
+                'bg-indigo-400',
+                'bg-sky-400',
+                'bg-violet-400',
+                'bg-emerald-400',
+                'bg-amber-400',
+                'bg-slate-400',
+              ]
+              return (
+                <>
+                  <div className="mb-2 flex h-[7px] gap-0.5 overflow-hidden rounded-sm">
+                    {included.map((sec, i) => (
+                      <div
+                        key={sec.key}
+                        className={colors[i % colors.length]}
+                        style={{ width: `${Math.max(0.6, (sec.tokens / CONTEXT_WINDOW) * 100)}%` }}
+                        title={`${sec.title}: ${sec.tokens.toLocaleString()} tokens`}
+                      />
+                    ))}
+                    <div className="flex-1 bg-line" />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[10.5px] text-muted">
+                    {included.map((sec, i) => (
+                      <span key={sec.key} className="inline-flex items-center gap-1.5">
+                        <span className={`h-[7px] w-[7px] rounded-sm ${colors[i % colors.length]}`} />
+                        {sec.title} {sec.tokens.toLocaleString()}
+                      </span>
+                    ))}
+                    <span className="ml-auto text-faint">
+                      of a {CONTEXT_WINDOW.toLocaleString()}-token window
+                    </span>
+                  </div>
+                </>
+              )
+            })()}
+
+            <div className="mt-2.5 border-t border-line pt-2.5 text-[11px] text-muted">
               {ctx.excluded_tokens.toLocaleString()} tokens deliberately withheld — the exclusions
               below are the point, not an omission.
             </div>

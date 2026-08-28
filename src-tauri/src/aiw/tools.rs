@@ -56,10 +56,28 @@ impl Permission {
 
 /// Whether a given call is a read or a write, so `Read` permission can allow
 /// the former and refuse the latter.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
 pub enum Access {
     Read,
     Write,
+}
+
+/// One callable action on a tool, with the schema a model needs to call it.
+///
+/// The schema is not decoration: a real provider must be handed a parameter
+/// schema per callable or it cannot emit a valid call at all. Declaring it here
+/// means both wire formats and the permission filter read from one place.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ToolAction {
+    pub name: String,
+    pub description: String,
+    /// Whether this action reads or writes. Previously a separate hand-written
+    /// match; an action added there and forgotten here silently defaulted to
+    /// "write", so the two are now the same source of truth.
+    pub access: Access,
+    /// JSON Schema (object) for the arguments.
+    pub params: serde_json::Value,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -67,6 +85,19 @@ pub struct ToolInfo {
     pub id: String,
     pub name: String,
     pub description: String,
+    pub actions: Vec<ToolAction>,
+}
+
+/// One function as a model sees it: a flat name, a description, and a schema.
+///
+/// Models take a flat list of callables, so `files` + `read` becomes
+/// `files_read`. The tool/action split is DevDeck's; the flattening is the
+/// wire's, and `parse_tool_call` reverses it.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct ToolDefinition {
+    pub name: String,
+    pub description: String,
+    pub input_schema: serde_json::Value,
 }
 
 /// A tool call.
@@ -181,50 +212,259 @@ pub const TOOL_PROCESS: &str = "process";
 pub const TOOL_TESTS: &str = "tests";
 pub const TOOL_KNOWLEDGE: &str = "knowledge";
 
+/// Shorthand for a JSON Schema object.
+fn schema(props: serde_json::Value, required: &[&str]) -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": props,
+        "required": required,
+        "additionalProperties": false,
+    })
+}
+
+fn act(name: &str, description: &str, access: Access, params: serde_json::Value) -> ToolAction {
+    ToolAction {
+        name: name.to_string(),
+        description: description.to_string(),
+        access,
+        params,
+    }
+}
+
 pub fn registry() -> Vec<ToolInfo> {
+    let path = serde_json::json!({
+        "path": { "type": "string", "description": "Project-relative path. Absolute paths and .. are refused." }
+    });
+
     vec![
         ToolInfo {
             id: TOOL_FILES.into(),
             name: "Files".into(),
             description: "Read and write files inside the project".into(),
+            actions: vec![
+                act(
+                    "read",
+                    "Read a file's contents.",
+                    Access::Read,
+                    schema(path.clone(), &["path"]),
+                ),
+                act(
+                    "list",
+                    "List a directory.",
+                    Access::Read,
+                    schema(path.clone(), &["path"]),
+                ),
+                act(
+                    "write",
+                    "Write a file, creating parent directories as needed.",
+                    Access::Write,
+                    schema(
+                        serde_json::json!({
+                            "path": { "type": "string", "description": "Project-relative path." },
+                            "content": { "type": "string", "description": "Full new contents of the file." }
+                        }),
+                        &["path", "content"],
+                    ),
+                ),
+            ],
         },
         ToolInfo {
             id: TOOL_GIT.into(),
             name: "Git".into(),
             description: "Status, log, diff and DevDeck-attributed commits".into(),
+            actions: vec![
+                act(
+                    "status",
+                    "Paths with uncommitted changes.",
+                    Access::Read,
+                    schema(serde_json::json!({}), &[]),
+                ),
+                act(
+                    "log",
+                    "Recent commits, newest first.",
+                    Access::Read,
+                    schema(
+                        serde_json::json!({ "limit": { "type": "integer", "minimum": 1, "maximum": 100 } }),
+                        &[],
+                    ),
+                ),
+                act(
+                    "diff",
+                    "Paths that differ between two commits.",
+                    Access::Read,
+                    schema(
+                        serde_json::json!({
+                            "from": { "type": "string", "description": "Base commit." },
+                            "to": { "type": "string", "description": "Defaults to HEAD." }
+                        }),
+                        &["from"],
+                    ),
+                ),
+                act(
+                    "commit",
+                    "Stage paths and commit, attributed to the calling agent.",
+                    Access::Write,
+                    schema(
+                        serde_json::json!({
+                            "message": { "type": "string" },
+                            "paths": { "type": "array", "items": { "type": "string" } }
+                        }),
+                        &["message"],
+                    ),
+                ),
+            ],
         },
         ToolInfo {
             id: TOOL_TERMINAL.into(),
             name: "Terminal".into(),
             description: "Run a command in the project directory".into(),
+            actions: vec![act(
+                "run",
+                "Run a shell command in the project root and return its output.",
+                Access::Write,
+                schema(
+                    serde_json::json!({ "command": { "type": "string", "description": "The command line to run." } }),
+                    &["command"],
+                ),
+            )],
         },
         ToolInfo {
             id: TOOL_PROCESS.into(),
             name: "Process".into(),
             description: "Start, stop and inspect the project's application".into(),
+            actions: vec![
+                act(
+                    "start",
+                    "Start the app, defaulting to the dev command in .devdeck/config/app.yaml.",
+                    Access::Write,
+                    schema(serde_json::json!({ "command": { "type": "string" } }), &[]),
+                ),
+                act(
+                    "status",
+                    "Whether the app is running.",
+                    Access::Read,
+                    schema(serde_json::json!({}), &[]),
+                ),
+                act(
+                    "logs",
+                    "Output captured from the app.",
+                    Access::Read,
+                    schema(serde_json::json!({}), &[]),
+                ),
+                act(
+                    "stop",
+                    "Stop the app.",
+                    Access::Write,
+                    schema(serde_json::json!({}), &[]),
+                ),
+            ],
         },
         ToolInfo {
             id: TOOL_TESTS.into(),
             name: "Tests".into(),
             description: "Run the project's configured test command".into(),
+            actions: vec![act(
+                "run",
+                "Run the test command from .devdeck/config/app.yaml.",
+                Access::Write,
+                schema(serde_json::json!({ "command": { "type": "string" } }), &[]),
+            )],
         },
         ToolInfo {
             id: TOOL_KNOWLEDGE.into(),
             name: "Knowledge".into(),
             description: "Search .devdeck knowledge and decisions".into(),
+            actions: vec![act(
+                "search",
+                "Find .devdeck documents containing a phrase.",
+                Access::Read,
+                schema(serde_json::json!({ "query": { "type": "string" } }), &[]),
+            )],
         },
     ]
 }
 
+/// The wire name for a tool action: `files` + `read` -> `files_read`.
+pub fn wire_name(tool: &str, action: &str) -> String {
+    format!("{tool}_{action}")
+}
+
+/// The callables one agent may actually use.
+///
+/// Actions the agent's permission would refuse are **left out entirely** rather
+/// than offered and then refused. Handing a read-only agent a `files_write` it
+/// can never call wastes a turn and teaches it to expect failures.
+pub fn definitions_for(agent: &str, permissions: &PermissionMatrix) -> Vec<ToolDefinition> {
+    let mut out = Vec::new();
+    for tool in registry() {
+        let permission = permissions.get(agent, &tool.id);
+        for action in tool.actions {
+            let allowed = match (permission, action.access) {
+                (Permission::Full, _) => true,
+                (Permission::Read, Access::Read) => true,
+                // Approval is not a silent yes, so it is not advertised either.
+                _ => false,
+            };
+            if !allowed {
+                continue;
+            }
+            out.push(ToolDefinition {
+                name: wire_name(&tool.id, &action.name),
+                description: format!("{} — {}", tool.name, action.description),
+                input_schema: action.params,
+            });
+        }
+    }
+    out
+}
+
+/// Turn a model's function call back into a `ToolCall`.
+///
+/// Validates against the declared schema before anything runs: a model will get
+/// this wrong sometimes, and a precise error it can act on beats a confusing
+/// failure from deep inside a tool.
+#[allow(dead_code)] // called by the wire translation and its tests
+pub fn parse_tool_call(name: &str, input: &serde_json::Value) -> Result<ToolCall, String> {
+    let reg = registry();
+    let Some((tool, action)) = reg.iter().find_map(|t| {
+        name.strip_prefix(&format!("{}_", t.id))
+            .and_then(|rest| t.actions.iter().find(|a| a.name == rest).map(|a| (t, a)))
+    }) else {
+        let known: Vec<String> = reg
+            .iter()
+            .flat_map(|t| t.actions.iter().map(move |a| wire_name(&t.id, &a.name)))
+            .collect();
+        return Err(format!(
+            "unknown tool '{name}'. Available: {}",
+            known.join(", ")
+        ));
+    };
+
+    if !input.is_object() {
+        return Err(format!("'{name}' expects an object of arguments"));
+    }
+    if let Some(required) = action.params.get("required").and_then(|r| r.as_array()) {
+        for key in required.iter().filter_map(|k| k.as_str()) {
+            if input.get(key).is_none() {
+                return Err(format!("'{name}' is missing required argument '{key}'"));
+            }
+        }
+    }
+
+    Ok(ToolCall::new(&tool.id, &action.name, input.clone()))
+}
+
 /// Which permission level a call needs.
 fn required_access(call: &ToolCall) -> Access {
-    match (call.tool.as_str(), call.action.as_str()) {
-        (TOOL_FILES, "read") | (TOOL_FILES, "list") => Access::Read,
-        (TOOL_GIT, "status") | (TOOL_GIT, "log") | (TOOL_GIT, "diff") => Access::Read,
-        (TOOL_PROCESS, "status") | (TOOL_PROCESS, "logs") => Access::Read,
-        (TOOL_KNOWLEDGE, _) => Access::Read,
-        _ => Access::Write,
-    }
+    registry()
+        .iter()
+        .find(|t| t.id == call.tool)
+        .and_then(|t| t.actions.iter().find(|a| a.name == call.action))
+        .map(|a| a.access)
+        // An action nobody declared is treated as a write. Unknown means
+        // unknown, and the safe reading of unknown is "this might change
+        // something".
+        .unwrap_or(Access::Write)
 }
 
 /// A running application started through the process tool.
@@ -904,5 +1144,162 @@ mod tests {
             None,
         );
         assert!(!bad.ok, "a non-zero exit must be a failure, not a success");
+    }
+}
+
+#[cfg(test)]
+mod schema_tests {
+    use super::*;
+
+    fn matrix(agent: &str, perm: Permission) -> PermissionMatrix {
+        let mut m = PermissionMatrix::default();
+        for t in registry() {
+            m.set(agent, &t.id, perm);
+        }
+        m
+    }
+
+    #[test]
+    fn every_action_declares_a_usable_schema() {
+        for tool in registry() {
+            assert!(!tool.actions.is_empty(), "{} has no actions", tool.id);
+            for a in &tool.actions {
+                assert!(
+                    !a.description.is_empty(),
+                    "{}.{} has no description",
+                    tool.id,
+                    a.name
+                );
+                assert_eq!(
+                    a.params.get("type").and_then(|t| t.as_str()),
+                    Some("object"),
+                    "{}.{} schema must be an object",
+                    tool.id,
+                    a.name
+                );
+                assert!(
+                    a.params.get("properties").is_some(),
+                    "{}.{} schema has no properties",
+                    tool.id,
+                    a.name
+                );
+                // Every required key must actually exist in properties, or the
+                // model is being asked for something undocumented.
+                let props = a.params["properties"].as_object().unwrap();
+                for k in a.params["required"].as_array().unwrap() {
+                    let k = k.as_str().unwrap();
+                    assert!(
+                        props.contains_key(k),
+                        "{}.{} requires undeclared '{k}'",
+                        tool.id,
+                        a.name
+                    );
+                }
+            }
+        }
+    }
+
+    /// The bug this replaces: `required_access` was a separate match, so an
+    /// action added to the registry and forgotten there was silently a write.
+    #[test]
+    fn access_comes_from_the_registry_not_a_parallel_list() {
+        assert_eq!(
+            required_access(&ToolCall::new(TOOL_FILES, "read", serde_json::json!({}))),
+            Access::Read
+        );
+        assert_eq!(
+            required_access(&ToolCall::new(TOOL_FILES, "write", serde_json::json!({}))),
+            Access::Write
+        );
+        assert_eq!(
+            required_access(&ToolCall::new(TOOL_GIT, "log", serde_json::json!({}))),
+            Access::Read
+        );
+        // An action nobody declared is treated as a write: unknown means it
+        // might change something.
+        assert_eq!(
+            required_access(&ToolCall::new(
+                TOOL_FILES,
+                "invented",
+                serde_json::json!({})
+            )),
+            Access::Write
+        );
+    }
+
+    #[test]
+    fn a_read_only_agent_is_never_offered_a_write() {
+        let defs = definitions_for("qa", &matrix("qa", Permission::Read));
+        assert!(!defs.is_empty(), "read-only still gets the reads");
+        for d in &defs {
+            assert!(
+                !d.name.ends_with("_write") && !d.name.ends_with("_commit"),
+                "read-only agent was offered '{}'",
+                d.name
+            );
+        }
+        assert!(defs.iter().any(|d| d.name == "files_read"));
+    }
+
+    #[test]
+    fn approval_and_none_advertise_nothing() {
+        for p in [Permission::Approval, Permission::None] {
+            let defs = definitions_for("x", &matrix("x", p));
+            assert!(
+                defs.is_empty(),
+                "{p:?} should advertise no callables, got {}",
+                defs.len()
+            );
+        }
+    }
+
+    #[test]
+    fn an_unknown_agent_is_offered_nothing() {
+        let defs = definitions_for("typo", &matrix("claude", Permission::Full));
+        assert!(defs.is_empty(), "permissions must fail closed here too");
+    }
+
+    #[test]
+    fn a_wire_name_round_trips_back_to_its_tool_and_action() {
+        let defs = definitions_for("dev", &matrix("dev", Permission::Full));
+        assert!(
+            defs.len() >= 12,
+            "expected the full surface, got {}",
+            defs.len()
+        );
+
+        for d in &defs {
+            // Build a minimal valid argument object from the schema.
+            let mut args = serde_json::Map::new();
+            for k in d.input_schema["required"].as_array().unwrap() {
+                args.insert(k.as_str().unwrap().to_string(), serde_json::json!("x"));
+            }
+            let call = parse_tool_call(&d.name, &serde_json::Value::Object(args))
+                .unwrap_or_else(|e| panic!("'{}' did not parse: {e}", d.name));
+            assert_eq!(wire_name(&call.tool, &call.action), d.name);
+        }
+    }
+
+    #[test]
+    fn a_missing_required_argument_is_refused_with_a_usable_message() {
+        let e = parse_tool_call("files_read", &serde_json::json!({})).unwrap_err();
+        assert!(e.contains("missing required argument 'path'"), "got: {e}");
+    }
+
+    #[test]
+    fn an_invented_tool_is_refused_and_the_error_lists_the_real_ones() {
+        let e = parse_tool_call("filesystem_delete", &serde_json::json!({})).unwrap_err();
+        assert!(e.contains("unknown tool"), "got: {e}");
+        // The message is fed back to the model, so it has to be actionable.
+        assert!(
+            e.contains("files_read"),
+            "the error should name what does exist: {e}"
+        );
+    }
+
+    #[test]
+    fn a_non_object_argument_payload_is_refused() {
+        let e = parse_tool_call("files_read", &serde_json::json!("just a string")).unwrap_err();
+        assert!(e.contains("expects an object"), "got: {e}");
     }
 }

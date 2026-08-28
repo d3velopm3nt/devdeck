@@ -10,6 +10,7 @@ import { aiw } from '../../lib/aiw'
 const SECTIONS: Array<{ page: AiwPage; icon: IconName; label: string }> = [
   { page: 'overview', icon: 'layout', label: 'Overview' },
   { page: 'features', icon: 'list', label: 'Features' },
+  { page: 'context', icon: 'context', label: 'Context' },
   { page: 'agents', icon: 'agent', label: 'Agents' },
   { page: 'activity', icon: 'history', label: 'Activity' },
   { page: 'conflicts', icon: 'conflict', label: 'Conflicts' },

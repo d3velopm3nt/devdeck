@@ -910,12 +910,23 @@ function ContextInspector() {
     }
   }
 
+  // Reached from the sidebar there is no feature yet, and the inspector is
+  // meaningless without one. Rather than dead-ending, open on the first
+  // feature — the picker in the header is how you move between them.
+  useEffect(() => {
+    if (!a.featureId && a.features.length > 0) void a.selectFeature(a.features[0].id)
+  }, [a.featureId, a.features])
+
   if (!a.context) {
     return (
       <Empty
         icon="context"
-        title="No context assembled"
-        body="Pick a feature — the inspector shows exactly what an agent receives when it starts work on it."
+        title={a.features.length === 0 ? 'No features yet' : 'Assembling context…'}
+        body={
+          a.features.length === 0
+            ? 'The inspector shows exactly what an agent receives for a feature. Create one, or run the mock demo.'
+            : 'Reading .devdeck and working out what this feature’s agents should be given.'
+        }
       />
     )
   }
@@ -928,6 +939,18 @@ function ContextInspector() {
         subtitle="Exactly what an agent receives when it starts work on this feature."
         right={
           <>
+            <select
+              className="input text-[11.5px]"
+              value={a.featureId ?? ''}
+              onChange={(e) => void a.selectFeature(e.target.value)}
+              title="Which feature's context to inspect"
+            >
+              {a.features.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
             <button className="btn-ghost text-[11.5px]" onClick={() => void compare()}>
               <Icon name="commit" size={11} /> Compare context
             </button>

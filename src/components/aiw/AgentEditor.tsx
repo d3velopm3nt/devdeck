@@ -259,6 +259,11 @@ const Label = ({ children }: { children: React.ReactNode }) => (
 const Hint = ({ children }: { children: React.ReactNode }) => (
   <div className="mt-0.5 text-[10.5px] leading-[1.5] text-faint">{children}</div>
 )
+/// Label, control, then the hint.
+///
+/// The hint used to sit between the label and the input, so a field with one
+/// pushed its control lower than a field without — three inputs in a row, none
+/// of them level. Below the control they explain without moving anything.
 const Field = ({
   label,
   hint,
@@ -268,9 +273,9 @@ const Field = ({
   hint?: string
   children: React.ReactNode
 }) => (
-  <div>
+  <div className="flex flex-col">
     <Label>{label}</Label>
-    {hint && <Hint>{hint}</Hint>}
     <div className="mt-1">{children}</div>
+    {hint && <Hint>{hint}</Hint>}
   </div>
 )

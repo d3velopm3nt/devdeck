@@ -36,6 +36,7 @@ import {
   Globe,
   MoreHorizontal,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   GitBranch,
   Sparkles,
@@ -107,6 +108,7 @@ export type IconName =
   | 'globe'
   | 'more'
   | 'chevron-down'
+  | 'chevron-left'
   | 'chevron-right'
   | 'github'
   | 'example'
@@ -181,6 +183,7 @@ const REGISTRY: Record<IconName, LucideIcon> = {
   globe: Globe,
   more: MoreHorizontal,
   'chevron-down': ChevronDown,
+  'chevron-left': ChevronLeft,
   'chevron-right': ChevronRight,
   github: GitBranch,
   example: Sparkles,

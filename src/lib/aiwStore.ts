@@ -45,7 +45,7 @@ export type AiwPage =
   | 'chat'
   | 'overview' | 'features' | 'feature' | 'context' | 'agents'
   | 'conflicts' | 'activity' | 'decisions' | 'git'
-  | 'knowledge' | 'tests' | 'settings'
+  | 'knowledge' | 'tests' | 'skills' | 'settings'
 
 interface AiwState {
   ready: boolean

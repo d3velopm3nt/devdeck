@@ -37,6 +37,10 @@ pub struct AgentDef {
     pub system: String,
     /// tool id → permission
     pub permissions: HashMap<String, String>,
+    /// Skills folded into `system` at load. Kept alongside so the UI can say
+    /// which agents a skill reaches without re-reading every file.
+    #[serde(default)]
+    pub skills: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -891,6 +895,7 @@ impl Workspace {
                     model: d.meta.model,
                     system,
                     permissions: d.meta.permissions,
+                    skills: d.meta.skills,
                 }
             })
             .collect();
@@ -1037,6 +1042,7 @@ pub fn default_agents() -> Vec<AgentDef> {
             model: "mock-1".into(),
             system: "You are the developer's assistant. You coordinate the team,                      answer questions about the work, and keep track of what matters."
                 .into(),
+            skills: Vec::new(),
             permissions: perms(&[
                 ("delegate", "full"),
                 ("memory", "full"),
@@ -1056,6 +1062,7 @@ pub fn default_agents() -> Vec<AgentDef> {
             model: "mock-1".into(),
             system: "You set direction and record decisions. You do not write application code."
                 .into(),
+            skills: Vec::new(),
             permissions: perms(&[
                 ("files", "read"),
                 ("git", "read"),
@@ -1072,6 +1079,7 @@ pub fn default_agents() -> Vec<AgentDef> {
             provider: "mock".into(),
             model: "mock-1".into(),
             system: "You implement work items and keep the shared interfaces coherent.".into(),
+            skills: Vec::new(),
             permissions: perms(&[
                 ("files", "full"),
                 ("git", "full"),
@@ -1094,6 +1102,7 @@ pub fn default_agents() -> Vec<AgentDef> {
             provider: "mock".into(),
             model: "mock-1".into(),
             system: "You implement UI work items.".into(),
+            skills: Vec::new(),
             permissions: perms(&[
                 ("files", "full"),
                 ("git", "full"),
@@ -1117,6 +1126,7 @@ pub fn default_agents() -> Vec<AgentDef> {
             model: "mock-1".into(),
             system: "You verify behaviour. You run the app and the tests; you do not fix code."
                 .into(),
+            skills: Vec::new(),
             permissions: perms(&[
                 // Deliberately read-only on files: QA reporting a defect is
                 // useful, QA silently editing the code under test is not.
@@ -1140,6 +1150,7 @@ pub fn default_agents() -> Vec<AgentDef> {
             provider: "mock".into(),
             model: "mock-1".into(),
             system: "You check the implementation against the requirements and decisions.".into(),
+            skills: Vec::new(),
             permissions: perms(&[
                 ("files", "read"),
                 ("git", "read"),

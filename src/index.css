@@ -118,14 +118,19 @@ html[data-window='toast'] #root {
 .input {
   @apply rounded border border-line2 bg-page px-2 py-1 text-ink outline-none placeholder:text-faint focus:border-indigo-500;
 }
+/* Buttons are flex rows. An icon inside an inline button wraps onto its own
+   line above the label the moment the button is narrow — which is how a Back
+   button ended up reading as a chevron stacked on the word "Agents". Owning
+   the layout here means every caller gets it right, and callers that add
+   `inline-flex items-center gap-1` themselves are simply redundant now. */
 .btn-primary {
-  @apply rounded bg-indigo-600 px-2.5 py-1 text-white hover:bg-indigo-500 disabled:opacity-50;
+  @apply inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded bg-indigo-600 px-2.5 py-1 text-white hover:bg-indigo-500 disabled:opacity-50;
 }
 .btn-ghost {
-  @apply rounded border border-line2 bg-soft px-2.5 py-1 text-body hover:border-line3 hover:text-ink disabled:opacity-50;
+  @apply inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded border border-line2 bg-soft px-2.5 py-1 text-body hover:border-line3 hover:text-ink disabled:opacity-50;
 }
 .btn-danger {
-  @apply rounded bg-red-600/80 px-2.5 py-1 text-white hover:bg-red-500 disabled:opacity-50;
+  @apply inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded bg-red-600/80 px-2.5 py-1 text-white hover:bg-red-500 disabled:opacity-50;
 }
 /* A menu row is a flex line, not a block: an icon inside a block-level button
    wraps onto its own line above the label, and every caller then has to

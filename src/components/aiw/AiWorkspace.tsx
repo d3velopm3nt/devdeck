@@ -10,6 +10,7 @@ import { Icon, type IconName } from '../../lib/icons'
 import { useAiw, type AiwPage } from '../../lib/aiwStore'
 import { Settings } from './Settings'
 import { AgentEditor } from './AgentEditor'
+import { Skills } from './Skills'
 import { ApprovalBar } from './ApprovalBar'
 import { Chat } from './Chat'
 import { CAPTURE_FEATURE, CAPTURE_PAGE } from '../../lib/devCapture'
@@ -1810,6 +1811,8 @@ function Page() {
       )
     case 'git':
       return <Git />
+    case 'skills':
+      return <Skills />
     case 'settings':
       return <Settings />
     case 'knowledge':

@@ -159,7 +159,14 @@ export function AgentEditor({ id, onClose }: { id: string; onClose: () => void }
             </Hint>
             {skills.length === 0 ? (
               <div className="mt-1.5 rounded border border-line bg-raise px-3 py-2.5 text-[11.5px] text-muted">
-                No skills yet. Add one under Agents &rarr; Skills and it becomes available here.
+                No skills yet.{' '}
+                <button
+                  className="text-indigo-300 underline-offset-2 hover:underline"
+                  onClick={() => a.setPage('skills')}
+                >
+                  Add one
+                </button>{' '}
+                and it becomes available to every agent.
               </div>
             ) : (
               <div className="mt-1.5 flex flex-wrap gap-1.5">

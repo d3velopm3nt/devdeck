@@ -215,6 +215,21 @@ export function AiwSidebar() {
           <div className="flex flex-col gap-px px-1.5">
             <button
               className={`flex items-center gap-2 rounded px-2 py-[5px] text-left text-[12px] ${
+                a.page === 'skills'
+                  ? 'bg-raise font-semibold text-ink'
+                  : 'text-dim hover:bg-hover hover:text-ink'
+              }`}
+              onClick={() => a.setPage('skills')}
+            >
+              <Icon
+                name="puzzle"
+                size={13}
+                className={a.page === 'skills' ? 'text-indigo-400' : ''}
+              />
+              Skills
+            </button>
+            <button
+              className={`flex items-center gap-2 rounded px-2 py-[5px] text-left text-[12px] ${
                 a.page === 'settings'
                   ? 'bg-raise font-semibold text-ink'
                   : 'text-dim hover:bg-hover hover:text-ink'

@@ -145,6 +145,8 @@ export interface AgentDef {
   model: string
   system: string
   permissions: Record<string, string>
+  /** Skills folded into the system prompt at load. */
+  skills: string[]
 }
 
 export type SessionStatus =

@@ -126,6 +126,39 @@ export function openNodeSetup(nodeId: number, title: string) {
   addToMain({ id, component: 'node-setup', title: `${title} · settings`, params: { id: nodeId } })
 }
 
+/// One of a project's AI views, as a document.
+///
+/// Keyed by project as well as kind, so `tyrex`'s Git and `assetx`'s Assistant
+/// are two tabs rather than one that keeps changing what it points at — which
+/// is the thing the old section row could not do.
+export type AiwDoc = 'assistant' | 'context' | 'git' | 'features'
+
+const AIW_TITLES: Record<AiwDoc, string> = {
+  assistant: 'Assistant',
+  context: 'Context',
+  git: 'Git',
+  features: 'Features',
+}
+
+export function openAiwDoc(kind: AiwDoc, projectId: string, projectName: string) {
+  const api = dockApi()
+  if (!api) return
+  const id = `aiw-${kind}-${projectId}`
+  const existing = api.getPanel(id)
+  if (existing) {
+    existing.api.setActive()
+    return
+  }
+  api.addPanel({
+    id,
+    component: `aiw-${kind}`,
+    // The project is in the title because a tab row spanning projects is
+    // unreadable without it.
+    title: `${AIW_TITLES[kind]} · ${projectName}`,
+    params: { projectId },
+  })
+}
+
 export function openTerminalPanel(ptyId: number, title: string) {
   if (!api) return
   const id = `terminal-${ptyId}`

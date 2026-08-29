@@ -9,14 +9,14 @@ import * as ipc from '../lib/ipc'
 import type { CommandDef, NodeKind, ProfileDef, ServiceDef, SvcState, TreeNode } from '../lib/types'
 import { useApp } from '../store'
 import { useAiw } from '../lib/aiwStore'
-import { openEditor, openNodeSetup, openService, openSpace } from '../lib/dock'
+import { openEditor, openNodeSetup, openService, openSpace, openAiwDoc, type AiwDoc } from '../lib/dock'
 import { focusCommandSession, launchProfile, openTerminal, runCommandInNewTerminal } from '../lib/runner'
 import { resolveDir } from '../lib/tree'
 import { nodeColor } from '../lib/spaces'
 import { loadExampleWorkspace } from '../lib/example'
 import { PopMenu, type MenuItem } from './PopMenu'
 import { GitHubImportModal } from './GitHubImportModal'
-import { Icon } from '../lib/icons'
+import { Icon, type IconName } from '../lib/icons'
 
 // The expand/collapse state is remembered across restarts so the tree
 // reopens where you left it — a folder isn't "gone" after a restart, its
@@ -501,6 +501,44 @@ export function Explorer() {
     )
   }
 
+  /// A project's AI views, as rows.
+  ///
+  /// These replaced a tab strip above the tree. The strip had to teleport you
+  /// to another surface for half its entries and open a document for the rest;
+  /// here every row does the same thing — opens a tab on the right — and the
+  /// Explorer stays the one place you navigate a project.
+  const AIW_ROWS: Array<{ kind: AiwDoc; label: string; icon: IconName }> = [
+    { kind: 'assistant', label: 'Assistant', icon: 'ai' },
+    { kind: 'context', label: 'Context', icon: 'context' },
+    { kind: 'git', label: 'Git', icon: 'commit' },
+  ]
+
+  const renderAiwRows = (node: TreeNode, depth: number): ReactNode => {
+    const pid = String(node.id)
+    return (
+      <div key={`${node.id}-aiw`}>
+        {AIW_ROWS.map((r) => (
+          <div
+            key={r.kind}
+            className="flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 text-[12px] text-body select-none hover:bg-hover"
+            style={{ paddingLeft: `${depth * 14 + 6}px` }}
+            onClick={() => {
+              setSelectedNode(node.id)
+              setRailView('projects')
+              openAiwDoc(r.kind, pid, node.name)
+            }}
+          >
+            <span className="w-5 shrink-0" />
+            <span className="flex w-5 shrink-0 items-center justify-center text-indigo-400">
+              <Icon name={r.icon} size={12} />
+            </span>
+            <span className="min-w-0 flex-1 truncate">{r.label}</span>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   /// What is happening in this project right now, and what it is working on.
   ///
   /// Above the category folders rather than inside them: those answer "what
@@ -594,7 +632,8 @@ export function Explorer() {
             onClick={() => {
               setSelectedNode(node.id)
               void selectFeature(f.id)
-              setRailView('aiworkspace')
+              setRailView('projects')
+              openAiwDoc('features', String(node.id), node.name)
             }}
           >
             <span className="w-5 shrink-0" />
@@ -740,6 +779,7 @@ export function Explorer() {
         </div>
         {isOpen && (
           <>
+            {node.kind === 'project' && renderAiwRows(node, depth + 1)}
             {node.kind === 'project' && renderLive(node, depth + 1)}
             {children.map((c) => renderNode(c, depth + 1))}
             {node.kind === 'project' && renderFeatures(node, depth + 1)}

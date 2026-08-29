@@ -99,6 +99,13 @@ function Welcome() {
   )
 }
 
+import {
+  AssistantPanel,
+  ContextPanel,
+  GitPanel,
+  FeaturesPanel,
+} from './components/aiw/ProjectPanels'
+
 const components = {
   'node-setup': (props: IDockviewPanelProps<{ id: number }>) => <NodeSetupPage {...props} />,
   'space-detail': (props: IDockviewPanelProps<{ id: number }>) => <SpaceDetailPage {...props} />,
@@ -107,6 +114,12 @@ const components = {
   terminal: (props: IDockviewPanelProps<{ ptyId: number }>) => (
     <TerminalView ptyId={props.params.ptyId} />
   ),
+  // A project's AI views are documents like any other. Nothing swaps the
+  // surface out any more; everything opens as a tab you can split and drag.
+  'aiw-assistant': AssistantPanel,
+  'aiw-context': ContextPanel,
+  'aiw-git': GitPanel,
+  'aiw-features': FeaturesPanel,
 }
 
 // Custom tab headers. Only terminals use one (to confirm ending the

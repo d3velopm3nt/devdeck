@@ -1,6 +1,10 @@
 {
   "pages": [
     {
+      "id": "page-4",
+      "name": "Sections — A or B"
+    },
+    {
       "id": "page-3",
       "name": "AI Workspace"
     },
@@ -58,6 +62,24 @@
       "h": 900,
       "title": "AI Workspace — sidebar expanded",
       "page": "page-3"
+    },
+    {
+      "file": "WithRow.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "A — keep the section row",
+      "page": "page-4"
+    },
+    {
+      "file": "NoRow.dc.html",
+      "x": 1560,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "B — the Explorer is the navigator",
+      "page": "page-4"
     }
   ],
   "annotations": [
@@ -188,10 +210,50 @@
       "w": 430,
       "page": "page-1",
       "text": "TOP BAR now matches Home: Launch and Widget moved into the DevDeck menu, Terminal onto the project row.\n\nWhat replaced them, right to left: the signed-in GitHub user, what needs you, and who is working."
+    },
+    {
+      "id": "fix",
+      "x": 0,
+      "y": -330,
+      "w": 500,
+      "page": "page-4",
+      "text": "THE FIX BOTH SHARE.\n\nEvery section opens a DOCUMENT. Assistant, Git, Agents and Context become dock panels beside terminals — so clicking one always produces a tab, in the same place, that you can split and drag.\n\nToday Services opens a document and Agents swaps the whole surface out. Two identical-looking controls, side by side, doing categorically different things. That is the confusion; everything else follows from it.\n\nRow 3 disappears in both: dockview's tabs ARE the document tabs."
+    },
+    {
+      "id": "opt-a",
+      "x": 540,
+      "y": -330,
+      "w": 460,
+      "page": "page-4",
+      "text": "A — KEEP THE ROW\n\nSections stay as a strip under the workspace tabs. One click from anywhere, and the row can carry counts and the project's paths.\n\nAgainst it: the Explorer already lists this project's services, commands, agents and features. Two navigation surfaces for one project, and 33px of permanent chrome for the second one.\n\nThree rows before content: workspace, sections, documents."
+    },
+    {
+      "id": "opt-b",
+      "x": 1560,
+      "y": -330,
+      "w": 460,
+      "page": "page-4",
+      "text": "B — THE EXPLORER IS THE NAVIGATOR\n\nAssistant, Context and Git become rows under the project, beside the live agents and the Services and Commands folders you already have. One place to navigate a project, one place to look.\n\nTwo rows before content instead of three, and the Explorer earns its width instead of competing with a strip above it.\n\nAgainst it: a nested row is a smaller target than a tab, and switching project view means going back to the tree."
+    },
+    {
+      "id": "tabs-note",
+      "x": 540,
+      "y": 380,
+      "w": 460,
+      "page": "page-4",
+      "text": "NOTE THE TAB ROW IN BOTH.\n\nEvery document carries its project — `Assistant · assetx`, `Git · tyrex`. That is only possible because a project is one record now, and it is what lets you keep tyrex's Git open while working in assetx.\n\nToday you cannot: the AI Workspace pages share a single \"selected project\", so opening one changes them all."
+    },
+    {
+      "id": "recommend",
+      "x": 1560,
+      "y": 380,
+      "w": 460,
+      "page": "page-4",
+      "text": "I lean B.\n\nThe Explorer is already where you look for a project, you said you liked seeing agents there, and B is the only one that removes a whole row rather than moving what is in it.\n\nBut A is the one you asked for originally, and \"one click from anywhere\" is a real argument. Pick either — the work underneath is the same either way, and it is most of the work."
     }
   ],
   "launch": {
     "view": "canvas",
-    "page": "page-3"
+    "page": "page-4"
   }
 }

@@ -388,7 +388,7 @@ function EventRow({ e, showMeta = false }: { e: DomainEvent; showMeta?: boolean 
 
 const STATUSES = ['All', 'planned', 'in-progress', 'review', 'blocked', 'completed']
 
-function Features() {
+export function Features() {
   const a = useAiw()
   const [filter, setFilter] = useState('All')
   const [creating, setCreating] = useState(false)
@@ -888,7 +888,7 @@ const Divider = () => <div className="h-7 w-px bg-line" />
 // Context Inspector
 // ---------------------------------------------------------------------------
 
-function ContextInspector() {
+export function ContextInspector() {
   const a = useAiw()
   const [open, setOpen] = useState<Record<string, boolean>>({})
   const [raw, setRaw] = useState<RawContext | null>(null)
@@ -1556,7 +1556,7 @@ function GitList() {
   )
 }
 
-function Git() {
+export function Git() {
   return (
     <div className="flex h-full flex-col">
       <PageHead title="Git" subtitle="Commits are the version layer for context — each one is a checkpoint agents can be measured against." />

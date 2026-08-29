@@ -586,6 +586,13 @@ pub fn run() {
         aiw_workspace.restore_agent_providers(&aiw::commands::saved_agent_providers(&conn));
         // After the agents exist, so saved grants land on the current default
         // set rather than being applied to nothing.
+        // Agents come from disk now. Before the saved grants, so a
+        // permission you set lands on the team you actually have.
+        match aiw_workspace.load_agents() {
+            Ok(n) if n > 0 => eprintln!("[aiw] {n} agent(s) loaded"),
+            Ok(_) => eprintln!("[aiw] no agents on disk"),
+            Err(e) => eprintln!("[aiw] could not load agents: {e}"),
+        }
         aiw_workspace.restore_permissions(&aiw::commands::saved_permissions(&conn));
     }
     let aiw_for_setup = aiw_workspace.clone();
@@ -871,6 +878,13 @@ pub fn run() {
             aiw::commands::aiw_save_profile,
             aiw::commands::aiw_memories,
             aiw::commands::aiw_forget_memory,
+            aiw::commands::aiw_assistant_context,
+            aiw::commands::aiw_agent_file,
+            aiw::commands::aiw_save_agent,
+            aiw::commands::aiw_delete_agent,
+            aiw::commands::aiw_skills,
+            aiw::commands::aiw_save_skill,
+            aiw::commands::aiw_delete_skill,
             aiw::commands::aiw_pending_approvals,
             aiw::commands::aiw_resolve_approval,
             aiw::commands::aiw_reset,

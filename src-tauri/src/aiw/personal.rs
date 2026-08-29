@@ -60,6 +60,46 @@ pub struct MemoryMeta {
     pub tags: Vec<String>,
 }
 
+/// An agent, as a file.
+///
+/// The frontmatter is what the runtime needs; the body is the agent's
+/// instructions — the thing you actually want to edit, in the format you
+/// already write prompts in. That split is deliberate: a system prompt buried
+/// in a JSON string is a prompt nobody improves.
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct AgentMeta {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    /// architect | developer | qa | reviewer | orchestrator, or your own.
+    #[serde(default)]
+    pub role: String,
+    #[serde(default)]
+    pub provider: String,
+    #[serde(default)]
+    pub model: String,
+    /// tool id -> permission.
+    #[serde(default)]
+    pub permissions: std::collections::HashMap<String, String>,
+    /// Skills to append to this agent's instructions, by name.
+    #[serde(default)]
+    pub skills: Vec<String>,
+    /// Built-ins are seeded once and then yours. Marked only so the UI can say
+    /// where a row came from; nothing treats them as read-only.
+    #[serde(default)]
+    pub builtin: bool,
+}
+
+/// A reusable block of instructions, shared between agents.
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct SkillMeta {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+}
+
 /// The personal root on disk.
 #[derive(Clone, Debug)]
 pub struct PersonalStore {
@@ -108,6 +148,22 @@ impl PersonalStore {
         self.root.join("profile.md")
     }
 
+    pub fn agents_dir(&self) -> PathBuf {
+        self.root.join("agents")
+    }
+
+    pub fn skills_dir(&self) -> PathBuf {
+        self.root.join("skills")
+    }
+
+    pub fn agent_md(&self, id: &str) -> PathBuf {
+        self.agents_dir().join(format!("{id}.md"))
+    }
+
+    pub fn skill_md(&self, name: &str) -> PathBuf {
+        self.skills_dir().join(format!("{name}.md"))
+    }
+
     pub fn conversation_md(&self, id: &str) -> PathBuf {
         self.conversations_dir().join(format!("{id}.md"))
     }
@@ -128,6 +184,8 @@ impl PersonalStore {
         }
         std::fs::create_dir_all(self.conversations_dir()).map_err(|e| e.to_string())?;
         std::fs::create_dir_all(self.memory_dir()).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(self.agents_dir()).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(self.skills_dir()).map_err(|e| e.to_string())?;
         Ok(())
     }
 
@@ -191,6 +249,64 @@ impl PersonalStore {
             }
         }
         out.sort_by(|a, b| b.meta.created_at.cmp(&a.meta.created_at));
+        out
+    }
+
+    /// Every agent on disk, by name. An unreadable one is skipped rather than
+    /// failing the lot — one hand-edited file with bad YAML should not cost you
+    /// the rest of your team.
+    pub fn agents(&self) -> Vec<Doc<AgentMeta>> {
+        let mut out = self.read_dir_docs::<AgentMeta>(&self.agents_dir());
+        out.sort_by(|a, b| a.meta.name.cmp(&b.meta.name));
+        out
+    }
+
+    pub fn save_agent(&self, doc: &Doc<AgentMeta>) -> PersonalResult<PathBuf> {
+        if doc.meta.id.trim().is_empty() {
+            return Err("an agent needs an id".into());
+        }
+        let p = self.agent_md(&doc.meta.id);
+        self.write_doc_at(&p, doc)?;
+        Ok(p)
+    }
+
+    pub fn forget_agent(&self, id: &str) -> bool {
+        std::fs::remove_file(self.agent_md(id)).is_ok()
+    }
+
+    pub fn skills(&self) -> Vec<Doc<SkillMeta>> {
+        let mut out = self.read_dir_docs::<SkillMeta>(&self.skills_dir());
+        out.sort_by(|a, b| a.meta.name.cmp(&b.meta.name));
+        out
+    }
+
+    pub fn save_skill(&self, doc: &Doc<SkillMeta>) -> PersonalResult<PathBuf> {
+        if doc.meta.name.trim().is_empty() {
+            return Err("a skill needs a name".into());
+        }
+        let p = self.skill_md(&doc.meta.name);
+        self.write_doc_at(&p, doc)?;
+        Ok(p)
+    }
+
+    pub fn forget_skill(&self, name: &str) -> bool {
+        std::fs::remove_file(self.skill_md(name)).is_ok()
+    }
+
+    fn read_dir_docs<T: for<'de> Deserialize<'de> + Default>(&self, dir: &Path) -> Vec<Doc<T>> {
+        let mut out = Vec::new();
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return out;
+        };
+        for e in entries.flatten() {
+            let p = e.path();
+            if p.extension().and_then(|s| s.to_str()) != Some("md") {
+                continue;
+            }
+            if let Ok(Some(d)) = self.read_doc_opt::<T>(&p) {
+                out.push(d);
+            }
+        }
         out
     }
 

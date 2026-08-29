@@ -1252,6 +1252,153 @@ pub fn aiw_forget_memory(ws: Ws, id: String) -> Result<bool, String> {
     Ok(ws.convs()?.store().forget_memory(&id))
 }
 
+/// An agent as it is on disk: the frontmatter, plus the instructions.
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
+pub struct AgentFile {
+    pub id: String,
+    pub name: String,
+    pub role: String,
+    pub provider: String,
+    pub model: String,
+    #[serde(default)]
+    pub permissions: std::collections::HashMap<String, String>,
+    #[serde(default)]
+    pub skills: Vec<String>,
+    #[serde(default)]
+    pub builtin: bool,
+    /// The agent's instructions. This is the part worth editing.
+    #[serde(default)]
+    pub instructions: String,
+}
+
+fn to_file(d: super::deck::Doc<super::personal::AgentMeta>) -> AgentFile {
+    AgentFile {
+        id: d.meta.id,
+        name: d.meta.name,
+        role: d.meta.role,
+        provider: d.meta.provider,
+        model: d.meta.model,
+        permissions: d.meta.permissions,
+        skills: d.meta.skills,
+        builtin: d.meta.builtin,
+        instructions: d.body,
+    }
+}
+
+fn to_doc(f: AgentFile) -> super::deck::Doc<super::personal::AgentMeta> {
+    super::deck::Doc {
+        meta: super::personal::AgentMeta {
+            id: f.id,
+            name: f.name,
+            role: f.role,
+            provider: f.provider,
+            model: f.model,
+            permissions: f.permissions,
+            skills: f.skills,
+            builtin: f.builtin,
+        },
+        body: f.instructions,
+    }
+}
+
+#[tauri::command]
+pub fn aiw_agent_file(ws: Ws, id: String) -> Result<AgentFile, String> {
+    ws.agent_doc(&id).map(to_file)
+}
+
+/// Create or update an agent. New ones get sensible, cautious permissions:
+/// anything that runs a command asks first, which is the setting you would
+/// choose if you thought about it, and the only one worth defaulting to.
+#[tauri::command]
+pub fn aiw_save_agent(ws: Ws, agent: AgentFile) -> Result<Vec<AgentDef>, String> {
+    let mut agent = agent;
+    agent.id = agent.id.trim().to_string();
+    if agent.id.is_empty() {
+        return Err("an agent needs an id".into());
+    }
+    if agent.name.trim().is_empty() {
+        agent.name = agent.id.clone();
+    }
+    if agent.permissions.is_empty() {
+        for (tool, perm) in [
+            ("files", "full"),
+            ("git", "full"),
+            ("tests", "full"),
+            ("knowledge", "full"),
+            ("terminal", "approval"),
+            ("process", "approval"),
+        ] {
+            agent.permissions.insert(tool.into(), perm.into());
+        }
+    }
+    ws.save_agent(&to_doc(agent))?;
+    Ok(ws.agents())
+}
+
+#[tauri::command]
+pub fn aiw_delete_agent(ws: Ws, id: String) -> Result<Vec<AgentDef>, String> {
+    ws.delete_agent(&id)?;
+    Ok(ws.agents())
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
+pub struct SkillFile {
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub body: String,
+}
+
+#[tauri::command]
+pub fn aiw_skills(ws: Ws) -> Result<Vec<SkillFile>, String> {
+    Ok(ws
+        .skills()?
+        .into_iter()
+        .map(|d| SkillFile {
+            name: d.meta.name,
+            description: d.meta.description,
+            body: d.body,
+        })
+        .collect())
+}
+
+#[tauri::command]
+pub fn aiw_save_skill(ws: Ws, skill: SkillFile) -> Result<Vec<SkillFile>, String> {
+    let name = skill.name.trim().to_string();
+    if name.is_empty() {
+        return Err("a skill needs a name".into());
+    }
+    ws.save_skill(&super::deck::Doc {
+        meta: super::personal::SkillMeta {
+            name,
+            description: skill.description,
+        },
+        body: skill.body,
+    })?;
+    aiw_skills(ws)
+}
+
+#[tauri::command]
+pub fn aiw_delete_skill(ws: Ws, name: String) -> Result<Vec<SkillFile>, String> {
+    ws.delete_skill(&name)?;
+    aiw_skills(ws)
+}
+
+/// Exactly what the assistant can see for this conversation.
+///
+/// Not a summary we compose for the UI — the same string the model is handed.
+/// A "what it knows" panel that paraphrased would be worse than none: you
+/// would trust it and it could drift from the truth without ever being wrong
+/// enough to notice.
+#[tauri::command]
+pub fn aiw_assistant_context(ws: Ws, conversation_id: String) -> Result<String, String> {
+    let convs = ws.convs()?;
+    let conv = convs.load(&conversation_id)?;
+    let workspace = ws.inner().clone();
+    Ok(Assistant::context(&workspace, convs, &conv))
+}
+
 /// Tool calls waiting on a human right now.
 #[tauri::command(async)]
 pub fn aiw_pending_approvals(ws: Ws) -> Vec<ApprovalRequest> {

@@ -771,7 +771,7 @@ impl Assistant {
     /// where the project stands. Personal facts come from the personal store;
     /// project facts from the project. They are labelled so it is obvious in
     /// the prompt which is which.
-    fn context(ws: &Arc<Workspace>, convs: &Conversations, conv: &ConversationMeta) -> String {
+    pub fn context(ws: &Arc<Workspace>, convs: &Conversations, conv: &ConversationMeta) -> String {
         let mut parts: Vec<String> = Vec::new();
 
         let profile = convs.store().profile();

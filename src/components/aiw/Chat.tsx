@@ -18,6 +18,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Icon } from '../../lib/icons'
 import { useAiw } from '../../lib/aiwStore'
 import { aiw, ago, type ChatMessage } from '../../lib/aiw'
+import { ProviderChip, ContextPeek } from './ChatHeader'
 
 // ---------------------------------------------------------------------------
 // Transcript
@@ -84,9 +85,8 @@ function Bubble({ m }: { m: ChatMessage }) {
 // Conversation list
 // ---------------------------------------------------------------------------
 
-function ConversationList() {
+function ConversationList({ onClose }: { onClose: () => void }) {
   const a = useAiw()
-  if (a.conversations.length === 0) return null
   return (
     <div className="w-56 shrink-0 border-r border-line bg-app">
       <div className="flex items-center gap-1.5 border-b border-line px-3 py-2">
@@ -99,6 +99,9 @@ function ConversationList() {
           onClick={() => void a.newConversation()}
         >
           <Icon name="add" size={12} />
+        </button>
+        <button className="btn-ghost text-[11px]" title="Hide conversations" onClick={onClose}>
+          <Icon name="chevron-left" size={12} />
         </button>
       </div>
       <div className="overflow-auto">
@@ -189,6 +192,10 @@ export function Chat() {
   const a = useAiw()
   const [draft, setDraft] = useState('')
   const [root, setRoot] = useState<string | null>(null)
+  // Hidden by default: as a dock panel the chat already sits beside the
+  // Explorer, and a second list column on the left leaves the conversation
+  // itself in a corridor.
+  const [showList, setShowList] = useState(false)
   const scroller = useRef<HTMLDivElement>(null)
   const box = useRef<HTMLTextAreaElement>(null)
 
@@ -239,10 +246,22 @@ export function Chat() {
 
   return (
     <div className="flex h-full min-h-0">
-      <ConversationList />
+      {showList && <ConversationList onClose={() => setShowList(false)} />}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex shrink-0 items-center gap-2 border-b border-line px-5 py-2.5">
+        <div className="relative flex shrink-0 items-center gap-2 border-b border-line px-3 py-2.5">
+          <button
+            className={`flex items-center gap-1.5 rounded px-1.5 py-1 text-[11px] ${
+              showList ? 'bg-hover text-ink' : 'text-dim hover:bg-hover hover:text-ink'
+            }`}
+            title={showList ? 'Hide conversations' : `Conversations (${a.conversations.length})`}
+            onClick={() => setShowList(!showList)}
+          >
+            <Icon name="list" size={13} />
+            {!showList && a.conversations.length > 0 && (
+              <span className="text-[10px] text-faint">{a.conversations.length}</span>
+            )}
+          </button>
           <Icon name="ai" size={14} className="text-indigo-400" />
           <span className="truncate text-[13px] font-semibold text-ink">
             {conv?.title ?? 'Assistant'}
@@ -263,6 +282,8 @@ export function Chat() {
               </option>
             ))}
           </select>
+          <ProviderChip />
+          <ContextPeek conversationId={conv?.id ?? null} />
           <button
             className="btn-ghost text-[11px]"
             title="Start a new conversation"

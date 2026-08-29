@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react'
 import { Icon, type IconName } from '../../lib/icons'
 import { useAiw, type AiwPage } from '../../lib/aiwStore'
 import { Settings } from './Settings'
+import { AgentEditor } from './AgentEditor'
 import { ApprovalBar } from './ApprovalBar'
 import { Chat } from './Chat'
 import { CAPTURE_FEATURE, CAPTURE_PAGE } from '../../lib/devCapture'
@@ -1406,10 +1407,67 @@ function DecisionList({ rows }: { rows: DecisionRow[] }) {
 
 function Agents() {
   const a = useAiw()
+  // Which agent's own page is open. Null is the list.
+  const [editing, setEditing] = useState<string | null>(null)
+
+  if (editing) return <AgentEditor id={editing} onClose={() => setEditing(null)} />
+
+  const add = async () => {
+    const name = prompt('Name for the new agent', 'Developer C')?.trim()
+    if (!name) return
+    // An id you can read in a file name and an event, derived once. Editable
+    // afterwards, because guessing wrong should not mean starting over.
+    const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+    await aiw.saveAgent({
+      id,
+      name,
+      role: 'developer',
+      provider: 'mock',
+      model: 'mock-1',
+      permissions: {},
+      skills: [],
+      builtin: false,
+      instructions: '',
+    })
+    await a.reloadAgents()
+    setEditing(id)
+  }
+
   return (
     <div className="flex h-full flex-col">
       <PageHead title="Agents" subtitle="Who is working right now, on what, and with which context." />
       <div className="min-h-0 flex-1 overflow-auto p-5">
+        <Section title="Your team">
+          <div className="grid grid-cols-3 gap-3">
+            {a.agents.map((ag) => (
+              <button
+                key={ag.id}
+                className="flex items-center gap-2.5 rounded-md border border-line bg-raise p-3 text-left hover:border-line2"
+                onClick={() => setEditing(ag.id)}
+              >
+                <Avatar id={ag.id} size={29} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[12.5px] font-semibold text-ink">{ag.name}</div>
+                  <div className="mt-px truncate text-[10.5px] text-muted">
+                    {ag.role} · {ag.provider === 'mock' ? 'Mock (no AI)' : ag.model || ag.provider}
+                  </div>
+                </div>
+                {ag.provider === 'mock' && (
+                  <span className="shrink-0 rounded bg-amber-500/14 px-1.5 text-[9.5px] font-semibold text-warn">
+                    mock
+                  </span>
+                )}
+              </button>
+            ))}
+            <button
+              className="flex items-center justify-center gap-1.5 rounded-md border border-dashed border-line2 p-3 text-[12px] text-muted hover:border-line3 hover:text-ink"
+              onClick={() => void add()}
+            >
+              <Icon name="add" size={13} /> New agent
+            </button>
+          </div>
+        </Section>
+
         <Section title="Sessions">
           {a.sessions.length === 0 ? (
             <Empty

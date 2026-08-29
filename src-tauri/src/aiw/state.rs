@@ -825,6 +825,138 @@ impl Workspace {
             .map_err(|e| e.clone())
     }
 
+    /// Load the team from disk, seeding the built-ins the first time.
+    ///
+    /// Agents were a hardcoded list, which meant the answer to "add another
+    /// developer" was "edit the source". They are files now — frontmatter the
+    /// runtime needs, body you actually write — and the built-ins are seeded
+    /// once so there is something to copy rather than a blank page.
+    ///
+    /// Seeded, not owned: once written they are yours to edit or delete, and
+    /// nothing rewrites them on a later launch.
+    pub fn load_agents(&self) -> Result<usize, String> {
+        let convs = self.convs()?;
+        let store = convs.store();
+
+        let on_disk = store.agents();
+        if on_disk.is_empty() {
+            for a in default_agents() {
+                let doc = super::deck::Doc {
+                    meta: super::personal::AgentMeta {
+                        id: a.id.clone(),
+                        name: a.name.clone(),
+                        role: a.role.clone(),
+                        provider: a.provider.clone(),
+                        model: a.model.clone(),
+                        permissions: a.permissions.clone(),
+                        skills: Vec::new(),
+                        builtin: true,
+                    },
+                    body: a.system.clone(),
+                };
+                store.save_agent(&doc)?;
+            }
+        }
+
+        let docs = store.agents();
+        if docs.is_empty() {
+            // Never leave the workspace with no agents at all: an empty team
+            // makes every other screen look broken for a reason you cannot see.
+            return Ok(0);
+        }
+
+        let skills: std::collections::HashMap<String, String> = store
+            .skills()
+            .into_iter()
+            .map(|d| (d.meta.name, d.body))
+            .collect();
+
+        let agents: Vec<AgentDef> = docs
+            .into_iter()
+            .map(|d| {
+                let mut system = d.body.trim().to_string();
+                // Skills append to the instructions rather than replacing them,
+                // so one shared block can be reused across agents without each
+                // of them restating it.
+                for name in &d.meta.skills {
+                    if let Some(body) = skills.get(name) {
+                        system.push_str(&format!("\n\n# {name}\n\n{}", body.trim()));
+                    }
+                }
+                AgentDef {
+                    id: d.meta.id,
+                    name: d.meta.name,
+                    role: d.meta.role,
+                    provider: d.meta.provider,
+                    model: d.meta.model,
+                    system,
+                    permissions: d.meta.permissions,
+                }
+            })
+            .collect();
+
+        let n = agents.len();
+        *self.agents.lock().unwrap() = agents;
+        self.rebuild_tool_services();
+        Ok(n)
+    }
+
+    /// Write one agent and reload, so the change reaches the runtime rather
+    /// than only the file.
+    pub fn save_agent(
+        &self,
+        doc: &super::deck::Doc<super::personal::AgentMeta>,
+    ) -> Result<(), String> {
+        self.convs()?.store().save_agent(doc)?;
+        self.load_agents()?;
+        Ok(())
+    }
+
+    pub fn delete_agent(&self, id: &str) -> Result<bool, String> {
+        if id == super::assistant::ASSISTANT_ID {
+            return Err(
+                "the assistant is how you talk to the workspace — it cannot be deleted".into(),
+            );
+        }
+        let gone = self.convs()?.store().forget_agent(id);
+        self.load_agents()?;
+        Ok(gone)
+    }
+
+    /// One agent as it is on disk, for editing.
+    pub fn agent_doc(
+        &self,
+        id: &str,
+    ) -> Result<super::deck::Doc<super::personal::AgentMeta>, String> {
+        self.convs()?
+            .store()
+            .agents()
+            .into_iter()
+            .find(|d| d.meta.id == id)
+            .ok_or_else(|| format!("no agent '{id}'"))
+    }
+
+    pub fn skills(&self) -> Result<Vec<super::deck::Doc<super::personal::SkillMeta>>, String> {
+        Ok(self.convs()?.store().skills())
+    }
+
+    pub fn save_skill(
+        &self,
+        doc: &super::deck::Doc<super::personal::SkillMeta>,
+    ) -> Result<(), String> {
+        self.convs()?.store().save_skill(doc)?;
+        // Agents embed skill bodies at load time, so a skill edit only reaches
+        // them on a reload.
+        self.load_agents()?;
+        Ok(())
+    }
+
+    pub fn delete_skill(&self, name: &str) -> Result<bool, String> {
+        let gone = self.convs()?.store().forget_skill(name);
+        self.load_agents()?;
+        Ok(gone)
+    }
+
     /// Requests waiting on a person right now.
     pub fn pending_approvals(&self) -> Vec<ApprovalRequest> {
         self.approvals.pending()

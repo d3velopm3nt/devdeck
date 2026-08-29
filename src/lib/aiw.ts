@@ -384,6 +384,27 @@ export interface ModelCatalog {
   note?: string
 }
 
+/** An agent as it is on disk: the frontmatter, plus its instructions. */
+export interface AgentFile {
+  id: string
+  name: string
+  role: string
+  provider: string
+  model: string
+  permissions: Record<string, string>
+  skills: string[]
+  builtin: boolean
+  /** The agent's instructions — the part worth editing. */
+  instructions: string
+}
+
+/** A shared block of instructions, appended to any agent that uses it. */
+export interface SkillFile {
+  name: string
+  description: string
+  body: string
+}
+
 /** What the assistant knows about you. Personal store, never a repo. */
 /** Progress while a reply is still being produced.
  *
@@ -531,6 +552,16 @@ export const aiw = {
   /** Live progress for the assistant. Separate from `onEvent`, deliberately. */
   onChat: (cb: (e: ChatEvent) => void): Promise<UnlistenFn> =>
     listen<ChatEvent>('aiw:chat', (e) => cb(e.payload)),
+
+  /** Exactly what a conversation can see — the same string the model gets. */
+  assistantContext: (conversationId: string) =>
+    invoke<string>('aiw_assistant_context', { conversationId }),
+  agentFile: (id: string) => invoke<AgentFile>('aiw_agent_file', { id }),
+  saveAgent: (agent: AgentFile) => invoke<AgentDef[]>('aiw_save_agent', { agent }),
+  deleteAgent: (id: string) => invoke<AgentDef[]>('aiw_delete_agent', { id }),
+  skills: () => invoke<SkillFile[]>('aiw_skills'),
+  saveSkill: (skill: SkillFile) => invoke<SkillFile[]>('aiw_save_skill', { skill }),
+  deleteSkill: (name: string) => invoke<SkillFile[]>('aiw_delete_skill', { name }),
 
   personalRoot: () => invoke<string>('aiw_personal_root'),
   profile: () => invoke<ProfileView>('aiw_profile'),

@@ -815,27 +815,21 @@ export function Explorer() {
 
   return (
     <div className="flex h-full flex-col bg-panel">
-      {/* Workspace switcher + add project */}
-      <div className="flex items-center justify-between gap-1 border-b border-line px-2 py-1.5">
-        <button
-          className="flex min-w-0 items-center gap-1.5 rounded px-1.5 py-1 text-[12.5px] font-medium text-ink hover:bg-hover"
-          title="Switch workspace"
-          onClick={(e) => {
-            const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
-            setWsMenu({ x: r.left, y: r.bottom })
-          }}
-        >
-          <Icon name="workspace" size={15} className="shrink-0 text-indigo-400" />
-          <span className="truncate">{ws?.name ?? 'No workspace'}</span>
-          <Icon name="chevron-down" size={12} className="shrink-0 text-muted" />
-        </button>
+      {/* No workspace switcher here any more — the tabs in the top bar are
+          the switcher, and having both meant the current workspace was named
+          twice on screen a few pixels apart. What is left is what the tree
+          cannot do for itself: getting a project into it. */}
+      <div className="flex items-center gap-1 border-b border-line px-2 py-1.5">
+        <span className="min-w-0 flex-1 truncate text-[10.5px] font-semibold uppercase tracking-[0.06em] text-muted">
+          Explorer
+        </span>
         <button
           className="flex shrink-0 items-center gap-1 rounded bg-soft px-2 py-1 text-[11px] text-ink hover:bg-indigo-600 disabled:opacity-40"
           title={activeWorkspaceId == null ? 'Create a workspace first' : 'Clone a GitHub repo into this workspace'}
           disabled={activeWorkspaceId == null}
           onClick={() => setGhOpen(true)}
         >
-          <Icon name="github" size={13} /> GitHub
+          <Icon name="github" size={13} /> Clone
         </button>
         <button
           className="flex shrink-0 items-center gap-1 rounded bg-soft px-2 py-1 text-[11px] text-ink hover:bg-indigo-600 disabled:opacity-40"

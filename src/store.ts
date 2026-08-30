@@ -33,6 +33,8 @@ const LOG_UI_LIMIT = 5000
 export type Theme = 'dark' | 'light'
 export type RailView =
   | 'home'
+  | 'inbox'
+  | 'scheduler'
   | 'projects'
   | 'stash'
   | 'connections'
@@ -304,6 +306,8 @@ const RAIL_KEY = 'devdeck.railView'
 /// fail validation on the next launch, and silently drop the user back to Home.
 const RAIL_VIEWS: readonly RailView[] = [
   'home',
+  'inbox',
+  'scheduler',
   'projects',
   'stash',
   'connections',

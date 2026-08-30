@@ -39,6 +39,48 @@ export const nodeCreate = (
   path?: string | null,
   relPath?: string | null,
 ) => invoke<TreeNode>('node_create', { parentId, kind, name, path: path ?? null, relPath: relPath ?? null })
+// ---- schedules ----
+
+/** One thing that happens on a clock. */
+export interface Schedule {
+  id: number
+  name: string
+  /** reminder | command | agent */
+  kind: string
+  node_id: number | null
+  /** daily | weekdays | weekly | hourly */
+  every: string
+  /** Minutes past midnight, local. */
+  at_min: number
+  /** For 'weekly': comma-separated 0-6, Sunday first. */
+  days: string
+  payload: string
+  enabled: boolean
+  /** Whether a missed run should happen late. A reminder never should. */
+  catch_up: boolean
+  last_run: number | null
+  last_ok: boolean
+  last_note: string
+  next_run: number | null
+}
+
+export const schedulesList = () => invoke<Schedule[]>('schedules_list')
+export const scheduleSave = (s: {
+  id?: number | null
+  name: string
+  kind: string
+  nodeId: number | null
+  every: string
+  atMin: number
+  days: string
+  payload: string
+  catchUp: boolean
+}) => invoke<number>('schedule_save', { ...s, id: s.id ?? null })
+export const scheduleEnable = (id: number, on: boolean) =>
+  invoke<void>('schedule_enable', { id, on })
+export const scheduleDelete = (id: number) => invoke<void>('schedule_delete', { id })
+export const scheduleRunNow = (id: number) => invoke<void>('schedule_run_now', { id })
+
 // ---- the vault: the folder tree that is the Explorer ----
 
 /** What a node's `_devdeck.md` says about it. */

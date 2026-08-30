@@ -170,6 +170,14 @@ export function Rail() {
         onClick={() => setRailView('home')}
       />
 
+      <RailButton
+        label="Inbox"
+        icon="inbox"
+        active={railView === 'inbox'}
+        expanded={expanded}
+        onClick={() => setRailView('inbox')}
+      />
+
       <Rule expanded={expanded} />
 
       {expanded && recentNodes.length > 0 && (
@@ -205,6 +213,14 @@ export function Rail() {
       ))}
 
       <Rule expanded={expanded} />
+
+      <RailButton
+        label="Scheduler"
+        icon="schedule"
+        active={railView === 'scheduler'}
+        expanded={expanded}
+        onClick={() => setRailView('scheduler')}
+      />
 
       {WORK.map((it) => (
         <RailButton

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Dock, buildDefaultLayout } from './Dock'
 import { BottomBar } from './components/BottomBar'
+import { InboxPage } from './components/InboxPage'
+import { SchedulerPage } from './components/SchedulerPage'
 import { SetupModal } from './components/SetupModal'
 import { VaultSetup } from './components/VaultSetup'
 import { Sheet } from './components/Sheet'
@@ -710,6 +712,8 @@ export default function App() {
           {railView === 'connections' && <ConnectionsView />}
           {railView === 'aiworkspace' && <AiWorkspace />}
           {railView === 'machine' && <MachineSetup />}
+          {railView === 'inbox' && <InboxPage />}
+          {railView === 'scheduler' && <SchedulerPage />}
           {railView === 'settings' && <ConfigPage />}
         </main>
       </div>

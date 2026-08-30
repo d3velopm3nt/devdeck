@@ -23,6 +23,7 @@ mod machine;
 mod monitor;
 mod pty;
 mod scan;
+mod schedule;
 mod seed;
 mod services;
 mod setup;
@@ -613,6 +614,22 @@ pub fn run() {
         // first invoke from a webview cannot arrive before it exists.
         .manage(aiw_workspace)
         .setup(move |app| {
+            // The clock. One pass at startup, which is what makes catching up
+            // possible at all — while the app runs a schedule fires because its
+            // moment arrived; at launch it fires because its moment passed
+            // while nothing was watching.
+            {
+                let h = app.handle().clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(4));
+                    schedule::tick(&h, true);
+                    loop {
+                        std::thread::sleep(std::time::Duration::from_secs(30));
+                        schedule::tick(&h, false);
+                    }
+                });
+            }
+
             // Give the AI Workspace bus a way out to the UI. The closure lives
             // here, in the shell, so the bus itself stays free of Tauri — which
             // is both cleaner layering and what keeps the test binary linkable.
@@ -750,6 +767,11 @@ pub fn run() {
             vault::vault_meta,
             vault::vault_delete,
             vault::vault_dir,
+            schedule::schedules_list,
+            schedule::schedule_save,
+            schedule::schedule_enable,
+            schedule::schedule_delete,
+            schedule::schedule_run_now,
             vault::vault_move,
             vault::vault_switch,
             vault::vault_switch_cost,

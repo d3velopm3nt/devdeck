@@ -16,6 +16,8 @@ import {
   Pause,
   GitCommitHorizontal,
   Boxes,
+  CalendarClock,
+  Inbox,
   Box,
   Folder,
   FolderOpen,
@@ -88,6 +90,8 @@ import {
 // swap is a one-line change here.
 export type IconName =
   | 'workspace'
+  | 'inbox'
+  | 'schedule'
   | 'solution'
   | 'project'
   | 'folder'
@@ -164,6 +168,8 @@ export type IconName =
 
 const REGISTRY: Record<IconName, LucideIcon> = {
   workspace: Boxes,
+  inbox: Inbox,
+  schedule: CalendarClock,
   solution: Layers,
   project: Box,
   folder: Folder,

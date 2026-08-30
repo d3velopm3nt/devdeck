@@ -1,0 +1,25 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 900, "h": 680, "title": "The inbox — one place, every space" },
+    { "file": "Scheduler.dc.html", "x": 1020, "y": 0, "w": 860, "h": 680, "title": "Scheduler — a pillar" },
+    { "file": "Agent.dc.html", "x": 0, "y": 800, "w": 700, "h": 680, "title": "How a live agent gets made" },
+    { "file": "Community.dc.html", "x": 820, "y": 800, "w": 860, "h": 680, "title": "Agents & skills" }
+  ],
+  "annotations": [
+    {
+      "id": "evidence-rule",
+      "x": 1920,
+      "y": 0,
+      "w": 400,
+      "text": "EVERY ITEM CARRIES ITS EVIDENCE\n\nStolen from conflict.rs, which already says it:\n\"Detection is heuristic and says so… a conflict\ncentre that cries wolf gets ignored.\"\n\nSo the inbox never just asserts. It shows what it\nsaw, and every item can be told to stop watching."
+    },
+    {
+      "id": "no-scheduler-needed",
+      "x": 1740,
+      "y": 800,
+      "w": 400,
+      "text": "THREE OF THE FIVE NEED NO CLOCK\n\nAn agent finishing, an approval, a project changing\n— all events on the bus you already have.\n\nOnly the deadline and the neglected routine need\ntime, and neglect is the absence of events: one\ndaily sweep, not a general scheduler."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

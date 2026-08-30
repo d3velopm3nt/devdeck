@@ -1,0 +1,13 @@
+{
+  "artboards": [
+    { "file": "Build.dc.html", "title": "1 · The Assistant drafts it", "x": 0, "y": 0, "w": 720, "h": 780 },
+    { "file": "Interview.dc.html", "title": "2 · It interviews you", "x": 840, "y": 0, "w": 640, "h": 760 },
+    { "file": "Main.dc.html", "title": "3 · The bot, in use", "x": 1600, "y": 0, "w": 720, "h": 760 },
+    { "file": "Recommend.dc.html", "title": "4 · What it needs", "x": 0, "y": 920, "w": 720, "h": 680 },
+    { "file": "Context.dc.html", "title": "5 · Memory & improving", "x": 840, "y": 920, "w": 720, "h": 700 },
+    { "file": "Focus.dc.html", "title": "6 · Focus session", "x": 1680, "y": 920, "w": 720, "h": 740 },
+    { "file": "Bots.dc.html", "title": "7 · The bots page", "x": 0, "y": 1800, "w": 780, "h": 660 },
+    { "file": "Shell.dc.html", "title": "8 · In the shell", "x": 900, "y": 1800, "w": 1280, "h": 760 }
+  ],
+  "launch": { "view": "canvas" }
+}

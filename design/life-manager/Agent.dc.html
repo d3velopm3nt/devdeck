@@ -1,0 +1,110 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background: #0d1017; }
+    a { color: #818cf8; } a:hover { color: #a5b4fc; }
+    .pill { flex: none; border-radius: 999px; padding: 1px 7px; font-size: 9px; font-weight: 600;
+            letter-spacing: 0.04em; text-transform: uppercase; line-height: 1.6; }
+    .card { border: 1px solid #1e293b; border-radius: 8px; background: #11141c; }
+    .lbl { font-size: 9.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #475569; }
+    .grant { display: flex; align-items: center; gap: 9px; padding: 7px 12px; border-top: 1px solid #1e293b; }
+    .lvl { flex: none; border-radius: 4px; padding: 1px 7px; font-size: 9.5px; font-weight: 600; }
+    .say { font-size: 12.5px; line-height: 1.55; color: #cbd5e1; }
+  </style>
+</helmet>
+
+<div style="width: 700px; height: 680px; background: #0d1017; padding: 20px 22px; box-sizing: border-box; display: flex; flex-direction: column; gap: 13px; overflow: hidden">
+
+  <div>
+    <div style="font-size: 15px; font-weight: 600; color: #e2e8f0">How a live agent gets made</div>
+    <div style="margin-top: 3px; font-size: 11.5px; color: #94a3b8">
+      You describe the job. The assistant writes the agent and shows you exactly what it will be allowed to do.
+    </div>
+  </div>
+
+  <!-- What you said -->
+  <div style="display: flex; gap: 10px; align-items: flex-start">
+    <span style="width: 24px; height: 24px; border-radius: 50%; background: #232b3b; color: #94a3b8; font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none">DT</span>
+    <div class="say" style="padding-top: 2px">&ldquo;Every morning tell me if anything in Innotrack needs me before I start.&rdquo;</div>
+  </div>
+
+  <!-- What it proposes -->
+  <div style="display: flex; gap: 10px; align-items: flex-start; min-height: 0; flex: 1">
+    <span style="width: 24px; height: 24px; border-radius: 50%; background: rgb(129 140 248 / 0.18); color: #818cf8; display: flex; align-items: center; justify-content: center; flex: none">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="m8 7 4-4 4 4"/><path d="M3 12h18"/></svg>
+    </span>
+    <div style="min-width: 0; flex: 1">
+      <div class="say">That&rsquo;s an agent. Here it is &mdash; nothing runs until you say so.</div>
+
+      <div class="card" style="margin-top: 9px">
+        <div style="display: flex; align-items: center; gap: 9px; padding: 11px 13px">
+          <span style="width: 28px; height: 28px; border-radius: 7px; background: #38bdf8; color: #0b0e14; font-size: 9.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none">MB</span>
+          <div style="min-width: 0; flex: 1">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span style="font-size: 13px; font-weight: 600; color: #e2e8f0">Morning brief</span>
+              <span class="pill" style="background: rgb(56 189 248 / 0.16); color: #38bdf8">Innotrack</span>
+            </div>
+            <div style="margin-top: 2px; font-size: 11px; color: #64748b">Weekdays at 07:00 &middot; writes one item to your inbox</div>
+          </div>
+        </div>
+
+        <!-- The permission preview. This is the trust surface, so it is the
+             biggest thing on the card, not a link to a settings page. -->
+        <div style="padding: 8px 13px 3px; border-top: 1px solid #1e293b">
+          <span class="lbl">What it may touch</span>
+        </div>
+        <div class="grant">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+          <span style="flex: 1; font-size: 11.5px; color: #cbd5e1">Your repos in Innotrack</span>
+          <span class="lvl" style="background: rgb(74 222 128 / 0.14); color: #4ade80">Read</span>
+        </div>
+        <div class="grant">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg>
+          <span style="flex: 1; font-size: 11.5px; color: #cbd5e1">Calendar</span>
+          <span class="lvl" style="background: rgb(74 222 128 / 0.14); color: #4ade80">Read</span>
+        </div>
+        <div class="grant">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+          <span style="flex: 1; font-size: 11.5px; color: #cbd5e1">Mail</span>
+          <span class="lvl" style="background: rgb(251 191 36 / 0.16); color: #fbbf24">Draft, never send</span>
+        </div>
+        <div class="grant">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></svg>
+          <span style="flex: 1; font-size: 11.5px; color: #64748b">Starting or stopping anything</span>
+          <span class="lvl" style="background: rgb(100 116 139 / 0.18); color: #94a3b8">No</span>
+        </div>
+
+        <div style="border-top: 1px solid #1e293b; padding: 9px 13px; font-size: 11px; line-height: 1.5; color: #64748b">
+          It cannot be given more than I have. If you revoke one of these later, the
+          schedule pauses and says so rather than running without it.
+        </div>
+
+        <div style="display: flex; gap: 7px; border-top: 1px solid #1e293b; padding: 10px 13px">
+          <span style="border-radius: 5px; background: #6366f1; padding: 4px 12px; font-size: 11.5px; font-weight: 600; color: #fff">Create and schedule</span>
+          <span style="border: 1px solid #1e293b; border-radius: 5px; padding: 4px 12px; font-size: 11.5px; color: #94a3b8">Run once now</span>
+          <span style="border: 1px solid #1e293b; border-radius: 5px; padding: 4px 12px; font-size: 11.5px; color: #94a3b8">Change it</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- The loop closes in the inbox, not in a chat you have to remember to open -->
+  <div class="card" style="flex: none; padding: 11px 13px">
+    <div class="lbl">Then what</div>
+    <div style="margin-top: 6px; font-size: 11.5px; line-height: 1.6; color: #cbd5e1">
+      It runs at 07:00 and posts one item to your inbox &mdash; carrying what it found and why it
+      thought you would care. If it needs a decision it asks there, and the schedule waits rather
+      than guessing.
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

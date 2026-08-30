@@ -1,0 +1,137 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background: #0d1017; }
+    a { color: #818cf8; } a:hover { color: #a5b4fc; }
+    .lbl { font-size: 9.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #475569; }
+    .card { border: 1px solid #1e293b; border-radius: 8px; background: #11141c; }
+    .field { display: flex; gap: 10px; padding: 8px 12px; border-top: 1px solid #1e293b; font-size: 11.5px; }
+    .key { flex: none; width: 96px; color: #64748b; padding-top: 1px; }
+    .val { min-width: 0; flex: 1; color: #cbd5e1; line-height: 1.5; }
+    .why { margin-top: 3px; font-size: 10.5px; line-height: 1.5; color: #64748b; }
+    .edit { flex: none; font-size: 10px; color: #475569; padding-top: 2px; }
+    .btn { border-radius: 5px; padding: 4px 11px; font-size: 11.5px; font-weight: 500; }
+    .day { flex: 1; border-radius: 4px; padding: 5px 0; text-align: center; font-size: 9.5px; }
+  </style>
+</helmet>
+
+<div style="width: 720px; height: 780px; background: #0d1017; padding: 18px 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 11px; overflow: hidden">
+
+  <div style="display: flex; align-items: flex-start; gap: 10px">
+    <span style="width: 26px; height: 26px; border-radius: 7px; background: rgb(129 140 248 / 0.18); color: #818cf8; display: flex; align-items: center; justify-content: center; flex: none">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
+    </span>
+    <div style="min-width: 0; flex: 1">
+      <div style="font-size: 14.5px; font-weight: 600; color: #e2e8f0">The Assistant drafted a bot for Health</div>
+      <div style="margin-top: 2px; font-size: 11.5px; color: #94a3b8">
+        It builds one first and asks you to change it. A blank form is a worse question than a wrong answer.
+      </div>
+    </div>
+  </div>
+
+  <!-- Business vs personal is settled before anything else, and it sets the defaults. -->
+  <div class="card" style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-color: rgb(52 211 153 / 0.28)">
+    <span style="flex: none; border-radius: 999px; padding: 1px 8px; font-size: 9.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; line-height: 1.7; background: rgb(52 211 153 / 0.16); color: #34d399">Personal</span>
+    <div style="min-width: 0; flex: 1; font-size: 11.5px; line-height: 1.5; color: #cbd5e1">
+      Health sits in your Personal space, so it starts quiet: nothing during work hours, nothing
+      written anywhere a colleague can see, no repo access it didn&rsquo;t ask for.
+    </div>
+    <span class="edit">Change</span>
+  </div>
+
+  <!-- The draft. Every line is a decision it already made, with the reason. -->
+  <div class="card" style="flex: none">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 9px 12px">
+      <span class="lbl" style="flex: 1">The draft</span>
+      <span style="font-size: 10px; color: #475569">from 4 things you said</span>
+    </div>
+
+    <div class="field">
+      <span class="key">Called</span>
+      <span class="val">Health bot</span>
+      <span class="edit">Rename</span>
+    </div>
+
+    <div class="field">
+      <span class="key">Its goal</span>
+      <div class="val">
+        Three training mornings a week, and back in the pool before winter.
+        <div class="why">You said &ldquo;before winter&rdquo; &mdash; I read that as end of November. Wrong?</div>
+      </div>
+      <span class="edit">Change</span>
+    </div>
+
+    <div class="field">
+      <span class="key">Can reach</span>
+      <div class="val">
+        Your Health folder. Your calendar, read only.
+        <div class="why">Not your mail. Nothing here needs it, so I didn&rsquo;t ask for it.</div>
+      </div>
+      <span class="edit">Change</span>
+    </div>
+
+    <div class="field">
+      <span class="key">First agent</span>
+      <div class="val">
+        Plan keeper &mdash; turns the week into three slots and moves one when your calendar fills.
+      </div>
+      <span class="edit">Change</span>
+    </div>
+  </div>
+
+  <!-- The routine, argued for. This is the part it should be pushy about. -->
+  <div class="card" style="flex: 1; min-height: 0; display: flex; flex-direction: column; border-color: rgb(129 140 248 / 0.3)">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 9px 12px 6px">
+      <span class="lbl" style="color: #818cf8; flex: 1">The routine it wants to run</span>
+      <span style="font-size: 10px; color: #475569">the part it pushes on</span>
+    </div>
+
+    <div style="display: flex; gap: 5px; padding: 0 12px 8px">
+      <span class="day" style="background: rgb(129 140 248 / 0.2); color: #a5b4fc">Mon<br><span style="font-size: 9px; color: #818cf8">06:30</span></span>
+      <span class="day" style="background: #171b25; color: #475569">Tue</span>
+      <span class="day" style="background: rgb(129 140 248 / 0.2); color: #a5b4fc">Wed<br><span style="font-size: 9px; color: #818cf8">06:30</span></span>
+      <span class="day" style="background: #171b25; color: #475569">Thu</span>
+      <span class="day" style="background: rgb(129 140 248 / 0.2); color: #a5b4fc">Fri<br><span style="font-size: 9px; color: #818cf8">06:30</span></span>
+      <span class="day" style="background: #171b25; color: #475569">Sat</span>
+      <span class="day" style="background: rgb(52 211 153 / 0.16); color: #34d399">Sun<br><span style="font-size: 9px; color: #34d399">looks back</span></span>
+    </div>
+
+    <div style="padding: 0 12px 10px; font-size: 11.5px; line-height: 1.6; color: #cbd5e1">
+      Mon / Wed / Fri at 06:30, because the two weeks you actually trained were those days.
+      Sunday evening it reads the week and moves next week&rsquo;s slots around what is in your calendar.
+    </div>
+
+    <div style="padding: 8px 12px; border-top: 1px solid #1e293b; display: flex; gap: 9px; align-items: flex-start">
+      <span style="flex: none; border-radius: 4px; padding: 0 5px; font-size: 9px; font-weight: 600; line-height: 1.7; background: rgb(251 191 36 / 0.16); color: #fbbf24">changed</span>
+      <div style="min-width: 0; flex: 1; font-size: 11.5px; line-height: 1.5; color: #cbd5e1">
+        I dropped the daily nudge I was going to add.
+        <div class="why">Daily reminders are why you stopped using the last app. Three a week is the most it will send.</div>
+      </div>
+    </div>
+
+    <div style="padding: 8px 12px; border-top: 1px solid #1e293b; display: flex; gap: 9px; align-items: flex-start">
+      <span style="flex: none; border-radius: 4px; padding: 0 5px; font-size: 9px; font-weight: 600; line-height: 1.7; background: rgb(56 189 248 / 0.16); color: #38bdf8">asks</span>
+      <div style="min-width: 0; flex: 1; font-size: 11.5px; line-height: 1.5; color: #cbd5e1">
+        Winter is 13 weeks off and the pool wants two sessions a week by October.
+        <div class="why">That does not fit three mornings. Do I cut the goal, or add a fourth slot?</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; align-items: center; gap: 8px">
+    <span class="btn" style="background: #6366f1; color: #fff">Make it</span>
+    <span class="btn" style="border: 1px solid #1e293b; color: #cbd5e1">Ask me the rest &mdash; 6 questions</span>
+    <span style="flex: 1"></span>
+    <span class="btn" style="color: #64748b">Start over</span>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

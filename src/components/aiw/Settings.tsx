@@ -1,4 +1,4 @@
-// AI Workspace settings.
+// Assistant settings.
 //
 // Everything you configure once lives here, so the rail's sidebar stays a list
 // of things you *watch* rather than a mix of surfaces and forms. Three

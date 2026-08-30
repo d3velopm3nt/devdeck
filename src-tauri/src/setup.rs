@@ -112,13 +112,47 @@ pub struct GithubUser {
     pub reason: String,
 }
 
+/// Who is signed in, asking `gh` first and our own OAuth token second.
+///
+/// `gh` leads because when it *is* authenticated it is the identity that
+/// actually pushes. The stored-token fallback exists because a device-flow
+/// sign-in on a machine with no CLI is still a real sign-in, and reporting it
+/// as "not signed in" would make the flow look broken when it worked.
+///
+/// Async because the fallback reaches the network, and `reqwest::blocking`
+/// panics if its runtime is dropped anywhere blocking is not allowed.
+#[tauri::command(async)]
+pub async fn github_user() -> GithubUser {
+    tauri::async_runtime::spawn_blocking(|| {
+        let via_gh = github_user_via_gh();
+        if !via_gh.login.is_empty() {
+            return via_gh;
+        }
+        match crate::github::user_from_stored_token() {
+            Some((login, name, avatar_url)) => GithubUser {
+                login,
+                name,
+                avatar_url,
+                reason: String::new(),
+            },
+            // Keep gh's reason — "gh is not installed" and "you are not logged
+            // in" need different things from you, and the chip says which.
+            None => via_gh,
+        }
+    })
+    .await
+    .unwrap_or_else(|e| GithubUser {
+        reason: format!("the identity check did not finish: {e}"),
+        ..Default::default()
+    })
+}
+
 /// `gh api user` — one call, and it fails fast when unauthenticated.
 ///
 /// Never guesses from `git config user.name`: that is a commit signature you
 /// can set to anything, not proof of who you are signed in as. Showing it as
 /// an account would be a lie the moment the two differ.
-#[tauri::command]
-pub fn github_user() -> GithubUser {
+fn github_user_via_gh() -> GithubUser {
     if !on_path("gh") {
         return GithubUser {
             reason: "the GitHub CLI (gh) is not installed".into(),

@@ -1,4 +1,4 @@
-// AI Workspace — types and IPC.
+// Assistant — types and IPC.
 //
 // These mirror the Rust structs in `src-tauri/src/aiw/`. Keeping them in one
 // file next to the calls means a backend rename shows up as a type error here
@@ -458,7 +458,7 @@ export type ApprovalDecision = 'allow' | 'allow-always' | 'deny' | 'deny-always'
 export const aiw = {
   projects: () => invoke<AiProject[]>('aiw_projects'),
   /** Re-read the project tree. Call after anything adds, renames or removes a
-   *  project, so the Explorer and the AI Workspace cannot drift apart. */
+   *  project, so the Explorer and the Assistant cannot drift apart. */
   syncProjects: () => invoke<AiProject[]>('aiw_sync_projects'),
 
   features: (projectId: string) => invoke<FeatureRow[]>('aiw_features', { projectId }),

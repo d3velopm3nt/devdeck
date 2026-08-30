@@ -112,6 +112,20 @@ export function openService(serviceId: number, title: string) {
 }
 
 /// Open (or focus) the setup page for a project or folder as a main tab.
+/// The page for a node the app has no dedicated page for — a Topic, an Area,
+/// a Client. Projects have the dashboard; this is everything else.
+export function openNodeConfig(nodeId: number, title: string) {
+  if (!api) return
+  useApp.getState().setRailView('projects')
+  const id = `node-config-${nodeId}`
+  const existing = api.getPanel(id)
+  if (existing) {
+    existing.api.setActive()
+    return
+  }
+  addToMain({ id, component: 'node-config', title, params: { id: nodeId } })
+}
+
 export function openNodeSetup(nodeId: number, title: string) {
   if (!api) return
   useApp.getState().setRailView('projects')

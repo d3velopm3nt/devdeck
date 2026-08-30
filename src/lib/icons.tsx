@@ -88,6 +88,7 @@ import {
 // swap is a one-line change here.
 export type IconName =
   | 'workspace'
+  | 'solution'
   | 'project'
   | 'folder'
   | 'command'
@@ -163,6 +164,7 @@ export type IconName =
 
 const REGISTRY: Record<IconName, LucideIcon> = {
   workspace: Boxes,
+  solution: Layers,
   project: Box,
   folder: Folder,
   command: SquareTerminal,
@@ -228,7 +230,7 @@ const REGISTRY: Record<IconName, LucideIcon> = {
   tag: Tag,
   database: Database,
   query: PlayIcon,
-  // AI Workspace. Semantic names, so swapping the glyph is one line.
+  // Assistant. Semantic names, so swapping the glyph is one line.
   ai: Sparkle,
   agent: Bot,
   context: Diamond,

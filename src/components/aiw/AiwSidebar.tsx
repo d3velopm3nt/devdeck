@@ -1,4 +1,4 @@
-// The AI Workspace sidebar.
+// The Assistant sidebar.
 //
 // Two things changed here, and the second is why the first was possible.
 //
@@ -99,7 +99,7 @@ export function AiwSidebar() {
     <div className="flex h-full flex-col bg-app">
       <div className="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2">
         <Icon name="ai" size={14} className="text-indigo-400" />
-        <span className="text-[12.5px] font-semibold text-ink">AI Workspace</span>
+        <span className="text-[12.5px] font-semibold text-ink">Assistant</span>
         <button
           className="btn-ghost ml-auto inline-flex items-center gap-1 text-[11px]"
           title="Reload projects, sessions, conflicts and activity"

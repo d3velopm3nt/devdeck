@@ -5,7 +5,7 @@
 // permission nobody can satisfy is a permission nobody uses.
 //
 // An agent blocked here is stopped mid-turn with a thread held open, so this
-// bar sits above every AI Workspace page rather than living on one of them.
+// bar sits above every Assistant page rather than living on one of them.
 // Three things it must get right:
 //
 //   1. **Legible.** A prompt showing raw JSON gets rubber-stamped, which is the
@@ -21,6 +21,7 @@ import { useEffect, useState } from 'react'
 import { Icon } from '../../lib/icons'
 import { useAiw } from '../../lib/aiwStore'
 import { initials, type ApprovalRequest } from '../../lib/aiw'
+import { ProjectTag } from './ProjectTag'
 
 /** Seconds left before the agent gives up and is refused. */
 function secondsLeft(r: ApprovalRequest, now: number): number {
@@ -73,7 +74,7 @@ function Request({ r, now }: { r: ApprovalRequest; now: number }) {
             {r.project_id && (
               <>
                 <span className="text-faint">·</span>
-                <span>{r.project_id}</span>
+                <ProjectTag id={r.project_id} />
               </>
             )}
             <span className="text-faint">·</span>

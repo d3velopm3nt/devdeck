@@ -27,7 +27,7 @@ export function HomeAttention() {
   const app = useApp()
   const a = useAiw()
 
-  // Home is often the first thing on screen, before the AI Workspace has ever
+  // Home is often the first thing on screen, before the Assistant has ever
   // been opened — so it loads its own data rather than assuming someone else
   // did. Without this the column reads "nothing needs you" on a cold start,
   // which is the one wrong answer it must never give.

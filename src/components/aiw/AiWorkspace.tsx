@@ -1,4 +1,4 @@
-// The AI Workspace surface.
+// The Assistant surface.
 //
 // Every number on these screens comes from a service call or the event bus —
 // there is no display-only data here. Where something failed to load it says so
@@ -13,6 +13,7 @@ import { AgentEditor } from './AgentEditor'
 import { Skills } from './Skills'
 import { ApprovalBar } from './ApprovalBar'
 import { Chat } from './Chat'
+import { ProjectTag } from './ProjectTag'
 import { CAPTURE_FEATURE, CAPTURE_PAGE } from '../../lib/devCapture'
 import {
   aiw,
@@ -168,8 +169,8 @@ function Overview() {
   return (
     <div className="flex h-full flex-col">
       <PageHead
-        title="AI Workspace"
-        subtitle="Shared context and coordination for humans and AI agents."
+        title="Assistant"
+        subtitle="Shared context and coordination across every project, in every workspace."
         right={
           <button className="btn-ghost text-[11.5px]" onClick={() => void a.refresh()}>
             <Icon name="update" size={11} /> Refresh
@@ -239,8 +240,12 @@ function Overview() {
                           <div className="flex-1" />
                           <span className="text-[10.5px] text-faint">{ago(f.last_activity)}</span>
                         </div>
-                        <div className="mb-2.5 font-mono text-[11px] text-muted">
-                          {a.projectId} · {f.areas.join(' · ') || 'no areas declared'}
+                        <div className="mb-2.5 flex min-w-0 items-baseline gap-1 text-[11px] text-muted">
+                          <ProjectTag id={a.projectId} />
+                          <span className="shrink-0">·</span>
+                          <span className="truncate font-mono">
+                            {f.areas.join(' · ') || 'no areas declared'}
+                          </span>
                         </div>
                         {fs.length === 0 ? (
                           <div className="text-[11.5px] text-muted">No sessions yet.</div>
@@ -1493,8 +1498,10 @@ function Agents() {
                     <Chip className={sessionStatusStyle(s.status)}>{s.status}</Chip>
                   </div>
                   <div className="mb-2.5 rounded border border-line bg-page px-3 py-2.5">
-                    <div className="mb-0.5 text-[10.5px] text-muted">
-                      {s.project_id} · {s.feature_id}
+                    <div className="mb-0.5 flex min-w-0 items-baseline gap-1 text-[10.5px] text-muted">
+                      <ProjectTag id={s.project_id} />
+                      <span className="shrink-0">·</span>
+                      <span className="truncate">{s.feature_id}</span>
                     </div>
                     <div className="text-[12px] leading-[1.45] text-body">
                       {s.summary ?? 'Working…'}
@@ -1762,7 +1769,7 @@ function Page() {
   if (!a.ready) {
     return (
       <div className="flex h-full items-center justify-center gap-2 text-[12px] text-muted">
-        <Icon name="spinner" size={14} className="animate-spin" /> Loading the AI Workspace…
+        <Icon name="spinner" size={14} className="animate-spin" /> Loading the Assistant…
       </div>
     )
   }

@@ -125,3 +125,56 @@ export function UpdateBar({
     </div>
   )
 }
+
+// The always-on version chip in the top bar. It carries the update state as a
+// colour — green is current, amber is an update waiting, red is a failed check
+// — so the bar below can stay closed until you click here for it.
+export function VersionPill({
+  state,
+  current,
+  latest,
+  open,
+  onClick,
+}: {
+  state: UpState
+  current: string
+  latest: string
+  open: boolean
+  onClick: () => void
+}) {
+  const busy = state === 'checking' || state === 'updating'
+
+  const tone: Record<UpState, string> = {
+    checking: 'bg-indigo-500/15 text-indigo-400 hover:bg-indigo-500/25',
+    updating: 'bg-indigo-500/15 text-indigo-400 hover:bg-indigo-500/25',
+    uptodate: 'bg-emerald-500/15 text-ok hover:bg-emerald-500/25',
+    done: 'bg-emerald-500/15 text-ok hover:bg-emerald-500/25',
+    available: 'bg-amber-500/15 text-warn hover:bg-amber-500/25',
+    error: 'bg-red-500/15 text-err hover:bg-red-500/25',
+  }
+
+  const icon: IconName = busy
+    ? 'spinner'
+    : state === 'available' ? 'update'
+      : state === 'error' ? 'alert'
+      : 'ok'
+
+  const label = state === 'available' && latest ? `v${latest}` : current ? `v${current}` : 'version'
+
+  const title = busy
+    ? state === 'updating' ? 'Updating DevDeck…' : 'Checking for updates…'
+    : state === 'available' ? `Update available — v${latest}`
+      : state === 'done' ? `Updated to v${latest} — restart DevDeck to apply`
+      : state === 'error' ? "Couldn't check for updates"
+      : `DevDeck v${current} is up to date`
+
+  return (
+    <button
+      className={`flex items-center gap-1 rounded px-2 py-0.5 text-[11.5px] font-medium ${tone[state]} ${open ? 'ring-1 ring-inset ring-current/40' : ''}`}
+      title={`${title}  ·  click to ${open ? 'hide' : 'check for'} updates`}
+      onClick={onClick}
+    >
+      <Icon name={icon} size={12} spin={busy} /> {label}
+    </button>
+  )
+}

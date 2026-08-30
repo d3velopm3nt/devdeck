@@ -222,8 +222,8 @@ fn one_projects_context_never_reaches_another() {
     let t = Tmp::new("projiso");
     let (tyrex, assetx) = seed_demo(&t.0).unwrap();
     let w = ws();
-    w.register_project("tyrex", "TyreX", tyrex.clone());
-    w.register_project("assetx", "AssetX", assetx.clone());
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex.clone());
+    w.register_project("assetx", "AssetX", assetx.clone(), assetx.clone());
 
     let tyrex_ctx = ContextService::assemble(
         &super::deck::Deck::new(tyrex),
@@ -313,7 +313,7 @@ fn a_mock_agent_goes_through_the_same_runtime_as_a_real_one() {
     let t = Tmp::new("runtime");
     let (tyrex, _) = seed_demo(&t.0).unwrap();
     let w = ws();
-    w.register_project("tyrex", "TyreX", tyrex);
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
 
     let outcome = AgentRuntime::run(
         &w,
@@ -356,7 +356,7 @@ fn a_work_item_is_marked_done_in_devdeck_not_just_in_memory() {
     let t = Tmp::new("durable");
     let (tyrex, _) = seed_demo(&t.0).unwrap();
     let w = ws();
-    w.register_project("tyrex", "TyreX", tyrex.clone());
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex.clone());
 
     AgentRuntime::run(
         &w,
@@ -392,7 +392,7 @@ fn the_architects_decision_is_written_to_devdeck_and_reaches_later_context() {
     let t = Tmp::new("decision");
     let (tyrex, _) = seed_demo(&t.0).unwrap();
     let w = ws();
-    w.register_project("tyrex", "TyreX", tyrex.clone());
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex.clone());
 
     AgentRuntime::run(
         &w,
@@ -431,7 +431,7 @@ fn qa_runs_the_configured_tests_and_the_result_is_recorded() {
     let t = Tmp::new("qa");
     let (tyrex, _) = seed_demo(&t.0).unwrap();
     let w = ws();
-    w.register_project("tyrex", "TyreX", tyrex);
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
 
     AgentRuntime::run(
         &w,
@@ -464,7 +464,7 @@ fn qa_cannot_edit_the_code_it_is_testing() {
     let t = Tmp::new("qaperms");
     let (tyrex, _) = seed_demo(&t.0).unwrap();
     let w = ws();
-    let p = w.register_project("tyrex", "TyreX", tyrex.clone());
+    let p = w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex.clone());
 
     // QA is read-only on files by definition; prove the runtime honours it.
     let r = p.tools.execute(
@@ -491,7 +491,7 @@ fn a_permission_change_takes_effect_immediately() {
     let t = Tmp::new("permchange");
     let (tyrex, _) = seed_demo(&t.0).unwrap();
     let w = ws();
-    w.register_project("tyrex", "TyreX", tyrex.clone());
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex.clone());
 
     let scope = super::events::EventScope::feature("tyrex", "offline-synchronisation");
     let call = ToolCall::new(
@@ -644,7 +644,7 @@ fn a_second_writer_to_the_same_file_is_caught_through_the_event_bus() {
     let t = Tmp::new("filebus");
     let (tyrex, _) = seed_demo(&t.0).unwrap();
     let w = ws();
-    let p = w.register_project("tyrex", "TyreX", tyrex);
+    let p = w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
     let scope = super::events::EventScope::feature("tyrex", "offline-synchronisation");
 
     let call = ToolCall::new(
@@ -673,7 +673,7 @@ fn configuring_a_real_provider_changes_nothing_but_the_provider_layer() {
     let t = Tmp::new("provider");
     let (tyrex, _) = seed_demo(&t.0).unwrap();
     let w = ws();
-    w.register_project("tyrex", "TyreX", tyrex);
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
 
     w.configure_provider(super::state::ProviderConfig {
         kind: "openai-compatible".into(),
@@ -742,7 +742,7 @@ fn approval_fixture() -> (Tmp, Arc<Workspace>, PathBuf, ToolCall) {
         std::time::Duration::from_secs(15),
     ));
     Workspace::install_handlers(&w);
-    w.register_project("tyrex", "TyreX", tyrex.clone());
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex.clone());
     w.set_permission("qa", "files", "approval").unwrap();
     let call = ToolCall::new(
         TOOL_FILES,
@@ -940,7 +940,7 @@ fn asking_the_assistant_to_start_work_puts_an_agent_on_it() {
     let t = Tmp::new("orchestrate");
     let (tyrex, _) = seed_demo(&t.0).unwrap();
     let w = ws();
-    w.register_project("tyrex", "TyreX", tyrex);
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
     let c = convs(&t);
 
     let conv = c.create(Some("tyrex")).unwrap();
@@ -985,7 +985,7 @@ fn delegating_returns_immediately_rather_than_waiting_for_the_agent() {
     let t = Tmp::new("nonblocking");
     let (tyrex, _) = seed_demo(&t.0).unwrap();
     let w = ws();
-    w.register_project("tyrex", "TyreX", tyrex);
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
     let c = convs(&t);
     let conv = c.create(Some("tyrex")).unwrap();
 
@@ -1006,7 +1006,7 @@ fn what_the_assistant_remembers_never_lands_in_the_project() {
     let t = Tmp::new("memsplit");
     let (tyrex, _) = seed_demo(&t.0).unwrap();
     let w = ws();
-    w.register_project("tyrex", "TyreX", tyrex.clone());
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex.clone());
     let c = convs(&t);
     let conv = c.create(Some("tyrex")).unwrap();
 
@@ -1104,7 +1104,7 @@ fn a_project_tool_service_refuses_the_assistant_only_tools() {
     let t = Tmp::new("assistonly");
     let (tyrex, _) = seed_demo(&t.0).unwrap();
     let w = ws();
-    let p = w.register_project("tyrex", "TyreX", tyrex);
+    let p = w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
     let scope = super::events::EventScope::project("tyrex");
 
     for tool in ["delegate", "memory"] {
@@ -1228,7 +1228,7 @@ fn a_running_agent_does_not_hold_the_provider_registry() {
     let t = Tmp::new("providerlock");
     let (tyrex, _) = seed_demo(&t.0).unwrap();
     let w = ws();
-    w.register_project("tyrex", "TyreX", tyrex);
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
 
     let running = {
         let w = w.clone();
@@ -1377,7 +1377,7 @@ fn restored_permissions_reach_the_running_tool_services() {
     let t = Tmp::new("restoreperm");
     let (tyrex, _) = seed_demo(&t.0).unwrap();
     let w = ws();
-    w.register_project("tyrex", "TyreX", tyrex.clone());
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex.clone());
 
     let scope = super::events::EventScope::project("tyrex");
     let call = ToolCall::new(
@@ -1413,7 +1413,7 @@ fn delegating_to_a_scripted_agent_says_that_it_is_scripted() {
     let t = Tmp::new("scripted");
     let (tyrex, _) = seed_demo(&t.0).unwrap();
     let w = ws();
-    w.register_project("tyrex", "TyreX", tyrex);
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
     let c = convs(&t);
     let conv = c.create(Some("tyrex")).unwrap();
 
@@ -1447,8 +1447,8 @@ fn syncing_adopts_every_project_and_forgets_the_ones_that_went() {
     let w = ws();
 
     let changed = w.sync_projects(&[
-        ("7".into(), "TyreX".into(), tyrex.clone()),
-        ("9".into(), "AssetX".into(), assetx.clone()),
+        ("7".into(), "TyreX".into(), tyrex.clone(), tyrex.clone()),
+        ("9".into(), "AssetX".into(), assetx.clone(), assetx.clone()),
     ]);
     assert_eq!(changed, 2);
     assert!(w.project("7").is_some());
@@ -1456,7 +1456,7 @@ fn syncing_adopts_every_project_and_forgets_the_ones_that_went() {
 
     // Delete one in the Explorer and it must leave here too. A project that
     // lingered would be the split registry all over again.
-    let changed = w.sync_projects(&[("7".into(), "TyreX".into(), tyrex.clone())]);
+    let changed = w.sync_projects(&[("7".into(), "TyreX".into(), tyrex.clone().clone(), tyrex.clone())]);
     assert_eq!(changed, 1, "one eviction, no re-registration");
     assert!(w.project("7").is_some());
     assert!(
@@ -1473,7 +1473,7 @@ fn an_unchanged_project_keeps_its_handle() {
     let (tyrex, _) = seed_demo(&t.0).unwrap();
     let w = ws();
 
-    let wanted = vec![("7".to_string(), "TyreX".to_string(), tyrex.clone())];
+    let wanted = vec![("7".to_string(), "TyreX".to_string(), tyrex.clone(), tyrex.clone())];
     w.sync_projects(&wanted);
     let first = w.project("7").unwrap();
 
@@ -1489,7 +1489,7 @@ fn an_unchanged_project_keeps_its_handle() {
     );
 
     // A rename is a real change and does rebuild.
-    let renamed = vec![("7".to_string(), "Tyre Exchange".to_string(), tyrex)];
+    let renamed = vec![("7".to_string(), "Tyre Exchange".to_string(), tyrex.clone(), tyrex)];
     assert_eq!(w.sync_projects(&renamed), 1);
     assert_eq!(w.project("7").unwrap().name, "Tyre Exchange");
 }
@@ -1502,9 +1502,9 @@ fn a_moved_project_gets_a_new_root() {
     let (tyrex, assetx) = seed_demo(&t.0).unwrap();
     let w = ws();
 
-    w.sync_projects(&[("7".into(), "TyreX".into(), tyrex)]);
+    w.sync_projects(&[("7".into(), "TyreX".into(), tyrex.clone(), tyrex)]);
     assert_eq!(
-        w.sync_projects(&[("7".into(), "TyreX".into(), assetx.clone())]),
+        w.sync_projects(&[("7".into(), "TyreX".into(), assetx.clone().clone(), assetx.clone())]),
         1
     );
     assert_eq!(w.project("7").unwrap().root, assetx);
@@ -1519,12 +1519,12 @@ fn re_identifying_a_project_keeps_everything_on_disk() {
     let (tyrex, _) = seed_demo(&t.0).unwrap();
     let w = ws();
 
-    w.sync_projects(&[("tyrex".into(), "TyreX".into(), tyrex.clone())]);
+    w.sync_projects(&[("tyrex".into(), "TyreX".into(), tyrex.clone().clone(), tyrex.clone())]);
     let before = w.project("tyrex").unwrap().deck().feature_slugs();
     assert!(!before.is_empty(), "the fixture has features");
 
     // The same folder, under the id a node would give it.
-    w.sync_projects(&[("42".into(), "TyreX".into(), tyrex)]);
+    w.sync_projects(&[("42".into(), "TyreX".into(), tyrex.clone(), tyrex)]);
     assert!(w.project("tyrex").is_none());
     let after = w.project("42").unwrap().deck().feature_slugs();
     assert_eq!(

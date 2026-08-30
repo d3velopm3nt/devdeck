@@ -171,13 +171,23 @@ pub struct TestRun {
 pub struct ProjectHandle {
     pub id: String,
     pub name: String,
+    /// Where the *code* is: what agents read, and what git is asked about.
+    /// For a node with no repository this is its own vault folder, so a topic
+    /// still has somewhere its notes live.
     pub root: PathBuf,
+    /// Where the *context* is — the vault folder holding `.devdeck`.
+    ///
+    /// These were one path until the vault existed, which meant a project's
+    /// context was written inside the code repository it described. That put
+    /// `.devdeck` in someone's pull request and gave a topic with no repo
+    /// nowhere at all to keep anything.
+    pub deck_root: PathBuf,
     pub tools: ToolService,
 }
 
 impl ProjectHandle {
     pub fn deck(&self) -> Deck {
-        Deck::new(self.root.clone())
+        Deck::new(self.deck_root.clone())
     }
 }
 
@@ -414,12 +424,19 @@ impl Workspace {
     /// Register a project directory. Builds its tool service with the
     /// permission matrix derived from the agent definitions, so permissions
     /// are enforced per project rather than globally.
-    pub fn register_project(&self, id: &str, name: &str, root: PathBuf) -> Arc<ProjectHandle> {
+    pub fn register_project(
+        &self,
+        id: &str,
+        name: &str,
+        root: PathBuf,
+        deck_root: PathBuf,
+    ) -> Arc<ProjectHandle> {
         let matrix = self.permission_matrix();
         let handle = Arc::new(ProjectHandle {
             id: id.to_string(),
             name: name.to_string(),
             root: root.clone(),
+            deck_root,
             tools: ToolService::new(root, id, matrix).with_approvals(self.approvals.clone()),
         });
         self.projects
@@ -440,24 +457,24 @@ impl Workspace {
     /// Handles are kept for projects whose id and root are unchanged: a
     /// `ProjectHandle` owns the running-app state, and rebuilding it on every
     /// sync would forget which apps an agent has started.
-    pub fn sync_projects(&self, wanted: &[(String, String, PathBuf)]) -> usize {
+    pub fn sync_projects(&self, wanted: &[(String, String, PathBuf, PathBuf)]) -> usize {
         let mut changed = 0usize;
         {
             let mut projects = self.projects.lock().unwrap();
             let keep: std::collections::HashSet<&str> =
-                wanted.iter().map(|(id, _, _)| id.as_str()).collect();
+                wanted.iter().map(|(id, _, _, _)| id.as_str()).collect();
             let before = projects.len();
             projects.retain(|id, _| keep.contains(id.as_str()));
             changed += before - projects.len();
         }
-        for (id, name, root) in wanted {
-            let same = self
-                .project(id)
-                .is_some_and(|p| &p.root == root && &p.name == name);
+        for (id, name, root, deck_root) in wanted {
+            let same = self.project(id).is_some_and(|p| {
+                &p.root == root && &p.deck_root == deck_root && &p.name == name
+            });
             if same {
                 continue;
             }
-            self.register_project(id, name, root.clone());
+            self.register_project(id, name, root.clone(), deck_root.clone());
             changed += 1;
         }
         changed
@@ -636,6 +653,7 @@ impl Workspace {
                     id: old.id.clone(),
                     name: old.name.clone(),
                     root: old.root.clone(),
+                    deck_root: old.deck_root.clone(),
                     tools: ToolService::new(old.root.clone(), &old.id, matrix.clone())
                         .with_approvals(self.approvals.clone()),
                 });

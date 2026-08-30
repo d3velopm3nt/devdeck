@@ -1,0 +1,16 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 620, "h": 680, "title": "The rail as the picker", "is_interactive": true },
+    { "file": "Collapsed.dc.html", "x": 740, "y": 0, "w": 620, "h": 680, "title": "When it collapses" }
+  ],
+  "annotations": [
+    {
+      "id": "try-it",
+      "x": 0,
+      "y": 760,
+      "w": 400,
+      "text": "This one works — click a solution to switch the tree,\nand Collapse to see the rail at 52px.\n\nThe Explorer has no switcher any more: the rail is the\nonly place a solution is named."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

@@ -93,7 +93,12 @@ export interface AppState {
   /** The workspace the Explorer is currently showing. Workspaces are switched,
    *  not browsed in the tree. */
   activeWorkspaceId: number | null
+  /** Scopes the Explorer to one solution. Null = show the whole workspace. */
+  activeSolutionId: number | null
   hotkey: string
+  /** The words offered when labelling a node. Free text is still allowed —
+   *  this is a shortlist you maintain, not a set of kinds the app enforces. */
+  labels: string[]
   /** Request the Log viewer to filter its output. `n` bumps so asking for
    *  the same thing twice still refocuses. `search` also drives its text
    *  box — that's how a stacktrace clip jumps you to matching log lines. */
@@ -151,7 +156,13 @@ export interface AppState {
 
   setSelectedNode: (id: number | null) => void
   setActiveWorkspace: (id: number | null) => void
+  setActiveSolution: (id: number | null) => void
+  /** Create a solution in the active workspace. Shared so the rail and the
+   *  Explorer cannot drift into two different creation paths. */
+  createSolution: (name: string) => Promise<TreeNode | null>
   setHotkey: (h: string) => void
+  refreshLabels: () => Promise<void>
+  saveLabels: (list: string[]) => Promise<void>
   focusServiceLogs: (name: string) => void
   /** Reveal the Logs tab filtered to `term` across every source. */
   searchLogs: (term: string) => void
@@ -265,6 +276,10 @@ let ingestTimer: number | undefined
 
 import { CAPTURE_RAIL } from './lib/devCapture'
 
+/// Seeded, not fixed: the list lives in settings and you edit it there.
+const DEFAULT_LABELS = ['Product', 'Topic', 'Client', 'Area', 'Service', 'Archive']
+const LABELS_KEY = 'node_labels'
+
 const RAIL_KEY = 'devdeck.railView'
 /// Every rail view, in one place. The old hand-written comparison chain did not
 /// include new views, so a view added later would be written to localStorage,
@@ -340,6 +355,8 @@ export const useApp = create<AppState>((set, get) => ({
   treeLoading: true,
   selectedNodeId: null,
   activeWorkspaceId: loadActiveWs(),
+  activeSolutionId: null,
+  labels: DEFAULT_LABELS,
   hotkey: 'ctrl+shift+Space',
   theme: 'dark',
   railView: loadRailView(),
@@ -381,7 +398,10 @@ export const useApp = create<AppState>((set, get) => ({
   refreshTree: async () => {
     set({ treeLoading: true })
     try {
-      const nodes = await ipc.treeList()
+      // The folders are the truth; SQLite is the index they are read into.
+      // A scan is what refreshes the tree, so a folder made outside the app
+      // shows up on the next read rather than never.
+      const nodes = await ipc.vaultScan()
       const activeWorkspaceId = resolveActiveWs(nodes, get().activeWorkspaceId)
       persistActiveWs(activeWorkspaceId)
       treeRetries = 0
@@ -807,7 +827,39 @@ export const useApp = create<AppState>((set, get) => ({
   setActiveWorkspace: (id) => {
     persistActiveWs(id)
     // Switching workspace clears any selection from the previous one.
-    set({ activeWorkspaceId: id, selectedNodeId: null })
+    // The solution scope belongs to the workspace we are leaving — a solution
+    // id from another workspace would scope the tree to nothing.
+    set({ activeWorkspaceId: id, selectedNodeId: null, activeSolutionId: null })
+    // ...and takes you there. Most rail destinations — the Assistant, Machine,
+    // Stash, Settings — are global, so a workspace tab clicked from one of them
+    // would otherwise change nothing you can see, which reads as a dead click.
+    // Going to Projects makes the tab mean the same thing from everywhere.
+    //
+    // Cheap to undo: the rail remembers where you were, and nothing you were
+    // looking at is lost by leaving it.
+    localStorage.setItem(RAIL_KEY, 'projects')
+    set({ railView: 'projects' })
+  },
+  setActiveSolution: (id) => set({ activeSolutionId: id, selectedNodeId: null }),
+  createSolution: async (name) => {
+    const { activeWorkspaceId, refreshTree } = get()
+    if (activeWorkspaceId == null) return null
+    const created = await ipc.vaultCreate(activeWorkspaceId, name)
+    await refreshTree()
+    return created
+  },
+  refreshLabels: async () => {
+    const raw = await ipc.settingGet(LABELS_KEY)
+    const list = (raw ?? DEFAULT_LABELS.join('\n'))
+      .split(/[\n,]/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+    set({ labels: list })
+  },
+  saveLabels: async (list) => {
+    const clean = [...new Set(list.map((s) => s.trim()).filter(Boolean))]
+    await ipc.settingSet(LABELS_KEY, clean.join('\n'))
+    set({ labels: clean })
   },
   setHotkey: (h) => set({ hotkey: h }),
   setTheme: async (t) => {

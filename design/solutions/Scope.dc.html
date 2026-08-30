@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background: #0d1017; }
+    a { color: #818cf8; } a:hover { color: #a5b4fc; }
+    .col { border: 1px solid #1e293b; border-radius: 6px; background: #11141c; padding: 13px 14px; display: flex; flex-direction: column; gap: 9px; }
+    .hd { display: flex; align-items: center; gap: 7px; }
+    .hd b { font-size: 11.5px; font-weight: 600; letter-spacing: 0.03em; }
+    .it { font-size: 11.5px; line-height: 1.45; color: #cbd5e1; padding-left: 15px; position: relative; }
+    .it::before { content: ''; position: absolute; left: 0; top: 6px; width: 5px; height: 5px; border-radius: 50%; }
+    .go .it::before { background: #4ade80; }
+    .later .it::before { background: #fbbf24; }
+    .never .it::before { background: #64748b; }
+    .it span { color: #64748b; }
+    .mono { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 10.5px; }
+  </style>
+</helmet>
+
+<div style="width: 700px; height: 680px; background: #0d1017; padding: 24px 26px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px">
+
+  <div>
+    <div style="font-size: 15px; font-weight: 600; color: #e2e8f0">Build this much, and stop</div>
+    <div style="margin-top: 3px; font-size: 11.5px; line-height: 1.5; color: #94a3b8">
+      You asked to be kept honest. Everything in the middle column is a
+      thing that sounds necessary and is not — yet.
+    </div>
+  </div>
+
+  <div class="col go" style="flex: none">
+    <div class="hd">
+      <span style="width: 7px; height: 7px; border-radius: 50%; background: #4ade80"></span>
+      <b style="color: #4ade80">BUILD FIRST</b>
+      <span style="margin-left: auto; font-size: 10px; color: #475569">the whole idea, minimum surface</span>
+    </div>
+    <div class="it">A <span class="mono">solution</span> node kind, and the switcher at the top of the Explorer</div>
+    <div class="it">One config repo, one folder structure</div>
+    <div class="it">Features as a flat list on a solution, each naming the projects it touches</div>
+    <div class="it">A one-way import of existing <span class="mono">.devdeck</span> folders into it</div>
+  </div>
+
+  <div class="col later" style="flex: none">
+    <div class="hd">
+      <span style="width: 7px; height: 7px; border-radius: 50%; background: #fbbf24"></span>
+      <b style="color: #fbbf24">DEFER UNTIL IT HURTS</b>
+      <span style="margin-left: auto; font-size: 10px; color: #475569">each needs a real complaint first</span>
+    </div>
+    <div class="it">
+      Three levels of agent/skill inheritance
+      <span>— start with one, at the solution. Add levels the day you copy-paste an agent.</span>
+    </div>
+    <div class="it">
+      <span class="mono">branch</span> per project, and drift warnings
+      <span>— wait until a stale context actually bites someone.</span>
+    </div>
+    <div class="it">
+      Per-project feature state and status rollups
+      <span>— a status on the feature is enough to start.</span>
+    </div>
+    <div class="it">
+      A config repo per client
+      <span>— do it the day you give someone outside the team access.</span>
+    </div>
+  </div>
+
+  <div class="col never" style="flex: none">
+    <div class="hd">
+      <span style="width: 7px; height: 7px; border-radius: 50%; background: #64748b"></span>
+      <b style="color: #94a3b8">DON'T BUILD</b>
+      <span style="margin-left: auto; font-size: 10px; color: #475569">these actively cost you</span>
+    </div>
+    <div class="it">
+      Two kinds of feature
+      <span>— one kind, listing 1..n projects. A single-repo feature is one that lists one.</span>
+    </div>
+    <div class="it">
+      Sync between the config repo and <span class="mono">.devdeck</span>
+      <span>— import once, then delete <span class="mono">.devdeck</span>. Two-way sync is the split-brain you are trying to remove.</span>
+    </div>
+    <div class="it">
+      Services or commands on a solution
+      <span>— those belong to a repo, and always will.</span>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

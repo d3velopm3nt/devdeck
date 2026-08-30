@@ -67,7 +67,10 @@ export function GitHubImportModal({ onClose }: { onClose: () => void }) {
       const name = dir.split(/[\\/]/).filter(Boolean).pop() ?? 'project'
 
       setStatus('Creating project…')
-      const project = await ipc.nodeCreate(activeWorkspaceId, 'project', name, dir)
+      // The clone lands wherever the user chose; the node is a vault folder
+      // that points at it.
+      const project = await ipc.vaultCreate(activeWorkspaceId, name)
+      await ipc.vaultSetMeta(project.id, { repo: dir })
 
       setStatus('Scanning scripts…')
       const detected = await ipc.scanProject(dir).catch(() => [])

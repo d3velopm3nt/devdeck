@@ -39,10 +39,74 @@ export const nodeCreate = (
   path?: string | null,
   relPath?: string | null,
 ) => invoke<TreeNode>('node_create', { parentId, kind, name, path: path ?? null, relPath: relPath ?? null })
+// ---- the vault: the folder tree that is the Explorer ----
+
+/** What a node's `_devdeck.md` says about it. */
+export interface VaultMeta {
+  label: string
+  /** Absolute path to the code this node is about. Its presence is what makes
+   *  the node a project; the vault folder and the repo are unrelated dirs. */
+  repo: string
+  color: string
+  body: string
+}
+
+/** Where the vault lives, or null until the user has chosen. */
+export const vaultRoot = () => invoke<string | null>('vault_root')
+
+/** What the pre-vault tree still holds, so setup can say what clearing costs. */
+export interface VaultLegacy {
+  nodes: number
+  commands: number
+  services: number
+}
+export const vaultLegacy = () => invoke<VaultLegacy>('vault_legacy')
+/** The folder setup suggests, so the screen opens with an answer in it. */
+export const vaultDefaultRoot = () => invoke<string>('vault_default_root')
+export const vaultSetRoot = (path: string, gitInit: boolean, adoptExistingTree: boolean) =>
+  invoke<string>('vault_set_root', { path, gitInit, adoptExistingTree })
+/** Re-read the folders and hand back the tree they describe. */
+export const vaultScan = () => invoke<TreeNode[]>('vault_scan')
+export const vaultCreate = (parentId: number | null, name: string) =>
+  invoke<TreeNode>('vault_create', { parentId, name })
+export const vaultRename = (id: number, name: string) =>
+  invoke<void>('vault_rename', { id, name })
+export const vaultMeta = (id: number) => invoke<VaultMeta>('vault_meta', { id })
+export const vaultSetMeta = (
+  id: number,
+  fields: { label?: string; repo?: string; color?: string; body?: string },
+) =>
+  invoke<void>('vault_set_meta', {
+    id,
+    label: fields.label ?? null,
+    repo: fields.repo ?? null,
+    color: fields.color ?? null,
+    body: fields.body ?? null,
+  })
+export const vaultDelete = (id: number) => invoke<void>('vault_delete', { id })
+/** What switching to another vault folder would cost, before anything moves. */
+export interface VaultSwitchCost {
+  keeps: number
+  drops: number
+  losing_commands: number
+  losing_services: number
+}
+/** Move the vault and everything in it. Ids survive, so nothing loses its
+ *  commands or services. */
+export const vaultMove = (newPath: string) => invoke<string>('vault_move', { newPath })
+/** Adopt a folder that already holds a vault — a clone on another machine. */
+export const vaultSwitch = (path: string) => invoke<string>('vault_switch', { path })
+export const vaultSwitchCost = (path: string) => invoke<VaultSwitchCost>('vault_switch_cost', { path })
+
+/** A node's own folder on disk — for revealing it, or writing context into it. */
+export const vaultDir = (id: number) => invoke<string>('vault_dir', { id })
+
+export const nodeSetLabel = (id: number, label: string) =>
+  invoke<void>('node_set_label', { id, label })
 export const nodeRename = (id: number, name: string) => invoke<void>('node_rename', { id, name })
 export const nodeUpdate = (
   id: number,
-  fields: { name?: string; path?: string; relPath?: string; color?: string },
+  fields: { name?: string; path?: string; relPath?: string; color?: string; kind?: string },
 ) =>
   invoke<void>('node_update', {
     id,
@@ -50,6 +114,7 @@ export const nodeUpdate = (
     path: fields.path ?? null,
     relPath: fields.relPath ?? null,
     color: fields.color ?? null,
+    kind: fields.kind ?? null,
   })
 export const nodeDelete = (id: number) => invoke<void>('node_delete', { id })
 
@@ -170,7 +235,7 @@ export function onSetupDone(cb: (ok: boolean) => void): Promise<UnlistenFn> {
 }
 export const cloneRepo = (url: string, parent: string) => invoke<string>('clone_repo', { url, parent })
 
-/** Who is signed in to GitHub, per the `gh` CLI. */
+/** Who is signed in to GitHub — `gh` first, our own OAuth token second. */
 export interface GithubUser {
   /** Empty when nobody is signed in, or gh is not installed. */
   login: string
@@ -181,6 +246,37 @@ export interface GithubUser {
 }
 
 export const githubUser = () => invoke<GithubUser>('github_user')
+
+// ---- GitHub sign-in (OAuth device flow) ----
+
+/** The codes GitHub hands back when a sign-in starts. */
+export interface DeviceStart {
+  /** The short code the user types into GitHub, e.g. `WDJB-MJHT`. */
+  user_code: string
+  /** Ours, not theirs — the handle we poll with. Never shown. */
+  device_code: string
+  verification_uri: string
+  /** Seconds GitHub asks us to wait between polls. */
+  interval: number
+  /** Seconds until the code dies. */
+  expires_in: number
+}
+
+/** One poll's answer. `pending` is the normal case, not a failure. */
+export type DevicePoll =
+  | { kind: 'pending'; interval: number }
+  /** Signed in. `gh` says whether the CLI took the token too. */
+  | { kind: 'done'; login: string; gh: boolean }
+  | { kind: 'failed'; message: string; retryable: boolean }
+
+/** Whether this build has an OAuth app to sign in against at all. */
+export const githubOauthConfigured = () => invoke<boolean>('github_oauth_configured')
+export const githubDeviceStart = () => invoke<DeviceStart>('github_device_start')
+export const githubDevicePoll = (deviceCode: string, interval: number) =>
+  invoke<DevicePoll>('github_device_poll', { deviceCode, interval })
+/** Do we hold a token? Never *what* it is. */
+export const githubTokenStored = () => invoke<boolean>('github_token_stored')
+export const githubSignOut = (alsoGh = true) => invoke<void>('github_sign_out', { alsoGh })
 
 // ---- git ----
 export interface GitInfo {

@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { Dock, buildDefaultLayout } from './Dock'
 import { BottomBar } from './components/BottomBar'
 import { SetupModal } from './components/SetupModal'
+import { VaultSetup } from './components/VaultSetup'
 import { Sheet } from './components/Sheet'
-import { UpdateBar, type UpState } from './components/UpdateBar'
+import { UpdateBar, VersionPill, type UpState } from './components/UpdateBar'
 import { Rail } from './shell/Rail'
 import { WorkspaceTabs } from './shell/WorkspaceTabs'
 import { WindowControls } from './shell/WindowControls'
@@ -40,7 +41,7 @@ async function handleTourAction(action: ipc.TourAction) {
     return
   }
   if (action === 'workspace') {
-    const ws = await ipc.nodeCreate(null, 'workspace', 'New workspace')
+    const ws = await ipc.vaultCreate(null, 'New workspace')
     await st.refreshTree()
     useApp.getState().setActiveWorkspace(ws.id)
     useApp.getState().setRailView('projects')
@@ -50,13 +51,14 @@ async function handleTourAction(action: ipc.TourAction) {
   if (action === 'project') {
     let ws = useApp.getState().nodes.find((n) => n.kind === 'workspace')
     if (!ws) {
-      ws = await ipc.nodeCreate(null, 'workspace', 'New workspace')
+      ws = await ipc.vaultCreate(null, 'New workspace')
       await st.refreshTree()
     }
     const dir = await openDialog({ directory: true, title: 'Select the project base folder (repo root)' })
     if (typeof dir !== 'string') return
     const name = dir.split(/[\\/]/).filter(Boolean).pop() ?? 'project'
-    const created = await ipc.nodeCreate(ws.id, 'project', name, dir)
+    const created = await ipc.vaultCreate(ws.id, name)
+    await ipc.vaultSetMeta(created.id, { repo: dir })
     await st.refreshTree()
     useApp.getState().setActiveWorkspace(ws.id)
     useApp.getState().setSelectedNode(created.id)
@@ -78,16 +80,26 @@ function Menu({
   label,
   children,
   accent,
+  bar,
 }: {
   label: React.ReactNode
   children: (close: () => void) => React.ReactNode
   accent?: boolean
+  /// A menu-bar item: flat until hovered or open, so a row of them reads as
+  /// one bar rather than five buttons.
+  bar?: boolean
 }) {
   const [open, setOpen] = useState(false)
   return (
     <div className="relative">
       <button
-        className={`inline-flex items-center gap-1 ${accent ? 'btn-primary' : 'btn-ghost'} text-[12px]`}
+        className={
+          bar
+            ? `inline-flex items-center rounded px-2.5 py-1 text-[12px] ${
+                open ? 'bg-hover text-ink' : 'text-body hover:bg-hover/60 hover:text-ink'
+              }`
+            : `inline-flex items-center gap-1 ${accent ? 'btn-primary' : 'btn-ghost'} text-[12px]`
+        }
         onClick={() => setOpen((o) => !o)}
       >
         {label}
@@ -133,7 +145,9 @@ export default function App() {
   const [update, setUpdate] = useState<ipc.UpdateInfo | null>(null)
   const [upState, setUpState] = useState<UpState>('checking')
   const [upStatus, setUpStatus] = useState('')
-  const [upHidden, setUpHidden] = useState(false)
+  const [upHidden, setUpHidden] = useState(true)
+  // The bar stays out of the way until you ask for it — the version pill in
+  // the top bar carries the status, and clicking it opens this.
 
   // Timestamp of the last completed check, so a background re-check doesn't
   // fire on every window focus.
@@ -159,14 +173,17 @@ export default function App() {
         }
         setUpStatus('')
         setUpState(info.available ? 'available' : 'uptodate')
-        if (info.available && quiet) setUpHidden(false)
       })
       .catch((e) => {
         setUpStatus(String(e))
         setUpState('error')
       })
   }
-  useEffect(() => checkUpdate(), [])
+  // Check on launch, but quietly: the pill reports the result, not the bar.
+  useEffect(() => checkUpdate(true), [])
+
+  // The label registry, read once so the tree menu and the config page agree.
+  useEffect(() => void useApp.getState().refreshLabels(), [])
 
   // Re-check periodically and when the window regains focus — a long-running
   // window used to never learn about a new release after startup.
@@ -339,8 +356,35 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // undefined = not asked yet (render nothing), null = no vault chosen.
+  const [vaultRoot, setVaultRoot] = useState<string | null | undefined>(undefined)
+  useEffect(() => {
+    void ipc
+      .vaultRoot()
+      .then((r) => setVaultRoot(r))
+      .catch(() => setVaultRoot(null))
+  }, [])
+
   const runningCount = Object.values(app.svcStates).filter((s) => s.status === 'running').length
   const liveTerms = app.terminals.filter((t) => t.alive)
+
+  // Nothing works without a vault folder, so ask for one before showing a
+  // shell whose Explorer would only ever be empty.
+  // Not asked yet: paint the ground rather than a shell that is about to be
+  // replaced by the setup screen.
+  if (vaultRoot === undefined) return <div className="h-screen bg-app" />
+  if (vaultRoot === null) {
+    return (
+      <div className="flex h-screen flex-col bg-app text-body">
+        <VaultSetup
+          onDone={() => {
+            setVaultRoot('')
+            void app.refreshTree()
+          }}
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-screen flex-col bg-app text-body">
@@ -365,140 +409,219 @@ export default function App() {
         >
           {(close) => (
             <>
-              <div className="px-2 py-1 text-[9.5px] font-semibold uppercase tracking-[0.06em] text-faint">
-                New terminal
+              <div className="px-2 py-1.5 text-[11px] text-muted">
+                DevDeck {update?.current ? `v${update.current}` : ''}
               </div>
-              {app.shells.map((sh) => (
-                <button
-                  key={sh.command}
-                  className="menu-item"
-                  onClick={() => {
-                    close()
-                    app.setRailView('projects')
-                    void openTerminal(sh.command, nodeDir || undefined)
-                  }}
-                >
-                  <Icon name="terminal" size={13} /> {sh.name}
-                  {node && <span className="ml-1 text-muted">in {node.name}</span>}
-                </button>
-              ))}
-
-              {/* Open terminals stay reachable from here until the document
-                  tab row lands; without it a terminal you scrolled away from
-                  has no way back. */}
-              {liveTerms.length > 0 && (
-                <>
-                  <div className="my-1 border-t border-line" />
-                  <div className="px-2 py-1 text-[9.5px] font-semibold uppercase tracking-[0.06em] text-faint">
-                    Open terminals
-                  </div>
-                  {liveTerms.map((t) => (
-                    <button
-                      key={t.id}
-                      className="menu-item"
-                      onClick={() => {
-                        close()
-                        app.setRailView('projects')
-                        openSingleton(`terminal-${t.id}`, 'terminal', t.title)
-                      }}
-                    >
-                      <Icon name="terminal" size={13} /> #{t.id} {t.title}
-                    </button>
-                  ))}
-                </>
-              )}
-
-              {app.profiles.length > 0 && (
-                <>
-                  <div className="my-1 border-t border-line" />
-                  <div className="px-2 py-1 text-[9.5px] font-semibold uppercase tracking-[0.06em] text-faint">
-                    Launch
-                  </div>
-                  {app.profiles.map((pr) => (
-                    <button
-                      key={pr.id}
-                      className="menu-item"
-                      onClick={() => {
-                        close()
-                        void launchProfile(pr)
-                      }}
-                    >
-                      <Icon name="service" size={13} /> {pr.name}
-                    </button>
-                  ))}
-                </>
-              )}
-
-              <div className="my-1 border-t border-line" />
-              <div className="px-2 py-1 text-[9.5px] font-semibold uppercase tracking-[0.06em] text-faint">
-                Layout
-              </div>
-              <button
-                className="menu-item"
-                onClick={() => {
-                  close()
-                  const name = prompt('Save layout as')?.trim()
-                  if (name) {
-                    void saveLayout(name).then(() => useApp.getState().refreshLayouts())
-                  }
-                }}
-              >
-                Save current as…
-              </button>
-              <button
-                className="menu-item"
-                onClick={() => {
-                  close()
-                  const api = dockApi()
-                  if (api) buildDefaultLayout(api)
-                }}
-              >
-                Reset to default
-              </button>
-              {app.layouts
-                .filter((l) => !l.name.startsWith('__autosave'))
-                .map((l) => (
-                  <button
-                    key={l.id}
-                    className="menu-item"
-                    onClick={() => {
-                      close()
-                      app.setRailView('projects')
-                      restoreLayout(l.data)
-                    }}
-                  >
-                    <Icon name="layout" size={13} /> {l.name}
-                  </button>
-                ))}
-
               <div className="my-1 border-t border-line" />
               <button
                 className="menu-item"
                 onClick={() => {
                   close()
-                  void ipc.widgetToggle()
+                  app.setRailView('settings')
                 }}
               >
-                <Icon name="widget" size={13} /> Command widget
-                <span className="ml-auto text-[10px] text-faint">{app.hotkey}</span>
-              </button>
-              <button
-                className="menu-item"
-                onClick={() => {
-                  close()
-                  void checkUpdate()
-                }}
-              >
-                <Icon name="update" size={13} /> Check for updates
-                {update && <span className="ml-auto text-[10px] text-faint">v{update.current}</span>}
+                <Icon name="settings" size={13} /> Settings
               </button>
             </>
           )}
         </Menu>
 
-        <div className="my-2 w-px shrink-0 bg-line" />
+        {/* The four standard menus, beside the brand rather than inside it.
+            Every item here already existed in the one DevDeck dropdown; this
+            only says out loud which kind of thing each one is. */}
+        <div className="flex items-center gap-0.5 self-center pl-1">
+          <Menu bar label="File">
+            {(close) => (
+              <>
+                <div className="px-2 py-1 text-[9.5px] font-semibold uppercase tracking-[0.06em] text-faint">
+                  New terminal
+                </div>
+                {app.shells.map((sh) => (
+                  <button
+                    key={sh.command}
+                    className="menu-item"
+                    onClick={() => {
+                      close()
+                      app.setRailView('projects')
+                      void openTerminal(sh.command, nodeDir || undefined)
+                    }}
+                  >
+                    <Icon name="terminal" size={13} /> {sh.name}
+                  </button>
+                ))}
+                {liveTerms.length > 0 && (
+                  <>
+                    <div className="my-1 border-t border-line" />
+                    <div className="px-2 py-1 text-[9.5px] font-semibold uppercase tracking-[0.06em] text-faint">
+                      Open terminals
+                    </div>
+                    {liveTerms.map((t) => (
+                      <button
+                        key={t.id}
+                        className="menu-item"
+                        onClick={() => {
+                          close()
+                          app.setRailView('projects')
+                          openSingleton(`terminal-${t.id}`, 'terminal', t.title)
+                        }}
+                      >
+                        <Icon name="terminal" size={13} /> #{t.id} {t.title}
+                      </button>
+                    ))}
+                  </>
+                )}
+              </>
+            )}
+          </Menu>
 
-        <WorkspaceTabs />
+          <Menu bar label="View">
+            {(close) => (
+              <>
+                <div className="px-2 py-1 text-[9.5px] font-semibold uppercase tracking-[0.06em] text-faint">
+                  Layout
+                </div>
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    close()
+                    const name = prompt('Save layout as')?.trim()
+                    if (name) {
+                      void saveLayout(name).then(() => useApp.getState().refreshLayouts())
+                    }
+                  }}
+                >
+                  Save current as…
+                </button>
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    close()
+                    const api = dockApi()
+                    if (api) buildDefaultLayout(api)
+                  }}
+                >
+                  Reset to default
+                </button>
+                {app.layouts
+                  .filter((l) => !l.name.startsWith('__autosave'))
+                  .map((l) => (
+                    <button
+                      key={l.id}
+                      className="menu-item"
+                      onClick={() => {
+                        close()
+                        app.setRailView('projects')
+                        restoreLayout(l.data)
+                      }}
+                    >
+                      <Icon name="layout" size={13} /> {l.name}
+                    </button>
+                  ))}
+
+                <div className="my-1 border-t border-line" />
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    close()
+                    app.showBottom('logs')
+                  }}
+                >
+                  <Icon name="logs" size={13} /> Logs
+                </button>
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    close()
+                    app.showBottom('processes')
+                  }}
+                >
+                  <Icon name="machine" size={13} /> Processes
+                </button>
+
+                <div className="my-1 border-t border-line" />
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    close()
+                    void ipc.widgetToggle()
+                  }}
+                >
+                  <Icon name="widget" size={13} /> Command widget
+                  <span className="ml-auto text-[10px] text-faint">{app.hotkey}</span>
+                </button>
+              </>
+            )}
+          </Menu>
+
+          <Menu bar label="Build">
+            {(close) => (
+              <>
+                {app.profiles.length === 0 ? (
+                  <div className="px-2 py-1.5 text-[11.5px] text-muted">No launch profiles yet.</div>
+                ) : (
+                  <>
+                    <div className="px-2 py-1 text-[9.5px] font-semibold uppercase tracking-[0.06em] text-faint">
+                      Launch
+                    </div>
+                    {app.profiles.map((pr) => (
+                      <button
+                        key={pr.id}
+                        className="menu-item"
+                        onClick={() => {
+                          close()
+                          void launchProfile(pr)
+                        }}
+                      >
+                        <Icon name="service" size={13} /> {pr.name}
+                      </button>
+                    ))}
+                  </>
+                )}
+                {node && (node.kind === 'project' || node.kind === 'folder') && (
+                  <>
+                    <div className="my-1 border-t border-line" />
+                    <button
+                      className="menu-item"
+                      onClick={() => {
+                        close()
+                        openNodeSetup(node.id, node.name)
+                      }}
+                    >
+                      <Icon name="tool" size={13} /> Set up “{node.name}”…
+                    </button>
+                  </>
+                )}
+              </>
+            )}
+          </Menu>
+
+          <Menu bar label="Help">
+            {(close) => (
+              <>
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    close()
+                    void checkUpdate()
+                  }}
+                >
+                  <Icon name="update" size={13} /> Check for updates
+                  {update && <span className="ml-auto text-[10px] text-faint">v{update.current}</span>}
+                </button>
+                <div className="my-1 border-t border-line" />
+                <button
+                  className="menu-item"
+                  onClick={() => {
+                    close()
+                    void ipc.openUrl('https://github.com/d3velopm3nt/devdeck')
+                  }}
+                >
+                  <Icon name="external" size={13} /> GitHub repository
+                </button>
+              </>
+            )}
+          </Menu>
+        </div>
 
         <div className="ml-auto flex items-center gap-2.5 pl-2 pr-1">
           <AgentCluster />
@@ -511,23 +634,28 @@ export default function App() {
           >
             <Icon name="widget" size={15} />
           </button>
-          {/* An update is the one thing here worth interrupting for, so it
-              keeps a visible pill rather than living only in the menu. */}
-          {upState === 'available' && (
-            <button
-              className="flex items-center gap-1 rounded bg-amber-500/15 px-2 py-0.5 text-[11.5px] font-medium text-warn hover:bg-amber-500/25"
-              title={`Update available — v${update?.latest}`}
-              onClick={() => checkUpdate()}
-            >
-              <Icon name="update" size={12} /> v{update?.latest}
-            </button>
-          )}
+          {/* The version, always visible, coloured by update state. Green means
+              you're current; clicking opens the update bar and re-checks. */}
+          <VersionPill
+            state={upState}
+            current={update?.current ?? ''}
+            latest={update?.latest ?? ''}
+            open={!upHidden}
+            onClick={() => (upHidden ? checkUpdate() : setUpHidden(true))}
+          />
           <div className="h-4 w-px bg-line" />
           <NotificationBell />
           <AccountChip />
         </div>
 
         <WindowControls />
+      </div>
+
+      {/* Workspaces get the row to themselves. Sharing the title bar with the
+          menus meant two different kinds of thing — commands and places —
+          competing for the same strip. */}
+      <div className="flex items-stretch border-b border-line bg-panel" data-tauri-drag-region>
+        <WorkspaceTabs />
       </div>
 
 

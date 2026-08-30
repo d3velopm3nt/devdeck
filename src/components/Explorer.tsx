@@ -9,9 +9,9 @@ import * as ipc from '../lib/ipc'
 import type { CommandDef, NodeKind, ProfileDef, ServiceDef, SvcState, TreeNode } from '../lib/types'
 import { useApp } from '../store'
 import { useAiw } from '../lib/aiwStore'
-import { openEditor, openNodeSetup, openService, openSpace, openAiwDoc, type AiwDoc } from '../lib/dock'
+import { openEditor, openNodeConfig, openNodeSetup, openService, openSpace, openAiwDoc, type AiwDoc } from '../lib/dock'
 import { focusCommandSession, launchProfile, openTerminal, runCommandInNewTerminal } from '../lib/runner'
-import { resolveDir } from '../lib/tree'
+import { findNode, resolveDir } from '../lib/tree'
 import { nodeColor } from '../lib/spaces'
 import { loadExampleWorkspace } from '../lib/example'
 import { PopMenu, type MenuItem } from './PopMenu'
@@ -43,18 +43,21 @@ function saveSet<T>(key: string, set: Set<T>) {
 
 const KIND_ICON: Record<NodeKind, string> = {
   workspace: 'workspace',
+  solution: 'solution',
   project: 'project',
   folder: 'folder',
 }
 
 const KIND_COLOR: Record<NodeKind, string> = {
   workspace: 'text-indigo-400',
+  solution: 'text-viol',
   project: 'text-ok',
   folder: 'text-dim',
 }
 
 const KIND_LABEL: Record<NodeKind, string> = {
   workspace: 'Workspace',
+  solution: 'Solution',
   project: 'Project',
   folder: 'Folder',
 }
@@ -85,16 +88,35 @@ export function Explorer() {
     nodes, commands, services, profiles, svcStates, gitByNode,
     selectedNodeId, setSelectedNode, setRailView,
     activeWorkspaceId, activeWorkspace, setActiveWorkspace,
+    activeSolutionId, setActiveSolution, createSolution, labels,
     refreshTree, refreshCommands, refreshServices, refreshProfiles, focusServiceLogs, servicePort,
     requestStartService, treeError, treeLoading, retryBootstrap,
   } = useApp()
   // The tree shows the active workspace's projects/folders — workspaces
   // themselves are switched from the header, not browsed in the tree.
   const workspaces = useMemo(() => nodes.filter((n) => n.kind === 'workspace'), [nodes])
-  const roots = useMemo(
-    () => (activeWorkspaceId == null ? [] : nodes.filter((n) => n.parent_id === activeWorkspaceId)),
+
+  // Solutions of the active workspace. The switcher only appears when there is
+  // at least one — a tree with none looks exactly as it always has.
+  const solutions = useMemo(
+    () =>
+      activeWorkspaceId == null
+        ? []
+        : nodes.filter((n) => n.kind === 'solution' && n.parent_id === activeWorkspaceId),
     [nodes, activeWorkspaceId],
   )
+  const activeSolution = useMemo(
+    () => solutions.find((s) => s.id === activeSolutionId) ?? null,
+    [solutions, activeSolutionId],
+  )
+
+  // Scoped to a solution when one is picked, otherwise the whole workspace —
+  // which still shows solutions as branches, so nothing is hidden by default.
+  const roots = useMemo(() => {
+    if (activeWorkspaceId == null) return []
+    if (activeSolution) return nodes.filter((n) => n.parent_id === activeSolution.id)
+    return nodes.filter((n) => n.parent_id === activeWorkspaceId)
+  }, [nodes, activeWorkspaceId, activeSolution])
   const ws = activeWorkspace()
   const [expanded, setExpanded] = useState<Set<number>>(() => loadSet<number>(EXPANDED_KEY))
   // Category groups are open by default; this holds the ones the user collapsed.
@@ -105,6 +127,8 @@ export function Explorer() {
   const [menu, setMenu] = useState<Menu | null>(null)
   const [wsMenu, setWsMenu] = useState<{ x: number; y: number } | null>(null)
   const [ghOpen, setGhOpen] = useState(false)
+  const [filtering, setFiltering] = useState(false)
+  const [filter, setFilter] = useState('')
   const [renamingId, setRenamingId] = useState<number | null>(null)
   const [draft, setDraft] = useState('')
   const [busySvc, setBusySvc] = useState<number | null>(null)
@@ -148,26 +172,60 @@ export function Explorer() {
     const name = draft.trim()
     setRenamingId(null)
     if (name && name !== node.name) {
-      await ipc.nodeRename(node.id, name)
+      await ipc.vaultRename(node.id, name)
       await refreshTree()
     }
   }
 
-  const addProject = async () => {
+  // Add creates a container and opens its config page. The folder picker used
+  // to be the first question, which quietly asserted that everything is a
+  // repo — and a Topic has no folder at all. Choosing a folder on that page is
+  // what promotes it to a project.
+  // Adding makes a folder. The name is asked for because the folder *is* the
+  // name — and the folder picker that used to open here asked the wrong
+  // question entirely, since a topic has no repo to point at.
+  const addNode = async () => {
     if (activeWorkspaceId == null) return
-    // A project is an app root — pick its base directory.
+    const name = prompt('Name for the new folder')
+    if (name === null) return
+    const parent = activeSolutionId ?? activeWorkspaceId
+    try {
+      const created = await ipc.vaultCreate(parent, name)
+      expand(parent)
+      await refreshTree()
+      setSelectedNode(created.id)
+      openNodeConfig(created.id, created.name)
+    } catch (e) {
+      alert(String(e))
+    }
+  }
+
+  const addProjectTo = async (parentId: number) => {
     const dir = await openDialog({ directory: true, title: 'Select the project base folder (repo root)' })
     if (typeof dir !== 'string') return
-    const name = dir.split(/[\\/]/).filter(Boolean).pop() ?? 'project'
-    const created = await ipc.nodeCreate(activeWorkspaceId, 'project', name, dir)
+    const name = dir.split(/[\/]/).filter(Boolean).pop() ?? 'project'
+    const created = await ipc.vaultCreate(parentId, name)
+    await ipc.vaultSetMeta(created.id, { repo: dir })
+    expand(parentId)
     await refreshTree()
     setSelectedNode(created.id)
     openNodeSetup(created.id, name)
   }
 
+  const addSolution = async () => {
+    if (activeWorkspaceId == null) return
+    const name = prompt('Name for the new solution', 'New solution')
+    if (name === null) return
+    const created = await createSolution(name.trim() || 'New solution')
+    if (created) {
+      setSelectedNode(created.id)
+      expand(created.id)
+    }
+  }
+
   const addFolder = async (parent: TreeNode) => {
     // Default the subpath to the folder name; user tunes it in setup.
-    const created = await ipc.nodeCreate(parent.id, 'folder', 'new-folder', null, 'new-folder')
+    const created = await ipc.vaultCreate(parent.id, 'new-folder')
     expand(parent.id)
     await refreshTree()
     beginRename(created)
@@ -176,7 +234,7 @@ export function Explorer() {
   const addWorkspace = async () => {
     const name = prompt('Name for the new workspace', 'New workspace')
     if (name === null) return
-    const created = await ipc.nodeCreate(null, 'workspace', name.trim() || 'New workspace')
+    const created = await ipc.vaultCreate(null, name.trim() || 'New workspace')
     await refreshTree()
     setActiveWorkspace(created.id)
   }
@@ -186,7 +244,7 @@ export function Explorer() {
     if (name === null) return
     const n = name.trim()
     if (n && n !== w.name) {
-      await ipc.nodeRename(w.id, n)
+      await ipc.vaultRename(w.id, n)
       await refreshTree()
     }
   }
@@ -196,8 +254,9 @@ export function Explorer() {
   // keep showing items from a workspace you just deleted.
   const del = async (node: TreeNode) => {
     const label = node.kind === 'workspace' ? 'workspace' : node.kind
-    if (!confirm(`Delete ${label} “${node.name}” and everything inside it?`)) return
-    await ipc.nodeDelete(node.id)
+    // This removes the folder from disk, not just a row — say so.
+    if (!confirm(`Delete the ${label} folder “${node.name}” and everything inside it?`)) return
+    await ipc.vaultDelete(node.id)
     if (selectedNodeId === node.id) setSelectedNode(null)
     await Promise.all([refreshTree(), refreshCommands(), refreshServices(), refreshProfiles()])
   }
@@ -255,10 +314,39 @@ export function Explorer() {
   const nodeMenuItems = (node: TreeNode | null): MenuItem[] => {
     if (!node) {
       return [
-        { icon: 'project', label: 'New project', disabled: activeWorkspaceId == null, onClick: () => void addProject() },
+        { icon: 'add', label: 'Add…', disabled: activeWorkspaceId == null, onClick: () => void addNode() },
+        { icon: 'solution', label: 'New solution…', disabled: activeWorkspaceId == null, onClick: () => void addSolution() },
       ]
     }
     const items: MenuItem[] = []
+
+    // The label registry, offered rather than typed. Free text still works —
+    // the config page has a field for it — but the common case is one of these.
+    for (const l of labels) {
+      if (l === node.label) continue
+      items.push({
+        icon: 'tag',
+        label: l,
+        onClick: () => void ipc.vaultSetMeta(node.id, { label: l }).then(() => refreshTree()),
+      })
+    }
+    if (node.label) {
+      items.push({
+        icon: 'close',
+        label: `Clear “${node.label}”`,
+        onClick: () => void ipc.vaultSetMeta(node.id, { label: '' }).then(() => refreshTree()),
+      })
+    }
+    items.push({ separator: true, label: '' })
+
+    if (node.kind === 'solution') {
+      items.push({
+        icon: 'view',
+        label: 'Show only this solution',
+        onClick: () => setActiveSolution(node.id),
+      })
+      items.push({ icon: 'project', label: 'Add project…', onClick: () => void addProjectTo(node.id) })
+    }
 
     if (node.kind === 'project') {
       items.push({ icon: 'view', label: 'Open dashboard', onClick: () => openSpace(node.id, node.name) })
@@ -276,7 +364,15 @@ export function Explorer() {
         { icon: 'command', label: 'New command', onClick: () => openEditor('command', 0, 'New command', node.id) },
         { icon: 'service', label: 'New service', onClick: () => openEditor('service', 0, 'New service', node.id) },
         { icon: 'profile', label: 'New profile', onClick: () => openEditor('profile', 0, 'New profile', node.id) },
-        { icon: 'reveal', label: 'Reveal in File Explorer', disabled: !dir, onClick: () => void ipc.revealInExplorer(dir).catch((e) => alert(String(e))) },
+        {
+        icon: 'reveal',
+        label: 'Reveal in File Explorer',
+        onClick: () =>
+          void ipc
+            .vaultDir(node.id)
+            .then((d) => ipc.revealInExplorer(d))
+            .catch((e) => alert(String(e))),
+      },
       )
     }
     items.push(
@@ -456,7 +552,7 @@ export function Explorer() {
   )
 
   // One category group ("Commands"/"Services"/"Profiles") under a node.
-  // The AI Workspace, read (never written) from here. Projects are the same
+  // The Assistant, read (never written) from here. Projects are the same
   // records on both sides now, so this is a lookup rather than a second list.
   const {
     sessions: aiwSessions,
@@ -483,8 +579,12 @@ export function Explorer() {
           <span className={`flex w-5 shrink-0 items-center justify-center ${meta.color}`}>
             <Icon name={meta.icon} size={13} />
           </span>
-          <span className="flex-1 truncate uppercase tracking-wide">{meta.label}</span>
-          <span className="shrink-0 pr-1 text-[10.5px] tabular-nums text-faint">{count || ''}</span>
+          <span className="flex-1 truncate">{meta.label}</span>
+          {count > 0 && (
+            <span className="mr-1 shrink-0 rounded-full bg-soft px-1.5 text-[10px] tabular-nums text-muted">
+              {count}
+            </span>
+          )}
           <button
             className="hidden shrink-0 items-center rounded px-1 text-dim hover:bg-hover hover:text-ink group-hover:flex"
             title={`New ${addKind}`}
@@ -618,7 +718,7 @@ export function Explorer() {
           <span className="flex w-5 shrink-0 items-center justify-center text-viol">
             <Icon name="list" size={13} />
           </span>
-          <span className="flex-1 truncate uppercase tracking-wide">Features</span>
+          <span className="flex-1 truncate">Features</span>
           <span className="shrink-0 pr-1 text-[10.5px] tabular-nums text-faint">
             {aiwFeatures.length}
           </span>
@@ -649,7 +749,32 @@ export function Explorer() {
     )
   }
 
+  // Filtering keeps a node when it matches, when anything it owns matches, or
+  // when a descendant does — an ancestor that vanished would take its matching
+  // children off screen with it. Null means no filter is running.
+  const q = filter.trim().toLowerCase()
+  const visible = useMemo(() => {
+    if (!q) return null
+    const named = (n: { name: string }) => n.name.toLowerCase().includes(q)
+    const hit = new Set<number>()
+    for (const n of nodes) {
+      const own =
+        named(n) ||
+        commands.some((c) => c.project_id === n.id && named(c)) ||
+        services.some((sv) => sv.project_id === n.id && named(sv)) ||
+        profiles.some((pr) => pr.project_id === n.id && named(pr))
+      if (!own) continue
+      let cur: TreeNode | null = n
+      while (cur) {
+        hit.add(cur.id)
+        cur = findNode(nodes, cur.parent_id)
+      }
+    }
+    return hit
+  }, [q, nodes, commands, services, profiles])
+
   const renderNode = (node: TreeNode, depth: number) => {
+    if (visible && !visible.has(node.id)) return null
     const children = nodes.filter((n) => n.parent_id === node.id)
     const nodeCommands = commands.filter((c) => c.project_id === node.id)
     const nodeServices = services.filter((s) => s.project_id === node.id)
@@ -661,7 +786,7 @@ export function Explorer() {
     const showProfiles = nodeProfiles.length > 0
     const hasKids =
       children.length > 0 || showCommands || showServices || showProfiles
-    const isOpen = expanded.has(node.id)
+    const isOpen = visible ? true : expanded.has(node.id)
     const selected = selectedNodeId === node.id
     const renaming = renamingId === node.id
     const sub = node.kind === 'folder' ? node.path || node.rel_path : node.kind === 'project' ? node.path : ''
@@ -679,6 +804,7 @@ export function Explorer() {
             // A project's click opens its dashboard (the space page); settings
             // stay on double-click / context menu.
             if (node.kind === 'project') openSpace(node.id, node.name)
+            else if (node.kind !== 'workspace') openNodeConfig(node.id, node.name)
           }}
           onDoubleClick={() => {
             if (renaming) return
@@ -722,7 +848,14 @@ export function Explorer() {
               }}
             />
           ) : (
-            <span className="flex-1 truncate">{node.name}</span>
+            <span className="flex min-w-0 flex-1 items-baseline gap-1.5 truncate">
+              <span className="truncate">{node.name}</span>
+              {node.label && (
+                <span className="shrink-0 rounded bg-soft px-1.5 text-[9.5px] uppercase tracking-[0.04em] text-muted">
+                  {node.label}
+                </span>
+              )}
+            </span>
           )}
           {node.kind === 'project' && gitByNode[node.id]?.branch && (() => {
             const g = gitByNode[node.id]!
@@ -820,26 +953,78 @@ export function Explorer() {
           twice on screen a few pixels apart. What is left is what the tree
           cannot do for itself: getting a project into it. */}
       <div className="flex items-center gap-1 border-b border-line px-2 py-1.5">
-        <span className="min-w-0 flex-1 truncate text-[10.5px] font-semibold uppercase tracking-[0.06em] text-muted">
-          Explorer
-        </span>
-        <button
-          className="flex shrink-0 items-center gap-1 rounded bg-soft px-2 py-1 text-[11px] text-ink hover:bg-indigo-600 disabled:opacity-40"
-          title={activeWorkspaceId == null ? 'Create a workspace first' : 'Clone a GitHub repo into this workspace'}
-          disabled={activeWorkspaceId == null}
-          onClick={() => setGhOpen(true)}
+        <span
+          className="min-w-0 flex-1 truncate text-[11.5px] font-semibold text-ink"
+          title={activeSolution ? `Showing ${activeSolution.name}` : undefined}
         >
-          <Icon name="github" size={13} /> Clone
+          {activeSolution ? activeSolution.name : 'Explorer'}
+        </span>
+
+        {/* Quiet icon actions. The two filled buttons that lived here were the
+            heaviest thing on the panel and were competing with the tree for
+            the same glance; the tree is what you came to read. */}
+        <button
+          className={`flex shrink-0 items-center rounded p-1 ${
+            filtering ? 'bg-hover text-ink' : 'text-dim hover:bg-hover hover:text-ink'
+          }`}
+          title="Filter the tree"
+          onClick={() => {
+            setFiltering((f) => !f)
+            if (filtering) setFilter('')
+          }}
+        >
+          <Icon name="search" size={14} />
         </button>
         <button
-          className="flex shrink-0 items-center gap-1 rounded bg-soft px-2 py-1 text-[11px] text-ink hover:bg-indigo-600 disabled:opacity-40"
-          title={activeWorkspaceId == null ? 'Create a workspace first' : 'Add a project to this workspace'}
+          className="flex shrink-0 items-center rounded p-1 text-dim hover:bg-hover hover:text-ink disabled:opacity-40"
+          title={activeWorkspaceId == null ? 'Create a workspace first' : 'Add a project, topic or anything else'}
           disabled={activeWorkspaceId == null}
-          onClick={() => void addProject()}
+          onClick={() => void addNode()}
         >
-          <Icon name="add" size={13} /> Project
+          <Icon name="add" size={14} />
+        </button>
+        <button
+          className="flex shrink-0 items-center rounded p-1 text-dim hover:bg-hover hover:text-ink"
+          title="Collapse everything"
+          onClick={() => {
+            setExpanded(new Set())
+          }}
+        >
+          <Icon name="caret-up" size={14} />
+        </button>
+        <button
+          className="flex shrink-0 items-center rounded p-1 text-dim hover:bg-hover hover:text-ink disabled:opacity-40"
+          title="More"
+          disabled={activeWorkspaceId == null}
+          onClick={(e) => {
+            const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+            setMenu({ x: r.left, y: r.bottom + 4, target: { type: 'node', node: null } })
+          }}
+        >
+          <Icon name="more" size={14} />
         </button>
       </div>
+
+      {/* The filter, only once you ask for it — a permanent search box on a
+          three-item tree is furniture. */}
+      {filtering && (
+        <div className="shrink-0 border-b border-line px-2 py-1.5">
+          <input
+            autoFocus
+            className="input w-full px-2 py-1 text-[11.5px]"
+            placeholder="Filter projects, commands, services"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setFilter('')
+                setFiltering(false)
+              }
+            }}
+          />
+        </div>
+      )}
+
       <div
         className="flex-1 overflow-y-auto p-1"
         onContextMenu={(e) => {
@@ -897,9 +1082,9 @@ export function Explorer() {
             </p>
             <button
               className="btn-primary mt-3 flex w-full items-center justify-center gap-1.5 text-[12px]"
-              onClick={() => void addProject()}
+              onClick={() => void addNode()}
             >
-              <Icon name="add" size={14} /> Add a project
+              <Icon name="add" size={14} /> Add something
             </button>
           </div>
         ) : (

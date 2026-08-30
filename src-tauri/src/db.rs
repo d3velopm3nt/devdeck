@@ -30,6 +30,11 @@ pub struct Node {
     /// Optional user-picked accent color (hex, e.g. "#7C8CF8"). When null
     /// the UI derives a stable color from the node id.
     pub color: Option<String>,
+    /// A word for what this node *is* — Product, Topic, Client, Area. Display
+    /// only: it changes the label shown and nothing else. Deliberately free
+    /// text rather than an enum, so adding a new one never means adding a
+    /// kind, an icon rule or a decision at creation time.
+    pub label: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -370,6 +375,11 @@ fn migrate(conn: &Connection) {
     if !has_color {
         let _ = conn.execute("ALTER TABLE nodes ADD COLUMN color TEXT", []);
     }
+    // Free-text label on a node (Product / Topic / Client / …).
+    let has_label = conn.prepare("SELECT label FROM nodes LIMIT 1").is_ok();
+    if !has_label {
+        let _ = conn.execute("ALTER TABLE nodes ADD COLUMN label TEXT", []);
+    }
     // Per-service shell/interpreter.
     let has_svc_shell = conn.prepare("SELECT shell FROM services LIMIT 1").is_ok();
     if !has_svc_shell {
@@ -466,6 +476,7 @@ fn row_to_node(row: &rusqlite::Row) -> rusqlite::Result<Node> {
         rel_path: row.get(5)?,
         sort: row.get(6)?,
         color: row.get(7)?,
+        label: row.get(8)?,
     })
 }
 
@@ -529,9 +540,19 @@ pub fn upsert_project(
 /// is a command to call — and because a project list assembled from anywhere
 /// but this table is a second source of truth, which is exactly what the
 /// merge removed.
+/// One node by id, straight from the index.
+pub fn node_by_id(conn: &Connection, id: i64) -> Result<Node, String> {
+    conn.query_row(
+        "SELECT id, parent_id, kind, name, path, rel_path, sort, color, label FROM nodes WHERE id = ?1",
+        params![id],
+        row_to_node,
+    )
+    .map_err(err)
+}
+
 pub fn nodes_on(conn: &Connection) -> Result<Vec<Node>, String> {
     let mut stmt = conn
-        .prepare("SELECT id, parent_id, kind, name, path, rel_path, sort, color FROM nodes ORDER BY sort, id")
+        .prepare("SELECT id, parent_id, kind, name, path, rel_path, sort, color, label FROM nodes ORDER BY sort, id")
         .map_err(err)?;
     let nodes = stmt
         .query_map([], row_to_node)
@@ -578,7 +599,21 @@ pub fn node_create(
         rel_path: rel_path.unwrap_or_default(),
         sort: 0,
         color: None,
+        label: None,
     })
+}
+
+/// Set (or clear, with an empty string) a node's display label.
+#[tauri::command]
+pub fn node_set_label(db: tauri::State<Db>, id: i64, label: String) -> Result<(), String> {
+    let conn = db.0.lock().unwrap();
+    let v = label.trim();
+    conn.execute(
+        "UPDATE nodes SET label = ?1 WHERE id = ?2",
+        params![if v.is_empty() { None } else { Some(v) }, id],
+    )
+    .map_err(err)?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -601,8 +636,16 @@ pub fn node_update(
     path: Option<String>,
     rel_path: Option<String>,
     color: Option<String>,
+    kind: Option<String>,
 ) -> Result<(), String> {
     let conn = db.0.lock().unwrap();
+    // Kind follows the folder: a node with a path is a project, one without is
+    // a container. The UI never asks for a kind directly, so this is only ever
+    // set alongside the path that justified it.
+    if let Some(kind) = kind {
+        conn.execute("UPDATE nodes SET kind = ?1 WHERE id = ?2", params![kind, id])
+            .map_err(err)?;
+    }
     if let Some(name) = name {
         conn.execute(
             "UPDATE nodes SET name = ?1 WHERE id = ?2",
@@ -755,7 +798,7 @@ pub fn services_list(db: tauri::State<Db>) -> Result<Vec<ServiceDef>, String> {
 /// rel_path. Returns "" if it can't be resolved.
 pub fn resolve_node_dir(conn: &Connection, node_id: i64) -> String {
     let node = conn.query_row(
-        "SELECT id, parent_id, kind, name, path, rel_path, sort, color FROM nodes WHERE id = ?1",
+        "SELECT id, parent_id, kind, name, path, rel_path, sort, color, label FROM nodes WHERE id = ?1",
         params![node_id],
         row_to_node,
     );
@@ -773,7 +816,7 @@ pub fn resolve_node_dir(conn: &Connection, node_id: i64) -> String {
             let mut base = String::new();
             while let Some(pid) = cur {
                 if let Ok(parent) = conn.query_row(
-                    "SELECT id, parent_id, kind, name, path, rel_path, sort, color FROM nodes WHERE id = ?1",
+                    "SELECT id, parent_id, kind, name, path, rel_path, sort, color, label FROM nodes WHERE id = ?1",
                     params![pid],
                     row_to_node,
                 ) {
@@ -1068,7 +1111,7 @@ mod tests {
     fn read_tree(conn: &Connection) -> Vec<Node> {
         let mut stmt = conn
             .prepare(
-                "SELECT id, parent_id, kind, name, path, rel_path, sort, color
+                "SELECT id, parent_id, kind, name, path, rel_path, sort, color, label
                  FROM nodes ORDER BY sort, id",
             )
             .expect("tree_list prepares");

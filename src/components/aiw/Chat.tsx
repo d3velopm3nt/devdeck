@@ -18,6 +18,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Icon } from '../../lib/icons'
 import { useAiw } from '../../lib/aiwStore'
 import { aiw, ago, type ChatMessage } from '../../lib/aiw'
+import { useProjectsByWorkspace } from '../../lib/aiwLabels'
 import { ProviderChip, ContextPeek } from './ChatHeader'
 
 // ---------------------------------------------------------------------------
@@ -190,6 +191,7 @@ function Live() {
 
 export function Chat() {
   const a = useAiw()
+  const byWorkspace = useProjectsByWorkspace()
   const [draft, setDraft] = useState('')
   const [root, setRoot] = useState<string | null>(null)
   // Hidden by default: as a dock panel the chat already sits beside the
@@ -268,7 +270,9 @@ export function Chat() {
           </span>
 
           {/* Focus, not a boundary — the assistant works across projects, but
-              the code tools need a root to resolve against. */}
+              the code tools need a root to resolve against. Grouped by
+              workspace, because the list spans all of them and two projects
+              can share a name across two workspaces. */}
           <select
             className="input ml-auto max-w-44 text-[11px]"
             value={conv?.project_id ?? ''}
@@ -276,10 +280,14 @@ export function Chat() {
             onChange={(e) => void a.focusConversation(e.target.value || undefined)}
           >
             <option value="">No project</option>
-            {a.projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
+            {byWorkspace.map((g) => (
+              <optgroup key={g.workspace} label={g.workspace}>
+                {g.projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
           <ProviderChip />

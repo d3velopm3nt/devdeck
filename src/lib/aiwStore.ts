@@ -1,7 +1,7 @@
-// AI Workspace UI state.
+// Assistant UI state.
 //
 // Kept in its own store rather than bolted onto the main one: nothing here is
-// needed by the rest of the app, and the AI Workspace is the only part that
+// needed by the rest of the app, and the Assistant is the only part that
 // re-renders on every event from the bus.
 //
 // The rule this store follows: it holds *what the backend said*, never a

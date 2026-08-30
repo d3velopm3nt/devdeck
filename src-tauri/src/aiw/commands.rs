@@ -111,12 +111,29 @@ pub fn sync_projects_from_tree(ws: &Arc<Workspace>, conn: &rusqlite::Connection)
             return 0;
         }
     };
-    let wanted: Vec<(String, String, PathBuf)> = nodes
+    // Every vault folder is AI-capable, not just the ones naming a repo: a
+    // topic wants context too, and before the vault it had nowhere to keep it.
+    let vault = crate::db::setting_get_conn(conn, crate::vault::ROOT_KEY)
+        .ok()
+        .flatten()
+        .filter(|s| !s.trim().is_empty())
+        .map(PathBuf::from);
+    let Some(vault) = vault else { return 0 };
+
+    let wanted: Vec<(String, String, PathBuf, PathBuf)> = nodes
         .into_iter()
-        .filter(|n| n.kind == "project")
-        .filter_map(|n| {
-            let root = n.path.filter(|p| !p.trim().is_empty())?;
-            Some((n.id.to_string(), n.name, PathBuf::from(root)))
+        .filter(|n| !n.rel_path.trim().is_empty())
+        .map(|n| {
+            // Context goes in the node's own folder; code lives wherever the
+            // repository is, falling back to that same folder when there is
+            // none, so a topic's file tools still have somewhere to work.
+            let deck_root = vault.join(n.rel_path.replace('/', std::path::MAIN_SEPARATOR_STR));
+            let code_root = n
+                .path
+                .filter(|p| !p.trim().is_empty())
+                .map(PathBuf::from)
+                .unwrap_or_else(|| deck_root.clone());
+            (n.id.to_string(), n.name, code_root, deck_root)
         })
         .collect();
     ws.sync_projects(&wanted)
@@ -805,8 +822,10 @@ pub fn run_demo_on(
 ) -> Result<DemoResult, String> {
     let (tyrex_id, tyrex_name, tyrex) = a;
     let (assetx_id, assetx_name, assetx) = b;
-    ws.register_project(tyrex_id, tyrex_name, tyrex.clone());
-    ws.register_project(assetx_id, assetx_name, assetx.clone());
+    // The fixtures are self-contained: their context lives beside their code,
+    // which is what makes the demo runnable without a vault at all.
+    ws.register_project(tyrex_id, tyrex_name, tyrex.clone(), tyrex.clone());
+    ws.register_project(assetx_id, assetx_name, assetx.clone(), assetx.clone());
 
     let feature = "offline-synchronisation";
     let mut outcomes = Vec::new();

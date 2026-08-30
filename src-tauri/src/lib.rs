@@ -17,6 +17,7 @@ mod conn;
 mod creds;
 mod db;
 mod git;
+mod github;
 mod legacy;
 mod machine;
 mod monitor;
@@ -27,6 +28,7 @@ mod services;
 mod setup;
 mod shots;
 mod stash;
+mod vault;
 
 use std::sync::{Arc, Mutex};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
@@ -736,6 +738,21 @@ pub fn run() {
             db::tree_list,
             db::node_create,
             db::node_rename,
+            db::node_set_label,
+            vault::vault_root,
+            vault::vault_default_root,
+            vault::vault_legacy,
+            vault::vault_set_root,
+            vault::vault_scan,
+            vault::vault_create,
+            vault::vault_rename,
+            vault::vault_set_meta,
+            vault::vault_meta,
+            vault::vault_delete,
+            vault::vault_dir,
+            vault::vault_move,
+            vault::vault_switch,
+            vault::vault_switch_cost,
             db::node_update,
             db::node_delete,
             db::commands_list,
@@ -866,6 +883,11 @@ pub fn run() {
             aiw::commands::aiw_app_status,
             aiw::commands::aiw_changed_since,
             setup::github_user,
+            github::github_oauth_configured,
+            github::github_device_start,
+            github::github_device_poll,
+            github::github_token_stored,
+            github::github_sign_out,
             aiw::commands::aiw_sync_projects,
             aiw::commands::aiw_conversations,
             aiw::commands::aiw_conversation,

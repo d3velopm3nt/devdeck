@@ -20,24 +20,43 @@ export function projectOf(nodes: TreeNode[], node: TreeNode | null): TreeNode | 
   return null
 }
 
-function joinPath(base: string, sub: string): string {
-  const b = base.replace(/[\\/]+$/, '')
-  const s = sub.replace(/^[\\/]+/, '').replace(/\//g, '\\')
-  if (!b) return s
-  if (!s) return b
-  return `${b}\\${s}`
+/// Nearest ancestor workspace of `node` (or itself if it is a workspace).
+///
+/// Walks rather than assuming a depth: a service can hang off a folder, and a
+/// folder's parent is a project, so "the workspace" is however many hops up it
+/// takes to find one.
+export function workspaceOf(nodes: TreeNode[], node: TreeNode | null): TreeNode | null {
+  let cur = node
+  while (cur) {
+    if (cur.kind === 'workspace') return cur
+    cur = findNode(nodes, cur.parent_id)
+  }
+  return null
 }
 
+/// Nearest ancestor solution of `node`, or null when it sits directly under a
+/// workspace. Null is the normal case, not an error: solutions are optional and
+/// every tree that existed before them has none.
+export function solutionOf(nodes: TreeNode[], node: TreeNode | null): TreeNode | null {
+  let cur = node
+  while (cur) {
+    if (cur.kind === 'solution') return cur
+    if (cur.kind === 'workspace') return null
+    cur = findNode(nodes, cur.parent_id)
+  }
+  return null
+}
+
+
 /// Resolved working directory for a node, or '' if none applies.
-export function resolveDir(nodes: TreeNode[], node: TreeNode | null): string {
+export function resolveDir(_nodes: TreeNode[], node: TreeNode | null): string {
   if (!node) return ''
   if (node.kind === 'workspace') return ''
   if (node.kind === 'project') return node.path ?? ''
-  // folder
-  if (node.path && node.path.trim() !== '') return node.path // absolute override
-  const proj = projectOf(nodes, node)
-  const base = proj?.path ?? ''
-  return joinPath(base, node.rel_path ?? '')
+  // A folder runs in the repository it names, and nowhere otherwise. `rel_path`
+  // is the node's place in the vault now, not a subpath of some parent repo —
+  // joining it onto one produced a directory that never existed.
+  return node.path?.trim() ? node.path : ''
 }
 
 /// A service's working directory: its explicit `cwd`, else the resolved

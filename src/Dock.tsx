@@ -9,6 +9,7 @@ import {
   type DockviewReadyEvent,
   type IDockviewPanelProps,
 } from 'dockview-react'
+import { NodeConfigPage } from './components/editors/NodeConfigPage'
 import { NodeSetupPage } from './components/editors/NodeSetupPage'
 import { SpaceDetailPage } from './components/SpaceDetailPage'
 import { ServiceDetailPage } from './components/ServiceDetailPage'
@@ -108,6 +109,7 @@ import {
 
 const components = {
   'node-setup': (props: IDockviewPanelProps<{ id: number }>) => <NodeSetupPage {...props} />,
+  'node-config': (props: IDockviewPanelProps<{ id: number }>) => <NodeConfigPage {...props} />,
   'space-detail': (props: IDockviewPanelProps<{ id: number }>) => <SpaceDetailPage {...props} />,
   'service-detail': (props: IDockviewPanelProps<{ id: number }>) => <ServiceDetailPage {...props} />,
   welcome: () => <Welcome />,

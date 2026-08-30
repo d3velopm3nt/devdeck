@@ -1,7 +1,10 @@
 // Shared types mirroring the Rust backend structs (snake_case fields
 // come straight from serde).
 
-export type NodeKind = 'workspace' | 'project' | 'folder'
+/// A solution groups the repos that ship together — the layer between a
+/// workspace and its projects. It is optional: a project may still sit
+/// directly under a workspace, which is what every existing tree looks like.
+export type NodeKind = 'workspace' | 'solution' | 'project' | 'folder'
 
 export interface TreeNode {
   id: number
@@ -15,6 +18,9 @@ export interface TreeNode {
   sort: number
   /** user-picked accent color (hex); null = derive from id. */
   color: string | null
+  /** A word for what this node *is* — Product, Topic, Client, Area. Display
+   *  only: free text, so a new one never costs a kind or a rule. */
+  label: string | null
 }
 
 export interface CommandDef {

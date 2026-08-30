@@ -12,7 +12,7 @@ import { useAiw } from '../lib/aiwStore'
 import { openEditor, openNodeConfig, openNodeSetup, openService, openSpace, openAiwDoc, type AiwDoc } from '../lib/dock'
 import { focusCommandSession, launchProfile, openTerminal, runCommandInNewTerminal } from '../lib/runner'
 import { findNode, resolveDir } from '../lib/tree'
-import { nodeColor } from '../lib/spaces'
+import { labelColor, nodeColor } from '../lib/spaces'
 import { loadExampleWorkspace } from '../lib/example'
 import { PopMenu, type MenuItem } from './PopMenu'
 import { GitHubImportModal } from './GitHubImportModal'
@@ -88,7 +88,7 @@ export function Explorer() {
     nodes, commands, services, profiles, svcStates, gitByNode,
     selectedNodeId, setSelectedNode, setRailView,
     activeWorkspaceId, activeWorkspace, setActiveWorkspace,
-    activeSolutionId, setActiveSolution, createSolution, labels,
+    activeSolutionId, setActiveSolution, createSolution, labels, touchRecent,
     refreshTree, refreshCommands, refreshServices, refreshProfiles, focusServiceLogs, servicePort,
     requestStartService, treeError, treeLoading, retryBootstrap,
   } = useApp()
@@ -801,6 +801,9 @@ export function Explorer() {
           onClick={() => {
             if (renaming) return
             setSelectedNode(node.id)
+            // Opening a folder is what makes it recent. A workspace is not one
+            // of them — it is the frame, and it already has a tab.
+            if (node.kind !== 'workspace') touchRecent(node.id)
             // A project's click opens its dashboard (the space page); settings
             // stay on double-click / context menu.
             if (node.kind === 'project') openSpace(node.id, node.name)
@@ -851,7 +854,13 @@ export function Explorer() {
             <span className="flex min-w-0 flex-1 items-baseline gap-1.5 truncate">
               <span className="truncate">{node.name}</span>
               {node.label && (
-                <span className="shrink-0 rounded bg-soft px-1.5 text-[9.5px] uppercase tracking-[0.04em] text-muted">
+                <span
+                  className="shrink-0 rounded-full px-2 text-[9px] font-semibold uppercase leading-[1.6] tracking-[0.04em]"
+                  style={{
+                    background: `${labelColor(node.label)}28`,
+                    color: labelColor(node.label),
+                  }}
+                >
                   {node.label}
                 </span>
               )}

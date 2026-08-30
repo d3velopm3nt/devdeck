@@ -21,6 +21,19 @@ export function spaceColor(id: number): string {
   return SPACE_PALETTE[Math.abs(id) % SPACE_PALETTE.length]
 }
 
+/// Stable tint for a label word, keyed by the text itself.
+///
+/// Derived rather than chosen so the same word is the same colour everywhere
+/// without anyone maintaining a mapping — and a label you invent tomorrow gets
+/// a colour for free. Returned as the hex; callers tint background and text
+/// from it so the pill reads on both themes.
+export function labelColor(label: string): string {
+  const key = label.trim().toLowerCase()
+  let h = 0
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0
+  return SPACE_PALETTE[Math.abs(h) % SPACE_PALETTE.length]
+}
+
 /// Effective color for a node: the user's picked color if set, else the
 /// stable derived one.
 export function nodeColor(node: { id: number; color: string | null }): string {

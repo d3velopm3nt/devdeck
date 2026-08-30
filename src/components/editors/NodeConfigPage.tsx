@@ -124,7 +124,7 @@ export function NodeConfigPage({ params }: IDockviewPanelProps<{ id: number }>) 
                 ))}
               </datalist>
               <span className="text-[11px] text-muted">
-                {isProject ? 'Has a folder, so it can run things' : 'No folder — a container'}
+                {isProject ? 'Linked to a repository' : 'No repository — runs in its own folder'}
               </span>
             </div>
           </div>
@@ -151,9 +151,9 @@ export function NodeConfigPage({ params }: IDockviewPanelProps<{ id: number }>) 
           </div>
           {!node.path && (
             <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
-              Point this at a repository and it becomes a project — commands, services, git and
-              terminals all become available. Leave it unlinked and it stays a plain folder, which
-              is what a topic wants.
+              Optional. Commands, services and terminals work either way — they run in this
+              node&rsquo;s own folder when no repository is named. Naming one changes <em>where</em>
+              they run, and is what turns on git.
             </p>
           )}
         </section>

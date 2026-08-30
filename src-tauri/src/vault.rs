@@ -396,8 +396,22 @@ pub fn vault_scan(db: tauri::State<Db>) -> Result<Vec<db::Node>, String> {
     if root.trim().is_empty() {
         return Ok(Vec::new());
     }
-    scan_into(&conn, Path::new(&root))?;
-    db::nodes_on(&conn)
+    let root = PathBuf::from(root);
+    scan_into(&conn, &root)?;
+
+    // Hand back each node's own folder alongside it. Without this a node with
+    // no repository had no working directory at all — no terminal, and commands
+    // and services with nowhere to run — even though its folder was right there.
+    let mut nodes = db::nodes_on(&conn)?;
+    for n in &mut nodes {
+        if !n.rel_path.trim().is_empty() {
+            n.dir = root
+                .join(n.rel_path.replace('/', std::path::MAIN_SEPARATOR_STR))
+                .to_string_lossy()
+                .to_string();
+        }
+    }
+    Ok(nodes)
 }
 
 // ---------------------------------------------------------------------------

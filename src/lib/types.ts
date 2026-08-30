@@ -21,6 +21,9 @@ export interface TreeNode {
   /** A word for what this node *is* — Product, Topic, Client, Area. Display
    *  only: free text, so a new one never costs a kind or a rule. */
   label: string | null
+  /** This node's own folder, absolute. Every node has one, which is what lets
+   *  a folder with no repository still run a terminal and its commands. */
+  dir: string
 }
 
 export interface CommandDef {

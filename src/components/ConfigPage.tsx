@@ -35,7 +35,7 @@ function Toggle({
 const TAB_KEY = 'devdeck.settings.tab'
 
 export function ConfigPage() {
-  const { hotkey, setHotkey, shells, gitMonitorEnabled, gitMonitorIntervalMin, setGitMonitor, fetchGitStatus, theme, setTheme, stashStatus, refreshStashStatus, setStashCapture, refreshTree, labels, saveLabels } = useApp()
+  const { hotkey, setHotkey, shells, gitMonitorEnabled, gitMonitorIntervalMin, setGitMonitor, fetchGitStatus, theme, setTheme, stashStatus, refreshStashStatus, setStashCapture, refreshTree, labels, saveLabels, recentLimit, setRecentLimit } = useApp()
   const [draft, setDraft] = useState(hotkey)
   const [status, setStatus] = useState<string | null>(null)
   const [seeding, setSeeding] = useState(false)
@@ -357,6 +357,27 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
             </button>
             {labelMsg && <span className="text-[11px] text-ok">{labelMsg}</span>}
           </div>
+        </section>
+
+        <section>
+          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
+            Recent folders
+          </h3>
+          <div className="flex items-center gap-2.5">
+            <input
+              className="input w-20"
+              type="number"
+              min={0}
+              max={10}
+              value={recentLimit}
+              onChange={(e) => void setRecentLimit(Number(e.target.value))}
+            />
+            <span className="text-[11.5px] text-body">shown in the rail</span>
+          </div>
+          <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
+            The folders you opened most recently, listed under Home. Set it to 0 to hide the
+            section entirely.
+          </p>
         </section>
           </>
         )}

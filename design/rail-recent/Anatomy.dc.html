@@ -1,0 +1,114 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background: #0d1017; }
+    a { color: #818cf8; } a:hover { color: #a5b4fc; }
+    h3 { margin: 0; font-size: 12.5px; font-weight: 600; color: #e2e8f0; }
+    .why { margin: 5px 0 0; font-size: 11px; line-height: 1.55; color: #94a3b8; }
+    .card { border: 1px solid #1e293b; border-radius: 8px; background: #11141c; padding: 13px 15px; }
+    .lbl { font-size: 9.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #475569; }
+    .chip-old { border-radius: 3px; background: rgb(30 41 59 / 0.4); padding: 1px 6px;
+                font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em; color: #64748b; }
+    .pill { border-radius: 999px; padding: 1px 8px; font-size: 9px; font-weight: 600;
+            letter-spacing: 0.04em; text-transform: uppercase; line-height: 1.6; }
+    .tab { display: flex; align-items: center; gap: 9px; padding: 6px 14px 6px 12px; border-radius: 6px; }
+  </style>
+</helmet>
+
+<div style="width: 620px; height: 680px; background: #0d1017; padding: 24px 26px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px">
+
+  <div>
+    <div style="font-size: 15px; font-weight: 600; color: #e2e8f0">The three pieces</div>
+    <div style="margin-top: 3px; font-size: 11.5px; color: #94a3b8">What changes, and why each one.</div>
+  </div>
+
+  <!-- 1 -->
+  <div class="card">
+    <h3>Labels become pills</h3>
+    <div style="margin: 10px 0 0; display: flex; align-items: center; gap: 16px">
+      <span style="display: flex; align-items: center; gap: 7px">
+        <span class="lbl">Now</span>
+        <span class="chip-old">Product</span>
+      </span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#334155" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+      <span style="display: flex; align-items: center; gap: 7px">
+        <span class="lbl">Pill</span>
+        <span class="pill" style="background: rgb(167 139 250 / 0.16); color: #a78bfa">Product</span>
+        <span class="pill" style="background: rgb(56 189 248 / 0.16); color: #38bdf8">Topic</span>
+        <span class="pill" style="background: rgb(100 116 139 / 0.18); color: #94a3b8">Archive</span>
+      </span>
+    </div>
+    <p class="why">
+      Fully rounded, and tinted rather than grey. The tint is derived from the label text, so the
+      same word is the same colour everywhere without anyone choosing one — and a label you invent
+      gets a colour for free.
+    </p>
+  </div>
+
+  <!-- 2 -->
+  <div class="card">
+    <h3>Solutions in the rail become Recent</h3>
+    <p class="why" style="margin-top: 8px">
+      That list has been empty since folders became real: it filters for a
+      <span style="font-family: ui-monospace, Consolas, monospace; color: #cbd5e1">solution</span>
+      kind the scanner stopped producing. Rather than resurrect a kind we deliberately removed, the
+      slot holds the last three folders you opened.
+    </p>
+    <p class="why">
+      It keeps what you liked — a short jump list next to Home — without needing a category to
+      maintain. Clicking one scopes the Explorer to it, exactly as picking a solution did.
+    </p>
+    <p class="why" style="color: #64748b">
+      Ordered by when you last opened one, so it reorders itself and never needs curating.
+    </p>
+  </div>
+
+  <!-- 3 -->
+  <div class="card">
+    <h3>Workspace tabs always say something</h3>
+    <div style="margin: 10px 0; display: flex; flex-direction: column; gap: 8px">
+      <div style="display: flex; align-items: center; gap: 10px">
+        <span class="lbl" style="width: 34px">Now</span>
+        <div class="tab" style="background: #0d1017; box-shadow: inset 0 2px 0 #6366f1">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.97 12.92A2 2 0 0 0 2 14.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0L12 19v-5.5l-5-3-4.03 2.42Z"/><path d="M7.97 4.42A2 2 0 0 0 7 6.13v4.37l5 3 5-3V6.13a2 2 0 0 0-.97-1.71l-3-1.8a2 2 0 0 0-2.06 0l-3 1.8Z"/></svg>
+          <span style="font-size: 12.5px; font-weight: 600; color: #e2e8f0">Innotrack</span>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px">
+        <span class="lbl" style="width: 34px">New</span>
+        <div class="tab" style="background: #0d1017; box-shadow: inset 0 2px 0 #6366f1">
+          <span style="width: 26px; height: 26px; border-radius: 7px; background: #6366f1; color: #fff; font-size: 9.5px; font-weight: 700; display: flex; align-items: center; justify-content: center">IN</span>
+          <span style="display: flex; flex-direction: column; line-height: 1.25">
+            <span style="font-size: 12.5px; font-weight: 600; color: #e2e8f0">Innotrack</span>
+            <span style="display: flex; align-items: center; gap: 7px; font-size: 10px; color: #64748b">
+              <span>4 projects</span>
+              <span style="display: flex; align-items: center; gap: 3px; color: #4ade80">
+                <span style="width: 5px; height: 5px; border-radius: 50%; background: #4ade80"></span>2 running
+              </span>
+            </span>
+          </span>
+        </div>
+      </div>
+    </div>
+    <p class="why">
+      The signals were built already — running, behind, working, waiting — but only rendered when
+      one was non-zero. A quiet workspace looked untouched, which is why it read as never built.
+    </p>
+    <p class="why">
+      Now the second line is always present, falling back to the project count. And the icon
+      becomes the workspace&rsquo;s own initials in its own colour, so the tabs are told apart by
+      shape rather than by reading them.
+    </p>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

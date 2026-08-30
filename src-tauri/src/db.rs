@@ -35,6 +35,11 @@ pub struct Node {
     /// text rather than an enum, so adding a new one never means adding a
     /// kind, an icon rule or a decision at creation time.
     pub label: Option<String>,
+    /// The node's own folder, absolute. Derived from the vault root and
+    /// `rel_path` rather than stored, and filled in by the scan — a node has
+    /// exactly one place on disk, and two columns for it could disagree.
+    #[serde(default)]
+    pub dir: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -477,6 +482,7 @@ fn row_to_node(row: &rusqlite::Row) -> rusqlite::Result<Node> {
         sort: row.get(6)?,
         color: row.get(7)?,
         label: row.get(8)?,
+        dir: String::new(),
     })
 }
 
@@ -600,6 +606,7 @@ pub fn node_create(
         sort: 0,
         color: None,
         label: None,
+        dir: String::new(),
     })
 }
 

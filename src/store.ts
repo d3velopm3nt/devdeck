@@ -99,6 +99,11 @@ export interface AppState {
   /** The words offered when labelling a node. Free text is still allowed —
    *  this is a shortlist you maintain, not a set of kinds the app enforces. */
   labels: string[]
+  /** Node ids you have opened, most recent first. A convenience list, so it
+   *  lives in localStorage rather than the vault — losing it costs nothing. */
+  recent: number[]
+  /** How many of them the rail shows. */
+  recentLimit: number
   /** Request the Log viewer to filter its output. `n` bumps so asking for
    *  the same thing twice still refocuses. `search` also drives its text
    *  box — that's how a stacktrace clip jumps you to matching log lines. */
@@ -162,6 +167,8 @@ export interface AppState {
   createSolution: (name: string) => Promise<TreeNode | null>
   setHotkey: (h: string) => void
   refreshLabels: () => Promise<void>
+  touchRecent: (id: number) => void
+  setRecentLimit: (n: number) => Promise<void>
   saveLabels: (list: string[]) => Promise<void>
   focusServiceLogs: (name: string) => void
   /** Reveal the Logs tab filtered to `term` across every source. */
@@ -279,6 +286,17 @@ import { CAPTURE_RAIL } from './lib/devCapture'
 /// Seeded, not fixed: the list lives in settings and you edit it there.
 const DEFAULT_LABELS = ['Product', 'Topic', 'Client', 'Area', 'Service', 'Archive']
 const LABELS_KEY = 'node_labels'
+const RECENT_LIMIT_KEY = 'recent_limit'
+const RECENT_KEY = 'devdeck.recent'
+
+const loadRecent = (): number[] => {
+  try {
+    const v = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]')
+    return Array.isArray(v) ? v.filter((n) => typeof n === 'number') : []
+  } catch {
+    return []
+  }
+}
 
 const RAIL_KEY = 'devdeck.railView'
 /// Every rail view, in one place. The old hand-written comparison chain did not
@@ -357,6 +375,8 @@ export const useApp = create<AppState>((set, get) => ({
   activeWorkspaceId: loadActiveWs(),
   activeSolutionId: null,
   labels: DEFAULT_LABELS,
+  recent: loadRecent(),
+  recentLimit: 3,
   hotkey: 'ctrl+shift+Space',
   theme: 'dark',
   railView: loadRailView(),
@@ -848,13 +868,33 @@ export const useApp = create<AppState>((set, get) => ({
     await refreshTree()
     return created
   },
+  touchRecent: (id) => {
+    // Newest first, no duplicates, and a bounded tail — the list is a jump
+    // list, not a history.
+    const next = [id, ...get().recent.filter((x) => x !== id)].slice(0, 20)
+    try {
+      localStorage.setItem(RECENT_KEY, JSON.stringify(next))
+    } catch {
+      // A blocked localStorage is not worth failing a click over.
+    }
+    set({ recent: next })
+  },
+  setRecentLimit: async (n) => {
+    const v = Math.max(0, Math.min(10, Math.round(n)))
+    await ipc.settingSet(RECENT_LIMIT_KEY, String(v))
+    set({ recentLimit: v })
+  },
   refreshLabels: async () => {
     const raw = await ipc.settingGet(LABELS_KEY)
     const list = (raw ?? DEFAULT_LABELS.join('\n'))
       .split(/[\n,]/)
       .map((s) => s.trim())
       .filter(Boolean)
-    set({ labels: list })
+    // An unset setting reads back null, and Number(null) is 0 — which would
+    // have hidden the Recent list entirely on a machine that never set it.
+    const rawLimit = await ipc.settingGet(RECENT_LIMIT_KEY)
+    const lim = rawLimit === null || rawLimit.trim() === '' ? 3 : Number(rawLimit)
+    set({ labels: list, recentLimit: Number.isFinite(lim) && lim >= 0 ? lim : 3 })
   },
   saveLabels: async (list) => {
     const clean = [...new Set(list.map((s) => s.trim()).filter(Boolean))]

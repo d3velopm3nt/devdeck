@@ -20,6 +20,7 @@ import { useMemo, useState } from 'react'
 import { useApp } from '../store'
 import * as ipc from '../lib/ipc'
 import { Icon } from '../lib/icons'
+import { avatarLabel, nodeColor } from '../lib/spaces'
 import { findNode, subtreeIds, workspaceOf } from '../lib/tree'
 import { PopMenu, type MenuItem } from '../components/PopMenu'
 import { useAiw } from '../lib/aiwStore'
@@ -137,19 +138,31 @@ export function WorkspaceTabs() {
               setMenu({ x: e.clientX, y: e.clientY, id: w.id })
             }}
           >
-            <Icon name="workspace" size={15} className={active ? 'text-indigo-400' : 'text-muted'} />
+            {/* Its own initials in its own colour: the tabs are told apart by
+                shape rather than by reading them. */}
+            <span
+              className={`flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[7px] text-[9.5px] font-bold ${
+                active ? 'text-white' : 'bg-hover text-muted'
+              }`}
+              style={active ? { background: nodeColor(w) } : undefined}
+            >
+              {avatarLabel(w.name)}
+            </span>
             <span className="flex min-w-0 flex-col leading-tight">
               <span className={`max-w-[150px] truncate text-[12.5px] ${active ? 'font-semibold' : ''}`}>
                 {w.name}
               </span>
-              {/* The second line only exists when there is something on it, so
-                  a quiet workspace stays a single-line tab. */}
-              {(running > 0 || behind > 0 || working > 0 || waiting > 0) && (
-                <span className="mt-0.5 flex items-center gap-2 text-[10px]">
+              {/* Always present. It used to appear only when a count was
+                  non-zero, which made a quiet workspace look identical to one
+                  before any of this existed. */}
+              <span className="mt-0.5 flex items-center gap-2 text-[10px]">
+                {running === 0 && behind === 0 && working === 0 && waiting === 0 && (
+                  <span className="text-faint">Idle</span>
+                )}
                   {running > 0 && (
                     <span className="flex items-center gap-1 text-ok">
                       <span className="h-[5px] w-[5px] rounded-full bg-emerald-400" />
-                      {running}
+                      {running} running
                     </span>
                   )}
                   {behind > 0 && (
@@ -170,11 +183,10 @@ export function WorkspaceTabs() {
                       title={`${waiting} waiting on you`}
                     >
                       <Icon name="alert" size={9} />
-                      {waiting}
+                      {waiting} waiting
                     </span>
                   )}
-                </span>
-              )}
+              </span>
             </span>
           </button>
         )

@@ -20,6 +20,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useApp, type RailView } from '../store'
 import { Icon, type IconName } from '../lib/icons'
 import { avatarLabel, nodeColor } from '../lib/spaces'
+import { findNode, subtreeIds } from '../lib/tree'
+import type { TreeNode } from '../lib/types'
 
 type Item = { view: RailView; icon: IconName; label: string }
 
@@ -118,20 +120,30 @@ export function Rail() {
     activeWorkspaceId,
     activeSolutionId,
     setActiveSolution,
-    createSolution,
+    recent,
+    recentLimit,
+    touchRecent,
   } = useApp()
   const anyRunning = Object.values(svcStates).some((s) => s.status === 'running')
 
   const [expanded, setExpanded] = useState(() => localStorage.getItem(KEY) === '1')
   useEffect(() => localStorage.setItem(KEY, expanded ? '1' : '0'), [expanded])
 
-  const solutions = useMemo(
-    () =>
-      activeWorkspaceId == null
-        ? []
-        : nodes.filter((n) => n.kind === 'solution' && n.parent_id === activeWorkspaceId),
-    [nodes, activeWorkspaceId],
-  )
+  // The folders you opened most recently, in this workspace.
+  //
+  // This slot used to list solutions. Since folders became real there is no
+  // `solution` kind for it to match — kind is derived, and only ever workspace,
+  // project or folder — so the list was permanently empty. Recency keeps what
+  // the slot was good for (a short jump list beside Home) without needing a
+  // category anyone has to maintain.
+  const recentNodes = useMemo(() => {
+    if (activeWorkspaceId == null || recentLimit === 0) return []
+    const inWorkspace = new Set(subtreeIds(nodes, activeWorkspaceId))
+    return recent
+      .map((id) => findNode(nodes, id))
+      .filter((n): n is TreeNode => !!n && n.id !== activeWorkspaceId && inWorkspace.has(n.id))
+      .slice(0, recentLimit)
+  }, [recent, recentLimit, nodes, activeWorkspaceId])
 
   // Picking a solution is also navigating: the tree it scopes lives on the
   // projects view, so landing anywhere else would scope something you cannot see.
@@ -140,13 +152,7 @@ export function Rail() {
     setRailView('projects')
   }
 
-  const addSolution = () => {
-    const name = prompt('Name for the new solution', 'New solution')
-    if (name === null) return
-    void createSolution(name.trim() || 'New solution').then((created) => {
-      if (created) go(created.id)
-    })
-  }
+
 
   const onProjects = railView === 'projects'
 
@@ -166,9 +172,9 @@ export function Rail() {
 
       <Rule expanded={expanded} />
 
-      {expanded && (
+      {expanded && recentNodes.length > 0 && (
         <div className="px-2 pb-px pt-1 text-[9px] font-semibold uppercase tracking-[0.07em] text-faint">
-          Solutions
+          Recent
         </div>
       )}
 
@@ -176,7 +182,7 @@ export function Rail() {
           unscoped view keeps a slot. With no solutions yet it is simply
           "Projects", which is what this rail has always said. */}
       <RailButton
-        label={solutions.length > 0 ? 'All projects' : 'Projects'}
+        label="All projects"
         icon="project"
         active={onProjects && activeSolutionId == null}
         expanded={expanded}
@@ -184,25 +190,19 @@ export function Rail() {
         onClick={() => go(null)}
       />
 
-      {solutions.map((sol) => (
+      {recentNodes.map((n) => (
         <RailButton
-          key={sol.id}
-          label={sol.name}
-          avatar={{ text: avatarLabel(sol.name), color: nodeColor(sol) }}
-          active={onProjects && activeSolutionId === sol.id}
+          key={n.id}
+          label={n.name}
+          avatar={{ text: avatarLabel(n.name), color: nodeColor(n) }}
+          active={onProjects && activeSolutionId === n.id}
           expanded={expanded}
-          onClick={() => go(sol.id)}
+          onClick={() => {
+            touchRecent(n.id)
+            go(n.id)
+          }}
         />
       ))}
-
-      <RailButton
-        label="New solution"
-        icon="add"
-        active={false}
-        expanded={expanded}
-        mini
-        onClick={addSolution}
-      />
 
       <Rule expanded={expanded} />
 

@@ -51,12 +51,14 @@ export function solutionOf(nodes: TreeNode[], node: TreeNode | null): TreeNode |
 /// Resolved working directory for a node, or '' if none applies.
 export function resolveDir(_nodes: TreeNode[], node: TreeNode | null): string {
   if (!node) return ''
-  if (node.kind === 'workspace') return ''
   if (node.kind === 'project') return node.path ?? ''
-  // A folder runs in the repository it names, and nowhere otherwise. `rel_path`
-  // is the node's place in the vault now, not a subpath of some parent repo —
-  // joining it onto one produced a directory that never existed.
-  return node.path?.trim() ? node.path : ''
+  // A node works in the repository it names, and otherwise in its own folder.
+  //
+  // The fallback is the point: needing a git repo before you could open a
+  // terminal or run a command made "project" a thing you had to qualify for.
+  // Every node has a folder, so every node can do the work — naming a repo only
+  // changes *where*, and lights up git.
+  return node.path?.trim() ? node.path : (node.dir ?? '')
 }
 
 /// A service's working directory: its explicit `cwd`, else the resolved

@@ -14,13 +14,19 @@
 //   * **Anything that needs you sorts above anything that is merely news.**
 //     A feed where an agent waiting on a decision sits below a git pull is a
 //     feed that trains you to skim past the decision.
+//
+// And one rule of its own: while a focus session is running, anything that
+// needs you from outside the goal's space is *held* — still here, counted, one
+// click from view, and never dropped. Holding is a rendering rule and nothing
+// more, which is why ending a session cannot lose anything.
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '../store'
 import { useAiw } from '../lib/aiwStore'
 import { Icon, type IconName } from '../lib/icons'
 import { fmtAgo } from '../lib/time'
-import { findNode, workspaceOf } from '../lib/tree'
+import { findNode, subtreeIds, workspaceOf } from '../lib/tree'
+import { FocusStart } from './FocusBar'
 
 type Tone = 'wait' | 'agent' | 'fail' | 'news'
 
@@ -33,6 +39,9 @@ interface Row {
   evidence: string
   space: string
   at: number
+  /// The node this is about, when it names one. Only used to decide whether a
+  /// focus session holds it back.
+  nodeId?: number | null
   onOpen?: () => void
 }
 
@@ -44,8 +53,10 @@ const TONE: Record<Tone, { dot: string; text: string }> = {
 }
 
 export function InboxPage() {
-  const { activity, refreshActivity, nodes, setRailView } = useApp()
+  const { activity, refreshActivity, nodes, setRailView, focus, endFocus } = useApp()
   const aiw = useAiw()
+  const [showHeld, setShowHeld] = useState(false)
+  const [starting, setStarting] = useState(false)
 
   useEffect(() => {
     void refreshActivity()
@@ -78,6 +89,7 @@ export function InboxPage() {
         evidence: r.detail || r.summary,
         space: spaceOf(r.project_id),
         at: now,
+        nodeId: Number(r.project_id),
         onOpen: () => useAiw.getState().setPage('agents'),
       })
     }
@@ -92,6 +104,7 @@ export function InboxPage() {
           'Two pieces of work look like they disagree.',
         space: spaceOf(c.project_id),
         at: Date.parse(c.detected_at) || now,
+        nodeId: Number(c.project_id),
         onOpen: () => useAiw.getState().setPage('conflicts'),
       })
     }
@@ -114,7 +127,23 @@ export function InboxPage() {
     return out.sort((x, y) => rank(x) - rank(y) || y.at - x.at)
   }, [activity, aiw.approvals, aiw.conflicts, aiw.agents, nodes])
 
-  const waiting = rows.filter((r) => r.tone === 'wait').length
+  // What the focus session holds. Only things that need you: news was never
+  // going to interrupt, so hiding it would only make the page emptier.
+  const [visible, held] = useMemo(() => {
+    if (!focus?.node_id) return [rows, [] as Row[]]
+    const inGoal = new Set(subtreeIds(nodes, focus.node_id))
+    const keep: Row[] = []
+    const hold: Row[] = []
+    for (const r of rows) {
+      const outside = r.nodeId == null || !Number.isFinite(r.nodeId) || !inGoal.has(r.nodeId)
+      if (r.tone === 'wait' && outside) hold.push(r)
+      else keep.push(r)
+    }
+    return [keep, hold]
+  }, [rows, focus, nodes])
+
+  const waiting = visible.filter((r) => r.tone === 'wait').length
+  const shown = showHeld ? [...visible, ...held] : visible
 
   return (
     <div className="flex h-full flex-col bg-page">
@@ -129,14 +158,38 @@ export function InboxPage() {
               {waiting} need{waiting === 1 ? 's' : ''} you
             </span>
           )}
+          {focus ? (
+            <button className="btn-ghost text-[11.5px]" onClick={() => void endFocus(held.length)}>
+              <Icon name="focus" size={12} /> End focus
+            </button>
+          ) : (
+            <button className="btn-ghost text-[11.5px]" onClick={() => setStarting(true)}>
+              <Icon name="focus" size={12} /> Focus
+            </button>
+          )}
           <button className="btn-ghost text-[11.5px]" onClick={() => void refreshActivity()}>
             <Icon name="update" size={12} /> Refresh
           </button>
         </div>
       </div>
 
+      {held.length > 0 && (
+        <button
+          className="flex shrink-0 items-center gap-2.5 border-b border-line bg-soft px-5 py-2 text-left hover:bg-hover"
+          onClick={() => setShowHeld((v) => !v)}
+        >
+          <Icon name={showHeld ? 'chevron-down' : 'chevron-right'} size={12} className="text-muted" />
+          <span className="text-[11.5px] text-dim">
+            {held.length} held while you focus
+          </span>
+          <span className="text-[10.5px] text-faint">
+            Outside “{focus?.goal}”. Nothing is dropped — it all arrives when you finish.
+          </span>
+        </button>
+      )}
+
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {rows.length === 0 ? (
+        {shown.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-8 text-center">
             <Icon name="inbox" size={26} className="text-faint" />
             <div className="text-[12.5px] text-dim">Nothing yet</div>
@@ -146,7 +199,7 @@ export function InboxPage() {
             </div>
           </div>
         ) : (
-          rows.map((r) => {
+          shown.map((r) => {
             const tone = TONE[r.tone]
             return (
               <div
@@ -190,6 +243,8 @@ export function InboxPage() {
           })
         )}
       </div>
+
+      {starting && <FocusStart onClose={() => setStarting(false)} />}
 
       {/* The reply box is what makes this a conversation rather than a list.
           It is not wired to the assistant yet — saying so beats a box that

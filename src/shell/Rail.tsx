@@ -215,6 +215,14 @@ export function Rail() {
       <Rule expanded={expanded} />
 
       <RailButton
+        label="Bots"
+        icon="bot"
+        active={railView === 'bots'}
+        expanded={expanded}
+        onClick={() => setRailView('bots')}
+      />
+
+      <RailButton
         label="Scheduler"
         icon="schedule"
         active={railView === 'scheduler'}

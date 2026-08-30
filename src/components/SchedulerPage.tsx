@@ -9,6 +9,13 @@
 // to the gym at nine when you meant half six is noise, and noise is how a
 // scheduler earns being ignored — so a missed reminder is recorded rather than
 // fired, and the row says so.
+//
+// A bot's heartbeat appears here too, and is the one kind of row this page will
+// not let you edit. Its routine is `_bot.md` in that space's folder; the row is
+// only the clock agreeing with the file, and `bots_list` puts back anything
+// changed here. Offering an Edit that is silently reverted is the same failure
+// as the node colour that used to be written to SQLite and lost on the next
+// scan — so it sends you to the bot instead.
 
 import { useEffect, useMemo, useState } from 'react'
 import * as ipc from '../lib/ipc'
@@ -19,6 +26,7 @@ import { workspaceOf, findNode } from '../lib/tree'
 const KIND: Record<string, { icon: IconName; label: string; tint: string }> = {
   reminder: { icon: 'alert', label: 'Reminder', tint: 'text-ok' },
   command: { icon: 'command', label: 'Command', tint: 'text-info' },
+  bot: { icon: 'bot', label: 'Heartbeat', tint: 'text-indigo-400' },
   agent: { icon: 'agent', label: 'Agent', tint: 'text-indigo-400' },
 }
 
@@ -50,7 +58,7 @@ function until(ms: number | null): string {
 }
 
 export function SchedulerPage() {
-  const { nodes } = useApp()
+  const { nodes, setRailView } = useApp()
   const [list, setList] = useState<ipc.Schedule[]>([])
   const [editing, setEditing] = useState<Partial<ipc.Schedule> | null>(null)
   const [err, setErr] = useState('')
@@ -138,7 +146,8 @@ export function SchedulerPage() {
             <div className="text-[12.5px] text-dim">Nothing scheduled</div>
             <div className="max-w-[400px] text-[11.5px] leading-relaxed text-muted">
               A schedule is a reminder that only tells you, or a command that runs in a space’s
-              folder. Agent schedules come once agents can hold a standing grant.
+              folder. Give a space a bot and its heartbeat shows up here too. Agent schedules come
+              once agents can hold a standing grant.
             </div>
           </div>
         ) : (
@@ -165,6 +174,8 @@ export function SchedulerPage() {
                   <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-muted">
                     {s.kind === 'command' ? (
                       <span className="truncate font-mono">{s.payload}</span>
+                    ) : s.kind === 'bot' ? (
+                      <span>Reads the space and writes at most one line. Nothing runs.</span>
                     ) : (
                       <span>Tells you. Nothing runs.</span>
                     )}
@@ -176,26 +187,39 @@ export function SchedulerPage() {
                       className="btn-ghost text-[11px]"
                       onClick={() => void ipc.scheduleRunNow(s.id).then(load).catch((e) => setErr(String(e)))}
                     >
-                      Run now
+                      {s.kind === 'bot' ? 'Wake it now' : 'Run now'}
                     </button>
-                    <button className="btn-ghost text-[11px]" onClick={() => setEditing(s)}>
-                      Edit
-                    </button>
-                    <button
-                      className="btn-ghost text-[11px]"
-                      onClick={() => void ipc.scheduleEnable(s.id, !s.enabled).then(load)}
-                    >
-                      {s.enabled ? 'Turn off' : 'Turn on'}
-                    </button>
-                    <button
-                      className="btn-ghost text-[11px] text-dim"
-                      onClick={() => {
-                        if (!confirm(`Delete the schedule “${s.name}”?`)) return
-                        void ipc.scheduleDelete(s.id).then(load)
-                      }}
-                    >
-                      Delete
-                    </button>
+                    {s.kind === 'bot' ? (
+                      <>
+                        <button className="btn-ghost text-[11px]" onClick={() => setRailView('bots')}>
+                          Edit the bot
+                        </button>
+                        <span className="text-[10.5px] text-faint">
+                          its routine lives in <code>_bot.md</code>
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <button className="btn-ghost text-[11px]" onClick={() => setEditing(s)}>
+                          Edit
+                        </button>
+                        <button
+                          className="btn-ghost text-[11px]"
+                          onClick={() => void ipc.scheduleEnable(s.id, !s.enabled).then(load)}
+                        >
+                          {s.enabled ? 'Turn off' : 'Turn on'}
+                        </button>
+                        <button
+                          className="btn-ghost text-[11px] text-dim"
+                          onClick={() => {
+                            if (!confirm(`Delete the schedule “${s.name}”?`)) return
+                            void ipc.scheduleDelete(s.id).then(load)
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>

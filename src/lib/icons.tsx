@@ -9,6 +9,7 @@
 
 import {
   Bot,
+  Crosshair,
   Sparkle,
   TriangleAlert,
   Diamond,
@@ -165,6 +166,8 @@ export type IconName =
   | 'conflict'
   | 'pause'
   | 'commit'
+  | 'bot'
+  | 'focus'
 
 const REGISTRY: Record<IconName, LucideIcon> = {
   workspace: Boxes,
@@ -239,6 +242,8 @@ const REGISTRY: Record<IconName, LucideIcon> = {
   // Assistant. Semantic names, so swapping the glyph is one line.
   ai: Sparkle,
   agent: Bot,
+  bot: Bot,
+  focus: Crosshair,
   context: Diamond,
   decision: Gavel,
   conflict: TriangleAlert,

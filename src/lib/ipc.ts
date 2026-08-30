@@ -81,6 +81,58 @@ export const scheduleEnable = (id: number, on: boolean) =>
 export const scheduleDelete = (id: number) => invoke<void>('schedule_delete', { id })
 export const scheduleRunNow = (id: number) => invoke<void>('schedule_run_now', { id })
 
+// ---- focus: a goal, a clock, and permission to ignore everything else ----
+
+export interface Focus {
+  id: number
+  goal: string
+  /** The space the goal is about. Null means it spans everything, and then
+   *  nothing is held. */
+  node_id: number | null
+  started_at: number
+  ended_at: number | null
+  /** What never reached you, counted by the inbox when the session ended. */
+  held: number
+}
+
+export const focusCurrent = () => invoke<Focus | null>('focus_current')
+export const focusStart = (goal: string, nodeId: number | null) =>
+  invoke<Focus>('focus_start', { goal, nodeId })
+/** `held` is the inbox's count — the backend cannot work it out, because
+ *  holding is a rendering rule over three live streams. */
+export const focusEnd = (held: number) => invoke<void>('focus_end', { held })
+export const focusRecent = (limit = 8) => invoke<Focus[]>('focus_recent', { limit })
+
+// ---- bots: a file in a folder, not a new entity ----
+
+export interface Bot {
+  node_id: number
+  node_name: string
+  dir: string
+  name: string
+  goal: string
+  /** daily | weekdays | weekly | hourly, or empty for no heartbeat. */
+  every: string
+  at_min: number
+  days: string
+  body: string
+  schedule_id: number | null
+  last_woke: number | null
+}
+
+export const botsList = () => invoke<Bot[]>('bots_list')
+export const botGet = (nodeId: number) => invoke<Bot | null>('bot_get', { nodeId })
+export const botSave = (b: {
+  nodeId: number
+  name: string
+  goal: string
+  every: string
+  atMin: number
+  days: string
+  body: string
+}) => invoke<Bot>('bot_save', b)
+export const botDelete = (nodeId: number) => invoke<void>('bot_delete', { nodeId })
+
 // ---- the vault: the folder tree that is the Explorer ----
 
 /** What a node's `_devdeck.md` says about it. */

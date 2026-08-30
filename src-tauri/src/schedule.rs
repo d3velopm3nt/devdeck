@@ -1,13 +1,16 @@
 //! Things that happen on a clock.
 //!
-//! Not an agent feature. A schedule runs one of three things:
+//! Not an agent feature. A schedule runs one of four things:
 //!
 //!   * a **reminder**, which only tells you,
 //!   * a **command**, which runs a shell line in a space's folder,
+//!   * a **bot**, which is a space's heartbeat: it reads what that space is
+//!     carrying and writes at most one line to your inbox, or stays silent.
+//!     It touches nothing, so it needs no grant,
 //!   * an **agent**, which needs a standing grant and therefore does not exist
 //!     yet — the permission model denies on timeout, so an unattended agent
-//!     either stalls or has to be trusted too widely. Reminders and commands
-//!     need none of that, which is why they ship first.
+//!     either stalls or has to be trusted too widely. The other three need
+//!     none of that, which is why they ship first.
 //!
 //! **Catching up is per schedule, not global.** A reminder whose moment has
 //! passed must not fire late — being told to go to the gym at nine when you
@@ -30,7 +33,7 @@ pub const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS schedules (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
-    -- reminder | command | agent
+    -- reminder | command | bot | agent
     kind TEXT NOT NULL,
     -- The node this belongs to. Null means it is not about any one space.
     node_id INTEGER REFERENCES nodes(id) ON DELETE CASCADE,
@@ -308,7 +311,13 @@ fn dir_for(conn: &Connection, node_id: Option<i64>) -> Option<String> {
 /// Takes no connection on purpose. `activity::record` locks the database
 /// itself, so a caller holding that lock while calling this deadlocks the
 /// thread — which is exactly what the first version of the tick did.
-fn run_one(app: &tauri::AppHandle, s: &Schedule, dir: Option<String>, late: bool) -> (bool, String) {
+fn run_one(
+    app: &tauri::AppHandle,
+    s: &Schedule,
+    dir: Option<String>,
+    late: bool,
+    report: Option<String>,
+) -> (bool, String) {
     let when = if late { " (late)" } else { "" };
 
     let (ok, note) = match s.kind.as_str() {
@@ -338,18 +347,34 @@ fn run_one(app: &tauri::AppHandle, s: &Schedule, dir: Option<String>, late: bool
                 Err(e) => (false, format!("could not run: {e}")),
             }
         }
+        // A bot waking reads its space and says at most one thing. `report` is
+        // that thing, gathered under the lock by the caller; None means the
+        // space had nothing worth mentioning, and then the bot says nothing at
+        // all. A heartbeat that reports "all clear" every morning is a
+        // heartbeat you learn to scroll past, which costs you the morning it
+        // does not.
+        "bot" => match report {
+            Some(r) => (true, r),
+            None => return (true, String::new()),
+        },
         // Deliberately not implemented: an agent run needs a standing grant,
         // and pretending otherwise would mean running one unsupervised.
         _ => (false, "Agent schedules are not available yet.".into()),
     };
 
+    let bot = s.kind == "bot";
     crate::activity::record(
         app,
-        "schedule",
-        format!("{}{when}", s.name),
+        if bot { "bot" } else { "schedule" },
+        if bot {
+            format!("{} woke{when}", s.name)
+        } else {
+            format!("{}{when}", s.name)
+        },
         if ok {
             match s.kind.as_str() {
                 "reminder" => "Reminder".to_string(),
+                "bot" => note.clone(),
                 _ => s.payload.clone(),
             }
         } else {
@@ -371,7 +396,10 @@ fn run_one(app: &tauri::AppHandle, s: &Schedule, dir: Option<String>, late: bool
 /// command can take seconds, and recording activity needs the same lock.
 pub fn tick(app: &tauri::AppHandle, startup: bool) {
     enum Do {
-        Run(Schedule, Option<String>, bool),
+        /// The schedule, its working directory, whether it is late, and — for a
+        /// bot — what it found. All four are gathered under the lock, because
+        /// running is done without it.
+        Run(Schedule, Option<String>, bool, Option<String>),
         Missed(Schedule, i64),
     }
 
@@ -396,7 +424,12 @@ pub fn tick(app: &tauri::AppHandle, startup: bool) {
                 todo.push(Do::Missed(s, due_ms));
             } else {
                 let dir = dir_for(&conn, s.node_id);
-                todo.push(Do::Run(s, dir, late));
+                let report = if s.kind == "bot" {
+                    s.node_id.and_then(|n| crate::bots::wake_report(&conn, n))
+                } else {
+                    None
+                };
+                todo.push(Do::Run(s, dir, late, report));
             }
         }
         todo
@@ -404,8 +437,8 @@ pub fn tick(app: &tauri::AppHandle, startup: bool) {
 
     for item in todo {
         match item {
-            Do::Run(s, dir, late) => {
-                let (ok, note) = run_one(app, &s, dir, late);
+            Do::Run(s, dir, late, report) => {
+                let (ok, note) = run_one(app, &s, dir, late, report);
                 let conn = db.0.lock().unwrap();
                 let _ = conn.execute(
                     "UPDATE schedules SET last_run=?1, last_ok=?2, last_note=?3 WHERE id=?4",
@@ -434,14 +467,19 @@ pub fn tick(app: &tauri::AppHandle, startup: bool) {
 /// Run a schedule by hand, ignoring whether it is due.
 #[tauri::command]
 pub fn schedule_run_now(app: tauri::AppHandle, db: tauri::State<Db>, id: i64) -> Result<(), String> {
-    let (s, dir) = {
+    let (s, dir, report) = {
         let conn = db.0.lock().unwrap();
         let sql = format!("SELECT {COLS} FROM schedules WHERE id = ?1");
         let s = conn.query_row(&sql, params![id], row).map_err(err)?;
         let dir = dir_for(&conn, s.node_id);
-        (s, dir)
+        let report = if s.kind == "bot" {
+            s.node_id.and_then(|n| crate::bots::wake_report(&conn, n))
+        } else {
+            None
+        };
+        (s, dir, report)
     };
-    let (ok, note) = run_one(&app, &s, dir, false);
+    let (ok, note) = run_one(&app, &s, dir, false, report);
     let conn = db.0.lock().unwrap();
     conn.execute(
         "UPDATE schedules SET last_run=?1, last_ok=?2, last_note=?3 WHERE id=?4",

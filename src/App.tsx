@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Dock, buildDefaultLayout } from './Dock'
 import { BottomBar } from './components/BottomBar'
 import { InboxPage } from './components/InboxPage'
+import { BotsPage } from './components/BotsPage'
+import { FocusBar } from './components/FocusBar'
 import { SchedulerPage } from './components/SchedulerPage'
 import { SetupModal } from './components/SetupModal'
 import { VaultSetup } from './components/VaultSetup'
@@ -661,6 +663,10 @@ export default function App() {
       </div>
 
 
+      {/* The goal you are on, when you are on one. Above the update bar
+          because it is about right now and the update bar is not. */}
+      <FocusBar />
+
       {/* Self-update status bar */}
       {!upHidden && (
         <UpdateBar
@@ -713,6 +719,7 @@ export default function App() {
           {railView === 'aiworkspace' && <AiWorkspace />}
           {railView === 'machine' && <MachineSetup />}
           {railView === 'inbox' && <InboxPage />}
+          {railView === 'bots' && <BotsPage />}
           {railView === 'scheduler' && <SchedulerPage />}
           {railView === 'settings' && <ConfigPage />}
         </main>

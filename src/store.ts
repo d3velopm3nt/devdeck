@@ -34,6 +34,7 @@ export type Theme = 'dark' | 'light'
 export type RailView =
   | 'home'
   | 'inbox'
+  | 'bots'
   | 'scheduler'
   | 'projects'
   | 'stash'
@@ -223,6 +224,18 @@ export interface AppState {
   refreshActivity: () => Promise<void>
   pushActivity: (a: Activity) => void
 
+  /** The goal you are on, or null. One at a time, app-wide: the point of
+   *  focusing is that the *other* spaces go quiet. */
+  focus: ipc.Focus | null
+  refreshFocus: () => Promise<void>
+  startFocus: (goal: string, nodeId: number | null) => Promise<void>
+  /** `held` is what the inbox counted — it is the only thing that knows. */
+  endFocus: (held: number) => Promise<void>
+
+  /** Every `_bot.md` in the vault. */
+  bots: ipc.Bot[]
+  refreshBots: () => Promise<void>
+
   // Connections — the SQL layer.
   connections: ConnDef[]
   connQueries: SavedQuery[]
@@ -307,6 +320,7 @@ const RAIL_KEY = 'devdeck.railView'
 const RAIL_VIEWS: readonly RailView[] = [
   'home',
   'inbox',
+  'bots',
   'scheduler',
   'projects',
   'stash',
@@ -548,6 +562,8 @@ export const useApp = create<AppState>((set, get) => ({
     document.documentElement.dataset.theme = savedTheme === 'light' ? 'light' : 'dark'
     await tree
     void get().refreshActivity()
+    void get().refreshFocus()
+    void get().refreshBots()
     void get().refreshConnections()
     void get().refreshConnQueries()
   },
@@ -721,6 +737,21 @@ export const useApp = create<AppState>((set, get) => ({
   activity: [],
   refreshActivity: async () => set({ activity: await ipc.activityList(60) }),
   pushActivity: (a) => set((st) => ({ activity: [a, ...st.activity].slice(0, 60) })),
+
+  focus: null,
+  refreshFocus: async () => set({ focus: await ipc.focusCurrent() }),
+  startFocus: async (goal, nodeId) => {
+    set({ focus: await ipc.focusStart(goal, nodeId) })
+    await get().refreshActivity()
+  },
+  endFocus: async (held) => {
+    await ipc.focusEnd(held)
+    set({ focus: null })
+    await get().refreshActivity()
+  },
+
+  bots: [],
+  refreshBots: async () => set({ bots: await ipc.botsList() }),
 
   connections: [],
   connQueries: [],

@@ -13,9 +13,11 @@
 
 mod activity;
 mod aiw;
+mod bots;
 mod conn;
 mod creds;
 mod db;
+mod focus;
 mod git;
 mod github;
 mod legacy;
@@ -772,6 +774,14 @@ pub fn run() {
             schedule::schedule_enable,
             schedule::schedule_delete,
             schedule::schedule_run_now,
+            focus::focus_current,
+            focus::focus_start,
+            focus::focus_end,
+            focus::focus_recent,
+            bots::bots_list,
+            bots::bot_get,
+            bots::bot_save,
+            bots::bot_delete,
             vault::vault_move,
             vault::vault_switch,
             vault::vault_switch_cost,

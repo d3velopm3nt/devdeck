@@ -1,0 +1,132 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background: #0d1017; }
+    a { color: #818cf8; } a:hover { color: #a5b4fc; }
+    .lbl { font-size: 9.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #475569; }
+    .kind { display: flex; flex-direction: column; gap: 5px; border: 1px solid #1e293b; border-radius: 8px;
+            background: #11141c; padding: 12px 13px; }
+    .kind.on { border-color: rgb(99 102 241 / 0.5); background: rgb(99 102 241 / 0.06); }
+    .kind h4 { margin: 0; font-size: 12.5px; font-weight: 600; color: #e2e8f0; }
+    .kind p { margin: 0; font-size: 10.5px; line-height: 1.45; color: #64748b; }
+    .brings { font-size: 10px; color: #475569; }
+    .btn { border-radius: 5px; padding: 5px 13px; font-size: 12px; font-weight: 500; }
+  </style>
+</helmet>
+
+<div style="width: 1120px; height: 800px; background: #0d1017; padding: 26px 34px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px; overflow: hidden">
+
+  <div>
+    <div style="font-size: 18px; font-weight: 600; color: #e2e8f0">A new space</div>
+    <div style="margin-top: 4px; font-size: 12px; color: #94a3b8">
+      A space is a folder in your vault. Everything you put in it lives there, and you can move it later.
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 26px; min-height: 0; flex: 1">
+
+    <!-- Left: what it is -->
+    <div style="width: 620px; flex: none; display: flex; flex-direction: column; gap: 18px">
+      <div>
+        <label class="lbl" style="display: block; margin-bottom: 6px">Called</label>
+        <div style="display: flex; align-items: center; gap: 10px; border: 1px solid #334155; border-radius: 6px; background: #0d1017; padding: 9px 12px">
+          <span style="font-size: 15px; color: #e2e8f0">Fitness</span>
+          <span style="width: 1px; height: 15px; background: #6366f1"></span>
+        </div>
+        <div style="margin-top: 6px; font-size: 10.5px; color: #64748b; font-family: ui-monospace, Consolas, monospace">
+          ~/DevDeck/Fitness
+        </div>
+      </div>
+
+      <div>
+        <label class="lbl" style="display: block; margin-bottom: 8px">What is it for?</label>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px">
+
+          <div class="kind">
+            <h4>A business or a client</h4>
+            <p>The company itself, or someone you work for. Products live inside it as folders.</p>
+            <span class="brings">Brings: Clients, Money, Marketing · Monday and Friday</span>
+          </div>
+
+          <div class="kind">
+            <h4>A product you ship</h4>
+            <p>One thing with code behind it. Repositories, releases, something that runs.</p>
+            <span class="brings">Brings: a folder per repository · a release routine</span>
+          </div>
+
+          <div class="kind on">
+            <h4>Something you practise</h4>
+            <p>A thing you do again and again and want to keep at. Fitness, writing, a language.</p>
+            <span class="brings">Brings: a folder per area · an evening rhythm</span>
+          </div>
+
+          <div class="kind">
+            <h4>Something you are working out</h4>
+            <p>A decision to reach or a subject to learn, where the output is an answer.</p>
+            <span class="brings">Brings: a folder per question · a weekly look back</span>
+          </div>
+
+          <div class="kind" style="grid-column: span 2; flex-direction: row; align-items: baseline; gap: 10px">
+            <h4 style="flex: none">Start empty</h4>
+            <p style="min-width: 0; flex: 1">Just the folder. You add the rest.</p>
+            <span class="brings" style="flex: none">Brings: nothing</span>
+          </div>
+        </div>
+        <p style="margin: 9px 0 0; font-size: 10.5px; line-height: 1.5; color: #475569">
+          This only decides what gets drafted on the next screen. Afterwards it is a folder like any
+          other — there is no kind of space to live with later.
+        </p>
+      </div>
+    </div>
+
+    <!-- Right: what that already decided -->
+    <div style="min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; align-items: flex-start; gap: 9px; border: 1px solid rgb(99 102 241 / 0.3); border-radius: 8px; background: rgb(99 102 241 / 0.05); padding: 12px 13px">
+        <span style="width: 22px; height: 22px; border-radius: 6px; background: rgb(99 102 241 / 0.2); color: #818cf8; display: flex; align-items: center; justify-content: center; flex: none">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 14.06A4 4 0 0 1 14.06 9.94L18 3l-6.94 3.94A4 4 0 0 1 6.94 11L3 18l6.94-3.94Z"/></svg>
+        </span>
+        <div style="min-width: 0; flex: 1; font-size: 11.5px; line-height: 1.6; color: #cbd5e1">
+          Something you practise is usually not work, so I have tagged this
+          <span style="color: #4ade80">Personal</span>. That is the tag that decides whether anything
+          here is allowed to interrupt you during the day.
+        </div>
+      </div>
+
+      <div style="border: 1px solid #1e293b; border-radius: 8px; background: #11141c">
+        <div style="padding: 10px 13px 6px"><span class="lbl">Tagged</span></div>
+        <div style="display: flex; gap: 7px; padding: 0 13px 11px">
+          <span style="border-radius: 999px; padding: 3px 12px; font-size: 11px; font-weight: 600; background: rgb(74 222 128 / 0.16); color: #4ade80">Personal</span>
+          <span style="border-radius: 999px; padding: 3px 12px; font-size: 11px; border: 1px solid #1e293b; color: #64748b">Business</span>
+        </div>
+        <div style="border-top: 1px solid #1e293b; padding: 9px 13px; font-size: 10.5px; line-height: 1.55; color: #64748b">
+          Personal keeps it quiet: routines land in the evening, and a bot here waits until you are
+          not working. Business puts both on work hours.
+        </div>
+        <div style="border-top: 1px solid #1e293b; padding: 9px 13px; font-size: 10.5px; line-height: 1.55; color: #475569">
+          The kind above only suggests one — the two are not tied. A decision you are working out at
+          work is Business; a product you ship at the weekend is Personal.
+        </div>
+      </div>
+
+      <div style="flex: 1"></div>
+
+      <div style="display: flex; align-items: center; gap: 9px">
+        <span class="btn" style="background: #6366f1; color: #fff">Draft it</span>
+        <span class="btn" style="border: 1px solid #1e293b; color: #94a3b8">Just make the folder</span>
+      </div>
+      <div style="font-size: 10.5px; line-height: 1.5; color: #475569">
+        Nothing is written until you say so on the next screen.
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

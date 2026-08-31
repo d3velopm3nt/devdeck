@@ -23,6 +23,7 @@ import { Icon } from '../lib/icons'
 import { avatarLabel, nodeColor } from '../lib/spaces'
 import { findNode, subtreeIds, workspaceOf } from '../lib/tree'
 import { PopMenu, type MenuItem } from '../components/PopMenu'
+import { SpaceSetup } from '../components/SpaceSetup'
 import { useAiw } from '../lib/aiwStore'
 
 export function WorkspaceTabs() {
@@ -38,6 +39,7 @@ export function WorkspaceTabs() {
   } = useApp()
   const aiw = useAiw()
   const [menu, setMenu] = useState<{ x: number; y: number; id: number } | null>(null)
+  const [making, setMaking] = useState(false)
 
   const workspaces = useMemo(() => nodes.filter((n) => n.kind === 'workspace'), [nodes])
 
@@ -227,21 +229,8 @@ export function WorkspaceTabs() {
 
       <button
         className="flex shrink-0 items-center border-r border-line px-2.5 text-faint hover:bg-hover/40 hover:text-dim"
-        title="New workspace"
-        onClick={() => {
-          const name = prompt('Name for the new workspace', 'New workspace')
-          if (name === null) return
-          void (async () => {
-            try {
-              // A workspace is a top-level folder; depth is what makes it one.
-              const created = await ipc.vaultCreate(null, name.trim() || 'New workspace')
-              await refreshTree()
-              setActiveWorkspace(created.id)
-            } catch (e) {
-              alert(String(e))
-            }
-          })()
-        }}
+        title="New space"
+        onClick={() => setMaking(true)}
       >
         <Icon name="add" size={13} />
       </button>
@@ -249,6 +238,7 @@ export function WorkspaceTabs() {
       {menu && (
         <PopMenu x={menu.x} y={menu.y} items={menuItems(menu.id)} onClose={() => setMenu(null)} />
       )}
+      {making && <SpaceSetup onClose={() => setMaking(false)} />}
     </div>
   )
 }

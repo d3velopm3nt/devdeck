@@ -103,6 +103,56 @@ export const focusStart = (goal: string, nodeId: number | null) =>
 export const focusEnd = (held: number) => invoke<void>('focus_end', { held })
 export const focusRecent = (limit = 8) => invoke<Focus[]>('focus_recent', { limit })
 
+
+// ---- spaces: making a workspace with a first cut already drafted ----
+
+export interface FolderDraft {
+  name: string
+  why: string
+}
+
+export interface RoutineDraft {
+  name: string
+  /** daily | weekdays | weekly | hourly */
+  every: string
+  at_min: number
+  /** For 'weekly': comma-separated 0-6, Sunday first. */
+  days: string
+}
+
+export interface Starter {
+  id: string
+  name: string
+  what: string
+  /** One line naming what it actually brings. */
+  brings: string
+  /** The tag it suggests — only a suggestion. */
+  label: string
+  folders: FolderDraft[]
+  routines: RoutineDraft[]
+  bot: boolean
+}
+
+export interface SpaceCreated {
+  node_id: number
+  name: string
+  folders: string[]
+  routines: string[]
+  bot: boolean
+  /** Empty on a clean run. Anything here happened after the space existed. */
+  problems: string[]
+}
+
+export const spaceStarters = () => invoke<Starter[]>('space_starters')
+export const spaceCreate = (s: {
+  name: string
+  label: string
+  folders: FolderDraft[]
+  routines: RoutineDraft[]
+  botName: string
+  botGoal: string
+}) => invoke<SpaceCreated>('space_create', s)
+
 // ---- bots: a file in a folder, not a new entity ----
 
 export interface Bot {

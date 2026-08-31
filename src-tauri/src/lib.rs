@@ -32,6 +32,7 @@ mod seed;
 mod services;
 mod setup;
 mod shots;
+mod spaces;
 mod stash;
 mod vault;
 
@@ -766,6 +767,8 @@ pub fn run() {
             vault::vault_set_root,
             vault::vault_scan,
             vault::vault_create,
+            spaces::space_starters,
+            spaces::space_create,
             vault::vault_rename,
             vault::vault_set_meta,
             vault::vault_meta,

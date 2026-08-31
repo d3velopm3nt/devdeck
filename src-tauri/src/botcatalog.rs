@@ -80,10 +80,10 @@ pub fn all() -> Vec<Template> {
     vec![
         Template {
             id: s("website"),
-            name: s("Website bot"),
+            name: s("Website project"),
             what: s(
-                "Runs a site from brief to launch. It does not build the site — it holds the \
-                 steps, the standards and the checks, and hands the work to agents.",
+                "Manages a site from brief to launch. It writes no HTML itself — it holds the \
+                 steps, the standards and the checks, and puts agents on the work.",
             ),
             goal_hint: s("Ship the site by …"),
             every: s("weekdays"),
@@ -159,10 +159,10 @@ pub fn all() -> Vec<Template> {
         },
         Template {
             id: s("release"),
-            name: s("Release bot"),
+            name: s("Release train"),
             what: s(
                 "Holds the shape of a release so the same thing is not remembered differently \
-                 each time.",
+                 each time. It ships nothing itself: it decides what is ready, and who does it.",
             ),
             goal_hint: s("Ship … without a hotfix"),
             every: s("weekdays"),
@@ -204,10 +204,10 @@ pub fn all() -> Vec<Template> {
         },
         Template {
             id: s("topic"),
-            name: s("Topic bot"),
+            name: s("Topic"),
             what: s(
-                "For a space that is a subject rather than a codebase — a decision to make, a \
-                 thing to learn, something to keep an eye on.",
+                "Manages a subject rather than a codebase — a decision to make, a \
+                 thing to learn, something to keep an eye on. It keeps the question alive and puts \n                 agents on answering it.",
             ),
             goal_hint: s("Decide … by …"),
             every: s("weekly"),
@@ -237,7 +237,7 @@ pub fn all() -> Vec<Template> {
         Template {
             id: s("blank"),
             name: s("Start empty"),
-            what: s("A goal and a heartbeat. You add the rest."),
+            what: s("A goal, a heartbeat and a team. You add what it manages."),
             goal_hint: s(""),
             every: s("weekdays"),
             at_min: 7 * 60,

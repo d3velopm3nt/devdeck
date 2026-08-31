@@ -84,6 +84,16 @@ pub struct Bot {
     /// says so.
     #[serde(default)]
     pub agent: String,
+    /// Every agent this bot may put work on, its lead included.
+    ///
+    /// A bot manages; it does not do the work. The team is who it is allowed
+    /// to hand that work to, and it is a limit rather than a hint: an agent
+    /// that is not on it gets nothing, the same way an agent missing from the
+    /// permission matrix gets nothing. An empty team means the bot has nobody
+    /// yet and can only watch — a true thing to say about a bot with no one
+    /// to manage, not a failure.
+    #[serde(default)]
+    pub team: Vec<String>,
     /// What to ask it when it wakes. Empty means the goal.
     #[serde(default)]
     pub wake_intent: String,
@@ -131,6 +141,14 @@ fn read(dir: &Path) -> Option<Bot> {
                         "days" => b.days = v,
                         "template" => b.template = v,
                         "agent" => b.agent = v,
+                        "team" => {
+                            b.team = v
+                                .trim_matches(|c| c == '[' || c == ']')
+                                .split(',')
+                                .map(|x| x.trim().trim_matches('"').to_string())
+                                .filter(|x| !x.is_empty())
+                                .collect()
+                        }
                         "wake_intent" => b.wake_intent = v,
                         "feature" => b.feature = v,
                         "skills" => {
@@ -178,6 +196,9 @@ fn write(dir: &Path, b: &Bot) -> Result<(), String> {
     }
     if !b.agent.trim().is_empty() {
         out.push_str(&format!("agent: {}\n", b.agent.trim()));
+    }
+    if !b.team.is_empty() {
+        out.push_str(&format!("team: [{}]\n", b.team.join(", ")));
     }
     if !b.wake_intent.trim().is_empty() {
         out.push_str(&format!("wake_intent: {}\n", b.wake_intent.trim()));
@@ -331,6 +352,27 @@ pub fn bot_get(db: tauri::State<Db>, node_id: i64) -> Result<Option<Bot>, String
 /// without a running app — the behaviour worth checking should not be reachable
 /// only through a window.
 #[allow(clippy::too_many_arguments)]
+/// Tidy a team and refuse a lead who is not on it.
+///
+/// A bot manages, so the team is who it may put work on — a limit, not a
+/// description. Letting it wake an agent that is not on the team would make
+/// the limit read like an answer while being none.
+fn vet_team(name: &str, agent: &str, team: Vec<String>) -> Result<Vec<String>, String> {
+    let team: Vec<String> = team
+        .into_iter()
+        .map(|a| a.trim().to_string())
+        .filter(|a| !a.is_empty())
+        .collect();
+    if !agent.trim().is_empty() && !team.iter().any(|a| a == agent.trim()) {
+        return Err(format!(
+            "{} is not on {}'s team, so it cannot be the one it wakes. Add it to the team first.",
+            agent.trim(),
+            name
+        ));
+    }
+    Ok(team)
+}
+
 fn save_into(
     conn: &Connection,
     node_id: i64,
@@ -342,6 +384,7 @@ fn save_into(
     body: &str,
     skills: Vec<String>,
     agent: &str,
+    team: Vec<String>,
     wake_intent: &str,
 ) -> Result<(Bot, bool), String> {
     let name = name.trim();
@@ -359,6 +402,8 @@ fn save_into(
     if !dir.is_dir() {
         return Err(format!("{} is not there.", dir.display()));
     }
+
+    let team = vet_team(name, agent, team)?;
 
     // Two fields the editor never sends, and must never lose: which starter it
     // came from and which feature holds its work. Saving a name change is not a
@@ -380,6 +425,7 @@ fn save_into(
         template: existing.as_ref().map(|e| e.template.clone()).unwrap_or_default(),
         feature: existing.as_ref().map(|e| e.feature.clone()).unwrap_or_default(),
         agent: agent.trim().to_string(),
+        team,
         wake_intent: wake_intent.trim().to_string(),
         schedule_id: None,
         last_woke: None,
@@ -406,12 +452,13 @@ pub fn bot_save(
     body: String,
     skills: Vec<String>,
     agent: String,
+    team: Vec<String>,
     wake_intent: String,
 ) -> Result<Bot, String> {
     let (bot, created) = {
         let conn = db.0.lock().unwrap();
         save_into(
-            &conn, node_id, &name, &goal, &every, at_min, &days, &body, skills, &agent,
+            &conn, node_id, &name, &goal, &every, at_min, &days, &body, skills, &agent, team,
             &wake_intent,
         )?
     };
@@ -779,8 +826,10 @@ fn create_into(
         skills: tpl.as_ref().map(|t| t.skills.clone()).unwrap_or_default(),
         template: tpl.as_ref().map(|t| t.id.clone()).unwrap_or_default(),
         feature: String::new(),
-        // A new bot watches. Naming an agent is a separate, deliberate act.
+        // A new bot watches. Naming who it manages — and which of them it
+        // wakes — is a separate, deliberate act.
         agent: String::new(),
+        team: vec![],
         wake_intent: String::new(),
         schedule_id: None,
         last_woke: None,
@@ -1182,6 +1231,24 @@ pub fn wake_agent(app: &tauri::AppHandle, bot: &Bot) -> Option<(bool, String)> {
     if bot.agent.trim().is_empty() {
         return None;
     }
+    if !bot.team.iter().any(|a| a == bot.agent.trim()) {
+        return Some((
+            false,
+            if bot.team.is_empty() {
+                format!(
+                    "{} has no team, so there is nobody it may put work on. Add {} to its team on the bot's page.",
+                    bot.name, bot.agent
+                )
+            } else {
+                format!(
+                    "{} is not on {}'s team ({}), so it was not woken.",
+                    bot.agent,
+                    bot.name,
+                    bot.team.join(", ")
+                )
+            },
+        ));
+    }
     let ws = app.try_state::<std::sync::Arc<crate::aiw::state::Workspace>>()?;
     let workspace: std::sync::Arc<crate::aiw::state::Workspace> = (*ws).clone();
 
@@ -1309,6 +1376,46 @@ mod tests {
 
     /// A folder with no `_bot.md` has no bot. That is what makes "which folders
     /// have bots" answerable by looking rather than by asking the database.
+    /// The team is a limit, and one only the editor enforced would not be:
+    /// `_bot.md` is a file, so a hand-edited `agent:` has to be refused at the
+    /// point the work is handed out too. That check is in `wake_agent`; this
+    /// one covers the rule itself.
+    #[test]
+    fn a_lead_who_is_not_on_the_team_is_refused() {
+        let e = vet_team("Site", "dev-a", vec!["qa".into()]).unwrap_err();
+        assert!(e.contains("dev-a") && e.contains("team"), "{e}");
+    }
+
+    #[test]
+    fn a_bot_with_no_lead_may_have_no_team() {
+        assert_eq!(vet_team("Site", "", vec![]).unwrap(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn blank_names_are_dropped_rather_than_counted() {
+        let t = vet_team("Site", "qa", vec!["  ".into(), "qa".into(), String::new()]).unwrap();
+        assert_eq!(t, vec!["qa".to_string()]);
+    }
+
+    /// The team travels with the bot, like everything else about it.
+    #[test]
+    fn the_team_survives_the_file() {
+        let dir = std::env::temp_dir().join(format!("devdeck-team-{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+        let b = Bot {
+            name: "Site".into(),
+            goal: "Ship it".into(),
+            agent: "dev-a".into(),
+            team: vec!["dev-a".into(), "qa".into()],
+            ..Default::default()
+        };
+        write(&dir, &b).unwrap();
+        let back = read(&dir).expect("a bot");
+        assert_eq!(back.team, vec!["dev-a".to_string(), "qa".to_string()]);
+        assert_eq!(back.agent, "dev-a");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn no_file_means_no_bot() {
         let dir = std::env::temp_dir().join(format!("devdeck-nobot-{}", std::process::id()));

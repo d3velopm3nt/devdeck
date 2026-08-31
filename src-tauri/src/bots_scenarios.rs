@@ -335,6 +335,7 @@ fn renaming_a_bot_does_not_lose_its_starter_or_its_plan() {
         "my own notes",
         vec!["release-notes".into()],
         "",
+        vec![],
         "",
     )
     .unwrap();
@@ -364,7 +365,8 @@ fn taking_a_bots_heartbeat_away_removes_the_row() {
     create_into(&w.conn, 2, "blank", "Quiet bot", "Just be there", "daily", 420, "", false).unwrap();
     assert!(heartbeat(&w.conn, 2).is_some());
 
-    save_into(&w.conn, 2, "Quiet bot", "Just be there", "", 420, "", "", vec![], "", "").unwrap();
+    save_into(&w.conn, 2, "Quiet bot", "Just be there", "", 420, "", "", vec![], "", vec![], "")
+        .unwrap();
     assert!(heartbeat(&w.conn, 2).is_none(), "no routine, no clock");
     assert!(w.has(2, "heartbeat", NOW), "and it says so");
 }
@@ -740,6 +742,7 @@ fn naming_an_agent_is_written_down_and_survives_a_save() {
         "",
         vec![],
         "release-checker",
+        vec!["release-checker".into()],
         "Check the version files disagree with nothing",
     )
     .unwrap();
@@ -756,7 +759,7 @@ fn naming_an_agent_is_written_down_and_survives_a_save() {
 
     // And taking it away again puts the bot back to only watching.
     save_into(
-        &w.conn, 2, "Ops bot", "Ship 1.0", "weekdays", 420, "", "", vec![], "", "",
+        &w.conn, 2, "Ops bot", "Ship 1.0", "weekdays", 420, "", "", vec![], "", vec![], "",
     )
     .unwrap();
     assert_eq!(w.bot(2).agent, "");
@@ -780,7 +783,7 @@ fn a_bot_that_already_names_a_half_made_feature_is_refused_too() {
     let dir = w.dir("Business/Marketing site");
     std::fs::create_dir_all(dir.join(".devdeck").join("features").join("hand-made")).unwrap();
     save_into(
-        &w.conn, 2, "Site bot", "Ship the site", "weekdays", 480, "", "", vec![], "", "",
+        &w.conn, 2, "Site bot", "Ship the site", "weekdays", 480, "", "", vec![], "", vec![], "",
     )
     .unwrap();
     // Point the bot at it the way a hand-edited file would.

@@ -31,6 +31,7 @@ export function BotSettings({
   const [body, setBody] = useState(bot.body)
   const [skills, setSkills] = useState(bot.skills.join(', '))
   const [agent, setAgent] = useState(bot.agent)
+  const [team, setTeam] = useState<string[]>(bot.team ?? [])
   const [wakeIntent, setWakeIntent] = useState(bot.wake_intent)
   const [agents, setAgents] = useState<{ id: string; name: string }[]>([])
   const [err, setErr] = useState('')
@@ -47,6 +48,7 @@ export function BotSettings({
     setBody(bot.body)
     setSkills(bot.skills.join(', '))
     setAgent(bot.agent)
+    setTeam(bot.team ?? [])
     setWakeIntent(bot.wake_intent)
   }, [bot])
 
@@ -66,6 +68,7 @@ export function BotSettings({
     body !== bot.body ||
     skills !== bot.skills.join(', ') ||
     agent !== bot.agent ||
+    team.join(',') !== (bot.team ?? []).join(',') ||
     wakeIntent !== bot.wake_intent
 
   const save = () => {
@@ -84,6 +87,7 @@ export function BotSettings({
           .map((s) => s.trim())
           .filter(Boolean),
         agent,
+        team,
         wakeIntent,
       })
       .then(() => {
@@ -184,6 +188,45 @@ export function BotSettings({
           Opt-in, never a default, and the copy says plainly what it can and
           cannot do — a screen that implied an unattended agent was free to act
           would be the most dangerous sentence in the app. */}
+      {/* Who it manages. A bot does no work itself, so this is the list of
+          agents it may put work on — and it is a limit, not a description:
+          the lead has to be one of them, and a wake naming anyone else is
+          refused rather than quietly allowed. */}
+      <div>
+        <label className="mb-1 block text-[9.5px] font-semibold uppercase tracking-[0.06em] text-faint">
+          Its team
+        </label>
+        <div className="flex flex-wrap gap-1.5">
+          {agents.map((ag) => {
+            const on = team.includes(ag.id)
+            return (
+              <button
+                key={ag.id}
+                className={`rounded-full px-3 py-0.5 text-[11px] ${
+                  on
+                    ? 'bg-indigo-500/20 font-semibold text-indigo-300'
+                    : 'border border-line text-muted hover:text-dim'
+                }`}
+                onClick={() => {
+                  const next = on ? team.filter((t) => t !== ag.id) : [...team, ag.id]
+                  setTeam(next)
+                  // Dropping the lead from the team would save as an error, so
+                  // it stands down here instead of failing on the way out.
+                  if (on && agent === ag.id) setAgent('')
+                }}
+              >
+                {ag.name}
+              </button>
+            )
+          })}
+        </div>
+        <p className="mt-1.5 text-[10.5px] leading-[1.5] text-muted">
+          {team.length === 0
+            ? 'Nobody yet. A bot with no team can only watch — there is no one for it to put work on.'
+            : `It may put work on ${team.length === 1 ? 'this one agent' : `these ${team.length} agents`} and nobody else.`}
+        </p>
+      </div>
+
       <div>
         <label className="mb-1 block text-[9.5px] font-semibold uppercase tracking-[0.06em] text-faint">
           On waking, run
@@ -194,11 +237,13 @@ export function BotSettings({
           onChange={(e) => setAgent(e.target.value)}
         >
           <option value="">Nothing — just read the space and report</option>
-          {agents.map((ag) => (
-            <option key={ag.id} value={ag.id}>
-              {ag.name}
-            </option>
-          ))}
+          {agents
+            .filter((ag) => team.includes(ag.id))
+            .map((ag) => (
+              <option key={ag.id} value={ag.id}>
+                {ag.name}
+              </option>
+            ))}
         </select>
 
         {agent ? (
@@ -233,7 +278,9 @@ export function BotSettings({
           </>
         ) : (
           <p className="mt-1.5 text-[10.5px] leading-[1.5] text-muted">
-            A bot that watches. Naming an agent here is what turns it into one that works.
+            {team.length === 0
+              ? 'A bot that watches. Give it a team above, then name which of them it wakes.'
+              : 'A bot that watches. Naming one of its team here is what turns it into one that works.'}
           </p>
         )}
       </div>

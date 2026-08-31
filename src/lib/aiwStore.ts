@@ -92,8 +92,12 @@ interface AiwState {
   commits: GitCommit[]
   tools: ToolInfo[]
   permissions: PermissionRow[]
-  /** Standing grants — what you have already said yes to in advance. */
-  grants: Grant[]
+  /** Standing grants — what you have already said yes to in advance.
+   *
+   *  `null` until the first read comes back. "Nothing is pre-authorised" is a
+   *  claim about your machine, and a list that has not loaded yet has not
+   *  earned it — an empty array and an unread one must not look the same. */
+  grants: Grant[] | null
   testRuns: TestRun[]
   context: AssembledContext | null
 
@@ -157,7 +161,7 @@ export const useAiw = create<AiwState>((set, get) => ({
   commits: [],
   tools: [],
   permissions: [],
-  grants: [],
+  grants: null,
   testRuns: [],
   context: null,
 

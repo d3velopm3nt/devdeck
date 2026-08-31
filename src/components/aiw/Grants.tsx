@@ -52,8 +52,24 @@ export function Grants() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const live = a.grants.filter((g) => g.live)
-  const past = a.grants.filter((g) => !g.live)
+  // Until the first read comes back this is null, and the screen says nothing
+  // rather than asserting there is nothing.
+  const loaded = a.grants != null
+  const all = a.grants ?? []
+  const live = all.filter((g) => g.live)
+  const past = all.filter((g) => !g.live)
+
+  // A grant's project is a node id, which means nothing to a person reading it.
+  // Show the space's name, and fall back to the id only when the space is gone —
+  // in which case saying so is more useful than a bare number.
+  const where = (id: string) => {
+    if (!id) return null
+    const p = a.projects.find((x) => x.id === id)
+    return p ? p.name : `${id} (a space that is no longer here)`
+  }
+
+  // Likewise an agent id. The matrix above shows names, so this must too.
+  const who = (id: string) => a.agents.find((x) => x.id === id)?.name ?? id
 
   return (
     <div className="flex flex-col gap-3">
@@ -92,7 +108,13 @@ export function Grants() {
         </div>
       )}
 
-      {a.grants.length === 0 && (
+      {!loaded && (
+        <div className="rounded-md border border-line bg-raise px-3.5 py-4 text-center text-[11.5px] text-faint">
+          Reading what you have allowed…
+        </div>
+      )}
+
+      {loaded && all.length === 0 && (
         <div className="rounded-md border border-line bg-raise px-3.5 py-4 text-center text-[11.5px] text-muted">
           Nothing is pre-authorised. Every call that needs approval will ask.
         </div>
@@ -118,7 +140,8 @@ export function Grants() {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                   <span className="text-[12px] text-ink">
-                    <span className="font-semibold">{g.agent_id}</span> may {g.tool}.{g.action}
+                    <span className="font-semibold">{who(g.agent_id)}</span> may {g.tool}.
+                    {g.action}
                   </span>
                   <span className="font-mono text-[11px] text-dim">{scopeText(g)}</span>
                 </div>
@@ -126,7 +149,7 @@ export function Grants() {
                 <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10.5px] text-muted">
                   <span>
                     {g.project_id ? (
-                      g.project_id
+                      where(g.project_id)
                     ) : (
                       <span className="text-warn">every project</span>
                     )}

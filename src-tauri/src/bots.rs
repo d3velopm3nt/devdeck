@@ -251,11 +251,8 @@ fn sync_heartbeat(conn: &Connection, b: &Bot) -> Result<Option<i64>, String> {
 // ---------------------------------------------------------------------------
 
 fn dir_of(conn: &Connection, node: &db::Node) -> Option<PathBuf> {
-    if node.rel_path.trim().is_empty() {
-        return None;
-    }
-    let root = db::setting_get_conn(conn, crate::vault::ROOT_KEY).ok()??;
-    Some(Path::new(&root).join(node.rel_path.replace('/', std::path::MAIN_SEPARATOR_STR)))
+    // One rule, in db.rs. This used to hold its own copy of it.
+    db::node_dir(conn, node)
 }
 
 /// Every bot in the vault. Cheap enough to call on every visit: it is one

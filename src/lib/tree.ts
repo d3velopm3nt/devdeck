@@ -102,6 +102,14 @@ export function nodeLabel(nodes: TreeNode[], node: TreeNode): string {
 
 /// Projects and folders (things a command/service can belong to),
 /// ordered as they appear in the tree.
+/// Everything a command, service or profile can hang off.
+///
+/// A workspace is included: since the vault it is a real folder with a place on
+/// disk, so `npm run something` at the Innotrack level has somewhere to run.
+/// The only nodes left out are ones with no directory at all, which after the
+/// vault means none — but the filter stays honest rather than returning
+/// everything, because a node with no `rel_path` has nowhere to work and would
+/// silently run in whatever the process happened to be in.
 export function ownerNodes(nodes: TreeNode[]): TreeNode[] {
-  return nodes.filter((n) => n.kind === 'project' || n.kind === 'folder')
+  return nodes.filter((n) => resolveDir(nodes, n) !== '')
 }

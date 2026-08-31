@@ -289,23 +289,8 @@ pub fn schedule_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
 // ---------------------------------------------------------------------------
 
 fn dir_for(conn: &Connection, node_id: Option<i64>) -> Option<String> {
-    let id = node_id?;
-    let node = db::node_by_id(conn, id).ok()?;
-    // The repository if it names one, else the node's own folder — the same
-    // rule the rest of the app resolves a working directory by.
-    if let Some(p) = node.path.filter(|p| !p.trim().is_empty()) {
-        return Some(p);
-    }
-    let root = db::setting_get_conn(conn, crate::vault::ROOT_KEY).ok()??;
-    if node.rel_path.trim().is_empty() {
-        return None;
-    }
-    Some(
-        std::path::Path::new(&root)
-            .join(node.rel_path.replace('/', std::path::MAIN_SEPARATOR_STR))
-            .to_string_lossy()
-            .to_string(),
-    )
+    // One rule, in db.rs. This used to hold its own copy of it.
+    db::node_dir_by_id(conn, node_id?).map(|p| p.to_string_lossy().to_string())
 }
 
 /// Run one schedule and record it. `late` marks a catch-up run, which reads

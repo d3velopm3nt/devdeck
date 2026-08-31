@@ -370,30 +370,7 @@ export function Explorer() {
     if (node.kind === 'project') {
       items.push({ icon: 'view', label: 'Open dashboard', onClick: () => openSpace(node.id, node.name) })
     }
-    // A workspace is a folder too, and now that you can land on it, it needs
-    // the things you would want there. Not commands, services or terminals —
-    // work still happens in a project, and widening that is a separate
-    // decision — but a bot, somewhere to put a folder, and a way to open it.
-    if (node.kind === 'workspace') {
-      const bot = bots.find((b) => b.node_id === node.id)
-      items.push(
-        bot
-          ? { icon: 'bot', label: `Open ${bot.name}`, onClick: () => openBot(node.id, bot.name) }
-          : { icon: 'bot', label: 'Give it a bot…', onClick: () => setNewBotFor(node.id) },
-        { icon: 'folder', label: 'New folder', onClick: () => void addFolder(node) },
-        {
-          icon: 'reveal',
-          label: 'Reveal in File Explorer',
-          onClick: () =>
-            void ipc
-              .vaultDir(node.id)
-              .then((d) => ipc.revealInExplorer(d))
-              .catch((e) => alert(String(e))),
-        },
-      )
-    }
-
-    if (node.kind === 'project' || node.kind === 'folder') {
+    if (node.kind === 'workspace' || node.kind === 'project' || node.kind === 'folder') {
       // A bot is a file in this folder, so it belongs on this menu rather than
       // behind a rail view — the same rule that put every other document here.
       const bot = bots.find((b) => b.node_id === node.id)
@@ -407,7 +384,12 @@ export function Explorer() {
       items.push(
         {
           icon: 'settings',
-          label: node.kind === 'project' ? 'Project settings…' : 'Configure folder…',
+          label:
+            node.kind === 'project'
+              ? 'Project settings…'
+              : node.kind === 'workspace'
+                ? 'Workspace settings…'
+                : 'Configure folder…',
           onClick: () => openNodeSetup(node.id, node.name),
         },
         { icon: 'terminal', label: 'Open terminal here', disabled: !dir, onClick: () => void openTerminal(undefined, dir) },

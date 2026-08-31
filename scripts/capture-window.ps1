@@ -20,7 +20,9 @@ Add-Type -AssemblyName System.Drawing
 
 $sig = @'
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Text;
 public class Win32Cap {
   [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr hwnd, IntPtr hdc, uint flags);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hwnd, out RECT r);
@@ -28,14 +30,50 @@ public class Win32Cap {
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hwnd);
   [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hwnd);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hwnd, int cmd);
+  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc cb, IntPtr l);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
+  [DllImport("user32.dll")] public static extern int GetWindowTextLength(IntPtr h);
+  public delegate bool EnumProc(IntPtr h, IntPtr l);
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
+
+  /// Every visible top-level window, by title.
+  ///
+  /// `Process.MainWindowTitle` is not good enough here for two reasons, both of
+  /// which have produced a "screenshot of the wrong thing" that looked like a
+  /// bug in the app: a process owning several windows reports whichever one
+  /// Windows enumerates first (DevDeck has a floating Command Widget, and it
+  /// wins about half the time), and a terminal whose title happens to be the
+  /// path to devdeck.exe matches a substring search for "devdeck".
+  public static List<KeyValuePair<string, IntPtr>> Visible() {
+    var found = new List<KeyValuePair<string, IntPtr>>();
+    EnumWindows((h, l) => {
+      if (IsWindowVisible(h)) {
+        int n = GetWindowTextLength(h);
+        if (n > 0) {
+          var sb = new StringBuilder(n + 1);
+          GetWindowText(h, sb, sb.Capacity);
+          found.Add(new KeyValuePair<string, IntPtr>(sb.ToString(), h));
+        }
+      }
+      return true;
+    }, IntPtr.Zero);
+    return found;
+  }
 }
 '@
 if (-not ('Win32Cap' -as [type])) { Add-Type -TypeDefinition $sig }
 
-$proc = Get-Process | Where-Object { $_.MainWindowTitle -like "*$Title*" -and $_.MainWindowHandle -ne 0 } | Select-Object -First 1
-if (-not $proc) { Write-Error "no window matching '$Title'"; exit 2 }
-$h = $proc.MainWindowHandle
+# An exact title wins over a substring, so 'DevDeck' picks the app window and
+# not a terminal whose title is the path to devdeck.exe.
+$windows = [Win32Cap]::Visible()
+$hit = $windows | Where-Object { $_.Key -eq $Title } | Select-Object -First 1
+if (-not $hit) { $hit = $windows | Where-Object { $_.Key -like "*$Title*" } | Select-Object -First 1 }
+if (-not $hit) {
+  Write-Error "no visible window titled '$Title'. Visible: $(($windows | ForEach-Object { $_.Key }) -join ' | ')"
+  exit 2
+}
+$h = $hit.Value
 
 # Restore if minimised, raise, and let WebView2 paint.
 if ([Win32Cap]::IsIconic($h)) { [void][Win32Cap]::ShowWindow($h, 9) }

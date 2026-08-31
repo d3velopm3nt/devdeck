@@ -812,54 +812,39 @@ pub fn services_list(db: tauri::State<Db>) -> Result<Vec<ServiceDef>, String> {
 /// Resolve a node's working directory (mirrors the frontend rule):
 /// project → base path; folder → absolute override, else project base +
 /// rel_path. Returns "" if it can't be resolved.
-pub fn resolve_node_dir(conn: &Connection, node_id: i64) -> String {
-    let node = conn.query_row(
-        "SELECT id, parent_id, kind, name, path, rel_path, sort, color, label FROM nodes WHERE id = ?1",
-        params![node_id],
-        row_to_node,
-    );
-    let Ok(node) = node else { return String::new() };
-    match node.kind.as_str() {
-        "project" => node.path.unwrap_or_default(),
-        "folder" => {
-            if let Some(p) = &node.path {
-                if !p.trim().is_empty() {
-                    return p.clone();
-                }
-            }
-            // Walk up to the owning project for the base path.
-            let mut cur = node.parent_id;
-            let mut base = String::new();
-            while let Some(pid) = cur {
-                if let Ok(parent) = conn.query_row(
-                    "SELECT id, parent_id, kind, name, path, rel_path, sort, color, label FROM nodes WHERE id = ?1",
-                    params![pid],
-                    row_to_node,
-                ) {
-                    if parent.kind == "project" {
-                        base = parent.path.unwrap_or_default();
-                        break;
-                    }
-                    cur = parent.parent_id;
-                } else {
-                    break;
-                }
-            }
-            let base = base.trim_end_matches(['\\', '/']);
-            let sub = node
-                .rel_path
-                .trim_start_matches(['\\', '/'])
-                .replace('/', "\\");
-            if base.is_empty() {
-                sub
-            } else if sub.is_empty() {
-                base.to_string()
-            } else {
-                format!("{base}\\{sub}")
-            }
-        }
-        _ => String::new(),
+/// The folder a node works in: the repository it names, or its own place in
+/// the vault.
+///
+/// This is the rule, and it lives here because it had drifted into four copies
+/// — the scheduler, bots, the frontend, and this one. This was the oldest and
+/// had gone quietly wrong: it walked up to the owning *project* and joined its
+/// path with `rel_path`, which used to mean "subpath inside that project" and
+/// has meant "path from the vault root" since folders became real. So a service
+/// on a folder with no cwd of its own resolved to a directory that has never
+/// existed, and did it silently.
+///
+/// A workspace resolves like anything else. It is a folder in the vault with a
+/// place on disk, so it can own a command or a service.
+pub fn node_dir(conn: &Connection, node: &Node) -> Option<PathBuf> {
+    if let Some(p) = node.path.as_ref().filter(|p| !p.trim().is_empty()) {
+        return Some(PathBuf::from(p));
     }
+    let root = setting_get_conn(conn, crate::vault::ROOT_KEY).ok()??;
+    if node.rel_path.trim().is_empty() {
+        return None;
+    }
+    Some(std::path::Path::new(&root).join(node.rel_path.replace('/', std::path::MAIN_SEPARATOR_STR)))
+}
+
+pub fn node_dir_by_id(conn: &Connection, node_id: i64) -> Option<PathBuf> {
+    node_dir(conn, &node_by_id(conn, node_id).ok()?)
+}
+
+/// The same answer as a string, empty when there is none.
+pub fn resolve_node_dir(conn: &Connection, node_id: i64) -> String {
+    node_dir_by_id(conn, node_id)
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_default()
 }
 
 pub fn service_get(conn: &Connection, id: i64) -> Result<ServiceDef, String> {
@@ -1207,5 +1192,73 @@ mod tests {
             assert_eq!(a.kind, b.kind, "kinds must survive a repeated migration");
             assert_eq!(a.name, b.name);
         }
+    }
+}
+
+#[cfg(test)]
+mod node_dir_tests {
+    use super::*;
+
+    fn world() -> (Connection, std::path::PathBuf) {
+        let root = std::env::temp_dir().join(format!("devdeck-nodedir-{}", std::process::id()));
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(CORE_SCHEMA).unwrap();
+        migrate(&conn);
+        setting_set_conn(&conn, crate::vault::ROOT_KEY, &root.to_string_lossy()).unwrap();
+        (conn, root)
+    }
+
+    fn node(conn: &Connection, id: i64, parent: Option<i64>, kind: &str, name: &str, rel: &str, path: &str) {
+        conn.execute(
+            "INSERT INTO nodes (id, parent_id, kind, name, path, rel_path, sort) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0)",
+            params![id, parent, kind, name, path, rel],
+        )
+        .unwrap();
+    }
+
+    /// A workspace is a folder in the vault with a place on disk, so it can own
+    /// a command or a service. It used to resolve to nothing at all.
+    #[test]
+    fn a_workspace_has_a_working_directory() {
+        let (conn, root) = world();
+        node(&conn, 1, None, "workspace", "Innotrack", "Innotrack", "");
+        assert_eq!(node_dir_by_id(&conn, 1), Some(root.join("Innotrack")));
+    }
+
+    /// The bug this replaced: a folder's directory was built by walking up to
+    /// the owning project and joining its path with `rel_path` — which has
+    /// meant "from the vault root" since folders became real. So a service on a
+    /// folder resolved into a directory that never existed, silently.
+    #[test]
+    fn a_folder_sits_under_the_vault_root_not_under_its_project() {
+        let (conn, root) = world();
+        node(&conn, 1, None, "workspace", "Innotrack", "Innotrack", "");
+        node(&conn, 2, Some(1), "project", "x-platform", "Innotrack/x-platform", r"C:\repos\x-platform");
+        node(&conn, 3, Some(2), "folder", "notes", "Innotrack/x-platform/notes", "");
+
+        // The project works in the repository it names.
+        assert_eq!(node_dir_by_id(&conn, 2), Some(std::path::PathBuf::from(r"C:\repos\x-platform")));
+
+        // The folder works in its own place in the vault — *not* inside the
+        // repository, which is what the old rule produced.
+        let dir = node_dir_by_id(&conn, 3).unwrap();
+        assert_eq!(dir, root.join("Innotrack").join("x-platform").join("notes"));
+        assert!(
+            !dir.to_string_lossy().contains(r"C:\repos"),
+            "it must not be joined onto the repository: {}",
+            dir.display()
+        );
+    }
+
+    /// A node with nowhere to work says so, rather than resolving to the empty
+    /// string and running wherever the process happened to be.
+    #[test]
+    fn a_node_with_no_place_on_disk_has_no_directory() {
+        let (conn, _root) = world();
+        node(&conn, 1, None, "workspace", "Nowhere", "", "");
+        assert_eq!(node_dir_by_id(&conn, 1), None);
+        assert_eq!(resolve_node_dir(&conn, 1), "");
+        assert_eq!(resolve_node_dir(&conn, 404), "", "and so does a node that is not there");
     }
 }

@@ -57,9 +57,10 @@ export function InboxPage() {
   const aiw = useAiw()
   const [showHeld, setShowHeld] = useState(false)
   const [starting, setStarting] = useState(false)
+  const [read, setRead] = useState(false)
 
   useEffect(() => {
-    void refreshActivity()
+    void refreshActivity().finally(() => setRead(true))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -118,7 +119,7 @@ export function InboxPage() {
         title: a.title,
         evidence: a.detail || `${a.kind}${a.project_name ? ` · ${a.project_name}` : ''}`,
         space: a.project_name,
-        at: a.ts * 1000,
+        at: a.ts,
       })
     }
 
@@ -189,7 +190,11 @@ export function InboxPage() {
       )}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {shown.length === 0 ? (
+        {shown.length === 0 && !read ? (
+          <div className="flex h-full items-center justify-center text-[12px] text-muted">
+            Reading what happened…
+          </div>
+        ) : shown.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-8 text-center">
             <Icon name="inbox" size={26} className="text-faint" />
             <div className="text-[12.5px] text-dim">Nothing yet</div>

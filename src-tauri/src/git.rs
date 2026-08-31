@@ -274,6 +274,18 @@ pub struct GitCommit {
 
 /// The commit HEAD points at, full sha. `None` when `dir` is not a repo or has
 /// no commits yet — an empty repo is a normal state, not an error.
+/// Whether this directory is inside a git repository at all.
+///
+/// The difference between "nothing changed" and "there is nothing here that
+/// could change" — a vault folder with no repository can never answer a
+/// question about commits, and answering it with an empty list makes an
+/// unanswerable question look like a reassuring one.
+pub fn is_repo(dir: &Path) -> bool {
+    run_git(dir, &["rev-parse", "--is-inside-work-tree"])
+        .map(|s| s.trim() == "true")
+        .unwrap_or(false)
+}
+
 pub fn head_commit(dir: &Path) -> Option<String> {
     run_git(dir, &["rev-parse", "HEAD"]).filter(|s| !s.is_empty())
 }
@@ -357,7 +369,21 @@ pub fn dirty_files(dir: &Path) -> Vec<String> {
     run_git(dir, &["status", "--porcelain"])
         .map(|o| {
             o.lines()
-                .filter_map(|l| l.get(3..).map(|p| p.trim().to_string()))
+                .filter_map(|l| {
+                    // Porcelain v1 is `XY <path>`, two status characters then a
+                    // space — but a file that is modified and *not staged* has
+                    // a leading space, and `run_git` trims the whole output, so
+                    // the first such line arrives one character short. Reading
+                    // from a fixed offset then cut the first character off the
+                    // path: `a.txt` was reported as `.txt`, which matches
+                    // nothing and made uncommitted work invisible to staleness
+                    // detection. Skip the status token instead of counting.
+                    let rest = l.trim_start();
+                    let path = rest[rest.find(' ')?..].trim();
+                    // A rename is `old -> new`; the new name is the one that
+                    // exists to be read.
+                    Some(path.rsplit(" -> ").next().unwrap_or(path).to_string())
+                })
                 .filter(|p| !p.is_empty())
                 .collect()
         })

@@ -157,6 +157,7 @@ impl AgentRuntime {
         let active_lines = ws.active_work_lines(&cmd.project_id, &cmd.feature_id);
         let context = ContextService::assemble(
             &deck,
+            &project.root,
             &cmd.project_id,
             &cmd.feature_id,
             cmd.work_item_id.as_deref(),
@@ -545,7 +546,7 @@ impl AgentRuntime {
                     }
 
                     AgentAction::UpdateContext { body } => {
-                        match ContextService::persist(&deck, &cmd.feature_id, body) {
+                        match ContextService::persist(&deck, &project.root, &cmd.feature_id, body) {
                             Ok(_) => {
                                 ws.bus.emit(
                                     DomainEvent::new(
@@ -814,7 +815,8 @@ impl AgentRuntime {
             .caused_by(cause),
         );
 
-        let Ok(current) = ContextService::assemble(&deck, project_id, feature_id, None, &[]) else {
+        let Ok(current) = ContextService::assemble(&deck, &project.root, project_id, feature_id, None, &[])
+        else {
             return;
         };
         let active = ws.active_work_view(project_id);

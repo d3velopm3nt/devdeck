@@ -31,6 +31,19 @@ pub fn estimate_tokens(text: &str) -> usize {
     (text.chars().count() as f64 / 4.0).ceil() as usize
 }
 
+/// What changed since a checkpoint — and whether the question could be
+/// answered at all.
+///
+/// A folder with no repository cannot say what changed, and an empty file
+/// list is not that answer. Keeping the two apart is what lets the screen say
+/// "there is no repository here" instead of the far more dangerous "nothing
+/// has changed".
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct Changes {
+    pub repository: bool,
+    pub files: Vec<String>,
+}
+
 /// Why a section is or isn't in the context an agent receives.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -380,8 +393,13 @@ impl ContextService {
     ///
     /// `active_work` and `recent` are passed in rather than fetched so this
     /// stays a pure function of its inputs and can be tested without a runtime.
+    /// `code_root` is where the *code* is, which stopped being the deck's own
+    /// directory when context moved into the vault. Every git question below
+    /// asks about the code; asking the vault folder instead returned an empty
+    /// answer that looked exactly like a quiet repository.
     pub fn assemble(
         deck: &Deck,
+        code_root: &Path,
         project_id: &str,
         feature_id: &str,
         work_item: Option<&str>,
@@ -529,7 +547,7 @@ impl ContextService {
         }
 
         // -- recent changes (generated) ------------------------------------
-        let recent = git::log_entries(&deck.root, 5);
+        let recent = git::log_entries(code_root, 5);
         if !recent.is_empty() {
             let body = recent
                 .iter()
@@ -593,7 +611,7 @@ impl ContextService {
             project_id: project_id.to_string(),
             feature_id: feature_id.to_string(),
             work_item_id: work_item.map(str::to_string),
-            commit: commit.or_else(|| git::head_commit(&deck.root)),
+            commit: commit.or_else(|| git::head_commit(code_root)),
             assembled_at: now_iso(),
             sections,
             total_tokens,
@@ -622,23 +640,44 @@ impl ContextService {
     }
 
     /// "What changed since my checkpoint?" — the git half of the answer.
-    pub fn changed_since(deck: &Deck, checkpoint: &Checkpoint) -> Vec<String> {
-        let head = git::head_commit(&deck.root);
+    ///
+    /// Asked of the code, not the deck. It used to be asked of `deck.root`,
+    /// which since the vault is a folder git knows nothing about, so the head
+    /// was always `None`, the comparison arm never matched, and every agent
+    /// was told nothing had changed. That is the worst possible wrong answer:
+    /// staleness detection exists so an agent learns what it now believes
+    /// wrongly, and a confident "nothing" is how it goes on believing it.
+    pub fn changed_since(code_root: &Path, checkpoint: &Checkpoint) -> Changes {
+        if !git::is_repo(code_root) {
+            return Changes {
+                repository: false,
+                files: vec![],
+            };
+        }
+        let head = git::head_commit(code_root);
         let mut files = match (&checkpoint.commit, &head) {
-            (Some(from), Some(to)) if from != to => git::changed_between(&deck.root, from, to),
+            (Some(from), Some(to)) if from != to => git::changed_between(code_root, from, to),
             _ => vec![],
         };
         // Uncommitted work counts: an agent that edited a file without
         // committing has still moved the ground under everyone else.
-        files.extend(git::dirty_files(&deck.root));
+        files.extend(git::dirty_files(code_root));
         files.sort();
         files.dedup();
-        files
+        Changes {
+            repository: true,
+            files,
+        }
     }
 
     /// Write a feature's context back out, stamped with the commit it reflects.
-    pub fn persist(deck: &Deck, feature_id: &str, body: &str) -> Result<(), String> {
-        let head = git::head_commit(&deck.root);
+    pub fn persist(
+        deck: &Deck,
+        code_root: &Path,
+        feature_id: &str,
+        body: &str,
+    ) -> Result<(), String> {
+        let head = git::head_commit(code_root);
         deck.save_feature_context(feature_id, body, head.as_deref())
     }
 
@@ -682,6 +721,73 @@ mod tests {
         }
     }
 
+    /// A folder with no repository cannot say what changed, and saying
+    /// "nothing" would be the most dangerous possible answer: staleness
+    /// detection is what tells an agent it now believes something wrongly, so
+    /// a confident empty list is how it keeps believing it.
+    #[test]
+    fn a_folder_with_no_repository_says_so_rather_than_nothing_changed() {
+        let t = Tmp::new("norepo");
+        let cp = Checkpoint {
+            session_id: "s1".into(),
+            agent_id: "dev-a".into(),
+            project_id: "fitness".into(),
+            feature_id: "f".into(),
+            commit: None,
+            taken_at: now_iso(),
+            context_tokens: 0,
+        };
+        let changes = ContextService::changed_since(&t.0, &cp);
+        assert!(!changes.repository, "there is no repository here");
+        assert!(changes.files.is_empty());
+    }
+
+    /// And where there *is* one, the question is asked of the code. This used
+    /// to be asked of the deck — the vault folder — which git knows nothing
+    /// about, so every agent was told nothing had changed.
+    #[test]
+    fn a_real_change_in_the_repository_is_seen() {
+        let t = Tmp::new("repo");
+        let run = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(&t.0)
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+        };
+        if !run(&["init"]) {
+            eprintln!("git is not available; skipping");
+            return;
+        }
+        let _ = run(&["config", "user.email", "t@example.com"]);
+        let _ = run(&["config", "user.name", "T"]);
+        fs::write(t.0.join("a.txt"), "one").unwrap();
+        let _ = run(&["add", "."]);
+        let _ = run(&["commit", "-m", "first"]);
+
+        let cp = Checkpoint {
+            session_id: "s1".into(),
+            agent_id: "dev-a".into(),
+            project_id: "p".into(),
+            feature_id: "f".into(),
+            commit: crate::git::head_commit(&t.0),
+            taken_at: now_iso(),
+            context_tokens: 0,
+        };
+        assert!(cp.commit.is_some(), "the checkpoint anchors to a commit");
+
+        // Someone edits a file without committing: the ground has still moved.
+        fs::write(t.0.join("a.txt"), "two").unwrap();
+        let changes = ContextService::changed_since(&t.0, &cp);
+        assert!(changes.repository);
+        assert!(
+            changes.files.iter().any(|f| f.contains("a.txt")),
+            "{:?}",
+            changes.files
+        );
+    }
+
     fn seeded(tag: &str) -> (Tmp, Deck) {
         let t = Tmp::new(tag);
         let deck = t.deck();
@@ -704,7 +810,7 @@ mod tests {
         deck.save_feature_context(&b, "Beta's private context.", None)
             .unwrap();
 
-        let ctx = ContextService::assemble(&deck, "tyrex", &a, None, &[]).unwrap();
+        let ctx = ContextService::assemble(&deck, &deck.root, "tyrex", &a, None, &[]).unwrap();
 
         assert!(ctx.section("feature").is_some(), "own context included");
         assert!(
@@ -759,7 +865,7 @@ mod tests {
         )
         .unwrap();
 
-        let ctx = ContextService::assemble(&deck, "tyrex", &f, None, &[]).unwrap();
+        let ctx = ContextService::assemble(&deck, &deck.root, "tyrex", &f, None, &[]).unwrap();
         let prompt = ctx.to_prompt();
 
         assert!(
@@ -781,7 +887,7 @@ mod tests {
         let (_t, deck) = seeded("tokens");
         let f = deck.create_feature("Sync", "s", &[]).unwrap();
         deck.create_feature("Other", "o", &[]).unwrap();
-        let ctx = ContextService::assemble(&deck, "tyrex", &f, None, &[]).unwrap();
+        let ctx = ContextService::assemble(&deck, &deck.root, "tyrex", &f, None, &[]).unwrap();
 
         let included: usize = ctx
             .sections
@@ -821,7 +927,7 @@ mod tests {
         )
         .unwrap();
 
-        let ctx = ContextService::assemble(&deck, "tyrex", &f, Some("wi-1"), &[]).unwrap();
+        let ctx = ContextService::assemble(&deck, &deck.root, "tyrex", &f, Some("wi-1"), &[]).unwrap();
         let prompt = ctx.to_prompt();
         assert!(prompt.contains("Conflict resolution"));
         assert!(
@@ -834,7 +940,7 @@ mod tests {
     fn the_reconciler_marks_a_dependent_agent_stale_and_conflicting() {
         let (_t, deck) = seeded("reconcile");
         let f = deck.create_feature("Sync", "s", &[]).unwrap();
-        let ctx = ContextService::assemble(&deck, "tyrex", &f, None, &[]).unwrap();
+        let ctx = ContextService::assemble(&deck, &deck.root, "tyrex", &f, None, &[]).unwrap();
 
         let change = ChangeSet {
             project_id: "tyrex".into(),
@@ -887,7 +993,7 @@ mod tests {
     fn an_agent_on_another_feature_is_never_marked_stale() {
         let (_t, deck) = seeded("crossfeature");
         let f = deck.create_feature("Sync", "s", &[]).unwrap();
-        let ctx = ContextService::assemble(&deck, "tyrex", &f, None, &[]).unwrap();
+        let ctx = ContextService::assemble(&deck, &deck.root, "tyrex", &f, None, &[]).unwrap();
 
         let change = ChangeSet {
             project_id: "tyrex".into(),
@@ -922,7 +1028,7 @@ mod tests {
     fn an_up_to_date_agent_is_not_stale() {
         let (_t, deck) = seeded("uptodate");
         let f = deck.create_feature("Sync", "s", &[]).unwrap();
-        let ctx = ContextService::assemble(&deck, "tyrex", &f, None, &[]).unwrap();
+        let ctx = ContextService::assemble(&deck, &deck.root, "tyrex", &f, None, &[]).unwrap();
 
         let change = ChangeSet {
             project_id: "tyrex".into(),
@@ -960,7 +1066,7 @@ mod tests {
     fn the_author_of_a_change_is_never_stale_from_it() {
         let (_t, deck) = seeded("author");
         let f = deck.create_feature("Sync", "s", &[]).unwrap();
-        let ctx = ContextService::assemble(&deck, "tyrex", &f, None, &[]).unwrap();
+        let ctx = ContextService::assemble(&deck, &deck.root, "tyrex", &f, None, &[]).unwrap();
 
         let change = ChangeSet {
             project_id: "tyrex".into(),

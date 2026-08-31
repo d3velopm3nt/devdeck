@@ -256,6 +256,7 @@ pub fn aiw_context(
     let active = ws.active_work_lines(&project_id, &feature_id);
     ContextService::assemble(
         &p.deck(),
+        &p.root,
         &project_id,
         &feature_id,
         work_item_id.as_deref(),
@@ -728,7 +729,7 @@ pub fn aiw_export_context(
         .ok_or_else(|| format!("unknown project '{project_id}'"))?;
     let deck = p.deck();
     let active = ws.active_work_lines(&project_id, &feature_id);
-    let ctx = ContextService::assemble(&deck, &project_id, &feature_id, None, &active)?;
+    let ctx = ContextService::assemble(&deck, &p.root, &project_id, &feature_id, None, &active)?;
     let name = deck
         .feature(&feature_id)
         .map(|f| f.meta.name)
@@ -1112,7 +1113,10 @@ pub async fn aiw_models(
 /// "What changed since this session's checkpoint?" — the question an agent asks
 /// when it suspects the ground has moved.
 #[tauri::command]
-pub fn aiw_changed_since(ws: Ws, session_id: String) -> Result<Vec<String>, String> {
+pub fn aiw_changed_since(
+    ws: Ws,
+    session_id: String,
+) -> Result<super::context::Changes, String> {
     let session = ws
         .session(&session_id)
         .ok_or_else(|| format!("no session '{session_id}'"))?;
@@ -1122,7 +1126,7 @@ pub fn aiw_changed_since(ws: Ws, session_id: String) -> Result<Vec<String>, Stri
     let checkpoint = session
         .checkpoint
         .ok_or_else(|| "session has no checkpoint".to_string())?;
-    Ok(ContextService::changed_since(&project.deck(), &checkpoint))
+    Ok(ContextService::changed_since(&project.root, &checkpoint))
 }
 
 /// Where provider configuration (not keys) is remembered.

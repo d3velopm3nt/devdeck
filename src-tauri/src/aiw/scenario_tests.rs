@@ -226,7 +226,8 @@ fn one_projects_context_never_reaches_another() {
     w.register_project("assetx", "AssetX", assetx.clone(), assetx.clone());
 
     let tyrex_ctx = ContextService::assemble(
-        &super::deck::Deck::new(tyrex),
+        &super::deck::Deck::new(&tyrex),
+        &tyrex,
         "tyrex",
         "offline-synchronisation",
         None,
@@ -259,7 +260,7 @@ fn one_features_context_never_reaches_another() {
     .unwrap();
 
     let ctx =
-        ContextService::assemble(&deck, "tyrex", "offline-synchronisation", None, &[]).unwrap();
+        ContextService::assemble(&deck, &deck.root, "tyrex", "offline-synchronisation", None, &[]).unwrap();
     let prompt = ctx.to_prompt();
 
     assert!(
@@ -422,7 +423,7 @@ fn the_architects_decision_is_written_to_devdeck_and_reaches_later_context() {
 
     // And a later agent actually receives it.
     let ctx =
-        ContextService::assemble(&deck, "tyrex", "offline-synchronisation", None, &[]).unwrap();
+        ContextService::assemble(&deck, &deck.root, "tyrex", "offline-synchronisation", None, &[]).unwrap();
     assert!(
         ctx.to_prompt().contains("Server-authoritative"),
         "a recorded decision must reach the next agent's context"

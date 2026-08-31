@@ -42,14 +42,18 @@ export function ClockToast() {
             <div className="mt-0.5 text-[11.5px] leading-[1.5] text-body">{toast.detail}</div>
           )}
           <div className="mt-2 flex items-center gap-2">
+            {/* Where it actually went. A reminder that fired is on Home with
+                everything else that happened; only a failure is waiting for
+                you in the Inbox, and sending you to the wrong one of those is
+                how you learn the button is a lie. */}
             <button
               className="btn-ghost text-[11px]"
               onClick={() => {
-                setRailView('inbox')
+                setRailView(bad ? 'inbox' : 'home')
                 dismissToast()
               }}
             >
-              Open the Inbox
+              {bad ? 'Open the Inbox' : 'See it on Home'}
             </button>
             <button className="btn-ghost text-[11px]" onClick={dismissToast}>
               Dismiss

@@ -773,8 +773,13 @@ export const useApp = create<AppState>((set, get) => ({
       // because you just did something, and a toast for your own click is
       // noise you learn to dismiss without reading — which is how the one
       // that mattered gets dismissed too.
+      // Suppressed only when you are already looking at where it lands:
+      // Home for something that merely happened, the Inbox for a failure.
       toast:
-        (a.kind === 'schedule' || a.kind === 'bot') && st.railView !== 'inbox' ? a : st.toast,
+        (a.kind === 'schedule' || a.kind === 'bot') &&
+        st.railView !== (a.ok ? 'home' : 'inbox')
+          ? a
+          : st.toast,
     })),
 
   focus: null,

@@ -110,12 +110,18 @@ export function InboxPage() {
       })
     }
 
-    // Then what happened. A failure is not news — it reads as one.
-    for (const a of activity) {
+    // Then what went wrong. Only what went wrong: something you set up is not
+    // doing its job, and that is a thing to fix rather than a thing to read.
+    //
+    // What *worked* used to be here too, and it drowned the rest — an inbox
+    // that fills up on an ordinary day is one you stop opening, and then the
+    // agent waiting on you is behind forty lines saying a reminder fired. That
+    // stream is on Home now, where reading it is the point.
+    for (const a of activity.filter((x) => !x.ok)) {
       out.push({
         id: `activity-${a.id}`,
-        tone: a.ok ? 'news' : 'fail',
-        icon: a.ok ? 'history' : 'alert',
+        tone: 'fail',
+        icon: 'alert',
         title: a.title,
         evidence: a.detail || `${a.kind}${a.project_name ? ` · ${a.project_name}` : ''}`,
         space: a.project_name,
@@ -150,8 +156,8 @@ export function InboxPage() {
     <div className="flex h-full flex-col bg-page">
       <div className="flex shrink-0 items-center gap-2.5 border-b border-line px-5 py-3.5">
         <div className="min-w-0">
-          <h2 className="text-[15px] font-semibold text-ink">What happened</h2>
-          <p className="text-[11.5px] text-muted">Across every space.</p>
+          <h2 className="text-[15px] font-semibold text-ink">Needs you</h2>
+          <p className="text-[11.5px] text-muted">Across every space. What merely happened is on Home.</p>
         </div>
         <div className="ml-auto flex items-center gap-2">
           {waiting > 0 && (
@@ -197,10 +203,10 @@ export function InboxPage() {
         ) : shown.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-8 text-center">
             <Icon name="inbox" size={26} className="text-faint" />
-            <div className="text-[12.5px] text-dim">Nothing yet</div>
+            <div className="text-[12.5px] text-dim">Nothing needs you</div>
             <div className="max-w-[380px] text-[11.5px] leading-relaxed text-muted">
-              Start a service, run a command, or put an agent on something. What they do turns up
-              here.
+              An agent waiting on an answer, work that cannot continue, something that ran and
+              failed. Everything that simply happened is on Home.
             </div>
           </div>
         ) : (

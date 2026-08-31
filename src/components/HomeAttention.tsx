@@ -20,7 +20,7 @@
 import { useEffect } from 'react'
 import { useApp } from '../store'
 import { useAiw } from '../lib/aiwStore'
-import { aiw, initials, severityStyle, describeEvent, ago } from '../lib/aiw'
+import { aiw, initials, severityStyle, ago } from '../lib/aiw'
 import { Icon } from '../lib/icons'
 
 export function HomeAttention() {
@@ -147,25 +147,41 @@ export function HomeAttention() {
         })}
       </div>
 
+      {/* Under it, everything that merely happened.
+          This used to be the agent event stream, which is a developer's view of
+          the same machine and lives in the Assistant. What belongs on a
+          dashboard is the ordinary answer to "what has this thing been doing" —
+          a reminder that fired, a bot that woke, a service that started. It is
+          the stream the Inbox used to carry: reading it is the point, and
+          nothing here is waiting on you. */}
       <div className="shrink-0 px-4 pb-2 pt-4">
         <span className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-muted">
-          Agent activity
+          What happened
         </span>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto px-4 pb-3">
-        {a.events.length === 0 ? (
+        {app.activity.length === 0 ? (
           <div className="text-[11.5px] leading-5 text-muted">
-            Nothing yet. This fills up as agents work.
+            Nothing yet. Reminders, bots and services turn up here as they run.
           </div>
         ) : (
-          a.events.slice(0, 40).map((e) => (
-            <div key={e.id} className="flex gap-2.5 py-1.5">
-              <span className={`mt-[6px] h-[6px] w-[6px] shrink-0 rounded-full ${dot(e.type)}`} />
+          app.activity.slice(0, 40).map((x) => (
+            <div key={x.id} className="flex gap-2.5 py-1.5">
+              <span
+                className={`mt-[6px] h-[6px] w-[6px] shrink-0 rounded-full ${
+                  x.ok ? kindDot(x.kind) : 'bg-red-400'
+                }`}
+              />
               <div className="min-w-0 flex-1">
-                <div className="text-[11.5px] leading-[1.5] text-body">{describeEvent(e)}</div>
+                <div className={`text-[11.5px] leading-[1.5] ${x.ok ? 'text-body' : 'text-err'}`}>
+                  {x.title}
+                </div>
+                {x.detail && x.detail !== 'Reminder' && (
+                  <div className="truncate text-[10.5px] leading-[1.45] text-muted">{x.detail}</div>
+                )}
                 <div className="mt-0.5 truncate text-[9.5px] text-faint">
-                  {[nameOf(e.project_id ?? undefined), ago(e.timestamp)].filter(Boolean).join(' · ')}
+                  {[x.project_name, ago(new Date(x.ts).toISOString())].filter(Boolean).join(' · ')}
                 </div>
               </div>
             </div>
@@ -180,13 +196,13 @@ export function HomeAttention() {
   )
 }
 
-/// A colour per kind, so the stream is scannable without reading it. Failures
-/// and conflicts are the only ones that are not grey or green — a feed where
-/// everything is coloured is a feed where nothing stands out.
-function dot(type: string): string {
-  if (type.startsWith('conflict')) return 'bg-amber-400'
-  if (type.endsWith('.failed')) return 'bg-red-400'
-  if (type.startsWith('agent') || type.startsWith('session')) return 'bg-emerald-400'
-  if (type.startsWith('context') || type.startsWith('decision')) return 'bg-violet-400'
+
+/// A colour per kind of thing that happened, so the stream is scannable
+/// without reading it. Failures are the only red — a feed where everything is
+/// coloured is a feed where nothing stands out.
+function kindDot(kind: string): string {
+  if (kind === 'schedule' || kind === 'service') return 'bg-emerald-400'
+  if (kind === 'bot') return 'bg-indigo-400'
+  if (kind === 'space') return 'bg-violet-400'
   return 'bg-line3'
 }

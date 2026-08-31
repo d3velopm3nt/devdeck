@@ -18,6 +18,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useApp, type RailView } from '../store'
+import { useAiw } from '../lib/aiwStore'
 import { Icon, type IconName } from '../lib/icons'
 import { avatarLabel, nodeColor } from '../lib/spaces'
 import { findNode, subtreeIds } from '../lib/tree'
@@ -139,13 +140,16 @@ export function Rail() {
     activity,
     inboxSeen,
   } = useApp()
+  const aiw = useAiw()
   const anyRunning = Object.values(svcStates).some((s) => s.status === 'running')
-  // Only what the clock did. Everything else in the feed happened because you
-  // asked for it, and counting your own clicks back at you teaches you to
-  // ignore the number.
-  const unread = activity.filter(
-    (a) => a.ts > inboxSeen && (a.kind === 'schedule' || a.kind === 'bot'),
-  ).length
+  // What the Inbox holds, which is only what needs you: an agent stopped on a
+  // clock, work that cannot continue, something that ran and failed.
+  //
+  // Counting what merely happened would light the rail every time a reminder
+  // fired, and a badge that is always lit is one you stop reading — so the
+  // morning an agent is genuinely stuck would look like every other morning.
+  const waiting = aiw.approvals.length + aiw.conflicts.filter((c) => !c.resolved).length
+  const unread = waiting + activity.filter((a) => !a.ok && a.ts > inboxSeen).length
 
   const [expanded, setExpanded] = useState(() => localStorage.getItem(KEY) === '1')
   useEffect(() => localStorage.setItem(KEY, expanded ? '1' : '0'), [expanded])

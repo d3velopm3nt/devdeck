@@ -5,11 +5,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import * as ipc from '../lib/ipc'
 import { useApp } from '../store'
-import { Icon, type IconName } from '../lib/icons'
+import { Icon } from '../lib/icons'
 import { openService, openSpace, openTerminalPanel } from '../lib/dock'
 import { findNode, projectOf, subtreeIds } from '../lib/tree'
 import { nodeColor, avatarLabel, projectUsage, rankSpaces } from '../lib/spaces'
-import { fmtAgo, fmtUptime } from '../lib/time'
+import { fmtUptime } from '../lib/time'
 import type { LogEntry, ProcStat, TreeNode } from '../lib/types'
 import { HomeAttention } from './HomeAttention'
 
@@ -119,7 +119,7 @@ const LEVEL_STYLE: Record<string, string> = {
 
 export function Home() {
   const {
-    nodes, services, svcStates, stats, terminals, logs, recents, commands, gitByNode, activity,
+    nodes, services, svcStates, stats, terminals, logs, recents, commands, gitByNode,
     activeWorkspaceId, showBottom, focusServiceLogs, servicePort, requestStartService,
     treeError, treeLoading, retryBootstrap,
   } = useApp()
@@ -212,35 +212,6 @@ export function Home() {
   // The real activity stream. This used to be derived from `recents`, which
   // only stores the *last* time something ran — so two runs looked like one
   // and a crash looked like nothing at all.
-  const activityFeed = useMemo(() => {
-    const look: Record<string, { icon: IconName; tone: string }> = {
-      service: { icon: 'service', tone: 'text-ok bg-emerald-500/10' },
-      query: { icon: 'database', tone: 'text-viol bg-violet-500/10' },
-      git: { icon: 'github', tone: 'text-info bg-sky-500/10' },
-      clip: { icon: 'clip', tone: 'text-indigo-300 bg-indigo-500/10' },
-      screenshot: { icon: 'image', tone: 'text-ok bg-emerald-500/10' },
-    }
-    return activity.slice(0, 14).map((a) => {
-      const l = look[a.kind] ?? { icon: 'info' as IconName, tone: 'text-dim bg-white/5' }
-      return {
-        key: `a-${a.id}`,
-        ts: a.ts,
-        // A failure gets the alert glyph and red, whatever kind it was.
-        icon: a.ok ? l.icon : ('alert' as IconName),
-        tone: a.ok ? l.tone : 'text-err bg-red-500/10',
-        name: a.title,
-        what: a.detail,
-        sub: a.project_name,
-        onClick:
-          a.kind === 'service' && a.ref_id != null
-            ? () => {
-                const s = services.find((x) => x.id === a.ref_id)
-                if (s) openService(s.id, s.name)
-              }
-            : undefined,
-      }
-    })
-  }, [activity, services])
 
   const openBrowser = (port: number) =>
     void ipc.openUrl(`http://localhost:${port}`).catch((e) => alert(String(e)))
@@ -457,37 +428,10 @@ export function Home() {
           </div>
         </div>
 
-        {/* recent activity | master log */}
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          <div className="rounded-xl border border-line bg-panel p-3">
-            <CardHead title="Recent activity" />
-            {activityFeed.length === 0 ? (
-              <div className="py-5 text-center text-[12px] text-muted">
-                Start a service, run a query or copy something — it shows up here.
-              </div>
-            ) : (
-              <div className="max-h-[220px] overflow-y-auto">
-                {activityFeed.map((a) => (
-                  <div key={a.key} className="flex items-start gap-2.5 border-b border-line/60 py-2 text-[12px] text-dim last:border-b-0">
-                    <span className="w-[52px] shrink-0 pt-0.5 font-mono text-[9.5px] text-muted">{fmtAgo(a.ts, now)}</span>
-                    <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md ${a.tone}`}>
-                      <Icon name={a.icon} size={11} />
-                    </span>
-                    <span className="min-w-0">
-                      {a.onClick ? (
-                        <button className="font-semibold text-ink hover:underline" onClick={a.onClick}>{a.name}</button>
-                      ) : (
-                        <b className="font-semibold text-ink">{a.name}</b>
-                      )}{' '}
-                      {a.what && <span className="text-dim">{a.what}</span>}
-                      {a.sub && <span className="text-muted"> · {a.sub}</span>}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
+        {/* master log. The activity feed that used to sit beside this is in
+            the right-hand column now, under what needs you: one stream, one
+            place, rather than the same rows read twice on one screen. */}
+        <div className="grid grid-cols-1 gap-3">
           <div className="flex flex-col rounded-xl border border-line bg-panel p-3">
             <CardHead title="Master log" action="open full log →" onAction={() => showBottom('logs')} />
             <div className="max-h-[220px] min-h-[80px] flex-1 overflow-y-auto font-mono text-[11px] leading-[1.75] text-dim">

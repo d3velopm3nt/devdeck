@@ -24,6 +24,7 @@ import { BotKnows } from './BotKnows'
 import { BotTools } from './BotTools'
 import { BotSettings } from './BotSettings'
 import { BotInterview } from './BotInterview'
+import { BotGrants } from './BotGrants'
 import { CAPTURE_BOT_MODAL, CAPTURE_BOT_TAB } from '../../lib/devCapture'
 
 type Tab = 'overview' | 'plan' | 'knows' | 'tools' | 'settings'
@@ -81,6 +82,10 @@ export function BotPage({ params }: IDockviewPanelProps<{ id: number; ask?: bool
   useEffect(() => {
     reload()
     void ipc.botCatalog().then(setTemplates).catch(() => setTemplates([]))
+    // Agent names, for the heartbeat line and the sub-agent list. A bot document
+    // can be the first thing opened, before the Assistant page has ever loaded.
+    if (aiw.agents.length === 0) void useAiw.getState().reloadAgents()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reload])
 
   const node = findNode(nodes, nodeId)
@@ -263,6 +268,11 @@ export function BotPage({ params }: IDockviewPanelProps<{ id: number; ask?: bool
               <div className="min-w-0 flex-1">
                 <div className="text-[12.5px] text-ink">{routine(bot)}</div>
                 <div className="mt-0.5 text-[11px] text-muted">
+                  {bot.agent
+                    ? `Reads the space, then runs ${
+                        aiw.agents.find((x) => x.id === bot.agent)?.name ?? bot.agent
+                      }. `
+                    : ''}
                   {bot.last_woke
                     ? `Last woke ${new Date(bot.last_woke).toLocaleString()}`
                     : bot.every
@@ -274,6 +284,10 @@ export function BotPage({ params }: IDockviewPanelProps<{ id: number; ask?: bool
                 Change
               </button>
             </div>
+
+            {/* The other half of the routine. "It wakes at 07:00 and runs the
+                QA agent" is only half a sentence; this is the rest of it. */}
+            <BotGrants bot={bot} />
 
             {/* What it suggests. Always a proposal, never a fait accompli. */}
             {suggestions && suggestions.length > 0 && (

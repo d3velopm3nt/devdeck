@@ -20,6 +20,7 @@ import { progress, routine } from '../lib/bots'
 import { openBot } from '../lib/dock'
 import { FocusStart } from './FocusBar'
 import { BotCreate } from './bot/BotCreate'
+import { grantsFor } from './bot/BotGrants'
 import { CAPTURE_BOT_MODAL } from '../lib/devCapture'
 
 export function BotsPage() {
@@ -35,6 +36,9 @@ export function BotsPage() {
 
   useEffect(() => {
     void refreshBots()
+    // A bot that names an agent but has no standing grants will wake, refuse
+    // everything and achieve nothing. That is worth seeing from the list.
+    void aiw.refreshGrants()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -223,6 +227,23 @@ export function BotsPage() {
                         <button className="text-warn hover:underline" onClick={() => setRailView('inbox')}>
                           {t.conflicts} disagreement{t.conflicts === 1 ? '' : 's'}
                         </button>
+                      )}
+                      {b.agent && (
+                        <span
+                          className={
+                            (grantsFor(aiw.grants, b)?.length ?? 0) === 0 && aiw.grants != null
+                              ? 'text-warn'
+                              : 'text-muted'
+                          }
+                        >
+                          {aiw.grants == null
+                            ? ''
+                            : (grantsFor(aiw.grants, b)?.length ?? 0) === 0
+                              ? 'runs an agent, but may do nothing'
+                              : `runs an agent · ${grantsFor(aiw.grants, b)?.length} grant${
+                                  grantsFor(aiw.grants, b)?.length === 1 ? '' : 's'
+                                }`}
+                        </span>
                       )}
                       {t.working + t.blocked + t.waiting + t.conflicts === 0 && p.total === 0 && (
                         <span className="text-faint">nothing needs you</span>

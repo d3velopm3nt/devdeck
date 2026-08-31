@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react'
 import * as ipc from '../../lib/ipc'
 import { aiw } from '../../lib/aiw'
+import { BotGrants } from './BotGrants'
 import { Icon } from '../../lib/icons'
 import { DAYS, EVERY_OPTIONS, hhmm, toMin } from '../../lib/bots'
 
@@ -213,9 +214,20 @@ export function BotSettings({
               <div className="text-[10.5px] leading-[1.6] text-body">
                 It will run with nobody watching. Anything it tries that needs approval is refused
                 on the spot — there is no one to ask — so it can only do what you have already
-                allowed in advance, by name, under{' '}
-                <span className="text-ink">Assistant → Settings → Tools</span>. With no standing
-                grants it will run, refuse every tool call, and tell you so.
+                allowed in advance, by name.
+                {/* Said as a number rather than as a place to go and look:
+                    whether this bot can do anything tonight is the question you
+                    are actually asking while you set it up. */}
+                {agent === bot.agent && (
+                  <div className="mt-1">
+                    Right now: <BotGrants bot={bot} compact />. The full list is on Overview.
+                  </div>
+                )}
+                {agent !== bot.agent && (
+                  <div className="mt-1 text-muted">
+                    Save to see what {agent} is allowed to do here.
+                  </div>
+                )}
               </div>
             </div>
           </>

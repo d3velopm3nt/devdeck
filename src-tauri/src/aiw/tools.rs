@@ -651,7 +651,15 @@ pub fn access_for(tool: &str, action: &str) -> Access {
 
 /// Executes tool calls, enforces permissions, emits the events.
 pub struct ToolService {
+    /// Where the code is: what file, terminal and test tools work on.
     pub root: PathBuf,
+    /// Where `.devdeck` is — the vault folder, which stopped being the same
+    /// place the moment a node could name a repository. Reading it from `root`
+    /// meant looking inside the repository, where nothing has written it since
+    /// context moved out of pull requests: "start the app" reported no
+    /// configured command on every project that had one, and the knowledge
+    /// tool searched a directory that was not there.
+    pub deck_root: PathBuf,
     pub project_id: String,
     pub permissions: PermissionMatrix,
     /// Where `Approval` goes to ask a person. The default refuses immediately,
@@ -667,9 +675,13 @@ pub struct ToolService {
 }
 
 impl ToolService {
+    /// Both roots the same, which is right for a node with no repository and
+    /// for every test. [`with_deck_root`] separates them.
     pub fn new(root: impl Into<PathBuf>, project_id: &str, permissions: PermissionMatrix) -> Self {
+        let root: PathBuf = root.into();
         Self {
-            root: root.into(),
+            deck_root: root.clone(),
+            root,
             project_id: project_id.to_string(),
             permissions,
             approvals: Arc::new(ApprovalBroker::immediate_denial()),
@@ -679,6 +691,12 @@ impl ToolService {
     }
 
     /// Route `Approval` through a broker a human is actually watching.
+    /// Say where `.devdeck` is, when it is not beside the code.
+    pub fn with_deck_root(mut self, deck_root: PathBuf) -> Self {
+        self.deck_root = deck_root;
+        self
+    }
+
     pub fn with_approvals(mut self, broker: Arc<ApprovalBroker>) -> Self {
         self.approvals = broker;
         self
@@ -1082,7 +1100,7 @@ impl ToolService {
     }
 
     fn process(&self, call: &ToolCall) -> ToolResult {
-        let cfg = super::deck::Deck::new(self.root.clone()).app_cfg();
+        let cfg = super::deck::Deck::new(self.deck_root.clone()).app_cfg();
         match call.action.as_str() {
             "start" => {
                 let Some(command) = call.arg_str("command").or(cfg.dev.clone()) else {
@@ -1152,7 +1170,7 @@ impl ToolService {
     }
 
     fn tests(&self, call: &ToolCall) -> ToolResult {
-        let cfg = super::deck::Deck::new(self.root.clone()).app_cfg();
+        let cfg = super::deck::Deck::new(self.deck_root.clone()).app_cfg();
         let Some(command) = call.arg_str("command").or(cfg.test.clone()) else {
             return ToolResult::failed(
                 call,
@@ -1172,11 +1190,11 @@ impl ToolService {
     }
 
     fn knowledge(&self, call: &ToolCall) -> ToolResult {
-        let deck = super::deck::Deck::new(self.root.clone());
+        let deck = super::deck::Deck::new(self.deck_root.clone());
         let needle = call.arg_str("query").unwrap_or_default().to_lowercase();
         let mut hits = Vec::new();
         for rel in deck.tree() {
-            let full = self.root.join(&rel);
+            let full = self.deck_root.join(&rel);
             let Ok(text) = std::fs::read_to_string(&full) else {
                 continue;
             };

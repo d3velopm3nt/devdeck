@@ -271,9 +271,35 @@ fn sync_heartbeat(conn: &Connection, b: &Bot) -> Result<Option<i64>, String> {
 // Commands
 // ---------------------------------------------------------------------------
 
+/// Where a bot lives: the vault folder, always.
+///
+/// This used to be `node_dir`, which answers a different question — where
+/// work *runs* — and returns the repository for a node that names one. That
+/// put `_bot.md` and `.devdeck/features` inside the repository while the agent
+/// runtime read features from the vault folder, so on any project with a
+/// repository a bot's plan was invisible to the agent it woke. It also put our
+/// files in somebody's pull request, which is the thing the AI Workspace
+/// deliberately moved out of the repository to avoid.
 fn dir_of(conn: &Connection, node: &db::Node) -> Option<PathBuf> {
-    // One rule, in db.rs. This used to hold its own copy of it.
-    db::node_dir(conn, node)
+    let deck = db::node_deck_dir(conn, node)?;
+    // A bot written under the old rule is sitting in the repository, where
+    // nothing will look for it again. Move it once rather than letting it
+    // quietly stop existing — a bot that vanishes reads exactly like a bot
+    // that was never made.
+    if let Some(code) = db::node_dir(conn, node) {
+        if code != deck {
+            let (from, to) = (code.join(FILE), deck.join(FILE));
+            if from.is_file() && !to.is_file() {
+                if fs::create_dir_all(&deck).is_ok() && fs::rename(&from, &to).is_ok() {
+                    eprintln!(
+                        "[bots] moved {} out of the repository and into the vault",
+                        from.display()
+                    );
+                }
+            }
+        }
+    }
+    Some(deck)
 }
 
 /// Every bot in the vault. Cheap enough to call on every visit: it is one
@@ -1260,6 +1286,10 @@ pub fn wake_agent(app: &tauri::AppHandle, bot: &Bot) -> Option<(bool, String)> {
     // happen. Registering is idempotent, and uses the same rule the sync does:
     // context in the node's own folder, code wherever the repository is.
     if workspace.project(&bot.node_id.to_string()).is_none() {
+        // `bot.dir` is the deck folder, which is exactly what the frontend's
+        // sync registers as the deck root. Registering anything else here
+        // meant the same project id described two different directories
+        // depending on whether a bot woke before the tree synced.
         let dir = std::path::PathBuf::from(&bot.dir);
         let code_root = repo_of(app, bot.node_id).unwrap_or_else(|| dir.clone());
         workspace.register_project(&bot.node_id.to_string(), &bot.node_name, code_root, dir);

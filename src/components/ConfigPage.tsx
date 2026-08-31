@@ -337,8 +337,9 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
           <p className="mb-2 text-[11px] leading-relaxed text-muted">
             These are for the folders inside a workspace. A workspace itself is not labelled here —
             it is <span className="text-dim">Business</span> or <span className="text-dim">Personal</span>,
-            set on the workspace, and that one decides whether its routines land on work hours and
-            whether its bots may interrupt your day.
+            set on the workspace. That one seeds the times a new space drafts: evenings for
+            Personal, work hours for Business. Nothing enforces it afterwards — a bot wakes when
+            its own routine says so, whatever the workspace is tagged.
           </p>
           <textarea
             className="input h-28 w-full resize-y font-mono text-[11.5px]"

@@ -276,8 +276,8 @@ export function SpaceSetup({ onClose }: { onClose: () => void }) {
                 {!label
                   ? 'Untagged, nothing here assumes anything about your day. Pick one and the drafted times move with it.'
                   : quiet
-                    ? 'Personal keeps it quiet: routines land in the evening, and a bot here waits until you are not working.'
-                    : 'Business puts routines and a bot on work hours.'}
+                    ? 'Personal drafts the reminders below for the evening. It is a starting point, not a rule — nothing stops a routine you set yourself.'
+                    : 'Business drafts the reminders below on work hours. It is a starting point, not a rule.'}
               </div>
               <div className="border-t border-line px-3.5 py-2.5 text-[10.5px] leading-[1.55] text-faint">
                 The kind above only suggests one — the two are not tied. A decision you are working
@@ -566,7 +566,7 @@ export function SpaceSetup({ onClose }: { onClose: () => void }) {
               <div>No repository. Give a folder one later and it becomes a project.</div>
               <div>
                 {withBot && botGoal.trim()
-                  ? 'The bot watches. It wakes nothing until you name an agent for it.'
+                  ? 'The bot watches on weekdays at 08:00, whichever tag you picked. It wakes nothing until you name an agent for it.'
                   : 'No bot.'}
               </div>
               <div>Nothing reaches outside this machine.</div>

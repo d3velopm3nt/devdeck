@@ -825,6 +825,34 @@ pub fn services_list(db: tauri::State<Db>) -> Result<Vec<ServiceDef>, String> {
 ///
 /// A workspace resolves like anything else. It is a folder in the vault with a
 /// place on disk, so it can own a command or a service.
+/// Where what we *know* about a node lives: its `.devdeck`, its plan, its
+/// features, its `_bot.md`.
+///
+/// Always the vault folder, never the repository — even for a node that names
+/// one. Two reasons, and they are the same reason twice: nothing of ours
+/// should ever turn up in somebody's pull request, and a folder with no
+/// repository needs the answer to be the same shape as one that has a
+/// repository, or half the app works on topics and the other half does not.
+///
+/// This is the pair to [`node_dir`], which answers the *other* question —
+/// where work runs. Keeping one function for both is what let a bot write its
+/// plan into a repository while the runtime looked for it in the vault, so the
+/// bot woke an agent into a feature that did not exist there.
+pub fn node_deck_dir(conn: &Connection, node: &Node) -> Option<PathBuf> {
+    let root = setting_get_conn(conn, crate::vault::ROOT_KEY).ok()??;
+    if node.rel_path.trim().is_empty() {
+        return None;
+    }
+    Some(std::path::Path::new(&root).join(node.rel_path.replace('/', std::path::MAIN_SEPARATOR_STR)))
+}
+
+pub fn node_deck_dir_by_id(conn: &Connection, node_id: i64) -> Option<PathBuf> {
+    node_deck_dir(conn, &node_by_id(conn, node_id).ok()?)
+}
+
+/// Where work *runs*: the repository if the node names one, else its vault
+/// folder. Commands, services and terminals want this — `npm run dev` belongs
+/// in the repository, not beside it.
 pub fn node_dir(conn: &Connection, node: &Node) -> Option<PathBuf> {
     if let Some(p) = node.path.as_ref().filter(|p| !p.trim().is_empty()) {
         return Some(PathBuf::from(p));
@@ -1215,6 +1243,50 @@ mod node_dir_tests {
             params![id, parent, kind, name, path, rel],
         )
         .unwrap();
+    }
+
+    /// The two directories are different questions, and for a node that names
+    /// a repository they are different answers.
+    ///
+    /// One function used to answer both. That put a bot's `_bot.md` and its
+    /// `.devdeck/features` inside the repository, while the agent runtime read
+    /// features from the vault folder — so on any project with a repository a
+    /// bot woke an agent into a feature that did not exist there, and our
+    /// files turned up in somebody's pull request on the way.
+    #[test]
+    fn a_repo_backed_node_runs_in_the_repo_and_keeps_its_deck_in_the_vault() {
+        let (conn, root) = world();
+        node(&conn, 1, None, "workspace", "Innotrack", "Innotrack", "");
+        node(
+            &conn,
+            2,
+            Some(1),
+            "project",
+            "x-platform",
+            "Innotrack/x-platform",
+            r"C:\repos\x-platform",
+        );
+
+        // Work runs where the code is.
+        assert_eq!(
+            node_dir_by_id(&conn, 2),
+            Some(std::path::PathBuf::from(r"C:\repos\x-platform"))
+        );
+        // What we know about it stays in the vault.
+        assert_eq!(
+            node_deck_dir_by_id(&conn, 2),
+            Some(root.join("Innotrack").join("x-platform"))
+        );
+        assert_ne!(node_dir_by_id(&conn, 2), node_deck_dir_by_id(&conn, 2));
+    }
+
+    /// With no repository the two agree, which is why nothing noticed: every
+    /// bot built so far has been on a plain vault folder.
+    #[test]
+    fn without_a_repository_both_answers_are_the_same_folder() {
+        let (conn, _root) = world();
+        node(&conn, 1, None, "workspace", "Fitness", "Fitness", "");
+        assert_eq!(node_dir_by_id(&conn, 1), node_deck_dir_by_id(&conn, 1));
     }
 
     /// A workspace is a folder in the vault with a place on disk, so it can own

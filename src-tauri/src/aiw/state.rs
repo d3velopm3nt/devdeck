@@ -474,8 +474,9 @@ impl Workspace {
             id: id.to_string(),
             name: name.to_string(),
             root: root.clone(),
-            deck_root,
+            deck_root: deck_root.clone(),
             tools: ToolService::new(root, id, matrix)
+                .with_deck_root(deck_root)
                 .with_approvals(self.approvals.clone())
                 .with_grants(self.grants()),
         });
@@ -695,6 +696,7 @@ impl Workspace {
                     root: old.root.clone(),
                     deck_root: old.deck_root.clone(),
                     tools: ToolService::new(old.root.clone(), &old.id, matrix.clone())
+                        .with_deck_root(old.deck_root.clone())
                         .with_approvals(self.approvals.clone())
                         .with_grants(self.grants()),
                 });

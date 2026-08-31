@@ -334,6 +334,12 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
             are the choices. One per line. They are a shortlist you keep, not kinds the app
             enforces, so you can still type anything on a folder&rsquo;s page.
           </p>
+          <p className="mb-2 text-[11px] leading-relaxed text-muted">
+            <span className="text-dim">Business</span> and <span className="text-dim">Personal</span>{' '}
+            stay on the list whatever you save here. They are the two that change behaviour rather
+            than just reading on a pill — a Personal space drafts evening routines and keeps its
+            bot out of work hours — so removing them would leave that unreachable.
+          </p>
           <textarea
             className="input h-28 w-full resize-y font-mono text-[11.5px]"
             value={labelDraft}

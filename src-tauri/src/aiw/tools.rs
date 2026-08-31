@@ -138,6 +138,13 @@ impl ToolCall {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ToolResult {
+    /// Refused by the permission model rather than attempted and failed.
+    ///
+    /// A flag rather than a phrase in `error`, so a caller can count refusals
+    /// without matching on English — and so a bot's morning report can say "two
+    /// calls refused" instead of pasting the first message it happened to see.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub denied: bool,
     pub ok: bool,
     pub tool: String,
     pub action: String,
@@ -153,6 +160,7 @@ pub struct ToolResult {
 impl ToolResult {
     fn ok(call: &ToolCall, output: impl Into<String>) -> Self {
         Self {
+            denied: false,
             ok: true,
             tool: call.tool.clone(),
             action: call.action.clone(),
@@ -164,6 +172,7 @@ impl ToolResult {
     fn failed(call: &ToolCall, error: impl Into<String>) -> Self {
         let e = error.into();
         Self {
+            denied: false,
             ok: false,
             tool: call.tool.clone(),
             action: call.action.clone(),
@@ -174,6 +183,10 @@ impl ToolResult {
     }
     fn with_files(mut self, files: Vec<String>) -> Self {
         self.changed_files = files;
+        self
+    }
+    fn refused(mut self) -> Self {
+        self.denied = true;
         self
     }
 }
@@ -754,7 +767,9 @@ impl ToolService {
                     // an hour to arrive at "no".
                     None if scope.unattended => {
                         denial = Some(format!(
-                            "'{}' needed approval and this was started by a clock, so there was                              nobody to ask. Give it a standing grant if it should be allowed to                              do this unattended.",
+                            "'{}' needed approval and this was started by a clock, so there was \
+                             nobody to ask. Give it a standing grant if it should be allowed to \
+                             do this unattended.",
                             call.tool
                         ));
                         false
@@ -778,7 +793,7 @@ impl ToolService {
         if !allowed {
             let reason =
                 denial.unwrap_or_else(|| format!("'{}' is denied for {}", call.tool, agent_id));
-            let result = ToolResult::failed(call, reason.clone());
+            let result = ToolResult::failed(call, reason.clone()).refused();
             bus.emit(
                 DomainEvent::new(
                     EventType::ToolFailed,

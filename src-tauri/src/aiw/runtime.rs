@@ -53,6 +53,12 @@ pub struct StartAgentCommand {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SessionOutcome {
     pub session_id: String,
+    /// Tool calls the permission model refused. Counted rather than inferred
+    /// from the summary, because "it ran but was allowed to do nothing" is the
+    /// normal result of an unattended run with no standing grants, and a bot's
+    /// morning report has to be able to say so plainly.
+    #[serde(default)]
+    pub refused: usize,
     pub status: String,
     pub turns: u32,
     pub summary: String,
@@ -292,6 +298,9 @@ impl AgentRuntime {
         let mut files_touched: Vec<String> = Vec::new();
         let mut summary = String::new();
         let mut turns = 0u32;
+        // Refusals across the whole session, so the caller can say "it ran and was
+        // allowed to do nothing" without reading the summary for clues.
+        let mut refused = 0usize;
         let mut failed: Option<String> = None;
 
         for turn in 0..MAX_TURNS {
@@ -351,6 +360,9 @@ impl AgentRuntime {
                             project
                                 .tools
                                 .execute(&ws.bus, &agent.id, &scope, call, Some(&claimed));
+                        if result.denied {
+                            refused += 1;
+                        }
                         observations.push(super::provider::Observation {
                             // Empty for the mock, which has no wire protocol;
                             // a real provider's calls carry their own id, and
@@ -708,6 +720,7 @@ impl AgentRuntime {
 
         Ok(SessionOutcome {
             session_id,
+            refused,
             status: status.label().to_string(),
             turns,
             summary,

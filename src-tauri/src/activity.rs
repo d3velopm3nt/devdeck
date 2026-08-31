@@ -95,7 +95,7 @@ pub fn record(
     // the thing that happened; freezing the app was the one way it could.
     let Some(conn) = lock_briefly(&db) else {
         eprintln!(
-            "[activity] gave up waiting for the database to log {kind:?} {title:?} —              something is holding the lock across this call"
+            "[activity] gave up waiting for the database to log {kind:?} {title:?} — something is holding the lock across this call"
         );
         return;
     };

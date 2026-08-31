@@ -764,3 +764,31 @@ fn naming_an_agent_is_written_down_and_survives_a_save() {
         .unwrap()
         .contains("agent:"));
 }
+
+/// The half-made feature guard has to cover *both* ways a slug is chosen. The
+/// first version only checked the one where the bot had no feature yet, so a
+/// bot that already named one skipped the check entirely and produced a plan
+/// that read fine on screen and failed the moment an agent was asked to work
+/// on it.
+#[test]
+fn a_bot_that_already_names_a_half_made_feature_is_refused_too() {
+    let w = world();
+    create_into(&w.conn, 2, "blank", "Site bot", "Ship the site", "weekdays", 480, "", false)
+        .unwrap();
+
+    // A features directory with no feature.md, named by the bot itself.
+    let dir = w.dir("Business/Marketing site");
+    std::fs::create_dir_all(dir.join(".devdeck").join("features").join("hand-made")).unwrap();
+    save_into(
+        &w.conn, 2, "Site bot", "Ship the site", "weekdays", 480, "", "", vec![], "", "",
+    )
+    .unwrap();
+    // Point the bot at it the way a hand-edited file would.
+    let mut b = read(&dir).unwrap();
+    b.feature = "hand-made".into();
+    write(&dir, &b).unwrap();
+
+    let err = plan_into(&w.conn, 2, &["A step".into()]).unwrap_err();
+    assert!(err.contains("no feature.md"), "{err}");
+    assert!(err.contains("hand-made"), "it names the directory to deal with: {err}");
+}

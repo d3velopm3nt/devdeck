@@ -547,8 +547,19 @@ fn plan_into(conn: &Connection, node_id: i64, steps: &[String]) -> Result<(Strin
     // goal is an ordinary thing to do, and it used to fail with
     // "feature already exists" after the new `_bot.md` had already been
     // written. Adopting is also what you want: those steps are about this goal.
-    let slug = if !bot.feature.is_empty() && deck.feature_dir(&bot.feature).exists() {
+    // Both adoption paths check for `feature.md`, not just the directory. A
+    // directory alone is half a feature — the agent runtime loads the feature
+    // document, so adopting one without it produces a plan that reads fine on
+    // the Plan tab and fails the moment an agent is asked to work on it. The
+    // first version of this guard only covered the second branch, which meant a
+    // bot that already had a feature name skipped it entirely.
+    let slug = if !bot.feature.is_empty() && deck.feature_md(&bot.feature).is_file() {
         bot.feature.clone()
+    } else if !bot.feature.is_empty() && deck.feature_dir(&bot.feature).exists() {
+        return Err(format!(
+            ".devdeck/features/{} exists but has no feature.md, so an agent could not load it. Move or remove it, then try again.",
+            bot.feature
+        ));
     } else {
         let base = if bot.goal.trim().is_empty() { bot.name.clone() } else { bot.goal.clone() };
         let candidate = crate::aiw::deck::slugify(&base);
@@ -562,7 +573,7 @@ fn plan_into(conn: &Connection, node_id: i64, steps: &[String]) -> Result<(Strin
             // adopting one produces a plan the agent runtime cannot load. Say
             // so rather than writing work items into something broken.
             return Err(format!(
-                ".devdeck/features/{candidate} exists but has no feature.md. Move or remove it,                  then try again."
+                ".devdeck/features/{candidate} exists but has no feature.md. Move or remove it, then try again."
             ));
         } else {
             deck.create_feature(&base, &bot.goal, &[])?
@@ -1168,7 +1179,7 @@ fn repo_of(app: &tauri::AppHandle, node_id: i64) -> Option<PathBuf> {
 /// timeout. That matters more than it sounds: an agent making ten uncovered
 /// calls would otherwise take ten timeouts to finish failing, in the middle of
 /// the night, holding up every other schedule behind it.
-pub fn wake_agent(app: &tauri::AppHandle, bot: &Bot) -> Option<String> {
+pub fn wake_agent(app: &tauri::AppHandle, bot: &Bot) -> Option<(bool, String)> {
     use tauri::Manager;
 
     if bot.agent.trim().is_empty() {
@@ -1194,9 +1205,12 @@ pub fn wake_agent(app: &tauri::AppHandle, bot: &Bot) -> Option<String> {
     // it. Better to say that than to hand the runtime an empty feature id and
     // report whatever it makes of it.
     if bot.feature.trim().is_empty() {
-        return Some(format!(
-            "{} names {} but has no plan yet — an agent needs steps to work on. Give it some on              the bot's Plan tab.",
-            bot.name, bot.agent
+        return Some((
+            false,
+            format!(
+                "{} names {} but has no plan yet — an agent needs steps to work on. Give it some                  on the bot's Plan tab.",
+                bot.name, bot.agent
+            ),
         ));
     }
 
@@ -1217,24 +1231,49 @@ pub fn wake_agent(app: &tauri::AppHandle, bot: &Bot) -> Option<String> {
         unattended: true,
     };
 
+    // The line lands in your inbox, so the agent gets its name rather than its
+    // id. "QA Agent" and "qa" are the same thing to the runtime and not at all
+    // the same thing at seven in the morning.
+    let agent_name = workspace
+        .agents()
+        .into_iter()
+        .find(|a| a.id == bot.agent)
+        .map(|a| a.name)
+        .unwrap_or_else(|| bot.agent.clone());
+
     match crate::aiw::runtime::AgentRuntime::run(&workspace, &cmd) {
-        Ok(out) => Some(format!(
-            "{} ran {} — {} turn{}, {} file{} touched. {}",
-            bot.name,
-            bot.agent,
-            out.turns,
-            if out.turns == 1 { "" } else { "s" },
-            out.files_touched.len(),
-            if out.files_touched.len() == 1 { "" } else { "s" },
-            if out.summary.trim().is_empty() {
-                out.status.clone()
+        Ok(out) => {
+            let did = format!(
+                "{} ran {agent_name} — {} turn{}, {} file{} touched",
+                bot.name,
+                out.turns,
+                if out.turns == 1 { "" } else { "s" },
+                out.files_touched.len(),
+                if out.files_touched.len() == 1 { "" } else { "s" },
+            );
+            // A run that was refused everything is not good news wearing a
+            // summary. It says how many and what would change it, and it is
+            // recorded as *not ok* so the inbox draws it as something that went
+            // wrong rather than in the same grey as a stashed screenshot.
+            if out.refused > 0 {
+                Some((
+                    false,
+                    format!(
+                        "{did}. {} call{} refused — nothing is granted for {agent_name} to do \
+                         unattended. Give it a standing grant for what it should be allowed to do.",
+                        out.refused,
+                        if out.refused == 1 { "" } else { "s" },
+                    ),
+                ))
+            } else if out.summary.trim().is_empty() {
+                Some((true, format!("{did}. {}", out.status)))
             } else {
-                out.summary.clone()
+                Some((true, format!("{did}. {}", out.summary)))
             }
-        )),
+        }
         // A failed wake is worth saying. A heartbeat that silently stops
         // working is one you keep believing in.
-        Err(e) => Some(format!("{} could not run {}: {e}", bot.name, bot.agent)),
+        Err(e) => Some((false, format!("{} could not run {agent_name}: {e}", bot.name))),
     }
 }
 

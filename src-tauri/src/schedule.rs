@@ -368,9 +368,12 @@ fn run_one(
                 .as_ref()
                 .and_then(|b| crate::bots::wake_agent(app, b));
             match (report, ran) {
-                (Some(r), Some(a)) => (true, format!("{r}. {a}")),
+                // The wake's own success is the agent's: a bot that ran and was
+                // refused everything did not have a good night, and the inbox
+                // has to draw it that way.
+                (Some(r), Some((ok, a))) => (ok, format!("{r}. {a}")),
                 (Some(r), None) => (true, r),
-                (None, Some(a)) => (true, a),
+                (None, Some((ok, a))) => (ok, a),
                 // Nothing to report and nothing to run. A heartbeat that says
                 // "all clear" every morning is one you filter out.
                 (None, None) => return (true, String::new()),

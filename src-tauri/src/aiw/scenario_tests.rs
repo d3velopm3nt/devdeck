@@ -1781,3 +1781,32 @@ fn unattended_does_not_touch_a_level_that_was_not_asking() {
 
     assert!(r.ok, "a read stays a read at 3am: {:?}", r.error);
 }
+
+/// An unattended run with nothing granted is the normal first night, and the
+/// outcome has to be able to say so in a number rather than in prose.
+#[test]
+fn an_unattended_run_counts_what_it_was_refused() {
+    let (_t, w, tyrex, call) = approval_fixture();
+    let scope = super::events::EventScope::feature("tyrex", "offline-synchronisation").unattended();
+
+    let first = w
+        .project("tyrex")
+        .unwrap()
+        .tools
+        .execute(&w.bus, "qa", &scope, &call, None);
+    assert!(!first.ok);
+    assert!(first.denied, "a refusal is flagged, not inferred from the message");
+
+    // A failure that is not a refusal is not flagged as one — otherwise the
+    // count would quietly include every broken command.
+    let bad = ToolCall::new(TOOL_FILES, "read", serde_json::json!({ "path": "nope.txt" }));
+    w.set_permission("qa", TOOL_FILES, "full").unwrap();
+    let missing = w
+        .project("tyrex")
+        .unwrap()
+        .tools
+        .execute(&w.bus, "qa", &scope, &bad, None);
+    assert!(!missing.ok, "there is no such file");
+    assert!(!missing.denied, "it was attempted and failed, not refused");
+    assert!(!tyrex.join("nope.txt").exists());
+}

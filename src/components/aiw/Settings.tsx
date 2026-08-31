@@ -5,6 +5,8 @@
 // sections, in the order you actually need them: connect a model, point an
 // agent at it, then decide what that agent may touch.
 
+import { CAPTURE_SETTINGS_TAB } from '../../lib/devCapture'
+import { Grants } from './Grants'
 import { useEffect, useState } from 'react'
 import { Icon, type IconName } from '../../lib/icons'
 import { useAiw } from '../../lib/aiwStore'
@@ -187,8 +189,9 @@ function ToolPermissions() {
           refused. <span className="text-ink">Full</span> lets it go ahead,{' '}
           <span className="text-ink">Read</span> lets it look but not change anything,{' '}
           <span className="text-ink">Ask</span> stops the agent and checks with you first, and{' '}
-          <span className="text-ink">None</span> hides the tool completely. Nothing is ever approved
-          on your behalf — if you&rsquo;re away for 90 seconds, the answer is no.
+          <span className="text-ink">None</span> hides the tool completely.{' '}
+          <span className="text-ink">Ask</span> refuses when nobody answers, so being away is a no —
+          unless you gave a standing grant for that exact call, which is the list below.
         </div>
       </div>
 
@@ -249,6 +252,12 @@ function ToolPermissions() {
         <span className="text-dim">Ask</span> is offered, and the agent is told it may have to wait
         for you.
       </div>
+
+      {/* The other half of the same question: not what an agent may ask about,
+          but what it no longer has to. */}
+      <div className="mt-5 border-t border-line pt-4">
+        <Grants />
+      </div>
     </>
   )
 }
@@ -257,7 +266,7 @@ function ToolPermissions() {
 
 export function Settings() {
   const a = useAiw()
-  const [tab, setTab] = useState<Tab>('providers')
+  const [tab, setTab] = useState<Tab>((CAPTURE_SETTINGS_TAB as Tab) || 'providers')
 
   return (
     <div className="flex h-full flex-col">

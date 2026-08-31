@@ -280,6 +280,37 @@ export interface ToolInfo {
   description: string
 }
 
+
+/** Permission you gave in advance, narrowly. See `grants.rs`. */
+export interface GrantScope {
+  kind: 'exact' | 'prefix' | 'any'
+  value?: string
+}
+
+export interface Grant {
+  id: string
+  agent_id: string
+  tool: string
+  action: string
+  scope: GrantScope
+  /** Empty means every project — only reachable deliberately. */
+  project_id: string
+  created_at: string
+  expires_at: string
+  max_uses: number
+  uses: number
+  last_used?: string
+  note?: string
+  /** The last few things it allowed, newest first. A receipt, not a log. */
+  recent?: string[]
+  revoked_at?: string
+  live: boolean
+  /** 'expired' | 'spent' | 'revoked' | '' — one word for why it is inert. */
+  state: string
+  uses_left: number
+  summary: string
+}
+
 export interface PermissionRow {
   tool: string
   grants: [string, string][]
@@ -510,6 +541,21 @@ export const aiw = {
   permissions: () => invoke<PermissionRow[]>('aiw_permissions'),
   setPermission: (agentId: string, tool: string, permission: string) =>
     invoke<void>('aiw_set_permission', { agentId, tool, permission }),
+  grants: () => invoke<Grant[]>('aiw_grants'),
+  grantAdd: (g: {
+    agentId: string
+    tool: string
+    action: string
+    scopeKind: 'exact' | 'prefix' | 'any'
+    scopeValue: string
+    projectId: string
+    days: number
+    maxUses: number
+    note: string
+  }) => invoke<Grant>('aiw_grant_add', g),
+  grantRevoke: (id: string) => invoke<void>('aiw_grant_revoke', { id }),
+  grantRevokeAll: () => invoke<number>('aiw_grant_revoke_all'),
+  grantForget: (id: string) => invoke<void>('aiw_grant_forget', { id }),
   providers: () => invoke<[string, string, ProviderHealth][]>('aiw_providers'),
   providerSetups: () => invoke<ProviderSetup[]>('aiw_provider_setups'),
   configureProvider: (c: ProviderConfigInput) =>

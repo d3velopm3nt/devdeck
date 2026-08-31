@@ -16,6 +16,7 @@
 //   CAPTURE_BOT      node id whose bot page to open ('' = none)
 //   CAPTURE_BOT_TAB  which of its tabs to show ('' = Overview)
 //   CAPTURE_BOT_MODAL  'interview' | 'create' ('' = none)
+//   CAPTURE_SETTINGS_TAB  Assistant settings tab ('' = Providers)
 
 export const CAPTURE_RAIL: string = ''
 export const CAPTURE_PAGE = ''
@@ -25,3 +26,4 @@ export const CAPTURE_AUTORUN = false
 export const CAPTURE_BOT: string = ''
 export const CAPTURE_BOT_TAB: string = ''
 export const CAPTURE_BOT_MODAL: string = ''
+export const CAPTURE_SETTINGS_TAB: string = ''

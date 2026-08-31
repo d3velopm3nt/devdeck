@@ -573,6 +573,133 @@ pub fn saved_permissions(conn: &rusqlite::Connection) -> Vec<(String, String, St
         .unwrap_or_default()
 }
 
+
+// ---------------------------------------------------------------------------
+// Standing grants
+// ---------------------------------------------------------------------------
+
+/// A grant as the screen needs to draw it: the record, plus the two things it
+/// would otherwise have to work out — whether it is still live, and why not.
+#[derive(Serialize, Clone, Debug)]
+pub struct GrantRow {
+    #[serde(flatten)]
+    pub grant: super::grants::Grant,
+    pub live: bool,
+    /// "expired" | "spent" | "revoked" | "" — one word for why it is inert.
+    pub state: String,
+    pub uses_left: u32,
+    /// The one line a person can judge without reading fields.
+    pub summary: String,
+}
+
+#[tauri::command]
+pub fn aiw_grants(ws: Ws) -> Vec<GrantRow> {
+    let now = super::events::now_iso();
+    let mut rows: Vec<GrantRow> = ws
+        .grants()
+        .all()
+        .into_iter()
+        .map(|g| {
+            let state = if g.revoked() {
+                "revoked"
+            } else if g.expired(&now) {
+                "expired"
+            } else if g.spent() {
+                "spent"
+            } else {
+                ""
+            };
+            GrantRow {
+                live: g.live(&now),
+                state: state.to_string(),
+                uses_left: g.uses_left(),
+                summary: g.describe(),
+                grant: g,
+            }
+        })
+        .collect();
+    // Live first, then most recently used, then newest.
+    rows.sort_by(|a, b| {
+        b.live
+            .cmp(&a.live)
+            .then(b.grant.last_used.cmp(&a.grant.last_used))
+            .then(b.grant.created_at.cmp(&a.grant.created_at))
+    });
+    rows
+}
+
+/// Write a grant deliberately, rather than by answering a prompt with "always".
+///
+/// This is the only way to get anything broader than the exact call you were
+/// asked about — a prefix, or every project — and it goes through the same
+/// validation, so "any command, standing" is refused here too.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub fn aiw_grant_add(
+    ws: Ws,
+    agent_id: String,
+    tool: String,
+    action: String,
+    scope_kind: String,
+    scope_value: String,
+    project_id: String,
+    days: i64,
+    max_uses: u32,
+    note: String,
+) -> Result<super::grants::Grant, String> {
+    let scope = match scope_kind.as_str() {
+        "exact" => super::grants::Scope::Exact(scope_value.trim().to_string()),
+        "prefix" => super::grants::Scope::Prefix(scope_value.trim().to_string()),
+        "any" => super::grants::Scope::Any,
+        other => return Err(format!("'{other}' is not a kind of scope.")),
+    };
+    let g = super::grants::Grant {
+        id: String::new(),
+        agent_id,
+        tool: tool.clone(),
+        action: action.clone(),
+        scope,
+        project_id,
+        created_at: String::new(),
+        expires_at: (chrono::Utc::now() + chrono::Duration::days(days.clamp(1, 365))).to_rfc3339(),
+        max_uses,
+        uses: 0,
+        last_used: String::new(),
+        note,
+        recent: vec![],
+        revoked_at: String::new(),
+    };
+    ws.grants().add(g, super::tools::access_for(&tool, &action))
+}
+
+#[tauri::command]
+pub fn aiw_grant_revoke(ws: Ws, id: String) -> Result<(), String> {
+    if ws.grants().revoke(&id) {
+        Ok(())
+    } else {
+        Err("that grant was already withdrawn".into())
+    }
+}
+
+/// Withdraw everything at once. The button you want when something has gone
+/// wrong and you do not want to read a list first.
+#[tauri::command]
+pub fn aiw_grant_revoke_all(ws: Ws) -> usize {
+    ws.grants().revoke_all()
+}
+
+/// Remove a withdrawn, spent or expired grant from the list. Refuses a live
+/// one: forgetting is tidying, not revoking, and the two must not be the same
+/// button.
+#[tauri::command]
+pub fn aiw_grant_forget(ws: Ws, id: String) -> Result<(), String> {
+    if ws.grants().forget(&id) {
+        Ok(())
+    } else {
+        Err("that one is still live — withdraw it first".into())
+    }
+}
+
 #[tauri::command]
 pub fn aiw_providers(ws: Ws) -> Vec<(String, String, ProviderHealth)> {
     ws.providers.lock().unwrap().list()

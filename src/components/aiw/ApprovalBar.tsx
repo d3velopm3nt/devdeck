@@ -99,9 +99,17 @@ function Request({ r, now }: { r: ApprovalRequest; now: number }) {
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
+          {/* This used to promote the whole tool to Full — a yes to one command
+              became a yes to every command, on every project, for ever. It now
+              writes a bounded standing grant for exactly this call, so the
+              label can say what actually happens. */}
           <label
             className="flex cursor-pointer select-none items-center gap-1.5 text-[10.5px] text-muted hover:text-dim"
-            title="Also change this agent's permission for this tool, so you aren't asked again"
+            title={
+              'Allow: writes a standing grant for exactly this call, in this project — 20 uses, ' +
+              '7 days. Deny: takes the tool away and withdraws the grants on it. ' +
+              'Standing grants are listed under Settings, where you can withdraw them.'
+            }
           >
             <input
               type="checkbox"
@@ -109,7 +117,7 @@ function Request({ r, now }: { r: ApprovalRequest; now: number }) {
               checked={always}
               onChange={(e) => setAlways(e.target.checked)}
             />
-            Don&rsquo;t ask again
+            Don&rsquo;t ask again for this exact call
           </label>
           <button
             className="rounded border border-line2 px-2.5 py-1 text-[11.5px] text-dim hover:bg-hover hover:text-ink disabled:opacity-40"

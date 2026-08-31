@@ -820,8 +820,16 @@ fn a_denial_stops_the_write_from_ever_happening() {
 
 /// The point of "always" — otherwise you answer the same question every turn
 /// and start reaching for `Full` just to make it stop.
+///
+/// This test used to assert the opposite of what it asserts now, and the change
+/// is the whole reason standing grants exist. "Always" wrote
+/// `set_permission(tool, "full")`, so a yes to writing `approved.txt` was also a
+/// yes to writing *anything*, on every project, for ever — and this test proved
+/// it by writing a second, unrelated file without a prompt. It now writes a
+/// bounded grant for that one call instead: the same call goes through, and the
+/// different one still asks.
 #[test]
-fn always_allow_moves_the_permission_so_it_stops_asking() {
+fn always_allow_covers_that_call_and_only_that_call() {
     let (_t, w, tyrex, call) = approval_fixture();
     let scope = super::events::EventScope::feature("tyrex", "offline-synchronisation");
 
@@ -841,26 +849,146 @@ fn always_allow_moves_the_permission_so_it_stops_asking() {
     human.join().unwrap();
     assert!(first.ok, "the answered call runs: {:?}", first.error);
 
-    // Nobody is listening this time. If it still asked, it would sit here for
-    // the full timeout and then be refused — so speed is the assertion.
-    let second_call = ToolCall::new(
-        TOOL_FILES,
-        "write",
-        serde_json::json!({ "path": "again.txt", "content": "no second prompt" }),
+    // The level did not move. That is the fix: "always" is now a narrow
+    // standing grant, not a promotion to Full.
+    assert_eq!(
+        w.permission_matrix().get("qa", TOOL_FILES),
+        super::tools::Permission::Approval,
+        "saying always must not widen the tool"
     );
-    let started = std::time::Instant::now();
-    let second =
-        w.project("tyrex")
-            .unwrap()
-            .tools
-            .execute(&w.bus, "qa", &scope, &second_call, None);
 
-    assert!(second.ok, "the second call is no longer gated");
+    // The same call again: nobody is listening, so if it asked it would sit for
+    // the full timeout and be refused. Speed is the assertion.
+    let started = std::time::Instant::now();
+    let again = w
+        .project("tyrex")
+        .unwrap()
+        .tools
+        .execute(&w.bus, "qa", &scope, &call, None);
+    assert!(again.ok, "the same call is covered: {:?}", again.error);
     assert!(
         started.elapsed() < std::time::Duration::from_secs(5),
-        "it asked again — 'always' did not stick"
+        "it asked again — the grant did not stick"
     );
-    assert!(tyrex.join("again.txt").exists());
+
+    // A *different* file still asks. Someone has to be there to say no, or this
+    // would block for the whole timeout.
+    let other = ToolCall::new(
+        TOOL_FILES,
+        "write",
+        serde_json::json!({ "path": "again.txt", "content": "not what you agreed to" }),
+    );
+    let human = {
+        let w = w.clone();
+        std::thread::spawn(move || {
+            let req = wait_for_prompt(&w);
+            assert!(
+                req.summary.contains("again.txt"),
+                "it asked about the right thing: {}",
+                req.summary
+            );
+            w.resolve_approval(&req.id, super::approval::Decision::Deny)
+                .unwrap();
+        })
+    };
+    let second = w
+        .project("tyrex")
+        .unwrap()
+        .tools
+        .execute(&w.bus, "qa", &scope, &other, None);
+    human.join().unwrap();
+
+    assert!(!second.ok, "a grant for one file is not a grant for another");
+    assert!(
+        !tyrex.join("again.txt").exists(),
+        "and nothing was written before the refusal"
+    );
+    assert!(tyrex.join("approved.txt").exists(), "the granted one did run");
+}
+
+/// A grant is spent, and when it runs out the question comes back.
+#[test]
+fn a_standing_grant_runs_out() {
+    let (_t, w, _tyrex, call) = approval_fixture();
+    let scope = super::events::EventScope::feature("tyrex", "offline-synchronisation");
+
+    // One use, so the second call has to ask again.
+    let grant = super::grants::Grant {
+        agent_id: "qa".into(),
+        tool: TOOL_FILES.into(),
+        action: "write".into(),
+        scope: super::grants::Scope::Exact("approved.txt".into()),
+        project_id: "tyrex".into(),
+        expires_at: (chrono::Utc::now() + chrono::Duration::days(1)).to_rfc3339(),
+        max_uses: 1,
+        ..Default::default()
+    };
+    w.grants()
+        .add(grant, super::tools::Access::Write)
+        .unwrap();
+
+    let first = w
+        .project("tyrex")
+        .unwrap()
+        .tools
+        .execute(&w.bus, "qa", &scope, &call, None);
+    assert!(first.ok, "the grant covered it: {:?}", first.error);
+
+    let human = {
+        let w = w.clone();
+        std::thread::spawn(move || {
+            let req = wait_for_prompt(&w);
+            w.resolve_approval(&req.id, super::approval::Decision::Deny)
+                .unwrap();
+        })
+    };
+    let second = w
+        .project("tyrex")
+        .unwrap()
+        .tools
+        .execute(&w.bus, "qa", &scope, &call, None);
+    human.join().unwrap();
+    assert!(!second.ok, "one use meant one");
+}
+
+/// The property the whole design rests on: a grant refines `Approval` and can
+/// never override a level that was not going to ask.
+#[test]
+fn a_grant_cannot_reach_past_a_revoked_tool() {
+    let (_t, w, tyrex, call) = approval_fixture();
+    let scope = super::events::EventScope::feature("tyrex", "offline-synchronisation");
+
+    w.grants()
+        .add(
+            super::grants::Grant {
+                agent_id: "qa".into(),
+                tool: TOOL_FILES.into(),
+                action: "write".into(),
+                scope: super::grants::Scope::Exact("approved.txt".into()),
+                project_id: "tyrex".into(),
+                expires_at: (chrono::Utc::now() + chrono::Duration::days(1)).to_rfc3339(),
+                max_uses: 20,
+                ..Default::default()
+            },
+            super::tools::Access::Write,
+        )
+        .unwrap();
+
+    // Take the tool away without touching the grant.
+    w.set_permission("qa", TOOL_FILES, "none").unwrap();
+
+    let r = w
+        .project("tyrex")
+        .unwrap()
+        .tools
+        .execute(&w.bus, "qa", &scope, &call, None);
+
+    assert!(!r.ok, "revoking the tool has to be a complete answer");
+    assert!(!tyrex.join("approved.txt").exists());
+    assert!(
+        r.error.unwrap().contains("denied"),
+        "and it reads as denied, not as a grant that failed"
+    );
 }
 
 /// The mirror image: "always deny" has to revoke, not just refuse once.

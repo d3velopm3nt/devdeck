@@ -18,6 +18,7 @@ import {
 } from './devCapture'
 import {
   aiw,
+  type Grant,
   type AgentDef,
   type AssistantReply,
   type ChatEvent,
@@ -91,6 +92,8 @@ interface AiwState {
   commits: GitCommit[]
   tools: ToolInfo[]
   permissions: PermissionRow[]
+  /** Standing grants — what you have already said yes to in advance. */
+  grants: Grant[]
   testRuns: TestRun[]
   context: AssembledContext | null
 
@@ -116,6 +119,10 @@ interface AiwState {
   startAgent: (agentId: string, opts?: { workItemId?: string; intent?: string; areas?: string[]; dependsOn?: string[] }) => Promise<void>
   resolveConflict: (id: string) => Promise<void>
   setPermission: (agentId: string, tool: string, permission: string) => Promise<void>
+  refreshGrants: () => Promise<void>
+  revokeGrant: (id: string) => Promise<void>
+  revokeAllGrants: () => Promise<void>
+  forgetGrant: (id: string) => Promise<void>
   pushEvent: (e: DomainEvent) => void
 }
 
@@ -150,6 +157,7 @@ export const useAiw = create<AiwState>((set, get) => ({
   commits: [],
   tools: [],
   permissions: [],
+  grants: [],
   testRuns: [],
   context: null,
 
@@ -279,7 +287,7 @@ export const useAiw = create<AiwState>((set, get) => ({
     // `always` moves a permission, so the matrix on screen is now stale.
     if (decision.endsWith('always')) {
       try {
-        set({ permissions: await aiw.permissions() })
+        set({ permissions: await aiw.permissions(), grants: await aiw.grants() })
       } catch {
         /* the matrix reloads on the next refresh */
       }
@@ -469,7 +477,45 @@ export const useAiw = create<AiwState>((set, get) => ({
   setPermission: async (agentId, tool, permission) => {
     try {
       await aiw.setPermission(agentId, tool, permission)
-      set({ permissions: await aiw.permissions(), agents: await aiw.agents() })
+      // Grants too: denying a tool withdraws the standing grants on it, and the
+      // screen has to show that rather than a list that is quietly inert.
+      set({
+        permissions: await aiw.permissions(),
+        agents: await aiw.agents(),
+        grants: await aiw.grants(),
+      })
+    } catch (e) {
+      set({ error: say(e) })
+    }
+  },
+
+  refreshGrants: async () => {
+    try {
+      set({ grants: await aiw.grants() })
+    } catch (e) {
+      set({ error: say(e) })
+    }
+  },
+  revokeGrant: async (id) => {
+    try {
+      await aiw.grantRevoke(id)
+      set({ grants: await aiw.grants() })
+    } catch (e) {
+      set({ error: say(e) })
+    }
+  },
+  revokeAllGrants: async () => {
+    try {
+      await aiw.grantRevokeAll()
+      set({ grants: await aiw.grants() })
+    } catch (e) {
+      set({ error: say(e) })
+    }
+  },
+  forgetGrant: async (id) => {
+    try {
+      await aiw.grantForget(id)
+      set({ grants: await aiw.grants() })
     } catch (e) {
       set({ error: say(e) })
     }

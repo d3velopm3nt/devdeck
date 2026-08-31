@@ -215,6 +215,13 @@ pub struct ProjectSummary {
 const APPROVAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(90);
 
 /// The whole AI Workspace.
+/// How long an "always" from a prompt lasts, and how many times it may be
+/// used. Modest on purpose: this is the setting you get by pressing a button
+/// rather than by thinking about it, so it should be the one you would have
+/// chosen if you had. Both are editable per grant afterwards.
+pub const GRANT_DAYS: i64 = 7;
+pub const GRANT_USES: u32 = 20;
+
 pub struct Workspace {
     pub bus: SharedBus,
     pub conflicts: ConflictService,
@@ -232,6 +239,13 @@ pub struct Workspace {
     /// builds hundreds of them, and none of those has any business creating
     /// folders in `%APPDATA%`.
     conversations: std::sync::OnceLock<Result<Conversations, String>>,
+    /// Standing grants, shared by every project's tool service.
+    ///
+    /// Opened lazily for the same reason as conversations — building a
+    /// workspace must not touch `%APPDATA%` — and ephemeral when it cannot be
+    /// opened, so a machine that cannot write the file pre-authorises nothing
+    /// rather than pre-authorising everything.
+    grants: std::sync::OnceLock<Arc<super::grants::GrantStore>>,
     pub providers: Mutex<ProviderRegistry>,
     pub reconciler: Box<dyn ContextReconciler>,
     projects: Mutex<HashMap<String, Arc<ProjectHandle>>>,
@@ -263,6 +277,7 @@ impl Workspace {
             conflicts: ConflictService::new(),
             approvals: Arc::new(ApprovalBroker::new(timeout)),
             conversations: std::sync::OnceLock::new(),
+            grants: std::sync::OnceLock::new(),
             providers: Mutex::new(ProviderRegistry::new()),
             reconciler: Box::new(DeterministicReconciler),
             projects: Mutex::new(HashMap::new()),
@@ -437,7 +452,9 @@ impl Workspace {
             name: name.to_string(),
             root: root.clone(),
             deck_root,
-            tools: ToolService::new(root, id, matrix).with_approvals(self.approvals.clone()),
+            tools: ToolService::new(root, id, matrix)
+                .with_approvals(self.approvals.clone())
+                .with_grants(self.grants()),
         });
         self.projects
             .lock()
@@ -655,7 +672,8 @@ impl Workspace {
                     root: old.root.clone(),
                     deck_root: old.deck_root.clone(),
                     tools: ToolService::new(old.root.clone(), &old.id, matrix.clone())
-                        .with_approvals(self.approvals.clone()),
+                        .with_approvals(self.approvals.clone())
+                        .with_grants(self.grants()),
                 });
                 projects.insert(id, handle);
             }
@@ -847,6 +865,45 @@ impl Workspace {
             .map_err(|e| e.clone())
     }
 
+    /// The standing grants, opened on first use.
+    ///
+    /// A file that cannot be opened yields an ephemeral book rather than an
+    /// error: grants are an *optional* widening of what an agent may do, so
+    /// losing them costs you convenience, and every call falls back to asking a
+    /// person. Failing the other way would be the unsafe one.
+    pub fn grants(&self) -> Arc<super::grants::GrantStore> {
+        self.grants
+            .get_or_init(|| {
+                // Under test this is ephemeral, and that is not a convenience.
+                // Every project handle opens it, so a workspace built in a test
+                // would otherwise read *and write* the developer's own
+                // `%APPDATA%` grants — one test answering "always" would leave a
+                // live standing grant on a real machine, and the next test would
+                // find it and behave differently. A scenario that wants the real
+                // thing writes to a temporary path of its own.
+                #[cfg(test)]
+                {
+                    Arc::new(super::grants::GrantStore::ephemeral())
+                }
+                #[cfg(not(test))]
+                {
+                    let store = super::personal::PersonalStore::open()
+                        .and_then(|s| super::grants::GrantStore::open(s.root().join("grants.md")));
+                    Arc::new(match store {
+                        Ok(g) => g,
+                        Err(e) => {
+                            eprintln!(
+                                "[aiw] standing grants unavailable, everything will ask: {e}"
+                            );
+                            super::grants::GrantStore::ephemeral()
+                        }
+                    })
+                }
+            })
+            .clone()
+    }
+
+
     /// Load the team from disk, seeding the built-ins the first time.
     ///
     /// Agents were a hardcoded list, which meant the answer to "add another
@@ -995,12 +1052,49 @@ impl Workspace {
             .find(|r| r.id == id)
             .map(|r| (r.agent_id, r.tool));
 
-        // Move the permission *before* releasing the waiter, so the agent's
-        // next call already sees the new level rather than asking again.
+        // Settle the standing decision *before* releasing the waiter, so the
+        // agent's next call already sees it rather than asking again.
+        //
+        // "Always" used to mean `set_permission(tool, "full")`, which turned a
+        // yes to `npm test` into a yes to the entire terminal, on every
+        // project, for ever. It now writes a standing grant instead: this exact
+        // command, this project, bounded and dated. Saying always is a
+        // narrowing now, not a widening.
         if let Some((agent, tool)) = &agent_tool {
             match decision {
-                Decision::AllowAlways => self.set_permission(agent, tool, "full")?,
-                Decision::DenyAlways => self.set_permission(agent, tool, "none")?,
+                Decision::AllowAlways => {
+                    let req = self
+                        .approvals
+                        .pending()
+                        .into_iter()
+                        .find(|r| r.id == id);
+                    if let Some(r) = req {
+                        let args: serde_json::Value =
+                            serde_json::from_str(&r.detail).unwrap_or(serde_json::json!({}));
+                        let grant = super::grants::from_approval(
+                            agent,
+                            tool,
+                            &r.action,
+                            &args,
+                            r.project_id.as_deref(),
+                            GRANT_DAYS,
+                            GRANT_USES,
+                        );
+                        let access = super::tools::access_for(tool, &r.action);
+                        // A grant we cannot write is not a reason to fall back
+                        // to `Full`. The call is still allowed this once; the
+                        // next one asks again, which is the safe direction.
+                        if let Err(e) = self.grants().add(grant, access) {
+                            eprintln!("[aiw] could not keep that standing grant: {e}");
+                        }
+                    }
+                }
+                // Saying never has to take back what you already said yes to,
+                // or the refusal is not a refusal.
+                Decision::DenyAlways => {
+                    self.set_permission(agent, tool, "none")?;
+                    self.grants().revoke_tool(agent, tool);
+                }
                 _ => {}
             }
         }

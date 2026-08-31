@@ -14,6 +14,7 @@ use std::process::{Command, Stdio};
 use std::sync::Arc;
 
 use super::approval::{request_for, ApprovalBroker, Outcome};
+use super::grants::GrantStore;
 use super::events::{DomainEvent, EventBus, EventScope, EventType};
 
 #[cfg(windows)]
@@ -599,6 +600,21 @@ pub struct AppStatus {
     pub log_lines: usize,
 }
 
+/// Whether an action reads or writes, from the registry rather than a second
+/// hand-written list. A grant's safety rule hangs off this answer, so it must
+/// be the same answer the permission filter uses.
+///
+/// An unknown tool or action is a *write*. Guessing "read" for something we do
+/// not recognise would let an unlisted action be granted against any arguments.
+pub fn access_for(tool: &str, action: &str) -> Access {
+    registry()
+        .iter()
+        .find(|t| t.id == tool)
+        .and_then(|t| t.actions.iter().find(|a| a.name == action))
+        .map(|a| a.access)
+        .unwrap_or(Access::Write)
+}
+
 /// Executes tool calls, enforces permissions, emits the events.
 pub struct ToolService {
     pub root: PathBuf,
@@ -608,6 +624,10 @@ pub struct ToolService {
     /// so a service built without an approval surface behaves exactly as it did
     /// before rather than blocking against a queue nobody reads.
     pub approvals: Arc<ApprovalBroker>,
+    /// Permission you gave in advance, narrowly. Consulted only for
+    /// `Approval` — a grant can answer a question that was going to be asked,
+    /// and can never widen a level that was not going to ask at all.
+    pub grants: Arc<GrantStore>,
     /// Processes started by the process tool, keyed by project.
     pub apps: std::sync::Mutex<HashMap<String, RunningApp>>,
 }
@@ -619,6 +639,7 @@ impl ToolService {
             project_id: project_id.to_string(),
             permissions,
             approvals: Arc::new(ApprovalBroker::immediate_denial()),
+            grants: Arc::new(GrantStore::ephemeral()),
             apps: std::sync::Mutex::new(HashMap::new()),
         }
     }
@@ -626,6 +647,13 @@ impl ToolService {
     /// Route `Approval` through a broker a human is actually watching.
     pub fn with_approvals(mut self, broker: Arc<ApprovalBroker>) -> Self {
         self.approvals = broker;
+        self
+    }
+
+    /// Let standing grants answer approvals in advance. Without this the
+    /// service has an ephemeral book, so nothing is ever pre-authorised.
+    pub fn with_grants(mut self, grants: Arc<GrantStore>) -> Self {
+        self.grants = grants;
         self
     }
 
@@ -686,11 +714,49 @@ impl ToolService {
                 false
             }
             (Permission::Approval, _) => {
-                let outcome = self.ask_permission(bus, agent_id, scope, call, &requested);
-                if !outcome.allows() {
-                    denial = Some(outcome.reason(&call.tool));
+                // A standing grant answers before a person is asked — which is
+                // the only reason an agent can run while you are asleep. It is
+                // claimed and spent in one step, so the bound on it is real,
+                // and the event says which grant allowed it so the trail never
+                // reads as though a human was there.
+                let summary = super::approval::describe(&call.tool, &call.action, &call.args);
+                match self.grants.claim(
+                    agent_id,
+                    &call.tool,
+                    &call.action,
+                    &call.args,
+                    &self.project_id,
+                    &summary,
+                ) {
+                    Some(g) => {
+                        bus.emit(
+                            DomainEvent::new(
+                                EventType::ToolApprovalResolved,
+                                scope.clone().with_agent(agent_id),
+                                serde_json::json!({
+                                    "tool": call.tool,
+                                    "action": call.action,
+                                    "summary": summary,
+                                    "allowed": true,
+                                    "standing": true,
+                                    "grantId": g.id,
+                                    "usesLeft": g.uses_left(),
+                                    "expiresAt": g.expires_at,
+                                }),
+                            )
+                            .caused_by(&requested),
+                        );
+                        true
+                    }
+                    None => {
+                        let outcome =
+                            self.ask_permission(bus, agent_id, scope, call, &requested);
+                        if !outcome.allows() {
+                            denial = Some(outcome.reason(&call.tool));
+                        }
+                        outcome.allows()
+                    }
                 }
-                outcome.allows()
             }
             (Permission::None, _) => {
                 denial = Some(format!("'{}' is denied for {}", call.tool, agent_id));

@@ -45,6 +45,25 @@ fn now_millis() -> i64 {
 /// Record one event. Deliberately infallible: activity is a side effect of
 /// doing something useful, and failing to log it must never break the thing
 /// that happened.
+/// Take the database lock, but give up rather than hanging forever.
+fn lock_briefly(db: &Db) -> Option<std::sync::MutexGuard<'_, rusqlite::Connection>> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    loop {
+        match db.0.try_lock() {
+            Ok(g) => return Some(g),
+            // A poisoned mutex means some other thread panicked mid-write.
+            // Nothing here can fix that, and waiting will not help.
+            Err(std::sync::TryLockError::Poisoned(_)) => return None,
+            Err(std::sync::TryLockError::WouldBlock) => {
+                if std::time::Instant::now() >= deadline {
+                    return None;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+        }
+    }
+}
+
 pub fn record(
     app: &tauri::AppHandle,
     kind: &str,
@@ -61,8 +80,26 @@ pub fn record(
     let Some(db) = app.try_state::<Db>() else {
         return;
     };
+    // Never block waiting for the database.
+    //
+    // A caller that still holds the lock when it calls this deadlocks the
+    // thread it is on — and when that is the main thread the whole window
+    // freezes with no error anywhere. That has happened three times now (the
+    // scheduler's first tick, `schedule_run_now`, and a bot learning a skill),
+    // and each time it looked like the app had simply stopped rather than like a
+    // bug in logging.
+    //
+    // Real contention clears in microseconds, so a bounded wait costs correct
+    // callers nothing and turns the broken case into one missing line and a
+    // warning. This module already promises that failing to log must never break
+    // the thing that happened; freezing the app was the one way it could.
+    let Some(conn) = lock_briefly(&db) else {
+        eprintln!(
+            "[activity] gave up waiting for the database to log {kind:?} {title:?} —              something is holding the lock across this call"
+        );
+        return;
+    };
     let id = {
-        let Ok(conn) = db.0.lock() else { return };
         if conn
             .execute(
                 "INSERT INTO activity (kind, title, detail, ok, ref_id, project_name, ts)
@@ -83,6 +120,7 @@ pub fn record(
         }
         id
     };
+    drop(conn);
 
     let _ = app.emit(
         "activity:new",

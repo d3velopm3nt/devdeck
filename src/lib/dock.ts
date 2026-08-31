@@ -98,6 +98,24 @@ export function openSpace(projectId: number, title: string) {
 
 /// Open (or focus) the service page — live status, config, run history and
 /// log tail for one service — as a document tab.
+/// Open (or focus) a bot as a document tab. A bot is a file in a folder, and
+/// everything a folder offers opens as a document here — the Bots page is the
+/// index, this is the thing.
+export function openBot(nodeId: number, title: string, ask = false) {
+  if (!api) return
+  useApp.getState().setRailView('projects')
+  const id = `bot-${nodeId}`
+  const existing = api.getPanel(id)
+  if (existing) {
+    existing.api.setActive()
+    return
+  }
+  // `ask` opens the interview straight away, and only ever on a bot that was
+  // just made — a page that re-asks every time you visit is a page you close.
+  addToMain({ id, component: 'bot-detail', title, params: { id: nodeId, ask } })
+  api.getPanel(id)?.api.setActive()
+}
+
 export function openService(serviceId: number, title: string) {
   if (!api) return
   useApp.getState().setRailView('projects')

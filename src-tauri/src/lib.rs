@@ -13,6 +13,8 @@
 
 mod activity;
 mod aiw;
+mod botcatalog;
+mod botmind;
 mod bots;
 mod conn;
 mod creds;
@@ -782,6 +784,25 @@ pub fn run() {
             bots::bot_get,
             bots::bot_save,
             bots::bot_delete,
+            bots::bot_create,
+            bots::bot_plan,
+            bots::bot_work,
+            bots::bot_work_save,
+            bots::bot_work_delete,
+            bots::bot_interview,
+            bots::bot_answer,
+            bots::bot_interview_reset,
+            bots::bot_beliefs,
+            bots::bot_belief_add,
+            bots::bot_belief_correct,
+            bots::bot_belief_pin,
+            bots::bot_belief_drop,
+            bots::bot_belief_drop_stale,
+            bots::bot_tools,
+            bots::bot_tool_decide,
+            bots::bot_suggestions,
+            bots::bot_suggestion_answer,
+            botcatalog::bot_catalog,
             vault::vault_move,
             vault::vault_switch,
             vault::vault_switch_cost,

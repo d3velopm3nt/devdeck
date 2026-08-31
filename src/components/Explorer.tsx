@@ -9,12 +9,13 @@ import * as ipc from '../lib/ipc'
 import type { CommandDef, NodeKind, ProfileDef, ServiceDef, SvcState, TreeNode } from '../lib/types'
 import { useApp } from '../store'
 import { useAiw } from '../lib/aiwStore'
-import { openEditor, openNodeConfig, openNodeSetup, openService, openSpace, openAiwDoc, type AiwDoc } from '../lib/dock'
+import { openBot, openEditor, openNodeConfig, openNodeSetup, openService, openSpace, openAiwDoc, type AiwDoc } from '../lib/dock'
 import { focusCommandSession, launchProfile, openTerminal, runCommandInNewTerminal } from '../lib/runner'
 import { findNode, resolveDir } from '../lib/tree'
 import { labelColor, nodeColor } from '../lib/spaces'
 import { loadExampleWorkspace } from '../lib/example'
 import { PopMenu, type MenuItem } from './PopMenu'
+import { BotCreate } from './bot/BotCreate'
 import { GitHubImportModal } from './GitHubImportModal'
 import { Icon, type IconName } from '../lib/icons'
 
@@ -89,6 +90,7 @@ export function Explorer() {
     selectedNodeId, setSelectedNode, setRailView,
     activeWorkspaceId, activeWorkspace, setActiveWorkspace,
     activeSolutionId, setActiveSolution, createSolution, labels, touchRecent,
+    bots, refreshBots,
     refreshTree, refreshCommands, refreshServices, refreshProfiles, focusServiceLogs, servicePort,
     requestStartService, treeError, treeLoading, retryBootstrap,
   } = useApp()
@@ -127,6 +129,7 @@ export function Explorer() {
   const [menu, setMenu] = useState<Menu | null>(null)
   const [wsMenu, setWsMenu] = useState<{ x: number; y: number } | null>(null)
   const [ghOpen, setGhOpen] = useState(false)
+  const [newBotFor, setNewBotFor] = useState<number | null>(null)
   const [filtering, setFiltering] = useState(false)
   const [filter, setFilter] = useState('')
   const [renamingId, setRenamingId] = useState<number | null>(null)
@@ -352,6 +355,14 @@ export function Explorer() {
       items.push({ icon: 'view', label: 'Open dashboard', onClick: () => openSpace(node.id, node.name) })
     }
     if (node.kind === 'project' || node.kind === 'folder') {
+      // A bot is a file in this folder, so it belongs on this menu rather than
+      // behind a rail view — the same rule that put every other document here.
+      const bot = bots.find((b) => b.node_id === node.id)
+      items.push(
+        bot
+          ? { icon: 'bot', label: `Open ${bot.name}`, onClick: () => openBot(node.id, bot.name) }
+          : { icon: 'bot', label: 'Give it a bot…', onClick: () => setNewBotFor(node.id) },
+      )
       items.push({ icon: 'folder', label: 'New folder', onClick: () => void addFolder(node) })
       const dir = resolveDir(nodes, node)
       items.push(
@@ -1107,6 +1118,17 @@ export function Explorer() {
         <PopMenu x={wsMenu.x} y={wsMenu.y} items={workspaceMenuItems()} onClose={() => setWsMenu(null)} />
       )}
       {ghOpen && <GitHubImportModal onClose={() => setGhOpen(false)} />}
+      {newBotFor != null && (
+        <BotCreate
+          nodeId={newBotFor}
+          onClose={() => setNewBotFor(null)}
+          onCreated={(b) => {
+            setNewBotFor(null)
+            void refreshBots()
+            openBot(b.node_id, b.name, true)
+          }}
+        />
+      )}
     </div>
   )
 }

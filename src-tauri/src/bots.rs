@@ -57,6 +57,17 @@ pub struct Bot {
     pub days: String,
     /// Everything after the frontmatter — what this bot is for, in your words.
     pub body: String,
+    /// Skills appended to its instructions, by name. Words, no permissions —
+    /// the cheapest rung on the ladder, and the one most bots stop at.
+    #[serde(default)]
+    pub skills: Vec<String>,
+    /// Which starter it came from, or empty when it was made by hand. Kept so
+    /// the bot can still be told what that starter offers.
+    #[serde(default)]
+    pub template: String,
+    /// The `.devdeck` feature holding its work items. Empty until it has a plan.
+    #[serde(default)]
+    pub feature: String,
     /// The schedule row backing the heartbeat, when there is one.
     pub schedule_id: Option<i64>,
     pub last_woke: Option<i64>,
@@ -99,6 +110,16 @@ fn read(dir: &Path) -> Option<Bot> {
                         "every" => b.every = v,
                         "at" => b.at_min = parse_at(&v),
                         "days" => b.days = v,
+                        "template" => b.template = v,
+                        "feature" => b.feature = v,
+                        "skills" => {
+                            b.skills = v
+                                .trim_matches(|c| c == '[' || c == ']')
+                                .split(',')
+                                .map(|x| x.trim().trim_matches('"').to_string())
+                                .filter(|x| !x.is_empty())
+                                .collect()
+                        }
                         _ => {}
                     }
                 }
@@ -124,6 +145,15 @@ fn write(dir: &Path, b: &Bot) -> Result<(), String> {
         if b.every == "weekly" && !b.days.trim().is_empty() {
             out.push_str(&format!("days: {}\n", b.days.trim()));
         }
+    }
+    if !b.template.trim().is_empty() {
+        out.push_str(&format!("template: {}\n", b.template.trim()));
+    }
+    if !b.feature.trim().is_empty() {
+        out.push_str(&format!("feature: {}\n", b.feature.trim()));
+    }
+    if !b.skills.is_empty() {
+        out.push_str(&format!("skills: [{}]\n", b.skills.join(", ")));
     }
     out.push_str("---\n");
     if !b.body.trim().is_empty() {
@@ -271,6 +301,69 @@ pub fn bot_get(db: tauri::State<Db>, node_id: i64) -> Result<Option<Bot>, String
     Ok(Some(b))
 }
 
+/// Write a bot's file and make the clock agree with it.
+///
+/// Split out from the command so the whole lifecycle can be driven in a test
+/// without a running app — the behaviour worth checking should not be reachable
+/// only through a window.
+#[allow(clippy::too_many_arguments)]
+fn save_into(
+    conn: &Connection,
+    node_id: i64,
+    name: &str,
+    goal: &str,
+    every: &str,
+    at_min: i64,
+    days: &str,
+    body: &str,
+    skills: Vec<String>,
+) -> Result<(Bot, bool), String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("Give the bot a name.".into());
+    }
+    if goal.trim().is_empty() {
+        return Err(
+            "A bot needs a goal. Without one it has nothing to judge a suggestion against.".into(),
+        );
+    }
+
+    let n = db::node_by_id(conn, node_id)?;
+    let dir = dir_of(conn, &n).ok_or("That folder has no place on disk yet.")?;
+    if !dir.is_dir() {
+        return Err(format!("{} is not there.", dir.display()));
+    }
+
+    // Two fields the editor never sends, and must never lose: which starter it
+    // came from and which feature holds its work. Saving a name change is not a
+    // reason to forget where a bot's plan lives.
+    let existing = read(&dir);
+    let created = existing.is_none();
+
+    let mut b = Bot {
+        node_id,
+        node_name: n.name.clone(),
+        dir: dir.to_string_lossy().to_string(),
+        name: name.to_string(),
+        goal: goal.trim().to_string(),
+        every: every.trim().to_string(),
+        at_min: at_min.clamp(0, 1439),
+        days: days.to_string(),
+        body: body.to_string(),
+        skills: skills.into_iter().filter(|s| !s.trim().is_empty()).collect(),
+        template: existing.as_ref().map(|e| e.template.clone()).unwrap_or_default(),
+        feature: existing.as_ref().map(|e| e.feature.clone()).unwrap_or_default(),
+        schedule_id: None,
+        last_woke: None,
+    };
+    write(&dir, &b)?;
+    b.schedule_id = sync_heartbeat(conn, &b)?;
+    if let Some((_, last)) = heartbeat(conn, node_id) {
+        b.last_woke = last;
+    }
+    Ok((b, created))
+}
+
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub fn bot_save(
@@ -283,43 +376,11 @@ pub fn bot_save(
     at_min: i64,
     days: String,
     body: String,
+    skills: Vec<String>,
 ) -> Result<Bot, String> {
-    let name = name.trim().to_string();
-    if name.is_empty() {
-        return Err("Give the bot a name.".into());
-    }
-    if goal.trim().is_empty() {
-        return Err("A bot needs a goal. Without one it has nothing to judge a suggestion against.".into());
-    }
-
     let (bot, created) = {
         let conn = db.0.lock().unwrap();
-        let n = db::node_by_id(&conn, node_id)?;
-        let dir = dir_of(&conn, &n).ok_or("That folder has no place on disk yet.")?;
-        if !dir.is_dir() {
-            return Err(format!("{} is not there.", dir.display()));
-        }
-        let created = read(&dir).is_none();
-
-        let mut b = Bot {
-            node_id,
-            node_name: n.name.clone(),
-            dir: dir.to_string_lossy().to_string(),
-            name,
-            goal: goal.trim().to_string(),
-            every: every.trim().to_string(),
-            at_min: at_min.clamp(0, 1439),
-            days,
-            body,
-            schedule_id: None,
-            last_woke: None,
-        };
-        write(&dir, &b)?;
-        b.schedule_id = sync_heartbeat(&conn, &b)?;
-        if let Some((_, last)) = heartbeat(&conn, node_id) {
-            b.last_woke = last;
-        }
-        (b, created)
+        save_into(&conn, node_id, &name, &goal, &every, at_min, &days, &body, skills)?
     };
 
     crate::activity::record(
@@ -333,25 +394,410 @@ pub fn bot_save(
     Ok(bot)
 }
 
+/// Remove the bot, and only the bot.
+///
+/// The folder, its work items and everything else in the space stay. What it
+/// knew about *you* goes — leaving that behind would mean the next bot on this
+/// folder inheriting a stranger's answers, and a bot quoting an interview you
+/// never gave it is worse than one that knows nothing.
+fn delete_into(conn: &Connection, mind: &Mind, node_id: i64) -> Result<String, String> {
+    let n = db::node_by_id(conn, node_id)?;
+    let dir = dir_of(conn, &n).ok_or("That folder has no place on disk.")?;
+    let name = read(&dir).map(|b| b.name).unwrap_or_else(|| n.name.clone());
+    let _ = fs::remove_file(dir.join(FILE));
+    conn.execute(
+        "DELETE FROM schedules WHERE kind = 'bot' AND node_id = ?1",
+        params![node_id],
+    )
+    .map_err(err)?;
+    mind.forget(node_id);
+    Ok(name)
+}
+
 #[tauri::command]
 pub fn bot_delete(app: tauri::AppHandle, db: tauri::State<Db>, node_id: i64) -> Result<(), String> {
     let name = {
         let conn = db.0.lock().unwrap();
-        let n = db::node_by_id(&conn, node_id)?;
-        let dir = dir_of(&conn, &n).ok_or("That folder has no place on disk.")?;
-        let name = read(&dir).map(|b| b.name).unwrap_or_else(|| n.name.clone());
-        // The file goes; the folder and everything else in it stays. Deleting a
-        // bot must never look like deleting a space.
-        let _ = fs::remove_file(dir.join(FILE));
-        conn.execute(
-            "DELETE FROM schedules WHERE kind = 'bot' AND node_id = ?1",
-            params![node_id],
-        )
-        .map_err(err)?;
-        name
+        delete_into(&conn, &mind()?, node_id)?
     };
-    crate::activity::record(&app, "bot", format!("{name} removed"), "Its folder is untouched.", true, Some(node_id));
+    crate::activity::record(
+        &app,
+        "bot",
+        format!("{name} removed"),
+        "Its folder and its work items are untouched. What it knew about you is gone.",
+        true,
+        Some(node_id),
+    );
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// The work
+// ---------------------------------------------------------------------------
+
+/// A work item, plus the feature it sits in. The bot does not own these — they
+/// are the project's, in `.devdeck`, committed, and a teammate who never opens
+/// DevDeck can still read them.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct WorkRow {
+    pub id: String,
+    pub title: String,
+    /// unclaimed | claimed | in-progress | blocked | done
+    pub status: String,
+    pub assignee: Option<String>,
+    pub feature: String,
+}
+
+pub const STATUSES: [&str; 5] = ["unclaimed", "claimed", "in-progress", "blocked", "done"];
+
+fn deck_of(conn: &Connection, node_id: i64) -> Result<(crate::aiw::deck::Deck, PathBuf), String> {
+    let n = db::node_by_id(conn, node_id)?;
+    let dir = dir_of(conn, &n).ok_or("That folder has no place on disk.")?;
+    Ok((crate::aiw::deck::Deck::new(&dir), dir))
+}
+
+/// Every step this bot is managing. Reads the bot's own feature when it has
+/// one, and everything in the deck otherwise — a bot dropped onto a project
+/// that already had features should show you the work that is there, not
+/// pretend the space is empty.
+#[tauri::command]
+pub fn bot_work(db: tauri::State<Db>, node_id: i64) -> Result<Vec<WorkRow>, String> {
+    let conn = db.0.lock().unwrap();
+    let (deck, dir) = deck_of(&conn, node_id)?;
+    if !deck.exists() {
+        return Ok(vec![]);
+    }
+    let only = read(&dir).map(|b| b.feature).unwrap_or_default();
+
+    let mut out = Vec::new();
+    for slug in deck.feature_slugs() {
+        if !only.is_empty() && slug != only {
+            continue;
+        }
+        let Ok(work) = deck.work(&slug) else { continue };
+        for item in work.meta.items {
+            out.push(WorkRow {
+                id: item.id,
+                title: item.title,
+                status: if item.status.is_empty() { "unclaimed".into() } else { item.status },
+                assignee: item.assignee,
+                feature: slug.clone(),
+            });
+        }
+    }
+    Ok(out)
+}
+
+/// Give the bot's goal a plan: a feature in the deck, one work item per step.
+///
+/// This writes into the project's committed context, which is a bigger gesture
+/// than dropping one file in a folder — so it happens on purpose, from a
+/// button, and never as a side effect of creating a bot.
+fn plan_into(conn: &Connection, node_id: i64, steps: &[String]) -> Result<(String, String, usize), String> {
+    let (deck, dir) = deck_of(conn, node_id)?;
+    let n = db::node_by_id(conn, node_id)?;
+    let mut bot = read(&dir).ok_or("There is no bot in that folder.")?;
+
+    if !deck.exists() {
+        deck.init(&node_id.to_string(), &n.name)?;
+    }
+
+    // Reuse the bot's feature when it has one; the plan is a living list, and a
+    // second "add steps" must not fork it.
+    //
+    // And when it has none, *adopt* a feature that already carries this slug
+    // rather than refusing. Work items outlive the bot on purpose — they are
+    // the project's — so deleting a bot and making another one for the same
+    // goal is an ordinary thing to do, and it used to fail with
+    // "feature already exists" after the new `_bot.md` had already been
+    // written. Adopting is also what you want: those steps are about this goal.
+    let slug = if !bot.feature.is_empty() && deck.feature_dir(&bot.feature).exists() {
+        bot.feature.clone()
+    } else {
+        let base = if bot.goal.trim().is_empty() { bot.name.clone() } else { bot.goal.clone() };
+        let candidate = crate::aiw::deck::slugify(&base);
+        if !candidate.is_empty() && deck.feature_dir(&candidate).exists() {
+            candidate
+        } else {
+            deck.create_feature(&base, &bot.goal, &[])?
+        }
+    };
+
+    let mut work = deck.work(&slug)?.meta;
+    work.feature = slug.clone();
+    let mut added = 0usize;
+    for title in steps {
+        // Titles are the identity here — applying the same plan twice should
+        // not double every line.
+        if work.items.iter().any(|i| i.title.eq_ignore_ascii_case(title)) {
+            continue;
+        }
+        work.items.push(crate::aiw::deck::WorkItem {
+            id: next_work_id(&work.items),
+            title: title.clone(),
+            status: "unclaimed".into(),
+            assignee: None,
+            areas: vec![],
+        });
+        added += 1;
+    }
+    deck.save_work(&slug, &work)?;
+
+    bot.feature = slug.clone();
+    write(&dir, &bot)?;
+    Ok((slug, bot.name, added))
+}
+
+#[tauri::command]
+pub fn bot_plan(
+    app: tauri::AppHandle,
+    db: tauri::State<Db>,
+    node_id: i64,
+    steps: Vec<String>,
+) -> Result<String, String> {
+    let steps: Vec<String> = steps
+        .into_iter()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    if steps.is_empty() {
+        return Err("A plan needs at least one step.".into());
+    }
+
+    let (slug, name, added) = {
+        let conn = db.0.lock().unwrap();
+        plan_into(&conn, node_id, &steps)?
+    };
+
+    crate::activity::record(
+        &app,
+        "bot",
+        format!("{name} has a plan"),
+        format!(
+            "{added} step{} in .devdeck/features/{slug}",
+            if added == 1 { "" } else { "s" }
+        ),
+        true,
+        Some(node_id),
+    );
+    Ok(slug)
+}
+
+fn next_work_id(items: &[crate::aiw::deck::WorkItem]) -> String {
+    let mut n = items.len() + 1;
+    loop {
+        let candidate = format!("w{n}");
+        if !items.iter().any(|i| i.id == candidate) {
+            return candidate;
+        }
+        n += 1;
+    }
+}
+
+/// Add or change one step. `id` empty means a new one.
+#[tauri::command]
+pub fn bot_work_save(
+    db: tauri::State<Db>,
+    node_id: i64,
+    id: String,
+    title: String,
+    status: String,
+    assignee: Option<String>,
+) -> Result<(), String> {
+    let title = title.trim().to_string();
+    if title.is_empty() {
+        return Err("A step needs a title.".into());
+    }
+    if !STATUSES.contains(&status.as_str()) {
+        return Err(format!("{status} is not a status a step can be in."));
+    }
+
+    let conn = db.0.lock().unwrap();
+    let (deck, dir) = deck_of(&conn, node_id)?;
+    let mut bot = read(&dir).ok_or("There is no bot in that folder.")?;
+    let n = db::node_by_id(&conn, node_id)?;
+    if !deck.exists() {
+        deck.init(&node_id.to_string(), &n.name)?;
+    }
+
+    let slug = if !bot.feature.is_empty() && deck.feature_dir(&bot.feature).exists() {
+        bot.feature.clone()
+    } else {
+        let base = if bot.goal.trim().is_empty() { bot.name.clone() } else { bot.goal.clone() };
+        let s = deck.create_feature(&base, &bot.goal, &[])?;
+        bot.feature = s.clone();
+        write(&dir, &bot)?;
+        s
+    };
+
+    let mut work = deck.work(&slug)?.meta;
+    work.feature = slug.clone();
+    match work.items.iter_mut().find(|i| i.id == id) {
+        Some(item) => {
+            item.title = title;
+            item.status = status;
+            item.assignee = assignee.filter(|a| !a.trim().is_empty());
+        }
+        None => work.items.push(crate::aiw::deck::WorkItem {
+            id: if id.trim().is_empty() { next_work_id(&work.items) } else { id },
+            title,
+            status,
+            assignee: assignee.filter(|a| !a.trim().is_empty()),
+            areas: vec![],
+        }),
+    }
+    deck.save_work(&slug, &work)
+}
+
+#[tauri::command]
+pub fn bot_work_delete(db: tauri::State<Db>, node_id: i64, id: String) -> Result<(), String> {
+    let conn = db.0.lock().unwrap();
+    let (deck, dir) = deck_of(&conn, node_id)?;
+    let bot = read(&dir).ok_or("There is no bot in that folder.")?;
+    let slug = if bot.feature.is_empty() { return Ok(()) } else { bot.feature };
+    let mut work = deck.work(&slug)?.meta;
+    work.items.retain(|i| i.id != id);
+    deck.save_work(&slug, &work)
+}
+
+// ---------------------------------------------------------------------------
+// Starters
+// ---------------------------------------------------------------------------
+
+/// Make a bot from a starter: the file, its standards, its skills, and — when
+/// asked — its steps as work items.
+#[allow(clippy::too_many_arguments)]
+fn create_into(
+    conn: &Connection,
+    node_id: i64,
+    template_id: &str,
+    name: &str,
+    goal: &str,
+    every: &str,
+    at_min: i64,
+    days: &str,
+    with_plan: bool,
+) -> Result<Bot, String> {
+    let tpl = crate::botcatalog::get(template_id);
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("Give the bot a name.".into());
+    }
+    if goal.trim().is_empty() {
+        return Err(
+            "A bot needs a goal. Without one it has nothing to judge a suggestion against.".into(),
+        );
+    }
+
+    let n = db::node_by_id(conn, node_id)?;
+    let dir = dir_of(conn, &n).ok_or("That folder has no place on disk yet.")?;
+    if !dir.is_dir() {
+        return Err(format!("{} is not there.", dir.display()));
+    }
+    // A folder has at most one bot. Two would each think they owned the goal.
+    if read(&dir).is_some() {
+        return Err(format!("{} already has a bot.", n.name));
+    }
+
+    // Standards go in the body, not the frontmatter, because they are the part
+    // you will argue with — and a standard you cannot edit is someone else's.
+    let body = match &tpl {
+        Some(t) if !t.standards.is_empty() => {
+            let mut s = String::from("## What it holds the work to\n\n");
+            for line in &t.standards {
+                s.push_str(&format!("- {line}\n"));
+            }
+            s
+        }
+        _ => String::new(),
+    };
+
+    let mut b = Bot {
+        node_id,
+        node_name: n.name.clone(),
+        dir: dir.to_string_lossy().to_string(),
+        name: name.to_string(),
+        goal: goal.trim().to_string(),
+        every: every.trim().to_string(),
+        at_min: at_min.clamp(0, 1439),
+        days: days.to_string(),
+        body,
+        skills: tpl.as_ref().map(|t| t.skills.clone()).unwrap_or_default(),
+        template: tpl.as_ref().map(|t| t.id.clone()).unwrap_or_default(),
+        feature: String::new(),
+        schedule_id: None,
+        last_woke: None,
+    };
+    write(&dir, &b)?;
+    b.schedule_id = sync_heartbeat(conn, &b)?;
+
+    // "Make it" makes what you asked for, or nothing. A bot left on disk beside
+    // an error about its plan is a state you then have to clean up by hand.
+    if with_plan {
+        if let Some(t) = &tpl {
+            if !t.steps.is_empty() {
+                if let Err(e) = plan_into(conn, node_id, &t.steps) {
+                    let _ = fs::remove_file(dir.join(FILE));
+                    let _ = conn.execute(
+                        "DELETE FROM schedules WHERE kind = 'bot' AND node_id = ?1",
+                        params![node_id],
+                    );
+                    return Err(e);
+                }
+            }
+        }
+    }
+
+    // Re-read so the caller gets the feature the plan just set.
+    let mut fresh = read(&dir).unwrap_or(b);
+    fresh.node_id = node_id;
+    fresh.node_name = n.name;
+    fresh.dir = dir.to_string_lossy().to_string();
+    if let Some((id, last)) = heartbeat(conn, node_id) {
+        fresh.schedule_id = Some(id);
+        fresh.last_woke = last;
+    }
+    Ok(fresh)
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub fn bot_create(
+    app: tauri::AppHandle,
+    db: tauri::State<Db>,
+    node_id: i64,
+    template_id: String,
+    name: String,
+    goal: String,
+    every: String,
+    at_min: i64,
+    days: String,
+    with_plan: bool,
+) -> Result<Bot, String> {
+    let bot = {
+        let conn = db.0.lock().unwrap();
+        create_into(
+            &conn,
+            node_id,
+            &template_id,
+            &name,
+            &goal,
+            &every,
+            at_min,
+            &days,
+            with_plan,
+        )?
+    };
+
+    crate::activity::record(
+        &app,
+        "bot",
+        format!("{} created", bot.name),
+        bot.goal.clone(),
+        true,
+        Some(node_id),
+    );
+    Ok(bot)
 }
 
 // ---------------------------------------------------------------------------
@@ -394,6 +840,253 @@ pub fn wake_report(conn: &Connection, node_id: i64) -> Option<String> {
     }
     Some(parts.join(", "))
 }
+
+// ---------------------------------------------------------------------------
+// What it knows about you
+// ---------------------------------------------------------------------------
+//
+// Everything below reads and writes the *personal* store. It is in this file
+// rather than in `botmind.rs` because these are the Tauri entry points and the
+// UI can only call what is registered — but not one of them touches the vault,
+// and none of it is committable.
+
+use crate::botmind::{self as mind_ops, BeliefView, InterviewView, Mind, Suggestion};
+
+fn mind() -> Result<Mind, String> {
+    Mind::open()
+}
+
+fn now() -> String {
+    crate::aiw::events::now_iso()
+}
+
+fn now_ms() -> i64 {
+    chrono::Utc::now().timestamp_millis()
+}
+
+#[tauri::command]
+pub fn bot_interview(node_id: i64) -> Result<InterviewView, String> {
+    mind_ops::interview(&mind()?, node_id)
+}
+
+#[tauri::command]
+pub fn bot_answer(
+    node_id: i64,
+    step: usize,
+    answer: String,
+    skipped: bool,
+) -> Result<InterviewView, String> {
+    mind_ops::answer_question(&mind()?, node_id, step, &answer, skipped, &now())
+}
+
+#[tauri::command]
+pub fn bot_interview_reset(node_id: i64) -> Result<InterviewView, String> {
+    mind_ops::reset_interview(&mind()?, node_id)
+}
+
+#[tauri::command]
+pub fn bot_beliefs(node_id: i64) -> Result<Vec<BeliefView>, String> {
+    mind_ops::beliefs(&mind()?, node_id, now_ms())
+}
+
+#[tauri::command]
+pub fn bot_belief_add(node_id: i64, text: String) -> Result<(), String> {
+    mind_ops::add_belief(&mind()?, node_id, &text, &now())
+}
+
+#[tauri::command]
+pub fn bot_belief_correct(node_id: i64, id: String, text: String) -> Result<(), String> {
+    mind_ops::correct_belief(&mind()?, node_id, &id, &text)
+}
+
+#[tauri::command]
+pub fn bot_belief_pin(node_id: i64, id: String, pinned: bool) -> Result<(), String> {
+    mind_ops::pin_belief(&mind()?, node_id, &id, pinned)
+}
+
+#[tauri::command]
+pub fn bot_belief_drop(node_id: i64, id: String) -> Result<(), String> {
+    mind_ops::drop_belief(&mind()?, node_id, &id)
+}
+
+#[tauri::command]
+pub fn bot_belief_drop_stale(node_id: i64) -> Result<usize, String> {
+    mind_ops::drop_stale(&mind()?, node_id, now_ms())
+}
+
+// -- what it could use -----------------------------------------------------
+
+/// A tool the bot could use, and what you have already said about it.
+#[derive(Serialize, Clone, Debug)]
+pub struct ToolView {
+    #[serde(flatten)]
+    pub offer: crate::botcatalog::ToolOffer,
+    /// added | declined | empty when you have not said.
+    pub decided: String,
+}
+
+#[tauri::command]
+pub fn bot_tools(db: tauri::State<Db>, node_id: i64) -> Result<Vec<ToolView>, String> {
+    let bot = {
+        let conn = db.0.lock().unwrap();
+        let (_, dir) = deck_of(&conn, node_id)?;
+        read(&dir)
+    };
+    let Some(bot) = bot else { return Ok(vec![]) };
+
+    // A bot made by hand still gets offered things: its template is empty, so
+    // it sees the whole catalog rather than nothing at all.
+    let offers: Vec<crate::botcatalog::ToolOffer> = match crate::botcatalog::get(&bot.template) {
+        Some(t) if !t.tools.is_empty() => t.tools,
+        _ => crate::botcatalog::all().into_iter().flat_map(|t| t.tools).collect(),
+    };
+
+    let decided = mind()?.read(node_id)?.meta.tools;
+    Ok(offers
+        .into_iter()
+        .map(|o| ToolView {
+            decided: decided
+                .iter()
+                .find(|d| d.id == o.id)
+                .map(|d| d.response.clone())
+                .unwrap_or_default(),
+            offer: o,
+        })
+        .collect())
+}
+
+/// Say yes or no to a tool.
+///
+/// Saying yes to a *skill* writes it onto the bot, because a skill is only
+/// words. Every other rung returns a sentence saying what you would have to do
+/// yourself — this never installs anything, starts anything, or grants
+/// anything, and pretending otherwise would be the worst lie this app could
+/// tell.
+#[tauri::command]
+pub fn bot_tool_decide(
+    app: tauri::AppHandle,
+    db: tauri::State<Db>,
+    node_id: i64,
+    tool_id: String,
+    response: String,
+) -> Result<String, String> {
+    if response != "added" && response != "declined" {
+        return Err("A tool is either added or declined.".into());
+    }
+    let offer = crate::botcatalog::tool_by_id(&tool_id).ok_or("No such tool.")?;
+
+    mind_ops::record_tool(&mind()?, node_id, &tool_id, &response, &now())?;
+
+    if response == "declined" {
+        return Ok(String::new());
+    }
+
+    match offer.kind.as_str() {
+        "skill" => {
+            // Write under the lock, log without it. `activity::record` takes the
+            // same mutex, so recording while still holding it deadlocks the main
+            // thread — the app then freezes with no error at all, which is the
+            // third time this exact shape has bitten this codebase (the
+            // scheduler's first tick, and `schedule_run_now` before it).
+            let name = {
+                let conn = db.0.lock().unwrap();
+                let (_, dir) = deck_of(&conn, node_id)?;
+                let mut bot = read(&dir).ok_or("There is no bot in that folder.")?;
+                let slug = crate::aiw::deck::slugify(&offer.name);
+                if !bot.skills.contains(&slug) {
+                    bot.skills.push(slug);
+                }
+                write(&dir, &bot)?;
+                bot.name
+            };
+            crate::activity::record(
+                &app,
+                "bot",
+                format!("{name} learned {}", offer.name),
+                "A skill is words. Nothing was installed and nothing gained permissions.",
+                true,
+                Some(node_id),
+            );
+            Ok(String::new())
+        }
+        "agent" => Ok(format!(
+            "Noted. {} is not wired to the agent runtime yet — you would add it under Assistant.",
+            offer.name
+        )),
+        "software" => Ok(format!(
+            "Noted. Install {} yourself from Machine. DevDeck never installs anything on your behalf.",
+            offer.name
+        )),
+        _ => Ok(format!(
+            "Noted. {} would run as a service in this space; set it up on the project when you want it.",
+            offer.name
+        )),
+    }
+}
+
+// -- what it suggests ------------------------------------------------------
+
+#[tauri::command]
+pub fn bot_suggestions(db: tauri::State<Db>, node_id: i64) -> Result<Vec<Suggestion>, String> {
+    let (bot, work) = {
+        let conn = db.0.lock().unwrap();
+        let (deck, dir) = deck_of(&conn, node_id)?;
+        let Some(bot) = read(&dir) else { return Ok(vec![]) };
+        let mut items = Vec::new();
+        if deck.exists() {
+            for slug in deck.feature_slugs() {
+                if !bot.feature.is_empty() && slug != bot.feature {
+                    continue;
+                }
+                if let Ok(w) = deck.work(&slug) {
+                    items.extend(w.meta.items);
+                }
+            }
+        }
+        (bot, items)
+    };
+
+    let doc = mind()?.read(node_id)?;
+    let offers: Vec<crate::botcatalog::ToolOffer> = match crate::botcatalog::get(&bot.template) {
+        Some(t) => t.tools,
+        None => vec![],
+    };
+    let now = chrono::Utc::now().timestamp_millis();
+
+    let sig = crate::botmind::Signals {
+        goal: bot.goal.clone(),
+        every: bot.every.clone(),
+        last_woke: bot.last_woke,
+        work: &work,
+        answered: doc.meta.answers.iter().filter(|a| !a.skipped).count(),
+        skipped: doc.meta.answers.iter().filter(|a| a.skipped).count(),
+        offers: &offers,
+        decided: &doc.meta.tools,
+        now_ms: now,
+    };
+    Ok(crate::botmind::filter_answered(
+        crate::botmind::derive(&sig),
+        &doc.meta.suggestions,
+        now,
+    ))
+}
+
+/// Answer a suggestion. "Not now" comes back in a week; "wrong" never does, and
+/// the reason you gave becomes something it knows — which is the whole point of
+/// asking for one.
+#[tauri::command]
+pub fn bot_suggestion_answer(
+    node_id: i64,
+    id: String,
+    response: String,
+    why: String,
+) -> Result<(), String> {
+    mind_ops::answer_suggestion(&mind()?, node_id, &id, &response, &why, now_ms(), &now())
+}
+
+#[cfg(test)]
+#[path = "bots_scenarios.rs"]
+mod scenarios;
 
 #[cfg(test)]
 mod tests {

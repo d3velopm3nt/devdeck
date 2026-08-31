@@ -12,6 +12,9 @@ import {
 import { NodeConfigPage } from './components/editors/NodeConfigPage'
 import { NodeSetupPage } from './components/editors/NodeSetupPage'
 import { SpaceDetailPage } from './components/SpaceDetailPage'
+import { BotPage } from './components/bot/BotPage'
+import { CAPTURE_BOT } from './lib/devCapture'
+import { openBot } from './lib/dock'
 import { ServiceDetailPage } from './components/ServiceDetailPage'
 import { TerminalView } from './components/TerminalView'
 import { TerminalTab } from './components/TerminalTab'
@@ -111,6 +114,7 @@ const components = {
   'node-setup': (props: IDockviewPanelProps<{ id: number }>) => <NodeSetupPage {...props} />,
   'node-config': (props: IDockviewPanelProps<{ id: number }>) => <NodeConfigPage {...props} />,
   'space-detail': (props: IDockviewPanelProps<{ id: number }>) => <SpaceDetailPage {...props} />,
+  'bot-detail': (props: IDockviewPanelProps<{ id: number; ask?: boolean }>) => <BotPage {...props} />,
   'service-detail': (props: IDockviewPanelProps<{ id: number }>) => <ServiceDetailPage {...props} />,
   welcome: () => <Welcome />,
   terminal: (props: IDockviewPanelProps<{ ptyId: number }>) => (
@@ -154,6 +158,10 @@ export function Dock() {
       restored = false
     }
     if (!restored) buildDefaultLayout(event.api)
+
+    // Dev-only: open one bot page straight away, so a screenshot can be taken
+    // of a screen this session cannot click its way to. Inert when unset.
+    if (CAPTURE_BOT) openBot(Number(CAPTURE_BOT), 'Bot')
 
     // Autosave layout (debounced) so the workspace reopens as you left it.
     let timer: ReturnType<typeof setTimeout> | undefined

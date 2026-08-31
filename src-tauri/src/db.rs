@@ -369,7 +369,12 @@ pub fn checkpoint_state(app: &tauri::AppHandle) {
 }
 
 /// Schema/data migrations that run on every open (each is idempotent).
-fn migrate(conn: &Connection) {
+/// Bring an older database up to the current model.
+///
+/// Public so tests can build a database the same way boot does — `CORE_SCHEMA`
+/// alone is the *original* shape, and a test that skips this is testing a
+/// schema no running copy of DevDeck has.
+pub fn migrate(conn: &Connection) {
     // v2 model: add folder rel_path, and collapse the old
     // workspace→space→folder→project tree into workspace→project→folder.
     let has_rel_path = conn.prepare("SELECT rel_path FROM nodes LIMIT 1").is_ok();

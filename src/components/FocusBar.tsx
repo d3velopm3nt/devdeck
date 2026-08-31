@@ -163,7 +163,7 @@ export function FocusStart({
         <div className="flex flex-col gap-3 px-4 py-3.5">
           <input
             autoFocus
-            className="input text-[12.5px]"
+            className="input w-full text-[12.5px]"
             placeholder="Get the demo build green"
             value={goal}
             onChange={(e) => setGoal(e.target.value)}
@@ -178,7 +178,7 @@ export function FocusStart({
               About which space
             </label>
             <select
-              className="input text-[12px]"
+              className="input w-full text-[12px]"
               value={nodeId ?? ''}
               onChange={(e) => setNodeId(e.target.value ? Number(e.target.value) : null)}
             >

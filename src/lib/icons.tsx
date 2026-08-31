@@ -28,6 +28,7 @@ import {
   Check,
   Plus,
   Pencil,
+  Pin,
   Trash2,
   Settings,
   Terminal,
@@ -102,6 +103,7 @@ export type IconName =
   | 'check'
   | 'add'
   | 'edit'
+  | 'pin'
   | 'delete'
   | 'settings'
   | 'terminal'
@@ -182,6 +184,7 @@ const REGISTRY: Record<IconName, LucideIcon> = {
   check: Check,
   add: Plus,
   edit: Pencil,
+  pin: Pin,
   delete: Trash2,
   settings: Settings,
   terminal: Terminal,

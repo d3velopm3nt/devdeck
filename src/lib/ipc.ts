@@ -116,6 +116,12 @@ export interface Bot {
   at_min: number
   days: string
   body: string
+  /** Skills appended to its instructions. Words, no permissions. */
+  skills: string[]
+  /** Which starter it came from, empty when made by hand. */
+  template: string
+  /** The `.devdeck` feature holding its work items. Empty until it has a plan. */
+  feature: string
   schedule_id: number | null
   last_woke: number | null
 }
@@ -130,8 +136,139 @@ export const botSave = (b: {
   atMin: number
   days: string
   body: string
+  skills: string[]
 }) => invoke<Bot>('bot_save', b)
 export const botDelete = (nodeId: number) => invoke<void>('bot_delete', { nodeId })
+
+export interface BotWork {
+  id: string
+  title: string
+  /** unclaimed | claimed | in-progress | blocked | done */
+  status: string
+  assignee: string | null
+  feature: string
+}
+
+export const WORK_STATUSES = ['unclaimed', 'claimed', 'in-progress', 'blocked', 'done'] as const
+
+export interface ToolOffer {
+  id: string
+  name: string
+  /** skill | agent | software | self-hosted */
+  kind: string
+  what: string
+  /** What saying yes costs. Empty for a skill, which costs nothing. */
+  wants: string
+  because: string
+  /** added | declined | '' when you have not said. */
+  decided: string
+}
+
+export interface BotTemplate {
+  id: string
+  name: string
+  what: string
+  goal_hint: string
+  every: string
+  at_min: number
+  steps: string[]
+  standards: string[]
+  skills: string[]
+  tools: Omit<ToolOffer, 'decided'>[]
+}
+
+export interface BotAnswer {
+  step: number
+  question: string
+  answer: string
+  at: string
+  skipped: boolean
+}
+
+export interface Interview {
+  script: string[]
+  answers: BotAnswer[]
+  step: number
+  done: boolean
+}
+
+export interface Belief {
+  id: string
+  text: string
+  /** you | watched | corrected */
+  source: string
+  was: string
+  created_at: string
+  last_used: string
+  uses: number
+  pinned: boolean
+  /** Whether ageing would offer to drop it. */
+  stale: boolean
+}
+
+export interface BotSuggestion {
+  id: string
+  title: string
+  /** Why this is on screen. Never empty. */
+  evidence: string
+  /** interview | heartbeat | work | tool | goal */
+  kind: string
+  tool_id: string
+}
+
+export const botCatalog = () => invoke<BotTemplate[]>('bot_catalog')
+export const botCreate = (b: {
+  nodeId: number
+  templateId: string
+  name: string
+  goal: string
+  every: string
+  atMin: number
+  days: string
+  withPlan: boolean
+}) => invoke<Bot>('bot_create', b)
+
+export const botWork = (nodeId: number) => invoke<BotWork[]>('bot_work', { nodeId })
+export const botPlan = (nodeId: number, steps: string[]) =>
+  invoke<string>('bot_plan', { nodeId, steps })
+export const botWorkSave = (w: {
+  nodeId: number
+  id: string
+  title: string
+  status: string
+  assignee: string | null
+}) => invoke<void>('bot_work_save', w)
+export const botWorkDelete = (nodeId: number, id: string) =>
+  invoke<void>('bot_work_delete', { nodeId, id })
+
+export const botInterview = (nodeId: number) => invoke<Interview>('bot_interview', { nodeId })
+export const botAnswer = (nodeId: number, step: number, answer: string, skipped: boolean) =>
+  invoke<Interview>('bot_answer', { nodeId, step, answer, skipped })
+export const botInterviewReset = (nodeId: number) =>
+  invoke<Interview>('bot_interview_reset', { nodeId })
+
+export const botBeliefs = (nodeId: number) => invoke<Belief[]>('bot_beliefs', { nodeId })
+export const botBeliefAdd = (nodeId: number, text: string) =>
+  invoke<void>('bot_belief_add', { nodeId, text })
+export const botBeliefCorrect = (nodeId: number, id: string, text: string) =>
+  invoke<void>('bot_belief_correct', { nodeId, id, text })
+export const botBeliefPin = (nodeId: number, id: string, pinned: boolean) =>
+  invoke<void>('bot_belief_pin', { nodeId, id, pinned })
+export const botBeliefDrop = (nodeId: number, id: string) =>
+  invoke<void>('bot_belief_drop', { nodeId, id })
+export const botBeliefDropStale = (nodeId: number) =>
+  invoke<number>('bot_belief_drop_stale', { nodeId })
+
+export const botTools = (nodeId: number) => invoke<ToolOffer[]>('bot_tools', { nodeId })
+/** Returns a sentence when saying yes needs a step DevDeck will not take for
+ *  you — an install, a service, a permission. Empty when it is done. */
+export const botToolDecide = (nodeId: number, toolId: string, response: string) =>
+  invoke<string>('bot_tool_decide', { nodeId, toolId, response })
+
+export const botSuggestions = (nodeId: number) => invoke<BotSuggestion[]>('bot_suggestions', { nodeId })
+export const botSuggestionAnswer = (nodeId: number, id: string, response: string, why = '') =>
+  invoke<void>('bot_suggestion_answer', { nodeId, id, response, why })
+
 
 // ---- the vault: the folder tree that is the Explorer ----
 

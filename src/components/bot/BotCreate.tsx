@@ -49,18 +49,23 @@ export function BotCreate({
     void ipc.botCatalog().then(setTemplates).catch((e) => setErr(String(e)))
   }, [])
 
-  // Folders that could have one. A workspace cannot: a bot is for a thing you
-  // are trying to do, and a workspace is where things live.
+  // Anything in the workspace that could have one, the workspace included —
+  // a bot for the whole of Business is a reasonable thing to want.
   const choices = useMemo(() => {
     if (activeWorkspaceId == null) return []
     const ids = new Set(subtreeIds(nodes, activeWorkspaceId))
     const taken = new Set(bots.map((b) => b.node_id))
-    return nodes.filter((n) => ids.has(n.id) && n.id !== activeWorkspaceId && !taken.has(n.id))
+    return nodes.filter((n) => ids.has(n.id) && !taken.has(n.id))
   }, [nodes, bots, activeWorkspaceId])
 
   const node = nodeId == null ? null : findNode(nodes, nodeId)
   const ws = workspaceOf(nodes, node)
-  const label = (ws?.label ?? ws?.name ?? '').toLowerCase()
+  // Only the tag decides. This used to fall back to the workspace's *name*, so
+  // a space called "Health" came out personal and "Innotrack" came out business
+  // by string luck rather than because anyone had said so. An untagged
+  // workspace is undecided, and the draft says so instead of pretending.
+  const label = (ws?.label ?? '').toLowerCase()
+  const tagged = label.length > 0
   const quiet = QUIET.some((q) => label.includes(q))
   const template = templates.find((t) => t.id === templateId) ?? null
 
@@ -147,20 +152,30 @@ export function BotCreate({
               {ws && (
                 <div
                   className={`mt-2 flex items-center gap-2.5 rounded-lg border px-3 py-2 ${
-                    quiet ? 'border-emerald-500/25 bg-emerald-500/[0.04]' : 'border-sky-500/25 bg-sky-500/[0.04]'
+                    !tagged
+                      ? 'border-line bg-page'
+                      : quiet
+                        ? 'border-emerald-500/25 bg-emerald-500/[0.04]'
+                        : 'border-sky-500/25 bg-sky-500/[0.04]'
                   }`}
                 >
                   <span
                     className={`shrink-0 rounded-full px-2 text-[9px] font-semibold uppercase tracking-[0.04em] leading-[1.7] ${
-                      quiet ? 'bg-emerald-500/15 text-ok' : 'bg-sky-500/15 text-info'
+                      !tagged
+                        ? 'bg-soft text-muted'
+                        : quiet
+                          ? 'bg-emerald-500/15 text-ok'
+                          : 'bg-sky-500/15 text-info'
                     }`}
                   >
-                    {ws.label || ws.name}
+                    {ws.label || 'untagged'}
                   </span>
                   <span className="min-w-0 flex-1 text-[11px] leading-[1.5] text-body">
-                    {quiet
-                      ? 'This space is not work, so it starts quiet: weekly, in the evening. Change it below.'
-                      : 'A work space, so it starts on work hours. Change it below.'}
+                    {!tagged
+                      ? `${ws.name} is not tagged Business or Personal, so this starts on work hours. Right-click its tab to tag it.`
+                      : quiet
+                        ? 'This space is not work, so it starts quiet: weekly, in the evening. Change it below.'
+                        : 'A work space, so it starts on work hours. Change it below.'}
                   </span>
                 </div>
               )}

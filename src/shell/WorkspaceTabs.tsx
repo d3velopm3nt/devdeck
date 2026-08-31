@@ -34,6 +34,7 @@ export function WorkspaceTabs() {
     activeWorkspaceId,
     setActiveWorkspace,
     refreshTree,
+    labels,
   } = useApp()
   const aiw = useAiw()
   const [menu, setMenu] = useState<{ x: number; y: number; id: number } | null>(null)
@@ -86,7 +87,30 @@ export function WorkspaceTabs() {
   const menuItems = (id: number): MenuItem[] => {
     const w = findNode(nodes, id)
     if (!w) return []
+
+    // Tagging a workspace is not decoration. A bot drafted in a space tagged
+    // Personal starts quiet and out of work hours; one in a Business space
+    // starts on them. Until this menu existed there was no way to say which a
+    // workspace was, so the draft guessed from the name.
+    const tags: MenuItem[] = labels
+      .filter((l) => l !== w.label)
+      .map((l) => ({
+        icon: 'tag' as const,
+        label: l,
+        onClick: () =>
+          void ipc.vaultSetMeta(w.id, { label: l }).then(() => refreshTree()),
+      }))
+    if (w.label) {
+      tags.push({
+        icon: 'close',
+        label: `Clear “${w.label}”`,
+        onClick: () => void ipc.vaultSetMeta(w.id, { label: '' }).then(() => refreshTree()),
+      })
+    }
+
     return [
+      ...tags,
+      { separator: true, label: '' },
       {
         icon: 'edit',
         label: 'Rename workspace…',
@@ -149,8 +173,17 @@ export function WorkspaceTabs() {
               {avatarLabel(w.name)}
             </span>
             <span className="flex min-w-0 flex-col leading-tight">
-              <span className={`max-w-[150px] truncate text-[12.5px] ${active ? 'font-semibold' : ''}`}>
-                {w.name}
+              <span className="flex items-center gap-1.5">
+                <span
+                  className={`max-w-[150px] truncate text-[12.5px] ${active ? 'font-semibold' : ''}`}
+                >
+                  {w.name}
+                </span>
+                {w.label && (
+                  <span className="shrink-0 rounded-full bg-soft px-1.5 text-[8.5px] font-semibold uppercase tracking-[0.04em] text-muted">
+                    {w.label}
+                  </span>
+                )}
               </span>
               {/* Always present. It used to appear only when a count was
                   non-zero, which made a quiet workspace look identical to one

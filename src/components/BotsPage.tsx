@@ -64,13 +64,14 @@ export function BotsPage() {
     }
   }, [inWorkspace])
 
-  // Folders that could have one, so the empty state can say whether making a
-  // bot is even possible here.
+  // Anything in the workspace that could have one, the workspace included.
+  // A bot for "Business" is exactly the level people ask for, and excluding it
+  // was a judgement call that turned out to be wrong.
   const candidates = useMemo(() => {
     if (activeWorkspaceId == null) return []
     const ids = new Set(subtreeIds(nodes, activeWorkspaceId))
     const taken = new Set(bots.map((b) => b.node_id))
-    return nodes.filter((n) => ids.has(n.id) && n.id !== activeWorkspaceId && !taken.has(n.id))
+    return nodes.filter((n) => ids.has(n.id) && !taken.has(n.id))
   }, [nodes, bots, activeWorkspaceId])
 
   // A space the Assistant thinks should have one. The signal is real and small:

@@ -299,7 +299,19 @@ let ingestTimer: number | undefined
 import { CAPTURE_RAIL } from './lib/devCapture'
 
 /// Seeded, not fixed: the list lives in settings and you edit it there.
-const DEFAULT_LABELS = ['Product', 'Topic', 'Client', 'Area', 'Service', 'Archive']
+// Business and Personal lead because they are the two that *change behaviour*
+// rather than just reading on a pill: a bot in a Personal space starts quiet and
+// out of work hours. The rest are descriptive.
+const DEFAULT_LABELS = [
+  'Business',
+  'Personal',
+  'Product',
+  'Topic',
+  'Client',
+  'Area',
+  'Service',
+  'Archive',
+]
 const LABELS_KEY = 'node_labels'
 const RECENT_LIMIT_KEY = 'recent_limit'
 const RECENT_KEY = 'devdeck.recent'

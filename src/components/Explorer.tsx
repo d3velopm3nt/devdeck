@@ -114,13 +114,29 @@ export function Explorer() {
 
   // Scoped to a solution when one is picked, otherwise the whole workspace —
   // which still shows solutions as branches, so nothing is hidden by default.
+  // The tree starts at the workspace itself, not at its children.
+  //
+  // It used to start one level down, so there was no way to land on Innotrack —
+  // only on something inside it. That made the workspace a frame rather than a
+  // place: you could not tag it, configure it, or give it a bot, even though it
+  // is a real folder in the vault with its own `_devdeck.md`. Scoping to a
+  // solution still starts at that solution, because then the solution is what
+  // you picked.
   const roots = useMemo(() => {
     if (activeWorkspaceId == null) return []
     if (activeSolution) return nodes.filter((n) => n.parent_id === activeSolution.id)
-    return nodes.filter((n) => n.parent_id === activeWorkspaceId)
+    const ws = nodes.find((n) => n.id === activeWorkspaceId)
+    return ws ? [ws] : []
   }, [nodes, activeWorkspaceId, activeSolution])
   const ws = activeWorkspace()
   const [expanded, setExpanded] = useState<Set<number>>(() => loadSet<number>(EXPANDED_KEY))
+
+  // The workspace row is open when you arrive, or the tree would look empty
+  // until you clicked it. You can still collapse it; this only seeds it.
+  useEffect(() => {
+    if (activeWorkspaceId == null) return
+    setExpanded((prev) => (prev.has(activeWorkspaceId) ? prev : new Set(prev).add(activeWorkspaceId)))
+  }, [activeWorkspaceId])
   // Category groups are open by default; this holds the ones the user collapsed.
   const [collapsedCats, setCollapsedCats] = useState<Set<string>>(() => loadSet<string>(CATS_KEY))
 
@@ -354,6 +370,29 @@ export function Explorer() {
     if (node.kind === 'project') {
       items.push({ icon: 'view', label: 'Open dashboard', onClick: () => openSpace(node.id, node.name) })
     }
+    // A workspace is a folder too, and now that you can land on it, it needs
+    // the things you would want there. Not commands, services or terminals —
+    // work still happens in a project, and widening that is a separate
+    // decision — but a bot, somewhere to put a folder, and a way to open it.
+    if (node.kind === 'workspace') {
+      const bot = bots.find((b) => b.node_id === node.id)
+      items.push(
+        bot
+          ? { icon: 'bot', label: `Open ${bot.name}`, onClick: () => openBot(node.id, bot.name) }
+          : { icon: 'bot', label: 'Give it a bot…', onClick: () => setNewBotFor(node.id) },
+        { icon: 'folder', label: 'New folder', onClick: () => void addFolder(node) },
+        {
+          icon: 'reveal',
+          label: 'Reveal in File Explorer',
+          onClick: () =>
+            void ipc
+              .vaultDir(node.id)
+              .then((d) => ipc.revealInExplorer(d))
+              .catch((e) => alert(String(e))),
+        },
+      )
+    }
+
     if (node.kind === 'project' || node.kind === 'folder') {
       // A bot is a file in this folder, so it belongs on this menu rather than
       // behind a rail view — the same rule that put every other document here.
@@ -816,9 +855,10 @@ export function Explorer() {
             // of them — it is the frame, and it already has a tab.
             if (node.kind !== 'workspace') touchRecent(node.id)
             // A project's click opens its dashboard (the space page); settings
-            // stay on double-click / context menu.
+            // stay on double-click / context menu. A workspace opens the same
+            // page a folder does — it is one, and it has context of its own.
             if (node.kind === 'project') openSpace(node.id, node.name)
-            else if (node.kind !== 'workspace') openNodeConfig(node.id, node.name)
+            else openNodeConfig(node.id, node.name)
           }}
           onDoubleClick={() => {
             if (renaming) return

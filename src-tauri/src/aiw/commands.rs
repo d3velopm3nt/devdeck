@@ -227,6 +227,43 @@ pub fn aiw_create_feature(
     Ok(slug)
 }
 
+/// Every feature in a project with its work items, in one read.
+///
+/// The per-feature call exists because a feature page shows one feature. The
+/// question "what is actually being worked on here" is a different one, and
+/// answering it by asking once per feature turns a page into N round trips
+/// that arrive in an order nobody controls.
+#[derive(serde::Serialize, Clone, Debug)]
+pub struct FeatureWork {
+    pub feature_id: String,
+    pub feature_name: String,
+    pub status: String,
+    pub items: Vec<WorkItem>,
+}
+
+#[tauri::command]
+pub fn aiw_all_work(ws: Ws, project_id: String) -> Result<Vec<FeatureWork>, String> {
+    let p = ws
+        .project(&project_id)
+        .ok_or_else(|| format!("unknown project '{project_id}'"))?;
+    let deck = p.deck();
+    let mut out = Vec::new();
+    for slug in deck.feature_slugs() {
+        // A feature whose documents cannot be read is skipped rather than
+        // failing the whole page: one unreadable file must not make the other
+        // nine features look like they do not exist.
+        let Ok(f) = deck.feature(&slug) else { continue };
+        let items = deck.work(&slug).map(|w| w.meta.items).unwrap_or_default();
+        out.push(FeatureWork {
+            feature_id: slug,
+            feature_name: f.meta.name,
+            status: f.meta.status,
+            items,
+        });
+    }
+    Ok(out)
+}
+
 #[tauri::command]
 pub fn aiw_work_items(
     ws: Ws,

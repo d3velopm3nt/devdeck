@@ -939,6 +939,7 @@ pub fn run() {
             aiw::commands::aiw_features,
             aiw::commands::aiw_create_feature,
             aiw::commands::aiw_work_items,
+            aiw::commands::aiw_all_work,
             aiw::commands::aiw_context,
             aiw::commands::aiw_context_raw,
             aiw::commands::aiw_context_compare,

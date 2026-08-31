@@ -42,7 +42,7 @@ export type RailView =
   | 'aiworkspace'
   | 'machine'
   | 'settings'
-export type BottomTab = 'logs' | 'processes'
+export type BottomTab = 'logs' | 'processes' | 'events'
 
 /** What the Stash view is currently showing. `noProject` narrows to clips
  *  captured outside any project (the sidebar's "no project" tag). */

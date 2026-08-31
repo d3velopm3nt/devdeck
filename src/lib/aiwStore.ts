@@ -33,6 +33,7 @@ import {
   type DecisionRow,
   type DomainEvent,
   type FeatureRow,
+  type FeatureWork,
   type GitCommit,
   type PermissionRow,
   type Session,
@@ -45,7 +46,7 @@ import {
 export type AiwPage =
   | 'chat'
   | 'overview' | 'features' | 'feature' | 'context' | 'agents'
-  | 'conflicts' | 'activity' | 'decisions' | 'git'
+  | 'conflicts' | 'activity' | 'decisions' | 'git' | 'work'
   | 'knowledge' | 'tests' | 'skills' | 'settings'
 
 interface AiwState {
@@ -61,6 +62,10 @@ interface AiwState {
   projects: AiProject[]
   features: FeatureRow[]
   workItems: WorkItem[]
+  /** Every feature's work in the current project — the "what is going on"
+   *  view, as opposed to one feature at a time. */
+  allWork: FeatureWork[]
+  loadAllWork: () => Promise<void>
   agents: AgentDef[]
   sessions: Session[]
   claims: WorkClaim[]
@@ -145,6 +150,7 @@ export const useAiw = create<AiwState>((set, get) => ({
   projects: [],
   features: [],
   workItems: [],
+  allWork: [],
   agents: [],
   sessions: [],
   claims: [],
@@ -208,6 +214,21 @@ export const useAiw = create<AiwState>((set, get) => ({
   selectProject: async (id) => {
     set({ projectId: id, featureId: null, context: null })
     await get().refresh()
+  },
+
+  loadAllWork: async () => {
+    const { projectId } = get()
+    if (!projectId) {
+      set({ allWork: [] })
+      return
+    }
+    try {
+      set({ allWork: await aiw.allWork(projectId) })
+    } catch {
+      // A project whose deck cannot be read has no work to show. Leaving the
+      // previous project's list on screen would be worse than an empty one.
+      set({ allWork: [] })
+    }
   },
 
   selectFeature: async (id) => {

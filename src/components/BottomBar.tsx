@@ -5,10 +5,12 @@
 import { useEffect, useRef } from 'react'
 import { LogViewer } from './LogViewer'
 import { ProcessDashboard } from './ProcessDashboard'
+import { EventStream } from './EventStream'
+import { useAiw } from '../lib/aiwStore'
 import { useApp } from '../store'
 import { Icon } from '../lib/icons'
 
-export type BottomTab = 'logs' | 'processes'
+export type BottomTab = 'logs' | 'processes' | 'events'
 
 const MIN_H = 140
 const bottomChrome = 220 // leave room for the top bar + a slice of the dock
@@ -29,6 +31,7 @@ export function BottomBar({
   onHeight: (h: number) => void
 }) {
   const { logs, svcStates } = useApp()
+  const events = useAiw((s) => s.events)
   const drag = useRef<{ startY: number; startH: number } | null>(null)
 
   // Drag the top edge to resize (dragging up grows the panel).
@@ -89,6 +92,11 @@ export function BottomBar({
       <div className="flex items-center gap-1 px-1">
         <TabBtn id="logs" label="Logs" badge={logs.length} />
         <TabBtn id="processes" label="Processes" badge={runningCount} />
+        {/* The AI Workspace's bus, in the order it happened. Beside the log
+            rather than inside the Assistant: when an agent does something
+            surprising you want the events without leaving the page you were
+            on. */}
+        <TabBtn id="events" label="Events" badge={events.length} />
         <div className="flex-1" />
         <button
           className="flex items-center rounded px-2 py-1 text-dim hover:bg-hover hover:text-ink"
@@ -102,7 +110,13 @@ export function BottomBar({
       {/* body */}
       {!collapsed && (
         <div style={{ height }} className="min-h-0 border-t border-line">
-          {tab === 'logs' ? <LogViewer /> : <ProcessDashboard />}
+          {tab === 'logs' ? (
+            <LogViewer />
+          ) : tab === 'events' ? (
+            <EventStream />
+          ) : (
+            <ProcessDashboard />
+          )}
         </div>
       )}
     </div>

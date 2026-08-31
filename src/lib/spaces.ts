@@ -5,6 +5,22 @@
 import type { CommandDef, Recent, ServiceDef, TreeNode } from './types'
 import { projectOf, findNode } from './tree'
 
+/** What a workspace is for, in the only sense the app acts on.
+ *
+ *  These are not labels. A label is a word you keep for yourself and nothing
+ *  reads it; these two decide behaviour — a routine drafted in a Personal
+ *  space lands in the evening and its bot stays out of your working day, a
+ *  Business one does the opposite. Keeping them in the editable label list let
+ *  them be deleted, and then "Personal" could not be picked anywhere.
+ *
+ *  A workspace carries one of these or neither. Everything inside a workspace
+ *  carries labels instead: the two never appear in the same picker. */
+export const SPACE_TAGS = ['Business', 'Personal'] as const
+
+/** Personal means quiet. Nothing else does. */
+export const isQuiet = (tag: string | null | undefined) =>
+  (tag ?? '').toLowerCase() === 'personal'
+
 export const SPACE_PALETTE = [
   '#7C8CF8', // indigo
   '#4ADE80', // green

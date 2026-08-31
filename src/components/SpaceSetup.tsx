@@ -20,13 +20,9 @@ import * as ipc from '../lib/ipc'
 import { useApp } from '../store'
 import { Icon } from '../lib/icons'
 import { DAYS, hhmm, toMin } from '../lib/bots'
+import { SPACE_TAGS, isQuiet } from '../lib/spaces'
 
 type Step = 'start' | 'draft' | 'review'
-
-/** Tags that mean "this is not work". Everything else is treated as work — a
- *  space that starts too quiet is a nuisance; one that pings you at 07:00 about
- *  your family folder is worse. */
-const QUIET = ['personal', 'private', 'family', 'home', 'health', 'life']
 
 const LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
@@ -40,7 +36,7 @@ function routineText(r: ipc.RoutineDraft): string {
 }
 
 export function SpaceSetup({ onClose }: { onClose: () => void }) {
-  const { nodes, refreshTree, setActiveWorkspace, labels } = useApp()
+  const { nodes, refreshTree, setActiveWorkspace } = useApp()
 
   const [starters, setStarters] = useState<ipc.Starter[]>([])
   const [step, setStep] = useState<Step>('start')
@@ -71,14 +67,12 @@ export function SpaceSetup({ onClose }: { onClose: () => void }) {
   }, [onClose])
 
   const starter = starters.find((s) => s.id === pick) ?? null
-  const quiet = QUIET.some((q) => label.toLowerCase().includes(q))
+  const quiet = isQuiet(label)
 
   // The registry is editable, so the tag a starter suggests may not be in it.
   // Show it anyway: a tag that is set but has no pill is one you can neither
   // see nor take off, and the line above would be claiming a tag you cannot
   // find.
-  const pills = label && !labels.includes(label) ? [...labels, label] : labels
-
   // A name already in the vault fails at the very end, after you have drafted
   // everything. Say it at the field where the name is typed instead.
   const taken =
@@ -257,11 +251,11 @@ export function SpaceSetup({ onClose }: { onClose: () => void }) {
             <div className="overflow-hidden rounded-lg border border-line bg-panel">
               <div className="px-3.5 pb-1.5 pt-3">
                 <span className="text-[9.5px] font-semibold uppercase tracking-[0.06em] text-faint">
-                  Tagged
+                  Business or personal
                 </span>
               </div>
               <div className="flex flex-wrap gap-1.5 px-3.5 pb-3">
-                {pills.map((l) => (
+                {SPACE_TAGS.map((l) => (
                   <button
                     key={l}
                     className={`rounded-full px-3 py-0.5 text-[11px] ${
@@ -286,8 +280,10 @@ export function SpaceSetup({ onClose }: { onClose: () => void }) {
                     : 'Business puts routines and a bot on work hours.'}
               </div>
               <div className="border-t border-line px-3.5 py-2.5 text-[10.5px] leading-[1.55] text-faint">
-                The kind only suggests one — the two are not tied. A decision you are working out at
-                work is Business; a product you ship at the weekend is Personal.
+                The kind above only suggests one — the two are not tied. A decision you are working
+                out at work is Business; a product you ship at the weekend is Personal. This is the
+                workspace&rsquo;s own question, not a label: the words in Settings are for the
+                folders you put inside it.
               </div>
             </div>
 

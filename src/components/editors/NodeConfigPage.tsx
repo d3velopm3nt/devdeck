@@ -19,7 +19,7 @@ import * as ipc from '../../lib/ipc'
 import { useApp } from '../../store'
 import { Icon } from '../../lib/icons'
 import { openSpace, openNodeSetup, openNodeConfig } from '../../lib/dock'
-import { nodeColor } from '../../lib/spaces'
+import { SPACE_TAGS, nodeColor } from '../../lib/spaces'
 
 export function NodeConfigPage({ params }: IDockviewPanelProps<{ id: number }>) {
   const { nodes, commands, services, refreshTree, setSelectedNode, labels } = useApp()
@@ -115,11 +115,11 @@ export function NodeConfigPage({ params }: IDockviewPanelProps<{ id: number }>) 
                 className="input w-[150px] px-2 py-0.5 text-[11.5px]"
                 list="node-labels"
                 defaultValue={node.label ?? ''}
-                placeholder="Label (optional)"
+                placeholder={node.kind === 'workspace' ? 'Business or Personal' : 'Label (optional)'}
                 onBlur={(e) => setLabel(e.target.value)}
               />
               <datalist id="node-labels">
-                {labels.map((s) => (
+                {(node.kind === 'workspace' ? SPACE_TAGS : labels).map((s) => (
                   <option key={s} value={s} />
                 ))}
               </datalist>

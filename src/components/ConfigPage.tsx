@@ -335,10 +335,10 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
             enforces, so you can still type anything on a folder&rsquo;s page.
           </p>
           <p className="mb-2 text-[11px] leading-relaxed text-muted">
-            <span className="text-dim">Business</span> and <span className="text-dim">Personal</span>{' '}
-            stay on the list whatever you save here. They are the two that change behaviour rather
-            than just reading on a pill — a Personal space drafts evening routines and keeps its
-            bot out of work hours — so removing them would leave that unreachable.
+            These are for the folders inside a workspace. A workspace itself is not labelled here —
+            it is <span className="text-dim">Business</span> or <span className="text-dim">Personal</span>,
+            set on the workspace, and that one decides whether its routines land on work hours and
+            whether its bots may interrupt your day.
           </p>
           <textarea
             className="input h-28 w-full resize-y font-mono text-[11.5px]"

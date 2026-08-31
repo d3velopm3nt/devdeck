@@ -20,7 +20,7 @@ import { useMemo, useState } from 'react'
 import { useApp } from '../store'
 import * as ipc from '../lib/ipc'
 import { Icon } from '../lib/icons'
-import { avatarLabel, nodeColor } from '../lib/spaces'
+import { SPACE_TAGS, avatarLabel, nodeColor } from '../lib/spaces'
 import { findNode, subtreeIds, workspaceOf } from '../lib/tree'
 import { PopMenu, type MenuItem } from '../components/PopMenu'
 import { SpaceSetup } from '../components/SpaceSetup'
@@ -35,7 +35,6 @@ export function WorkspaceTabs() {
     activeWorkspaceId,
     setActiveWorkspace,
     refreshTree,
-    labels,
   } = useApp()
   const aiw = useAiw()
   const [menu, setMenu] = useState<{ x: number; y: number; id: number } | null>(null)
@@ -90,12 +89,12 @@ export function WorkspaceTabs() {
     const w = findNode(nodes, id)
     if (!w) return []
 
-    // Tagging a workspace is not decoration. A bot drafted in a space tagged
-    // Personal starts quiet and out of work hours; one in a Business space
-    // starts on them. Until this menu existed there was no way to say which a
-    // workspace was, so the draft guessed from the name.
-    const tags: MenuItem[] = labels
-      .filter((l) => l !== w.label)
+    // Tagging a workspace is not decoration, and it is not a label either. A
+    // bot drafted in a space tagged Personal starts quiet and out of work
+    // hours; one in a Business space starts on them. The words you keep in
+    // Settings are for the folders inside — offering them here would put a
+    // choice that does nothing beside the one that does.
+    const tags: MenuItem[] = SPACE_TAGS.filter((l) => l !== w.label)
       .map((l) => ({
         icon: 'tag' as const,
         label: l,

@@ -12,7 +12,7 @@ import { useAiw } from '../lib/aiwStore'
 import { openBot, openEditor, openNodeConfig, openNodeSetup, openService, openSpace, openAiwDoc, type AiwDoc } from '../lib/dock'
 import { focusCommandSession, launchProfile, openTerminal, runCommandInNewTerminal } from '../lib/runner'
 import { findNode, resolveDir } from '../lib/tree'
-import { labelColor, nodeColor } from '../lib/spaces'
+import { SPACE_TAGS, labelColor, nodeColor } from '../lib/spaces'
 import { loadExampleWorkspace } from '../lib/example'
 import { PopMenu, type MenuItem } from './PopMenu'
 import { BotCreate } from './bot/BotCreate'
@@ -341,7 +341,11 @@ export function Explorer() {
 
     // The label registry, offered rather than typed. Free text still works —
     // the config page has a field for it — but the common case is one of these.
-    for (const l of labels) {
+    //
+    // A workspace is the exception: it carries Business or Personal, which is
+    // a different question with different consequences, so it is offered those
+    // and only those.
+    for (const l of node.kind === 'workspace' ? SPACE_TAGS : labels) {
       if (l === node.label) continue
       items.push({
         icon: 'tag',

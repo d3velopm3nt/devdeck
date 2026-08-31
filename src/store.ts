@@ -312,18 +312,6 @@ const DEFAULT_LABELS = [
   'Service',
   'Archive',
 ]
-/** The two that cannot be edited away. Every other label is a word you keep
- *  for yourself, but these two decide behaviour — a Personal space drafts
- *  evening routines and keeps its bot out of work hours — so a list without
- *  them leaves that behaviour unreachable rather than unused. Editing the list
- *  to drop them once already made "Personal" impossible to pick anywhere. */
-const PINNED_LABELS = ['Business', 'Personal']
-
-const pinLabels = (list: string[]) => [
-  ...PINNED_LABELS,
-  ...list.filter((l) => !PINNED_LABELS.some((p) => p.toLowerCase() === l.toLowerCase())),
-]
-
 const LABELS_KEY = 'node_labels'
 const RECENT_LIMIT_KEY = 'recent_limit'
 const RECENT_KEY = 'devdeck.recent'
@@ -953,10 +941,10 @@ export const useApp = create<AppState>((set, get) => ({
     // have hidden the Recent list entirely on a machine that never set it.
     const rawLimit = await ipc.settingGet(RECENT_LIMIT_KEY)
     const lim = rawLimit === null || rawLimit.trim() === '' ? 3 : Number(rawLimit)
-    set({ labels: pinLabels(list), recentLimit: Number.isFinite(lim) && lim >= 0 ? lim : 3 })
+    set({ labels: list, recentLimit: Number.isFinite(lim) && lim >= 0 ? lim : 3 })
   },
   saveLabels: async (list) => {
-    const clean = pinLabels([...new Set(list.map((s) => s.trim()).filter(Boolean))])
+    const clean = [...new Set(list.map((s) => s.trim()).filter(Boolean))]
     await ipc.settingSet(LABELS_KEY, clean.join('\n'))
     set({ labels: clean })
   },

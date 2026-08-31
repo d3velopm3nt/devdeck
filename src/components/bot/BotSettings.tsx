@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from 'react'
 import * as ipc from '../../lib/ipc'
+import { aiw } from '../../lib/aiw'
 import { Icon } from '../../lib/icons'
 import { DAYS, EVERY_OPTIONS, hhmm, toMin } from '../../lib/bots'
 
@@ -28,6 +29,9 @@ export function BotSettings({
   )
   const [body, setBody] = useState(bot.body)
   const [skills, setSkills] = useState(bot.skills.join(', '))
+  const [agent, setAgent] = useState(bot.agent)
+  const [wakeIntent, setWakeIntent] = useState(bot.wake_intent)
+  const [agents, setAgents] = useState<{ id: string; name: string }[]>([])
   const [err, setErr] = useState('')
   const [saved, setSaved] = useState(false)
 
@@ -41,7 +45,16 @@ export function BotSettings({
     setDays(bot.days ? bot.days.split(',').map((d) => d.trim()).filter(Boolean) : [])
     setBody(bot.body)
     setSkills(bot.skills.join(', '))
+    setAgent(bot.agent)
+    setWakeIntent(bot.wake_intent)
   }, [bot])
+
+  useEffect(() => {
+    void aiw
+      .agents()
+      .then((list) => setAgents(list.map((x) => ({ id: x.id, name: x.name }))))
+      .catch(() => setAgents([]))
+  }, [])
 
   const dirty =
     name !== bot.name ||
@@ -50,7 +63,9 @@ export function BotSettings({
     at !== hhmm(bot.at_min) ||
     days.join(',') !== bot.days ||
     body !== bot.body ||
-    skills !== bot.skills.join(', ')
+    skills !== bot.skills.join(', ') ||
+    agent !== bot.agent ||
+    wakeIntent !== bot.wake_intent
 
   const save = () => {
     setErr('')
@@ -67,6 +82,8 @@ export function BotSettings({
           .split(',')
           .map((s) => s.trim())
           .filter(Boolean),
+        agent,
+        wakeIntent,
       })
       .then(() => {
         setSaved(true)
@@ -158,9 +175,55 @@ export function BotSettings({
 
         <p className="mt-1.5 text-[10.5px] leading-[1.5] text-muted">
           Waking reads the space and writes at most one line to your inbox — nothing at all when
-          there is nothing to say. It does not run an agent: that needs a standing grant the
-          permission model does not offer yet.
+          there is nothing to say. Whether it also runs an agent is the setting below.
         </p>
+      </div>
+
+      {/* Turning a bot from something that watches into something that works.
+          Opt-in, never a default, and the copy says plainly what it can and
+          cannot do — a screen that implied an unattended agent was free to act
+          would be the most dangerous sentence in the app. */}
+      <div>
+        <label className="mb-1 block text-[9.5px] font-semibold uppercase tracking-[0.06em] text-faint">
+          On waking, run
+        </label>
+        <select
+          className="input w-full text-[12px]"
+          value={agent}
+          onChange={(e) => setAgent(e.target.value)}
+        >
+          <option value="">Nothing — just read the space and report</option>
+          {agents.map((ag) => (
+            <option key={ag.id} value={ag.id}>
+              {ag.name}
+            </option>
+          ))}
+        </select>
+
+        {agent ? (
+          <>
+            <input
+              className="input mt-2 w-full text-[12px]"
+              placeholder="What to ask it — blank means the goal"
+              value={wakeIntent}
+              onChange={(e) => setWakeIntent(e.target.value)}
+            />
+            <div className="mt-2 flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/[0.05] px-3 py-2.5">
+              <Icon name="alert" size={13} className="mt-px shrink-0 text-warn" />
+              <div className="text-[10.5px] leading-[1.6] text-body">
+                It will run with nobody watching. Anything it tries that needs approval is refused
+                on the spot — there is no one to ask — so it can only do what you have already
+                allowed in advance, by name, under{' '}
+                <span className="text-ink">Assistant → Settings → Tools</span>. With no standing
+                grants it will run, refuse every tool call, and tell you so.
+              </div>
+            </div>
+          </>
+        ) : (
+          <p className="mt-1.5 text-[10.5px] leading-[1.5] text-muted">
+            A bot that watches. Naming an agent here is what turns it into one that works.
+          </p>
+        )}
       </div>
 
       <div>

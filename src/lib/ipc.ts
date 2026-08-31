@@ -122,6 +122,10 @@ export interface Bot {
   template: string
   /** The `.devdeck` feature holding its work items. Empty until it has a plan. */
   feature: string
+  /** The agent its heartbeat wakes. Empty means it only reads and reports. */
+  agent: string
+  /** What to ask that agent on waking. Empty means the goal. */
+  wake_intent: string
   schedule_id: number | null
   last_woke: number | null
 }
@@ -137,6 +141,8 @@ export const botSave = (b: {
   days: string
   body: string
   skills: string[]
+  agent: string
+  wakeIntent: string
 }) => invoke<Bot>('bot_save', b)
 export const botDelete = (nodeId: number) => invoke<void>('bot_delete', { nodeId })
 

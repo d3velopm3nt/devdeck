@@ -5,12 +5,15 @@
 //!   * a **reminder**, which only tells you,
 //!   * a **command**, which runs a shell line in a space's folder,
 //!   * a **bot**, which is a space's heartbeat: it reads what that space is
-//!     carrying and writes at most one line to your inbox, or stays silent.
-//!     It touches nothing, so it needs no grant,
-//!   * an **agent**, which needs a standing grant and therefore does not exist
-//!     yet — the permission model denies on timeout, so an unattended agent
-//!     either stalls or has to be trusted too widely. The other three need
-//!     none of that, which is why they ship first.
+//!     carrying, writes at most one line to your inbox or stays silent, and —
+//!     only if the bot names one — wakes an agent. What that agent may do is
+//!     decided entirely by the standing grants in `aiw/grants.rs`: an
+//!     unattended call that needs approval is refused on the spot, because
+//!     there is nobody to ask.
+//!
+//! The fourth kind, a bare `agent` schedule with no bot behind it, is still
+//! deliberately absent. A bot is what gives an unattended run a goal, a place
+//! and a record; a naked agent on a timer has none of those.
 //!
 //! **Catching up is per schedule, not global.** A reminder whose moment has
 //! passed must not fire late — being told to go to the gym at nine when you
@@ -317,6 +320,7 @@ fn run_one(
     dir: Option<String>,
     late: bool,
     report: Option<String>,
+    bot: Option<crate::bots::Bot>,
 ) -> (bool, String) {
     let when = if late { " (late)" } else { "" };
 
@@ -353,10 +357,25 @@ fn run_one(
         // all. A heartbeat that reports "all clear" every morning is a
         // heartbeat you learn to scroll past, which costs you the morning it
         // does not.
-        "bot" => match report {
-            Some(r) => (true, r),
-            None => return (true, String::new()),
-        },
+        "bot" => {
+            // Two things can happen on a wake, and the order matters: read the
+            // space first, then run the agent if one is named. Reading never
+            // touches anything, so a run that fails still leaves you the report.
+            //
+            // `wake_agent` is called here rather than under the caller's lock
+            // because a session can take minutes and takes the database itself.
+            let ran = bot
+                .as_ref()
+                .and_then(|b| crate::bots::wake_agent(app, b));
+            match (report, ran) {
+                (Some(r), Some(a)) => (true, format!("{r}. {a}")),
+                (Some(r), None) => (true, r),
+                (None, Some(a)) => (true, a),
+                // Nothing to report and nothing to run. A heartbeat that says
+                // "all clear" every morning is one you filter out.
+                (None, None) => return (true, String::new()),
+            }
+        }
         // Deliberately not implemented: an agent run needs a standing grant,
         // and pretending otherwise would mean running one unsupervised.
         _ => (false, "Agent schedules are not available yet.".into()),
@@ -396,10 +415,11 @@ fn run_one(
 /// command can take seconds, and recording activity needs the same lock.
 pub fn tick(app: &tauri::AppHandle, startup: bool) {
     enum Do {
-        /// The schedule, its working directory, whether it is late, and — for a
-        /// bot — what it found. All four are gathered under the lock, because
-        /// running is done without it.
-        Run(Schedule, Option<String>, bool, Option<String>),
+        /// The schedule, its working directory, whether it is late, what a bot
+        /// found when it looked, and the bot itself. All of it is gathered
+        /// under the lock, because running is done without it — a wake that
+        /// starts an agent can take minutes and needs the database.
+        Run(Schedule, Option<String>, bool, Option<String>, Option<crate::bots::Bot>),
         Missed(Schedule, i64),
     }
 
@@ -424,12 +444,18 @@ pub fn tick(app: &tauri::AppHandle, startup: bool) {
                 todo.push(Do::Missed(s, due_ms));
             } else {
                 let dir = dir_for(&conn, s.node_id);
-                let report = if s.kind == "bot" {
-                    s.node_id.and_then(|n| crate::bots::wake_report(&conn, n))
+                let (report, bot) = if s.kind == "bot" {
+                    match s.node_id {
+                        Some(n) => (
+                            crate::bots::wake_report(&conn, n),
+                            crate::bots::bot_on(&conn, n),
+                        ),
+                        None => (None, None),
+                    }
                 } else {
-                    None
+                    (None, None)
                 };
-                todo.push(Do::Run(s, dir, late, report));
+                todo.push(Do::Run(s, dir, late, report, bot));
             }
         }
         todo
@@ -437,8 +463,8 @@ pub fn tick(app: &tauri::AppHandle, startup: bool) {
 
     for item in todo {
         match item {
-            Do::Run(s, dir, late, report) => {
-                let (ok, note) = run_one(app, &s, dir, late, report);
+            Do::Run(s, dir, late, report, bot) => {
+                let (ok, note) = run_one(app, &s, dir, late, report, bot);
                 let conn = db.0.lock().unwrap();
                 let _ = conn.execute(
                     "UPDATE schedules SET last_run=?1, last_ok=?2, last_note=?3 WHERE id=?4",
@@ -467,19 +493,25 @@ pub fn tick(app: &tauri::AppHandle, startup: bool) {
 /// Run a schedule by hand, ignoring whether it is due.
 #[tauri::command]
 pub fn schedule_run_now(app: tauri::AppHandle, db: tauri::State<Db>, id: i64) -> Result<(), String> {
-    let (s, dir, report) = {
+    let (s, dir, report, bot) = {
         let conn = db.0.lock().unwrap();
         let sql = format!("SELECT {COLS} FROM schedules WHERE id = ?1");
         let s = conn.query_row(&sql, params![id], row).map_err(err)?;
         let dir = dir_for(&conn, s.node_id);
-        let report = if s.kind == "bot" {
-            s.node_id.and_then(|n| crate::bots::wake_report(&conn, n))
+        let (report, bot) = if s.kind == "bot" {
+            match s.node_id {
+                Some(n) => (
+                    crate::bots::wake_report(&conn, n),
+                    crate::bots::bot_on(&conn, n),
+                ),
+                None => (None, None),
+            }
         } else {
-            None
+            (None, None)
         };
-        (s, dir, report)
+        (s, dir, report, bot)
     };
-    let (ok, note) = run_one(&app, &s, dir, false, report);
+    let (ok, note) = run_one(&app, &s, dir, false, report, bot);
     let conn = db.0.lock().unwrap();
     conn.execute(
         "UPDATE schedules SET last_run=?1, last_ok=?2, last_note=?3 WHERE id=?4",

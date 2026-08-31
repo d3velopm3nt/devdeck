@@ -187,6 +187,16 @@ pub struct EventScope {
     pub session_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub agent_id: Option<String>,
+    /// Nobody is watching this one — it was started by a clock, not by you.
+    ///
+    /// Carried on the scope because the scope already travels everywhere a tool
+    /// call goes, and the gate is the one place that has to know. An unattended
+    /// call that needs approval is refused *immediately* rather than after the
+    /// timeout: there is by definition nobody to ask, and waiting ninety
+    /// seconds to reach the same answer only means a bot's morning wake takes
+    /// a quarter of an hour to fail.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub unattended: bool,
 }
 
 impl EventScope {
@@ -213,6 +223,12 @@ impl EventScope {
         self.session_id = Some(session_id.to_string());
         self
     }
+    /// Mark this as started by a clock rather than by a person.
+    pub fn unattended(mut self) -> Self {
+        self.unattended = true;
+        self
+    }
+
     pub fn with_work_item(mut self, work_item_id: &str) -> Self {
         self.work_item_id = Some(work_item_id.to_string());
         self

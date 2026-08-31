@@ -334,6 +334,8 @@ fn renaming_a_bot_does_not_lose_its_starter_or_its_plan() {
         "0",
         "my own notes",
         vec!["release-notes".into()],
+        "",
+        "",
     )
     .unwrap();
 
@@ -362,7 +364,7 @@ fn taking_a_bots_heartbeat_away_removes_the_row() {
     create_into(&w.conn, 2, "blank", "Quiet bot", "Just be there", "daily", 420, "", false).unwrap();
     assert!(heartbeat(&w.conn, 2).is_some());
 
-    save_into(&w.conn, 2, "Quiet bot", "Just be there", "", 420, "", "", vec![]).unwrap();
+    save_into(&w.conn, 2, "Quiet bot", "Just be there", "", 420, "", "", vec![], "", "").unwrap();
     assert!(heartbeat(&w.conn, 2).is_none(), "no routine, no clock");
     assert!(w.has(2, "heartbeat", NOW), "and it says so");
 }
@@ -715,4 +717,50 @@ fn a_failed_plan_leaves_no_half_made_bot() {
     assert!(made.is_err(), "it refused");
     assert!(!dir.join(FILE).exists(), "and left nothing behind");
     assert!(heartbeat(&w.conn, 2).is_none(), "including no orphaned clock");
+}
+
+// ---------------------------------------------------------------------------
+// 10. A bot that names an agent
+// ---------------------------------------------------------------------------
+
+#[test]
+fn naming_an_agent_is_written_down_and_survives_a_save() {
+    let w = world();
+    create_into(&w.conn, 2, "release", "Ops bot", "Ship 1.0", "weekdays", 420, "", true).unwrap();
+    assert_eq!(w.bot(2).agent, "", "a new bot watches; it does not work");
+
+    save_into(
+        &w.conn,
+        2,
+        "Ops bot",
+        "Ship 1.0",
+        "weekdays",
+        420,
+        "",
+        "",
+        vec![],
+        "release-checker",
+        "Check the version files disagree with nothing",
+    )
+    .unwrap();
+
+    let back = w.bot(2);
+    assert_eq!(back.agent, "release-checker");
+    assert!(back.wake_intent.contains("version files"));
+    assert!(
+        std::fs::read_to_string(w.dir("Business/Marketing site").join(FILE))
+            .unwrap()
+            .contains("agent: release-checker"),
+        "it is in the file, so it travels with the folder"
+    );
+
+    // And taking it away again puts the bot back to only watching.
+    save_into(
+        &w.conn, 2, "Ops bot", "Ship 1.0", "weekdays", 420, "", "", vec![], "", "",
+    )
+    .unwrap();
+    assert_eq!(w.bot(2).agent, "");
+    assert!(!std::fs::read_to_string(w.dir("Business/Marketing site").join(FILE))
+        .unwrap()
+        .contains("agent:"));
 }

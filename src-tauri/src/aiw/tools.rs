@@ -748,6 +748,17 @@ impl ToolService {
                         );
                         true
                     }
+                    // Nobody is there. Asking would block for the whole
+                    // timeout and then deny anyway, so it denies now and says
+                    // why — a bot's morning wake should not take a quarter of
+                    // an hour to arrive at "no".
+                    None if scope.unattended => {
+                        denial = Some(format!(
+                            "'{}' needed approval and this was started by a clock, so there was                              nobody to ask. Give it a standing grant if it should be allowed to                              do this unattended.",
+                            call.tool
+                        ));
+                        false
+                    }
                     None => {
                         let outcome =
                             self.ask_permission(bus, agent_id, scope, call, &requested);

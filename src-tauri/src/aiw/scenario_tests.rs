@@ -325,6 +325,7 @@ fn a_mock_agent_goes_through_the_same_runtime_as_a_real_one() {
             intent: Some("Implement conflict resolution".into()),
             areas: vec!["packages/sync".into()],
             depends_on: vec![],
+            unattended: false,
         },
     )
     .unwrap();
@@ -368,6 +369,7 @@ fn a_work_item_is_marked_done_in_devdeck_not_just_in_memory() {
             intent: None,
             areas: vec![],
             depends_on: vec![],
+            unattended: false,
         },
     )
     .unwrap();
@@ -404,6 +406,7 @@ fn the_architects_decision_is_written_to_devdeck_and_reaches_later_context() {
             intent: Some("Define the sync architecture".into()),
             areas: vec![],
             depends_on: vec![],
+            unattended: false,
         },
     )
     .unwrap();
@@ -443,6 +446,7 @@ fn qa_runs_the_configured_tests_and_the_result_is_recorded() {
             intent: Some("Verify synchronisation".into()),
             areas: vec![],
             depends_on: vec![],
+            unattended: false,
         },
     )
     .unwrap();
@@ -705,6 +709,7 @@ fn configuring_a_real_provider_changes_nothing_but_the_provider_layer() {
             intent: None,
             areas: vec![],
             depends_on: vec![],
+            unattended: false,
         },
     )
     .unwrap();
@@ -1371,6 +1376,7 @@ fn a_running_agent_does_not_hold_the_provider_registry() {
                     intent: Some("hold the lock if you can".into()),
                     areas: vec![],
                     depends_on: vec![],
+                    unattended: false,
                 },
             )
         })
@@ -1669,4 +1675,109 @@ fn a_project_with_no_path_is_not_adopted() {
     let w = ws();
     assert_eq!(w.sync_projects(&[]), 0);
     assert!(w.summaries().is_empty());
+}
+
+/// Started by a clock, with nobody to ask.
+///
+/// The whole point of the unattended flag: an approval that nobody can answer
+/// is refused *now*, not after the timeout. Ten uncovered calls would otherwise
+/// take ten timeouts to finish failing, in the middle of the night, holding up
+/// every schedule behind them.
+#[test]
+fn an_unattended_call_is_refused_at_once_rather_than_waiting() {
+    let (_t, w, tyrex, call) = approval_fixture();
+    let scope = super::events::EventScope::feature("tyrex", "offline-synchronisation").unattended();
+
+    let started = std::time::Instant::now();
+    let r = w
+        .project("tyrex")
+        .unwrap()
+        .tools
+        .execute(&w.bus, "qa", &scope, &call, None);
+
+    assert!(!r.ok, "nobody was there, so it is a no");
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(2),
+        "it waited for the timeout instead of answering straight away"
+    );
+    assert!(!tyrex.join("approved.txt").exists());
+
+    // And the reason says what would change it, because the agent is told this
+    // and a person reads it in the log.
+    let why = r.error.unwrap();
+    assert!(why.contains("nobody to ask"), "unhelpful: {why}");
+    assert!(why.contains("standing grant"), "it does not say what would fix it: {why}");
+}
+
+/// The other half: a standing grant is exactly what lets an unattended run do
+/// anything at all.
+#[test]
+fn an_unattended_run_does_what_it_was_granted_and_nothing_else() {
+    let (_t, w, tyrex, call) = approval_fixture();
+    let scope = super::events::EventScope::feature("tyrex", "offline-synchronisation").unattended();
+
+    w.grants()
+        .add(
+            super::grants::Grant {
+                agent_id: "qa".into(),
+                tool: TOOL_FILES.into(),
+                action: "write".into(),
+                scope: super::grants::Scope::Exact("approved.txt".into()),
+                project_id: "tyrex".into(),
+                expires_at: (chrono::Utc::now() + chrono::Duration::days(1)).to_rfc3339(),
+                max_uses: 5,
+                ..Default::default()
+            },
+            super::tools::Access::Write,
+        )
+        .unwrap();
+
+    let granted = w
+        .project("tyrex")
+        .unwrap()
+        .tools
+        .execute(&w.bus, "qa", &scope, &call, None);
+    assert!(granted.ok, "the granted call ran: {:?}", granted.error);
+    assert!(tyrex.join("approved.txt").exists());
+
+    // Anything else is still refused, immediately.
+    let other = ToolCall::new(
+        TOOL_FILES,
+        "write",
+        serde_json::json!({ "path": "elsewhere.txt", "content": "not agreed" }),
+    );
+    let started = std::time::Instant::now();
+    let refused = w
+        .project("tyrex")
+        .unwrap()
+        .tools
+        .execute(&w.bus, "qa", &scope, &other, None);
+    assert!(!refused.ok, "a grant for one file is not a grant for another");
+    assert!(started.elapsed() < std::time::Duration::from_secs(2));
+    assert!(!tyrex.join("elsewhere.txt").exists());
+
+    // The grant recorded what it allowed, so the morning after has an answer.
+    let g = w.grants().all().into_iter().next().unwrap();
+    assert_eq!(g.uses, 1, "one call, one use");
+    assert_eq!(g.recent.len(), 1);
+    assert!(g.recent[0].contains("approved.txt"), "{:?}", g.recent);
+}
+
+/// A read an agent already had does not become an approval just because nobody
+/// is watching. Unattended narrows what `Approval` can do; it must not narrow
+/// the levels that were never going to ask.
+#[test]
+fn unattended_does_not_touch_a_level_that_was_not_asking() {
+    let (_t, w, _tyrex, _call) = approval_fixture();
+    let scope = super::events::EventScope::feature("tyrex", "offline-synchronisation").unattended();
+    w.set_permission("qa", TOOL_FILES, "read").unwrap();
+
+    let read = ToolCall::new(TOOL_FILES, "list", serde_json::json!({ "path": "." }));
+    let r = w
+        .project("tyrex")
+        .unwrap()
+        .tools
+        .execute(&w.bus, "qa", &scope, &read, None);
+
+    assert!(r.ok, "a read stays a read at 3am: {:?}", r.error);
 }

@@ -21,11 +21,17 @@
 //! rebuildable index — and it is why a bot copied into another machine's vault
 //! still has its routine.
 //!
-//! **Waking does not run an agent.** It reads the space and writes at most one
-//! line to your inbox, and only when there is something to say. An unattended
-//! agent needs a standing grant the permission model does not offer, so a
-//! heartbeat that quietly gathers is the honest version of the feature: nothing
-//! can happen to your machine while you are asleep.
+//! **Waking reads the space, and runs an agent only if you named one.** By
+//! default a heartbeat gathers: it writes at most one line to your inbox, and
+//! nothing at all when there is nothing to say. Naming an agent in the bot's
+//! settings is the deliberate step that turns watching into working.
+//!
+//! Even then, what it may actually do is decided entirely by standing grants
+//! (`aiw/grants.rs`). An unattended call that needs approval is refused on the
+//! spot — there is nobody to ask, and waiting for the timeout would only reach
+//! the same answer slowly. So a bot with an agent and no grants runs, refuses
+//! every tool call, and tells you exactly that. Nothing can happen to your
+//! machine that you did not agree to in advance, by name.
 
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
@@ -68,6 +74,19 @@ pub struct Bot {
     /// The `.devdeck` feature holding its work items. Empty until it has a plan.
     #[serde(default)]
     pub feature: String,
+    /// The agent its heartbeat wakes, or empty for a heartbeat that only reads
+    /// and reports.
+    ///
+    /// Naming one is the whole difference between a bot that watches and a bot
+    /// that works, so it is opt-in and never a default. What that agent may
+    /// actually do unattended is decided entirely by standing grants: with none,
+    /// it will get through its turn refusing every tool call, which is safe and
+    /// says so.
+    #[serde(default)]
+    pub agent: String,
+    /// What to ask it when it wakes. Empty means the goal.
+    #[serde(default)]
+    pub wake_intent: String,
     /// The schedule row backing the heartbeat, when there is one.
     pub schedule_id: Option<i64>,
     pub last_woke: Option<i64>,
@@ -111,6 +130,8 @@ fn read(dir: &Path) -> Option<Bot> {
                         "at" => b.at_min = parse_at(&v),
                         "days" => b.days = v,
                         "template" => b.template = v,
+                        "agent" => b.agent = v,
+                        "wake_intent" => b.wake_intent = v,
                         "feature" => b.feature = v,
                         "skills" => {
                             b.skills = v
@@ -154,6 +175,12 @@ fn write(dir: &Path, b: &Bot) -> Result<(), String> {
     }
     if !b.skills.is_empty() {
         out.push_str(&format!("skills: [{}]\n", b.skills.join(", ")));
+    }
+    if !b.agent.trim().is_empty() {
+        out.push_str(&format!("agent: {}\n", b.agent.trim()));
+    }
+    if !b.wake_intent.trim().is_empty() {
+        out.push_str(&format!("wake_intent: {}\n", b.wake_intent.trim()));
     }
     out.push_str("---\n");
     if !b.body.trim().is_empty() {
@@ -317,6 +344,8 @@ fn save_into(
     days: &str,
     body: &str,
     skills: Vec<String>,
+    agent: &str,
+    wake_intent: &str,
 ) -> Result<(Bot, bool), String> {
     let name = name.trim();
     if name.is_empty() {
@@ -353,6 +382,8 @@ fn save_into(
         skills: skills.into_iter().filter(|s| !s.trim().is_empty()).collect(),
         template: existing.as_ref().map(|e| e.template.clone()).unwrap_or_default(),
         feature: existing.as_ref().map(|e| e.feature.clone()).unwrap_or_default(),
+        agent: agent.trim().to_string(),
+        wake_intent: wake_intent.trim().to_string(),
         schedule_id: None,
         last_woke: None,
     };
@@ -377,10 +408,15 @@ pub fn bot_save(
     days: String,
     body: String,
     skills: Vec<String>,
+    agent: String,
+    wake_intent: String,
 ) -> Result<Bot, String> {
     let (bot, created) = {
         let conn = db.0.lock().unwrap();
-        save_into(&conn, node_id, &name, &goal, &every, at_min, &days, &body, skills)?
+        save_into(
+            &conn, node_id, &name, &goal, &every, at_min, &days, &body, skills, &agent,
+            &wake_intent,
+        )?
     };
 
     crate::activity::record(
@@ -516,8 +552,18 @@ fn plan_into(conn: &Connection, node_id: i64, steps: &[String]) -> Result<(Strin
     } else {
         let base = if bot.goal.trim().is_empty() { bot.name.clone() } else { bot.goal.clone() };
         let candidate = crate::aiw::deck::slugify(&base);
-        if !candidate.is_empty() && deck.feature_dir(&candidate).exists() {
+        if candidate.is_empty() {
+            deck.create_feature(&base, &bot.goal, &[])?
+        } else if deck.feature_md(&candidate).is_file() {
+            // A complete feature from a previous bot on this space: adopt it.
             candidate
+        } else if deck.feature_dir(&candidate).exists() {
+            // A directory with no `feature.md` is a half-made feature, and
+            // adopting one produces a plan the agent runtime cannot load. Say
+            // so rather than writing work items into something broken.
+            return Err(format!(
+                ".devdeck/features/{candidate} exists but has no feature.md. Move or remove it,                  then try again."
+            ));
         } else {
             deck.create_feature(&base, &bot.goal, &[])?
         }
@@ -725,6 +771,9 @@ fn create_into(
         skills: tpl.as_ref().map(|t| t.skills.clone()).unwrap_or_default(),
         template: tpl.as_ref().map(|t| t.id.clone()).unwrap_or_default(),
         feature: String::new(),
+        // A new bot watches. Naming an agent is a separate, deliberate act.
+        agent: String::new(),
+        wake_intent: String::new(),
         schedule_id: None,
         last_woke: None,
     };
@@ -1082,6 +1131,111 @@ pub fn bot_suggestion_answer(
     why: String,
 ) -> Result<(), String> {
     mind_ops::answer_suggestion(&mind()?, node_id, &id, &response, &why, now_ms(), &now())
+}
+
+/// The bot on a node, read under a lock the caller already holds.
+///
+/// Separate from `bot_get` because the scheduler gathers everything it needs
+/// while it has the database and then lets go — running a wake can take
+/// minutes, and holding the lock across it would freeze the app.
+pub fn bot_on(conn: &Connection, node_id: i64) -> Option<Bot> {
+    let n = db::node_by_id(conn, node_id).ok()?;
+    let dir = dir_of(conn, &n)?;
+    let mut b = read(&dir)?;
+    b.node_id = node_id;
+    b.node_name = n.name;
+    b.dir = dir.to_string_lossy().to_string();
+    Some(b)
+}
+
+/// The repository a node names, if it names one. Read through the database
+/// because the bot file does not carry it — `_devdeck.md` does.
+fn repo_of(app: &tauri::AppHandle, node_id: i64) -> Option<PathBuf> {
+    use tauri::Manager;
+    let db = app.try_state::<Db>()?;
+    let conn = db.0.lock().ok()?;
+    let n = db::node_by_id(&conn, node_id).ok()?;
+    n.path.filter(|p| !p.trim().is_empty()).map(PathBuf::from)
+}
+
+/// Wake the agent this bot names, if it names one.
+///
+/// Returns the line for your inbox. `None` means it had nothing to say, which
+/// stays the common case.
+///
+/// Runs with `unattended` set, so every tool call that is not covered by a
+/// standing grant is refused immediately rather than blocking for the approval
+/// timeout. That matters more than it sounds: an agent making ten uncovered
+/// calls would otherwise take ten timeouts to finish failing, in the middle of
+/// the night, holding up every other schedule behind it.
+pub fn wake_agent(app: &tauri::AppHandle, bot: &Bot) -> Option<String> {
+    use tauri::Manager;
+
+    if bot.agent.trim().is_empty() {
+        return None;
+    }
+    let ws = app.try_state::<std::sync::Arc<crate::aiw::state::Workspace>>()?;
+    let workspace: std::sync::Arc<crate::aiw::state::Workspace> = (*ws).clone();
+
+    // Make sure the Assistant knows this space before asking it to work there.
+    //
+    // The startup catch-up tick runs before the frontend has had a chance to
+    // sync the tree, so without this the first wake after every launch failed
+    // with "unknown project" — which is exactly the wake you most want to
+    // happen. Registering is idempotent, and uses the same rule the sync does:
+    // context in the node's own folder, code wherever the repository is.
+    if workspace.project(&bot.node_id.to_string()).is_none() {
+        let dir = std::path::PathBuf::from(&bot.dir);
+        let code_root = repo_of(app, bot.node_id).unwrap_or_else(|| dir.clone());
+        workspace.register_project(&bot.node_id.to_string(), &bot.node_name, code_root, dir);
+    }
+
+    // An agent works inside a feature, so a bot with no plan has nowhere to put
+    // it. Better to say that than to hand the runtime an empty feature id and
+    // report whatever it makes of it.
+    if bot.feature.trim().is_empty() {
+        return Some(format!(
+            "{} names {} but has no plan yet — an agent needs steps to work on. Give it some on              the bot's Plan tab.",
+            bot.name, bot.agent
+        ));
+    }
+
+    let intent = if bot.wake_intent.trim().is_empty() {
+        bot.goal.clone()
+    } else {
+        bot.wake_intent.clone()
+    };
+
+    let cmd = crate::aiw::runtime::StartAgentCommand {
+        project_id: bot.node_id.to_string(),
+        feature_id: bot.feature.clone(),
+        agent_id: bot.agent.clone(),
+        work_item_id: None,
+        intent: Some(intent),
+        areas: vec![],
+        depends_on: vec![],
+        unattended: true,
+    };
+
+    match crate::aiw::runtime::AgentRuntime::run(&workspace, &cmd) {
+        Ok(out) => Some(format!(
+            "{} ran {} — {} turn{}, {} file{} touched. {}",
+            bot.name,
+            bot.agent,
+            out.turns,
+            if out.turns == 1 { "" } else { "s" },
+            out.files_touched.len(),
+            if out.files_touched.len() == 1 { "" } else { "s" },
+            if out.summary.trim().is_empty() {
+                out.status.clone()
+            } else {
+                out.summary.clone()
+            }
+        )),
+        // A failed wake is worth saying. A heartbeat that silently stops
+        // working is one you keep believing in.
+        Err(e) => Some(format!("{} could not run {}: {e}", bot.name, bot.agent)),
+    }
 }
 
 #[cfg(test)]

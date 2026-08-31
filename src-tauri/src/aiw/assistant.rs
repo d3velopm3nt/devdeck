@@ -609,6 +609,7 @@ impl Assistant {
                     intent: s("intent"),
                     areas: Vec::new(),
                     depends_on: Vec::new(),
+                    unattended: false,
                 };
 
                 // Begin synchronously so a bad request fails *here*, where the

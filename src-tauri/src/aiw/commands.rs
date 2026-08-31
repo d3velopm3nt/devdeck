@@ -968,6 +968,7 @@ pub fn run_demo_on(
             intent: Some("Define the sync architecture".into()),
             areas: vec![],
             depends_on: vec![],
+            unattended: false,
         },
     )?);
 
@@ -985,6 +986,7 @@ pub fn run_demo_on(
             intent: Some("Build the sync status UI".into()),
             areas: vec!["apps/mobile".into()],
             depends_on: vec!["SyncResult".into()],
+            unattended: false,
         },
     )?;
 
@@ -999,6 +1001,7 @@ pub fn run_demo_on(
             intent: Some("Implement conflict resolution".into()),
             areas: vec!["packages/sync".into(), "api/sync".into()],
             depends_on: vec![],
+            unattended: false,
         },
     )?);
 
@@ -1016,6 +1019,7 @@ pub fn run_demo_on(
             intent: Some("Verify synchronisation behaviour".into()),
             areas: vec!["tests".into()],
             depends_on: vec![],
+            unattended: false,
         },
     )?);
 
@@ -1030,6 +1034,7 @@ pub fn run_demo_on(
             intent: Some("Scaffold the asset register".into()),
             areas: vec!["packages/assets".into()],
             depends_on: vec![],
+            unattended: false,
         },
     )?);
 

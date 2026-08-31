@@ -2,8 +2,9 @@
 //
 // A pillar rather than a face of the Assistant, because most of what belongs
 // here has nothing to do with agents: a reminder only tells you, and a command
-// runs without a model anywhere near it. Those two need no standing grant,
-// which is exactly why they exist today and agent schedules do not.
+// runs without a model anywhere near it. Neither needs a standing grant, which
+// is why both shipped first — and why a bot's heartbeat, which can now wake an
+// agent, is bounded by grants rather than by this page.
 //
 // The one rule worth reading: a **reminder never catches up**. Being told to go
 // to the gym at nine when you meant half six is noise, and noise is how a
@@ -146,8 +147,8 @@ export function SchedulerPage() {
             <div className="text-[12.5px] text-dim">Nothing scheduled</div>
             <div className="max-w-[400px] text-[11.5px] leading-relaxed text-muted">
               A schedule is a reminder that only tells you, or a command that runs in a space’s
-              folder. Give a space a bot and its heartbeat shows up here too. Agent schedules come
-              once agents can hold a standing grant.
+              folder. Give a space a bot and its heartbeat shows up here too — and a bot that names
+              an agent wakes it, bounded by the standing grants you gave.
             </div>
           </div>
         ) : (
@@ -175,7 +176,9 @@ export function SchedulerPage() {
                     {s.kind === 'command' ? (
                       <span className="truncate font-mono">{s.payload}</span>
                     ) : s.kind === 'bot' ? (
-                      <span>Reads the space and writes at most one line. Nothing runs.</span>
+                      <span>
+                        Reads the space, and runs the agent the bot names — if it names one.
+                      </span>
                     ) : (
                       <span>Tells you. Nothing runs.</span>
                     )}

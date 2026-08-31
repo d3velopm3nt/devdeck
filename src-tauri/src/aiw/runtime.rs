@@ -43,6 +43,11 @@ pub struct StartAgentCommand {
     /// Symbols it reads — what makes it go stale when they change.
     #[serde(default)]
     pub depends_on: Vec<String>,
+    /// Started by a clock rather than by you. Anything needing approval is
+    /// refused straight away, because there is nobody to ask — only standing
+    /// grants get through.
+    #[serde(default)]
+    pub unattended: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -117,9 +122,12 @@ impl AgentRuntime {
         }
 
         let session_id = new_session_id();
-        let scope = EventScope::feature(&cmd.project_id, &cmd.feature_id)
+        let mut scope = EventScope::feature(&cmd.project_id, &cmd.feature_id)
             .with_agent(&cmd.agent_id)
             .with_session(&session_id);
+        if cmd.unattended {
+            scope = scope.unattended();
+        }
 
         // -- 1. start ------------------------------------------------------
         let started = ws.bus.publish(

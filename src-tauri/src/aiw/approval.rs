@@ -124,6 +124,24 @@ pub fn describe(tool: &str, action: &str, args: &serde_json::Value) -> String {
             }
         }
         ("process", "stop") => "stop the application".into(),
+        // A bot outlives the conversation that asked for it, so the prompt
+        // names the whole thing — what it is for and when it will wake — not
+        // just that a file appears somewhere.
+        ("bots", "create") => {
+            let every = match s("every") {
+                "" => "weekdays",
+                e => e,
+            };
+            let at = match s("at") {
+                "" => "08:00",
+                a => a,
+            };
+            format!(
+                "leave a bot called \"{}\" here, waking {every} at {at} — {}",
+                s("name"),
+                s("goal")
+            )
+        }
         ("tests", _) => {
             let c = s("command");
             if c.is_empty() {
@@ -266,6 +284,39 @@ pub fn request_for(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A bot outlives the conversation that asked for it, so the prompt has to
+    /// name the whole thing. "bots.create" would be a question nobody can
+    /// answer.
+    #[test]
+    fn a_bot_prompt_says_what_it_is_for_and_when_it_wakes() {
+        let d = describe(
+            "bots",
+            "create",
+            &serde_json::json!({
+                "name": "Marketing site bot",
+                "goal": "Keep the pricing page honest",
+                "every": "weekly",
+                "at": "18:00"
+            }),
+        );
+        assert!(d.contains("Marketing site bot"), "{d}");
+        assert!(d.contains("Keep the pricing page honest"), "{d}");
+        assert!(d.contains("weekly") && d.contains("18:00"), "{d}");
+    }
+
+    /// The defaults are the ones the tool documents, and the prompt must show
+    /// the time it will actually wake rather than leaving it blank.
+    #[test]
+    fn a_bot_prompt_fills_in_the_defaults_it_will_use() {
+        let d = describe(
+            "bots",
+            "create",
+            &serde_json::json!({ "name": "Site bot", "goal": "Ship it" }),
+        );
+        assert!(d.contains("weekdays") && d.contains("08:00"), "{d}");
+    }
+
     use std::sync::Arc;
 
     fn req(tool: &str, action: &str, args: serde_json::Value) -> ApprovalRequest {

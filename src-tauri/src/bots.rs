@@ -768,7 +768,7 @@ pub fn bot_work_delete(db: tauri::State<Db>, node_id: i64, id: String) -> Result
 /// Make a bot from a starter: the file, its standards, its skills, and — when
 /// asked — its steps as work items.
 #[allow(clippy::too_many_arguments)]
-fn create_into(
+pub(crate) fn create_into(
     conn: &Connection,
     node_id: i64,
     template_id: &str,

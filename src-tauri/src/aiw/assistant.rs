@@ -29,7 +29,7 @@ use super::personal::{MemoryMeta, PersonalStore};
 use super::provider::{AgentAction, AgentRequest, AgentResponse, ChatTurn, Observation};
 use super::runtime::{AgentRuntime, StartAgentCommand};
 use super::state::Workspace;
-use super::tools::{is_assistant_tool, ToolCall, TOOL_DELEGATE, TOOL_MEMORY};
+use super::tools::{is_assistant_tool, ToolCall, TOOL_BOTS, TOOL_DELEGATE, TOOL_MEMORY};
 
 /// The built-in orchestrator's agent id. It is a real entry in the agent list
 /// so it inherits provider selection and the permission matrix.
@@ -517,6 +517,7 @@ impl Assistant {
             return match call.tool.as_str() {
                 TOOL_DELEGATE => Self::delegate(ws, conv, call, delegated),
                 TOOL_MEMORY => Self::memory(convs, conv, call),
+                TOOL_BOTS => Self::make_bot(ws, conv, call, scope, cause),
                 _ => (false, format!("unknown assistant tool '{}'", call.tool)),
             };
         }
@@ -544,6 +545,80 @@ impl Assistant {
                 r.error.unwrap_or_else(|| "failed".into())
             },
         )
+    }
+
+    /// Leave a bot behind in the space this conversation is about.
+    ///
+    /// Always asked first, whatever the permission matrix says. Every other
+    /// assistant tool acts inside the conversation and stops when it ends; a
+    /// bot keeps its own heartbeat afterwards, so the person who will live
+    /// with it gets to see it written out and say no.
+    fn make_bot(
+        ws: &Arc<Workspace>,
+        conv: &ConversationMeta,
+        call: &ToolCall,
+        scope: &EventScope,
+        cause: &DomainEvent,
+    ) -> (bool, String) {
+        let s = |k: &str| {
+            call.args
+                .get(k)
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_string()
+        };
+        let Some(project_id) = conv.project_id.as_deref() else {
+            return (
+                false,
+                "a bot lives in a space — pick one for this conversation first".into(),
+            );
+        };
+        let (name, goal) = (s("name"), s("goal"));
+        if name.is_empty() || goal.is_empty() {
+            return (false, "a bot needs a name and a goal".into());
+        }
+        if !ws.can_make_bots() {
+            return (false, "this build cannot create bots".into());
+        }
+
+        // Started by a clock rather than by a person, there is nobody to ask,
+        // and a bot that quietly makes more bots overnight is the last thing
+        // anyone wants. Refuse before prompting rather than after timing out.
+        if scope.unattended {
+            return (
+                false,
+                "making a bot needs a person to say yes, and this run has nobody watching".into(),
+            );
+        }
+
+        let outcome = ws.ask_approval(ASSISTANT_ID, call, scope, cause);
+        if !outcome.allows() {
+            return (false, format!("not made — {outcome:?}"));
+        }
+
+        let every = match s("every").as_str() {
+            "" => "weekdays".to_string(),
+            e => e.to_string(),
+        };
+        let at_min = match s("at").as_str() {
+            "" => 8 * 60,
+            a => {
+                let (h, m) = a.split_once(':').unwrap_or((a, "0"));
+                h.trim().parse::<i64>().unwrap_or(8) * 60 + m.trim().parse::<i64>().unwrap_or(0)
+            }
+        };
+
+        match ws.make_bot(super::state::BotDraft {
+            project_id: project_id.to_string(),
+            name: name.clone(),
+            goal,
+            every,
+            at_min: at_min.clamp(0, 1439),
+        }) {
+            Ok(note) => (true, note),
+            Err(e) => (false, e),
+        }
     }
 
     fn delegate(

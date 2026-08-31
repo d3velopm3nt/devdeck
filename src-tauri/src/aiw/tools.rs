@@ -240,6 +240,7 @@ pub const TOOL_TESTS: &str = "tests";
 pub const TOOL_KNOWLEDGE: &str = "knowledge";
 /// Orchestrator-only: hand a piece of work to a specialist agent.
 pub const TOOL_DELEGATE: &str = "delegate";
+pub const TOOL_BOTS: &str = "bots";
 /// Orchestrator-only: what the assistant remembers about you, across projects.
 /// Backed by the personal store, never by a project's `.devdeck`.
 pub const TOOL_MEMORY: &str = "memory";
@@ -253,7 +254,7 @@ pub const TOOL_MEMORY: &str = "memory";
 /// whole workspace and the other writes to the personal store, and a
 /// project-scoped tool service has no business reaching either.
 pub fn is_assistant_tool(tool: &str) -> bool {
-    tool == TOOL_DELEGATE || tool == TOOL_MEMORY
+    tool == TOOL_DELEGATE || tool == TOOL_MEMORY || tool == TOOL_BOTS
 }
 
 /// Shorthand for a JSON Schema object.
@@ -451,6 +452,26 @@ pub fn registry() -> Vec<ToolInfo> {
                     schema(serde_json::json!({}), &[]),
                 ),
             ],
+        },
+        ToolInfo {
+            id: TOOL_BOTS.into(),
+            name: "Bots".into(),
+            description: "Set up something that keeps watching a space after this conversation ends"
+                .into(),
+            actions: vec![act(
+                "create",
+                "Leave a bot behind in the space this conversation is about. A bot manages: it                  holds a goal and a heartbeat, and it is created with no team and no agent, so                  it watches and reports until a person gives it someone to put work on. Always                  needs the person to say yes first.",
+                Access::Write,
+                schema(
+                    serde_json::json!({
+                        "name": { "type": "string", "description": "What to call it, e.g. 'Marketing site bot'." },
+                        "goal": { "type": "string", "description": "The outcome it is managing, in one line. It cannot be blank." },
+                        "every": { "type": "string", "description": "daily | weekdays | weekly. Defaults to weekdays." },
+                        "at": { "type": "string", "description": "Local time it wakes, HH:MM. Defaults to 08:00." }
+                    }),
+                    &["name", "goal"],
+                ),
+            )],
         },
         ToolInfo {
             id: TOOL_MEMORY.into(),

@@ -569,6 +569,39 @@ pub fn run() {
     let aiw_workspace = std::sync::Arc::new(aiw::state::Workspace::new());
     // Subscribers can only be installed once the workspace is shared.
     aiw::state::Workspace::install_handlers(&aiw_workspace);
+    // Teach it how to make a bot. `aiw` knows nothing about this database — a
+    // heartbeat is a schedules row — so the app hands it the one operation it
+    // cannot do for itself, and a build that never does this simply cannot
+    // make bots rather than half-making them.
+    {
+        let app = aiw_workspace.clone();
+        let _ = &app;
+        aiw_workspace.set_bot_maker(Box::new(move |d: aiw::state::BotDraft| {
+            let node_id: i64 = d
+                .project_id
+                .parse()
+                .map_err(|_| format!("'{}' is not a space in your vault", d.project_id))?;
+            // Its own connection rather than the shared one: this runs on an
+            // agent's thread, and reaching for a mutex another command may be
+            // holding is exactly the shape that has frozen this app before.
+            let conn = crate::db::open();
+            let bot = bots::create_into(
+                &conn,
+                node_id,
+                "blank",
+                &d.name,
+                &d.goal,
+                &d.every,
+                d.at_min,
+                "",
+                false,
+            )?;
+            Ok(format!(
+                "{} is in {} — it wakes on its own heartbeat and watches. It has no team and                  no agent, so it reports and does nothing else until you give it someone.",
+                bot.name, bot.node_name
+            ))
+        }));
+    }
     // Re-register whatever this install was pointed at last time. Without this
     // the project list is lost on every restart, which looks exactly like the
     // projects themselves being gone.

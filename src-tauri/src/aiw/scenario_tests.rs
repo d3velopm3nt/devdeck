@@ -1810,3 +1810,52 @@ fn an_unattended_run_counts_what_it_was_refused() {
     assert!(!missing.denied, "it was attempted and failed, not refused");
     assert!(!tyrex.join("nope.txt").exists());
 }
+
+/// A build that was never taught how to make a bot must say so, not pretend.
+///
+/// The assistant checks before it offers, so this is the difference between
+/// "I cannot do that here" and a tool call that appears to work and leaves
+/// nothing behind.
+#[test]
+fn a_workspace_with_no_bot_maker_refuses_rather_than_pretending() {
+    let ws = Workspace::new();
+    assert!(!ws.can_make_bots());
+    let e = ws
+        .make_bot(super::state::BotDraft {
+            project_id: "8".into(),
+            name: "Site bot".into(),
+            goal: "Ship it".into(),
+            every: "weekdays".into(),
+            at_min: 480,
+        })
+        .unwrap_err();
+    assert!(e.contains("cannot create bots"), "{e}");
+}
+
+/// And one that was taught passes the draft through untouched — the summary a
+/// person approved and the bot that gets made have to be the same thing.
+#[test]
+fn the_draft_that_was_approved_is_the_draft_that_is_made() {
+    let ws = Workspace::new();
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let sink = seen.clone();
+    ws.set_bot_maker(Box::new(move |d| {
+        *sink.lock().unwrap() = Some(d.clone());
+        Ok(format!("{} made", d.name))
+    }));
+    let out = ws
+        .make_bot(super::state::BotDraft {
+            project_id: "8".into(),
+            name: "Site bot".into(),
+            goal: "Ship it".into(),
+            every: "weekly".into(),
+            at_min: 18 * 60,
+        })
+        .unwrap();
+    assert_eq!(out, "Site bot made");
+    let got = seen.lock().unwrap().clone().expect("the draft reached it");
+    assert_eq!(got.name, "Site bot");
+    assert_eq!(got.goal, "Ship it");
+    assert_eq!(got.every, "weekly");
+    assert_eq!(got.at_min, 18 * 60);
+}

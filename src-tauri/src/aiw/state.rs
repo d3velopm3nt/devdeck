@@ -222,6 +222,25 @@ const APPROVAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(90)
 pub const GRANT_DAYS: i64 = 7;
 pub const GRANT_USES: u32 = 20;
 
+/// What the assistant asks for when it is told to set something up to watch a
+/// space. Deliberately small: a bot it cannot describe in one screen is a bot
+/// nobody can approve.
+#[derive(Clone, Debug)]
+pub struct BotDraft {
+    pub project_id: String,
+    pub name: String,
+    pub goal: String,
+    /// daily | weekdays | weekly
+    pub every: String,
+    pub at_min: i64,
+}
+
+/// Making a bot writes a file *and* a schedules row, and nothing in `aiw`
+/// knows about that database — the arrow points down. So the outer app hands
+/// the workspace a way to do it and the assistant asks; a build that never
+/// hands one over simply cannot make bots, and says so.
+pub type BotMaker = Box<dyn Fn(BotDraft) -> Result<String, String> + Send + Sync>;
+
 pub struct Workspace {
     pub bus: SharedBus,
     pub conflicts: ConflictService,
@@ -246,6 +265,9 @@ pub struct Workspace {
     /// opened, so a machine that cannot write the file pre-authorises nothing
     /// rather than pre-authorising everything.
     grants: std::sync::OnceLock<Arc<super::grants::GrantStore>>,
+    /// Supplied by the app at startup. Unset in tests and in any headless
+    /// build, where asking for a bot fails honestly rather than pretending.
+    bot_maker: std::sync::OnceLock<BotMaker>,
     pub providers: Mutex<ProviderRegistry>,
     pub reconciler: Box<dyn ContextReconciler>,
     projects: Mutex<HashMap<String, Arc<ProjectHandle>>>,
@@ -276,6 +298,7 @@ impl Workspace {
             bus: Arc::new(EventBus::new()),
             conflicts: ConflictService::new(),
             approvals: Arc::new(ApprovalBroker::new(timeout)),
+            bot_maker: std::sync::OnceLock::new(),
             conversations: std::sync::OnceLock::new(),
             grants: std::sync::OnceLock::new(),
             providers: Mutex::new(ProviderRegistry::new()),
@@ -1038,6 +1061,83 @@ impl Workspace {
     }
 
     /// Requests waiting on a person right now.
+    /// Ask a person about a tool call the assistant is about to run itself.
+    ///
+    /// The project `ToolService` does this for everything it dispatches; the
+    /// assistant's own tools never went through it, which was fine while they
+    /// only touched memory and sessions. A bot outlives the conversation, so
+    /// it takes the same route: the same broker, the same two events, the same
+    /// queue the approval bar is already reading.
+    pub fn ask_approval(
+        &self,
+        agent_id: &str,
+        call: &super::tools::ToolCall,
+        scope: &super::events::EventScope,
+        cause: &super::events::DomainEvent,
+    ) -> super::approval::Outcome {
+        let request = super::approval::request_for(
+            agent_id,
+            &call.tool,
+            &call.action,
+            &call.args,
+            scope.project_id.as_deref(),
+            scope.feature_id.as_deref(),
+            scope.session_id.as_deref(),
+            self.approvals.timeout(),
+        );
+        let bus = &self.bus;
+        let outcome = self.approvals.ask(request.clone(), |r| {
+            bus.emit(
+                super::events::DomainEvent::new(
+                    super::events::EventType::ToolApprovalRequested,
+                    scope.clone().with_agent(agent_id),
+                    serde_json::json!({
+                        "approvalId": r.id,
+                        "tool": r.tool,
+                        "action": r.action,
+                        "summary": r.summary,
+                        "detail": r.detail,
+                        "expiresIn": r.expires_in,
+                    }),
+                )
+                .caused_by(cause),
+            );
+        });
+        bus.emit(
+            super::events::DomainEvent::new(
+                super::events::EventType::ToolApprovalResolved,
+                scope.clone().with_agent(agent_id),
+                serde_json::json!({
+                    "approvalId": request.id,
+                    "tool": request.tool,
+                    "summary": request.summary,
+                    "allowed": outcome.allows(),
+                    "outcome": outcome,
+                }),
+            )
+            .caused_by(cause),
+        );
+        outcome
+    }
+
+    /// Teach this workspace how to make a bot. Called once, at startup.
+    pub fn set_bot_maker(&self, f: BotMaker) {
+        let _ = self.bot_maker.set(f);
+    }
+
+    /// Whether asking for a bot can lead anywhere. The assistant checks before
+    /// offering, so it never proposes something it cannot carry out.
+    pub fn can_make_bots(&self) -> bool {
+        self.bot_maker.get().is_some()
+    }
+
+    pub fn make_bot(&self, draft: BotDraft) -> Result<String, String> {
+        match self.bot_maker.get() {
+            Some(f) => f(draft),
+            None => Err("this build cannot create bots".into()),
+        }
+    }
+
     pub fn pending_approvals(&self) -> Vec<ApprovalRequest> {
         self.approvals.pending()
     }

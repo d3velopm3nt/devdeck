@@ -929,6 +929,7 @@ pub fn run() {
             conn::conn_query_delete,
             conn::conn_runs_list,
             activity::activity_list,
+            activity::activity_for,
             activity::activity_clear,
             activity::service_runs,
             toast_show,

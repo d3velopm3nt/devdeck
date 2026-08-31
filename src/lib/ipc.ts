@@ -79,7 +79,14 @@ export const scheduleSave = (s: {
 export const scheduleEnable = (id: number, on: boolean) =>
   invoke<void>('schedule_enable', { id, on })
 export const scheduleDelete = (id: number) => invoke<void>('schedule_delete', { id })
-export const scheduleRunNow = (id: number) => invoke<void>('schedule_run_now', { id })
+export interface RunOutcome {
+  ok: boolean
+  /** Empty when a reminder simply told you — which is the whole job. */
+  note: string
+  ran_at: number
+}
+export const scheduleRunNow = (id: number) =>
+  invoke<RunOutcome>('schedule_run_now', { id })
 
 // ---- focus: a goal, a clock, and permission to ignore everything else ----
 
@@ -638,6 +645,10 @@ export const recentsList = () => invoke<Recent[]>('recents_list')
 
 // ---- activity ----
 export const activityList = (limit = 60) => invoke<Activity[]>('activity_list', { limit })
+/** What one schedule, bot or service has done, newest first. A rolling
+ *  history: the feed is trimmed, so this means "as far back as is kept". */
+export const activityFor = (refId: number, kinds: string[], limit = 8) =>
+  invoke<Activity[]>('activity_for', { refId, kinds, limit })
 export const activityClear = () => invoke<void>('activity_clear')
 /** Durable run history for one service: start, stop, duration, exit code. */
 export const serviceRuns = (serviceId: number, limit = 25) =>

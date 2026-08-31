@@ -478,9 +478,26 @@ pub fn tick(app: &tauri::AppHandle, startup: bool) {
     }
 }
 
+/// What one run did, so the row that asked for it can say so.
+///
+/// A reminder that worked has an empty note — telling you *is* the whole job
+/// — and returning nothing at all made a successful run look exactly like a
+/// button that does nothing. `ok` and the note together are enough for the
+/// screen to say something true either way.
+#[derive(serde::Serialize, Clone, Debug)]
+pub struct RunOutcome {
+    pub ok: bool,
+    pub note: String,
+    pub ran_at: i64,
+}
+
 /// Run a schedule by hand, ignoring whether it is due.
 #[tauri::command]
-pub fn schedule_run_now(app: tauri::AppHandle, db: tauri::State<Db>, id: i64) -> Result<(), String> {
+pub fn schedule_run_now(
+    app: tauri::AppHandle,
+    db: tauri::State<Db>,
+    id: i64,
+) -> Result<RunOutcome, String> {
     let (s, dir, report, bot) = {
         let conn = db.0.lock().unwrap();
         let sql = format!("SELECT {COLS} FROM schedules WHERE id = ?1");
@@ -500,11 +517,12 @@ pub fn schedule_run_now(app: tauri::AppHandle, db: tauri::State<Db>, id: i64) ->
         (s, dir, report, bot)
     };
     let (ok, note) = run_one(&app, &s, dir, false, report, bot);
+    let ran_at = chrono::Local::now().timestamp_millis();
     let conn = db.0.lock().unwrap();
     conn.execute(
         "UPDATE schedules SET last_run=?1, last_ok=?2, last_note=?3 WHERE id=?4",
-        params![chrono::Local::now().timestamp_millis(), ok as i64, note, id],
+        params![ran_at, ok as i64, note, id],
     )
     .map_err(err)?;
-    Ok(())
+    Ok(RunOutcome { ok, note, ran_at })
 }

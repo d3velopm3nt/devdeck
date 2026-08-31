@@ -48,6 +48,7 @@ function RailButton({
   expanded,
   mini,
   dot,
+  count,
   onClick,
 }: {
   label: string
@@ -59,6 +60,9 @@ function RailButton({
   /// Secondary rows (New solution, Collapse) sit a little shorter.
   mini?: boolean
   dot?: boolean
+  /// How many things are waiting. Shown as a number rather than a dot: whether
+  /// it is one reminder or nine changes whether you stop what you are doing.
+  count?: number
   onClick: () => void
 }) {
   const height = mini ? (expanded ? 'h-7' : 'h-8') : expanded ? 'h-8' : 'h-10'
@@ -94,6 +98,15 @@ function RailButton({
         <Icon name={icon ?? 'project'} size={expanded ? 15 : 17} className="shrink-0" />
       )}
       {expanded && <span className="min-w-0 flex-1 truncate text-left">{label}</span>}
+      {!!count && count > 0 && (
+        <span
+          className={`shrink-0 rounded-full bg-indigo-500 px-1.5 text-[9.5px] font-bold text-white ${
+            expanded ? 'ml-auto' : 'absolute right-0.5 top-1 border-2 border-app'
+          }`}
+        >
+          {count > 99 ? '99+' : count}
+        </span>
+      )}
       {dot && (
         <span
           className={
@@ -123,8 +136,16 @@ export function Rail() {
     recent,
     recentLimit,
     touchRecent,
+    activity,
+    inboxSeen,
   } = useApp()
   const anyRunning = Object.values(svcStates).some((s) => s.status === 'running')
+  // Only what the clock did. Everything else in the feed happened because you
+  // asked for it, and counting your own clicks back at you teaches you to
+  // ignore the number.
+  const unread = activity.filter(
+    (a) => a.ts > inboxSeen && (a.kind === 'schedule' || a.kind === 'bot'),
+  ).length
 
   const [expanded, setExpanded] = useState(() => localStorage.getItem(KEY) === '1')
   useEffect(() => localStorage.setItem(KEY, expanded ? '1' : '0'), [expanded])
@@ -175,6 +196,7 @@ export function Rail() {
         icon="inbox"
         active={railView === 'inbox'}
         expanded={expanded}
+        count={unread}
         onClick={() => setRailView('inbox')}
       />
 

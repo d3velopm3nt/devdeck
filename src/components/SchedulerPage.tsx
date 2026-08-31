@@ -23,6 +23,7 @@ import * as ipc from '../lib/ipc'
 import { useApp } from '../store'
 import { Icon, type IconName } from '../lib/icons'
 import { workspaceOf, findNode } from '../lib/tree'
+import type { Activity } from '../lib/types'
 
 const KIND: Record<string, { icon: IconName; label: string; tint: string }> = {
   reminder: { icon: 'alert', label: 'Reminder', tint: 'text-ok' },
@@ -59,8 +60,16 @@ function until(ms: number | null): string {
 }
 
 export function SchedulerPage() {
-  const { nodes, setRailView } = useApp()
+  const { nodes, setRailView, refreshActivity } = useApp()
   const [list, setList] = useState<ipc.Schedule[]>([])
+  // What the last hand-run did, by schedule. A reminder that worked says
+  // nothing at all through the schedules table — its note is empty, because
+  // telling you is the whole job — so without this the button was
+  // indistinguishable from one that did nothing.
+  const [ran, setRan] = useState<Record<number, ipc.RunOutcome>>({})
+  // The history that was already being written and never read: `activity`
+  // stamps every fire with the schedule's id.
+  const [past, setPast] = useState<Record<number, Activity[]>>({})
   const [editing, setEditing] = useState<Partial<ipc.Schedule> | null>(null)
   const [err, setErr] = useState('')
 
@@ -185,12 +194,99 @@ export function SchedulerPage() {
                     {!s.catch_up && <span className="text-faint">· never runs late</span>}
                     {s.last_note && <span className="text-warn">· {s.last_note}</span>}
                   </div>
+
+                  {ran[s.id] && (
+                    <div
+                      className={`mt-1.5 text-[11px] ${ran[s.id].ok ? 'text-ok' : 'text-err'}`}
+                    >
+                      {ran[s.id].ok
+                        ? ran[s.id].note.trim()
+                          ? `Ran just now — ${ran[s.id].note}`
+                          : s.kind === 'reminder'
+                            ? 'Ran just now — it told you. It is in the Inbox.'
+                            : 'Ran just now — nothing to report.'
+                        : `Did not run — ${ran[s.id].note || 'no reason given'}`}
+                    </div>
+                  )}
+
+                  {past[s.id] && past[s.id].length > 0 && (
+                    <div className="mt-2 rounded-lg border border-line bg-panel">
+                      {past[s.id].map((a) => (
+                        <div
+                          key={a.id}
+                          className="flex items-baseline gap-2.5 border-b border-line px-3 py-1 last:border-0"
+                        >
+                          <span className="w-[112px] shrink-0 text-[10.5px] tabular-nums text-muted">
+                            {new Date(a.ts).toLocaleString([], {
+                              day: '2-digit',
+                              month: 'short',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                          <span
+                            className={`min-w-0 flex-1 truncate text-[11px] ${
+                              a.ok ? 'text-body' : 'text-err'
+                            }`}
+                          >
+                            {a.detail || a.title}
+                          </span>
+                        </div>
+                      ))}
+                      {/* Said out loud, because "the last 8" and "everything
+                          that ever happened" look identical in a list. */}
+                      <div className="px-3 py-1.5 text-[10px] text-faint">
+                        The most recent runs still kept. The feed is trimmed as it grows.
+                      </div>
+                    </div>
+                  )}
+                  {past[s.id] && past[s.id].length === 0 && (
+                    <div className="mt-2 text-[11px] text-muted">
+                      Nothing kept for this one yet.
+                    </div>
+                  )}
                   <div className="mt-2 flex items-center gap-1.5">
                     <button
                       className="btn-ghost text-[11px]"
-                      onClick={() => void ipc.scheduleRunNow(s.id).then(load).catch((e) => setErr(String(e)))}
+                      onClick={() =>
+                        void ipc
+                          .scheduleRunNow(s.id)
+                          .then(async (out) => {
+                            setRan((r) => ({ ...r, [s.id]: out }))
+                            await load()
+                            // The fire wrote an activity row; the Inbox is
+                            // reading a list from before it existed.
+                            await refreshActivity()
+                            if (past[s.id]) {
+                              setPast((p) => ({ ...p, [s.id]: [] }))
+                              void ipc
+                                .activityFor(s.id, ['schedule', 'bot'])
+                                .then((h) => setPast((p) => ({ ...p, [s.id]: h })))
+                            }
+                          })
+                          .catch((e) => setErr(String(e)))
+                      }
                     >
                       {s.kind === 'bot' ? 'Wake it now' : 'Run now'}
+                    </button>
+                    <button
+                      className="btn-ghost text-[11px]"
+                      onClick={() => {
+                        if (past[s.id]) {
+                          setPast((p) => {
+                            const n = { ...p }
+                            delete n[s.id]
+                            return n
+                          })
+                          return
+                        }
+                        void ipc
+                          .activityFor(s.id, ['schedule', 'bot'])
+                          .then((h) => setPast((p) => ({ ...p, [s.id]: h })))
+                          .catch((e) => setErr(String(e)))
+                      }}
+                    >
+                      {past[s.id] ? 'Hide runs' : 'Past runs'}
                     </button>
                     {s.kind === 'bot' ? (
                       <>

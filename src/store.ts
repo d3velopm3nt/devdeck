@@ -222,6 +222,12 @@ export interface AppState {
   /** The activity stream — every source writes to it, everything reads it. */
   activity: Activity[]
   refreshActivity: () => Promise<void>
+  /** When the Inbox was last opened. Everything newer is unread. */
+  inboxSeen: number
+  markInboxSeen: () => void
+  /** The most recent thing worth interrupting for, until it is dismissed. */
+  toast: Activity | null
+  dismissToast: () => void
   pushActivity: (a: Activity) => void
 
   /** The goal you are on, or null. One at a time, app-wide: the point of
@@ -326,6 +332,10 @@ const loadRecent = (): number[] => {
 }
 
 const RAIL_KEY = 'devdeck.railView'
+/** When the Inbox was last looked at. Kept locally rather than in the database
+ *  because it is about this screen, not about the work. */
+const SEEN_KEY = 'devdeck.inbox.seen'
+const loadSeen = () => Number(localStorage.getItem(SEEN_KEY) ?? 0) || 0
 /// Every rail view, in one place. The old hand-written comparison chain did not
 /// include new views, so a view added later would be written to localStorage,
 /// fail validation on the next launch, and silently drop the user back to Home.
@@ -748,7 +758,24 @@ export const useApp = create<AppState>((set, get) => ({
 
   activity: [],
   refreshActivity: async () => set({ activity: await ipc.activityList(60) }),
-  pushActivity: (a) => set((st) => ({ activity: [a, ...st.activity].slice(0, 60) })),
+  inboxSeen: loadSeen(),
+  markInboxSeen: () => {
+    const now = Date.now()
+    localStorage.setItem(SEEN_KEY, String(now))
+    set({ inboxSeen: now })
+  },
+  toast: null,
+  dismissToast: () => set({ toast: null }),
+  pushActivity: (a) =>
+    set((st) => ({
+      activity: [a, ...st.activity].slice(0, 60),
+      // Only the clock interrupts. Everything else in the feed happened
+      // because you just did something, and a toast for your own click is
+      // noise you learn to dismiss without reading — which is how the one
+      // that mattered gets dismissed too.
+      toast:
+        (a.kind === 'schedule' || a.kind === 'bot') && st.railView !== 'inbox' ? a : st.toast,
+    })),
 
   focus: null,
   refreshFocus: async () => set({ focus: await ipc.focusCurrent() }),
@@ -957,6 +984,12 @@ export const useApp = create<AppState>((set, get) => ({
   setRailView: (v) => {
     localStorage.setItem(RAIL_KEY, v)
     set({ railView: v })
+    // Opening the Inbox is what "seen" means. Anything that arrives while you
+    // are sitting on it is already in front of you.
+    if (v === 'inbox') {
+      get().markInboxSeen()
+      set({ toast: null })
+    }
   },
   openSheet: (s) => set({ sheet: s }),
   closeSheet: () => set({ sheet: null }),

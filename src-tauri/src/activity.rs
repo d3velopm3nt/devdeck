@@ -137,6 +137,52 @@ pub fn record(
     );
 }
 
+/// Everything one schedule, bot or service has done, newest first.
+///
+/// Not a new store: `record` already stamps `ref_id` with the id of the thing
+/// that acted, so the history has been written all along and nothing read it
+/// back. A schedule's page asking "what happened the last few times?" is a
+/// query, not a feature.
+///
+/// It is a rolling history — `record` trims to the most recent rows overall —
+/// so an answer here means "as far back as is kept", never "this is all that
+/// ever happened".
+#[tauri::command]
+pub fn activity_for(
+    db: tauri::State<Db>,
+    ref_id: i64,
+    kinds: Vec<String>,
+    limit: i64,
+) -> Result<Vec<Activity>, String> {
+    let conn = db.0.lock().unwrap();
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, kind, title, detail, ok, ref_id, project_name, ts
+               FROM activity WHERE ref_id = ?1 ORDER BY ts DESC, id DESC LIMIT ?2",
+        )
+        .map_err(err)?;
+    let rows = stmt
+        .query_map(params![ref_id, if limit > 0 { limit } else { 10 }], |r| {
+            Ok(Activity {
+                id: r.get(0)?,
+                kind: r.get(1)?,
+                title: r.get(2)?,
+                detail: r.get(3)?,
+                ok: r.get::<_, i64>(4)? == 1,
+                ref_id: r.get(5)?,
+                project_name: r.get(6)?,
+                ts: r.get(7)?,
+            })
+        })
+        .map_err(err)?;
+    // `ref_id` is only unique within a kind — schedule 3 and service 3 are
+    // different things — so the caller says which kinds it means.
+    Ok(rows
+        .filter_map(Result::ok)
+        .filter(|a| kinds.is_empty() || kinds.iter().any(|k| k == &a.kind))
+        .collect())
+}
+
 #[tauri::command]
 pub fn activity_list(db: tauri::State<Db>, limit: i64) -> Result<Vec<Activity>, String> {
     let conn = db.0.lock().unwrap();

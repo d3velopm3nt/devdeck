@@ -9,6 +9,7 @@ import { SetupModal } from './components/SetupModal'
 import { VaultSetup } from './components/VaultSetup'
 import { Sheet } from './components/Sheet'
 import { UpdateBar, VersionPill, type UpState } from './components/UpdateBar'
+import { ClockToast } from './components/ClockToast'
 import { Rail } from './shell/Rail'
 import { WorkspaceTabs } from './shell/WorkspaceTabs'
 import { WindowControls } from './shell/WindowControls'
@@ -666,6 +667,7 @@ export default function App() {
       {/* The goal you are on, when you are on one. Above the update bar
           because it is about right now and the update bar is not. */}
       <FocusBar />
+      <ClockToast />
 
       {/* Self-update status bar */}
       {!upHidden && (

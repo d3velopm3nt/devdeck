@@ -292,9 +292,12 @@ replaces an activity feed, an event stream and a status page.
 
 **Two views, in this order.**
 
-1. **On it** — global. Every space, right now, grouped by *goal* rather than
-   by bot (a bot on two goals appears twice). Three sections: Moving, Waiting
-   on you, Quiet. Selecting a goal opens its thread.
+1. **Team** — global, opening on **Goals**: every space, right now, grouped
+   by *goal* rather than by bot (a bot on two goals appears twice). Three
+   sections: Moving, Waiting on you, Quiet. Selecting a goal opens its
+   thread. Three more tabs on the same surface — **Features**, **Work**, and
+   **Bots**, which is a bot's own thread: its wake as a receipt, what its
+   agents said folded in, your reply.
 2. **Spaces** — the tree, which now goes into the repository: real folders
    and files. A label (PRODUCT, SERVICE, TOPIC) says what a folder *is*; an
    item chip (Offline sync) says what it is *part of*, derived from which

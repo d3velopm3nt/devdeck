@@ -35,7 +35,7 @@
     },
     {
       "file": "Global.dc.html",
-      "title": "View 1 · On it — every space, grouped by goal",
+      "title": "View 1 · Team › Goals — every space, grouped by goal",
       "page": "page-3",
       "x": 0,
       "y": 0,
@@ -75,6 +75,15 @@
       "page": "page-3",
       "x": 1576,
       "y": 1060,
+      "w": 1456,
+      "h": 909
+    },
+    {
+      "file": "Bots.dc.html",
+      "title": "Team › Bots — a bot's own thread",
+      "page": "page-3",
+      "x": 0,
+      "y": 2120,
       "w": 1456,
       "h": 909
     }
@@ -118,7 +127,7 @@
       "x": -520,
       "y": 560,
       "w": 460,
-      "text": "VIEW 1 · ON IT\n\nGlobal, as you said: every space, right now. Grouped by goal rather than by bot — a bot on two goals appears twice, because the question is \"what is moving\", not \"who is employed\".\n\nThree sections and no more: Moving, Waiting on you, Quiet. A quiet bot is not hidden — it says when it will next speak."
+      "text": "VIEW 1 · TEAM, OPENING ON GOALS\n\nGlobal, as you said: every space, right now. Grouped by goal rather than by bot — a bot on two goals appears twice, because the question is \"what is moving\", not \"who is employed\".\n\nThree sections and no more: Moving, Waiting on you, Quiet. A quiet bot is not hidden — it says when it will next speak."
     },
     {
       "id": "files-to-items",
@@ -142,7 +151,15 @@
       "x": -520,
       "y": 1060,
       "w": 460,
-      "text": "FEATURES AND WORK\n\nBoth are tabs of the On it surface — On it · Features · Work — not rail entries. The rail keeps six things; these are three ways of reading the same goals.\n\nFeatures is the catalogue: every feature in every space, who manages it, who is on it, and the last thing said in its thread. A feature made by hand has no manager until a bot adopts it.\n\nWork is the same goals opened up: every open item grouped by feature. \"Has it\" is a live claim; \"nobody yet\" carries the bot's suggestion of who should. A row opens the feature's thread at that item.\n\n@you rows are tinted amber in both, and they are the only rows that also appear in the Inbox."
+      "text": "FEATURES AND WORK\n\nBoth are tabs of the Team surface — Goals · Features · Work · Bots — not rail entries. The rail keeps six things; these are three ways of reading the same goals.\n\nFeatures is the catalogue: every feature in every space, who manages it, who is on it, and the last thing said in its thread. A feature made by hand has no manager until a bot adopts it.\n\nWork is the same goals opened up: every open item grouped by feature. \"Has it\" is a live claim; \"nobody yet\" carries the bot's suggestion of who should. A row opens the feature's thread at that item.\n\n@you rows are tinted amber in both, and they are the only rows that also appear in the Inbox."
+    },
+    {
+      "id": "bots-thread",
+      "page": "page-3",
+      "x": -520,
+      "y": 2120,
+      "w": 460,
+      "text": "TEAM › BOTS\n\nThe bot's own thread — the Grok shape. Left is a contact list: bots you talk to, then the agents they put to work. Right is one bot: its wake as a receipt, what its agents said folded in under a \"Messages from @qa and @dev-a\" line, and your reply.\n\n\"Run the suite after every push from now on\" becomes a routine whose trigger is an event, not a time — the receipt says so.\n\nThe same message model as the goal thread. A bot's thread is you and it; a goal's thread is everyone on the goal. @ works the same in both."
     }
   ],
   "launch": {

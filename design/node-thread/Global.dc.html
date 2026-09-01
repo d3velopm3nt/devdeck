@@ -41,8 +41,8 @@
     <!-- rail: On it is the first view, Spaces the second -->
     <div style="width: 160px; flex-shrink: 0; background: #0b0e14; border-right: 1px solid #1e293b; padding: 8px 6px; display: flex; flex-direction: column; gap: 2px;">
       <div class="rail rail-on">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 1.8"></path></svg>
-        <span>On it</span>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"></circle><path d="M3.5 19a5.5 5.5 0 0 1 11 0"></path><circle cx="17" cy="9" r="2.6"></circle><path d="M15.5 14.2a4.5 4.5 0 0 1 5 4.3"></path></svg>
+        <span>Team</span>
         <span style="margin-left: auto; font-size: 10px; color: #4ade80;">6</span>
       </div>
       <div class="rail">
@@ -75,9 +75,12 @@
 
     <!-- what is being worked on, everywhere, grouped by goal -->
     <div style="width: 300px; flex-shrink: 0; background: #11141c; border-right: 1px solid #1e293b; display: flex; flex-direction: column;">
-      <div style="height: 40px; flex-shrink: 0; display: flex; align-items: center; padding: 0 12px; border-bottom: 1px solid #1e293b;">
-        <span style="font-size: 12.5px; font-weight: 600; color: #e2e8f0;">On it</span>
-        <span style="margin-left: 8px; font-size: 10.5px; color: #64748b;">every space · right now</span>
+      <div style="flex-shrink: 0; display: flex; align-items: baseline; gap: 16px; padding: 14px 14px 0; border-bottom: 1px solid #1e293b;">
+        <span style="font-size: 12px; color: #e2e8f0; padding: 0 1px 8px; border-bottom: 2px solid #818cf8;">Goals</span>
+        <span style="font-size: 12px; color: #64748b; padding: 0 1px 8px;">Features</span>
+        <span style="font-size: 12px; color: #64748b; padding: 0 1px 8px;">Work</span>
+        <span style="font-size: 12px; color: #64748b; padding: 0 1px 8px;">Bots</span>
+        <span style="margin-left: auto; padding-bottom: 8px; font-size: 10px; color: #475569;">every space</span>
       </div>
 
       <div style="padding: 8px 6px; display: flex; flex-direction: column; gap: 2px;">
@@ -154,7 +157,7 @@
           </span>
         </div>
         <div style="display: flex; gap: 10px; margin-top: 9px; align-items: center;">
-          <span class="lbl">On it</span>
+          <span class="lbl">In this thread</span>
           <span class="who"><i style="background: #818cf8;"></i>x-platform bot <span style="color: #475569;">manages</span></span>
           <span class="who"><i style="background: #4ade80;"></i>dev-a <span style="color: #475569;">holds “Reconcile writes”</span></span>
           <span class="who"><i style="background: #38bdf8;"></i>qa</span>

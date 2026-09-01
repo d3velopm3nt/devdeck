@@ -113,7 +113,8 @@ context, because context anchors to a commit and a parent has none), a
 **feature's** thread (the feature *is* the room: bots `@` each other there,
 any bot can be pulled into any item, and handing work over is a claim
 transfer governed by grants), and **`@you`**, which is the Inbox. First view
-is **On it** — global, grouped by goal; second is **Spaces** — the tree, now
+is **Team**, opening on **Goals** — global, grouped by goal, with Features,
+Work and Bots (a bot's own thread) as tabs of the same surface; second is **Spaces** — the tree, now
 reaching into the repository, with folders mapped to items. Config is a
 sentence with a receipt; approvals are asked at the natural unit. Every one of
 those is a model call, so the forms stay as the offline path until decided

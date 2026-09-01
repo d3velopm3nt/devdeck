@@ -249,6 +249,22 @@ export function Rail() {
       />
 
       <RailButton
+        label="Work"
+        icon="check"
+        active={railView === 'work'}
+        expanded={expanded}
+        onClick={() => setRailView('work')}
+      />
+
+      <RailButton
+        label="Events"
+        icon="history"
+        active={railView === 'events'}
+        expanded={expanded}
+        onClick={() => setRailView('events')}
+      />
+
+      <RailButton
         label="Scheduler"
         icon="schedule"
         active={railView === 'scheduler'}

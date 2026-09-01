@@ -29,7 +29,6 @@ const GROUPS: Array<{ title: string; items: Item[] }> = [
     title: 'Watch',
     items: [
       { page: 'agents', icon: 'agent', label: 'Agents' },
-      { page: 'work', icon: 'check', label: 'Work' },
       { page: 'activity', icon: 'history', label: 'Activity' },
       { page: 'conflicts', icon: 'conflict', label: 'Conflicts' },
       { page: 'tests', icon: 'ok', label: 'Tests' },
@@ -70,14 +69,6 @@ export function AiwSidebar() {
 
   const count = (p: AiwPage): { n: number; tone: string } | null => {
     if (p === 'features') return num(a.features.length)
-    // Open work, not all of it: a number that only ever grows is a number you
-    // stop reading, and what you want from this row is how much is left.
-    if (p === 'work') {
-      const open = a.allWork
-        .flatMap((f) => f.items)
-        .filter((i) => i.status !== 'done').length
-      return open ? { n: open, tone: 'text-ok' } : num(0)
-    }
     if (p === 'agents') return working.length ? { n: working.length, tone: 'text-ok' } : num(0)
     if (p === 'conflicts')
       return openConflicts ? { n: openConflicts, tone: 'text-warn font-semibold' } : num(0)

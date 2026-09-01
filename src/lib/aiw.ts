@@ -180,6 +180,8 @@ export interface Session {
 }
 
 export interface FeatureWork {
+  project_id: string
+  project_name: string
   feature_id: string
   feature_name: string
   status: string
@@ -504,7 +506,8 @@ export const aiw = {
     invoke<string>('aiw_create_feature', { projectId, name, goal, areas }),
   /** Every feature and its work items in one read — "what is being worked on
    *  here", rather than one feature at a time. */
-  allWork: (projectId: string) => invoke<FeatureWork[]>('aiw_all_work', { projectId }),
+  allWork: (projectId?: string) =>
+    invoke<FeatureWork[]>('aiw_all_work', { projectId: projectId ?? null }),
   workItems: (projectId: string, featureId: string) =>
     invoke<WorkItem[]>('aiw_work_items', { projectId, featureId }),
 

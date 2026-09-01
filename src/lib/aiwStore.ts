@@ -46,7 +46,7 @@ import {
 export type AiwPage =
   | 'chat'
   | 'overview' | 'features' | 'feature' | 'context' | 'agents'
-  | 'conflicts' | 'activity' | 'decisions' | 'git' | 'work'
+  | 'conflicts' | 'activity' | 'decisions' | 'git'
   | 'knowledge' | 'tests' | 'skills' | 'settings'
 
 interface AiwState {
@@ -65,7 +65,7 @@ interface AiwState {
   /** Every feature's work in the current project — the "what is going on"
    *  view, as opposed to one feature at a time. */
   allWork: FeatureWork[]
-  loadAllWork: () => Promise<void>
+  loadAllWork: (projectId?: string) => Promise<void>
   agents: AgentDef[]
   sessions: Session[]
   claims: WorkClaim[]
@@ -216,17 +216,15 @@ export const useAiw = create<AiwState>((set, get) => ({
     await get().refresh()
   },
 
-  loadAllWork: async () => {
-    const { projectId } = get()
-    if (!projectId) {
-      set({ allWork: [] })
-      return
-    }
+  /// Every space, unless one is named. The Work page is on the rail and asks
+  /// about all of them; a page scoped to whichever folder happened to be
+  /// selected would hide the bot working two folders over.
+  loadAllWork: async (projectId) => {
     try {
       set({ allWork: await aiw.allWork(projectId) })
     } catch {
-      // A project whose deck cannot be read has no work to show. Leaving the
-      // previous project's list on screen would be worse than an empty one.
+      // Leaving the last answer on screen would be worse than an empty one:
+      // stale work items read exactly like current ones.
       set({ allWork: [] })
     }
   },

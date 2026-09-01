@@ -66,7 +66,7 @@ about `.devdeck`.
 
 ```
 events.rs     the typed bus everything talks through
-deck.rs       `.devdeck` on disk — a project's durable truth, committed
+deck.rs       `.devdeck` on disk — a node's durable truth, kept in the vault
 personal.rs   %APPDATA%\devdeckssistant — *your* durable truth, never committed
 context.rs    assembly, checkpoints, deltas, reconciliation
 conflict.rs   watches events, decides when two pieces of work disagree
@@ -79,12 +79,22 @@ state.rs      Workspace: the live in-memory view
 commands.rs   Tauri entry points, the only thing the UI can call
 ```
 
-**The store split is a rule, not a convention.** Project state goes in
-`.devdeck` and is committed. Anything about *the user* — conversations, memory,
-preferences — goes in the personal store, which refuses to be created inside a
-git repository at all. Adding state? Decide which side it belongs on before
-writing it, because the wrong answer puts personal notes in someone's pull
-request.
+**The store split is a rule, not a convention.** A node's state — features,
+work items, decisions, `_bot.md` — goes in `.devdeck` inside its **vault
+folder**, never inside the repository it describes. Anything about *the user*
+— conversations, memory, preferences — goes in the personal store, which
+refuses to be created inside a git repository at all. Adding state? Decide
+which side it belongs on before writing it, because the wrong answer puts
+personal notes in someone's pull request.
+
+**Two directories, two questions, never one function.** `db::node_dir` is where
+work *runs*: the repository when a node names one, because `npm run dev`
+belongs there. `db::node_deck_dir` is where what we *know* lives: the vault
+folder, always. They agree for a folder with no repository, which is how one
+function answering both went unnoticed — it wrote `_bot.md` and
+`.devdeck/features` into people's repositories while the agent runtime read
+features from the vault, so a bot woke an agent into a feature that was not
+there.
 
 **Permissions fail closed, and `approval` genuinely asks.** Every agent reaches
 the machine only through `ToolService`, gated by the permission matrix. An

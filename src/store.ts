@@ -36,6 +36,8 @@ export type RailView =
   | 'inbox'
   | 'bots'
   | 'scheduler'
+  | 'work'
+  | 'events'
   | 'projects'
   | 'stash'
   | 'connections'

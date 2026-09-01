@@ -10,6 +10,8 @@ import { VaultSetup } from './components/VaultSetup'
 import { Sheet } from './components/Sheet'
 import { UpdateBar, VersionPill, type UpState } from './components/UpdateBar'
 import { ClockToast } from './components/ClockToast'
+import { WorkPage } from './components/WorkPage'
+import { EventsPage } from './components/EventsPage'
 import { Rail } from './shell/Rail'
 import { WorkspaceTabs } from './shell/WorkspaceTabs'
 import { WindowControls } from './shell/WindowControls'
@@ -722,6 +724,8 @@ export default function App() {
           {railView === 'machine' && <MachineSetup />}
           {railView === 'inbox' && <InboxPage />}
           {railView === 'bots' && <BotsPage />}
+          {railView === 'work' && <WorkPage />}
+          {railView === 'events' && <EventsPage />}
           {railView === 'scheduler' && <SchedulerPage />}
           {railView === 'settings' && <ConfigPage />}
         </main>

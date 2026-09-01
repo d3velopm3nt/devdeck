@@ -235,31 +235,50 @@ pub fn aiw_create_feature(
 /// that arrive in an order nobody controls.
 #[derive(serde::Serialize, Clone, Debug)]
 pub struct FeatureWork {
+    /// Which space it belongs to, because the answer spans all of them.
+    pub project_id: String,
+    pub project_name: String,
     pub feature_id: String,
     pub feature_name: String,
     pub status: String,
     pub items: Vec<WorkItem>,
 }
 
+/// `project_id` narrows it to one space; omitted, it answers for every space
+/// there is.
+///
+/// Every space is the useful default. Features live in each node's own deck,
+/// so a bot working in one folder puts work somewhere a page scoped to a
+/// different folder cannot see — and "what are my bots doing" is not a
+/// question about the folder you happen to have selected.
 #[tauri::command]
-pub fn aiw_all_work(ws: Ws, project_id: String) -> Result<Vec<FeatureWork>, String> {
-    let p = ws
-        .project(&project_id)
-        .ok_or_else(|| format!("unknown project '{project_id}'"))?;
-    let deck = p.deck();
+pub fn aiw_all_work(ws: Ws, project_id: Option<String>) -> Result<Vec<FeatureWork>, String> {
+    let ids: Vec<String> = match project_id {
+        Some(id) => vec![id],
+        None => ws.project_ids(),
+    };
     let mut out = Vec::new();
-    for slug in deck.feature_slugs() {
-        // A feature whose documents cannot be read is skipped rather than
-        // failing the whole page: one unreadable file must not make the other
-        // nine features look like they do not exist.
-        let Ok(f) = deck.feature(&slug) else { continue };
-        let items = deck.work(&slug).map(|w| w.meta.items).unwrap_or_default();
-        out.push(FeatureWork {
-            feature_id: slug,
-            feature_name: f.meta.name,
-            status: f.meta.status,
-            items,
-        });
+    for id in ids {
+        // A space that is not registered is skipped rather than failing the
+        // page. Asking for one by name is different: that is a caller naming
+        // something that should exist.
+        let Some(p) = ws.project(&id) else { continue };
+        let deck = p.deck();
+        for slug in deck.feature_slugs() {
+            // A feature whose documents cannot be read is skipped too: one
+            // unreadable file must not make the other nine look like they do
+            // not exist.
+            let Ok(f) = deck.feature(&slug) else { continue };
+            let items = deck.work(&slug).map(|w| w.meta.items).unwrap_or_default();
+            out.push(FeatureWork {
+                project_id: p.id.clone(),
+                project_name: p.name.clone(),
+                feature_id: slug,
+                feature_name: f.meta.name,
+                status: f.meta.status,
+                items,
+            });
+        }
     }
     Ok(out)
 }

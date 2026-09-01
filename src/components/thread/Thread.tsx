@@ -21,6 +21,7 @@ import { aiw, ago, type ChatEvent, type ChatMessage, type ConversationMeta } fro
 import { Bubble } from '../aiw/Chat'
 import { Icon, type IconName } from '../../lib/icons'
 import { useSpeakers } from './speakers'
+import { useAiw } from '../../lib/aiwStore'
 
 /// The receipt kinds. Anything else with a `tool` is a real tool step.
 const RECEIPTS: Record<string, { icon: IconName; tint: string }> = {
@@ -100,6 +101,15 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
   const bottom = useRef<HTMLDivElement>(null)
   const box = useRef<HTMLTextAreaElement>(null)
   const speakers = useSpeakers()
+  // Every message in a thread is a model call. With no provider configured the
+  // mock answers, and it can coordinate but not think — so the thread says so
+  // rather than letting a scripted line pass for a conversation. Making a
+  // space, a bot or a routine still works with no key at all; only talking
+  // needs one.
+  const onMock = useAiw((s) => {
+    const a = s.agents.find((x) => x.id === 'assistant')
+    return !!a && a.provider === 'mock'
+  })
 
   const reload = useCallback(() => {
     return load()
@@ -183,6 +193,17 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
               {speakers(p)}
             </span>
           ))}
+        </div>
+      )}
+
+      {onMock && (
+        <div className="mb-2 flex shrink-0 items-start gap-2 rounded-lg border border-line bg-raise px-3 py-2 text-[11px] leading-[1.55] text-dim">
+          <Icon name="info" size={12} className="mt-px shrink-0 text-indigo-400" />
+          <span>
+            Running on the <span className="text-ink">mock provider</span>: replies here are
+            scripted. Spaces, bots and routines all still work with no API key — talking is the
+            part that needs one. Connect a provider under Settings → Assistant.
+          </span>
         </div>
       )}
 

@@ -254,82 +254,86 @@ How it works:
 
 ## Designed, not built
 
-### Bots as teammates — every node is a conversation · `design/node-thread/`
+### Bots as teammates — every node is a conversation ✅ built · `design/node-thread/`
 
-Designed 1 September 2026, after a week of building bots the other way.
-The canvas is at https://claude.ai/code/artifact/536d3183-3086-429a-8645-758ae9d97fcd
+Designed 1 September 2026, built 2 September. The canvas is at
+https://claude.ai/code/artifact/536d3183-3086-429a-8645-758ae9d97fcd
 (page 1 is a clickable prototype).
 
-**What changed in our heads.** A bot is a manager, not a worker: it holds a
-goal, wakes on a rhythm, and puts agents on what it finds. The unit you talk
-to is a **thread**, not a page with tabs — and there are three kinds, one
-message model:
+**A bot is a manager, not a worker:** it holds a goal, wakes on a rhythm, and
+puts agents on what it finds. The unit you talk to is a **thread**, and there
+are three kinds on one message model:
 
-- **A node's thread.** Click any level of the tree — workspace, folder,
-  repo-backed project — and talk to it. A parent sees its own context in full
-  and its children as **headlines** (who has a bot, what is open, what failed
-  last night); it says outright that it has no repository up there. Full
-  context stays on the node that owns the commit, because that is where the
-  checkpoint anchors.
-- **A feature's thread — the feature is the room.** No new object. A feature
-  or work item already exists in the deck; it gains a thread, and that thread
-  is where bots and agents collaborate: qa reports, `@dev-a` takes it and the
-  claim moves, the manager pulls in `@architect` for one answer. Any bot can
-  be pulled into any item with `@`. Being in the thread is free; being
-  *handed work* is a claim transfer, governed by the team list and grants like
-  everything else.
+- **A node's thread.** Click any level of the tree and talk to it. A project
+  owns a commit, so it answers from real context; a parent owns none, rolls
+  its children up as headlines, and says outright that it has no repository
+  up there.
+- **A feature's thread — the feature is the room.** No new object: the
+  feature already exists in the deck and gains a conversation marked with its
+  slug. Bots and agents collaborate there with `@`.
 - **`@you` is the Inbox.** A message addressed to a person is the only thing
-  that needs attention. Everything else is just the thread.
+  that needs attention; everything else is just the thread.
+
+**Being in a thread is free; being handed work is a claim transfer.**
+`@qa look at this` adds a participant and nothing else. `@dev-a take "Fix
+dirty_files"` moves the claim, and goes through the same gate as
+`delegate.start` — refused, with a reason in the thread, when the speaker may
+not delegate. That is how a bot with no agent talks in a room without moving
+anyone's work: its id is one the permission matrix has never heard of.
+
+**Two views.** **Team** is first, opening on **Goals** — every space, grouped
+into Moving / Waiting on you / Quiet — with Features, Work and Bots as tabs of
+the same surface. **Spaces** is the tree, which now goes into the repository:
+real folders and files, with a chip saying which feature a path is part of,
+derived from the work items whose areas name it.
+
+**What this deleted.** The Bots, Work, Events and Scheduler rail entries and
+their pages. Bots and Work are tabs of Team; Events is the bottom bar's raw
+bus and its header says so; the Scheduler is Settings → Routines. The
+Assistant left the rail too: it is the first contact on Team → Bots, and what
+is left of its old surface — providers, agents, permissions, grants — is
+Settings → Assistant.
 
 **Configuration is a sentence, with a receipt.** "Do this every weekday
-morning" creates the routine and drops a receipt line; the routine is still
-a clock row and a line in `_bot.md`, so editing either changes it. Approvals
-are asked at the natural unit — one question for fourteen files, not
-fourteen questions — with *Allow once / Allow until morning / No*, and
-"until morning" writes a standing grant and says so. A bot's wake posts a
-**receipt** (git → 3 commits · tests → 2 failed · work → 1 blocked), which
-replaces an activity feed, an event stream and a status page.
+morning" goes through the `routine` tool, which asks first and then writes the
+same two things the form writes: a clock row and a line in `_bot.md`.
+Approvals are asked at the natural unit — *Allow once / Allow until morning /
+No* — and "until morning" writes a standing grant for that exact call
+expiring at 06:00 rather than a permission that never ends.
 
-**Two views, in this order.**
+**Review points are not permissions.** `stop_at: [before any push]` in
+`_bot.md` stops the call and says which rule stopped it. Permissions answer
+"may you"; `git` is one tool, so an agent allowed to commit is allowed to
+push. This answers "not without me", which is a different question and lives
+in words rather than in the matrix.
 
-1. **Team** — global, opening on **Goals**: every space, right now, grouped
-   by *goal* rather than by bot (a bot on two goals appears twice). Three
-   sections: Moving, Waiting on you, Quiet. Selecting a goal opens its
-   thread. Three more tabs on the same surface — **Features**, **Work**, and
-   **Bots**, which is a bot's own thread: its wake as a receipt, what its
-   agents said folded in, your reply.
-2. **Spaces** — the tree, which now goes into the repository: real folders
-   and files. A label (PRODUCT, SERVICE, TOPIC) says what a folder *is*; an
-   item chip (Offline sync) says what it is *part of*, derived from which
-   feature's work items name files in it. The five pseudo-rows under a
-   project today — Assistant, Context, Git, Commands, Services — leave the
-   tree and become what the node's page has.
+**Routines can be events.** A routine whose trigger is `test.failed`,
+`git.commit.created`, `file.changed` or `conflict.detected` rather than a
+time. The trigger list is deliberately short and there is a one-minute
+cooldown claimed *before* the run: a wake emits events of its own, and a broad
+listener is not a feature, it is a loop with a nice name.
 
-**What this deletes.** Bots, Work, Events and Scheduler leave the rail and
-become views over the tree or filters. The bot page's five tabs collapse into
-its thread. The six places "what happened" currently lives (Inbox, Home's
-stream, the Assistant's Activity page, the Events tab, the Events page, Logs)
-collapse to: the thread that did it, the Inbox for `@you`, and Logs for raw
-process output.
+**Decided: the forms stay as the offline path.** Spaces, bots, routines and
+schedules are all creatable with no API key, and the mock provider keeps that
+true. What needs a provider is *talking* — every message in a thread is a
+model call — so every thread says so plainly while the mock is answering
+rather than letting a scripted line pass for a conversation.
 
-**What it costs, decided up front.** Every bot-to-bot message and every
-sentence-as-configuration is a model call. Today spaces, bots and schedules
-are creatable with no API key, and the mock provider exists to protect that.
-Either the forms stay as the offline path, or the app says plainly that bots
-cannot talk without a key. Also open: whether the folder→item mapping is
-purely derived or can be pinned by hand.
+**Decided: a team is who is in the room.** `team:` in `_bot.md` is still the
+written-down half, but the effective team is that list plus any agent *you*
+pulled into the bot's thread. Safe in one direction only, and only because
+participants are written when a typed message is sent: a person can widen a
+team by talking, and a bot cannot widen its own.
+
+**Still open:** whether the folder→item mapping should also be pinnable by
+hand rather than only derived from work items.
 
 **Borrowed from Grok bot's docs, on purpose:** the request shape (outcome,
-sources, constraints, deliverable, *review point* — "stop before any push"
-belongs in `_bot.md`); routines triggered by an **event** (tests fail on
-master, a PR opens, a file under `src/sync/` changes) and not only a clock;
+sources, constraints, deliverable, review point); event-triggered routines;
 "save what we just did as a skill"; and the line worth keeping verbatim —
 *an approval controls the proposed action, it does not reverse work already
-completed* — which for us is free, because every action is a commit or a
-diff we can show.
-
-
-Mocks live in `design/`. Open them in a browser; they're clickable.
+completed* — which for us is free, because every action is a commit or a diff
+we can show.
 
 ### Connections — the SQL layer ✅ built · `design/shell-mock.html#connections`
 Rail item. Connections are first-class entities scoped to a workspace/project.

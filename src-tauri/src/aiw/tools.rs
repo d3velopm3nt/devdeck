@@ -241,9 +241,14 @@ pub const TOOL_KNOWLEDGE: &str = "knowledge";
 /// Orchestrator-only: hand a piece of work to a specialist agent.
 pub const TOOL_DELEGATE: &str = "delegate";
 pub const TOOL_BOTS: &str = "bots";
+/// Turning a sentence into a routine. Assistant-side like `bots`: it outlives
+/// the conversation that asked for it, so it always asks first.
+pub const TOOL_ROUTINE: &str = "routine";
 /// Orchestrator-only: what the assistant remembers about you, across projects.
 /// Backed by the personal store, never by a project's `.devdeck`.
 pub const TOOL_MEMORY: &str = "memory";
+/// Writing down how something is done, so it can be done that way again.
+pub const TOOL_SKILL: &str = "skill";
 
 /// Tools the assistant executes itself rather than handing to a project's
 /// `ToolService`.
@@ -254,7 +259,11 @@ pub const TOOL_MEMORY: &str = "memory";
 /// whole workspace and the other writes to the personal store, and a
 /// project-scoped tool service has no business reaching either.
 pub fn is_assistant_tool(tool: &str) -> bool {
-    tool == TOOL_DELEGATE || tool == TOOL_MEMORY || tool == TOOL_BOTS
+    tool == TOOL_DELEGATE
+        || tool == TOOL_MEMORY
+        || tool == TOOL_BOTS
+        || tool == TOOL_ROUTINE
+        || tool == TOOL_SKILL
 }
 
 /// Shorthand for a JSON Schema object.
@@ -470,6 +479,49 @@ pub fn registry() -> Vec<ToolInfo> {
                         "at": { "type": "string", "description": "Local time it wakes, HH:MM. Defaults to 08:00." }
                     }),
                     &["name", "goal"],
+                ),
+            )],
+        },
+        ToolInfo {
+            id: TOOL_ROUTINE.into(),
+            name: "Routines".into(),
+            description: "Set when something happens on its own, from a sentence".into(),
+            actions: vec![act(
+                "create",
+                "Turn \"do this every weekday morning\" into a routine on the space this \
+                 conversation is about. It becomes a clock row and a line in the bot's file, so \
+                 editing either changes it. Always needs the person to say yes first.",
+                Access::Write,
+                schema(
+                    serde_json::json!({
+                        "what": { "type": "string", "description": "What it is for, in a few words." },
+                        "every": { "type": "string", "description": "daily | weekdays | weekly | hourly | event" },
+                        "at": { "type": "string", "description": "Local time it fires, HH:MM. Ignored by hourly and event." },
+                        "on": { "type": "string", "description": "For 'event': the bus event that triggers it, e.g. test.failed or git.commit.created." }
+                    }),
+                    &["what", "every"],
+                ),
+            )],
+        },
+        ToolInfo {
+            id: TOOL_SKILL.into(),
+            name: "Skills".into(),
+            description: "Write down how something is done, so an agent can be told to do it \
+                          that way"
+                .into(),
+            actions: vec![act(
+                "save",
+                "Save what just happened as a skill: a named block of instructions any agent can \
+                 name in its skills list. Words only — a skill grants no permission and installs \
+                 nothing, which is why it is the cheapest way to change how work is done.",
+                Access::Write,
+                schema(
+                    serde_json::json!({
+                        "name": { "type": "string", "description": "Short name, e.g. release-checklist." },
+                        "description": { "type": "string", "description": "One line: when to use it." },
+                        "body": { "type": "string", "description": "The instructions themselves." }
+                    }),
+                    &["name", "body"],
                 ),
             )],
         },

@@ -508,8 +508,52 @@ pub fn from_approval(
     days: i64,
     max_uses: u32,
 ) -> Grant {
-    let now = now_iso();
-    let expires = chrono::Utc::now() + chrono::Duration::days(days.clamp(1, 365));
+    from_approval_until(
+        agent_id,
+        tool,
+        action,
+        args,
+        project_id,
+        (chrono::Utc::now() + chrono::Duration::days(days.clamp(1, 365))).to_rfc3339(),
+        max_uses,
+        "From an approval you answered with “always”.",
+    )
+}
+
+/// The next six in the morning, as a moment.
+///
+/// "Until morning" has to be a time rather than a duration: said at 23:40 it
+/// should end in six hours, and said at 05:00 in one. A fixed number of hours
+/// would quietly hand a whole day to anyone answering just before dawn.
+pub fn next_morning() -> String {
+    use chrono::{Duration, TimeZone, Timelike};
+    let now = chrono::Local::now();
+    let six = now
+        .date_naive()
+        .and_hms_opt(6, 0, 0)
+        .and_then(|n| chrono::Local.from_local_datetime(&n).single());
+    let at = match six {
+        Some(t) if now.hour() < 6 => t,
+        Some(t) => t + Duration::days(1),
+        // A clock this machine cannot represent is not worth guessing at;
+        // eight hours is the shape of "overnight" either way.
+        None => now + Duration::hours(8),
+    };
+    at.to_utc().to_rfc3339()
+}
+
+/// A grant from an approval, expiring at a moment you choose.
+#[allow(clippy::too_many_arguments)]
+pub fn from_approval_until(
+    agent_id: &str,
+    tool: &str,
+    action: &str,
+    args: &serde_json::Value,
+    project_id: Option<&str>,
+    expires_at: String,
+    max_uses: u32,
+    note: &str,
+) -> Grant {
     Grant {
         id: new_id("grant"),
         agent_id: agent_id.to_string(),
@@ -520,12 +564,12 @@ pub fn from_approval(
             None => Scope::Any,
         },
         project_id: project_id.unwrap_or_default().to_string(),
-        created_at: now,
-        expires_at: expires.to_rfc3339(),
+        created_at: now_iso(),
+        expires_at,
         max_uses,
         uses: 0,
         last_used: String::new(),
-        note: "From an approval you answered with “always”.".into(),
+        note: note.to_string(),
         recent: vec![],
         revoked_at: String::new(),
     }
@@ -534,6 +578,20 @@ pub fn from_approval(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// "Until morning" is a moment, not a duration.
+    #[test]
+    fn until_morning_lands_on_the_next_six_and_never_more_than_a_day_out() {
+        let at = chrono::DateTime::parse_from_rfc3339(&next_morning()).unwrap();
+        let now = chrono::Utc::now();
+        let hours = (at.with_timezone(&chrono::Utc) - now).num_hours();
+        assert!(hours >= 0, "it is in the future: {hours}h");
+        assert!(hours <= 24, "and never more than a day out: {hours}h");
+        let local = at.with_timezone(&chrono::Local);
+        use chrono::Timelike;
+        assert_eq!(local.hour(), 6, "six in the morning, locally");
+        assert_eq!(local.minute(), 0);
+    }
 
     fn at(days: i64) -> String {
         (chrono::Utc::now() + chrono::Duration::days(days)).to_rfc3339()

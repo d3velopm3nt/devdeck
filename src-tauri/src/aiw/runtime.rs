@@ -48,6 +48,53 @@ pub struct StartAgentCommand {
     /// grants get through.
     #[serde(default)]
     pub unattended: bool,
+    /// Review points, in words: "before any push".
+    ///
+    /// Not a permission. Permissions answer "may you", and `git` is one tool —
+    /// an agent allowed to commit is allowed to push. This answers the other
+    /// question, "not without me", so it stops the call before it happens and
+    /// says which rule stopped it. It comes from `stop_at:` in the bot's file,
+    /// which is why it is words rather than a tool id.
+    #[serde(default)]
+    pub stop_at: Vec<String>,
+}
+
+/// Whether a call runs into a review point, and which one.
+///
+/// Deliberately blunt matching on the words in the rule: "before any push"
+/// stops `git.push` and a terminal command containing "push". A rule that
+/// matched nothing would be worse than no rule at all — you would believe you
+/// had a review point and not have one — so anything that looks like it
+/// applies, does.
+pub fn review_point(call: &super::tools::ToolCall, stop_at: &[String]) -> Option<String> {
+    if stop_at.is_empty() {
+        return None;
+    }
+    let subject = format!(
+        "{}.{} {}",
+        call.tool,
+        call.action,
+        call.args
+    )
+    .to_lowercase();
+    const NOISE: &[&str] = &[
+        "before", "any", "the", "a", "an", "all", "every", "stop", "at", "on", "to", "not",
+        "without", "me", "first", "ask", "for",
+    ];
+    stop_at.iter().find_map(|rule| {
+        let words: Vec<&str> = rule
+            .split_whitespace()
+            .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric()))
+            .filter(|w| w.len() > 2 && !NOISE.contains(w))
+            .collect();
+        if words.is_empty() {
+            return None;
+        }
+        words
+            .iter()
+            .any(|w| subject.contains(&w.to_lowercase()))
+            .then(|| rule.clone())
+    })
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -357,6 +404,39 @@ impl AgentRuntime {
             for action in &response.actions {
                 match action {
                     AgentAction::Tool(call) => {
+                        // A review point stops the call before it happens.
+                        // Counted as a refusal, because that is what it is
+                        // from the agent's side, and reported in the words the
+                        // rule was written in.
+                        if let Some(rule) = review_point(call, &cmd.stop_at) {
+                            refused += 1;
+                            let why = format!(
+                                "stopped before {}.{} — you asked to review this: \"{rule}\"",
+                                call.tool, call.action
+                            );
+                            ws.bus.emit(
+                                DomainEvent::new(
+                                    EventType::ToolFailed,
+                                    scope.clone(),
+                                    serde_json::json!({
+                                        "tool": call.tool,
+                                        "action": call.action,
+                                        "denied": true,
+                                        "reviewPoint": rule,
+                                    }),
+                                )
+                                .caused_by(&claimed),
+                            );
+                            observations.push(super::provider::Observation {
+                                call_id: call.call_id.clone(),
+                                tool: call.tool.clone(),
+                                action: call.action.clone(),
+                                args: call.args.clone(),
+                                ok: false,
+                                output: why,
+                            });
+                            continue;
+                        }
                         let result =
                             project
                                 .tools
@@ -872,5 +952,51 @@ impl AgentRuntime {
             ws.conflicts
                 .on_stale(&ws.bus, &stale_ev, session_id, &session.agent_id);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::aiw::tools::ToolCall;
+
+    fn call(tool: &str, action: &str, args: serde_json::Value) -> ToolCall {
+        ToolCall::new(tool, action, args)
+    }
+
+    #[test]
+    fn a_review_point_written_in_words_stops_the_call_it_is_about() {
+        let rules = vec!["before any push".to_string()];
+        assert_eq!(
+            review_point(&call("git", "push", serde_json::json!({})), &rules).as_deref(),
+            Some("before any push")
+        );
+        // The same rule, reached the other way round.
+        assert!(review_point(
+            &call("terminal", "run", serde_json::json!({ "command": "git push origin main" })),
+            &rules
+        )
+        .is_some());
+    }
+
+    #[test]
+    fn it_leaves_everything_else_alone() {
+        let rules = vec!["before any push".to_string()];
+        assert!(review_point(&call("files", "read", serde_json::json!({ "path": "a.txt" })), &rules).is_none());
+        assert!(review_point(&call("git", "commit", serde_json::json!({ "message": "wip" })), &rules).is_none());
+    }
+
+    #[test]
+    fn no_rules_stop_nothing() {
+        assert!(review_point(&call("git", "push", serde_json::json!({})), &[]).is_none());
+    }
+
+    /// A rule made only of filler would match everything, which is worse than
+    /// matching nothing: you would believe you had a review point and every
+    /// call would stop.
+    #[test]
+    fn a_rule_with_no_words_in_it_matches_nothing() {
+        let rules = vec!["before any".to_string(), "  ".to_string()];
+        assert!(review_point(&call("git", "push", serde_json::json!({})), &rules).is_none());
     }
 }

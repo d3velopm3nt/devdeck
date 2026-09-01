@@ -11,7 +11,6 @@ import { useAiw, type AiwPage } from '../../lib/aiwStore'
 import { Settings } from './Settings'
 import { AgentEditor } from './AgentEditor'
 import { Skills } from './Skills'
-import { ApprovalBar } from './ApprovalBar'
 import { Chat } from './Chat'
 import { ProjectTag } from './ProjectTag'
 import { CAPTURE_FEATURE, CAPTURE_PAGE } from '../../lib/devCapture'
@@ -1753,7 +1752,8 @@ export function AiWorkspace() {
   // wraps them rather than sitting inside a page.
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <ApprovalBar />
+      {/* The bar itself is in the shell now: an agent waiting on you has to
+          reach you on Team or on Home, not only here. */}
       <div className="min-h-0 flex-1">
         <Page />
       </div>

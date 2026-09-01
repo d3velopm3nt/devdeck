@@ -241,6 +241,29 @@ pub struct BotDraft {
 /// hands one over simply cannot make bots, and says so.
 pub type BotMaker = Box<dyn Fn(BotDraft) -> Result<String, String> + Send + Sync>;
 
+/// What a sentence turns into.
+///
+/// Deliberately the same shape the form writes, because it *is* the form's
+/// output: a routine is a clock row and a line in `_bot.md`, and a sentence
+/// that produced anything else would be a second way to configure the same
+/// thing.
+#[derive(Clone, Debug)]
+pub struct RoutineDraft {
+    pub project_id: String,
+    /// What it is for, in a few words.
+    pub what: String,
+    /// daily | weekdays | weekly | hourly | event
+    pub every: String,
+    pub at_min: i64,
+    /// For `event`: the bus event that fires it.
+    pub on: String,
+}
+
+/// Making a routine writes a `schedules` row and a line in a file, neither of
+/// which `aiw` knows anything about. Same arrangement as [`BotMaker`]: the
+/// outer app hands one over, and a build that does not simply cannot.
+pub type RoutineMaker = Box<dyn Fn(RoutineDraft) -> Result<String, String> + Send + Sync>;
+
 pub struct Workspace {
     pub bus: SharedBus,
     pub conflicts: ConflictService,
@@ -268,6 +291,7 @@ pub struct Workspace {
     /// Supplied by the app at startup. Unset in tests and in any headless
     /// build, where asking for a bot fails honestly rather than pretending.
     bot_maker: std::sync::OnceLock<BotMaker>,
+    routine_maker: std::sync::OnceLock<RoutineMaker>,
     pub providers: Mutex<ProviderRegistry>,
     pub reconciler: Box<dyn ContextReconciler>,
     projects: Mutex<HashMap<String, Arc<ProjectHandle>>>,
@@ -299,6 +323,7 @@ impl Workspace {
             conflicts: ConflictService::new(),
             approvals: Arc::new(ApprovalBroker::new(timeout)),
             bot_maker: std::sync::OnceLock::new(),
+            routine_maker: std::sync::OnceLock::new(),
             conversations: std::sync::OnceLock::new(),
             grants: std::sync::OnceLock::new(),
             providers: Mutex::new(ProviderRegistry::new()),
@@ -1140,6 +1165,22 @@ impl Workspace {
         }
     }
 
+    /// Teach this workspace how to turn a sentence into a routine.
+    pub fn set_routine_maker(&self, f: RoutineMaker) {
+        let _ = self.routine_maker.set(f);
+    }
+
+    pub fn can_make_routines(&self) -> bool {
+        self.routine_maker.get().is_some()
+    }
+
+    pub fn make_routine(&self, draft: RoutineDraft) -> Result<String, String> {
+        match self.routine_maker.get() {
+            Some(f) => f(draft),
+            None => Err("this build cannot create routines".into()),
+        }
+    }
+
     pub fn pending_approvals(&self) -> Vec<ApprovalRequest> {
         self.approvals.pending()
     }
@@ -1164,6 +1205,29 @@ impl Workspace {
         // narrowing now, not a widening.
         if let Some((agent, tool)) = &agent_tool {
             match decision {
+                // The same shape as "always", with an end on it: this exact
+                // call, this project, until six tomorrow. That is the unit
+                // people actually mean when they say "carry on without me".
+                Decision::AllowUntilMorning => {
+                    if let Some(r) = self.approvals.pending().into_iter().find(|r| r.id == id) {
+                        let args: serde_json::Value =
+                            serde_json::from_str(&r.detail).unwrap_or(serde_json::json!({}));
+                        let grant = super::grants::from_approval_until(
+                            agent,
+                            tool,
+                            &r.action,
+                            &args,
+                            r.project_id.as_deref(),
+                            super::grants::next_morning(),
+                            GRANT_USES,
+                            "Allowed until morning, from a prompt you answered.",
+                        );
+                        let access = super::tools::access_for(tool, &r.action);
+                        if let Err(e) = self.grants().add(grant, access) {
+                            eprintln!("[aiw] could not keep that grant until morning: {e}");
+                        }
+                    }
+                }
                 Decision::AllowAlways => {
                     let req = self
                         .approvals

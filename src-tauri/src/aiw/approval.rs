@@ -31,6 +31,14 @@ use super::events::{new_id, now_iso};
 pub enum Decision {
     /// Run it this once.
     Allow,
+    /// Run it, and stop asking until the morning.
+    ///
+    /// The natural unit for "carry on without me": it covers tonight and
+    /// expires at six, so an overnight run finishes without waking anyone and
+    /// tomorrow starts by asking again. A standing grant with a date on it is
+    /// a smaller thing to say yes to than "always", and people say yes to it
+    /// for the right reasons.
+    AllowUntilMorning,
     /// Run it, and stop asking for this tool and agent.
     AllowAlways,
     /// Refuse this one.
@@ -41,7 +49,10 @@ pub enum Decision {
 
 impl Decision {
     pub fn allows(self) -> bool {
-        matches!(self, Decision::Allow | Decision::AllowAlways)
+        matches!(
+            self,
+            Decision::Allow | Decision::AllowAlways | Decision::AllowUntilMorning
+        )
     }
 }
 
@@ -65,6 +76,9 @@ impl Outcome {
     /// what happened and what would change it.
     pub fn reason(&self, tool: &str) -> String {
         match self {
+            Outcome::Decided(Decision::AllowUntilMorning) => {
+                format!("'{tool}' was approved until morning")
+            }
             Outcome::Decided(Decision::Deny) => format!("'{tool}' was refused by a human"),
             Outcome::Decided(Decision::DenyAlways) => {
                 format!("'{tool}' was refused and revoked for this agent")
@@ -142,6 +156,25 @@ pub fn describe(tool: &str, action: &str, args: &serde_json::Value) -> String {
                 s("goal")
             )
         }
+        // A routine outlives the conversation too, so the prompt is the
+        // sentence you would have typed into the form.
+        ("routine", "create") => {
+            let every = match s("every") {
+                "" => "weekdays",
+                e => e,
+            };
+            let what = s("what");
+            if every == "event" {
+                format!("run \"{what}\" whenever {} happens", s("on"))
+            } else {
+                let at = match s("at") {
+                    "" => "08:00",
+                    a => a,
+                };
+                format!("run \"{what}\" {every} at {at}")
+            }
+        }
+        ("skill", "save") => format!("save the skill \"{}\"", s("name")),
         ("tests", _) => {
             let c = s("command");
             if c.is_empty() {

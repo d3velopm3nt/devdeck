@@ -113,7 +113,20 @@ export function BottomBar({
           {tab === 'logs' ? (
             <LogViewer />
           ) : tab === 'events' ? (
-            <EventStream />
+            <div className="flex h-full min-h-0 flex-col">
+              {/* Say what this is. "What happened" lives in three places now —
+                  the thread that did it, the Inbox for anything addressed to
+                  you, and Logs for raw process output. This is none of those:
+                  it is the bus itself, kept for when something surprising
+                  happened and the narrated version is the wrong tool. */}
+              <div className="shrink-0 border-b border-line px-3 py-1 text-[10.5px] text-faint">
+                The raw event bus, in order, for debugging. What agents and bots
+                actually said is in their threads.
+              </div>
+              <div className="min-h-0 flex-1">
+                <EventStream />
+              </div>
+            </div>
           ) : (
             <ProcessDashboard />
           )}

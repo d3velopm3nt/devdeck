@@ -3,6 +3,7 @@ import { Dock, buildDefaultLayout } from './Dock'
 import { BottomBar } from './components/BottomBar'
 import { InboxPage } from './components/InboxPage'
 import { TeamPage } from './components/team/TeamPage'
+import { ApprovalBar } from './components/aiw/ApprovalBar'
 import { FocusBar } from './components/FocusBar'
 import { SetupModal } from './components/SetupModal'
 import { VaultSetup } from './components/VaultSetup'
@@ -684,6 +685,11 @@ export default function App() {
           onDismiss={() => setUpHidden(true)}
         />
       )}
+
+      {/* An agent stopped mid-turn is on a 90-second clock, and the Assistant
+          is no longer a place you sit — so the prompt lives above every view
+          rather than on one of them. */}
+      <ApprovalBar />
 
       {/* Shell: rail → contextual sidebar → view surface */}
       <div className="flex min-h-0 flex-1">

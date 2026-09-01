@@ -405,6 +405,91 @@ fn run_one(
     (ok, note)
 }
 
+/// Events that may fire a routine.
+///
+/// Narrow on purpose. A routine that woke on `tool.executed` would fire a
+/// hundred times an hour and wake more agents, which would fire it again — a
+/// broad listener is not a feature, it is a loop with a nice name.
+const TRIGGERS: &[&str] = &[
+    "test.failed",
+    "test.completed",
+    "git.commit.created",
+    "file.changed",
+    "conflict.detected",
+];
+
+/// The shortest gap between two runs of the same event routine.
+///
+/// A wake emits events of its own, so without this a routine listening for
+/// `file.changed` would re-trigger itself off its own agent's writes. The
+/// cooldown is claimed *before* the run, not after, so the window is closed
+/// while the run is still going.
+const COOLDOWN_MS: i64 = 60_000;
+
+/// Fire the routines listening for this event.
+///
+/// Called from the bus sink, on whatever thread emitted — so the run itself
+/// goes to a thread of its own. A wake can take minutes and takes the database
+/// with it; doing that inline would stop the event bus for the duration.
+pub fn on_event(app: &tauri::AppHandle, event_type: &str, project_id: Option<&str>) {
+    if !TRIGGERS.contains(&event_type) {
+        return;
+    }
+    let Some(db) = app.try_state::<Db>() else { return };
+    let node: Option<i64> = project_id.and_then(|p| p.parse().ok());
+    let now = chrono::Local::now().timestamp_millis();
+
+    let due: Vec<(Schedule, Option<String>)> = {
+        let Ok(conn) = db.0.try_lock() else { return };
+        let Ok(all) = all(&conn) else { return };
+        let mut out = Vec::new();
+        for s in all
+            .into_iter()
+            .filter(|s| s.enabled && s.every == "event" && s.payload.trim() == event_type)
+        {
+            // An event about one space must not wake a bot watching another.
+            if let (Some(n), Some(sn)) = (node, s.node_id) {
+                if n != sn {
+                    continue;
+                }
+            }
+            if s.last_run.is_some_and(|r| now - r < COOLDOWN_MS) {
+                continue;
+            }
+            // Claim the cooldown before running, not after.
+            let _ = conn.execute(
+                "UPDATE schedules SET last_run=?1 WHERE id=?2",
+                params![now, s.id],
+            );
+            let dir = dir_for(&conn, s.node_id);
+            out.push((s, dir));
+        }
+        out
+    };
+
+    for (s, dir) in due {
+        let h = app.clone();
+        std::thread::spawn(move || {
+            let (report, bot) = {
+                let Some(db) = h.try_state::<Db>() else { return };
+                let conn = db.0.lock().unwrap();
+                match s.node_id {
+                    Some(n) => (crate::bots::wake_report(&conn, n), crate::bots::bot_on(&conn, n)),
+                    None => (None, None),
+                }
+            };
+            let (ok, note) = run_one(&h, &s, dir, false, report, bot);
+            if let Some(db) = h.try_state::<Db>() {
+                let conn = db.0.lock().unwrap();
+                let _ = conn.execute(
+                    "UPDATE schedules SET last_ok=?1, last_note=?2 WHERE id=?3",
+                    params![ok as i64, note, s.id],
+                );
+            }
+        });
+    }
+}
+
 /// One pass. Called on a timer while the app is open, and once at startup.
 ///
 /// `startup` is what makes catching up possible at all: while running, a

@@ -537,8 +537,18 @@ export interface ApprovalRequest {
   expires_in: number
 }
 
-/** `always` variants also move the permission, so the question stops recurring. */
-export type ApprovalDecision = 'allow' | 'allow-always' | 'deny' | 'deny-always'
+/** What you can answer.
+ *
+ *  `allow-until-morning` is the natural unit for "carry on without me": it
+ *  writes a standing grant for this exact call that expires at six, so an
+ *  overnight run finishes and tomorrow asks again. The `always` variants move
+ *  the permission itself, so the question stops recurring at all. */
+export type ApprovalDecision =
+  | 'allow'
+  | 'allow-until-morning'
+  | 'allow-always'
+  | 'deny'
+  | 'deny-always'
 
 export const aiw = {
   projects: () => invoke<AiProject[]>('aiw_projects'),

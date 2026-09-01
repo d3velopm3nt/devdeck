@@ -1026,6 +1026,7 @@ pub fn run_demo_on(
             areas: vec![],
             depends_on: vec![],
             unattended: false,
+            stop_at: Vec::new(),
         },
     )?);
 
@@ -1044,6 +1045,7 @@ pub fn run_demo_on(
             areas: vec!["apps/mobile".into()],
             depends_on: vec!["SyncResult".into()],
             unattended: false,
+            stop_at: Vec::new(),
         },
     )?;
 
@@ -1059,6 +1061,7 @@ pub fn run_demo_on(
             areas: vec!["packages/sync".into(), "api/sync".into()],
             depends_on: vec![],
             unattended: false,
+            stop_at: Vec::new(),
         },
     )?);
 
@@ -1077,6 +1080,7 @@ pub fn run_demo_on(
             areas: vec!["tests".into()],
             depends_on: vec![],
             unattended: false,
+            stop_at: Vec::new(),
         },
     )?);
 
@@ -1092,6 +1096,7 @@ pub fn run_demo_on(
             areas: vec!["packages/assets".into()],
             depends_on: vec![],
             unattended: false,
+            stop_at: Vec::new(),
         },
     )?);
 

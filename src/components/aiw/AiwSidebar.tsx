@@ -29,7 +29,6 @@ const GROUPS: Array<{ title: string; items: Item[] }> = [
     title: 'Watch',
     items: [
       { page: 'agents', icon: 'agent', label: 'Agents' },
-      { page: 'activity', icon: 'history', label: 'Activity' },
       { page: 'conflicts', icon: 'conflict', label: 'Conflicts' },
       { page: 'tests', icon: 'ok', label: 'Tests' },
     ],

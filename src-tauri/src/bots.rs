@@ -84,7 +84,12 @@ pub struct Bot {
     /// says so.
     #[serde(default)]
     pub agent: String,
-    /// Every agent this bot may put work on, its lead included.
+    /// Every agent this bot may put work on, its lead included — the part of
+    /// the team written down in the file.
+    ///
+    /// Not the whole answer any more: see [`effective_team`]. Someone you pull
+    /// into the bot's thread by hand counts too, and that list is not stored
+    /// twice.
     ///
     /// A bot manages; it does not do the work. The team is who it is allowed
     /// to hand that work to, and it is a limit rather than a hint: an agent
@@ -97,6 +102,15 @@ pub struct Bot {
     /// What to ask it when it wakes. Empty means the goal.
     #[serde(default)]
     pub wake_intent: String,
+    /// Where it must stop and ask, whatever its permissions say.
+    ///
+    /// "before any push" is the one everybody wants, and permissions cannot
+    /// express it: `git` is one tool, and an agent that may commit may push.
+    /// A review point is the other kind of rule — not "may you", but "not
+    /// without me" — so it is written in words in the bot's own file and
+    /// honoured by the runtime rather than by the permission matrix.
+    #[serde(default)]
+    pub stop_at: Vec<String>,
     /// The schedule row backing the heartbeat, when there is one.
     pub schedule_id: Option<i64>,
     pub last_woke: Option<i64>,
@@ -150,6 +164,14 @@ fn read(dir: &Path) -> Option<Bot> {
                                 .collect()
                         }
                         "wake_intent" => b.wake_intent = v,
+                        "stop_at" => {
+                            b.stop_at = v
+                                .trim_matches(|c| c == '[' || c == ']')
+                                .split(',')
+                                .map(|x| x.trim().trim_matches('"').to_string())
+                                .filter(|x| !x.is_empty())
+                                .collect()
+                        }
                         "feature" => b.feature = v,
                         "skills" => {
                             b.skills = v
@@ -202,6 +224,9 @@ fn write(dir: &Path, b: &Bot) -> Result<(), String> {
     }
     if !b.wake_intent.trim().is_empty() {
         out.push_str(&format!("wake_intent: {}\n", b.wake_intent.trim()));
+    }
+    if !b.stop_at.is_empty() {
+        out.push_str(&format!("stop_at: [{}]\n", b.stop_at.join(", ")));
     }
     out.push_str("---\n");
     if !b.body.trim().is_empty() {
@@ -414,6 +439,99 @@ pub fn bot_get(db: tauri::State<Db>, node_id: i64) -> Result<Option<Bot>, String
     Ok(Some(b))
 }
 
+/// Set when something happens, from a sentence.
+///
+/// The whole point is that this writes *the same two things the form writes*:
+/// a line in `_bot.md` and a row on the clock. A sentence that produced a
+/// third kind of routine would be a second way to configure the same thing,
+/// and the two would drift the first week.
+///
+/// A space with no bot gets a plain reminder instead of one being invented for
+/// it — a routine is a small thing to agree to, a bot is not.
+pub fn set_routine(
+    conn: &Connection,
+    node_id: i64,
+    what: &str,
+    every: &str,
+    at_min: i64,
+    on: &str,
+) -> Result<String, String> {
+    let n = db::node_by_id(conn, node_id)?;
+    let bot = dir_of(conn, &n).and_then(|dir| {
+        read(&dir).map(|mut b| {
+            b.node_id = node_id;
+            b.node_name = n.name.clone();
+            b.dir = dir.to_string_lossy().to_string();
+            b
+        })
+    });
+
+    // An event routine wakes a bot, so it needs one. Saying so beats writing a
+    // row that can never fire.
+    if every == "event" {
+        let Some(b) = bot else {
+            return Err(format!(
+                "An event routine wakes a bot, and {} has none yet. Give it a bot first.",
+                n.name
+            ));
+        };
+        if on.trim().is_empty() {
+            return Err("Say which event should fire it, e.g. test.failed.".into());
+        }
+        let name = format!("{} · {}", b.name.trim(), what.trim());
+        conn.execute(
+            "DELETE FROM schedules WHERE kind='bot' AND node_id=?1 AND every='event' AND payload=?2",
+            params![node_id, on.trim()],
+        )
+        .map_err(err)?;
+        conn.execute(
+            "INSERT INTO schedules (name, kind, node_id, every, at_min, days, payload, catch_up) \
+             VALUES (?1, 'bot', ?2, 'event', 0, '', ?3, 0)",
+            params![name, node_id, on.trim()],
+        )
+        .map_err(err)?;
+        return Ok(format!(
+            "Set. \"{}\" now runs when {} happens — an event on the clock, not a time.",
+            what.trim(),
+            on.trim()
+        ));
+    }
+
+    match bot {
+        Some(mut b) => {
+            b.every = every.trim().to_string();
+            b.at_min = at_min;
+            let dir = std::path::PathBuf::from(&b.dir);
+            write(&dir, &b)?;
+            sync_heartbeat(conn, &b)?;
+            Ok(format!(
+                "Set. {} wakes {} at {} — it is a row on the clock and a line in {}, so editing \
+                 either changes it.",
+                b.name.trim(),
+                if b.every == "hourly" { "every hour".into() } else { b.every.clone() },
+                fmt_at(b.at_min),
+                FILE
+            ))
+        }
+        None => {
+            conn.execute(
+                "INSERT INTO schedules (name, kind, node_id, every, at_min, days, payload, catch_up) \
+                 VALUES (?1, 'reminder', ?2, ?3, ?4, '', ?1, 0)",
+                params![what.trim(), node_id, every.trim(), at_min],
+            )
+            .map_err(err)?;
+            Ok(format!(
+                "Set. \"{}\" is a reminder on {} — {} at {}. Nothing watches this space yet, so \
+                 it tells you rather than doing anything.",
+                what.trim(),
+                n.name,
+                every.trim(),
+                fmt_at(at_min)
+            ))
+        }
+    }
+}
+
 /// Write a bot's file and make the clock agree with it.
 ///
 /// Split out from the command so the whole lifecycle can be driven in a test
@@ -495,6 +613,10 @@ fn save_into(
         agent: agent.trim().to_string(),
         team,
         wake_intent: wake_intent.trim().to_string(),
+        // Review points are edited in the file rather than in the form:
+        // "not without me" is a sentence, and a checkbox would have to
+        // pretend it is a permission.
+        stop_at: existing.as_ref().map(|e| e.stop_at.clone()).unwrap_or_default(),
         schedule_id: None,
         last_woke: None,
     };
@@ -899,6 +1021,9 @@ pub(crate) fn create_into(
         agent: String::new(),
         team: vec![],
         wake_intent: String::new(),
+        // A new bot has no review points. They are the kind of rule you add
+        // once you have seen it do something you would rather see first.
+        stop_at: vec![],
         schedule_id: None,
         last_woke: None,
     };
@@ -1312,7 +1437,8 @@ pub fn persona(bot: &Bot) -> crate::aiw::assistant::Persona {
     }
     if !bot.team.is_empty() {
         system.push_str(&format!(
-            "\n\nYour team — the only agents you may put work on: {}.",
+            "\n\nYour team — the agents you may put work on: {}. Anyone the person pulls into \
+             your thread with @ joins it.",
             bot.team.join(", ")
         ));
     }
@@ -1413,6 +1539,38 @@ pub async fn bot_thread_send(
     .map_err(|e| e.to_string())?
 }
 
+/// Who this bot may actually put work on.
+///
+/// The file's list, plus anyone *you* pulled into its thread. The second half
+/// is the point of item 15: a team is who is in the room, and maintaining that
+/// as a separate list in a form was a second place to keep the same fact.
+///
+/// The widening is safe in exactly one direction, and only because of how
+/// participants are written: a mention is recorded when a *typed* message is
+/// sent, and nothing a bot posts on its own goes through that path. So a
+/// person can add to a team by talking; a bot cannot add to its own.
+pub fn effective_team(
+    ws: &std::sync::Arc<crate::aiw::state::Workspace>,
+    bot: &Bot,
+) -> Vec<String> {
+    let mut team = bot.team.clone();
+    let Ok(convs) = ws.convs() else { return team };
+    let Some(thread) = convs.list().into_iter().find(|c| c.bot_node == Some(bot.node_id)) else {
+        return team;
+    };
+    for p in thread.participants {
+        // `bot:` ids are other bots. A bot is someone you talk to, not someone
+        // work is handed to — that is what agents are for.
+        if p.starts_with("bot:") || team.iter().any(|t| t == &p) {
+            continue;
+        }
+        if ws.agent(&p).is_some() {
+            team.push(p);
+        }
+    }
+    team
+}
+
 /// Wake the agent this bot names, if it names one.
 ///
 /// Returns the line for your inbox. `None` means it had nothing to say, which
@@ -1429,10 +1587,13 @@ pub fn wake_agent(app: &tauri::AppHandle, bot: &Bot) -> Option<(bool, String)> {
     if bot.agent.trim().is_empty() {
         return None;
     }
-    if !bot.team.iter().any(|a| a == bot.agent.trim()) {
+    let ws = app.try_state::<std::sync::Arc<crate::aiw::state::Workspace>>()?;
+    let workspace: std::sync::Arc<crate::aiw::state::Workspace> = (*ws).clone();
+    let team = effective_team(&workspace, bot);
+    if !team.iter().any(|a| a == bot.agent.trim()) {
         return Some((
             false,
-            if bot.team.is_empty() {
+            if team.is_empty() {
                 format!(
                     "{} has no team, so there is nobody it may put work on. Add {} to its team on the bot's page.",
                     bot.name, bot.agent
@@ -1442,14 +1603,11 @@ pub fn wake_agent(app: &tauri::AppHandle, bot: &Bot) -> Option<(bool, String)> {
                     "{} is not on {}'s team ({}), so it was not woken.",
                     bot.agent,
                     bot.name,
-                    bot.team.join(", ")
+                    team.join(", ")
                 )
             },
         ));
     }
-    let ws = app.try_state::<std::sync::Arc<crate::aiw::state::Workspace>>()?;
-    let workspace: std::sync::Arc<crate::aiw::state::Workspace> = (*ws).clone();
-
     // Make sure the Assistant knows this space before asking it to work there.
     //
     // The startup catch-up tick runs before the frontend has had a chance to
@@ -1495,6 +1653,9 @@ pub fn wake_agent(app: &tauri::AppHandle, bot: &Bot) -> Option<(bool, String)> {
         areas: vec![],
         depends_on: vec![],
         unattended: true,
+        // The bot's own review points travel with the run. A wake is exactly
+        // when nobody is watching, so this is when they matter most.
+        stop_at: bot.stop_at.clone(),
     };
 
     // The line lands in your inbox, so the agent gets its name rather than its

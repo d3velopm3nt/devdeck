@@ -45,9 +45,20 @@ function Request({ r, now }: { r: ApprovalRequest; now: number }) {
   const urgent = left <= 30
   const agent = a.agents.find((x) => x.id === r.agent_id)
 
-  const answer = async (allow: boolean) => {
+  const answer = async (decision: 'allow' | 'allow-until-morning' | 'deny') => {
     setBusy(true)
-    await a.resolveApproval(r.id, allow ? (always ? 'allow-always' : 'allow') : always ? 'deny-always' : 'deny')
+    // The checkbox turns either answer into a standing one. It is a modifier
+    // rather than a fourth button, because the three that matter should be
+    // readable without reading anything else.
+    const final =
+      decision === 'deny'
+        ? always
+          ? 'deny-always'
+          : 'deny'
+        : decision === 'allow' && always
+          ? 'allow-always'
+          : decision
+    await a.resolveApproval(r.id, final)
     // No setBusy(false): answering removes the row.
   }
 
@@ -122,16 +133,26 @@ function Request({ r, now }: { r: ApprovalRequest; now: number }) {
           <button
             className="rounded border border-line2 px-2.5 py-1 text-[11.5px] text-dim hover:bg-hover hover:text-ink disabled:opacity-40"
             disabled={busy}
-            onClick={() => void answer(false)}
+            onClick={() => void answer('deny')}
           >
-            Deny
+            No
+          </button>
+          {/* The unit people actually mean by "carry on without me": a
+              standing grant for this exact call that runs out at six. */}
+          <button
+            className="rounded border border-line2 px-2.5 py-1 text-[11.5px] text-dim hover:bg-hover hover:text-ink disabled:opacity-40"
+            disabled={busy}
+            title="Writes a standing grant for exactly this call, in this project, expiring at 06:00"
+            onClick={() => void answer('allow-until-morning')}
+          >
+            Allow until morning
           </button>
           <button
             className="btn-primary px-3 py-1 text-[11.5px] disabled:opacity-40"
             disabled={busy}
-            onClick={() => void answer(true)}
+            onClick={() => void answer('allow')}
           >
-            {busy ? '…' : 'Allow'}
+            {busy ? '…' : 'Allow once'}
           </button>
         </div>
       </div>

@@ -30,7 +30,9 @@ use super::provider::{AgentAction, AgentRequest, AgentResponse, ChatTurn, Observ
 use super::mentions::{self, Handover};
 use super::runtime::{AgentRuntime, LiveSession, StartAgentCommand};
 use super::state::Workspace;
-use super::tools::{is_assistant_tool, ToolCall, TOOL_BOTS, TOOL_DELEGATE, TOOL_MEMORY};
+use super::tools::{
+    is_assistant_tool, ToolCall, TOOL_BOTS, TOOL_DELEGATE, TOOL_MEMORY, TOOL_ROUTINE, TOOL_SKILL,
+};
 
 /// The built-in orchestrator's agent id. It is a real entry in the agent list
 /// so it inherits provider selection and the permission matrix.
@@ -885,6 +887,7 @@ impl Assistant {
             areas: Vec::new(),
             depends_on: Vec::new(),
             unattended: false,
+            stop_at: Vec::new(),
         };
         let live = match AgentRuntime::begin(ws, &cmd) {
             Ok(l) => l,
@@ -987,6 +990,8 @@ impl Assistant {
                 TOOL_DELEGATE => Self::delegate(ws, convs, conv, call, delegated),
                 TOOL_MEMORY => Self::memory(convs, conv, call),
                 TOOL_BOTS => Self::make_bot(ws, conv, me, call, scope, cause),
+                TOOL_ROUTINE => Self::make_routine(ws, conv, me, call, scope, cause),
+                TOOL_SKILL => Self::save_skill(ws, call),
                 _ => (false, format!("unknown assistant tool '{}'", call.tool)),
             };
         }
@@ -1091,6 +1096,76 @@ impl Assistant {
         }
     }
 
+    /// Turn a sentence into a routine.
+    ///
+    /// Asked first, always, for the same reason a bot is: it keeps happening
+    /// after the conversation ends. And refused outright when nobody is
+    /// watching — a run started by a clock that quietly adds more clock rows
+    /// is how a machine fills up with things nobody remembers agreeing to.
+    fn make_routine(
+        ws: &Arc<Workspace>,
+        conv: &ConversationMeta,
+        me: &str,
+        call: &ToolCall,
+        scope: &EventScope,
+        cause: &DomainEvent,
+    ) -> (bool, String) {
+        let s = |k: &str| {
+            call.args
+                .get(k)
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_string()
+        };
+        let Some(project_id) = conv.project_id.as_deref() else {
+            return (
+                false,
+                "a routine belongs to a space — pick one for this conversation first".into(),
+            );
+        };
+        let what = s("what");
+        if what.is_empty() {
+            return (false, "say what the routine is for".into());
+        }
+        if !ws.can_make_routines() {
+            return (false, "this build cannot create routines".into());
+        }
+        if scope.unattended {
+            return (
+                false,
+                "setting up a routine needs a person to say yes, and this run has nobody watching"
+                    .into(),
+            );
+        }
+        let outcome = ws.ask_approval(me, call, scope, cause);
+        if !outcome.allows() {
+            return (false, format!("not set up — {outcome:?}"));
+        }
+
+        let every = match s("every").as_str() {
+            "" => "weekdays".to_string(),
+            e => e.to_string(),
+        };
+        let at_min = match s("at").as_str() {
+            "" => 8 * 60,
+            a => {
+                let (h, m) = a.split_once(':').unwrap_or((a, "0"));
+                h.trim().parse::<i64>().unwrap_or(8) * 60 + m.trim().parse::<i64>().unwrap_or(0)
+            }
+        };
+        match ws.make_routine(super::state::RoutineDraft {
+            project_id: project_id.to_string(),
+            what,
+            every,
+            at_min: at_min.clamp(0, 1439),
+            on: s("on"),
+        }) {
+            Ok(note) => (true, note),
+            Err(e) => (false, e),
+        }
+    }
+
     fn delegate(
         ws: &Arc<Workspace>,
         convs: &Conversations,
@@ -1156,6 +1231,7 @@ impl Assistant {
                     areas: Vec::new(),
                     depends_on: Vec::new(),
                     unattended: false,
+                    stop_at: Vec::new(),
                 };
 
                 // Begin synchronously so a bad request fails *here*, where the
@@ -1203,6 +1279,40 @@ impl Assistant {
                 )
             }
             other => (false, format!("unknown delegate action '{other}'")),
+        }
+    }
+
+    /// Write down how something is done.
+    ///
+    /// Not gated by a prompt, unlike a bot or a routine, and the difference is
+    /// real rather than a convenience: a skill is words. It installs nothing,
+    /// runs nothing and grants nothing — an agent has to be pointed at it
+    /// before it changes anything, and that is a separate act. What the
+    /// receipt must do is say exactly what was written and where.
+    fn save_skill(ws: &Arc<Workspace>, call: &ToolCall) -> (bool, String) {
+        if call.action != "save" {
+            return (false, format!("unknown skill action '{}'", call.action));
+        }
+        let s = |k: &str| call.args.get(k).and_then(|v| v.as_str()).unwrap_or("").trim();
+        let (name, body) = (s("name"), s("body"));
+        if name.is_empty() || body.is_empty() {
+            return (false, "a skill needs a name and instructions".into());
+        }
+        match ws.save_skill(&Doc {
+            meta: super::personal::SkillMeta {
+                name: name.to_string(),
+                description: s("description").to_string(),
+            },
+            body: body.to_string(),
+        }) {
+            Ok(()) => (
+                true,
+                format!(
+                    "Saved the skill “{name}” to your personal store, outside every repository. \
+                     It changes nothing until an agent names it under skills:."
+                ),
+            ),
+            Err(e) => (false, e),
         }
     }
 

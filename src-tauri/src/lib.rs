@@ -605,6 +605,19 @@ pub fn run() {
             ))
         }));
     }
+    // And how to turn a sentence into a routine, for the same reason: a
+    // routine is a clock row and a line in a file, and neither of those is
+    // something `aiw` can reach.
+    {
+        aiw_workspace.set_routine_maker(Box::new(move |d: aiw::state::RoutineDraft| {
+            let node_id: i64 = d
+                .project_id
+                .parse()
+                .map_err(|_| format!("'{}' is not a space in your vault", d.project_id))?;
+            let conn = crate::db::open();
+            bots::set_routine(&conn, node_id, &d.what, &d.every, d.at_min, &d.on)
+        }));
+    }
     // Re-register whatever this install was pointed at last time. Without this
     // the project list is lost on every restart, which looks exactly like the
     // projects themselves being gone.
@@ -679,6 +692,14 @@ pub fn run() {
                 .bus
                 .attach_sink(move |ev| {
                     let _ = emit_handle.emit("aiw:event", ev.clone());
+                    // A routine can be a rhythm or a thing that happens.
+                    // Tests failing on master is the example everyone gives,
+                    // and it is not a time of day.
+                    crate::schedule::on_event(
+                        &emit_handle,
+                        &ev.kind,
+                        ev.scope.project_id.as_deref(),
+                    );
                 });
 
             monitor::spawn(app.handle().clone());

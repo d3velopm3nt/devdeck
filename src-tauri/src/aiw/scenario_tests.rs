@@ -328,6 +328,7 @@ fn a_mock_agent_goes_through_the_same_runtime_as_a_real_one() {
             areas: vec!["packages/sync".into()],
             depends_on: vec![],
             unattended: false,
+            stop_at: Vec::new(),
         },
     )
     .unwrap();
@@ -372,6 +373,7 @@ fn a_work_item_is_marked_done_in_devdeck_not_just_in_memory() {
             areas: vec![],
             depends_on: vec![],
             unattended: false,
+            stop_at: Vec::new(),
         },
     )
     .unwrap();
@@ -409,6 +411,7 @@ fn the_architects_decision_is_written_to_devdeck_and_reaches_later_context() {
             areas: vec![],
             depends_on: vec![],
             unattended: false,
+            stop_at: Vec::new(),
         },
     )
     .unwrap();
@@ -449,6 +452,7 @@ fn qa_runs_the_configured_tests_and_the_result_is_recorded() {
             areas: vec![],
             depends_on: vec![],
             unattended: false,
+            stop_at: Vec::new(),
         },
     )
     .unwrap();
@@ -712,6 +716,7 @@ fn configuring_a_real_provider_changes_nothing_but_the_provider_layer() {
             areas: vec![],
             depends_on: vec![],
             unattended: false,
+            stop_at: Vec::new(),
         },
     )
     .unwrap();
@@ -1644,6 +1649,7 @@ fn a_running_agent_does_not_hold_the_provider_registry() {
                     areas: vec![],
                     depends_on: vec![],
                     unattended: false,
+                    stop_at: Vec::new(),
                 },
             )
         })

@@ -1,0 +1,203 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: #818cf8; } a:hover { color: #a5b4fc; }
+    .rail { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; border-radius: 8px; font-size: 12px; color: #64748b; }
+    .rail-on { background: #151923; color: #e2e8f0; }
+    .lbl { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #475569; }
+    .tab { font-size: 12.5px; color: #64748b; padding: 0 2px 9px; border-bottom: 2px solid transparent; }
+    .tab-on { color: #e2e8f0; border-bottom-color: #818cf8; }
+    .filt { font-size: 11px; color: #94a3b8; border: 1px solid #1e293b; border-radius: 999px; padding: 3px 10px; }
+    .filt-on { color: #e2e8f0; border-color: #334155; background: rgb(30 41 59 / 0.4); }
+    .bot { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; color: #a5b4fc; }
+    .group { border: 1px solid #1e293b; border-radius: 12px; background: #11141c; overflow: hidden; }
+    .ghead { display: flex; align-items: center; gap: 10px; padding: 10px 16px; }
+    .item { display: grid; grid-template-columns: 8px minmax(0, 1fr) 190px minmax(0, 1fr) 24px; gap: 12px; align-items: center; padding: 9px 16px; border-top: 1px solid #1e293b; }
+    .item:hover { background: #151923; }
+    .has { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; padding: 1px 8px; border-radius: 999px; }
+    .mono { font-family: ui-monospace, Consolas, monospace; font-size: 11px; color: #e2e8f0; }
+  </style>
+</helmet>
+
+<div style="width: 1456px; height: 909px; background: #0b0e14; color: #cbd5e1; display: flex; flex-direction: column; box-sizing: border-box;">
+
+  <div style="height: 32px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 12px; border-bottom: 1px solid #1e293b; background: #11141c;">
+    <span style="font-size: 11.5px; color: #94a3b8;">DevDeck</span>
+    <span style="font-size: 11.5px; color: #475569;">File</span>
+    <span style="font-size: 11.5px; color: #475569;">View</span>
+    <span style="font-size: 11.5px; color: #475569;">Build</span>
+    <span style="font-size: 11.5px; color: #475569;">Help</span>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; min-height: 0;">
+
+    <div style="width: 160px; flex-shrink: 0; background: #0b0e14; border-right: 1px solid #1e293b; padding: 8px 6px; display: flex; flex-direction: column; gap: 2px;">
+      <div class="rail rail-on">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 1.8"></path></svg>
+        <span>On it</span>
+        <span style="margin-left: auto; font-size: 10px; color: #4ade80;">6</span>
+      </div>
+      <div class="rail">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 13.5 6 5.5h12l2.5 8v5h-17z"></path><path d="M3.5 13.5H9l1 2h4l1-2h5.5"></path></svg>
+        <span>Inbox</span>
+        <span style="margin-left: auto; background: #6366f1; color: #fff; font-size: 9.5px; font-weight: 700; padding: 0 6px; border-radius: 999px;">1</span>
+      </div>
+      <div class="rail">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"></path><path d="M3.5 7 12 11.6 20.5 7M12 11.6v9.9"></path></svg>
+        <span>Spaces</span>
+      </div>
+      <div class="rail">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 11 12 4l8.5 7"></path><path d="M5.5 9.8V19h13V9.8"></path></svg>
+        <span>Home</span>
+      </div>
+      <div style="height: 1px; background: #1e293b; margin: 10px 6px;"></div>
+      <div class="rail">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="5" rx="1.5"></rect><path d="M5.5 9.5v9h13v-9"></path><path d="M10 13h4"></path></svg>
+        <span>Stash</span>
+      </div>
+      <div class="rail">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="10" rx="2"></rect><path d="M7 19h10M21 9v10h-4"></path></svg>
+        <span>Machine</span>
+      </div>
+      <div class="rail">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12H3.5M18 6l-1.6 1.6M7.6 16.4 6 18M18 18l-1.6-1.6M7.6 7.6 6 6"></path></svg>
+        <span>Settings</span>
+      </div>
+    </div>
+
+    <div style="flex-grow: 1; min-width: 0; background: #0d1017; display: flex; flex-direction: column;">
+
+      <div style="flex-shrink: 0; border-bottom: 1px solid #1e293b; padding: 14px 24px 0;">
+        <div style="display: flex; align-items: baseline; gap: 22px;">
+          <span class="tab">On it</span>
+          <span class="tab">Features</span>
+          <span class="tab tab-on">Work</span>
+          <span style="margin-left: auto; font-size: 10.5px; color: #475569; padding-bottom: 9px;">9 open · every space</span>
+        </div>
+      </div>
+
+      <div style="flex-shrink: 0; display: flex; gap: 6px; padding: 12px 24px 12px; align-items: center;">
+        <span class="filt filt-on">Open 9</span>
+        <span class="filt">Held 3</span>
+        <span class="filt">Waiting on you 1</span>
+        <span class="filt">Blocked 2</span>
+        <span class="filt">Nobody on it 3</span>
+        <span style="margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: #64748b;">
+          <span style="width: 12px; height: 12px; border: 1px solid #334155; border-radius: 3px; display: inline-block;"></span>
+          Show finished · 8
+        </span>
+      </div>
+
+      <div style="flex-grow: 1; min-height: 0; overflow: hidden; padding: 0 24px 16px; display: flex; flex-direction: column; gap: 12px;">
+
+        <!-- Offline sync -->
+        <div class="group">
+          <div class="ghead">
+            <span style="font-size: 12.5px; font-weight: 600; color: #e2e8f0;">Offline sync</span>
+            <span style="font-size: 10.5px; color: #64748b;">x-platform · 2 of 5</span>
+            <span class="bot" style="margin-left: auto;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="6" width="16" height="12" rx="3"></rect><circle cx="9" cy="12" r="1.3"></circle><circle cx="15" cy="12" r="1.3"></circle><path d="M12 6V3.5"></path></svg>x-platform bot manages</span>
+          </div>
+
+          <div class="item" style="background: rgb(251 191 36 / 0.04);">
+            <span style="width: 7px; height: 7px; border-radius: 999px; background: #fbbf24;"></span>
+            <span style="font-size: 12px; color: #e2e8f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Fix dirty_files path</span>
+            <span class="has" style="background: rgb(251 191 36 / 0.14); color: #fbbf24;">@you · dev-a wants to push</span>
+            <span style="font-size: 11px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">fix is in, green locally · stopped at your review point · 2 min</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+          </div>
+
+          <div class="item">
+            <span style="width: 7px; height: 7px; border-radius: 999px; background: #4ade80;"></span>
+            <span style="font-size: 12px; color: #e2e8f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Reconcile offline writes</span>
+            <span class="has" style="background: rgb(74 222 128 / 0.14); color: #4ade80;">dev-a has it</span>
+            <span style="font-size: 11px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">editing sync.ts · 12 min in · 0 tools refused</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+          </div>
+
+          <div class="item">
+            <span style="width: 7px; height: 7px; border-radius: 999px; background: #fbbf24;"></span>
+            <span style="font-size: 12px; color: #e2e8f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Conflict UI for two-device edits</span>
+            <span class="has" style="border: 1px solid #334155; color: #94a3b8;">blocked</span>
+            <span style="font-size: 11px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">waiting on <span style="color: #cbd5e1;">Reconcile offline writes</span> · x-platform bot will unblock it</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+          </div>
+
+          <div class="item">
+            <span style="width: 7px; height: 7px; border-radius: 999px; background: #334155;"></span>
+            <span style="font-size: 12px; color: #cbd5e1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Retry queue when the network returns</span>
+            <span class="has" style="border: 1px solid #1e293b; color: #64748b;">nobody yet</span>
+            <span style="font-size: 11px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><span style="color: #a5b4fc;">x-platform bot</span> · next for dev-b once Reconcile lands · <span style="color: #a5b4fc;">put someone on it</span></span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+          </div>
+        </div>
+
+        <!-- Pricing page -->
+        <div class="group">
+          <div class="ghead">
+            <span style="font-size: 12.5px; font-weight: 600; color: #e2e8f0;">Pricing page</span>
+            <span style="font-size: 10.5px; color: #64748b;">Marketing site · 1 of 3</span>
+            <span class="bot" style="margin-left: auto;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="6" width="16" height="12" rx="3"></rect><circle cx="9" cy="12" r="1.3"></circle><circle cx="15" cy="12" r="1.3"></circle><path d="M12 6V3.5"></path></svg>Marketing bot manages</span>
+          </div>
+          <div class="item">
+            <span style="width: 7px; height: 7px; border-radius: 999px; background: #4ade80;"></span>
+            <span style="font-size: 12px; color: #e2e8f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Three headline options</span>
+            <span class="has" style="background: rgb(167 139 250 / 0.14); color: #c4b5fd;">writer has it</span>
+            <span style="font-size: 11px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">drafted, waiting for you to pick · 18 min</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+          </div>
+          <div class="item">
+            <span style="width: 7px; height: 7px; border-radius: 999px; background: #334155;"></span>
+            <span style="font-size: 12px; color: #cbd5e1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Price table copy</span>
+            <span class="has" style="border: 1px solid #1e293b; color: #64748b;">nobody yet</span>
+            <span style="font-size: 11px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">needs the headline first</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+          </div>
+        </div>
+
+        <!-- Release 1.4 -->
+        <div class="group">
+          <div class="ghead">
+            <span style="font-size: 12.5px; font-weight: 600; color: #e2e8f0;">Release 1.4</span>
+            <span style="font-size: 10.5px; color: #64748b;">TrackX · 4 of 6</span>
+            <span class="bot" style="margin-left: auto;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="6" width="16" height="12" rx="3"></rect><circle cx="9" cy="12" r="1.3"></circle><circle cx="15" cy="12" r="1.3"></circle><path d="M12 6V3.5"></path></svg>TrackX bot manages</span>
+          </div>
+          <div class="item" style="background: rgb(251 191 36 / 0.04);">
+            <span style="width: 7px; height: 7px; border-radius: 999px; background: #fbbf24;"></span>
+            <span style="font-size: 12px; color: #e2e8f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Tag v1.4.0</span>
+            <span class="has" style="background: rgb(251 191 36 / 0.14); color: #fbbf24;">@you · needs a yes</span>
+            <span style="font-size: 11px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">changelog and version bumps are done · a tag is past its review point · 08:00</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+          </div>
+          <div class="item">
+            <span style="width: 7px; height: 7px; border-radius: 999px; background: #334155;"></span>
+            <span style="font-size: 12px; color: #cbd5e1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Announce in the changelog channel</span>
+            <span class="has" style="border: 1px solid #1e293b; color: #64748b;">nobody yet</span>
+            <span style="font-size: 11px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">after the tag</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+          </div>
+        </div>
+
+        <div style="font-size: 10.5px; color: #475569;">
+          Every open work item in every space, grouped by the feature it belongs to. "Has it" is a live claim; "nobody yet" is the bot's suggestion of who should. Clicking a row opens the feature's thread at that item.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="height: 28px; flex-shrink: 0; border-top: 1px solid #1e293b; background: #11141c; display: flex; align-items: center; gap: 14px; padding: 0 12px;">
+    <span style="font-size: 11px; color: #94a3b8;">Logs</span>
+    <span style="font-size: 11px; color: #475569;">Processes</span>
+    <span style="margin-left: auto; font-size: 10.5px; color: #334155;">2 agents running · local-first · SQLite</span>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

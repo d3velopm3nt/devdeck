@@ -1,15 +1,83 @@
 {
   "pages": [
-    { "id": "page-1", "name": "Prototype" },
-    { "id": "page-3", "name": "The two views" },
-    { "id": "page-2", "name": "Not chosen" }
+    {
+      "id": "page-1",
+      "name": "Prototype"
+    },
+    {
+      "id": "page-3",
+      "name": "The two views"
+    },
+    {
+      "id": "page-2",
+      "name": "Not chosen"
+    }
   ],
   "artboards": [
-    { "file": "Main.dc.html", "title": "Thread first · click it", "page": "page-1", "x": 0, "y": 0, "w": 1456, "h": 909, "is_interactive": true },
-    { "file": "Tree.dc.html", "title": "The tree, before and after", "page": "page-1", "x": 1576, "y": 0, "w": 900, "h": 700 },
-    { "file": "Global.dc.html", "title": "View 1 · On it — every space, grouped by goal", "page": "page-3", "x": 0, "y": 0, "w": 1456, "h": 909 },
-    { "file": "Items.dc.html", "title": "View 2 · Spaces — files mapped to items", "page": "page-3", "x": 1576, "y": 0, "w": 1456, "h": 909 },
-    { "file": "PageFirst.dc.html", "title": "Option B · Page first", "page": "page-2", "x": 0, "y": 0, "w": 1456, "h": 909 }
+    {
+      "file": "Main.dc.html",
+      "title": "Thread first · click it",
+      "page": "page-1",
+      "x": 0,
+      "y": 0,
+      "w": 1456,
+      "h": 909,
+      "is_interactive": true
+    },
+    {
+      "file": "Tree.dc.html",
+      "title": "The tree, before and after",
+      "page": "page-1",
+      "x": 1576,
+      "y": 0,
+      "w": 900,
+      "h": 700
+    },
+    {
+      "file": "Global.dc.html",
+      "title": "View 1 · On it — every space, grouped by goal",
+      "page": "page-3",
+      "x": 0,
+      "y": 0,
+      "w": 1456,
+      "h": 909
+    },
+    {
+      "file": "Items.dc.html",
+      "title": "View 2 · Spaces — files mapped to items",
+      "page": "page-3",
+      "x": 1576,
+      "y": 0,
+      "w": 1456,
+      "h": 909
+    },
+    {
+      "file": "PageFirst.dc.html",
+      "title": "Option B · Page first",
+      "page": "page-2",
+      "x": 0,
+      "y": 0,
+      "w": 1456,
+      "h": 909
+    },
+    {
+      "file": "Features.dc.html",
+      "title": "Features · with bots",
+      "page": "page-3",
+      "x": 0,
+      "y": 1060,
+      "w": 1456,
+      "h": 909
+    },
+    {
+      "file": "Work.dc.html",
+      "title": "Work · with bots",
+      "page": "page-3",
+      "x": 1576,
+      "y": 1060,
+      "w": 1456,
+      "h": 909
+    }
   ],
   "annotations": [
     {
@@ -67,7 +135,18 @@
       "y": 0,
       "w": 460,
       "text": "OPTION B · Page first — not chosen, kept for the record.\n\nThe node as a dashboard with the assistant docked underneath. Everything visible at once, still works with no provider, least to rebuild.\n\nWhat it lost: the bot's night is a card reading \"last woke 08:00\" rather than the bot telling you what it found."
+    },
+    {
+      "id": "tabs-not-rail",
+      "page": "page-3",
+      "x": -520,
+      "y": 1060,
+      "w": 460,
+      "text": "FEATURES AND WORK\n\nBoth are tabs of the On it surface — On it · Features · Work — not rail entries. The rail keeps six things; these are three ways of reading the same goals.\n\nFeatures is the catalogue: every feature in every space, who manages it, who is on it, and the last thing said in its thread. A feature made by hand has no manager until a bot adopts it.\n\nWork is the same goals opened up: every open item grouped by feature. \"Has it\" is a live claim; \"nobody yet\" carries the bot's suggestion of who should. A row opens the feature's thread at that item.\n\n@you rows are tinted amber in both, and they are the only rows that also appear in the Inbox."
     }
   ],
-  "launch": { "view": "canvas", "page": "page-3" }
+  "launch": {
+    "view": "canvas",
+    "page": "page-3"
+  }
 }

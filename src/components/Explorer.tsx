@@ -9,7 +9,16 @@ import * as ipc from '../lib/ipc'
 import type { CommandDef, NodeKind, ProfileDef, ServiceDef, SvcState, TreeNode } from '../lib/types'
 import { useApp } from '../store'
 import { useAiw } from '../lib/aiwStore'
-import { openBot, openEditor, openNodeConfig, openNodeSetup, openService, openSpace, openAiwDoc, type AiwDoc } from '../lib/dock'
+import {
+  openAiwDoc,
+  openBot,
+  openEditor,
+  openNodeConfig,
+  openNodeSetup,
+  openNodeThread,
+  openService,
+  openSpace,
+} from '../lib/dock'
 import { focusCommandSession, launchProfile, openTerminal, runCommandInNewTerminal } from '../lib/runner'
 import { findNode, resolveDir } from '../lib/tree'
 import { SPACE_TAGS, labelColor, nodeColor } from '../lib/spaces'
@@ -17,7 +26,7 @@ import { loadExampleWorkspace } from '../lib/example'
 import { PopMenu, type MenuItem } from './PopMenu'
 import { BotCreate } from './bot/BotCreate'
 import { GitHubImportModal } from './GitHubImportModal'
-import { Icon, type IconName } from '../lib/icons'
+import { Icon } from '../lib/icons'
 
 // The expand/collapse state is remembered across restarts so the tree
 // reopens where you left it — a folder isn't "gone" after a restart, its
@@ -143,6 +152,11 @@ export function Explorer() {
   useEffect(() => saveSet(EXPANDED_KEY, expanded), [expanded])
   useEffect(() => saveSet(CATS_KEY, collapsedCats), [collapsedCats])
   const [menu, setMenu] = useState<Menu | null>(null)
+  // What is on disk under a node, and which folders are open. Keyed
+  // `<nodeId>:<rel>`, so two nodes can each have a `src` open at once.
+  const [files, setFiles] = useState<Record<string, ipc.FileRow[]>>({})
+  const [fileErr, setFileErr] = useState<Record<string, string>>({})
+  const [openDirs, setOpenDirs] = useState<Set<string>>(new Set())
   const [wsMenu, setWsMenu] = useState<{ x: number; y: number } | null>(null)
   const [ghOpen, setGhOpen] = useState(false)
   const [newBotFor, setNewBotFor] = useState<number | null>(null)
@@ -637,42 +651,106 @@ export function Explorer() {
     )
   }
 
-  /// A project's AI views, as rows.
+  /// The files under a node, on disk.
   ///
-  /// These replaced a tab strip above the tree. The strip had to teleport you
-  /// to another surface for half its entries and open a document for the rest;
-  /// here every row does the same thing — opens a tab on the right — and the
-  /// Explorer stays the one place you navigate a project.
-  const AIW_ROWS: Array<{ kind: AiwDoc; label: string; icon: IconName }> = [
-    { kind: 'assistant', label: 'Assistant', icon: 'ai' },
-    { kind: 'context', label: 'Context', icon: 'context' },
-    { kind: 'git', label: 'Git', icon: 'commit' },
-  ]
+  /// The tree used to stop at the vault, and under each project it carried
+  /// five rows that were not folders at all — Assistant, Context, Git,
+  /// Commands, Services wearing folder costumes. Those are things a node
+  /// *has*, and they are on its page now. This is what a tree is actually
+  /// for: where things are.
+  ///
+  /// Loaded when you expand and never before: a vault of thirty repositories
+  /// would otherwise read every one of them to draw a sidebar.
+  const loadDir = (nodeId: number, rel: string) => {
+    const k = `${nodeId}:${rel}`
+    if (files[k] || fileErr[k]) return
+    void ipc
+      .nodeFiles(nodeId, rel)
+      .then((rows) => setFiles((f) => ({ ...f, [k]: rows })))
+      // "I could not read this folder" and "this folder is empty" must never
+      // render the same, so the failure is kept and shown.
+      .catch((e) => setFileErr((x) => ({ ...x, [k]: String(e) })))
+  }
 
-  const renderAiwRows = (node: TreeNode, depth: number): ReactNode => {
-    const pid = String(node.id)
-    return (
-      <div key={`${node.id}-aiw`}>
-        {AIW_ROWS.map((r) => (
+  const toggleDir = (nodeId: number, rel: string) => {
+    const k = `${nodeId}:${rel}`
+    setOpenDirs((prev) => {
+      const next = new Set(prev)
+      if (next.has(k)) next.delete(k)
+      else {
+        next.add(k)
+        loadDir(nodeId, rel)
+      }
+      return next
+    })
+  }
+
+  const renderFiles = (node: TreeNode, rel: string, depth: number): ReactNode => {
+    const k = `${node.id}:${rel}`
+    const rows = files[k]
+    const err = fileErr[k]
+    const pad = { paddingLeft: `${depth * 14 + 6}px` }
+
+    if (err) {
+      return (
+        <div key={`${k}-err`} className="px-1.5 py-0.5 text-[11px] text-err" style={pad}>
+          <span className="pl-10">could not read this folder — {err}</span>
+        </div>
+      )
+    }
+    if (!rows) {
+      return (
+        <div key={`${k}-load`} className="px-1.5 py-0.5 text-[11px] text-muted" style={pad}>
+          <span className="pl-10">reading the folder…</span>
+        </div>
+      )
+    }
+    // A child node already has a row of its own; the folder behind it would be
+    // the same place on screen twice.
+    const owned = new Set(
+      rel === '' ? nodes.filter((n) => n.parent_id === node.id).map((x) => x.name.toLowerCase()) : [],
+    )
+    const visible = rows.filter((r) => !(r.dir && owned.has(r.name.toLowerCase())))
+    if (visible.length === 0) {
+      return (
+        <div key={`${k}-empty`} className="px-1.5 py-0.5 text-[11px] text-faint" style={pad}>
+          <span className="pl-10">nothing else in this folder</span>
+        </div>
+      )
+    }
+    return visible.map((r) => {
+      const childKey = `${node.id}:${r.rel}`
+      const open = openDirs.has(childKey)
+      return (
+        <div key={childKey}>
           <div
-            key={r.kind}
-            className="flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 text-[12px] text-body select-none hover:bg-hover"
-            style={{ paddingLeft: `${depth * 14 + 6}px` }}
+            className="group flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 text-[12px] text-body select-none hover:bg-hover"
+            style={pad}
+            title={r.rel}
             onClick={() => {
-              setSelectedNode(node.id)
-              setRailView('projects')
-              openAiwDoc(r.kind, pid, node.name)
+              if (r.dir) toggleDir(node.id, r.rel)
             }}
           >
-            <span className="w-5 shrink-0" />
-            <span className="flex w-5 shrink-0 items-center justify-center text-indigo-400">
-              <Icon name={r.icon} size={12} />
+            <span className="flex w-5 shrink-0 items-center justify-center text-dim">
+              {r.dir && <Icon name={open ? 'chevron-down' : 'chevron-right'} size={13} />}
             </span>
-            <span className="min-w-0 flex-1 truncate">{r.label}</span>
+            <span className="flex w-5 shrink-0 items-center justify-center text-faint">
+              <Icon name={r.dir ? 'folder' : 'note'} size={12} />
+            </span>
+            <span className="min-w-0 flex-1 truncate">{r.name}</span>
+            {r.item && (
+              <span
+                className="mr-1 shrink-0 rounded-full bg-indigo-500/12 px-1.5 text-[9px] font-semibold uppercase tracking-[0.03em] text-indigo-400"
+                title={`Work items on “${r.item}” name this path`}
+              >
+                {r.item}
+              </span>
+            )}
           </div>
-        ))}
-      </div>
-    )
+          {r.dir && open && renderFiles(node, r.rel, depth + 1)}
+        </div>
+      )
+    })
   }
 
   /// What is happening in this project right now, and what it is working on.
@@ -843,8 +921,11 @@ export function Explorer() {
             // A project's click opens its dashboard (the space page); settings
             // stay on double-click / context menu. A workspace opens the same
             // page a folder does — it is one, and it has context of its own.
-            if (node.kind === 'project') openSpace(node.id, node.name)
-            else openNodeConfig(node.id, node.name)
+            // Every node is a conversation, so a click opens its thread. Its
+            // dashboard, its settings and its context are on that page, one
+            // click further — which is what the five pseudo-rows under every
+            // project used to be for.
+            openNodeThread(node.id, node.name)
           }}
           onDoubleClick={() => {
             if (renaming) return
@@ -862,6 +943,7 @@ export function Explorer() {
             className={`flex w-5 shrink-0 items-center justify-center text-dim hover:text-ink ${hasKids ? 'cursor-pointer' : 'opacity-0'}`}
             onClick={(e) => {
               e.stopPropagation()
+              if (node.kind === 'project' && !expanded.has(node.id)) loadDir(node.id, '')
               toggle(node.id)
             }}
           >
@@ -958,10 +1040,10 @@ export function Explorer() {
         </div>
         {isOpen && (
           <>
-            {node.kind === 'project' && renderAiwRows(node, depth + 1)}
             {node.kind === 'project' && renderLive(node, depth + 1)}
             {children.map((c) => renderNode(c, depth + 1))}
             {node.kind === 'project' && renderFeatures(node, depth + 1)}
+            {node.kind === 'project' && renderFiles(node, '', depth + 1)}
             {showCommands &&
               renderCategory(
                 node,

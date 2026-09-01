@@ -81,6 +81,22 @@ export function openEditor(kind: EditorKind, id: number, _title?: string, projec
   useApp.getState().openSheet({ kind, id, projectId: projectId ?? null })
 }
 
+/// Open (or focus) a node's thread — the first thing a click on the tree
+/// does now. Every level has one, which is the whole model: you talk to a
+/// workspace, a folder or a project, and what differs is what it can say.
+export function openNodeThread(nodeId: number, title: string) {
+  if (!api) return
+  useApp.getState().setRailView('projects')
+  const id = `node-thread-${nodeId}`
+  const existing = api.getPanel(id)
+  if (existing) {
+    existing.api.setActive()
+    return
+  }
+  addToMain({ id, component: 'node-thread', title, params: { id: nodeId } })
+  api.getPanel(id)?.api.setActive()
+}
+
 /// Open (or focus) the personalized detail page for a space (project) as
 /// a main-area tab.
 export function openSpace(projectId: number, title: string) {

@@ -19,6 +19,7 @@ mod bots;
 mod conn;
 mod creds;
 mod db;
+mod files;
 mod focus;
 mod git;
 mod github;
@@ -995,6 +996,7 @@ pub fn run() {
             aiw::commands::aiw_send_message,
             bots::bot_thread,
             bots::bot_thread_send,
+            files::node_files,
             team::team_board,
             threads::feature_thread,
             threads::feature_thread_send,

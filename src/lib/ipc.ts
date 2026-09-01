@@ -209,6 +209,19 @@ export const botDelete = (nodeId: number) => invoke<void>('bot_delete', { nodeId
 // The bot's own thread. Same record and same loop as a conversation with the
 // assistant, run in the bot's voice with the bot's permissions — so the shapes
 // are the assistant's, not a second set.
+/** One entry under a node, on disk. `item` is the feature whose work items
+ *  name this path — derived, never a label anyone maintains. */
+export interface FileRow {
+  name: string
+  rel: string
+  dir: boolean
+  item?: string
+}
+
+/** What is in one folder of a node. `rel` empty means the node's own root. */
+export const nodeFiles = (nodeId: number, rel = '') =>
+  invoke<FileRow[]>('node_files', { nodeId, rel })
+
 /** The Team board: every goal in every space, with everyone on it. */
 export const teamBoard = () => invoke<import('./aiw').GoalRow[]>('team_board')
 

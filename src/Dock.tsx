@@ -103,6 +103,7 @@ function Welcome() {
   )
 }
 
+import { NodePage } from './components/node/NodePage'
 import {
   AssistantPanel,
   ContextPanel,
@@ -113,6 +114,7 @@ import {
 const components = {
   'node-setup': (props: IDockviewPanelProps<{ id: number }>) => <NodeSetupPage {...props} />,
   'node-config': (props: IDockviewPanelProps<{ id: number }>) => <NodeConfigPage {...props} />,
+  'node-thread': (props: IDockviewPanelProps<{ id: number }>) => <NodePage {...props} />,
   'space-detail': (props: IDockviewPanelProps<{ id: number }>) => <SpaceDetailPage {...props} />,
   'bot-detail': (props: IDockviewPanelProps<{ id: number; ask?: boolean }>) => <BotPage {...props} />,
   'service-detail': (props: IDockviewPanelProps<{ id: number }>) => <ServiceDetailPage {...props} />,

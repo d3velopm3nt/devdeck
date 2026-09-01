@@ -1241,6 +1241,136 @@ fn repo_of(app: &tauri::AppHandle, node_id: i64) -> Option<PathBuf> {
     n.path.filter(|p| !p.trim().is_empty()).map(PathBuf::from)
 }
 
+// ---------------------------------------------------------------------------
+// The bot's own thread
+// ---------------------------------------------------------------------------
+
+/// The voice a bot speaks in. Built from `_bot.md` every time, so editing the
+/// file changes the bot — nothing is cached about who it is.
+///
+/// Permissions are the named agent's, when there is one. A bot with no agent
+/// is given an id the matrix has never heard of, which gets it nothing: it
+/// can answer questions about its space and cannot touch anything. That is
+/// the honest shape of "a bot that watches", and it is the same rule that
+/// governs its wake.
+pub fn persona(bot: &Bot) -> crate::aiw::assistant::Persona {
+    let acts = !bot.agent.trim().is_empty();
+    let mut system = format!(
+        "You are {}, the bot managing {}. You manage; you do not do the work yourself \
+         — you read the space, say what you found, and put agents on what needs doing. \
+         Be brief and concrete. Say plainly what you did, what you did not, and what \
+         needs a person.",
+        bot.name, bot.node_name
+    );
+    if !bot.goal.trim().is_empty() {
+        system.push_str(&format!("\n\nYour goal: {}", bot.goal.trim()));
+    }
+    if !bot.body.trim().is_empty() {
+        system.push_str(&format!("\n\n{}", bot.body.trim()));
+    }
+    if !bot.team.is_empty() {
+        system.push_str(&format!(
+            "\n\nYour team — the only agents you may put work on: {}.",
+            bot.team.join(", ")
+        ));
+    }
+    if !acts {
+        system.push_str(
+            "\n\nYou have no agent, so you cannot run tools or delegate. Say so if asked \
+             to act, and say what naming an agent would let you do.",
+        );
+    }
+    crate::aiw::assistant::Persona {
+        agent_id: if acts { bot.agent.trim().to_string() } else { format!("bot:{}", bot.node_id) },
+        runs_as: if acts {
+            bot.agent.trim().to_string()
+        } else {
+            crate::aiw::assistant::ASSISTANT_ID.to_string()
+        },
+        name: bot.name.clone(),
+        system,
+    }
+}
+
+/// Put a line the bot said on its own — a wake report — into its thread.
+///
+/// Best effort, and says so: a wake that cannot reach the personal store still
+/// happened and is still in the activity feed, so failing the wake over its
+/// transcript would be backwards. The line is logged instead.
+pub fn thread_post(app: &tauri::AppHandle, bot: &Bot, text: &str) {
+    use tauri::Manager;
+    if text.trim().is_empty() {
+        return;
+    }
+    let Some(ws) = app.try_state::<std::sync::Arc<crate::aiw::state::Workspace>>() else {
+        return;
+    };
+    let result = (|| -> Result<(), String> {
+        let convs = ws.convs()?;
+        let conv = convs.for_bot(bot.node_id, &bot.node_id.to_string(), &bot.name)?;
+        convs.post_as_bot(&conv.id, text)?;
+        Ok(())
+    })();
+    if let Err(e) = result {
+        eprintln!("[bots] {} woke but its thread could not be written: {e}", bot.name);
+    }
+}
+
+/// The bot's thread, found or made.
+#[tauri::command]
+pub fn bot_thread(
+    ws: tauri::State<std::sync::Arc<crate::aiw::state::Workspace>>,
+    db: tauri::State<Db>,
+    node_id: i64,
+) -> Result<crate::aiw::assistant::ConversationMeta, String> {
+    let bot = {
+        let conn = db.0.lock().unwrap();
+        bot_on(&conn, node_id).ok_or("There is no bot in that folder.")?
+    };
+    let convs = ws.convs()?;
+    convs.for_bot(node_id, &node_id.to_string(), &bot.name)
+}
+
+/// Say something to a bot in its own thread, and get its answer.
+///
+/// The same loop the assistant uses, run as the bot: its voice from
+/// `_bot.md`, its permissions from the agent it names. Streams progress on the
+/// assistant's channel, keyed by conversation, so the page that asked is the
+/// only one that hears it.
+#[tauri::command]
+pub async fn bot_thread_send(
+    app: tauri::AppHandle,
+    ws: tauri::State<'_, std::sync::Arc<crate::aiw::state::Workspace>>,
+    db: tauri::State<'_, Db>,
+    node_id: i64,
+    text: String,
+) -> Result<crate::aiw::assistant::AssistantReply, String> {
+    use tauri::Emitter;
+    let bot = {
+        let conn = db.0.lock().unwrap();
+        bot_on(&conn, node_id).ok_or("There is no bot in that folder.")?
+    };
+    // The space has to be registered before the bot can read it — the same
+    // step a wake takes, for the same reason.
+    if ws.project(&node_id.to_string()).is_none() {
+        let dir = std::path::PathBuf::from(&bot.dir);
+        let code_root = repo_of(&app, node_id).unwrap_or_else(|| dir.clone());
+        ws.register_project(&node_id.to_string(), &bot.node_name, code_root, dir);
+    }
+    let workspace = ws.inner().clone();
+    let who = persona(&bot);
+    tauri::async_runtime::spawn_blocking(move || {
+        let sink = move |e: crate::aiw::assistant::ChatEvent| {
+            let _ = app.emit("aiw:chat", e);
+        };
+        let convs = workspace.convs()?;
+        let conv = convs.for_bot(node_id, &node_id.to_string(), &bot.name)?;
+        crate::aiw::assistant::Assistant::send_as(&workspace, convs, &conv.id, &text, &sink, &who)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Wake the agent this bot names, if it names one.
 ///
 /// Returns the line for your inbox. `None` means it had nothing to say, which
@@ -1444,6 +1574,49 @@ mod tests {
         assert_eq!(back.team, vec!["dev-a".to_string(), "qa".to_string()]);
         assert_eq!(back.agent, "dev-a");
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A bot with no agent can talk but not act. That is enforced by giving
+    /// it an id the permission matrix has never heard of — the matrix fails
+    /// closed — while the assistant's provider does the talking. Naming an
+    /// agent makes the bot that agent for both.
+    #[test]
+    fn a_bot_with_no_agent_speaks_as_nobody_the_matrix_knows() {
+        let b = Bot {
+            node_id: 8,
+            name: "Fitness bot".into(),
+            node_name: "Fitness".into(),
+            goal: "Four sessions a week".into(),
+            ..Default::default()
+        };
+        let p = persona(&b);
+        assert_eq!(p.agent_id, "bot:8", "an id no permission row matches");
+        assert_eq!(p.runs_as, crate::aiw::assistant::ASSISTANT_ID);
+        assert!(p.system.contains("Fitness bot"), "{}", p.system);
+        assert!(p.system.contains("Four sessions a week"), "{}", p.system);
+        assert!(
+            p.system.contains("cannot run tools"),
+            "it is told, so it can say so: {}",
+            p.system
+        );
+    }
+
+    #[test]
+    fn a_bot_with_an_agent_is_that_agent_for_permissions_and_voice() {
+        let b = Bot {
+            node_id: 2,
+            name: "x-platform bot".into(),
+            node_name: "x-platform".into(),
+            goal: "Ship offline sync".into(),
+            agent: "dev-a".into(),
+            team: vec!["dev-a".into(), "qa".into()],
+            ..Default::default()
+        };
+        let p = persona(&b);
+        assert_eq!(p.agent_id, "dev-a");
+        assert_eq!(p.runs_as, "dev-a");
+        assert!(p.system.contains("dev-a, qa"), "the team is named: {}", p.system);
+        assert!(!p.system.contains("cannot run tools"));
     }
 
     #[test]

@@ -52,7 +52,9 @@ function ToolRow({ m }: { m: ChatMessage }) {
   )
 }
 
-function Bubble({ m }: { m: ChatMessage }) {
+/// One message. Shared with a bot's thread, which is the same record in a
+/// different voice — `who` is the name the non-user side speaks as.
+export function Bubble({ m, who = 'Assistant' }: { m: ChatMessage; who?: string }) {
   if (m.from === 'tool') return <ToolRow m={m} />
   const mine = m.from === 'user'
   return (
@@ -67,7 +69,7 @@ function Bubble({ m }: { m: ChatMessage }) {
       <div className="min-w-0 flex-1">
         <div className="mb-0.5 flex items-baseline gap-2">
           <span className="text-[11.5px] font-semibold text-ink">
-            {mine ? 'You' : 'Assistant'}
+            {mine ? 'You' : who}
           </span>
           <span className="text-[10px] text-faint">{ago(m.at)}</span>
         </div>

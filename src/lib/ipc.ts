@@ -206,6 +206,14 @@ export const botSave = (b: {
 }) => invoke<Bot>('bot_save', b)
 export const botDelete = (nodeId: number) => invoke<void>('bot_delete', { nodeId })
 
+// The bot's own thread. Same record and same loop as a conversation with the
+// assistant, run in the bot's voice with the bot's permissions — so the shapes
+// are the assistant's, not a second set.
+export const botThread = (nodeId: number) =>
+  invoke<import('./aiw').ConversationMeta>('bot_thread', { nodeId })
+export const botThreadSend = (nodeId: number, text: string) =>
+  invoke<import('./aiw').AssistantReply>('bot_thread_send', { nodeId, text })
+
 export interface BotWork {
   id: string
   title: string

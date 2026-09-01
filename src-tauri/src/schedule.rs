@@ -352,6 +352,18 @@ fn run_one(
             let ran = bot
                 .as_ref()
                 .and_then(|b| crate::bots::wake_agent(app, b));
+            // The receipt is the log, and the bot's thread is where the
+            // receipt goes — the inbox line and the thread line are the same
+            // sentence, so a wake reads the same wherever you meet it.
+            let line = match (&report, &ran) {
+                (Some(r), Some((_, a))) => format!("{r}. {a}"),
+                (Some(r), None) => r.clone(),
+                (None, Some((_, a))) => a.clone(),
+                (None, None) => String::new(),
+            };
+            if let Some(b) = bot.as_ref() {
+                crate::bots::thread_post(app, b, &line);
+            }
             match (report, ran) {
                 // The wake's own success is the agent's: a bot that ran and was
                 // refused everything did not have a good night, and the inbox

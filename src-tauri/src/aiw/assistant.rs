@@ -96,8 +96,40 @@ pub struct ConversationMeta {
     /// this is a default rather than a boundary.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project_id: Option<String>,
+    /// The bot this is the thread of, when it is one. A bot's thread is the
+    /// same shape as a conversation with the assistant — you, it, and what it
+    /// did — so it is the same record, marked rather than duplicated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bot_node: Option<i64>,
     #[serde(default)]
     pub messages: Vec<ChatMessage>,
+}
+
+/// Who a turn runs as.
+///
+/// The assistant and a bot go through one loop: same provider call, same tool
+/// gate, same transcript. What differs is the voice and the permissions, and
+/// that is all this carries. `agent_id` is what the permission matrix is asked
+/// about — an id it has never heard of gets nothing, which is how a bot with
+/// no agent can talk without being able to act. `runs_as` is the agent whose
+/// provider and model do the talking.
+#[derive(Clone, Debug)]
+pub struct Persona {
+    pub agent_id: String,
+    pub runs_as: String,
+    pub name: String,
+    pub system: String,
+}
+
+impl Persona {
+    pub fn assistant(system: &str) -> Self {
+        Self {
+            agent_id: ASSISTANT_ID.into(),
+            runs_as: ASSISTANT_ID.into(),
+            name: "Assistant".into(),
+            system: system.to_string(),
+        }
+    }
 }
 
 /// What the UI is told while a reply is still being produced.
@@ -153,6 +185,8 @@ pub struct ConversationSummary {
     pub messages: usize,
     /// The last thing said, for the list.
     pub preview: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bot_node: Option<i64>,
 }
 
 // ---------------------------------------------------------------------------
@@ -180,10 +214,59 @@ impl Conversations {
             started_at: now.clone(),
             updated_at: now,
             project_id: project_id.map(str::to_string),
+            bot_node: None,
             messages: Vec::new(),
         };
         self.save(&meta)?;
         Ok(meta)
+    }
+
+    /// A bot's thread: found if it exists, made if it does not.
+    ///
+    /// One per bot, by the node it lives on. The title is the bot's name and
+    /// stays that way — the first thing said does not rename a bot.
+    pub fn for_bot(
+        &self,
+        node_id: i64,
+        project_id: &str,
+        name: &str,
+    ) -> Result<ConversationMeta, String> {
+        if let Some(existing) = self
+            .list()
+            .into_iter()
+            .find(|c| c.bot_node == Some(node_id))
+        {
+            return self.load(&existing.id);
+        }
+        let now = now_iso();
+        let meta = ConversationMeta {
+            id: new_id("conv"),
+            title: name.to_string(),
+            started_at: now.clone(),
+            updated_at: now,
+            project_id: Some(project_id.to_string()),
+            bot_node: Some(node_id),
+            messages: Vec::new(),
+        };
+        self.save(&meta)?;
+        Ok(meta)
+    }
+
+    /// Something the bot said on its own — a wake report — appended without a
+    /// turn. The receipt is the log, and the thread is where the receipt goes.
+    pub fn post_as_bot(&self, conv_id: &str, text: &str) -> Result<ChatMessage, String> {
+        let mut conv = self.load(conv_id)?;
+        let msg = ChatMessage {
+            at: now_iso(),
+            from: Speaker::Assistant,
+            text: text.trim().to_string(),
+            tool: Some("wake".into()),
+            ok: Some(true),
+        };
+        conv.messages.push(msg.clone());
+        conv.updated_at = now_iso();
+        self.save(&conv)?;
+        Ok(msg)
     }
 
     pub fn load(&self, id: &str) -> Result<ConversationMeta, String> {
@@ -237,6 +320,7 @@ impl Conversations {
                 started_at: m.started_at,
                 updated_at: m.updated_at,
                 project_id: m.project_id,
+                bot_node: m.bot_node,
             });
         }
         out.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
@@ -254,7 +338,9 @@ fn render(m: &ConversationMeta) -> String {
     for msg in &m.messages {
         let who = match msg.from {
             Speaker::User => "You".to_string(),
-            Speaker::Assistant => "Assistant".to_string(),
+            Speaker::Assistant => {
+                if m.bot_node.is_some() { m.title.clone() } else { "Assistant".to_string() }
+            }
             Speaker::Tool => format!(
                 "{} {}",
                 msg.tool.clone().unwrap_or_else(|| "tool".into()),
@@ -297,25 +383,43 @@ impl Assistant {
         text: &str,
         sink: ChatSink,
     ) -> Result<AssistantReply, String> {
+        let agent = ws
+            .agent(ASSISTANT_ID)
+            .ok_or_else(|| format!("no '{ASSISTANT_ID}' agent"))?;
+        Self::send_as(ws, convs, conversation_id, text, sink, &Persona::assistant(&agent.system))
+    }
+
+    /// One turn, as whoever `persona` says. The assistant and every bot come
+    /// through here; nothing about the loop knows which it is.
+    pub fn send_as(
+        ws: &Arc<Workspace>,
+        convs: &Conversations,
+        conversation_id: &str,
+        text: &str,
+        sink: ChatSink,
+        persona: &Persona,
+    ) -> Result<AssistantReply, String> {
         if text.trim().is_empty() {
             return Err("nothing to send".into());
         }
         let mut conv = convs.load(conversation_id)?;
         let agent = ws
-            .agent(ASSISTANT_ID)
-            .ok_or_else(|| format!("no '{ASSISTANT_ID}' agent"))?;
+            .agent(&persona.runs_as)
+            .ok_or_else(|| format!("no '{}' agent", persona.runs_as))?;
+        let me: &str = &persona.agent_id;
 
         // The first thing said names the conversation. Better than "New
         // conversation" forever, and cheaper than asking a model for a title.
-        if conv.messages.is_empty() {
+        // A bot's thread is already named after the bot.
+        if conv.messages.is_empty() && conv.bot_node.is_none() {
             conv.title = truncate(text.trim(), 60);
         }
         let mut appended = vec![ChatMessage::said(Speaker::User, text.trim())];
         conv.messages.push(appended[0].clone());
 
         let scope = match &conv.project_id {
-            Some(p) => EventScope::project(p).with_agent(ASSISTANT_ID),
-            None => EventScope::default().with_agent(ASSISTANT_ID),
+            Some(p) => EventScope::project(p).with_agent(me),
+            None => EventScope::default().with_agent(me),
         };
         let started = ws.bus.emit(DomainEvent::new(
             EventType::AgentStarted,
@@ -323,7 +427,7 @@ impl Assistant {
             serde_json::json!({ "name": agent.name, "conversation": conv.id }),
         ));
 
-        let mut tools = super::tools::definitions_for(ASSISTANT_ID, &ws.permission_matrix());
+        let mut tools = super::tools::definitions_for(me, &ws.permission_matrix());
         // The project tools are only meaningful with a project in focus. Saying
         // so beats offering a model a `files_read` that cannot resolve a root.
         if conv.project_id.is_none() {
@@ -341,10 +445,10 @@ impl Assistant {
 
         while turn < MAX_TURNS {
             let request = AgentRequest {
-                agent_id: ASSISTANT_ID.into(),
+                agent_id: me.to_string(),
                 role: agent.role.clone(),
                 model: agent.model.clone(),
-                system: Self::system_prompt(ws, convs, &conv, &agent.system),
+                system: Self::system_prompt(ws, convs, &conv, &persona.system),
                 context: Self::context(ws, convs, &conv),
                 goal: text.trim().to_string(),
                 tools: tools.clone(),
@@ -388,6 +492,7 @@ impl Assistant {
                             ws,
                             convs,
                             &conv,
+                            me,
                             call,
                             &scope,
                             &started,
@@ -495,10 +600,12 @@ impl Assistant {
     /// Run one tool call. Assistant-only tools are handled here; everything
     /// else goes through the project's `ToolService` and its permission gate,
     /// approval prompt included.
+    #[allow(clippy::too_many_arguments)]
     fn run_tool(
         ws: &Arc<Workspace>,
         convs: &Conversations,
         conv: &ConversationMeta,
+        me: &str,
         call: &ToolCall,
         scope: &EventScope,
         cause: &DomainEvent,
@@ -506,8 +613,9 @@ impl Assistant {
     ) -> (bool, String) {
         if is_assistant_tool(&call.tool) {
             // Still permission-checked: the orchestrator's right to spawn
-            // agents is revocable like anything else.
-            let permission = ws.permission_matrix().get(ASSISTANT_ID, &call.tool);
+            // agents is revocable like anything else — and a bot's is decided
+            // by its own row in the matrix, not the assistant's.
+            let permission = ws.permission_matrix().get(me, &call.tool);
             if matches!(permission, super::tools::Permission::None) {
                 return (
                     false,
@@ -517,7 +625,7 @@ impl Assistant {
             return match call.tool.as_str() {
                 TOOL_DELEGATE => Self::delegate(ws, conv, call, delegated),
                 TOOL_MEMORY => Self::memory(convs, conv, call),
-                TOOL_BOTS => Self::make_bot(ws, conv, call, scope, cause),
+                TOOL_BOTS => Self::make_bot(ws, conv, me, call, scope, cause),
                 _ => (false, format!("unknown assistant tool '{}'", call.tool)),
             };
         }
@@ -536,7 +644,7 @@ impl Assistant {
         };
         let r = project
             .tools
-            .execute(&ws.bus, ASSISTANT_ID, scope, call, Some(cause));
+            .execute(&ws.bus, me, scope, call, Some(cause));
         (
             r.ok,
             if r.ok {
@@ -556,6 +664,7 @@ impl Assistant {
     fn make_bot(
         ws: &Arc<Workspace>,
         conv: &ConversationMeta,
+        me: &str,
         call: &ToolCall,
         scope: &EventScope,
         cause: &DomainEvent,
@@ -592,7 +701,7 @@ impl Assistant {
             );
         }
 
-        let outcome = ws.ask_approval(ASSISTANT_ID, call, scope, cause);
+        let outcome = ws.ask_approval(me, call, scope, cause);
         if !outcome.allows() {
             return (false, format!("not made — {outcome:?}"));
         }

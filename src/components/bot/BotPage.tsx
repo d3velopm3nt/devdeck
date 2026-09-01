@@ -25,9 +25,10 @@ import { BotTools } from './BotTools'
 import { BotSettings } from './BotSettings'
 import { BotInterview } from './BotInterview'
 import { BotGrants } from './BotGrants'
+import { BotChat } from './BotChat'
 import { CAPTURE_BOT_MODAL, CAPTURE_BOT_TAB } from '../../lib/devCapture'
 
-type Tab = 'overview' | 'plan' | 'knows' | 'tools' | 'settings'
+type Tab = 'chat' | 'overview' | 'plan' | 'knows' | 'tools' | 'settings'
 
 const SUGGESTION_ICON: Record<string, IconName> = {
   interview: 'ai',
@@ -47,7 +48,9 @@ export function BotPage({ params }: IDockviewPanelProps<{ id: number; ask?: bool
   const [suggestions, setSuggestions] = useState<ipc.BotSuggestion[] | null>(null)
   const [interview, setInterview] = useState<ipc.Interview | null>(null)
   const [templates, setTemplates] = useState<ipc.BotTemplate[]>([])
-  const [tab, setTab] = useState<Tab>((CAPTURE_BOT_TAB as Tab) || 'overview')
+  // Opens on the thread. A page that opened on settings was a form with a bot
+  // attached; opening on what the bot said is the other way round.
+  const [tab, setTab] = useState<Tab>((CAPTURE_BOT_TAB as Tab) || 'chat')
   const [gone, setGone] = useState(false)
   const [err, setErr] = useState('')
   const [asking, setAsking] = useState(params.ask === true || CAPTURE_BOT_MODAL === 'interview')
@@ -166,6 +169,7 @@ export function BotPage({ params }: IDockviewPanelProps<{ id: number; ask?: bool
   const scriptLen = interview?.script.length ?? 6
 
   const TABS: { id: Tab; label: string; badge?: string }[] = [
+    { id: 'chat', label: 'Chat' },
     { id: 'overview', label: 'Overview' },
     { id: 'plan', label: 'Plan', badge: work.length ? `${p.done}/${p.total}` : undefined },
     {
@@ -251,6 +255,12 @@ export function BotPage({ params }: IDockviewPanelProps<{ id: number; ask?: bool
         {err && (
           <div className="mb-3 rounded-lg border border-red-500/25 bg-red-500/[0.07] px-3 py-2 text-[11.5px] leading-[1.5] text-err">
             {err}
+          </div>
+        )}
+
+        {tab === 'chat' && bot && (
+          <div className="h-full">
+            <BotChat bot={bot} />
           </div>
         )}
 

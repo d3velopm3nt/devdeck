@@ -991,6 +991,8 @@ pub fn run() {
             aiw::commands::aiw_delete_conversation,
             aiw::commands::aiw_focus_conversation,
             aiw::commands::aiw_send_message,
+            bots::bot_thread,
+            bots::bot_thread_send,
             aiw::commands::aiw_personal_root,
             aiw::commands::aiw_profile,
             aiw::commands::aiw_save_profile,

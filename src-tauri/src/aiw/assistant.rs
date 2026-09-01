@@ -27,7 +27,8 @@ use super::deck::Doc;
 use super::events::{new_id, now_iso, DomainEvent, EventScope, EventType};
 use super::personal::{MemoryMeta, PersonalStore};
 use super::provider::{AgentAction, AgentRequest, AgentResponse, ChatTurn, Observation};
-use super::runtime::{AgentRuntime, StartAgentCommand};
+use super::mentions::{self, Handover};
+use super::runtime::{AgentRuntime, LiveSession, StartAgentCommand};
 use super::state::Workspace;
 use super::tools::{is_assistant_tool, ToolCall, TOOL_BOTS, TOOL_DELEGATE, TOOL_MEMORY};
 
@@ -65,6 +66,12 @@ pub struct ChatMessage {
     pub tool: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ok: Option<bool>,
+    /// Who said it, when that is not simply "the assistant": a bot's id, an
+    /// agent's id. A thread with three bots and two agents in it cannot be
+    /// read without this, and inferring the speaker from the conversation's
+    /// title only works while exactly one thing is talking.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub by: Option<String>,
 }
 
 impl ChatMessage {
@@ -75,6 +82,27 @@ impl ChatMessage {
             text: text.into(),
             tool: None,
             ok: None,
+            by: None,
+        }
+    }
+
+    /// Somebody joining a thread. Public because bots are resolved a layer
+    /// up, where the database is — `aiw` knows agents and nothing else.
+    pub fn pulled_in(by: &str, text: impl Into<String>) -> Self {
+        Self::note(by, "pulled-in", true, text)
+    }
+
+    /// Something the thread records rather than something anyone said: a
+    /// participant pulled in, a claim moving, a session reporting back. Drawn
+    /// as a receipt, never as a speech bubble — nobody asked it a question.
+    fn note(by: &str, tag: &str, ok: bool, text: impl Into<String>) -> Self {
+        Self {
+            at: now_iso(),
+            from: Speaker::Assistant,
+            text: text.into(),
+            tool: Some(tag.to_string()),
+            ok: Some(ok),
+            by: Some(by.to_string()),
         }
     }
 }
@@ -101,6 +129,24 @@ pub struct ConversationMeta {
     /// did — so it is the same record, marked rather than duplicated.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bot_node: Option<i64>,
+    /// The feature this is the thread of, when it is one.
+    ///
+    /// The feature *is* the room: it already exists in the deck, so it gains
+    /// a thread rather than a new object beside it. One conversation per
+    /// (project, feature), found or made.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feature: Option<String>,
+    /// The node this is the thread of, when it is one — a workspace, a folder,
+    /// a project. Any level of the tree can be talked to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub node: Option<i64>,
+    /// Everyone who has been pulled in, by agent or bot id.
+    ///
+    /// Being in a thread is free — this list is what a mention writes, and it
+    /// carries no permission at all. Being *handed work* is a claim transfer,
+    /// which goes through the gate and is not recorded here.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub participants: Vec<String>,
     #[serde(default)]
     pub messages: Vec<ChatMessage>,
 }
@@ -185,8 +231,19 @@ pub struct ConversationSummary {
     pub messages: usize,
     /// The last thing said, for the list.
     pub preview: String,
+    /// And who said it. A room with five things talking in it cannot be
+    /// previewed without naming the speaker.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview_by: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bot_node: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feature: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub node: Option<i64>,
+    /// Who is in it, so a list of threads can say so without loading each one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub participants: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -215,6 +272,68 @@ impl Conversations {
             updated_at: now,
             project_id: project_id.map(str::to_string),
             bot_node: None,
+            feature: None,
+            node: None,
+            participants: Vec::new(),
+            messages: Vec::new(),
+        };
+        self.save(&meta)?;
+        Ok(meta)
+    }
+
+    /// A feature's thread: found if it exists, made if it does not.
+    ///
+    /// One per feature per project. The title is the feature's name, and the
+    /// first thing said does not rename it — a room is not named after
+    /// whoever walked in first.
+    pub fn for_feature(
+        &self,
+        project_id: &str,
+        feature_id: &str,
+        name: &str,
+    ) -> Result<ConversationMeta, String> {
+        if let Some(existing) = self.list().into_iter().find(|c| {
+            c.feature.as_deref() == Some(feature_id) && c.project_id.as_deref() == Some(project_id)
+        }) {
+            return self.load(&existing.id);
+        }
+        let now = now_iso();
+        let meta = ConversationMeta {
+            id: new_id("conv"),
+            title: name.to_string(),
+            started_at: now.clone(),
+            updated_at: now,
+            project_id: Some(project_id.to_string()),
+            bot_node: None,
+            feature: Some(feature_id.to_string()),
+            node: None,
+            participants: Vec::new(),
+            messages: Vec::new(),
+        };
+        self.save(&meta)?;
+        Ok(meta)
+    }
+
+    /// A node's thread: found if it exists, made if it does not.
+    ///
+    /// Every level of the tree has one — a workspace, a folder, a project.
+    /// What differs between them is what there is to say, not whether you can
+    /// say it.
+    pub fn for_node(&self, node_id: i64, name: &str) -> Result<ConversationMeta, String> {
+        if let Some(existing) = self.list().into_iter().find(|c| c.node == Some(node_id)) {
+            return self.load(&existing.id);
+        }
+        let now = now_iso();
+        let meta = ConversationMeta {
+            id: new_id("conv"),
+            title: name.to_string(),
+            started_at: now.clone(),
+            updated_at: now,
+            project_id: Some(node_id.to_string()),
+            bot_node: None,
+            feature: None,
+            node: Some(node_id),
+            participants: Vec::new(),
             messages: Vec::new(),
         };
         self.save(&meta)?;
@@ -246,6 +365,9 @@ impl Conversations {
             updated_at: now,
             project_id: Some(project_id.to_string()),
             bot_node: Some(node_id),
+            feature: None,
+            node: None,
+            participants: Vec::new(),
             messages: Vec::new(),
         };
         self.save(&meta)?;
@@ -255,18 +377,42 @@ impl Conversations {
     /// Something the bot said on its own — a wake report — appended without a
     /// turn. The receipt is the log, and the thread is where the receipt goes.
     pub fn post_as_bot(&self, conv_id: &str, text: &str) -> Result<ChatMessage, String> {
-        let mut conv = self.load(conv_id)?;
-        let msg = ChatMessage {
+        self.post(conv_id, ChatMessage {
             at: now_iso(),
             from: Speaker::Assistant,
             text: text.trim().to_string(),
             tool: Some("wake".into()),
             ok: Some(true),
-        };
+            by: None,
+        })
+    }
+
+    /// Append one message to a thread nobody is holding open.
+    ///
+    /// This is how an agent reports back after the conversation that started
+    /// it has moved on, and how a bot posts into a feature's room. Re-reads
+    /// before writing, because the thread may have grown since the caller
+    /// last saw it — a session takes minutes, and overwriting what was said
+    /// while it ran would lose exactly the messages worth keeping.
+    pub fn post(&self, conv_id: &str, msg: ChatMessage) -> Result<ChatMessage, String> {
+        let mut conv = self.load(conv_id)?;
         conv.messages.push(msg.clone());
         conv.updated_at = now_iso();
         self.save(&conv)?;
         Ok(msg)
+    }
+
+    /// Record that someone is now in this thread. Idempotent: being mentioned
+    /// twice does not make you two participants.
+    pub fn add_participant(&self, conv_id: &str, who: &str) -> Result<bool, String> {
+        let mut conv = self.load(conv_id)?;
+        if conv.participants.iter().any(|p| p.eq_ignore_ascii_case(who)) {
+            return Ok(false);
+        }
+        conv.participants.push(who.to_string());
+        conv.updated_at = now_iso();
+        self.save(&conv)?;
+        Ok(true)
     }
 
     pub fn load(&self, id: &str) -> Result<ConversationMeta, String> {
@@ -306,14 +452,14 @@ impl Conversations {
                 continue;
             };
             let m = doc.meta;
+            let last = m
+                .messages
+                .iter()
+                .rev()
+                .find(|x| x.from != Speaker::Tool);
             out.push(ConversationSummary {
-                preview: m
-                    .messages
-                    .iter()
-                    .rev()
-                    .find(|x| x.from != Speaker::Tool)
-                    .map(|x| truncate(&x.text, 120))
-                    .unwrap_or_default(),
+                preview: last.map(|x| truncate(&x.text, 120)).unwrap_or_default(),
+                preview_by: last.and_then(|x| x.by.clone()),
                 messages: m.messages.len(),
                 id: m.id,
                 title: m.title,
@@ -321,6 +467,9 @@ impl Conversations {
                 updated_at: m.updated_at,
                 project_id: m.project_id,
                 bot_node: m.bot_node,
+                feature: m.feature,
+                node: m.node,
+                participants: m.participants,
             });
         }
         out.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
@@ -417,6 +566,27 @@ impl Assistant {
         let mut appended = vec![ChatMessage::said(Speaker::User, text.trim())];
         conv.messages.push(appended[0].clone());
 
+        // A message can pull people in and hand work over before anything has
+        // answered it. Both are facts about the thread rather than something a
+        // model decides, so they happen here and are recorded as receipts.
+        let mut delegated: Vec<String> = Vec::new();
+        for note in Self::pull_in(ws, &mut conv, text, persona) {
+            appended.push(note.clone());
+            sink(ChatEvent::Step {
+                conversation_id: conv.id.clone(),
+                message: note,
+            });
+        }
+        if let Some(h) = mentions::handover(text) {
+            let note = Self::hand_over(ws, convs, &conv, persona, &h, &mut delegated);
+            conv.messages.push(note.clone());
+            appended.push(note.clone());
+            sink(ChatEvent::Step {
+                conversation_id: conv.id.clone(),
+                message: note,
+            });
+        }
+
         let scope = match &conv.project_id {
             Some(p) => EventScope::project(p).with_agent(me),
             None => EventScope::default().with_agent(me),
@@ -439,7 +609,6 @@ impl Assistant {
 
         let conv_id = conv.id.clone();
         let mut observations: Vec<Observation> = Vec::new();
-        let mut delegated: Vec<String> = Vec::new();
         let mut reply = String::new();
         let mut turn = 0u32;
 
@@ -504,6 +673,7 @@ impl Assistant {
                             text: truncate(&output, 600),
                             tool: Some(format!("{}.{}", call.tool, call.action)),
                             ok: Some(ok),
+                            by: Some(me.to_string()),
                         };
                         conv.messages.push(msg.clone());
                         appended.push(msg.clone());
@@ -565,7 +735,10 @@ impl Assistant {
             );
         }
 
-        let msg = ChatMessage::said(Speaker::Assistant, &reply);
+        let mut msg = ChatMessage::said(Speaker::Assistant, &reply);
+        // In a room with several bots in it, "who said this" cannot be
+        // inferred from the conversation's title.
+        msg.by = Some(persona.agent_id.clone());
         conv.messages.push(msg.clone());
         appended.push(msg);
         conv.updated_at = now_iso();
@@ -597,6 +770,194 @@ impl Assistant {
         })
     }
 
+    /// Pull the people this message mentions into the thread.
+    ///
+    /// Free, and deliberately so: a mention costs nothing, needs nobody's
+    /// permission, and gives the mentioned party exactly one thing — this
+    /// thread, from here on. Work changing hands is [`Self::hand_over`], and
+    /// it is a different thing with a different gate.
+    ///
+    /// Only agents are resolved here. A bot is a file in a folder that this
+    /// layer knows nothing about, so the caller registers those before the
+    /// turn starts — which is why `participants` is a plain list of names
+    /// rather than anything typed.
+    fn pull_in(
+        ws: &Arc<Workspace>,
+        conv: &mut ConversationMeta,
+        text: &str,
+        persona: &Persona,
+    ) -> Vec<ChatMessage> {
+        let mut notes = Vec::new();
+        for name in mentions::mentions(text) {
+            if conv.participants.iter().any(|p| p.eq_ignore_ascii_case(&name)) {
+                continue;
+            }
+            let Some(agent) = ws.agent(&name) else { continue };
+            conv.participants.push(agent.id.clone());
+            let note = ChatMessage::note(
+                &agent.id,
+                "pulled-in",
+                true,
+                format!(
+                    "@{} pulled in by {} — reads this thread from here on",
+                    agent.id, persona.name
+                ),
+            );
+            conv.messages.push(note.clone());
+            notes.push(note);
+        }
+        notes
+    }
+
+    /// Move a work item to somebody.
+    ///
+    /// This is the line the whole design rests on: being in a thread is free,
+    /// being handed work is a claim transfer. So it goes through the same gate
+    /// as `delegate.start` — if the speaker may not delegate, the claim does
+    /// not move, and the thread says so rather than quietly doing nothing.
+    fn hand_over(
+        ws: &Arc<Workspace>,
+        convs: &Conversations,
+        conv: &ConversationMeta,
+        persona: &Persona,
+        h: &Handover,
+        delegated: &mut Vec<String>,
+    ) -> ChatMessage {
+        let refuse = |why: String| ChatMessage::note(&persona.agent_id, "handover", false, why);
+
+        let (Some(project_id), Some(feature_id)) = (conv.project_id.clone(), conv.feature.clone())
+        else {
+            return refuse(
+                "Work changes hands inside a feature — this thread is not one, so nothing moved."
+                    .into(),
+            );
+        };
+        // The gate. Not a courtesy check: an id the matrix has never heard of
+        // gets nothing, which is how a bot with no agent can talk in a thread
+        // without being able to move anyone's work.
+        if matches!(
+            ws.permission_matrix().get(&persona.agent_id, TOOL_DELEGATE),
+            super::tools::Permission::None
+        ) {
+            return refuse(format!(
+                "{} may not hand work over — that goes through the same gate as delegate.start, \
+                 and it is not granted here. Nothing moved.",
+                persona.name
+            ));
+        }
+        let Some(agent) = ws.agent(&h.agent) else {
+            return refuse(format!("Nobody here is called @{}, so nothing moved.", h.agent));
+        };
+        let Some(project) = ws.project(&project_id) else {
+            return refuse(format!("No project '{project_id}', so nothing moved."));
+        };
+        let wanted = h.what.trim().to_lowercase();
+        if wanted.is_empty() {
+            return refuse("Say which work item to hand over.".into());
+        }
+        let items = project
+            .deck()
+            .work(&feature_id)
+            .map(|w| w.meta.items)
+            .unwrap_or_default();
+        let Some(item) = items
+            .iter()
+            .find(|i| i.id.to_lowercase() == wanted || i.title.to_lowercase() == wanted)
+            .or_else(|| items.iter().find(|i| i.title.to_lowercase().contains(&wanted)))
+        else {
+            return refuse(format!(
+                "No work item on {feature_id} matching “{}”, so nothing moved.",
+                h.what
+            ));
+        };
+        let was = if item.status.trim().is_empty() {
+            "unclaimed".to_string()
+        } else {
+            item.status.clone()
+        };
+
+        let cmd = StartAgentCommand {
+            project_id,
+            feature_id,
+            agent_id: agent.id.clone(),
+            work_item_id: Some(item.id.clone()),
+            intent: Some(format!("{} handed this over: {}", persona.name, item.title)),
+            areas: Vec::new(),
+            depends_on: Vec::new(),
+            unattended: false,
+        };
+        let live = match AgentRuntime::begin(ws, &cmd) {
+            Ok(l) => l,
+            Err(e) => return refuse(format!("{} could not take it: {e}", agent.id)),
+        };
+        delegated.push(live.session_id.clone());
+        Self::drive_and_report(ws, convs, live, conv.id.clone(), &agent);
+
+        ChatMessage::note(
+            &agent.id,
+            "handover",
+            true,
+            format!(
+                "“{}” claimed by @{} — was {was}. Handed over by {}.",
+                item.title, agent.id, persona.name
+            ),
+        )
+    }
+
+    /// Run a session in the background and report back into the thread it came
+    /// from.
+    ///
+    /// The reporting is the point. A session started from a conversation and
+    /// finishing somewhere else is how "I put dev-a on it" becomes a claim
+    /// nobody can check — so the thread that started it gets one message when
+    /// it ends, in the receipt shape: what ran, what changed, what it could
+    /// not do.
+    fn drive_and_report(
+        ws: &Arc<Workspace>,
+        convs: &Conversations,
+        live: LiveSession,
+        conv_id: String,
+        agent: &super::state::AgentDef,
+    ) {
+        let bg = ws.clone();
+        let who = agent.id.clone();
+        let name = agent.name.clone();
+        // The store this conversation actually came from. Asking the workspace
+        // for its own would be the same object in the app and a different one
+        // anywhere the caller opened its own — and a receipt written into the
+        // wrong store is a receipt nobody ever sees.
+        let store = convs.store().clone();
+        std::thread::spawn(move || {
+            let line = match AgentRuntime::drive(&bg, live) {
+                Ok(out) => format!(
+                    "{name} finished — {} turn{}, {} file{} touched, {} refused.\n{}",
+                    out.turns,
+                    if out.turns == 1 { "" } else { "s" },
+                    out.files_touched.len(),
+                    if out.files_touched.len() == 1 { "" } else { "s" },
+                    out.refused,
+                    out.summary.trim(),
+                ),
+                Err(e) => {
+                    eprintln!("[aiw] delegated session failed: {e}");
+                    format!("{name} could not finish — {e}")
+                }
+            };
+            // Best effort, and it says so: the session happened whether or not
+            // its receipt could be written, and failing the run over its
+            // transcript would be backwards.
+            let posted = Conversations::new(store)
+                .post(
+                    &conv_id,
+                    ChatMessage::note(&who, "session", !line.contains("could not finish"), line),
+                )
+                .map(|_| ());
+            if let Err(e) = posted {
+                eprintln!("[aiw] {who} finished but its receipt could not be written: {e}");
+            }
+        });
+    }
+
     /// Run one tool call. Assistant-only tools are handled here; everything
     /// else goes through the project's `ToolService` and its permission gate,
     /// approval prompt included.
@@ -623,7 +984,7 @@ impl Assistant {
                 );
             }
             return match call.tool.as_str() {
-                TOOL_DELEGATE => Self::delegate(ws, conv, call, delegated),
+                TOOL_DELEGATE => Self::delegate(ws, convs, conv, call, delegated),
                 TOOL_MEMORY => Self::memory(convs, conv, call),
                 TOOL_BOTS => Self::make_bot(ws, conv, me, call, scope, cause),
                 _ => (false, format!("unknown assistant tool '{}'", call.tool)),
@@ -732,6 +1093,7 @@ impl Assistant {
 
     fn delegate(
         ws: &Arc<Workspace>,
+        convs: &Conversations,
         conv: &ConversationMeta,
         call: &ToolCall,
         delegated: &mut Vec<String>,
@@ -807,13 +1169,13 @@ impl Assistant {
                 delegated.push(session_id.clone());
 
                 // A session takes minutes. Holding the chat open for one would
-                // make the assistant useless exactly when it is doing the most.
-                let bg = ws.clone();
-                std::thread::spawn(move || {
-                    if let Err(e) = AgentRuntime::drive(&bg, live) {
-                        eprintln!("[aiw] delegated session failed: {e}");
-                    }
-                });
+                // make the assistant useless exactly when it is doing the most
+                // — so it runs in the background and reports back into this
+                // thread when it is done.
+                let Some(def) = ws.agent(&agent_id) else {
+                    return (false, format!("no agent '{agent_id}'"));
+                };
+                Self::drive_and_report(ws, convs, live, conv.id.clone(), &def);
 
                 // Say when the agent behind this is scripted. "I have put
                 // Developer A on it" is a claim about real work; if the
@@ -1101,6 +1463,7 @@ mod tests {
             text: "ok".into(),
             tool: Some("delegate.start".into()),
             ok: Some(true),
+            by: None,
         });
         c.save(&conv).unwrap();
 
@@ -1148,6 +1511,7 @@ mod tests {
             text: "some tool output".into(),
             tool: Some("memory.list".into()),
             ok: Some(true),
+            by: None,
         });
         c.save(&b).unwrap();
 

@@ -26,11 +26,13 @@ import type { TreeNode } from '../lib/types'
 
 type Item = { view: RailView; icon: IconName; label: string }
 
-/// Destinations that are not solutions.
-const WORK: Item[] = [
-  { view: 'aiworkspace', icon: 'ai', label: 'Assistant' },
-  { view: 'connections', icon: 'database', label: 'Connections' },
-]
+/// Destinations that are not spaces.
+///
+/// The Assistant used to be here. It is a contact now, first in the list on
+/// Team → Bots, because it is one of the things you talk to rather than a
+/// place you go; what is left of its old surface is configuration, and that
+/// is under Settings.
+const WORK: Item[] = [{ view: 'connections', icon: 'database', label: 'Connections' }]
 
 /// The app itself, anchored to the bottom.
 const APP: Item[] = [
@@ -187,12 +189,16 @@ export function Rail() {
         expanded ? 'w-[160px] items-stretch gap-px px-1.5 py-1.5' : 'w-[52px] items-center gap-1 py-2'
       }`}
     >
+      {/* Team first: what everyone is working on is the question this app
+          exists to answer, and it is the one you have before you have any
+          other. Inbox second, because it is the short list of what needs
+          *you*. */}
       <RailButton
-        label="Home"
-        icon="home"
-        active={railView === 'home'}
+        label="Team"
+        icon="agent"
+        active={railView === 'team'}
         expanded={expanded}
-        onClick={() => setRailView('home')}
+        onClick={() => setRailView('team')}
       />
 
       <RailButton
@@ -212,12 +218,11 @@ export function Rail() {
         </div>
       )}
 
-      {/* Repos belonging to no solution still have to be reachable, so the
-          unscoped view keeps a slot. With no solutions yet it is simply
-          "Projects", which is what this rail has always said. */}
+      {/* The tree. "Spaces" rather than "Projects": it holds workspaces,
+          folders and repos, and only some of them are projects. */}
       <RailButton
-        label="All projects"
-        icon="project"
+        label="Spaces"
+        icon="workspace"
         active={onProjects && activeSolutionId == null}
         expanded={expanded}
         dot={anyRunning}
@@ -240,36 +245,16 @@ export function Rail() {
 
       <Rule expanded={expanded} />
 
+      {/* Bots, Work, Events and Scheduler were four rail entries onto the same
+          question. They are tabs and filters now: Bots and Work are tabs of
+          Team, Events is the bottom bar's raw bus, and the clock lives under
+          Settings → Routines beside the bot whose file it agrees with. */}
       <RailButton
-        label="Bots"
-        icon="bot"
-        active={railView === 'bots'}
+        label="Home"
+        icon="home"
+        active={railView === 'home'}
         expanded={expanded}
-        onClick={() => setRailView('bots')}
-      />
-
-      <RailButton
-        label="Work"
-        icon="check"
-        active={railView === 'work'}
-        expanded={expanded}
-        onClick={() => setRailView('work')}
-      />
-
-      <RailButton
-        label="Events"
-        icon="history"
-        active={railView === 'events'}
-        expanded={expanded}
-        onClick={() => setRailView('events')}
-      />
-
-      <RailButton
-        label="Scheduler"
-        icon="schedule"
-        active={railView === 'scheduler'}
-        expanded={expanded}
-        onClick={() => setRailView('scheduler')}
+        onClick={() => setRailView('home')}
       />
 
       {WORK.map((it) => (

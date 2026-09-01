@@ -34,6 +34,8 @@ mod setup;
 mod shots;
 mod spaces;
 mod stash;
+mod team;
+mod threads;
 mod vault;
 
 use std::sync::{Arc, Mutex};
@@ -993,6 +995,11 @@ pub fn run() {
             aiw::commands::aiw_send_message,
             bots::bot_thread,
             bots::bot_thread_send,
+            team::team_board,
+            threads::feature_thread,
+            threads::feature_thread_send,
+            threads::node_thread,
+            threads::node_thread_send,
             aiw::commands::aiw_personal_root,
             aiw::commands::aiw_profile,
             aiw::commands::aiw_save_profile,

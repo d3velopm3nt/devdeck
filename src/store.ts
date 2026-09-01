@@ -34,13 +34,16 @@ export type Theme = 'dark' | 'light'
 export type RailView =
   | 'home'
   | 'inbox'
-  | 'bots'
-  | 'scheduler'
-  | 'work'
-  | 'events'
+  /// Team: goals, features, work and bots — the first view.
+  | 'team'
+  /// The tree. Called Spaces on the rail; the id stayed to keep saved
+  /// preferences and every existing link working.
   | 'projects'
   | 'stash'
   | 'connections'
+  /// The Assistant's own workspace pages — providers, agents, conflicts.
+  /// Reached from Settings rather than from the rail: it is where you
+  /// configure the team, not where you work with it.
   | 'aiworkspace'
   | 'machine'
   | 'settings'
@@ -344,8 +347,7 @@ const loadSeen = () => Number(localStorage.getItem(SEEN_KEY) ?? 0) || 0
 const RAIL_VIEWS: readonly RailView[] = [
   'home',
   'inbox',
-  'bots',
-  'scheduler',
+  'team',
   'projects',
   'stash',
   'connections',

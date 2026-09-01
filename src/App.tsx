@@ -2,16 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { Dock, buildDefaultLayout } from './Dock'
 import { BottomBar } from './components/BottomBar'
 import { InboxPage } from './components/InboxPage'
-import { BotsPage } from './components/BotsPage'
+import { TeamPage } from './components/team/TeamPage'
 import { FocusBar } from './components/FocusBar'
-import { SchedulerPage } from './components/SchedulerPage'
 import { SetupModal } from './components/SetupModal'
 import { VaultSetup } from './components/VaultSetup'
 import { Sheet } from './components/Sheet'
 import { UpdateBar, VersionPill, type UpState } from './components/UpdateBar'
 import { ClockToast } from './components/ClockToast'
-import { WorkPage } from './components/WorkPage'
-import { EventsPage } from './components/EventsPage'
 import { Rail } from './shell/Rail'
 import { WorkspaceTabs } from './shell/WorkspaceTabs'
 import { WindowControls } from './shell/WindowControls'
@@ -723,10 +720,7 @@ export default function App() {
           {railView === 'aiworkspace' && <AiWorkspace />}
           {railView === 'machine' && <MachineSetup />}
           {railView === 'inbox' && <InboxPage />}
-          {railView === 'bots' && <BotsPage />}
-          {railView === 'work' && <WorkPage />}
-          {railView === 'events' && <EventsPage />}
-          {railView === 'scheduler' && <SchedulerPage />}
+          {railView === 'team' && <TeamPage />}
           {railView === 'settings' && <ConfigPage />}
         </main>
       </div>

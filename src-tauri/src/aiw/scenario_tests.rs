@@ -12,6 +12,7 @@ use super::commands::{run_demo, seed_demo};
 use super::context::ContextService;
 use super::events::EventType;
 use super::runtime::{AgentRuntime, StartAgentCommand};
+use super::assistant::Persona;
 use super::state::Workspace;
 use super::tools::{ToolCall, TOOL_FILES};
 
@@ -1066,6 +1067,271 @@ fn convs(t: &Tmp) -> Conversations {
     let s = PersonalStore::at(t.0.join("personal"));
     s.ensure().unwrap();
     Conversations::new(s)
+}
+
+// ---------------------------------------------------------------------------
+// Threads: the feature is the room
+// ---------------------------------------------------------------------------
+
+/// The feature gains a thread; it does not gain a second object.
+///
+/// One conversation per (project, feature), found rather than made twice —
+/// otherwise two people opening the same feature would be talking in two
+/// rooms that look identical and share nothing.
+#[test]
+fn a_feature_has_exactly_one_thread_however_often_it_is_opened() {
+    let t = Tmp::new("featthread");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
+    let c = convs(&t);
+
+    let a = c
+        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .unwrap();
+    let b = c
+        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .unwrap();
+    assert_eq!(a.id, b.id, "the room is found, not made again");
+    assert_eq!(a.feature.as_deref(), Some("offline-synchronisation"));
+
+    // A different feature in the same project is a different room.
+    let other = c.for_feature("tyrex", "reporting", "Reporting").unwrap();
+    assert_ne!(other.id, a.id);
+}
+
+/// Being in a thread is free. A mention adds a participant and nothing else —
+/// no claim moves, no session starts, nobody is asked for permission.
+#[test]
+fn a_mention_pulls_someone_in_and_moves_no_work() {
+    let t = Tmp::new("mention");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
+    let c = convs(&t);
+    let conv = c
+        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .unwrap();
+
+    let reply = Assistant::send(&w, &c, &conv.id, "@qa what did the suite say?", &quiet).unwrap();
+    assert!(reply.delegated.is_empty(), "a mention is not a delegation");
+
+    let saved = c.load(&conv.id).unwrap();
+    assert!(
+        saved.participants.iter().any(|p| p == "qa"),
+        "qa should be in the thread: {:?}",
+        saved.participants
+    );
+    assert!(
+        saved
+            .messages
+            .iter()
+            .any(|m| m.tool.as_deref() == Some("pulled-in") && m.by.as_deref() == Some("qa")),
+        "the thread records who was pulled in"
+    );
+    assert!(
+        w.claims_for(Some("tyrex"), true).is_empty(),
+        "nothing was claimed by talking"
+    );
+}
+
+/// Handing work over is a claim transfer, so it goes through the delegate gate.
+/// With the tool revoked, the claim does not move and the thread says so.
+#[test]
+fn handing_work_over_is_refused_when_the_speaker_may_not_delegate() {
+    let t = Tmp::new("handover-denied");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
+    w.set_permission(ASSISTANT_ID, super::tools::TOOL_DELEGATE, "none")
+        .unwrap();
+    let c = convs(&t);
+    let conv = c
+        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .unwrap();
+
+    Assistant::send(&w, &c, &conv.id, "@dev-a take \"Sync status UI\"", &quiet).unwrap();
+
+    let saved = c.load(&conv.id).unwrap();
+    let note = saved
+        .messages
+        .iter()
+        .find(|m| m.tool.as_deref() == Some("handover"))
+        .expect("the attempt is recorded either way");
+    assert_eq!(note.ok, Some(false), "it must not have moved: {}", note.text);
+    assert!(
+        note.text.contains("gate"),
+        "and it says why: {}",
+        note.text
+    );
+    assert!(w.claims_for(Some("tyrex"), true).is_empty());
+}
+
+/// The same message, with the gate open: the claim moves, the work item is
+/// marked in the deck, and the session that starts reports back into the
+/// thread it came from.
+#[test]
+fn handing_work_over_moves_the_claim_and_the_agent_reports_back() {
+    let t = Tmp::new("handover");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
+    let c = convs(&t);
+    let conv = c
+        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .unwrap();
+
+    let reply =
+        Assistant::send(&w, &c, &conv.id, "@dev-a take \"Sync status UI\"", &quiet).unwrap();
+    assert_eq!(reply.delegated.len(), 1, "a session started: {reply:?}");
+
+    let saved = c.load(&conv.id).unwrap();
+    let note = saved
+        .messages
+        .iter()
+        .find(|m| m.tool.as_deref() == Some("handover"))
+        .expect("the transfer is recorded");
+    assert_eq!(note.ok, Some(true), "{}", note.text);
+    assert!(note.text.contains("Sync status UI"), "{}", note.text);
+    assert_eq!(note.by.as_deref(), Some("dev-a"), "it names who has it now");
+
+    // The claim is real, and it is on the work item that was named.
+    let held = w.claims_for(Some("tyrex"), false);
+    assert!(
+        held.iter()
+            .any(|c| c.agent_id == "dev-a" && c.work_item_id.as_deref() == Some("wi-ui")),
+        "the claim names the item: {held:?}"
+    );
+
+    // And the session posts one receipt into this thread when it ends.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    let receipt = loop {
+        let now = c.load(&conv.id).unwrap();
+        if let Some(m) = now
+            .messages
+            .iter()
+            .find(|m| m.tool.as_deref() == Some("session"))
+            .cloned()
+        {
+            break m;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the agent never reported back into the thread"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    };
+    assert_eq!(receipt.by.as_deref(), Some("dev-a"));
+    assert!(
+        receipt.text.contains("turn") && receipt.text.contains("refused"),
+        "the receipt says what ran and what it could not do: {}",
+        receipt.text
+    );
+}
+
+/// A bot with no agent has an id the permission matrix has never heard of, so
+/// it can talk in a room and cannot move anyone's work. That is the whole
+/// safety property of "being in a thread is free", asserted rather than
+/// assumed.
+#[test]
+fn a_bot_with_no_agent_can_talk_in_a_room_but_cannot_move_work() {
+    let t = Tmp::new("botvoice");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
+    let c = convs(&t);
+    let conv = c
+        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .unwrap();
+
+    // Exactly what `bots::persona` builds for a bot that names no agent: an
+    // unknown id, running on the assistant's provider.
+    let voice = Persona {
+        agent_id: "bot:99".into(),
+        runs_as: ASSISTANT_ID.into(),
+        name: "TyreX bot".into(),
+        system: "You manage TyreX.".into(),
+    };
+    Assistant::send_as(
+        &w,
+        &c,
+        &conv.id,
+        "@dev-a take \"Sync status UI\"",
+        &quiet,
+        &voice,
+    )
+    .unwrap();
+
+    let saved = c.load(&conv.id).unwrap();
+    let note = saved
+        .messages
+        .iter()
+        .find(|m| m.tool.as_deref() == Some("handover"))
+        .expect("the attempt is recorded");
+    assert_eq!(note.ok, Some(false), "{}", note.text);
+    assert!(w.claims_for(Some("tyrex"), true).is_empty());
+    // It still said something — talking is what it can do.
+    assert!(saved
+        .messages
+        .iter()
+        .any(|m| m.by.as_deref() == Some("bot:99")));
+}
+
+/// Two bots in one room, talking to each other, in the same record.
+///
+/// This is bot-to-bot communication with nothing special about it: two
+/// personas, one conversation, each message carrying who said it. The mock
+/// provider makes it work with no key — what it cannot do is make the words
+/// good, which is why the assertion is about the plumbing.
+#[test]
+fn two_bots_hold_a_conversation_in_one_feature_thread() {
+    let t = Tmp::new("bot2bot");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
+    let c = convs(&t);
+    let conv = c
+        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .unwrap();
+
+    let bot = |id: &str, name: &str| Persona {
+        agent_id: id.into(),
+        runs_as: ASSISTANT_ID.into(),
+        name: name.into(),
+        system: format!("You are {name}."),
+    };
+
+    Assistant::send_as(
+        &w,
+        &c,
+        &conv.id,
+        "@qa the suite is red again on this one.",
+        &quiet,
+        &bot("bot:1", "x-platform bot"),
+    )
+    .unwrap();
+    Assistant::send_as(
+        &w,
+        &c,
+        &conv.id,
+        "Two failures, both in sync. @architect worth one answer?",
+        &quiet,
+        &bot("bot:2", "TrackX bot"),
+    )
+    .unwrap();
+
+    let saved = c.load(&conv.id).unwrap();
+    let speakers: Vec<&str> = saved
+        .messages
+        .iter()
+        .filter_map(|m| m.by.as_deref())
+        .collect();
+    assert!(speakers.contains(&"bot:1"), "{speakers:?}");
+    assert!(speakers.contains(&"bot:2"), "{speakers:?}");
+    // Both mentions pulled their agent in, and neither moved any work.
+    assert!(saved.participants.iter().any(|p| p == "qa"));
+    assert!(saved.participants.iter().any(|p| p == "architect"));
+    assert!(w.claims_for(Some("tyrex"), true).is_empty());
 }
 
 /// The distinction that makes this an orchestrator rather than a chat window.

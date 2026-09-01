@@ -290,7 +290,7 @@ export function SchedulerPage() {
                     </button>
                     {s.kind === 'bot' ? (
                       <>
-                        <button className="btn-ghost text-[11px]" onClick={() => setRailView('bots')}>
+                        <button className="btn-ghost text-[11px]" onClick={() => setRailView('team')}>
                           Edit the bot
                         </button>
                         <span className="text-[10.5px] text-faint">

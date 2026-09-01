@@ -209,6 +209,24 @@ export const botDelete = (nodeId: number) => invoke<void>('bot_delete', { nodeId
 // The bot's own thread. Same record and same loop as a conversation with the
 // assistant, run in the bot's voice with the bot's permissions — so the shapes
 // are the assistant's, not a second set.
+/** The Team board: every goal in every space, with everyone on it. */
+export const teamBoard = () => invoke<import('./aiw').GoalRow[]>('team_board')
+
+// A feature's thread — the room bots and agents collaborate in. The feature
+// already exists in the deck; this is the same conversation record marked with
+// its slug, so nothing new is created on disk.
+export const featureThread = (nodeId: number, featureId: string) =>
+  invoke<import('./aiw').ConversationMeta>('feature_thread', { nodeId, featureId })
+export const featureThreadSend = (nodeId: number, featureId: string, text: string) =>
+  invoke<import('./aiw').AssistantReply>('feature_thread_send', { nodeId, featureId, text })
+
+// A node's thread, at any level of the tree. A parent has no repository, and
+// says so rather than answering as though it had read code up there.
+export const nodeThread = (nodeId: number) =>
+  invoke<import('./aiw').ConversationMeta>('node_thread', { nodeId })
+export const nodeThreadSend = (nodeId: number, text: string) =>
+  invoke<import('./aiw').AssistantReply>('node_thread_send', { nodeId, text })
+
 export const botThread = (nodeId: number) =>
   invoke<import('./aiw').ConversationMeta>('bot_thread', { nodeId })
 export const botThreadSend = (nodeId: number, text: string) =>

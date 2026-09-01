@@ -302,6 +302,48 @@ fn dir_of(conn: &Connection, node: &db::Node) -> Option<PathBuf> {
     Some(deck)
 }
 
+/// Every bot in the vault, read through a connection someone else is holding.
+///
+/// The listing command reconciles heartbeats as well; this one only reads, so
+/// it is safe to call from inside another command's lock — which is what a
+/// thread does when it has to work out whether `@marketing` is anybody.
+pub fn all_bots(conn: &Connection) -> Vec<Bot> {
+    let mut out = Vec::new();
+    for n in db::nodes_on(conn).unwrap_or_default() {
+        let Some(dir) = dir_of(conn, &n) else { continue };
+        let Some(mut b) = read(&dir) else { continue };
+        b.node_id = n.id;
+        b.node_name = n.name.clone();
+        b.dir = dir.to_string_lossy().to_string();
+        if b.name.trim().is_empty() {
+            b.name = format!("{} bot", n.name);
+        }
+        out.push(b);
+    }
+    out
+}
+
+/// Whether a bot answers to `@name`.
+///
+/// People type the short thing: `@x-platform` for "x-platform bot", or
+/// `@marketing` for "Marketing site bot". So a mention matches the node's
+/// name, the bot's name with spaces hyphenated, or the first word of either —
+/// and never on a bare prefix of something longer, which would make `@dev`
+/// silently reach a bot called "dev-tools bot".
+pub fn answers_to(b: &Bot, mention: &str) -> bool {
+    let m = mention.trim().to_lowercase();
+    if m.is_empty() {
+        return false;
+    }
+    let slug = |s: &str| s.trim().to_lowercase().replace(' ', "-");
+    let first = |s: &str| s.trim().to_lowercase().split_whitespace().next().unwrap_or("").to_string();
+    slug(&b.node_name) == m
+        || slug(&b.name) == m
+        || format!("{}-bot", slug(&b.node_name)) == m
+        || first(&b.node_name) == m
+        || first(&b.name) == m
+}
+
 /// Every bot in the vault. Cheap enough to call on every visit: it is one
 /// small read per node that has a folder, and nodes are counted in dozens.
 ///

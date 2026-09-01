@@ -8,6 +8,7 @@ import * as ipc from '../lib/ipc'
 import { useApp } from '../store'
 import { loadExampleWorkspace } from '../lib/example'
 import { Icon } from '../lib/icons'
+import { SchedulerPage } from './SchedulerPage'
 
 /** A labelled checkbox row, the shape the Git section already uses. */
 function Toggle({
@@ -206,6 +207,32 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
               <Icon name="terminal" size={14} className="shrink-0" />
               Development
             </button>
+            {/* Routines were a rail entry of their own. They are settings: a
+                clock row that agrees with a line in a bot's file, and the one
+                place both can be read at once. */}
+            <button
+              key="routines"
+              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] ${
+                tab === 'routines' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
+              }`}
+              onClick={() => setTab('routines')}
+            >
+              <Icon name="schedule" size={14} className="shrink-0" />
+              Routines
+            </button>
+            {/* What the team is made of, as opposed to what it is doing: which
+                model each agent runs on, what each may touch, what you have
+                pre-authorised. Talking to them is Team. */}
+            <button
+              key="assistant"
+              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] ${
+                tab === 'assistant' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
+              }`}
+              onClick={() => setTab('assistant')}
+            >
+              <Icon name="ai" size={14} className="shrink-0" />
+              Assistant
+            </button>
             <button
               key="stash"
               className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] ${
@@ -228,8 +255,30 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
             </button>
       </nav>
 
+      {tab === 'routines' ? (
+        <div className="min-w-0 flex-1">
+          <SchedulerPage />
+        </div>
+      ) : (
       <div className="min-w-0 flex-1 overflow-y-auto px-7 py-6">
         <div className="max-w-2xl space-y-6">
+        {tab === 'assistant' && (
+          <>
+            <div className="mb-5">
+              <h2 className="text-[16px] font-semibold text-ink">Assistant</h2>
+              <p className="text-[12px] leading-[1.6] text-muted">
+                Providers, agents, skills, permissions and standing grants — what the team is made
+                of. What it is <em>doing</em> is Team.
+              </p>
+            </div>
+            <button
+              className="btn-primary text-[12px]"
+              onClick={() => useApp.getState().setRailView('aiworkspace')}
+            >
+              <Icon name="ai" size={12} /> Open the Assistant workspace
+            </button>
+          </>
+        )}
         {tab === 'general' && (
           <>
             <div className="mb-5">
@@ -572,6 +621,7 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
         )}
         </div>
       </div>
+      )}
     </div>
   )
 }

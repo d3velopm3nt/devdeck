@@ -373,9 +373,13 @@ export interface ChatMessage {
   at: string
   from: Speaker
   text: string
-  /** `tool.action`, on tool steps only. */
+  /** `tool.action`, on tool steps only. Also the receipt kind on a note:
+   *  `wake`, `pulled-in`, `handover`, `session`. */
   tool?: string
   ok?: boolean
+  /** Who said it — an agent id, or `bot:<node>` for a bot. Absent means the
+   *  assistant, which is the only speaker that needs no introduction. */
+  by?: string
 }
 
 export interface ConversationMeta {
@@ -385,6 +389,14 @@ export interface ConversationMeta {
   updated_at: string
   /** The project in focus. A focus, not a boundary — the assistant works across projects. */
   project_id?: string
+  /** The bot whose thread this is. */
+  bot_node?: number
+  /** The feature whose room this is. */
+  feature?: string
+  /** The node whose thread this is. */
+  node?: number
+  /** Everyone pulled in with `@`. Being here carries no permission at all. */
+  participants?: string[]
   messages: ChatMessage[]
 }
 
@@ -396,7 +408,40 @@ export interface ConversationSummary {
   project_id?: string
   messages: number
   preview: string
+  preview_by?: string
+  bot_node?: number
+  feature?: string
+  node?: number
+  participants?: string[]
 }
+
+/** One goal on the Team board: a feature, wherever it lives, and who is on it. */
+export interface GoalRow {
+  node_id: number
+  space: string
+  workspace: string
+  feature_id: string
+  feature_name: string
+  status: string
+  goal?: string
+  managed_by?: string
+  bot_node?: number
+  on_it: string[]
+  participants: string[]
+  items_total: number
+  items_done: number
+  items_blocked: number
+  items_unclaimed: number
+  last_said?: string
+  last_by?: string
+  last_at?: string
+  waiting: number
+  conflicts: number
+}
+
+/** Which of the three groups a goal belongs in. Mirrors `GoalRow::group`. */
+export const goalGroup = (g: GoalRow): 'waiting' | 'moving' | 'quiet' =>
+  g.waiting > 0 || g.conflicts > 0 ? 'waiting' : g.on_it.length > 0 ? 'moving' : 'quiet'
 
 export interface AssistantReply {
   conversation_id: string

@@ -102,6 +102,23 @@ unknown agent gets nothing; `read` refuses writes; `approval` blocks the
 agent's turn and prompts a human, denying on timeout. The orchestrator is an
 agent like any other — it appears in the matrix and can be revoked.
 
+**A bot is a manager, and the thread is the unit.** Designed 1 Sep 2026
+(`design/node-thread/`, and the "Bots as teammates" entry in ROADMAP.md) —
+not yet built, so the code still has a Bots page with tabs, a Scheduler page
+and a Work page. The model to build toward: a bot holds a goal, wakes on a
+rhythm, and puts agents on what it finds; you talk to it in a thread, not a
+form. Three threads, one message model — a **node's** thread (click any level
+of the tree; a parent sees its children as headlines, never their full
+context, because context anchors to a commit and a parent has none), a
+**feature's** thread (the feature *is* the room: bots `@` each other there,
+any bot can be pulled into any item, and handing work over is a claim
+transfer governed by grants), and **`@you`**, which is the Inbox. First view
+is **On it** — global, grouped by goal; second is **Spaces** — the tree, now
+reaching into the repository, with folders mapped to items. Config is a
+sentence with a receipt; approvals are asked at the natural unit. Every one of
+those is a model call, so the forms stay as the offline path until decided
+otherwise.
+
 **The mock is a provider, not a bypass.** Everything works with no API key and
 no network, and the mock refuses an empty context so a broken assembly cannot
 hide behind it. Where it cannot answer honestly, it says so.

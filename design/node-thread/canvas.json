@@ -1,0 +1,73 @@
+{
+  "pages": [
+    { "id": "page-1", "name": "Prototype" },
+    { "id": "page-3", "name": "The two views" },
+    { "id": "page-2", "name": "Not chosen" }
+  ],
+  "artboards": [
+    { "file": "Main.dc.html", "title": "Thread first · click it", "page": "page-1", "x": 0, "y": 0, "w": 1456, "h": 909, "is_interactive": true },
+    { "file": "Tree.dc.html", "title": "The tree, before and after", "page": "page-1", "x": 1576, "y": 0, "w": 900, "h": 700 },
+    { "file": "Global.dc.html", "title": "View 1 · On it — every space, grouped by goal", "page": "page-3", "x": 0, "y": 0, "w": 1456, "h": 909 },
+    { "file": "Items.dc.html", "title": "View 2 · Spaces — files mapped to items", "page": "page-3", "x": 1576, "y": 0, "w": 1456, "h": 909 },
+    { "file": "PageFirst.dc.html", "title": "Option B · Page first", "page": "page-2", "x": 0, "y": 0, "w": 1456, "h": 909 }
+  ],
+  "annotations": [
+    {
+      "id": "try-this",
+      "page": "page-1",
+      "x": -520,
+      "y": 0,
+      "w": 460,
+      "text": "TRY IT\n\n1 · Answer the approval three ways. \"Allow until morning\" writes a standing grant and says so; \"No\" still leaves the failures on the work item.\n\n2 · Then take the quick reply — \"do this every weekday morning\" — and watch the routine appear as a receipt rather than a form.\n\n3 · Click Innotrack in the tree. Same thread, one level up: headlines for its three folders, and it says outright it has no repository up there. Click a row to go down.\n\n4 · Click TrackX to see a bot that refused everything overnight, and hand it a narrow dated grant.\n\n5 · Click Marketing site — an empty node — and press New bot here."
+    },
+    {
+      "id": "what-changed",
+      "page": "page-1",
+      "x": 1576,
+      "y": 820,
+      "w": 460,
+      "text": "The five rows that leave the tree are not folders — they are the node's own things wearing folder costumes. After this they live on the node's page, one click away, which is the whole point of clicking it.\n\nThe dots are the only new information in the tree: green means a bot lives here and it is well, red means last night went badly, and the number is work still open beneath."
+    },
+    {
+      "id": "the-bill",
+      "page": "page-1",
+      "x": -520,
+      "y": 620,
+      "w": 460,
+      "text": "THE BILL\n\nBots, Work, Events and Scheduler leave the rail — each becomes a view over the tree or a filter. Three of those four I added this week.\n\nAnd config-by-sentence needs a real provider. Today spaces, bots and schedules are all creatable with no API key at all, and the mock exists to protect that. Either the forms stay as the offline path, or the app stops working without a key. Worth deciding before any of this is built."
+    },
+    {
+      "id": "no-room",
+      "page": "page-3",
+      "x": -520,
+      "y": 0,
+      "w": 460,
+      "text": "THE FEATURE IS THE ROOM\n\nNo new object. A feature or work item already exists in the deck; it gains a thread, and that thread is where bots collaborate — qa reports, @dev-a takes it, the claim moves, the manager pulls in @architect for one answer.\n\nAny bot can be pulled into any item with @. Being in the thread costs nothing. Being handed work is a claim transfer, and that is governed by grants like everything else.\n\n@you is the Inbox. The one amber card is the only line that needs a person; everything above it is just the thread."
+    },
+    {
+      "id": "grouped-by-goal",
+      "page": "page-3",
+      "x": -520,
+      "y": 560,
+      "w": 460,
+      "text": "VIEW 1 · ON IT\n\nGlobal, as you said: every space, right now. Grouped by goal rather than by bot — a bot on two goals appears twice, because the question is \"what is moving\", not \"who is employed\".\n\nThree sections and no more: Moving, Waiting on you, Quiet. A quiet bot is not hidden — it says when it will next speak."
+    },
+    {
+      "id": "files-to-items",
+      "page": "page-3",
+      "x": 1576,
+      "y": -250,
+      "w": 460,
+      "text": "VIEW 2 · SPACES\n\nThe tree stays what it is, and now goes into the repository: real folders and files. A label (PRODUCT, SERVICE, TOPIC) says what a folder is. An item chip (Offline sync, Invoicing) says what it is part of.\n\nThe mapping is derived, not painted on: a folder is part of a feature because that feature's work items name files in it. Change it on the feature. Files inherit their folder's chip and carry none of their own.\n\nThe question for you: is that derivation enough, or do you want to pin a folder to an item by hand?"
+    },
+    {
+      "id": "option-b",
+      "page": "page-2",
+      "x": -520,
+      "y": 0,
+      "w": 460,
+      "text": "OPTION B · Page first — not chosen, kept for the record.\n\nThe node as a dashboard with the assistant docked underneath. Everything visible at once, still works with no provider, least to rebuild.\n\nWhat it lost: the bot's night is a card reading \"last woke 08:00\" rather than the bot telling you what it found."
+    }
+  ],
+  "launch": { "view": "canvas", "page": "page-3" }
+}

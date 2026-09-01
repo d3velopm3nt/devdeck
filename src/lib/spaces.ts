@@ -56,12 +56,29 @@ export function nodeColor(node: { id: number; color: string | null }): string {
   return node.color && node.color.trim() !== '' ? node.color : spaceColor(node.id)
 }
 
-/// 1–2 letter avatar from a name ("TrackX" → "TR", "web app" → "WA").
+/// 1–2 letter avatar from a name.
+///
+/// `DevDeck` → `DD`, `Develtech` → `DE`, `Health & Fitness` → `HF`,
+/// `web app` → `WA`, `TrackX` → `TX`.
+///
+/// Words come from two places: the capitals inside a run-together name, and
+/// the usual separators. Both steps fix a real collision the old rule had —
+/// `Develtech` and `DevDeck`, a company and the product inside it, sat next
+/// to each other on Home and both read `DE`; and splitting on *any*
+/// non-letter is what makes "Health & Fitness" read `HF` rather than `H&`.
+const CAMEL = /(\p{Ll}|\p{N})(\p{Lu})/gu
+const ACRONYM = /(\p{Lu}+)(\p{Lu}\p{Ll})/gu
+const NOT_WORD = /[^\p{L}\p{N}]+/u
+
 export function avatarLabel(name: string): string {
-  const words = name.trim().split(/[\s\-_]+/).filter(Boolean)
+  const spaced = name.replace(CAMEL, '$1 $2').replace(ACRONYM, '$1 $2')
+  const words = spaced.split(NOT_WORD).filter(Boolean)
   if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase()
-  const w = words[0] ?? name
-  return w.slice(0, 2).toUpperCase()
+  if (words.length === 0) {
+    const t = name.trim()
+    return t === '' ? '?' : t.slice(0, 1).toUpperCase()
+  }
+  return words[0].slice(0, 2).toUpperCase()
 }
 
 export interface SpaceUsage {

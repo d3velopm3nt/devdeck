@@ -141,6 +141,15 @@ from the file, which is the rule the vault has always followed.
 The Assistant left the rail: it is a contact on Team → Bots, and what is left of
 its old surface is configuration.
 
+## 7. It runs with the harness empty
+
+![Shipped defaults](screenshots/13-shipped-defaults.png)
+
+The same build with every capture knob blank, restoring the layout it was left
+in. The parent's chips now read *11 open items* rather than 25, because the
+goal's work items were ticked in `work.md` — the deck is the record, and the
+app is reading it.
+
 ---
 
 ## The fifteen items

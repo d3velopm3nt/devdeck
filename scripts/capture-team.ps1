@@ -16,7 +16,7 @@
 #>
 param(
   [string]$Out = 'test-results\node-thread\screenshots',
-  [int]$SettleMs = 7000
+  [int]$SettleMs = 20000
 )
 
 $ErrorActionPreference = 'Stop'
@@ -32,7 +32,8 @@ function Set-View {
   param(
     [string]$Rail = '', [string]$Page = '', [string]$Project = '', [string]$Feature = '',
     [string]$TeamTab = '', [string]$Goal = '', [string]$Node = '', [string]$Bot = '',
-    [string]$BotTab = '', [string]$SettingsTab = '', [string[]]$Say = @()
+    [string]$BotTab = '', [string]$SettingsTab = '', [string]$Expand = '', [string]$Workspace = '',
+    [string[]]$Say = @()
   )
   $sayLines = if ($Say.Count -eq 0) { '' } else { ($Say | ForEach-Object { "  '" + ($_ -replace "'", "\'") + "'," }) -join "`n" }
   $body = @"
@@ -54,10 +55,21 @@ $sayLines
 export const CAPTURE_TEAM_TAB: string = '$TeamTab'
 export const CAPTURE_GOAL: string = '$Goal'
 export const CAPTURE_NODE: string = '$Node'
+export const CAPTURE_EXPAND: string = '$Expand'
+export const CAPTURE_WORKSPACE: string = '$Workspace'
 "@
   # Vite reads this file on its watcher thread and holds it briefly.
   for ($i = 0; $i -lt 12; $i++) {
-    try { Set-Content -Path $harness -Value $body -Encoding utf8; return } catch { Start-Sleep -Milliseconds 400 }
+    try {
+      Set-Content -Path $harness -Value $body -Encoding utf8
+      # Ask the dev server for the module we just changed, so it is transformed
+      # before the app asks for it. Without this the first load after a change
+      # is a white window for as long as the rebuild takes, and a screenshot of
+      # that is a screenshot of nothing.
+      try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 20 'http://localhost:5173/src/lib/devCapture.ts' | Out-Null } catch {}
+      try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 20 'http://localhost:5173/src/App.tsx' | Out-Null } catch {}
+      return
+    } catch { Start-Sleep -Milliseconds 400 }
   }
   Write-Error "could not write $harness"
 }
@@ -82,10 +94,10 @@ function Shot {
   # A white "still loading" page samples as 2 distinct colours; a rendered
   # screen is 3 or more. Retry rather than shipping a blank as evidence.
   $line = ''
-  for ($try = 1; $try -le 3; $try++) {
+  for ($try = 1; $try -le 5; $try++) {
     $line = & powershell -ExecutionPolicy Bypass -File $capture -Title DevDeck -Out $target 2>&1
     if ("$line" -match '\((\d+) distinct') { if ([int]$Matches[1] -ge 3) { break } }
-    if ($try -lt 3) { Start-Sleep -Milliseconds 5000 }
+    if ($try -lt 5) { Start-Sleep -Milliseconds 9000 }
   }
   Write-Output "$Name : $line"
 }
@@ -94,32 +106,41 @@ function Shot {
 # The shots
 # ---------------------------------------------------------------------------
 
-Set-View -Rail 'team' -TeamTab 'goals'
+Set-View -Rail 'team' -TeamTab 'goals' -Goal '4:offline-sync'
 Shot '01-team-goals'
 
+Set-View -Rail 'team' -TeamTab 'goals' -Goal '12:node-as-conversation'
+Shot '02-two-bots-in-a-room'
+
 Set-View -Rail 'team' -TeamTab 'features'
-Shot '02-team-features'
+Shot '03-team-features'
 
 Set-View -Rail 'team' -TeamTab 'work'
-Shot '03-team-work'
+Shot '04-team-work'
 
 Set-View -Rail 'team' -TeamTab 'bots'
-Shot '04-team-bots'
+Shot '05-team-bots'
 
-Set-View -Rail 'projects' -Node '12'
-Shot '05-node-thread'
+Set-View -Rail 'projects' -Node '12' -Workspace '1'
+Shot '06-node-thread'
 
-Set-View -Rail 'projects' -Node '1'
-Shot '06-parent-headlines'
+Set-View -Rail 'projects' -Node '1' -Workspace '1'
+Shot '07-parent-headlines'
+
+Set-View -Rail 'projects' -Expand '1,2' -Workspace '1' -Node '2'
+Shot '08-spaces-tree'
 
 Set-View -Rail 'inbox'
-Shot '07-inbox'
+Shot '09-inbox'
 
 Set-View -Rail 'home'
-Shot '08-home'
+Shot '10-home'
 
 Set-View -Rail 'settings' -SettingsTab 'routines'
-Shot '09-settings-routines'
+Shot '11-settings-routines'
 
-Set-View -Rail '' -Node '' -TeamTab ''
+Set-View -Rail 'settings' -SettingsTab 'assistant'
+Shot '12-settings-assistant'
+
+Set-View
 Write-Output '--- done ---'

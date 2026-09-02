@@ -476,6 +476,13 @@ impl Conversations {
                 fresh.messages.push(m.clone());
             }
         }
+        // In the order things happened, not in the order they were written.
+        // A session that finished mid-turn is appended after the turn's own
+        // messages, and a room that reads out of order is a room you have to
+        // reconstruct in your head. Timestamps are ISO-8601 UTC, so sorting
+        // them as text is sorting them as time; equal ones keep the order they
+        // arrived in, which is why this is a stable sort.
+        fresh.messages.sort_by(|a, b| a.at.cmp(&b.at));
         fresh.updated_at = now_iso();
         self.save(&fresh)
     }

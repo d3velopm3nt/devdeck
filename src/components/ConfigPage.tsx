@@ -9,6 +9,7 @@ import { useApp } from '../store'
 import { loadExampleWorkspace } from '../lib/example'
 import { Icon } from '../lib/icons'
 import { SchedulerPage } from './SchedulerPage'
+import { CAPTURE_SETTINGS_TAB } from '../lib/devCapture'
 
 /** A labelled checkbox row, the shape the Git section already uses. */
 function Toggle({
@@ -46,7 +47,7 @@ export function ConfigPage() {
   const [vaultBusy, setVaultBusy] = useState(false)
   const [labelDraft, setLabelDraft] = useState('')
   const [labelMsg, setLabelMsg] = useState('')
-  const [tab, setTab] = useState(() => localStorage.getItem(TAB_KEY) ?? 'general')
+  const [tab, setTab] = useState(() => CAPTURE_SETTINGS_TAB || localStorage.getItem(TAB_KEY) || 'general')
   useEffect(() => localStorage.setItem(TAB_KEY, tab), [tab])
 
   useEffect(() => {

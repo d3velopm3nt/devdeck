@@ -146,9 +146,21 @@ export default function App() {
   // worth anything.
   useEffect(() => {
     if (CAPTURE_NODE) {
+      // The dock mounts after the tree loads, and opening a panel before it
+      // exists is a silent no-op — which looks exactly like the feature not
+      // working. Wait for it.
       const id = Number(CAPTURE_NODE)
-      const node = useApp.getState().nodes.find((n) => n.id === id)
-      if (node) openNodeThread(node.id, node.name)
+      const open = window.setInterval(() => {
+        const node = useApp.getState().nodes.find((n) => n.id === id)
+        // Not just "the dock exists": the saved layout is restored a moment
+        // after it does, and restoring replaces whatever was open. Waiting for
+        // panels means waiting for that to have happened.
+        const api = dockApi()
+        if (!node || !api || api.panels.length === 0) return
+        window.clearInterval(open)
+        openNodeThread(node.id, node.name)
+      }, 400)
+      window.setTimeout(() => window.clearInterval(open), 20000)
     }
     // React runs effects twice in development, and a message sent twice is
     // two messages. Guarded at module scope rather than with a ref, because

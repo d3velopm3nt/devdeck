@@ -38,7 +38,7 @@ const SUGGESTION_ICON: Record<string, IconName> = {
   goal: 'project',
 }
 
-export function BotPage({ params }: IDockviewPanelProps<{ id: number; ask?: boolean }>) {
+export function BotPage({ params, api }: IDockviewPanelProps<{ id: number; ask?: boolean }>) {
   const nodeId = params.id
   const { nodes, focus, refreshBots, refreshActivity } = useApp()
   const aiw = useAiw()
@@ -81,6 +81,15 @@ export function BotPage({ params }: IDockviewPanelProps<{ id: number; ask?: bool
     })
     void refreshBots()
   }, [nodeId, refreshBots])
+
+  // "Ask me the questions" is consumed once, here, rather than living in the
+  // panel forever. Dock layouts are saved and restored, so a parameter that
+  // stays true means the interview opens every time you come back to the bot —
+  // which is the page-you-close behaviour this flag exists to avoid.
+  useEffect(() => {
+    if (params.ask) api.updateParameters({ id: nodeId, ask: false })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     reload()

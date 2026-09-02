@@ -307,7 +307,7 @@ const adoptingPorts = new Set<number>()
 /** Trailing-edge timer for `ingestStashItem`. */
 let ingestTimer: number | undefined
 
-import { CAPTURE_RAIL } from './lib/devCapture'
+import { CAPTURE_WORKSPACE, CAPTURE_RAIL } from './lib/devCapture'
 
 /// Seeded, not fixed: the list lives in settings and you edit it there.
 // Business and Personal lead because they are the two that *change behaviour*
@@ -364,6 +364,9 @@ const loadRailView = (): RailView => {
 
 const AW_KEY = 'devdeck.activeWorkspace'
 const loadActiveWs = (): number | null => {
+  // Screenshot harness: which workspace tab is open decides what the tree can
+  // show, so a capture has to be able to say.
+  if (CAPTURE_WORKSPACE) return Number(CAPTURE_WORKSPACE)
   const v = Number(localStorage.getItem(AW_KEY))
   return Number.isFinite(v) && v > 0 ? v : null
 }

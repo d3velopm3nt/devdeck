@@ -24,6 +24,7 @@ import { findNode, resolveDir } from '../lib/tree'
 import { SPACE_TAGS, labelColor, nodeColor } from '../lib/spaces'
 import { loadExampleWorkspace } from '../lib/example'
 import { PopMenu, type MenuItem } from './PopMenu'
+import { CAPTURE_EXPAND } from '../lib/devCapture'
 import { BotCreate } from './bot/BotCreate'
 import { GitHubImportModal } from './GitHubImportModal'
 import { Icon } from '../lib/icons'
@@ -93,6 +94,19 @@ const CAT_META: Record<Cat, { label: string; icon: string; color: string }> = {
   profiles: { label: 'Profiles', icon: 'profile', color: 'text-viol/80' },
 }
 
+/// Ask for something the first time it is rendered.
+///
+/// The tree loads a folder when you expand it, which is the right rule and
+/// leaves one gap: a branch that was already open when the app started — from
+/// last time, or from the screenshot harness — was never expanded by anyone.
+function FetchOnce({ load }: { load: () => void }) {
+  useEffect(() => {
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  return null
+}
+
 export function Explorer() {
   const {
     nodes, commands, services, profiles, svcStates, gitByNode,
@@ -138,7 +152,13 @@ export function Explorer() {
     return ws ? [ws] : []
   }, [nodes, activeWorkspaceId, activeSolution])
   const ws = activeWorkspace()
-  const [expanded, setExpanded] = useState<Set<number>>(() => loadSet<number>(EXPANDED_KEY))
+  const [expanded, setExpanded] = useState<Set<number>>(() => {
+    const saved = loadSet<number>(EXPANDED_KEY)
+    // Screenshot harness: open these branches on load, because this session
+    // cannot click one open. Empty in every shipped build.
+    for (const id of CAPTURE_EXPAND.split(',').map(Number).filter(Boolean)) saved.add(id)
+    return saved
+  })
 
   // The workspace row is open when you arrive, or the tree would look empty
   // until you clicked it. You can still collapse it; this only seeds it.
@@ -1044,6 +1064,9 @@ export function Explorer() {
             {children.map((c) => renderNode(c, depth + 1))}
             {node.kind === 'project' && renderFeatures(node, depth + 1)}
             {node.kind === 'project' && renderFiles(node, '', depth + 1)}
+            {node.kind === 'project' && !files[`${node.id}:`] && !fileErr[`${node.id}:`] && (
+              <FetchOnce load={() => loadDir(node.id, '')} />
+            )}
             {showCommands &&
               renderCategory(
                 node,

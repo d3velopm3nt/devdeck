@@ -259,6 +259,43 @@ pub struct RoutineDraft {
     pub on: String,
 }
 
+/// One model call, as it happened.
+///
+/// Assembled where the call is made, because that is the only place that
+/// knows all of it: who was speaking, whose provider answered, what the
+/// prompt actually was after assembly, and how long it took.
+#[derive(Clone, Debug)]
+pub struct CallRecord {
+    pub at: i64,
+    /// Who spoke: an agent id, or `bot:<node>` for a bot with no agent.
+    pub speaker: String,
+    pub speaker_name: String,
+    /// agent | bot | assistant
+    pub kind: String,
+    /// The agent whose provider and model did the talking.
+    pub runs_as: String,
+    pub provider: String,
+    pub model: String,
+    pub project_id: String,
+    pub project_name: String,
+    pub feature: String,
+    pub conversation: String,
+    pub session: String,
+    pub turn: u32,
+    pub ms: i64,
+    pub ok: bool,
+    pub error: String,
+    pub prompt: String,
+    pub reply: String,
+    pub tools: usize,
+    pub usage: Option<super::provider::TokenUsage>,
+}
+
+/// Where a call record goes. The app hands one over at startup; a build that
+/// does not simply keeps no log, which is the same arrangement as bots and
+/// routines and for the same reason — `aiw` knows nothing about SQLite.
+pub type CallLog = Box<dyn Fn(CallRecord) + Send + Sync>;
+
 /// Making a routine writes a `schedules` row and a line in a file, neither of
 /// which `aiw` knows anything about. Same arrangement as [`BotMaker`]: the
 /// outer app hands one over, and a build that does not simply cannot.
@@ -292,6 +329,7 @@ pub struct Workspace {
     /// build, where asking for a bot fails honestly rather than pretending.
     bot_maker: std::sync::OnceLock<BotMaker>,
     routine_maker: std::sync::OnceLock<RoutineMaker>,
+    call_log: std::sync::OnceLock<CallLog>,
     pub providers: Mutex<ProviderRegistry>,
     pub reconciler: Box<dyn ContextReconciler>,
     projects: Mutex<HashMap<String, Arc<ProjectHandle>>>,
@@ -324,6 +362,7 @@ impl Workspace {
             approvals: Arc::new(ApprovalBroker::new(timeout)),
             bot_maker: std::sync::OnceLock::new(),
             routine_maker: std::sync::OnceLock::new(),
+            call_log: std::sync::OnceLock::new(),
             conversations: std::sync::OnceLock::new(),
             grants: std::sync::OnceLock::new(),
             providers: Mutex::new(ProviderRegistry::new()),
@@ -1178,6 +1217,18 @@ impl Workspace {
         match self.bot_maker.get() {
             Some(f) => f(draft),
             None => Err("this build cannot create bots".into()),
+        }
+    }
+
+    /// Teach this workspace where to write down what a model was asked.
+    pub fn set_call_log(&self, f: CallLog) {
+        let _ = self.call_log.set(f);
+    }
+
+    /// Write one call down, if anyone is listening.
+    pub fn log_call(&self, rec: CallRecord) {
+        if let Some(f) = self.call_log.get() {
+            f(rec);
         }
     }
 

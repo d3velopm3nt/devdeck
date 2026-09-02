@@ -16,6 +16,7 @@ mod aiw;
 mod botcatalog;
 mod botmind;
 mod bots;
+mod calls;
 mod conn;
 mod creds;
 mod db;
@@ -684,6 +685,14 @@ pub fn run() {
                 });
             }
 
+            // Where every model call is written down. Installed here rather
+            // than above because it needs the app handle, and the handle only
+            // exists once setup runs.
+            {
+                let log = app.handle().clone();
+                aiw_for_setup.set_call_log(Box::new(move |rec| calls::record(&log, rec)));
+            }
+
             // Give the AI Workspace bus a way out to the UI. The closure lives
             // here, in the shell, so the bus itself stays free of Tauri — which
             // is both cleaner layering and what keeps the test binary linkable.
@@ -954,6 +963,9 @@ pub fn run() {
             conn::conn_runs_list,
             activity::activity_list,
             activity::activity_for,
+            calls::calls_list,
+            calls::calls_usage,
+            calls::calls_clear,
             activity::activity_clear,
             activity::service_runs,
             toast_show,

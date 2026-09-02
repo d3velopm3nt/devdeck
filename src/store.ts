@@ -39,6 +39,8 @@ export type RailView =
   | 'team'
   /// The people: the assistant, the bots, the agents.
   | 'bots'
+  /// What the AI is costing, across every space.
+  | 'analytics'
   /// The tree. Called Spaces on the rail; the id stayed to keep saved
   /// preferences and every existing link working.
   | 'projects'
@@ -50,7 +52,7 @@ export type RailView =
   | 'aiworkspace'
   | 'machine'
   | 'settings'
-export type BottomTab = 'logs' | 'processes' | 'events'
+export type BottomTab = 'logs' | 'processes' | 'events' | 'calls'
 
 /** What the Stash view is currently showing. `noProject` narrows to clips
  *  captured outside any project (the sidebar's "no project" tag). */
@@ -364,6 +366,7 @@ const RAIL_VIEWS: readonly RailView[] = [
   'inbox',
   'team',
   'bots',
+  'analytics',
   'projects',
   'stash',
   'connections',

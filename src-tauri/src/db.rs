@@ -123,6 +123,8 @@ pub fn open() -> Connection {
         .expect("create schedule schema");
     conn.execute_batch(crate::focus::SCHEMA)
         .expect("create focus schema");
+    conn.execute_batch(crate::calls::SCHEMA)
+        .expect("create model-call log schema");
     // A run that was "running" when the app was killed did not survive.
     crate::activity::close_orphan_runs(&conn);
 

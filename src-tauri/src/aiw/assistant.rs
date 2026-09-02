@@ -826,7 +826,8 @@ impl Assistant {
                 history: Self::history(&conv),
             };
 
-            let response: AgentResponse = {
+            let started_at = std::time::Instant::now();
+            let outcome: Result<AgentResponse, String> = {
                 // Cloned out and the lock released before the call. A chat
                 // turn can run for a minute and can pause on an approval
                 // prompt; holding the registry for that long would freeze
@@ -843,8 +844,50 @@ impl Assistant {
                         conversation_id: conv_id.clone(),
                         text: t.to_string(),
                     });
-                })?
+                })
             };
+            // Recorded either way. A turn that failed is the one you most
+            // want to read afterwards.
+            ws.log_call(super::state::CallRecord {
+                at: chrono::Local::now().timestamp_millis(),
+                speaker: persona.agent_id.clone(),
+                speaker_name: persona.name.clone(),
+                kind: if persona.agent_id.starts_with("bot:") {
+                    "bot".into()
+                } else if persona.agent_id == ASSISTANT_ID {
+                    "assistant".into()
+                } else {
+                    "agent".into()
+                },
+                runs_as: agent.id.clone(),
+                provider: agent.provider.clone(),
+                model: agent.model.clone(),
+                project_id: conv.project_id.clone().unwrap_or_default(),
+                project_name: conv
+                    .project_id
+                    .as_deref()
+                    .and_then(|p| ws.project(p))
+                    .map(|p| p.name.clone())
+                    .unwrap_or_default(),
+                feature: conv.feature.clone().unwrap_or_default(),
+                conversation: conv.id.clone(),
+                session: String::new(),
+                turn,
+                ms: started_at.elapsed().as_millis() as i64,
+                ok: outcome.is_ok(),
+                error: outcome.as_ref().err().cloned().unwrap_or_default(),
+                prompt: format!(
+                    "# system\n{}\n\n# context\n{}\n\n# goal\n{}",
+                    request.system, request.context, request.goal
+                ),
+                reply: outcome
+                    .as_ref()
+                    .map(|r| r.message.clone())
+                    .unwrap_or_default(),
+                tools: request.tools.len(),
+                usage: outcome.as_ref().ok().and_then(|r| r.usage),
+            });
+            let response: AgentResponse = outcome?;
 
             if !response.message.trim().is_empty() {
                 reply = response.message.trim().to_string();
@@ -1985,11 +2028,20 @@ impl Assistant {
     /// only what it said it would do.
     fn history(conv: &ConversationMeta) -> Vec<ChatTurn> {
         let msgs = &conv.messages;
-        // The last message is the one being answered; it goes in as the goal.
-        let end = msgs.len().saturating_sub(1);
+        // Everything except the message being answered, which goes in as the
+        // goal. That is the last *user* message, not the last message: a
+        // handover receipt is appended after it, and dropping the final
+        // element dropped exactly that — so a bot was answering without
+        // knowing whether the work it had just handed over had moved, and
+        // said it had when it had not.
+        let end = msgs
+            .iter()
+            .rposition(|m| m.from == Speaker::User)
+            .unwrap_or(msgs.len().saturating_sub(1));
         let start = end.saturating_sub(VERBATIM_MESSAGES);
         msgs[start..end]
             .iter()
+            .chain(msgs[(end + 1).min(msgs.len())..].iter())
             .map(|m| match m.from {
                 Speaker::User => ChatTurn {
                     role: "user".into(),

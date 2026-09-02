@@ -6,11 +6,12 @@ import { useEffect, useRef } from 'react'
 import { LogViewer } from './LogViewer'
 import { ProcessDashboard } from './ProcessDashboard'
 import { EventStream } from './EventStream'
+import { LlmCalls } from './LlmCalls'
 import { useAiw } from '../lib/aiwStore'
 import { useApp } from '../store'
 import { Icon } from '../lib/icons'
 
-export type BottomTab = 'logs' | 'processes' | 'events'
+export type BottomTab = 'logs' | 'processes' | 'events' | 'calls'
 
 const MIN_H = 140
 const bottomChrome = 220 // leave room for the top bar + a slice of the dock
@@ -97,6 +98,7 @@ export function BottomBar({
             surprising you want the events without leaving the page you were
             on. */}
         <TabBtn id="events" label="Events" badge={events.length} />
+        <TabBtn id="calls" label="Models" />
         <div className="flex-1" />
         <button
           className="flex items-center rounded px-2 py-1 text-dim hover:bg-hover hover:text-ink"
@@ -112,6 +114,8 @@ export function BottomBar({
         <div style={{ height }} className="min-h-0 border-t border-line">
           {tab === 'logs' ? (
             <LogViewer />
+          ) : tab === 'calls' ? (
+            <LlmCalls />
           ) : tab === 'events' ? (
             <div className="flex h-full min-h-0 flex-col">
               {/* Say what this is. "What happened" lives in three places now —

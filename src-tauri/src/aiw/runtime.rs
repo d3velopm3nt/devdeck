@@ -24,9 +24,25 @@ use super::state::{
 };
 use super::tools::TOOL_TESTS;
 
+/// Wall-clock milliseconds. The session record keeps ISO strings; a log row
+/// keeps a number, because it is sorted and bucketed by day.
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
+}
+
 /// A provider that never says "done" would spin forever; the runtime stops
-/// regardless. Chosen well above the longest built-in script.
-const MAX_TURNS: u32 = 8;
+/// regardless.
+///
+/// Eight was chosen for the scripted mock — well above its longest script —
+/// and it is nowhere near enough for a model doing real work. The first real
+/// session under it spent all eight turns reading the repository and stopped
+/// mid-investigation with nothing to show, which read as "the agent did
+/// nothing" rather than "the agent ran out of room".
+const MOCK_TURNS: u32 = 8;
+const REAL_TURNS: u32 = 40;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct StartAgentCommand {
@@ -364,7 +380,12 @@ impl AgentRuntime {
         let mut refused = 0usize;
         let mut failed: Option<String> = None;
 
-        for turn in 0..MAX_TURNS {
+        let budget = if agent.provider == super::provider::MockProvider::ID {
+            MOCK_TURNS
+        } else {
+            REAL_TURNS
+        };
+        for turn in 0..budget {
             turns = turn + 1;
 
             let request = AgentRequest {
@@ -383,7 +404,8 @@ impl AgentRuntime {
                 history: Vec::new(),
             };
 
-            let response: AgentResponse = {
+            let started_at = std::time::Instant::now();
+            let outcome: Result<AgentResponse, String> = {
                 // Cloned out and the lock released before the call: holding
                 // it across a model turn serialises every other agent behind
                 // this one.
@@ -394,12 +416,43 @@ impl AgentRuntime {
                 let Some(p) = p else {
                     return Err(format!("unknown provider '{}'", agent.provider));
                 };
-                match p.run(&request) {
-                    Ok(r) => r,
-                    Err(e) => {
-                        failed = Some(e);
-                        break;
-                    }
+                p.run(&request)
+            };
+            // A session is where "it ran and did nothing" happens, so every
+            // turn of it is written down: what it was asked, what came back.
+            ws.log_call(super::state::CallRecord {
+                at: now_ms(),
+                speaker: agent.id.clone(),
+                speaker_name: agent.name.clone(),
+                kind: "agent".into(),
+                runs_as: agent.id.clone(),
+                provider: agent.provider.clone(),
+                model: agent.model.clone(),
+                project_id: cmd.project_id.clone(),
+                project_name: project.name.clone(),
+                feature: cmd.feature_id.clone(),
+                conversation: String::new(),
+                session: session_id.clone(),
+                turn,
+                ms: started_at.elapsed().as_millis() as i64,
+                ok: outcome.is_ok(),
+                error: outcome.as_ref().err().cloned().unwrap_or_default(),
+                prompt: format!(
+                    "# system\n{}\n\n# context\n{}\n\n# goal\n{}",
+                    request.system, request.context, request.goal
+                ),
+                reply: outcome
+                    .as_ref()
+                    .map(|r| r.message.clone())
+                    .unwrap_or_default(),
+                tools: request.tools.len(),
+                usage: outcome.as_ref().ok().and_then(|r| r.usage),
+            });
+            let response: AgentResponse = match outcome {
+                Ok(r) => r,
+                Err(e) => {
+                    failed = Some(e);
+                    break;
                 }
             };
 
@@ -772,9 +825,19 @@ impl AgentRuntime {
         };
 
         if summary.is_empty() {
-            summary = failed
-                .clone()
-                .unwrap_or_else(|| "Session ended with no summary.".into());
+            summary = match &failed {
+                Some(e) => e.clone(),
+                // Out of turns is a specific thing that happened, and saying
+                // "no summary" for it is the same failure as reporting an
+                // unreachable server as up to date.
+                None if turns >= budget => format!(
+                    "Stopped after {turns} turns without finishing — the turn budget ran out.                      Its last words: {}",
+                    ws.session(&session_id)
+                        .and_then(|s| s.transcript.iter().rev().find(|t| t.kind == "message").map(|t| t.text.clone()))
+                        .unwrap_or_else(|| "nothing".into())
+                ),
+                None => "Session ended with no summary.".into(),
+            };
         }
 
         ws.update_session(&session_id, |s| {

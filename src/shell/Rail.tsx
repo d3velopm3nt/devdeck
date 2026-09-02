@@ -43,6 +43,7 @@ const WORK: Item[] = [{ view: 'connections', icon: 'database', label: 'Connectio
 
 /// The app itself, anchored to the bottom.
 const APP: Item[] = [
+  { view: 'analytics', icon: 'history', label: 'Analytics' },
   { view: 'stash', icon: 'stash', label: 'Stash' },
   { view: 'machine', icon: 'machine', label: 'Machine' },
   { view: 'settings', icon: 'settings', label: 'Settings' },

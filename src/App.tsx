@@ -4,6 +4,7 @@ import { BottomBar } from './components/BottomBar'
 import { InboxPage } from './components/InboxPage'
 import { TeamPage } from './components/team/TeamPage'
 import { BotsPage } from './components/BotsPage'
+import { AnalyticsPage } from './components/AnalyticsPage'
 import { ApprovalBar } from './components/aiw/ApprovalBar'
 import { FocusBar } from './components/FocusBar'
 import { SetupModal } from './components/SetupModal'
@@ -789,6 +790,7 @@ export default function App() {
           {railView === 'inbox' && <InboxPage />}
           {railView === 'team' && <TeamPage />}
           {railView === 'bots' && <BotsPage />}
+          {railView === 'analytics' && <AnalyticsPage />}
           {railView === 'settings' && <ConfigPage />}
         </main>
       </div>

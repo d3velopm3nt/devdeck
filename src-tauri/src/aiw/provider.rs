@@ -138,6 +138,64 @@ pub struct AgentResponse {
     pub actions: Vec<AgentAction>,
     /// True when the provider considers the work finished.
     pub complete: bool,
+    /// What the turn cost, when the provider said. `None` means it did not
+    /// say — which is not zero, and the analytics must not add it up as if
+    /// it were.
+    pub usage: Option<TokenUsage>,
+}
+
+/// Tokens, in the neutral shape every provider maps onto.
+///
+/// Borrowed from x-platform's `ai-usage` package so the two agree: four plain
+/// counts, priced separately because a cache read is a tenth of fresh input
+/// and a cache write is a quarter more.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TokenUsage {
+    pub input: u32,
+    pub output: u32,
+    pub cache_read: u32,
+    pub cache_write: u32,
+}
+
+impl TokenUsage {
+    /// Anthropic's `usage` object, in either a response or a stream event.
+    pub fn from_anthropic(v: &serde_json::Value) -> Option<Self> {
+        let u = v.get("usage")?;
+        let n = |k: &str| u.get(k).and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+        Some(Self {
+            input: n("input_tokens"),
+            output: n("output_tokens"),
+            cache_read: n("cache_read_input_tokens"),
+            cache_write: n("cache_creation_input_tokens"),
+        })
+    }
+
+    /// OpenAI's `usage` object.
+    pub fn from_openai(v: &serde_json::Value) -> Option<Self> {
+        let u = v.get("usage")?;
+        let n = |k: &str| u.get(k).and_then(|x| x.as_u64()).unwrap_or(0) as u32;
+        let cached = u
+            .get("prompt_tokens_details")
+            .and_then(|d| d.get("cached_tokens"))
+            .and_then(|x| x.as_u64())
+            .unwrap_or(0) as u32;
+        Some(Self {
+            input: n("prompt_tokens").saturating_sub(cached),
+            output: n("completion_tokens"),
+            cache_read: cached,
+            cache_write: 0,
+        })
+    }
+
+    /// Add a stream's later usage to what its start reported.
+    pub fn merge(self, other: Self) -> Self {
+        Self {
+            input: self.input.max(other.input),
+            output: self.output.max(other.output),
+            cache_read: self.cache_read.max(other.cache_read),
+            cache_write: self.cache_write.max(other.cache_write),
+        }
+    }
 }
 
 /// Everything a model provider must offer.
@@ -246,6 +304,7 @@ impl MockProvider {
                     summary: "nothing to do".into(),
                 }],
                 complete: true,
+            usage: None,
             },
         }
     }
@@ -281,6 +340,7 @@ impl MockProvider {
                     summary: "handled".into(),
                 }],
                 complete: true,
+            usage: None,
             };
         }
 
@@ -311,6 +371,7 @@ impl MockProvider {
                     }),
                 ))],
                 complete: false,
+            usage: None,
             };
         }
 
@@ -328,6 +389,7 @@ impl MockProvider {
                         }),
                     ))],
                     complete: false,
+            usage: None,
                 };
             }
             return AgentResponse {
@@ -337,6 +399,7 @@ impl MockProvider {
                     summary: "nothing to delegate".into(),
                 }],
                 complete: true,
+            usage: None,
             };
         }
 
@@ -349,6 +412,7 @@ impl MockProvider {
                 summary: "answered".into(),
             }],
             complete: true,
+            usage: None,
         }
     }
 
@@ -362,6 +426,7 @@ impl MockProvider {
                     serde_json::json!({ "query": "sync" }),
                 ))],
                 complete: false,
+            usage: None,
             },
             1 => AgentResponse {
                 message: "Offline sites have unreliable clocks, so the server must decide.".into(),
@@ -379,6 +444,7 @@ impl MockProvider {
                     supersedes: None,
                 }],
                 complete: false,
+            usage: None,
             },
             _ => AgentResponse {
                 message: "Decision recorded and context updated.".into(),
@@ -397,6 +463,7 @@ impl MockProvider {
                     },
                 ],
                 complete: true,
+            usage: None,
             },
         }
     }
@@ -414,6 +481,7 @@ impl MockProvider {
                     serde_json::json!({}),
                 ))],
                 complete: false,
+            usage: None,
             },
             (1, true) => AgentResponse {
                 message: "Changing SyncResult so a conflict can be represented.".into(),
@@ -434,6 +502,7 @@ impl MockProvider {
                     },
                 ],
                 complete: false,
+            usage: None,
             },
             (1, false) => AgentResponse {
                 message: "Building the sync status badge against SyncResult.".into(),
@@ -447,6 +516,7 @@ impl MockProvider {
                     }),
                 ))],
                 complete: false,
+            usage: None,
             },
             _ => AgentResponse {
                 message: "Work complete for this turn.".into(),
@@ -458,6 +528,7 @@ impl MockProvider {
                     },
                 }],
                 complete: true,
+            usage: None,
             },
         }
     }
@@ -472,6 +543,7 @@ impl MockProvider {
                     serde_json::json!({}),
                 ))],
                 complete: false,
+            usage: None,
             },
             1 => AgentResponse {
                 message: "Running the configured test command.".into(),
@@ -481,6 +553,7 @@ impl MockProvider {
                     serde_json::json!({}),
                 ))],
                 complete: false,
+            usage: None,
             },
             _ => AgentResponse {
                 message: "Recording the result.".into(),
@@ -494,6 +567,7 @@ impl MockProvider {
                     ),
                 }],
                 complete: true,
+            usage: None,
             },
         }
     }
@@ -508,6 +582,7 @@ impl MockProvider {
                     serde_json::json!({ "path": "packages/sync/types.ts" }),
                 ))],
                 complete: false,
+            usage: None,
             },
             _ => {
                 let saw_outcome = req
@@ -528,6 +603,7 @@ impl MockProvider {
                         },
                     }],
                     complete: true,
+            usage: None,
                 }
             }
         }
@@ -596,6 +672,7 @@ impl LLMProvider for MockProvider {
                     summary: "answered".into(),
                 }],
                 complete: true,
+            usage: None,
             });
         }
         let mut response = Self::script(&request.role, request);
@@ -852,6 +929,10 @@ pub struct AnthropicStreamAccumulator {
     /// block index -> (id, name, raw argument text so far)
     blocks: std::collections::BTreeMap<u64, (String, String, String)>,
     done: bool,
+    /// What the stream said the turn cost. `message_start` carries the input
+    /// side and `message_delta` the output side, so they are merged rather
+    /// than replaced.
+    usage: Option<TokenUsage>,
 }
 
 impl AnthropicStreamAccumulator {
@@ -871,9 +952,26 @@ impl AnthropicStreamAccumulator {
         self.push_chunk(&chunk)
     }
 
+    /// What the stream reported this turn cost, so far.
+    pub fn usage(&self) -> Option<TokenUsage> {
+        self.usage
+    }
+
     pub fn push_chunk(&mut self, chunk: &serde_json::Value) -> Option<String> {
         let kind = chunk.get("type").and_then(|t| t.as_str())?;
         let index = chunk.get("index").and_then(|i| i.as_u64()).unwrap_or(0);
+
+        // Usage arrives on the message envelope, not on a content block.
+        let counted = chunk
+            .get("message")
+            .and_then(TokenUsage::from_anthropic)
+            .or_else(|| TokenUsage::from_anthropic(chunk));
+        if let Some(u) = counted {
+            self.usage = Some(match self.usage {
+                Some(prev) => prev.merge(u),
+                None => u,
+            });
+        }
 
         match kind {
             "content_block_start" => {
@@ -930,6 +1028,7 @@ impl AnthropicStreamAccumulator {
     }
 
     pub fn finish(self) -> (String, Vec<RawToolCall>, Vec<String>) {
+        // Callers that want the usage ask for it before finishing.
         let mut calls = Vec::new();
         let mut dropped = Vec::new();
         for (_, (id, name, raw)) in self.blocks {
@@ -1026,6 +1125,7 @@ fn assemble(message: String, calls: &[RawToolCall], dropped: &[String]) -> Agent
     }
 
     AgentResponse {
+        usage: None,
         message: if rejected.is_empty() {
             message
         } else {
@@ -1407,11 +1507,12 @@ impl AnthropicProvider {
         })
     }
 
+    #[allow(clippy::type_complexity)]
     fn stream(
         &self,
         body: &serde_json::Value,
         on_delta: &dyn Fn(&str),
-    ) -> Result<(String, Vec<RawToolCall>, Vec<String>), String> {
+    ) -> Result<(String, Vec<RawToolCall>, Vec<String>, Option<TokenUsage>), String> {
         use std::io::BufRead;
 
         let client = self.client()?;
@@ -1443,7 +1544,9 @@ impl AnthropicProvider {
                 break;
             }
         }
-        Ok(acc.finish())
+        let usage = acc.usage();
+        let (text, calls, dropped) = acc.finish();
+        Ok((text, calls, dropped, usage))
     }
 }
 
@@ -1478,7 +1581,9 @@ impl LLMProvider for AnthropicProvider {
         let json: serde_json::Value = serde_json::from_str(&text)
             .map_err(|e| format!("Anthropic returned invalid JSON: {e}"))?;
         let (message, calls) = from_anthropic_response(&json);
-        Ok(assemble(message, &calls, &[]))
+        let mut r = assemble(message, &calls, &[]);
+        r.usage = TokenUsage::from_anthropic(&json);
+        Ok(r)
     }
 
     fn run_streaming(
@@ -1487,8 +1592,10 @@ impl LLMProvider for AnthropicProvider {
         on_delta: &dyn Fn(&str),
     ) -> Result<AgentResponse, String> {
         let body = self.body(request, true)?;
-        let (message, calls, dropped) = self.stream(&body, on_delta)?;
-        Ok(assemble(message, &calls, &dropped))
+        let (message, calls, dropped, usage) = self.stream(&body, on_delta)?;
+        let mut r = assemble(message, &calls, &dropped);
+        r.usage = usage;
+        Ok(r)
     }
 
     fn health(&self) -> ProviderHealth {

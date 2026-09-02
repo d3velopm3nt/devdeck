@@ -225,6 +225,68 @@ export interface FileRow {
 export const nodeFiles = (nodeId: number, rel = '') =>
   invoke<FileRow[]>('node_files', { nodeId, rel })
 
+/** One model call: what went in, what came back, whose it was, what it cost.
+ *  Token fields are null when the provider did not report — never zero. */
+export interface LlmCall {
+  id: number
+  at: number
+  speaker: string
+  speaker_name: string
+  kind: 'agent' | 'bot' | 'assistant'
+  runs_as: string
+  provider: string
+  model: string
+  project_id: string
+  project_name: string
+  feature: string
+  conversation: string
+  session: string
+  turn: number
+  ms: number
+  ok: boolean
+  error: string
+  prompt: string
+  prompt_len: number
+  reply: string
+  reply_len: number
+  tools: number
+  input_tokens: number | null
+  output_tokens: number | null
+  cache_read_tokens: number | null
+  cache_write_tokens: number | null
+}
+
+export interface UsageRow {
+  key: string
+  label: string
+  calls: number
+  /** Calls whose provider reported nothing. Shown rather than hidden. */
+  unreported: number
+  input: number
+  output: number
+  cache_read: number
+  cache_write: number
+  provider: string
+}
+
+export interface UsageReport {
+  since: number
+  calls: number
+  unreported: number
+  input: number
+  output: number
+  cache_read: number
+  cache_write: number
+  by_space: UsageRow[]
+  by_speaker: UsageRow[]
+  by_model: UsageRow[]
+  by_day: UsageRow[]
+}
+
+export const callsList = (limit = 200) => invoke<LlmCall[]>('calls_list', { limit })
+export const callsUsage = (days = 30) => invoke<UsageReport>('calls_usage', { days })
+export const callsClear = () => invoke<void>('calls_clear')
+
 /** The Team board: every goal in every space, with everyone on it. */
 export const teamBoard = () => invoke<import('./aiw').GoalRow[]>('team_board')
 

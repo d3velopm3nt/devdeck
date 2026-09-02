@@ -1206,21 +1206,48 @@ impl Assistant {
         if wanted.is_empty() {
             return refuse("Say which work item to hand over.".into());
         }
-        let items = project
-            .deck()
+        let deck = project.deck();
+        let mut items = deck
             .work(&feature_id)
             .map(|w| w.meta.items)
             .unwrap_or_default();
-        let Some(item) = items
+        let found = items
             .iter()
-            .find(|i| i.id.to_lowercase() == wanted || i.title.to_lowercase() == wanted)
-            .or_else(|| items.iter().find(|i| i.title.to_lowercase().contains(&wanted)))
-        else {
-            return refuse(format!(
-                "No work item on {feature_id} matching “{}”, so nothing moved.",
-                h.what
-            ));
+            .position(|i| i.id.to_lowercase() == wanted || i.title.to_lowercase() == wanted)
+            .or_else(|| items.iter().position(|i| i.title.to_lowercase().contains(&wanted)));
+        let item = match found {
+            Some(i) => items[i].clone(),
+            // A manager saying "take this" about something not on the plan is
+            // the act of putting it on the plan. Only a manager: an agent or
+            // the assistant naming an item that does not exist is naming the
+            // wrong thing, and the honest answer to that is still no.
+            None if persona.plan.as_deref() == Some(feature_id.as_str()) => {
+                let title = h.what.trim();
+                let new_item = super::deck::WorkItem {
+                    id: format!("w{:02}-{}", items.len() + 1, super::deck::slugify(title)),
+                    title: title.to_string(),
+                    status: "unclaimed".into(),
+                    assignee: None,
+                    areas: Vec::new(),
+                };
+                items.push(new_item.clone());
+                let meta = super::deck::WorkMeta {
+                    feature: feature_id.clone(),
+                    items: items.clone(),
+                };
+                if let Err(e) = deck.save_work(&feature_id, &meta) {
+                    return refuse(format!("could not add “{title}” to the plan: {e}"));
+                }
+                new_item
+            }
+            None => {
+                return refuse(format!(
+                    "No work item on {feature_id} matching “{}”, so nothing moved.",
+                    h.what
+                ));
+            }
         };
+        let item = &item;
         let was = if item.status.trim().is_empty() {
             "unclaimed".to_string()
         } else {

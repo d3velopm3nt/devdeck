@@ -149,6 +149,7 @@ export function Pill({
   const [open, setOpen] = useState(false)
   const thread = useContext(ThreadContext)
   const [waking, setWaking] = useState<string | null>(null)
+  const [wakeBusy, setWakeBusy] = useState(false)
   // Hover opens the card; using a control inside pins it, because a select's
   // dropdown reaches outside the card and would otherwise close it mid-pick.
   // A click anywhere else unpins.
@@ -324,18 +325,23 @@ export function Pill({
             <span className="mt-2 block border-t border-line pt-2">
               <button
                 className="btn-primary text-[11px]"
-                disabled={!!waking || thinking || !!live}
+                // Busy while a wake is in flight, and while it is already
+                // working — not forever after the first one, which is how it
+                // used to read as broken.
+                disabled={wakeBusy || thinking || !!live}
                 title={
                   thread.feature
                     ? 'Start a session on this feature; it reports back here'
                     : 'Have it read this thread and answer now'
                 }
                 onClick={() => {
+                  setWakeBusy(true)
                   setWaking('…')
                   void ipc
                     .threadWake(thread.convId as string, agent.id)
                     .then((line) => setWaking(line))
                     .catch((e) => setWaking(String(e)))
+                    .finally(() => setWakeBusy(false))
                 }}
               >
                 <Icon name="update" size={11} /> {live ? 'Working' : 'Wake'}
@@ -358,14 +364,16 @@ export function Pill({
               {bot.schedule_id && (
                 <button
                   className="btn-primary text-[11px]"
-                  disabled={!!waking}
+                  disabled={wakeBusy}
                   title="Run its heartbeat now; the receipt lands in its thread"
                   onClick={() => {
+                    setWakeBusy(true)
                     setWaking('…')
                     void ipc
                       .scheduleRunNow(bot.schedule_id as number)
                       .then((r) => setWaking(r.note || (r.ok ? 'woke, nothing to say' : 'did not run')))
                       .catch((e) => setWaking(String(e)))
+                      .finally(() => setWakeBusy(false))
                   }}
                 >
                   <Icon name="update" size={11} /> Wake it

@@ -32,6 +32,7 @@ use super::runtime::{AgentRuntime, LiveSession, StartAgentCommand};
 use super::state::Workspace;
 use super::tools::{
     is_assistant_tool, ToolCall, TOOL_BOTS, TOOL_DELEGATE, TOOL_MEMORY, TOOL_ROUTINE, TOOL_SKILL,
+    TOOL_WORK,
 };
 
 /// The built-in orchestrator's agent id. It is a real entry in the agent list
@@ -167,6 +168,18 @@ pub struct Persona {
     pub runs_as: String,
     pub name: String,
     pub system: String,
+    /// Who this persona may hand work to, when that is not the matrix's call.
+    ///
+    /// A bot has no row in the permission matrix — an unknown id gets nothing,
+    /// which is how a bot with no agent cannot act. But a bot *manages*, and
+    /// managing is putting work on people: its team. So a bot's gate is its
+    /// team list rather than the matrix, and an agent or the assistant keeps
+    /// `None` here and is judged by the matrix as before.
+    pub may_delegate_to: Option<Vec<String>>,
+    /// The feature this persona manages, when it is a bot with a plan. Work
+    /// handed over from its own thread lands there, and `work.add` without a
+    /// feature named means this one.
+    pub plan: Option<String>,
     /// Words only: no tools this turn, whatever the matrix says.
     ///
     /// This is how an agent answers a mention. Being named in a room is free
@@ -184,6 +197,8 @@ impl Persona {
             runs_as: ASSISTANT_ID.into(),
             name: "Assistant".into(),
             system: system.to_string(),
+            may_delegate_to: None,
+            plan: None,
             talk_only: false,
         }
     }
@@ -203,6 +218,8 @@ impl Persona {
                 agent.system.trim(),
                 agent.id
             ),
+            may_delegate_to: None,
+            plan: None,
             talk_only: true,
         }
     }
@@ -844,6 +861,7 @@ impl Assistant {
                             ws,
                             convs,
                             &conv,
+                            persona.plan.as_deref(),
                             me,
                             call,
                             &scope,
@@ -925,6 +943,32 @@ impl Assistant {
         msg.by = Some(persona.agent_id.clone());
         conv.messages.push(msg.clone());
         appended.push(msg);
+
+        // What the speaker *said* is read the same way what you said was:
+        // `@qa` pulls qa in, `@dev-a take "…"` hands the work over — gated by
+        // what this speaker may do. Before this, a bot that wrote "I've
+        // handed dev-a the item" had done nothing, and nothing on screen said
+        // so. It is bounded: a reply may cause at most a few handovers per
+        // human message, so two managers cannot pass work between themselves
+        // until the budget is the bill.
+        if !persona.talk_only && Self::auto_budget_left(&conv) {
+            for note in Self::pull_in(ws, &mut conv, &reply, persona) {
+                appended.push(note.clone());
+                sink(ChatEvent::Step {
+                    conversation_id: conv_id.clone(),
+                    message: note,
+                });
+            }
+            if let Some(h) = mentions::handover(&reply) {
+                let note = Self::hand_over(ws, convs, &conv, persona, &h, &mut delegated);
+                conv.messages.push(note.clone());
+                appended.push(note.clone());
+                sink(ChatEvent::Step {
+                    conversation_id: conv_id.clone(),
+                    message: note,
+                });
+            }
+        }
         conv.updated_at = now_iso();
 
         // Write by appending to what is on disk *now*, not by saving the copy
@@ -1039,6 +1083,23 @@ impl Assistant {
         Ok(format!("{} answered", agent.name))
     }
 
+    /// Whether a reply may still cause a handover on its own.
+    ///
+    /// Three per human message. A person saying something resets it; a bot
+    /// saying something does not. That is the whole loop-breaker: two
+    /// managers who each write "@you take it" at each other run out of
+    /// budget on the third pass and have to wait for a person.
+    fn auto_budget_left(conv: &ConversationMeta) -> bool {
+        let since_user = conv
+            .messages
+            .iter()
+            .rev()
+            .take_while(|m| m.from != Speaker::User)
+            .filter(|m| m.tool.as_deref() == Some("handover") && m.ok == Some(true))
+            .count();
+        since_user < 3
+    }
+
     /// Pull the people this message mentions into the thread.
     ///
     /// Free, and deliberately so: a mention costs nothing, needs nobody's
@@ -1094,25 +1155,46 @@ impl Assistant {
     ) -> ChatMessage {
         let refuse = |why: String| ChatMessage::note(&persona.agent_id, "handover", false, why);
 
-        let (Some(project_id), Some(feature_id)) = (conv.project_id.clone(), conv.feature.clone())
-        else {
+        // A feature's room names its feature. A bot's own thread does not,
+        // but the bot has a plan, and that plan is a feature — so work handed
+        // over from a bot's thread goes onto the bot's plan.
+        let feature_id = conv.feature.clone().or_else(|| persona.plan.clone());
+        let (Some(project_id), Some(feature_id)) = (conv.project_id.clone(), feature_id) else {
             return refuse(
-                "Work changes hands inside a feature — this thread is not one, so nothing moved."
+                "Work changes hands inside a feature — this thread is not one and nobody here \
+                 has a plan, so nothing moved."
                     .into(),
             );
         };
-        // The gate. Not a courtesy check: an id the matrix has never heard of
-        // gets nothing, which is how a bot with no agent can talk in a thread
-        // without being able to move anyone's work.
-        if matches!(
-            ws.permission_matrix().get(&persona.agent_id, TOOL_DELEGATE),
-            super::tools::Permission::None
-        ) {
-            return refuse(format!(
-                "{} may not hand work over — that goes through the same gate as delegate.start, \
-                 and it is not granted here. Nothing moved.",
-                persona.name
-            ));
+        // The gate. For an agent or the assistant it is the matrix, and an id
+        // the matrix has never heard of gets nothing. For a bot it is its
+        // team: a manager may put work on the people it manages and nobody
+        // else, which is what a team list is for.
+        let allowed = match &persona.may_delegate_to {
+            Some(team) => team.iter().any(|t| t.eq_ignore_ascii_case(&h.agent)),
+            None => !matches!(
+                ws.permission_matrix().get(&persona.agent_id, TOOL_DELEGATE),
+                super::tools::Permission::None
+            ),
+        };
+        if !allowed {
+            return refuse(match &persona.may_delegate_to {
+                Some(team) if team.is_empty() => format!(
+                    "{} has no team, so there is nobody it may hand work to. Nothing moved.",
+                    persona.name
+                ),
+                Some(team) => format!(
+                    "{} may only hand work to its team ({}), and @{} is not on it. Nothing moved.",
+                    persona.name,
+                    team.join(", "),
+                    h.agent
+                ),
+                None => format!(
+                    "{} may not hand work over — that goes through the same gate as \
+                     delegate.start, and it is not granted here. Nothing moved.",
+                    persona.name
+                ),
+            });
         }
         let Some(agent) = ws.agent(&h.agent) else {
             return refuse(format!("Nobody here is called @{}, so nothing moved.", h.agent));
@@ -1161,7 +1243,7 @@ impl Assistant {
             Err(e) => return refuse(format!("{} could not take it: {e}", agent.id)),
         };
         delegated.push(live.session_id.clone());
-        Self::drive_and_report(ws, convs, live, conv.id.clone(), &agent);
+        Self::drive_and_report_to(ws, convs, live, conv.id.clone(), &agent, Some(persona.clone()));
 
         ChatMessage::note(
             &agent.id,
@@ -1188,6 +1270,23 @@ impl Assistant {
         live: LiveSession,
         conv_id: String,
         agent: &super::state::AgentDef,
+    ) {
+        Self::drive_and_report_to(ws, convs, live, conv_id, agent, None)
+    }
+
+    /// As above, and then whoever manages the room reacts to the receipt.
+    ///
+    /// Agent-to-bot is the half of the conversation that was missing: dev-a
+    /// finished and said so, and the manager that put it there said nothing.
+    /// One reaction per receipt, as a talkless turn budgeted like any other,
+    /// so a manager cannot answer its own answer forever.
+    fn drive_and_report_to(
+        ws: &Arc<Workspace>,
+        convs: &Conversations,
+        live: LiveSession,
+        conv_id: String,
+        agent: &super::state::AgentDef,
+        host: Option<Persona>,
     ) {
         let bg = ws.clone();
         let who = agent.id.clone();
@@ -1216,14 +1315,27 @@ impl Assistant {
             // Best effort, and it says so: the session happened whether or not
             // its receipt could be written, and failing the run over its
             // transcript would be backwards.
-            let posted = Conversations::new(store)
+            let convs = Conversations::new(store);
+            let posted = convs
                 .post(
                     &conv_id,
-                    ChatMessage::note(&who, "session", !line.contains("could not finish"), line),
+                    ChatMessage::note(&who, "session", !line.contains("could not finish"), line.clone()),
                 )
                 .map(|_| ());
             if let Err(e) = posted {
                 eprintln!("[aiw] {who} finished but its receipt could not be written: {e}");
+                return;
+            }
+            // The manager reads the receipt and says what happens next.
+            if let Some(h) = host {
+                let quiet = |_: ChatEvent| {};
+                let prompt = format!(
+                    "@{who} reported back: {line}\nSay, briefly, what that means for the goal \
+                     and what happens next."
+                );
+                if let Err(e) = Self::answer_as(&bg, &convs, &conv_id, &prompt, &quiet, &h) {
+                    eprintln!("[aiw] {} could not react to {who}'s receipt: {e}", h.name);
+                }
             }
         });
     }
@@ -1232,10 +1344,12 @@ impl Assistant {
     /// else goes through the project's `ToolService` and its permission gate,
     /// approval prompt included.
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     fn run_tool(
         ws: &Arc<Workspace>,
         convs: &Conversations,
         conv: &ConversationMeta,
+        persona_plan: Option<&str>,
         me: &str,
         call: &ToolCall,
         scope: &EventScope,
@@ -1270,6 +1384,7 @@ impl Assistant {
                 TOOL_BOTS => Self::make_bot(ws, conv, me, call, scope, cause),
                 TOOL_ROUTINE => Self::make_routine(ws, conv, me, call, scope, cause),
                 TOOL_SKILL => Self::save_skill(ws, call),
+                TOOL_WORK => Self::plan_work(ws, conv, persona_plan, call),
                 _ => (false, format!("unknown assistant tool '{}'", call.tool)),
             };
         }
@@ -1557,6 +1672,78 @@ impl Assistant {
                 )
             }
             other => (false, format!("unknown delegate action '{other}'")),
+        }
+    }
+
+    /// Add an item to a plan, or mark one.
+    ///
+    /// Not gated by the matrix. A manager's plan is its own `work.md`, inside
+    /// the deck of the space it manages; touching that is what managing is,
+    /// not a reach into the machine. The item's status is honest from the
+    /// start — unclaimed — and the Work view is what it looks like.
+    fn plan_work(
+        ws: &Arc<Workspace>,
+        conv: &ConversationMeta,
+        plan: Option<&str>,
+        call: &ToolCall,
+    ) -> (bool, String) {
+        let s = |k: &str| call.args.get(k).and_then(|v| v.as_str()).unwrap_or("").trim();
+        let Some(project_id) = conv.project_id.as_deref() else {
+            return (false, "a work item belongs to a space — pick one first".into());
+        };
+        let Some(project) = ws.project(project_id) else {
+            return (false, format!("no project '{project_id}'"));
+        };
+        let feature = match (conv.feature.as_deref(), plan, s("feature")) {
+            (_, _, f) if !f.is_empty() => f.to_string(),
+            (Some(f), _, _) => f.to_string(),
+            (None, Some(p), _) => p.to_string(),
+            _ => return (false, "which feature? this thread has none and you manage none".into()),
+        };
+        let deck = project.deck();
+        match call.action.as_str() {
+            "add" => {
+                let title = s("title");
+                if title.is_empty() {
+                    return (false, "a work item needs a title".into());
+                }
+                let mut work = deck.work(&feature).unwrap_or_else(|_| Doc {
+                    meta: super::deck::WorkMeta {
+                        feature: feature.clone(),
+                        items: vec![],
+                    },
+                    body: String::new(),
+                });
+                let id = format!("w{:02}-{}", work.meta.items.len() + 1, super::deck::slugify(title));
+                work.meta.items.push(super::deck::WorkItem {
+                    id: id.clone(),
+                    title: title.to_string(),
+                    status: "unclaimed".into(),
+                    assignee: None,
+                    areas: Vec::new(),
+                });
+                match deck.save_work(&feature, &work.meta) {
+                    Ok(()) => (
+                        true,
+                        format!("Added “{title}” to {feature} as {id}, unclaimed. Hand it to someone with @name take \"{title}\"."),
+                    ),
+                    Err(e) => (false, e),
+                }
+            }
+            "list" => match deck.work(&feature) {
+                Ok(w) if w.meta.items.is_empty() => (true, format!("{feature} has no work items yet.")),
+                Ok(w) => (
+                    true,
+                    w.meta
+                        .items
+                        .iter()
+                        .map(|i| format!("- {} · {} · {}{}", i.id, i.title, i.status, i.assignee.as_deref().map(|a| format!(" · {a}")).unwrap_or_default()))
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                ),
+                Err(e) => (false, e),
+            },
+            other => (false, format!("unknown work action '{other}'")),
         }
     }
 

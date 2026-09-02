@@ -62,6 +62,7 @@ function RailButton({
   mini,
   dot,
   count,
+  live,
   onClick,
 }: {
   label: string
@@ -76,6 +77,9 @@ function RailButton({
   /// How many things are waiting. Shown as a number rather than a dot: whether
   /// it is one reminder or nine changes whether you stop what you are doing.
   count?: number
+  /// How many are working right now. Green, because it is good news, and a
+  /// number for the same reason `count` is.
+  live?: number
   onClick: () => void
 }) {
   const height = mini ? (expanded ? 'h-7' : 'h-8') : expanded ? 'h-8' : 'h-10'
@@ -111,6 +115,15 @@ function RailButton({
         <Icon name={icon ?? 'project'} size={expanded ? 15 : 17} className="shrink-0" />
       )}
       {expanded && <span className="min-w-0 flex-1 truncate text-left">{label}</span>}
+      {!!live && live > 0 && (
+        <span
+          className={`shrink-0 text-[10px] font-semibold text-ok ${
+            expanded ? 'ml-auto' : 'absolute right-1 top-0.5'
+          }`}
+        >
+          {live}
+        </span>
+      )}
       {!!count && count > 0 && (
         <span
           className={`shrink-0 rounded-full bg-indigo-500 px-1.5 text-[9.5px] font-bold text-white ${
@@ -165,6 +178,13 @@ export function Rail() {
   // morning an agent is genuinely stuck would look like every other morning.
   const waiting = aiw.approvals.length + aiw.conflicts.filter((c) => !c.resolved).length
   const unread = waiting + activity.filter((a) => !a.ok && a.ts > inboxSeen).length
+  // What is moving, so the rail says so without being opened: items held by
+  // a live claim under Work, agents mid-session under Bots. Green counts
+  // rather than the Inbox's badge, because these are good news.
+  const moving = aiw.claims.filter((c) => c.status === 'active').length
+  const working = new Set(
+    aiw.sessions.filter((s) => s.status === 'working' || s.status === 'planning').map((s) => s.agent_id),
+  ).size
 
   const [expanded, setExpanded] = useState(() => localStorage.getItem(KEY) === '1')
   useEffect(() => localStorage.setItem(KEY, expanded ? '1' : '0'), [expanded])
@@ -251,6 +271,9 @@ export function Rail() {
           >
             <Icon name={t.icon} size={12} className="shrink-0" />
             <span className="min-w-0 flex-1 truncate text-left">{t.label}</span>
+            {t.id === 'work' && moving > 0 && (
+              <span className="shrink-0 text-[10px] font-semibold text-ok">{moving}</span>
+            )}
           </button>
         ))}
 
@@ -261,6 +284,7 @@ export function Rail() {
         icon="bot"
         active={railView === 'bots'}
         expanded={expanded}
+        live={working}
         onClick={() => setRailView('bots')}
       />
 

@@ -249,6 +249,8 @@ pub const TOOL_ROUTINE: &str = "routine";
 pub const TOOL_MEMORY: &str = "memory";
 /// Writing down how something is done, so it can be done that way again.
 pub const TOOL_SKILL: &str = "skill";
+/// A manager's own plan: the work items of the feature it manages.
+pub const TOOL_WORK: &str = "work";
 
 /// Tools the assistant executes itself rather than handing to a project's
 /// `ToolService`.
@@ -264,6 +266,7 @@ pub fn is_assistant_tool(tool: &str) -> bool {
         || tool == TOOL_BOTS
         || tool == TOOL_ROUTINE
         || tool == TOOL_SKILL
+        || tool == TOOL_WORK
 }
 
 /// Shorthand for a JSON Schema object.
@@ -502,6 +505,34 @@ pub fn registry() -> Vec<ToolInfo> {
                     &["what", "every"],
                 ),
             )],
+        },
+        ToolInfo {
+            id: TOOL_WORK.into(),
+            name: "Work".into(),
+            description: "The plan: the work items of the feature this thread is about, or that \
+                          you manage"
+                .into(),
+            actions: vec![
+                act(
+                    "add",
+                    "Add a work item to the plan. It starts unclaimed; hand it to someone with \
+                     @name take \"title\" in your reply, which moves the claim and starts them.",
+                    Access::Write,
+                    schema(
+                        serde_json::json!({
+                            "title": { "type": "string", "description": "What has to be done, in one line." },
+                            "feature": { "type": "string", "description": "Feature slug. Omit in a feature's room or when you manage one." }
+                        }),
+                        &["title"],
+                    ),
+                ),
+                act(
+                    "list",
+                    "The plan's items, with status and who has each.",
+                    Access::Read,
+                    schema(serde_json::json!({ "feature": { "type": "string" } }), &[]),
+                ),
+            ],
         },
         ToolInfo {
             id: TOOL_SKILL.into(),

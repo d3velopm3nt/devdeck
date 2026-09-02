@@ -1444,8 +1444,9 @@ pub fn persona(bot: &Bot) -> crate::aiw::assistant::Persona {
     }
     if !acts {
         system.push_str(
-            "\n\nYou have no agent, so you cannot run tools or delegate. Say so if asked \
-             to act, and say what naming an agent would let you do.",
+            "\n\nYou have no agent, so you cannot run tools yourself. You can still manage: \
+             add to your plan with work.add, and hand an item to someone on your team by \
+             writing @name take \"title\" in your reply — that is what moves the work.",
         );
     }
     crate::aiw::assistant::Persona {
@@ -1457,8 +1458,27 @@ pub fn persona(bot: &Bot) -> crate::aiw::assistant::Persona {
         },
         name: bot.name.clone(),
         system,
+        // A bot's gate is its team, not the matrix — see `Persona`. This is
+        // the file's list; `persona_for` widens it with the thread's.
+        may_delegate_to: Some(bot.team.clone()),
+        plan: if bot.feature.trim().is_empty() {
+            None
+        } else {
+            Some(bot.feature.trim().to_string())
+        },
         talk_only: false,
     }
+}
+
+/// The voice, with the team it actually has: the file's list plus anyone a
+/// person pulled into its thread.
+pub fn persona_for(
+    ws: &std::sync::Arc<crate::aiw::state::Workspace>,
+    bot: &Bot,
+) -> crate::aiw::assistant::Persona {
+    let mut p = persona(bot);
+    p.may_delegate_to = Some(effective_team(ws, bot));
+    p
 }
 
 /// Put a line the bot said on its own — a wake report — into its thread.
@@ -1527,7 +1547,7 @@ pub async fn bot_thread_send(
         ws.register_project(&node_id.to_string(), &bot.node_name, code_root, dir);
     }
     let workspace = ws.inner().clone();
-    let who = persona(&bot);
+    let who = persona_for(&workspace, &bot);
     tauri::async_runtime::spawn_blocking(move || {
         let progress = app.clone();
         let sink = move |e: crate::aiw::assistant::ChatEvent| {

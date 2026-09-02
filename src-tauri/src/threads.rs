@@ -66,7 +66,7 @@ fn feature_persona(
     match managing {
         Some(bot) => {
             let name = bot.name.clone();
-            let mut p = crate::bots::persona(&bot);
+            let mut p = crate::bots::persona_for(ws, &bot);
             p.system.push_str(&format!(
                 "\n\nYou are in the thread for the feature “{feature_id}”. Other bots and agents \
                  are in here too. Address one with @name to pull them in; say @name take \"item\" \
@@ -157,7 +157,7 @@ fn also_answer(
     already: &str,
 ) {
     for bot in bots {
-        let who = crate::bots::persona(&bot);
+        let who = crate::bots::persona_for(ws, &bot);
         if who.agent_id == already {
             continue;
         }
@@ -377,7 +377,7 @@ fn node_persona(
         crate::bots::bot_on(&conn, node_id)
     };
     let mut p = match bot {
-        Some(b) => crate::bots::persona(&b),
+        Some(b) => crate::bots::persona_for(ws, &b),
         None => {
             let agent = ws
                 .agent(crate::aiw::assistant::ASSISTANT_ID)

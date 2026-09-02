@@ -54,7 +54,19 @@ function ToolRow({ m }: { m: ChatMessage }) {
 
 /// One message. Shared with a bot's thread, which is the same record in a
 /// different voice — `who` is the name the non-user side speaks as.
-export function Bubble({ m, who = 'Assistant' }: { m: ChatMessage; who?: string }) {
+export function Bubble({
+  m,
+  who = 'Assistant',
+  nameNode,
+  renderText,
+}: {
+  m: ChatMessage
+  who?: string
+  /// Something richer than the name — a thread passes the speaker's pill.
+  nameNode?: React.ReactNode
+  /// Something richer than the words — a thread draws @names as pills.
+  renderText?: (text: string) => React.ReactNode
+}) {
   if (m.from === 'tool') return <ToolRow m={m} />
   const mine = m.from === 'user'
   return (
@@ -69,7 +81,7 @@ export function Bubble({ m, who = 'Assistant' }: { m: ChatMessage; who?: string 
       <div className="min-w-0 flex-1">
         <div className="mb-0.5 flex items-baseline gap-2">
           <span className="text-[11.5px] font-semibold text-ink">
-            {mine ? 'You' : who}
+            {mine ? 'You' : (nameNode ?? who)}
           </span>
           <span className="text-[10px] text-faint">{ago(m.at)}</span>
         </div>
@@ -77,7 +89,7 @@ export function Bubble({ m, who = 'Assistant' }: { m: ChatMessage; who?: string 
             short prose, and a half-working renderer that mangles a path or a
             snippet is worse than none. */}
         <div className="whitespace-pre-wrap break-words text-[12.5px] leading-[1.65] text-body">
-          {m.text}
+          {renderText ? renderText(m.text) : m.text}
         </div>
       </div>
     </div>

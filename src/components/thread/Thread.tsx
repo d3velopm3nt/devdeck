@@ -22,6 +22,7 @@ import { Bubble } from '../aiw/Chat'
 import { Icon, type IconName } from '../../lib/icons'
 import { useSpeakers } from './speakers'
 import { useAiw } from '../../lib/aiwStore'
+import { MentionText, Pill, SpeakingContext } from './Pill'
 import { useApp } from '../../store'
 
 /// Someone you can @: an agent, a bot, or you.
@@ -65,7 +66,7 @@ function Receipt({ m }: { m: ChatMessage }) {
         }`}
       >
         <Icon name={failed ? 'alert' : kind.icon} size={11} className={failed ? '' : kind.tint} />
-        {m.text}
+        <MentionText text={m.text} />
       </span>
       <span className="h-px max-w-[120px] flex-1 bg-line" />
     </div>
@@ -86,7 +87,7 @@ function Wake({ m, name }: { m: ChatMessage; name: string }) {
           <span className="text-[10px] text-faint">woke · {ago(m.at)}</span>
         </div>
         <div className="rounded-lg border border-line bg-raise px-3.5 py-2.5 text-[12px] leading-[1.6] text-body">
-          {m.text}
+          <MentionText text={m.text} />
         </div>
       </div>
     </div>
@@ -134,111 +135,6 @@ function fold(messages: ChatMessage[]): (ChatMessage | ChatMessage[])[] {
     else out.push(m)
   }
   return out
-}
-
-/// One participant, as a pill that says what they are doing right now.
-///
-/// Live from two sources: the turn events (thinking, in this room) and the
-/// runtime's sessions (working on an item, somewhere). Hovering shows the
-/// card — who they are, what they are on, what they last did. A name in
-/// small grey text was a name; this is a person you can glance at.
-function Pill({
-  id,
-  label,
-  speaking,
-  host = false,
-}: {
-  id: string
-  label: string
-  speaking: Record<string, string>
-  host?: boolean
-}) {
-  const [open, setOpen] = useState(false)
-  const agents = useAiw((s) => s.agents)
-  const sessions = useAiw((s) => s.sessions)
-  const approvals = useAiw((s) => s.approvals)
-  const bots = useApp((s) => s.bots)
-
-  const isBot = id.startsWith('bot:')
-  const bot = isBot ? bots.find((b) => `bot:${b.node_id}` === id) : undefined
-  const agent = !isBot ? agents.find((a) => a.id === id) : undefined
-  const live = sessions.find(
-    (x) => x.agent_id === id && (x.status === 'working' || x.status === 'planning'),
-  )
-  const waiting = approvals.find((r) => r.agent_id === id)
-  const last = sessions.filter((x) => x.agent_id === id).sort((a, b) => b.started_at.localeCompare(a.started_at))[0]
-
-  const thinking = id in speaking
-  const status = thinking
-    ? { text: 'thinking…', dot: 'bg-indigo-400 animate-pulse', tone: 'text-indigo-300' }
-    : waiting
-      ? { text: 'waiting on you', dot: 'bg-amber-400', tone: 'text-warn' }
-      : live
-        ? { text: `working · ${live.feature_id}`, dot: 'bg-emerald-400', tone: 'text-ok' }
-        : bot
-          ? { text: bot.every ? 'watching' : 'no heartbeat', dot: bot.every ? 'bg-emerald-400/70' : 'bg-line3', tone: 'text-muted' }
-          : { text: 'idle', dot: 'bg-line3', tone: 'text-muted' }
-
-  return (
-    <span
-      className="relative"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-    >
-      <span
-        className={`inline-flex cursor-default items-center gap-1.5 rounded-full border px-2 py-[3px] text-[11px] ${
-          thinking
-            ? 'border-indigo-500/40 bg-indigo-500/10 text-ink'
-            : host
-              ? 'border-line2 bg-raise text-ink'
-              : 'border-line bg-panel text-body'
-        }`}
-      >
-        <span className={`h-[7px] w-[7px] rounded-full ${status.dot}`} />
-        <span className="font-medium">{label}</span>
-        <span className={`text-[10px] ${status.tone}`}>{status.text}</span>
-      </span>
-
-      {open && (
-        <span className="absolute left-0 top-full z-20 mt-1 block w-[280px] rounded-lg border border-line bg-menu p-3 text-left shadow-lg">
-          <span className="block text-[12px] font-semibold text-ink">{label}</span>
-          <span className="block text-[10.5px] text-muted">
-            {bot
-              ? `bot · ${bot.node_name}${bot.agent ? ` · runs ${bot.agent}` : ' · watches only'}`
-              : agent
-                ? `${agent.role} · ${agent.provider === 'mock' ? 'mock provider' : agent.provider}`
-                : host
-                  ? 'the assistant'
-                  : id}
-          </span>
-          <span className={`mt-1.5 block text-[11px] ${status.tone}`}>{status.text}</span>
-          {bot?.goal && <span className="mt-1.5 block text-[11px] text-body">{bot.goal}</span>}
-          {waiting && (
-            <span className="mt-1.5 block text-[11px] text-body">
-              wants to {waiting.summary} — answer it at the top of the window
-            </span>
-          )}
-          {live && (
-            <span className="mt-1.5 block text-[11px] text-body">
-              {live.turns} turn{live.turns === 1 ? '' : 's'} so far
-              {live.transcript.length > 0 && ` · ${live.transcript[live.transcript.length - 1].text}`}
-            </span>
-          )}
-          {!live && last && (
-            <span className="mt-1.5 block text-[11px] text-muted">
-              last: {last.status} on {last.feature_id}
-              {last.summary && ` — ${last.summary}`}
-            </span>
-          )}
-          {bot?.last_woke && (
-            <span className="mt-1.5 block text-[10.5px] text-faint">
-              last woke {new Date(bot.last_woke).toLocaleString()}
-            </span>
-          )}
-        </span>
-      )}
-    </span>
-  )
 }
 
 export interface ThreadProps {
@@ -418,6 +314,7 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
   const who = (m: ChatMessage) => (m.by ? speakers(m.by) : name)
 
   return (
+    <SpeakingContext.Provider value={speaking}>
     <div className="flex h-full min-h-0 flex-col">
       {err && (
         <div className="mb-3 rounded-lg border border-red-500/25 bg-red-500/[0.07] px-3 py-2 text-[11.5px] leading-[1.5] text-err">
@@ -430,9 +327,9 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
           <span className="mr-1 text-[9.5px] font-semibold uppercase tracking-[0.06em] text-faint">
             In this thread
           </span>
-          <Pill id={hostId ?? ''} label={name} speaking={speaking} host />
+          <Pill id={hostId ?? ''} label={name} host />
           {(conv.participants ?? []).map((p) => (
-            <Pill key={p} id={p} label={speakers(p)} speaking={speaking} />
+            <Pill key={p} id={p} label={speakers(p)} />
           ))}
         </div>
       )}
@@ -468,12 +365,18 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
             ) : m.tool && RECEIPTS[m.tool] ? (
               <Receipt key={i} m={m} />
             ) : (
-              <Bubble key={i} m={m} who={who(m)} />
+              <Bubble
+                key={i}
+                m={m}
+                who={who(m)}
+                nameNode={m.by ? <Pill id={m.by} label={who(m)} /> : hostId ? <Pill id={hostId} label={name} host /> : undefined}
+                renderText={(t) => <MentionText text={t} />}
+              />
             ),
           )
         )}
         {steps.map((m, i) => (
-          <Bubble key={`s-${i}`} m={m} who={who(m)} />
+          <Bubble key={`s-${i}`} m={m} who={who(m)} renderText={(t) => <MentionText text={t} />} />
         ))}
         {sending && (
           <div className="flex gap-3 py-2.5">
@@ -482,7 +385,11 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
             </div>
             <div className="min-w-0 flex-1">
               <div className="mb-0.5 text-[11.5px] font-semibold text-ink">
-                {Object.values(speaking)[0] ?? name}
+                {Object.keys(speaking)[0] ? (
+                  <Pill id={Object.keys(speaking)[0]} label={Object.values(speaking)[0]} />
+                ) : (
+                  name
+                )}
               </div>
               {streaming ? (
                 <div className="whitespace-pre-wrap break-words text-[12.5px] leading-[1.65] text-body">
@@ -582,5 +489,6 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
         {footnote && <div className="mt-1.5 text-[10.5px] text-faint">{footnote}</div>}
       </div>
     </div>
+    </SpeakingContext.Provider>
   )
 }

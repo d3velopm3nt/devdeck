@@ -173,6 +173,19 @@ impl AgentRuntime {
                 cmd.feature_id, cmd.project_id
             ));
         }
+        // A scripted agent does not think; it writes the same fixture files
+        // and commits them wherever it is pointed. That is a demo in a
+        // sandbox and vandalism in a repository other people pull from — it
+        // put `packages/sync/types.ts` into this app's own source once. So
+        // the mock only runs where nobody else will see the result.
+        if agent.provider == super::provider::MockProvider::ID && crate::git::has_remote(&project.root) {
+            return Err(format!(
+                "{} is on the mock provider, and a scripted session would commit fixture files                  into {}, which is a shared repository. Point {} at a real provider under                  Settings, or hand this to an agent that has one.",
+                agent.name,
+                project.root.display(),
+                agent.id
+            ));
+        }
 
         let session_id = new_session_id();
         let mut scope = EventScope::feature(&cmd.project_id, &cmd.feature_id)

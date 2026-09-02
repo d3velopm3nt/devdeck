@@ -280,6 +280,18 @@ pub struct GitCommit {
 /// could change" — a vault folder with no repository can never answer a
 /// question about commits, and answering it with an empty list makes an
 /// unanswerable question look like a reassuring one.
+/// Whether this repository is shared with anyone: it has a remote.
+///
+/// The line between a sandbox and a real project. A scripted agent writes
+/// fixture files and commits them; in a throwaway repo that is a demo, and
+/// in a repository other people pull from it is a mess with someone's name
+/// on it. The demo sandbox and every test repository have no remote.
+pub fn has_remote(dir: &Path) -> bool {
+    run_git(dir, &["remote"])
+        .map(|s| s.lines().any(|l| !l.trim().is_empty()))
+        .unwrap_or(false)
+}
+
 pub fn is_repo(dir: &Path) -> bool {
     run_git(dir, &["rev-parse", "--is-inside-work-tree"])
         .map(|s| s.trim() == "true")

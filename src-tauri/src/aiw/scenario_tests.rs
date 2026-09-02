@@ -1257,6 +1257,7 @@ fn a_bot_with_no_agent_can_talk_in_a_room_but_cannot_move_work() {
         runs_as: ASSISTANT_ID.into(),
         name: "TyreX bot".into(),
         system: "You manage TyreX.".into(),
+        talk_only: false,
     };
     Assistant::send_as(
         &w,
@@ -1305,6 +1306,7 @@ fn two_bots_hold_a_conversation_in_one_feature_thread() {
         runs_as: ASSISTANT_ID.into(),
         name: name.into(),
         system: format!("You are {name}."),
+        talk_only: false,
     };
 
     Assistant::send_as(

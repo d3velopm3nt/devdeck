@@ -136,6 +136,111 @@ function fold(messages: ChatMessage[]): (ChatMessage | ChatMessage[])[] {
   return out
 }
 
+/// One participant, as a pill that says what they are doing right now.
+///
+/// Live from two sources: the turn events (thinking, in this room) and the
+/// runtime's sessions (working on an item, somewhere). Hovering shows the
+/// card — who they are, what they are on, what they last did. A name in
+/// small grey text was a name; this is a person you can glance at.
+function Pill({
+  id,
+  label,
+  speaking,
+  host = false,
+}: {
+  id: string
+  label: string
+  speaking: Record<string, string>
+  host?: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const agents = useAiw((s) => s.agents)
+  const sessions = useAiw((s) => s.sessions)
+  const approvals = useAiw((s) => s.approvals)
+  const bots = useApp((s) => s.bots)
+
+  const isBot = id.startsWith('bot:')
+  const bot = isBot ? bots.find((b) => `bot:${b.node_id}` === id) : undefined
+  const agent = !isBot ? agents.find((a) => a.id === id) : undefined
+  const live = sessions.find(
+    (x) => x.agent_id === id && (x.status === 'working' || x.status === 'planning'),
+  )
+  const waiting = approvals.find((r) => r.agent_id === id)
+  const last = sessions.filter((x) => x.agent_id === id).sort((a, b) => b.started_at.localeCompare(a.started_at))[0]
+
+  const thinking = id in speaking
+  const status = thinking
+    ? { text: 'thinking…', dot: 'bg-indigo-400 animate-pulse', tone: 'text-indigo-300' }
+    : waiting
+      ? { text: 'waiting on you', dot: 'bg-amber-400', tone: 'text-warn' }
+      : live
+        ? { text: `working · ${live.feature_id}`, dot: 'bg-emerald-400', tone: 'text-ok' }
+        : bot
+          ? { text: bot.every ? 'watching' : 'no heartbeat', dot: bot.every ? 'bg-emerald-400/70' : 'bg-line3', tone: 'text-muted' }
+          : { text: 'idle', dot: 'bg-line3', tone: 'text-muted' }
+
+  return (
+    <span
+      className="relative"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <span
+        className={`inline-flex cursor-default items-center gap-1.5 rounded-full border px-2 py-[3px] text-[11px] ${
+          thinking
+            ? 'border-indigo-500/40 bg-indigo-500/10 text-ink'
+            : host
+              ? 'border-line2 bg-raise text-ink'
+              : 'border-line bg-panel text-body'
+        }`}
+      >
+        <span className={`h-[7px] w-[7px] rounded-full ${status.dot}`} />
+        <span className="font-medium">{label}</span>
+        <span className={`text-[10px] ${status.tone}`}>{status.text}</span>
+      </span>
+
+      {open && (
+        <span className="absolute left-0 top-full z-20 mt-1 block w-[280px] rounded-lg border border-line bg-menu p-3 text-left shadow-lg">
+          <span className="block text-[12px] font-semibold text-ink">{label}</span>
+          <span className="block text-[10.5px] text-muted">
+            {bot
+              ? `bot · ${bot.node_name}${bot.agent ? ` · runs ${bot.agent}` : ' · watches only'}`
+              : agent
+                ? `${agent.role} · ${agent.provider === 'mock' ? 'mock provider' : agent.provider}`
+                : host
+                  ? 'the assistant'
+                  : id}
+          </span>
+          <span className={`mt-1.5 block text-[11px] ${status.tone}`}>{status.text}</span>
+          {bot?.goal && <span className="mt-1.5 block text-[11px] text-body">{bot.goal}</span>}
+          {waiting && (
+            <span className="mt-1.5 block text-[11px] text-body">
+              wants to {waiting.summary} — answer it at the top of the window
+            </span>
+          )}
+          {live && (
+            <span className="mt-1.5 block text-[11px] text-body">
+              {live.turns} turn{live.turns === 1 ? '' : 's'} so far
+              {live.transcript.length > 0 && ` · ${live.transcript[live.transcript.length - 1].text}`}
+            </span>
+          )}
+          {!live && last && (
+            <span className="mt-1.5 block text-[11px] text-muted">
+              last: {last.status} on {last.feature_id}
+              {last.summary && ` — ${last.summary}`}
+            </span>
+          )}
+          {bot?.last_woke && (
+            <span className="mt-1.5 block text-[10.5px] text-faint">
+              last woke {new Date(bot.last_woke).toLocaleString()}
+            </span>
+          )}
+        </span>
+      )}
+    </span>
+  )
+}
+
 export interface ThreadProps {
   /// Read the thread. Called on mount and after every send, because the
   /// backend decides the timestamps, the receipts and the tool steps — a
@@ -201,6 +306,11 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
   const [sending, setSending] = useState(false)
   const [streaming, setStreaming] = useState('')
   const [steps, setSteps] = useState<ChatMessage[]>([])
+  // Who is mid-turn right now, by id, with the name the turn announced. A
+  // pill lights up on the start event and goes out on the done one — which
+  // is what "see the agent become active when I name it" means.
+  const [speaking, setSpeaking] = useState<Record<string, string>>({})
+  const hostId = conv?.bot_node != null ? `bot:${conv.bot_node}` : conv?.messages.find((m) => m.by && m.from === 'assistant')?.by
   const bottom = useRef<HTMLDivElement>(null)
   const box = useRef<HTMLTextAreaElement>(null)
   const speakers = useSpeakers()
@@ -229,6 +339,27 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
     void reload()
   }, [reload])
 
+  // The pills read live sessions and approvals. Load them here and keep them
+  // moving: a room may be the first thing opened, before anything else has
+  // asked the runtime for them, and a pill that says "idle" about an agent
+  // mid-session is the kind of wrong that costs trust.
+  useEffect(() => {
+    const a = useAiw.getState()
+    if (!a.ready) void a.bootstrap()
+    void a.refreshApprovals()
+    let stop: (() => void) | undefined
+    void aiw
+      .onEvent(() => {
+        void useAiw.getState().refreshApprovals()
+        void aiw.sessions().then((sessions) => useAiw.setState({ sessions })).catch(() => {})
+      })
+      .then((un) => {
+        stop = un
+      })
+    void aiw.sessions().then((sessions) => useAiw.setState({ sessions })).catch(() => {})
+    return () => stop?.()
+  }, [])
+
   // Progress arrives on the assistant's channel, keyed by conversation. Only
   // this one is ours: another thread's tokens spliced in here would be worse
   // than a spinner.
@@ -239,6 +370,16 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
         if (!conv || e.conversation_id !== conv.id) return
         if (e.kind === 'delta') setStreaming((s) => s + e.text)
         if (e.kind === 'step') setSteps((s) => [...s, e.message])
+        if (e.kind === 'turn') {
+          setSpeaking((cur) => {
+            const next = { ...cur }
+            if (e.done) delete next[e.by]
+            else next[e.by] = e.name
+            return next
+          })
+          // A new voice: what streamed so far belonged to the last one.
+          if (!e.done) setStreaming('')
+        }
       })
       .then((un) => {
         stop = un
@@ -284,17 +425,14 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
         </div>
       )}
 
-      {conv && conv.participants && conv.participants.length > 0 && (
-        <div className="mb-2 flex shrink-0 flex-wrap items-center gap-2 border-b border-line pb-2">
-          <span className="text-[9.5px] font-semibold uppercase tracking-[0.06em] text-faint">
+      {conv && (
+        <div className="mb-2 flex shrink-0 flex-wrap items-center gap-1.5 border-b border-line pb-2">
+          <span className="mr-1 text-[9.5px] font-semibold uppercase tracking-[0.06em] text-faint">
             In this thread
           </span>
-          <span className="text-[10.5px] text-dim">{name}</span>
-          {conv.participants.map((p) => (
-            <span key={p} className="flex items-center gap-1 text-[10.5px] text-muted">
-              <span className="h-[6px] w-[6px] rounded-full bg-indigo-400" />
-              {speakers(p)}
-            </span>
+          <Pill id={hostId ?? ''} label={name} speaking={speaking} host />
+          {(conv.participants ?? []).map((p) => (
+            <Pill key={p} id={p} label={speakers(p)} speaking={speaking} />
           ))}
         </div>
       )}
@@ -343,7 +481,9 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
               <Icon name="ai" size={12} />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="mb-0.5 text-[11.5px] font-semibold text-ink">{name}</div>
+              <div className="mb-0.5 text-[11.5px] font-semibold text-ink">
+                {Object.values(speaking)[0] ?? name}
+              </div>
               {streaming ? (
                 <div className="whitespace-pre-wrap break-words text-[12.5px] leading-[1.65] text-body">
                   {streaming}

@@ -1457,6 +1457,7 @@ pub fn persona(bot: &Bot) -> crate::aiw::assistant::Persona {
         },
         name: bot.name.clone(),
         system,
+        talk_only: false,
     }
 }
 
@@ -1528,12 +1529,19 @@ pub async fn bot_thread_send(
     let workspace = ws.inner().clone();
     let who = persona(&bot);
     tauri::async_runtime::spawn_blocking(move || {
+        let progress = app.clone();
         let sink = move |e: crate::aiw::assistant::ChatEvent| {
-            let _ = app.emit("aiw:chat", e);
+            let _ = progress.emit("aiw:chat", e);
         };
         let convs = workspace.convs()?;
         let conv = convs.for_bot(node_id, &node_id.to_string(), &bot.name)?;
-        crate::aiw::assistant::Assistant::send_as(&workspace, convs, &conv.id, &text, &sink, &who)
+        let reply = crate::aiw::assistant::Assistant::send_as(
+            &workspace, convs, &conv.id, &text, &sink, &who,
+        )?;
+        // Then every agent the message named, as itself. A room where you can
+        // name someone and they never speak is a room where @ looks broken.
+        crate::threads::answer_as_agents(&app, &workspace, &conv.id, &text, &who.agent_id);
+        Ok(reply)
     })
     .await
     .map_err(|e| e.to_string())?

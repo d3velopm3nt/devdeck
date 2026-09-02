@@ -581,6 +581,23 @@ impl LLMProvider for MockProvider {
                 request.agent_id, request.goal
             ));
         }
+        // Named in a thread, with no tools: the scripts below would start
+        // writing fixture files, which is exactly what a mention must not do.
+        // Say what a scripted agent can honestly say.
+        if request.tools.is_empty() && request.role != "orchestrator" {
+            return Ok(AgentResponse {
+                message: format!(
+                    "{} here, on the mock provider - I can read this thread but not think. Hand \
+                     me an item with @{} take \"...\" and I will run it in a session; point me \
+                     at a real provider under Settings to have me actually answer.",
+                    request.role, request.agent_id
+                ),
+                actions: vec![AgentAction::Done {
+                    summary: "answered".into(),
+                }],
+                complete: true,
+            });
+        }
         let mut response = Self::script(&request.role, request);
         if request.turn == 0 {
             response.message = format!(

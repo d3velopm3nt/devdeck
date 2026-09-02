@@ -502,6 +502,8 @@ export interface SkillFile {
 export type ChatEvent =
   | { kind: 'delta'; conversation_id: string; text: string }
   | { kind: 'step'; conversation_id: string; message: ChatMessage }
+  /** Somebody started (or finished) a turn. What lights a participant's pill. */
+  | { kind: 'turn'; conversation_id: string; by: string; name: string; done: boolean }
   | { kind: 'done'; conversation_id: string }
 
 export interface ProfileView {

@@ -167,6 +167,14 @@ pub struct Persona {
     pub runs_as: String,
     pub name: String,
     pub system: String,
+    /// Words only: no tools this turn, whatever the matrix says.
+    ///
+    /// This is how an agent answers a mention. Being named in a room is free
+    /// and must stay free, and an agent with `files: full` answering `@dev-a
+    /// what do you think?` by editing a file would make a mention into a
+    /// handover by the back door. Work happens in a session, when someone
+    /// hands it an item.
+    pub talk_only: bool,
 }
 
 impl Persona {
@@ -176,6 +184,26 @@ impl Persona {
             runs_as: ASSISTANT_ID.into(),
             name: "Assistant".into(),
             system: system.to_string(),
+            talk_only: false,
+        }
+    }
+
+    /// An agent speaking in a thread, as itself, with no hands.
+    pub fn agent_in_thread(agent: &super::state::AgentDef, thread: &str) -> Self {
+        Self {
+            agent_id: agent.id.clone(),
+            runs_as: agent.id.clone(),
+            name: agent.name.clone(),
+            system: format!(
+                "{}\n\nYou are answering in the thread \u{201c}{thread}\u{201d}, as yourself, \
+                 because someone named you. Reply briefly: what you see, what you would do, what \
+                 you need. You have no tools in a thread - work happens in a session when someone \
+                 hands you an item with @{} take \"...\" - so do not claim to have changed \
+                 anything.",
+                agent.system.trim(),
+                agent.id
+            ),
+            talk_only: true,
         }
     }
 }
@@ -199,6 +227,15 @@ pub enum ChatEvent {
     Step {
         conversation_id: String,
         message: ChatMessage,
+    },
+    /// Somebody started or finished a turn. This is what lets a room show,
+    /// live, who is thinking: a pill that lights up when you name an agent
+    /// and goes out when it has answered.
+    Turn {
+        conversation_id: String,
+        by: String,
+        name: String,
+        done: bool,
     },
     /// The turn is over; the transcript on disk is now authoritative.
     Done { conversation_id: String },
@@ -732,7 +769,18 @@ impl Assistant {
             serde_json::json!({ "name": agent.name, "conversation": conv.id }),
         ));
 
-        let mut tools = super::tools::definitions_for(me, &ws.permission_matrix());
+        sink(ChatEvent::Turn {
+            conversation_id: conv.id.clone(),
+            by: persona.agent_id.clone(),
+            name: persona.name.clone(),
+            done: false,
+        });
+
+        let mut tools = if persona.talk_only {
+            Vec::new()
+        } else {
+            super::tools::definitions_for(me, &ws.permission_matrix())
+        };
         // The project tools are only meaningful with a project in focus. Saying
         // so beats offering a model a `files_read` that cannot resolve a root.
         if conv.project_id.is_none() {
@@ -801,6 +849,7 @@ impl Assistant {
                             &scope,
                             &started,
                             &mut delegated,
+                            persona.talk_only,
                         );
                         let msg = ChatMessage {
                             at: now_iso(),
@@ -902,6 +951,12 @@ impl Assistant {
             .caused_by(&started),
         );
 
+        sink(ChatEvent::Turn {
+            conversation_id: conv_id.clone(),
+            by: persona.agent_id.clone(),
+            name: persona.name.clone(),
+            done: true,
+        });
         sink(ChatEvent::Done {
             conversation_id: conv_id,
         });
@@ -1117,7 +1172,18 @@ impl Assistant {
         scope: &EventScope,
         cause: &DomainEvent,
         delegated: &mut Vec<String>,
+        talk_only: bool,
     ) -> (bool, String) {
+        if talk_only {
+            return (
+                false,
+                format!(
+                    "'{}' is not available in a thread - this is a conversation, not a session. \
+                     Say what you would do; someone can hand you the item.",
+                    call.tool
+                ),
+            );
+        }
         if is_assistant_tool(&call.tool) {
             // Still permission-checked: the orchestrator's right to spawn
             // agents is revocable like anything else — and a bot's is decided

@@ -172,6 +172,37 @@ fn also_answer(
     }
 }
 
+/// Let every agent the message named answer it, as itself, with no hands.
+///
+/// The other half of `also_answer`: bots answer as bots, agents answer as
+/// agents. An agent in a thread talks - it has no tools there, which is what
+/// keeps a mention free - and works in a session when someone hands it an
+/// item. Naming it and getting silence back looked like nothing worked.
+pub fn answer_as_agents(
+    app: &tauri::AppHandle,
+    ws: &Arc<Workspace>,
+    conv_id: &str,
+    text: &str,
+    already: &str,
+) {
+    let Ok(convs) = ws.convs() else { return };
+    let Ok(conv) = convs.load(conv_id) else { return };
+    for name in crate::aiw::mentions::mentions(text) {
+        let Some(agent) = ws.agent(&name) else { continue };
+        if agent.id == already || agent.id == crate::aiw::assistant::ASSISTANT_ID {
+            continue;
+        }
+        let who = Persona::agent_in_thread(&agent, &conv.title);
+        let emit = app.clone();
+        let sink = move |e: ChatEvent| {
+            let _ = emit.emit("aiw:chat", e);
+        };
+        if let Err(e) = Assistant::answer_as(ws, convs, conv_id, text, &sink, &who) {
+            eprintln!("[threads] {} was named and could not answer: {e}", agent.id);
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // A feature's thread
 // ---------------------------------------------------------------------------
@@ -228,6 +259,7 @@ pub async fn feature_thread_send(
         // Then everyone else the message named. The room is the point: one
         // question, several voices, one transcript.
         also_answer(&emit, &workspace, &conv_id, &text, named, &who.agent_id);
+        answer_as_agents(&emit, &workspace, &conv_id, &text, &who.agent_id);
         Ok(reply)
     })
     .await
@@ -379,6 +411,7 @@ pub async fn node_thread_send(
         let convs = workspace.convs()?;
         let reply = Assistant::send_as(&workspace, convs, &conv_id, &text, &sink, &who)?;
         also_answer(&emit, &workspace, &conv_id, &text, named, &who.agent_id);
+        answer_as_agents(&emit, &workspace, &conv_id, &text, &who.agent_id);
         Ok(reply)
     })
     .await

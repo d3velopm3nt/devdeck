@@ -1,4 +1,4 @@
-﻿export const CAPTURE_RAIL: string = ''
+﻿export const CAPTURE_RAIL: string = 'bots'
 export const CAPTURE_PAGE = ''
 export const CAPTURE_PROJECT = ''
 export const CAPTURE_FEATURE = ''
@@ -7,8 +7,10 @@ export const CAPTURE_BOT: string = ''
 export const CAPTURE_BOT_TAB: string = ''
 export const CAPTURE_BOT_MODAL: string = ''
 export const CAPTURE_SETTINGS_TAB: string = ''
-export const CAPTURE_SAY: string[] = []
-export const CAPTURE_TEAM_TAB: string = ''
+export const CAPTURE_SAY: string[] = [
+  'bot:12:@dev-a can you see how we can add a splash screen when starting the app, as it is a blank window for a couple of seconds',
+]
+export const CAPTURE_TEAM_TAB: string = 'goals'
 export const CAPTURE_GOAL: string = ''
 export const CAPTURE_NODE: string = ''
 export const CAPTURE_EXPAND: string = ''

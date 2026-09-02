@@ -218,3 +218,31 @@ must not happen. The flag is consumed once now.
   repository. Renaming it is one click and it is your call.
 - **Every message in a thread is a model call.** The five exchanges above cost
   real Anthropic calls on your key.
+
+## What the model-call log caught, on its first day
+
+Two of the fixes below were not found by reading code. They were found by
+reading the log of what the models were actually asked and what they actually
+said, which is now the **Models** tab in the bottom bar
+(`screenshots/25-model-calls.png`) and, added up, the **Analytics** page
+(`screenshots/24-analytics.png`).
+
+- **A session that "did nothing" had spent its whole budget reading.** Eight
+  turns, every one a file read, then the cap. The budget was one number for
+  every provider; it is now 8 for the mock and 40 for a real one, and running
+  out is reported in those words instead of an empty summary.
+- **An agent hid the main window and never showed it again.** Commit `2c9d869`
+  set `"visible": false` in `tauri.conf.json` — half of "hide the window until
+  it is ready" — so the app launched with no window at all. Completed here:
+  the frontend calls `app_ready` once it has painted, and a timer in `setup`
+  shows the window anyway after eight seconds, because an app you cannot see
+  is an app you cannot even close.
+- **A bot reported that fix against a file this project does not have.**
+  "dev-a modified `src/main/index.ts`" — an Electron path, in a Tauri app. The
+  log is where that is visible; the thread alone reads like a finished job.
+
+The Analytics page reads those same rows. Twelve calls, all on
+`claude-opus-5`, all reporting their token counts, about sixty cents in total.
+The first version of the page failed with `Invalid column type Integer` on the
+per-day grouping: the error banner said so plainly rather than showing an
+empty page, which is the rule this app keeps everywhere else.

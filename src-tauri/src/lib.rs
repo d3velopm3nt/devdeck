@@ -128,6 +128,29 @@ fn toggle_widget(app: &tauri::AppHandle) {
     }
 }
 
+/// Show the main window, once.
+///
+/// The window is created hidden (`visible: false` in `tauri.conf.json`) so
+/// nobody watches an empty frame paint itself grey, then white, then finally
+/// the app. The cost of that is a promise: *something* has to show it, and if
+/// nothing does the app is running with no way to reach it. So there are two
+/// somethings — the frontend calls `app_ready` when it has painted, and a
+/// timer shows the window anyway if that call never comes. A slow start is a
+/// worse first impression than a broken one is a mystery.
+fn reveal_main(app: &tauri::AppHandle) {
+    let Some(win) = app.get_webview_window("main") else { return };
+    if win.is_visible().unwrap_or(false) {
+        return;
+    }
+    let _ = win.show();
+    let _ = win.set_focus();
+}
+
+#[tauri::command]
+fn app_ready(app: tauri::AppHandle) {
+    reveal_main(&app);
+}
+
 #[tauri::command]
 fn widget_toggle(app: tauri::AppHandle) {
     toggle_widget(&app);
@@ -685,6 +708,18 @@ pub fn run() {
                 });
             }
 
+            // The safety net behind `app_ready`. If the frontend throws before
+            // it can call in — a bad import, a bad migration — the window must
+            // still appear, because an app you cannot see is an app you cannot
+            // even close.
+            {
+                let h = app.handle().clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(8));
+                    reveal_main(&h);
+                });
+            }
+
             // Where every model call is written down. Installed here rather
             // than above because it needs the app handle, and the handle only
             // exists once setup runs.
@@ -808,6 +843,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            app_ready,
             hotkey_apply,
             widget_toggle,
             widget_show,

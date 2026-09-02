@@ -132,6 +132,13 @@ export default function App() {
   const nodeDir = resolveDir(app.nodes, node)
   const railView = app.railView
 
+  // We are on screen. The window was created hidden; this is what shows it.
+  // Deliberately the first effect in the shell and dependency-free, so it
+  // fires on the first paint whatever else is still loading.
+  useEffect(() => {
+    void ipc.appReady().catch(() => {})
+  }, [])
+
   // Screenshot harness (temporary): applied at runtime so a hot module
   // update takes effect without a full reload.
   useEffect(() => {

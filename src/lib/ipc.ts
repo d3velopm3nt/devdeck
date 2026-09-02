@@ -729,6 +729,13 @@ export const widgetResize = (width: number, height: number) =>
   invoke<void>('widget_resize', { width, height })
 
 export const focusMain = () => invoke<void>('focus_main')
+
+/// Tell the shell the UI has painted, so it can show the window.
+///
+/// The window starts hidden so nobody watches it assemble itself. If this
+/// never arrives the backend shows it anyway after a few seconds — a slow
+/// reveal beats an app with no window at all.
+export const appReady = () => invoke<void>('app_ready')
 /** Bring the widget into view without taking the keyboard. `sticky` keeps it
  *  up (a crash); otherwise it collapses itself after a few seconds. */
 export const widgetPeek = (sticky = false) => invoke<void>('widget_peek_cmd', { sticky })

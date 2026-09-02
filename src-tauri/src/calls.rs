@@ -134,6 +134,25 @@ fn row(r: &rusqlite::Row) -> rusqlite::Result<Call> {
     })
 }
 
+/// One grouped column as a string, whatever SQLite decided it was.
+///
+/// The groupings are not all text: a day bucket is `at / 86400000`, an
+/// integer. Asking rusqlite for a `String` there fails the whole query with
+/// "Invalid column type Integer", which is how the Analytics page arrived
+/// empty behind an error banner the first time it was opened. Reading the
+/// value and converting it here means a new grouping cannot break the page by
+/// being a number.
+fn text_at(r: &rusqlite::Row, i: usize) -> rusqlite::Result<String> {
+    use rusqlite::types::ValueRef;
+    Ok(match r.get_ref(i)? {
+        ValueRef::Null => String::new(),
+        ValueRef::Integer(n) => n.to_string(),
+        ValueRef::Real(f) => f.to_string(),
+        ValueRef::Text(t) => String::from_utf8_lossy(t).into_owned(),
+        ValueRef::Blob(_) => String::new(),
+    })
+}
+
 fn head(s: &str) -> (String, i64) {
     let len = s.chars().count() as i64;
     if len as usize <= CAP {
@@ -269,8 +288,8 @@ pub fn calls_usage(db: tauri::State<Db>, days: Option<i64>) -> Result<UsageRepor
         let rows = stmt
             .query_map(params![since], |r| {
                 Ok(UsageRow {
-                    key: r.get::<_, Option<String>>(0)?.unwrap_or_default(),
-                    label: r.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                    key: text_at(r, 0)?,
+                    label: text_at(r, 1)?,
                     calls: r.get(2)?,
                     unreported: r.get(3)?,
                     input: r.get(4)?,

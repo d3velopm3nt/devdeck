@@ -316,7 +316,7 @@ const adoptingPorts = new Set<number>()
 /** Trailing-edge timer for `ingestStashItem`. */
 let ingestTimer: number | undefined
 
-import { CAPTURE_TEAM_TAB, CAPTURE_WORKSPACE, CAPTURE_RAIL } from './lib/devCapture'
+import { CAPTURE_BOTTOM, CAPTURE_TEAM_TAB, CAPTURE_WORKSPACE, CAPTURE_RAIL } from './lib/devCapture'
 
 /// Seeded, not fixed: the list lives in settings and you edit it there.
 // Business and Personal lead because they are the two that *change behaviour*
@@ -447,8 +447,10 @@ export const useApp = create<AppState>((set, get) => ({
   theme: 'dark',
   railView: loadRailView(),
   sheet: null,
-  bottomTab: (localStorage.getItem('devdeck.bottom.tab') as BottomTab) || 'logs',
-  bottomCollapsed: localStorage.getItem('devdeck.bottom.collapsed') === '1',
+  bottomTab: (CAPTURE_BOTTOM as BottomTab) ||
+    (localStorage.getItem('devdeck.bottom.tab') as BottomTab) ||
+    'logs',
+  bottomCollapsed: CAPTURE_BOTTOM ? false : localStorage.getItem('devdeck.bottom.collapsed') === '1',
   logFocus: null,
 
   selectedNode: () => {

@@ -17,7 +17,8 @@
 // is the question this rail exists to answer.
 
 import { useEffect, useMemo, useState } from 'react'
-import { useApp, type RailView } from '../store'
+import { useApp, type RailView, type TeamTab } from '../store'
+import { openBot, openNodeThread } from '../lib/dock'
 import { useAiw } from '../lib/aiwStore'
 import { Icon, type IconName } from '../lib/icons'
 import { avatarLabel, nodeColor } from '../lib/spaces'
@@ -26,12 +27,18 @@ import type { TreeNode } from '../lib/types'
 
 type Item = { view: RailView; icon: IconName; label: string }
 
-/// Destinations that are not spaces.
+/// Team's three views, as the sub-menu under it.
+const TEAM: { id: TeamTab; icon: IconName; label: string }[] = [
+  { id: 'goals', icon: 'project', label: 'Goals' },
+  { id: 'features', icon: 'list', label: 'Features' },
+  { id: 'work', icon: 'check', label: 'Work' },
+]
+
+/// Destinations that are neither the team nor the tree.
 ///
-/// The Assistant used to be here. It is a contact now, first in the list on
-/// Team → Bots, because it is one of the things you talk to rather than a
-/// place you go; what is left of its old surface is configuration, and that
-/// is under Settings.
+/// The Assistant is not here: it is the first contact on Bots, because it is
+/// one of the things you talk to rather than a place you go. What is left of
+/// its old surface is configuration, under Settings.
 const WORK: Item[] = [{ view: 'connections', icon: 'database', label: 'Connections' }]
 
 /// The app itself, anchored to the bottom.
@@ -141,6 +148,9 @@ export function Rail() {
     touchRecent,
     activity,
     inboxSeen,
+    bots,
+    teamTab,
+    setTeamTab,
   } = useApp()
   const aiw = useAiw()
   const anyRunning = Object.values(svcStates).some((s) => s.status === 'running')
@@ -189,16 +199,48 @@ export function Rail() {
         expanded ? 'w-[160px] items-stretch gap-px px-1.5 py-1.5' : 'w-[52px] items-center gap-1 py-2'
       }`}
     >
-      {/* Team first: what everyone is working on is the question this app
-          exists to answer, and it is the one you have before you have any
-          other. Inbox second, because it is the short list of what needs
-          *you*. */}
+      <RailButton
+        label="Home"
+        icon="home"
+        active={railView === 'home'}
+        expanded={expanded}
+        onClick={() => setRailView('home')}
+      />
+
+      {/* Team, with what it holds as a sub-menu rather than as tabs on the
+          page — one navigation, not two. Collapsed to icons there is no room
+          for sub-items, so the icon opens whichever was last used. */}
       <RailButton
         label="Team"
         icon="agent"
         active={railView === 'team'}
         expanded={expanded}
         onClick={() => setRailView('team')}
+      />
+      {expanded &&
+        TEAM.map((t) => (
+          <button
+            key={t.id}
+            className={`flex h-7 w-full items-center gap-2 rounded-lg pl-8 pr-2 text-[11.5px] ${
+              railView === 'team' && teamTab === t.id
+                ? 'text-ink'
+                : 'text-muted hover:bg-hover/50 hover:text-dim'
+            }`}
+            onClick={() => setTeamTab(t.id)}
+          >
+            <Icon name={t.icon} size={12} className="shrink-0" />
+            <span className="min-w-0 flex-1 truncate text-left">{t.label}</span>
+          </button>
+        ))}
+
+      {/* The people: the assistant, the bots, the agents. First-class, so a
+          rail entry of their own rather than a tab inside the work. */}
+      <RailButton
+        label="Bots"
+        icon="bot"
+        active={railView === 'bots'}
+        expanded={expanded}
+        onClick={() => setRailView('bots')}
       />
 
       <RailButton
@@ -212,16 +254,11 @@ export function Rail() {
 
       <Rule expanded={expanded} />
 
-      {expanded && recentNodes.length > 0 && (
-        <div className="px-2 pb-px pt-1 text-[9px] font-semibold uppercase tracking-[0.07em] text-faint">
-          Recent
-        </div>
-      )}
-
-      {/* The tree. "Spaces" rather than "Projects": it holds workspaces,
-          folders and repos, and only some of them are projects. */}
+      {/* The tree of everything inside the current workspace. Called Explorer
+          because that is what it is; the workspaces themselves are the tabs
+          across the top, and "Spaces" here made one word mean both. */}
       <RailButton
-        label="Spaces"
+        label="Explorer"
         icon="workspace"
         active={onProjects && activeSolutionId == null}
         expanded={expanded}
@@ -229,33 +266,34 @@ export function Rail() {
         onClick={() => go(null)}
       />
 
-      {recentNodes.map((n) => (
-        <RailButton
-          key={n.id}
-          label={n.name}
-          avatar={{ text: avatarLabel(n.name), color: nodeColor(n) }}
-          active={onProjects && activeSolutionId === n.id}
-          expanded={expanded}
-          onClick={() => {
-            touchRecent(n.id)
-            go(n.id)
-          }}
-        />
-      ))}
+      {expanded && recentNodes.length > 0 && (
+        <div className="px-2 pb-px pt-1 text-[9px] font-semibold uppercase tracking-[0.07em] text-faint">
+          Recent
+        </div>
+      )}
+
+      {/* A recent folder opens its bot's page when it has one — the bot is
+          how you talk to a space that is being managed — and its thread when
+          it does not, which is where "New bot here" lives. */}
+      {recentNodes.map((n) => {
+        const bot = bots.find((b) => b.node_id === n.id)
+        return (
+          <RailButton
+            key={n.id}
+            label={n.name}
+            avatar={{ text: avatarLabel(n.name), color: nodeColor(n) }}
+            active={false}
+            expanded={expanded}
+            onClick={() => {
+              touchRecent(n.id)
+              if (bot) openBot(bot.node_id, bot.name)
+              else openNodeThread(n.id, n.name)
+            }}
+          />
+        )
+      })}
 
       <Rule expanded={expanded} />
-
-      {/* Bots, Work, Events and Scheduler were four rail entries onto the same
-          question. They are tabs and filters now: Bots and Work are tabs of
-          Team, Events is the bottom bar's raw bus, and the clock lives under
-          Settings → Routines beside the bot whose file it agrees with. */}
-      <RailButton
-        label="Home"
-        icon="home"
-        active={railView === 'home'}
-        expanded={expanded}
-        onClick={() => setRailView('home')}
-      />
 
       {WORK.map((it) => (
         <RailButton

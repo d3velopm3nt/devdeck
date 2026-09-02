@@ -81,6 +81,20 @@ export function openEditor(kind: EditorKind, id: number, _title?: string, projec
   useApp.getState().openSheet({ kind, id, projectId: projectId ?? null })
 }
 
+/// Open (or focus) the Assistant's own conversation as a document.
+export function openAssistant() {
+  if (!api) return
+  useApp.getState().setRailView('projects')
+  const id = 'assistant-thread'
+  const existing = api.getPanel(id)
+  if (existing) {
+    existing.api.setActive()
+    return
+  }
+  addToMain({ id, component: 'assistant-thread', title: 'Assistant' })
+  api.getPanel(id)?.api.setActive()
+}
+
 /// Open (or focus) a node's thread — the first thing a click on the tree
 /// does now. Every level has one, which is the whole model: you talk to a
 /// workspace, a folder or a project, and what differs is what it can say.

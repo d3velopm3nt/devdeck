@@ -3,6 +3,7 @@ import { Dock, buildDefaultLayout } from './Dock'
 import { BottomBar } from './components/BottomBar'
 import { InboxPage } from './components/InboxPage'
 import { TeamPage } from './components/team/TeamPage'
+import { BotsPage } from './components/BotsPage'
 import { ApprovalBar } from './components/aiw/ApprovalBar'
 import { FocusBar } from './components/FocusBar'
 import { SetupModal } from './components/SetupModal'
@@ -787,6 +788,7 @@ export default function App() {
           {railView === 'machine' && <MachineSetup />}
           {railView === 'inbox' && <InboxPage />}
           {railView === 'team' && <TeamPage />}
+          {railView === 'bots' && <BotsPage />}
           {railView === 'settings' && <ConfigPage />}
         </main>
       </div>

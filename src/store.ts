@@ -34,8 +34,11 @@ export type Theme = 'dark' | 'light'
 export type RailView =
   | 'home'
   | 'inbox'
-  /// Team: goals, features, work and bots — the first view.
+  /// Team: goals, features and work. Which of the three is open is the
+  /// rail's sub-menu, so it is state here rather than inside the page.
   | 'team'
+  /// The people: the assistant, the bots, the agents.
+  | 'bots'
   /// The tree. Called Spaces on the rail; the id stayed to keep saved
   /// preferences and every existing link working.
   | 'projects'
@@ -230,6 +233,10 @@ export interface AppState {
   /** When the Inbox was last opened. Everything newer is unread. */
   inboxSeen: number
   markInboxSeen: () => void
+  /// Which of Team's three views is open. A sub-menu on the rail, not tabs
+  /// on the page — one navigation, not two.
+  teamTab: TeamTab
+  setTeamTab: (t: TeamTab) => void
   /** The most recent thing worth interrupting for, until it is dismissed. */
   toast: Activity | null
   dismissToast: () => void
@@ -307,7 +314,7 @@ const adoptingPorts = new Set<number>()
 /** Trailing-edge timer for `ingestStashItem`. */
 let ingestTimer: number | undefined
 
-import { CAPTURE_WORKSPACE, CAPTURE_RAIL } from './lib/devCapture'
+import { CAPTURE_TEAM_TAB, CAPTURE_WORKSPACE, CAPTURE_RAIL } from './lib/devCapture'
 
 /// Seeded, not fixed: the list lives in settings and you edit it there.
 // Business and Personal lead because they are the two that *change behaviour*
@@ -336,6 +343,14 @@ const loadRecent = (): number[] => {
   }
 }
 
+export type TeamTab = 'goals' | 'features' | 'work'
+const TEAM_KEY = 'devdeck.team.tab'
+const loadTeamTab = (): TeamTab => {
+  if (CAPTURE_TEAM_TAB) return CAPTURE_TEAM_TAB as TeamTab
+  const v = localStorage.getItem(TEAM_KEY)
+  return v === 'features' || v === 'work' ? v : 'goals'
+}
+
 const RAIL_KEY = 'devdeck.railView'
 /** When the Inbox was last looked at. Kept locally rather than in the database
  *  because it is about this screen, not about the work. */
@@ -348,6 +363,7 @@ const RAIL_VIEWS: readonly RailView[] = [
   'home',
   'inbox',
   'team',
+  'bots',
   'projects',
   'stash',
   'connections',
@@ -765,6 +781,11 @@ export const useApp = create<AppState>((set, get) => ({
 
   activity: [],
   refreshActivity: async () => set({ activity: await ipc.activityList(60) }),
+  teamTab: loadTeamTab(),
+  setTeamTab: (t) => {
+    localStorage.setItem(TEAM_KEY, t)
+    set({ teamTab: t, railView: 'team' })
+  },
   inboxSeen: loadSeen(),
   markInboxSeen: () => {
     const now = Date.now()

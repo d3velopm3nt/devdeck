@@ -104,6 +104,7 @@ function Welcome() {
 }
 
 import { NodePage } from './components/node/NodePage'
+import { AssistantThread } from './components/thread/AssistantThread'
 import {
   AssistantPanel,
   ContextPanel,
@@ -115,6 +116,7 @@ const components = {
   'node-setup': (props: IDockviewPanelProps<{ id: number }>) => <NodeSetupPage {...props} />,
   'node-config': (props: IDockviewPanelProps<{ id: number }>) => <NodeConfigPage {...props} />,
   'node-thread': (props: IDockviewPanelProps<{ id: number }>) => <NodePage {...props} />,
+  'assistant-thread': () => <AssistantThread />,
   'space-detail': (props: IDockviewPanelProps<{ id: number }>) => <SpaceDetailPage {...props} />,
   'bot-detail': (props: IDockviewPanelProps<{ id: number; ask?: boolean }>) => <BotPage {...props} />,
   'service-detail': (props: IDockviewPanelProps<{ id: number }>) => <ServiceDetailPage {...props} />,

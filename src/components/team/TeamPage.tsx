@@ -1,9 +1,9 @@
 // Team — the first view: what is being worked on, everywhere, right now.
 //
-// Four tabs over one board, because Goals, Features and Work are three
+// Three views over one board, because Goals, Features and Work are three
 // questions about the same rows and asking the backend three times would let
-// them disagree. Bots is the fourth: the same people, listed as people rather
-// than as work.
+// them disagree. Which one is open is the rail's sub-menu. The people — the
+// bots and agents — have a page of their own.
 //
 // Global on purpose. Features live in each node's deck, so a page scoped to
 // whichever folder happened to be selected would hide the bot working two
@@ -16,22 +16,9 @@ import type { GoalRow } from '../../lib/aiw'
 import { aiw } from '../../lib/aiw'
 import { useApp } from '../../store'
 import { Icon } from '../../lib/icons'
-import { CAPTURE_TEAM_TAB } from '../../lib/devCapture'
 import { Goals } from './Goals'
 import { FeaturesTab } from './FeaturesTab'
 import { WorkTab } from './WorkTab'
-import { BotsTab } from './BotsTab'
-
-export type TeamTab = 'goals' | 'features' | 'work' | 'bots'
-
-const TABS: { id: TeamTab; label: string }[] = [
-  { id: 'goals', label: 'Goals' },
-  { id: 'features', label: 'Features' },
-  { id: 'work', label: 'Work' },
-  { id: 'bots', label: 'Bots' },
-]
-
-const KEY = 'devdeck.team.tab'
 
 /// What a failed read must never look like: an empty board.
 export interface Board {
@@ -42,13 +29,11 @@ export interface Board {
 }
 
 export function TeamPage() {
-  const [tab, setTab] = useState<TeamTab>(
-    () => (CAPTURE_TEAM_TAB as TeamTab) || (localStorage.getItem(KEY) as TeamTab) || 'goals',
-  )
+  // Which view is open is the rail's sub-menu, not a tab strip here: one
+  // navigation, and the same one whichever way you arrived.
+  const tab = useApp((s) => s.teamTab)
   const [board, setBoard] = useState<Board>({ rows: [], error: null, loaded: false })
   const refreshBots = useApp((s) => s.refreshBots)
-
-  useEffect(() => localStorage.setItem(KEY, tab), [tab])
 
   const reload = useCallback(() => {
     return ipc
@@ -78,22 +63,20 @@ export function TeamPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-page">
-      <div className="flex shrink-0 items-end gap-5 border-b border-line px-5 pt-3">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            className={`relative pb-2.5 text-[12.5px] ${
-              tab === t.id ? 'text-ink' : 'text-muted hover:text-dim'
-            }`}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-            {tab === t.id && (
-              <span className="absolute inset-x-0 -bottom-px h-[2px] rounded bg-indigo-500" />
-            )}
-          </button>
-        ))}
-        <div className="ml-auto flex items-center gap-3 pb-2.5 text-[10.5px] text-faint">
+      <div className="flex shrink-0 items-center gap-3 border-b border-line px-5 py-3">
+        <div className="min-w-0">
+          <h2 className="text-[15px] font-semibold text-ink">
+            {tab === 'goals' ? 'Goals' : tab === 'features' ? 'Features' : 'Work'}
+          </h2>
+          <p className="text-[11.5px] text-muted">
+            {tab === 'goals'
+              ? 'Every space, right now, grouped by goal. Pick one to open its thread.'
+              : tab === 'features'
+                ? 'Every feature in every space, and who is on it.'
+                : 'Every open item, and who is holding it.'}
+          </p>
+        </div>
+        <div className="ml-auto flex items-center gap-3 text-[10.5px] text-faint">
           {board.error ? (
             <span className="flex items-center gap-1.5 text-err">
               <Icon name="alert" size={11} /> could not read the board
@@ -119,7 +102,6 @@ export function TeamPage() {
         {tab === 'goals' && <Goals board={board} />}
         {tab === 'features' && <FeaturesTab board={board} />}
         {tab === 'work' && <WorkTab board={board} />}
-        {tab === 'bots' && <BotsTab />}
       </div>
     </div>
   )

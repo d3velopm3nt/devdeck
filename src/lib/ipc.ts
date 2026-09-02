@@ -184,6 +184,9 @@ export interface Bot {
   team: string[]
   /** What to ask that agent on waking. Empty means the goal. */
   wake_intent: string
+  /** Review points in words — "before any push". Not a permission: the runtime
+   *  stops such a call and says which rule stopped it. Edited in the file. */
+  stop_at: string[]
   schedule_id: number | null
   last_woke: number | null
 }

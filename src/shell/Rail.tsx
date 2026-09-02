@@ -49,6 +49,9 @@ const APP: Item[] = [
 ]
 
 const KEY = 'devdeck.rail.expanded'
+/// Whether Team's sub-menu is open. Remembered, because a menu that springs
+/// open on every launch is one you learn to close before reading.
+const TEAM_OPEN_KEY = 'devdeck.rail.teamOpen'
 
 function RailButton({
   label,
@@ -165,6 +168,8 @@ export function Rail() {
 
   const [expanded, setExpanded] = useState(() => localStorage.getItem(KEY) === '1')
   useEffect(() => localStorage.setItem(KEY, expanded ? '1' : '0'), [expanded])
+  const [teamOpen, setTeamOpen] = useState(() => localStorage.getItem(TEAM_OPEN_KEY) !== '0')
+  useEffect(() => localStorage.setItem(TEAM_OPEN_KEY, teamOpen ? '1' : '0'), [teamOpen])
 
   // The folders you opened most recently, in this workspace.
   //
@@ -210,14 +215,30 @@ export function Rail() {
       {/* Team, with what it holds as a sub-menu rather than as tabs on the
           page — one navigation, not two. Collapsed to icons there is no room
           for sub-items, so the icon opens whichever was last used. */}
-      <RailButton
-        label="Team"
-        icon="agent"
-        active={railView === 'team'}
-        expanded={expanded}
-        onClick={() => setRailView('team')}
-      />
+      <div className="relative">
+        <RailButton
+          label="Team"
+          icon="agent"
+          active={railView === 'team'}
+          expanded={expanded}
+          onClick={() => setRailView('team')}
+        />
+        {expanded && (
+          <button
+            className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-0.5 text-faint hover:bg-hover hover:text-dim"
+            title={teamOpen ? 'Hide Goals, Features and Work' : 'Show Goals, Features and Work'}
+            aria-label={teamOpen ? 'Collapse Team' : 'Expand Team'}
+            onClick={(e) => {
+              e.stopPropagation()
+              setTeamOpen((o) => !o)
+            }}
+          >
+            <Icon name={teamOpen ? 'chevron-down' : 'chevron-right'} size={13} />
+          </button>
+        )}
+      </div>
       {expanded &&
+        teamOpen &&
         TEAM.map((t) => (
           <button
             key={t.id}

@@ -14,11 +14,17 @@ import { useCallback, useEffect, useState } from 'react'
 import * as ipc from '../../lib/ipc'
 import type { GoalRow } from '../../lib/aiw'
 import { aiw } from '../../lib/aiw'
-import { useApp } from '../../store'
+import { useApp, type TeamTab } from '../../store'
 import { Icon } from '../../lib/icons'
 import { Goals } from './Goals'
 import { FeaturesTab } from './FeaturesTab'
 import { WorkTab } from './WorkTab'
+
+const TABS: { id: TeamTab; label: string }[] = [
+  { id: 'goals', label: 'Goals' },
+  { id: 'features', label: 'Features' },
+  { id: 'work', label: 'Work' },
+]
 
 /// What a failed read must never look like: an empty board.
 export interface Board {
@@ -29,9 +35,10 @@ export interface Board {
 }
 
 export function TeamPage() {
-  // Which view is open is the rail's sub-menu, not a tab strip here: one
-  // navigation, and the same one whichever way you arrived.
+  // Which view is open is one piece of state with two handles on it: the
+  // tabs here and the sub-menu on the rail. Either sets it, both show it.
   const tab = useApp((s) => s.teamTab)
+  const setTab = useApp((s) => s.setTeamTab)
   const [board, setBoard] = useState<Board>({ rows: [], error: null, loaded: false })
   const refreshBots = useApp((s) => s.refreshBots)
 
@@ -90,6 +97,23 @@ export function TeamPage() {
             <Icon name="update" size={12} />
           </button>
         </div>
+      </div>
+
+      <div className="flex shrink-0 items-end gap-5 border-b border-line px-5 pt-1">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            className={`relative pb-2 text-[12.5px] ${
+              tab === t.id ? 'text-ink' : 'text-muted hover:text-dim'
+            }`}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+            {tab === t.id && (
+              <span className="absolute inset-x-0 -bottom-px h-[2px] rounded bg-indigo-500" />
+            )}
+          </button>
+        ))}
       </div>
 
       {board.error && (

@@ -166,6 +166,15 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
   const [conv, setConv] = useState<ConversationMeta | null>(null)
   const [err, setErr] = useState('')
   const [draft, setDraft] = useState('')
+  // Who is mid-turn right now, by id, with the name the turn announced. A
+  // pill lights up on the start event and goes out on the done one.
+  //
+  // Declared before the picker below, which reads it while computing its
+  // rows: a `const` read before its line is a ReferenceError, and it only
+  // ran when someone typed `@` — so the whole window went white at exactly
+  // the moment the feature was being used.
+  const [speaking, setSpeaking] = useState<Record<string, string>>({})
+  const hostId = conv?.bot_node != null ? `bot:${conv.bot_node}` : conv?.messages.find((m) => m.by && m.from === 'assistant')?.by
   // The picker: which handles match the `@word` at the caret, and which one is
   // lit. It is a courtesy — the backend reads `@name` out of the sent text
   // either way — but a thing that only works if you already know the exact
@@ -232,11 +241,6 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
   const [sending, setSending] = useState(false)
   const [streaming, setStreaming] = useState('')
   const [steps, setSteps] = useState<ChatMessage[]>([])
-  // Who is mid-turn right now, by id, with the name the turn announced. A
-  // pill lights up on the start event and goes out on the done one — which
-  // is what "see the agent become active when I name it" means.
-  const [speaking, setSpeaking] = useState<Record<string, string>>({})
-  const hostId = conv?.bot_node != null ? `bot:${conv.bot_node}` : conv?.messages.find((m) => m.by && m.from === 'assistant')?.by
   const bottom = useRef<HTMLDivElement>(null)
   const box = useRef<HTMLTextAreaElement>(null)
   const speakers = useSpeakers()

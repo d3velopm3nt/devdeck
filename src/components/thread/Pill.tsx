@@ -13,6 +13,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { createPortal } from 'react-dom'
 import { useAiw } from '../../lib/aiwStore'
 import { aiw } from '../../lib/aiw'
+import * as ipc from '../../lib/ipc'
 import { useApp } from '../../store'
 import { openAgentSettings, openBot } from '../../lib/dock'
 import { Icon } from '../../lib/icons'
@@ -102,6 +103,12 @@ function ProviderSwitch({ agent }: { agent: { id: string; provider: string; mode
 /// thread provides it; every pill inside reads it.
 export const SpeakingContext = createContext<Record<string, string>>({})
 
+/// Which thread a pill is in, so its card can wake someone into it.
+export const ThreadContext = createContext<{ convId: string | null; feature: boolean }>({
+  convId: null,
+  feature: false,
+})
+
 /// The id behind an `@handle`, or null when nobody answers to it.
 ///
 /// Agents are named by id. A bot answers to its folder's name, hyphenated —
@@ -140,6 +147,8 @@ export function Pill({
   inline?: boolean
 }) {
   const [open, setOpen] = useState(false)
+  const thread = useContext(ThreadContext)
+  const [waking, setWaking] = useState<string | null>(null)
   // Hover opens the card; using a control inside pins it, because a select's
   // dropdown reaches outside the card and would otherwise close it mid-pick.
   // A click anywhere else unpins.
@@ -311,6 +320,32 @@ export function Pill({
               last woke {new Date(bot.last_woke).toLocaleString()}
             </span>
           )}
+          {agent && thread.convId && (
+            <span className="mt-2 block border-t border-line pt-2">
+              <button
+                className="btn-primary text-[11px]"
+                disabled={!!waking || thinking || !!live}
+                title={
+                  thread.feature
+                    ? 'Start a session on this feature; it reports back here'
+                    : 'Have it read this thread and answer now'
+                }
+                onClick={() => {
+                  setWaking('…')
+                  void ipc
+                    .threadWake(thread.convId as string, agent.id)
+                    .then((line) => setWaking(line))
+                    .catch((e) => setWaking(String(e)))
+                }}
+              >
+                <Icon name="update" size={11} /> {live ? 'Working' : 'Wake'}
+              </button>
+              <span className="ml-2 text-[10.5px] text-muted">
+                {waking ??
+                  (thread.feature ? 'starts a session on this feature' : 'answers in this thread')}
+              </span>
+            </span>
+          )}
           {agent && <ProviderSwitch agent={agent} />}
           {bot && (
             <span className="mt-2 flex gap-1.5">
@@ -320,6 +355,23 @@ export function Pill({
               >
                 <Icon name="bot" size={11} /> Open its page
               </button>
+              {bot.schedule_id && (
+                <button
+                  className="btn-primary text-[11px]"
+                  disabled={!!waking}
+                  title="Run its heartbeat now; the receipt lands in its thread"
+                  onClick={() => {
+                    setWaking('…')
+                    void ipc
+                      .scheduleRunNow(bot.schedule_id as number)
+                      .then((r) => setWaking(r.note || (r.ok ? 'woke, nothing to say' : 'did not run')))
+                      .catch((e) => setWaking(String(e)))
+                  }}
+                >
+                  <Icon name="update" size={11} /> Wake it
+                </button>
+              )}
+              {waking && <span className="text-[10.5px] text-muted">{waking}</span>}
             </span>
           )}
         </span>,

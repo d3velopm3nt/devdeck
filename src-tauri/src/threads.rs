@@ -203,6 +203,33 @@ pub fn answer_as_agents(
     }
 }
 
+/// Wake an agent from whichever thread you are reading.
+#[tauri::command]
+pub async fn thread_wake(
+    app: tauri::AppHandle,
+    ws: Ws<'_>,
+    conv_id: String,
+    agent_id: String,
+) -> Result<String, String> {
+    let workspace: Arc<Workspace> = (*ws).clone();
+    // The room's project has to be registered before a session can start in
+    // it — the same step every thread command takes.
+    if let Ok(conv) = workspace.convs()?.load(&conv_id) {
+        if let Some(n) = conv.project_id.as_deref().and_then(|p| p.parse::<i64>().ok()) {
+            register(&app, &workspace, n)?;
+        }
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let sink = move |e: ChatEvent| {
+            let _ = app.emit("aiw:chat", e);
+        };
+        let convs = workspace.convs()?;
+        Assistant::wake_into_thread(&workspace, convs, &conv_id, &agent_id, &sink)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 // ---------------------------------------------------------------------------
 // A feature's thread
 // ---------------------------------------------------------------------------

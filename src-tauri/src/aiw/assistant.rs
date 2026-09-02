@@ -970,6 +970,75 @@ impl Assistant {
         })
     }
 
+    /// Wake an agent from a thread, because a person asked.
+    ///
+    /// In a feature's room there is work to give it, so this starts a session
+    /// on that feature and the session reports back here when it ends — the
+    /// pill goes to *working*. Anywhere else there is nothing to hand it, so
+    /// it reads the thread and answers as itself. Both are things a person
+    /// did, which is why neither goes through the delegate gate: the gate
+    /// is for one agent moving another's work.
+    pub fn wake_into_thread(
+        ws: &Arc<Workspace>,
+        convs: &Conversations,
+        conversation_id: &str,
+        agent_id: &str,
+        sink: ChatSink,
+    ) -> Result<String, String> {
+        let conv = convs.load(conversation_id)?;
+        let agent = ws
+            .agent(agent_id)
+            .ok_or_else(|| format!("no agent '{agent_id}'"))?;
+        if agent.id == ASSISTANT_ID {
+            return Err("the assistant is always awake — just say something".into());
+        }
+
+        if let (Some(project_id), Some(feature_id)) = (conv.project_id.clone(), conv.feature.clone())
+        {
+            convs.add_participant(conversation_id, &agent.id)?;
+            let cmd = StartAgentCommand {
+                project_id,
+                feature_id: feature_id.clone(),
+                agent_id: agent.id.clone(),
+                work_item_id: None,
+                intent: Some(format!(
+                    "Woken from the thread by a person: read the thread, pick up what is open on \
+                     {feature_id}, and report back"
+                )),
+                areas: Vec::new(),
+                depends_on: Vec::new(),
+                unattended: false,
+                stop_at: Vec::new(),
+            };
+            let live = AgentRuntime::begin(ws, &cmd)?;
+            convs.post(
+                conversation_id,
+                ChatMessage::note(
+                    &agent.id,
+                    "handover",
+                    true,
+                    format!("@{} woken by you — working on {feature_id}", agent.id),
+                ),
+            )?;
+            Self::drive_and_report(ws, convs, live, conversation_id.to_string(), &agent);
+            return Ok(format!("{} is working on {feature_id}", agent.name));
+        }
+
+        // No work to give it here: it talks.
+        convs.add_participant(conversation_id, &agent.id)?;
+        let who = Persona::agent_in_thread(&agent, &conv.title);
+        Self::answer_as(
+            ws,
+            convs,
+            conversation_id,
+            "You were woken by the person reading this thread. Read it and say, briefly, what you \
+             see and what you would do first.",
+            sink,
+            &who,
+        )?;
+        Ok(format!("{} answered", agent.name))
+    }
+
     /// Pull the people this message mentions into the thread.
     ///
     /// Free, and deliberately so: a mention costs nothing, needs nobody's

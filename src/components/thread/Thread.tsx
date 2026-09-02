@@ -22,7 +22,7 @@ import { Bubble } from '../aiw/Chat'
 import { Icon, type IconName } from '../../lib/icons'
 import { useSpeakers } from './speakers'
 import { useAiw } from '../../lib/aiwStore'
-import { MentionText, Pill, SpeakingContext } from './Pill'
+import { MentionText, Pill, SpeakingContext, ThreadContext } from './Pill'
 import { openAgentSettings, openBot } from '../../lib/dock'
 import { useApp } from '../../store'
 
@@ -305,6 +305,11 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
           })
           // A new voice: what streamed so far belonged to the last one.
           if (!e.done) setStreaming('')
+          // A turn that ended while nothing was being sent from here — a
+          // wake, an agent answering after the host — lands on disk, not in
+          // this component. Re-read, or the room shows a reply that never
+          // arrives until you type.
+          if (e.done) void reload()
         }
       })
       .then((un) => {
@@ -345,6 +350,7 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
 
   return (
     <SpeakingContext.Provider value={speaking}>
+    <ThreadContext.Provider value={{ convId: conv?.id ?? null, feature: !!conv?.feature }}>
     <div className="flex h-full min-h-0 flex-col">
       {err && (
         <div className="mb-3 rounded-lg border border-red-500/25 bg-red-500/[0.07] px-3 py-2 text-[11.5px] leading-[1.5] text-err">
@@ -538,6 +544,7 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
         {footnote && <div className="mt-1.5 text-[10.5px] text-faint">{footnote}</div>}
       </div>
     </div>
+    </ThreadContext.Provider>
     </SpeakingContext.Provider>
   )
 }

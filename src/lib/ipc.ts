@@ -243,6 +243,11 @@ export const nodeThread = (nodeId: number) =>
 export const nodeThreadSend = (nodeId: number, text: string) =>
   invoke<import('./aiw').AssistantReply>('node_thread_send', { nodeId, text })
 
+/** Wake an agent from a thread: a session in a feature's room, an answer
+ *  anywhere else. Returns one line saying which happened. */
+export const threadWake = (convId: string, agentId: string) =>
+  invoke<string>('thread_wake', { convId, agentId })
+
 export const botThread = (nodeId: number) =>
   invoke<import('./aiw').ConversationMeta>('bot_thread', { nodeId })
 export const botThreadSend = (nodeId: number, text: string) =>

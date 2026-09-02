@@ -10,6 +10,7 @@
 // someone and does nothing about it looks like a mention that failed.
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { useAiw } from '../../lib/aiwStore'
 import { aiw } from '../../lib/aiw'
 import { useApp } from '../../store'
@@ -144,10 +145,39 @@ export function Pill({
   // A click anywhere else unpins.
   const [pinned, setPinned] = useState(false)
   const wrap = useRef<HTMLSpanElement>(null)
+  const card = useRef<HTMLSpanElement>(null)
+  // The card is rendered at the document root, not inside the message list:
+  // a list scrolls, and anything inside it is clipped at its bottom edge —
+  // which is exactly where the pill on the last message sits. Positioned
+  // from the pill's rectangle, and flipped above it when there is no room
+  // below.
+  const [at, setAt] = useState<{ left: number; top: number; up: boolean } | null>(null)
+  const place = () => {
+    const r = wrap.current?.getBoundingClientRect()
+    if (!r) return
+    const room = window.innerHeight - r.bottom
+    const up = room < 300 && r.top > room
+    const left = Math.min(r.left, Math.max(8, window.innerWidth - 292))
+    setAt({ left, top: up ? r.top - 6 : r.bottom + 6, up })
+  }
+  // Leaving the pill for the card must not close the card. Both sides count
+  // as "over it", and closing waits a beat so the gap between them is not a
+  // door slamming.
+  const leaveTimer = useRef<number | null>(null)
+  const enter = () => {
+    if (leaveTimer.current) window.clearTimeout(leaveTimer.current)
+    place()
+    setOpen(true)
+  }
+  const leave = () => {
+    if (pinned) return
+    leaveTimer.current = window.setTimeout(() => setOpen(false), 120)
+  }
   useEffect(() => {
     if (!pinned) return
     const away = (e: MouseEvent) => {
-      if (!wrap.current?.contains(e.target as Node)) {
+      const t = e.target as Node
+      if (!wrap.current?.contains(t) && !card.current?.contains(t)) {
         setPinned(false)
         setOpen(false)
       }
@@ -204,10 +234,8 @@ export function Pill({
     <span
       ref={wrap}
       className="relative inline-block align-baseline"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => {
-        if (!pinned) setOpen(false)
-      }}
+      onMouseEnter={enter}
+      onMouseLeave={leave}
       onMouseDown={() => setPinned(true)}
     >
       <span
@@ -226,8 +254,21 @@ export function Pill({
         {!inline && <span className={`text-[10px] ${status.tone}`}>{status.text}</span>}
       </span>
 
-      {open && (
-        <span className="absolute left-0 top-full z-20 mt-1 block w-[280px] rounded-lg border border-line bg-menu p-3 text-left text-[11px] font-normal shadow-lg">
+      {open &&
+        at &&
+        createPortal(
+        <span
+          ref={card}
+          className="fixed z-50 block w-[284px] rounded-lg border border-line bg-menu p-3 text-left text-[11px] font-normal shadow-lg"
+          style={{
+            left: at.left,
+            top: at.top,
+            transform: at.up ? 'translateY(-100%)' : undefined,
+          }}
+          onMouseEnter={enter}
+          onMouseLeave={leave}
+          onMouseDown={() => setPinned(true)}
+        >
           <span className="block text-[12px] font-semibold text-ink">
             {bot?.name ?? agent?.name ?? label}
           </span>
@@ -281,7 +322,8 @@ export function Pill({
               </button>
             </span>
           )}
-        </span>
+        </span>,
+        document.body,
       )}
     </span>
   )

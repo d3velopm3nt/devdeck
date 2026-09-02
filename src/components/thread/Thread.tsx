@@ -22,6 +22,26 @@ import { Bubble } from '../aiw/Chat'
 import { Icon, type IconName } from '../../lib/icons'
 import { useSpeakers } from './speakers'
 import { useAiw } from '../../lib/aiwStore'
+import { useApp } from '../../store'
+
+/// Someone you can @: an agent, a bot, or you.
+interface Handle {
+  handle: string
+  name: string
+  kind: 'agent' | 'bot' | 'you'
+}
+
+/// The `@word` the caret is inside, if any — its start offset and the word.
+function mentionAt(text: string, caret: number): { start: number; word: string } | null {
+  const before = text.slice(0, caret)
+  const at = before.lastIndexOf('@')
+  if (at < 0) return null
+  // Part of an email or a word: not a mention.
+  if (at > 0 && /[\w.]/.test(before[at - 1])) return null
+  const word = before.slice(at + 1)
+  if (/\s/.test(word)) return null
+  return { start: at, word }
+}
 
 /// The receipt kinds. Anything else with a `tool` is a real tool step.
 const RECEIPTS: Record<string, { icon: IconName; tint: string }> = {
@@ -138,6 +158,46 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
   const [conv, setConv] = useState<ConversationMeta | null>(null)
   const [err, setErr] = useState('')
   const [draft, setDraft] = useState('')
+  // The picker: which handles match the `@word` at the caret, and which one is
+  // lit. It is a courtesy — the backend reads `@name` out of the sent text
+  // either way — but a thing that only works if you already know the exact
+  // id is a thing that looks broken.
+  const [pick, setPick] = useState(0)
+  const [caret, setCaret] = useState(0)
+  const agents = useAiw((s) => s.agents)
+  const bots = useApp((s) => s.bots)
+  const mention = mentionAt(draft, caret)
+  const handles: Handle[] = mention
+    ? [
+        { handle: 'you', name: 'you — puts it in the Inbox', kind: 'you' as const },
+        // A bot answers to its folder's name, hyphenated, which is what the
+        // backend resolves. Its display name is shown beside it.
+        ...bots.map((b) => ({
+          handle: b.node_name.trim().toLowerCase().replace(/\s+/g, '-'),
+          name: b.name,
+          kind: 'bot' as const,
+        })),
+        ...agents
+          .filter((a) => a.id !== 'assistant')
+          .map((a) => ({ handle: a.id, name: a.name, kind: 'agent' as const })),
+      ].filter(
+        (h) =>
+          h.handle.toLowerCase().startsWith(mention.word.toLowerCase()) ||
+          h.name.toLowerCase().startsWith(mention.word.toLowerCase()),
+      )
+    : []
+  const choose = (h: Handle) => {
+    if (!mention) return
+    const next = `${draft.slice(0, mention.start)}@${h.handle} ${draft.slice(caret)}`
+    setDraft(next)
+    setPick(0)
+    const pos = mention.start + h.handle.length + 2
+    requestAnimationFrame(() => {
+      box.current?.focus()
+      box.current?.setSelectionRange(pos, pos)
+      setCaret(pos)
+    })
+  }
   const [sending, setSending] = useState(false)
   const [streaming, setStreaming] = useState('')
   const [steps, setSteps] = useState<ChatMessage[]>([])
@@ -300,7 +360,35 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
         <div ref={bottom} />
       </div>
 
-      <div className="mt-3 shrink-0 border-t border-line pt-3">
+      <div className="relative mt-3 shrink-0 border-t border-line pt-3">
+        {mention && handles.length > 0 && (
+          <div className="absolute bottom-full left-0 z-10 mb-1 w-[300px] overflow-hidden rounded-lg border border-line bg-menu shadow-lg">
+            {handles.slice(0, 8).map((h, i) => (
+              <button
+                key={h.kind + h.handle}
+                className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] ${
+                  i === pick ? 'bg-hover text-ink' : 'text-body hover:bg-hover/50'
+                }`}
+                onMouseDown={(e) => {
+                  // Before the textarea loses focus, or the caret is gone.
+                  e.preventDefault()
+                  choose(h)
+                }}
+              >
+                <Icon
+                  name={h.kind === 'bot' ? 'bot' : h.kind === 'agent' ? 'agent' : 'inbox'}
+                  size={12}
+                  className="shrink-0 text-indigo-400"
+                />
+                <span className="font-mono text-[11.5px]">@{h.handle}</span>
+                <span className="min-w-0 flex-1 truncate text-[11px] text-muted">{h.name}</span>
+              </button>
+            ))}
+            <div className="border-t border-line px-3 py-1 text-[10px] text-faint">
+              A mention pulls them in. Add <span className="font-mono">take "an item"</span> to hand work over.
+            </div>
+          </div>
+        )}
         <div className="flex items-end gap-2">
           <textarea
             ref={box}
@@ -311,10 +399,32 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
             disabled={!conv || sending}
             onChange={(e) => {
               setDraft(e.target.value)
+              setCaret(e.target.selectionStart ?? e.target.value.length)
+              setPick(0)
               e.target.style.height = 'auto'
               e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`
             }}
+            onSelect={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
             onKeyDown={(e) => {
+              const open = mention && handles.length > 0
+              if (open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                e.preventDefault()
+                const n = Math.min(handles.length, 8)
+                setPick((p) => (p + (e.key === 'ArrowDown' ? 1 : n - 1)) % n)
+                return
+              }
+              if (open && (e.key === 'Tab' || e.key === 'Enter')) {
+                e.preventDefault()
+                choose(handles[pick] ?? handles[0])
+                return
+              }
+              if (open && e.key === 'Escape') {
+                // Close it by breaking the word: a space after the @ is a
+                // mention of nobody, which is what dismissing means.
+                e.preventDefault()
+                setCaret(0)
+                return
+              }
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
                 void submit()

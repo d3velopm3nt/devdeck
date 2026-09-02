@@ -81,11 +81,7 @@ pub fn handover(text: &str) -> Option<Handover> {
                     let raw = text.get(offset..).unwrap_or(tail).trim();
                     return Some(Handover {
                         agent: name.clone(),
-                        what: raw
-                            .trim_matches(|c| c == '"' || c == '\u{201c}' || c == '\u{201d}' || c == '\'')
-                            .trim()
-                            .trim_end_matches(['.', '!'])
-                            .to_string(),
+                        what: title_of(raw),
                     });
                 }
             }
@@ -93,6 +89,33 @@ pub fn handover(text: &str) -> Option<Handover> {
         }
     }
     None
+}
+
+/// The work item named in `take "..." - and then some prose`.
+///
+/// A quoted title ends at its closing quote. People say more than the title in
+/// the same breath, and taking the whole tail found no work item at all: a
+/// correct refusal to a question nobody asked.
+fn title_of(raw: &str) -> String {
+    let mut chars = raw.chars();
+    if let Some(first) = chars.next() {
+        let close = match first {
+            '"' => Some('"'),
+            '\'' => Some('\''),
+            '\u{201c}' => Some('\u{201d}'),
+            _ => None,
+        };
+        if let Some(close) = close {
+            let rest: String = chars.collect();
+            return match rest.find(close) {
+                Some(end) => rest[..end].trim().to_string(),
+                // An opening quote with no closing one: the rest is the title,
+                // which is the reading that loses nothing.
+                None => rest.trim().to_string(),
+            };
+        }
+    }
+    raw.trim().trim_end_matches(['.', '!']).to_string()
 }
 
 #[cfg(test)]
@@ -132,6 +155,19 @@ mod tests {
     fn picking_it_up_counts_too() {
         let h = handover("@qa pick up the failing suite").unwrap();
         assert_eq!(h.agent, "qa");
+        assert_eq!(h.what, "the failing suite");
+    }
+
+    /// People say more than the title in the same breath.
+    #[test]
+    fn a_quoted_title_ends_at_its_quote_and_the_rest_is_just_talk() {
+        let h = handover("@dev-a take \"Fix dirty_files\" - the one qa trips over").unwrap();
+        assert_eq!(h.what, "Fix dirty_files");
+    }
+
+    #[test]
+    fn an_unquoted_title_is_the_rest_of_the_sentence() {
+        let h = handover("@qa take the failing suite.").unwrap();
         assert_eq!(h.what, "the failing suite");
     }
 

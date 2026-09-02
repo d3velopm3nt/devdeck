@@ -313,6 +313,7 @@ impl Conversations {
         feature_id: &str,
         name: &str,
     ) -> Result<ConversationMeta, String> {
+        let _gate = writing();
         if let Some(existing) = self.list().into_iter().find(|c| {
             c.feature.as_deref() == Some(feature_id) && c.project_id.as_deref() == Some(project_id)
         }) {
@@ -341,6 +342,7 @@ impl Conversations {
     /// What differs between them is what there is to say, not whether you can
     /// say it.
     pub fn for_node(&self, node_id: i64, name: &str) -> Result<ConversationMeta, String> {
+        let _gate = writing();
         if let Some(existing) = self.list().into_iter().find(|c| c.node == Some(node_id)) {
             return self.load(&existing.id);
         }
@@ -371,6 +373,7 @@ impl Conversations {
         project_id: &str,
         name: &str,
     ) -> Result<ConversationMeta, String> {
+        let _gate = writing();
         if let Some(existing) = self
             .list()
             .into_iter()
@@ -452,13 +455,23 @@ impl Conversations {
             }
         }
         for m in appended {
-            // Same instant, same words, same speaker is the same message —
-            // which only happens if a caller retried, and appending it twice
-            // would be a second bug on top of the first.
-            let already = fresh
-                .messages
-                .iter()
-                .any(|x| x.at == m.at && x.text == m.text && x.by == m.by);
+            // Same instant, same kind, same words, same speaker is the same
+            // message — which only happens if a caller retried, and appending
+            // it twice would be a second bug on top of the first.
+            //
+            // "Same kind" is load-bearing. A tool result and the reply that
+            // reports it are routinely the same sentence at the same
+            // millisecond by the same agent, and without `from` and `tool` in
+            // the key the reply was being dropped as a duplicate of its own
+            // evidence — which is how a delegation ended with the transcript
+            // stopping at the tool call.
+            let already = fresh.messages.iter().any(|x| {
+                x.at == m.at
+                    && x.from == m.from
+                    && x.tool == m.tool
+                    && x.text == m.text
+                    && x.by == m.by
+            });
             if !already {
                 fresh.messages.push(m.clone());
             }

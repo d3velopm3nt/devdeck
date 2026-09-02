@@ -121,6 +121,9 @@ function Menu({
   )
 }
 
+/// Whether the capture harness has already said its piece this session.
+let said = false
+
 export default function App() {
   const app = useApp()
   const node = app.selectedNode()
@@ -147,7 +150,11 @@ export default function App() {
       const node = useApp.getState().nodes.find((n) => n.id === id)
       if (node) openNodeThread(node.id, node.name)
     }
-    if (CAPTURE_SAY.length === 0) return
+    // React runs effects twice in development, and a message sent twice is
+    // two messages. Guarded at module scope rather than with a ref, because
+    // the second run is a second mount of the same component.
+    if (CAPTURE_SAY.length === 0 || said) return
+    said = true
     let stopped = false
     void (async () => {
       for (const line of CAPTURE_SAY) {

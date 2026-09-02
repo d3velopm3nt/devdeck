@@ -17,7 +17,6 @@
 //! screen of them is how people stop expanding it.
 
 use serde::Serialize;
-use std::path::Path;
 
 use crate::db::{self, Db};
 
@@ -163,13 +162,6 @@ pub fn node_files(
     files.sort_by(by_name);
     dirs.extend(files);
     Ok(dirs)
-}
-
-/// Whether a node has a folder worth expanding at all.
-pub fn has_files(conn: &rusqlite::Connection, node_id: i64) -> bool {
-    db::node_dir_by_id(conn, node_id)
-        .map(|p| Path::new(&p).is_dir())
-        .unwrap_or(false)
 }
 
 #[cfg(test)]

@@ -180,7 +180,7 @@ impl AgentRuntime {
         // the mock only runs where nobody else will see the result.
         if agent.provider == super::provider::MockProvider::ID && crate::git::has_remote(&project.root) {
             return Err(format!(
-                "{} is on the mock provider, and a scripted session would commit fixture files                  into {}, which is a shared repository. Point {} at a real provider under                  Settings, or hand this to an agent that has one.",
+                "{} is on the mock provider, and a scripted session would commit fixture files into {}, which is a shared repository. Point {} at a real provider under Settings, or hand this to an agent that has one.",
                 agent.name,
                 project.root.display(),
                 agent.id

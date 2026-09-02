@@ -275,7 +275,11 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
     void a.refreshApprovals()
     let stop: (() => void) | undefined
     void aiw
-      .onEvent(() => {
+      .onEvent((e) => {
+        // Into the store too, so the Events tab below sees what this room
+        // caused. A bus panel that says "nothing yet" under a handover that
+        // just happened is the panel lying.
+        useAiw.getState().pushEvent(e)
         void useAiw.getState().refreshApprovals()
         void aiw.sessions().then((sessions) => useAiw.setState({ sessions })).catch(() => {})
       })

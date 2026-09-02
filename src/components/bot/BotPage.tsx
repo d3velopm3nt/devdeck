@@ -38,8 +38,32 @@ const SUGGESTION_ICON: Record<string, IconName> = {
   goal: 'project',
 }
 
+/// As a dock document. The Bots page renders the same thing beside its list.
 export function BotPage({ params, api }: IDockviewPanelProps<{ id: number; ask?: boolean }>) {
-  const nodeId = params.id
+  return (
+    <BotDetail
+      nodeId={params.id}
+      ask={params.ask === true}
+      // "Ask me the questions" is consumed once rather than living in the
+      // panel forever. Dock layouts are saved and restored, so a parameter
+      // that stays true means the interview opens every time you come back —
+      // the page-you-close behaviour this flag exists to avoid.
+      onAskConsumed={() => api.updateParameters({ id: params.id, ask: false })}
+    />
+  )
+}
+
+/// One bot, in full: its thread first, then what it is, what it holds and
+/// what it may do. Rendered beside the Bots list and as a document.
+export function BotDetail({
+  nodeId,
+  ask = false,
+  onAskConsumed,
+}: {
+  nodeId: number
+  ask?: boolean
+  onAskConsumed?: () => void
+}) {
   const { nodes, focus, refreshBots, refreshActivity } = useApp()
   const aiw = useAiw()
 
@@ -53,7 +77,7 @@ export function BotPage({ params, api }: IDockviewPanelProps<{ id: number; ask?:
   const [tab, setTab] = useState<Tab>((CAPTURE_BOT_TAB as Tab) || 'chat')
   const [gone, setGone] = useState(false)
   const [err, setErr] = useState('')
-  const [asking, setAsking] = useState(params.ask === true || CAPTURE_BOT_MODAL === 'interview')
+  const [asking, setAsking] = useState(ask || CAPTURE_BOT_MODAL === 'interview')
   const [focusing, setFocusing] = useState(false)
   const [wrongFor, setWrongFor] = useState<string | null>(null)
   const [why, setWhy] = useState('')
@@ -82,12 +106,8 @@ export function BotPage({ params, api }: IDockviewPanelProps<{ id: number; ask?:
     void refreshBots()
   }, [nodeId, refreshBots])
 
-  // "Ask me the questions" is consumed once, here, rather than living in the
-  // panel forever. Dock layouts are saved and restored, so a parameter that
-  // stays true means the interview opens every time you come back to the bot —
-  // which is the page-you-close behaviour this flag exists to avoid.
   useEffect(() => {
-    if (params.ask) api.updateParameters({ id: nodeId, ask: false })
+    if (ask) onAskConsumed?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

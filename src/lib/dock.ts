@@ -5,6 +5,7 @@
 import type { DockviewApi } from 'dockview-react'
 import * as ipc from './ipc'
 import { useApp } from '../store'
+import { useAiw } from './aiwStore'
 
 let api: DockviewApi | null = null
 
@@ -79,6 +80,15 @@ export type EditorKind = 'command' | 'service' | 'profile'
 /// many call sites stay unchanged.
 export function openEditor(kind: EditorKind, id: number, _title?: string, projectId?: number | null) {
   useApp.getState().openSheet({ kind, id, projectId: projectId ?? null })
+}
+
+/// Open an agent's own page — provider, model, instructions, permissions.
+///
+/// From a pill in a thread, mostly: "dev-a is on the mock provider" is only
+/// useful if changing that is one click away.
+export function openAgentSettings(id: string) {
+  useApp.getState().setRailView('aiworkspace')
+  useAiw.getState().openAgent(id)
 }
 
 /// Open (or focus) the Assistant's own conversation as a document.

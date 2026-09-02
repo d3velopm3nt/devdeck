@@ -1412,8 +1412,14 @@ function DecisionList({ rows }: { rows: DecisionRow[] }) {
 
 function Agents() {
   const a = useAiw()
-  // Which agent's own page is open. Null is the list.
-  const [editing, setEditing] = useState<string | null>(null)
+  // Which agent's own page is open. Null is the list. Seeded from the store
+  // when something elsewhere — a pill in a thread — asked for one, and
+  // consumed at once so the list is what you get next time.
+  const [editing, setEditing] = useState<string | null>(() => {
+    const wanted = useAiw.getState().editAgent
+    if (wanted) useAiw.setState({ editAgent: null })
+    return wanted
+  })
 
   if (editing) return <AgentEditor id={editing} onClose={() => setEditing(null)} />
 

@@ -12,6 +12,8 @@
 import { createContext, useContext, useState, type ReactNode } from 'react'
 import { useAiw } from '../../lib/aiwStore'
 import { useApp } from '../../store'
+import { openAgentSettings, openBot } from '../../lib/dock'
+import { Icon } from '../../lib/icons'
 
 /// Who is mid-turn right now, by id, with the name the turn announced. The
 /// thread provides it; every pill inside reads it.
@@ -131,11 +133,16 @@ export function Pill({
             {bot
               ? `bot · ${bot.node_name}${bot.agent ? ` · runs ${bot.agent}` : ' · watches only'}`
               : agent
-                ? `${agent.role} · ${agent.provider === 'mock' ? 'mock provider' : agent.provider}`
+                ? `${agent.role} · ${agent.provider === 'mock' ? 'mock provider' : agent.provider} · ${agent.model}`
                 : host
                   ? 'the assistant'
                   : id}
           </span>
+          {agent?.provider === 'mock' && (
+            <span className="mt-1 block text-[10.5px] text-warn">
+              Scripted: it cannot think until it is pointed at a real provider.
+            </span>
+          )}
           <span className={`mt-1.5 block ${status.tone}`}>{status.text}</span>
           {bot?.goal && <span className="mt-1.5 block text-body">{bot.goal}</span>}
           {waiting && (
@@ -159,6 +166,21 @@ export function Pill({
           {bot?.last_woke && (
             <span className="mt-1.5 block text-[10.5px] text-faint">
               last woke {new Date(bot.last_woke).toLocaleString()}
+            </span>
+          )}
+          {(bot || agent) && (
+            <span className="mt-2 flex gap-1.5">
+              <button
+                className="btn-ghost text-[11px]"
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  if (bot) openBot(bot.node_id, bot.name)
+                  else if (agent) openAgentSettings(agent.id)
+                }}
+              >
+                <Icon name={bot ? 'bot' : 'settings'} size={11} />
+                {bot ? 'Open its page' : 'Provider, model, permissions'}
+              </button>
             </span>
           )}
         </span>

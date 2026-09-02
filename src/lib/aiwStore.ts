@@ -109,6 +109,10 @@ interface AiwState {
   demoRunning: boolean
 
   setPage: (p: AiwPage) => void
+  /// An agent whose editor should open next time the Agents page renders.
+  /// Consumed by that page, so it never re-opens on a later visit.
+  editAgent: string | null
+  openAgent: (id: string) => void
   selectProject: (id: string) => Promise<void>
   selectFeature: (id: string | null) => Promise<void>
   bootstrap: () => Promise<void>
@@ -174,6 +178,8 @@ export const useAiw = create<AiwState>((set, get) => ({
   demoRunning: false,
 
   setPage: (page) => set({ page }),
+  editAgent: null,
+  openAgent: (id) => set({ page: 'agents', editAgent: id }),
 
   bootstrap: async () => {
     // React runs effects twice in dev (StrictMode). Without this guard the

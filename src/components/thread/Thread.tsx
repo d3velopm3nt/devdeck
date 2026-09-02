@@ -23,6 +23,7 @@ import { Icon, type IconName } from '../../lib/icons'
 import { useSpeakers } from './speakers'
 import { useAiw } from '../../lib/aiwStore'
 import { MentionText, Pill, SpeakingContext } from './Pill'
+import { openAgentSettings, openBot } from '../../lib/dock'
 import { useApp } from '../../store'
 
 /// Someone you can @: an agent, a bot, or you.
@@ -30,6 +31,12 @@ interface Handle {
   handle: string
   name: string
   kind: 'agent' | 'bot' | 'you'
+  /// What it runs on, or when it wakes.
+  meta?: string
+  /// What it is doing right now.
+  state?: { text: string; tone: string }
+  /// Where to go to change it.
+  open?: () => void
 }
 
 /// The `@word` the caret is inside, if any — its start offset and the word.
@@ -166,8 +173,19 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
   const [pick, setPick] = useState(0)
   const [caret, setCaret] = useState(0)
   const agents = useAiw((s) => s.agents)
+  const sessions = useAiw((s) => s.sessions)
+  const approvals = useAiw((s) => s.approvals)
   const bots = useApp((s) => s.bots)
   const mention = mentionAt(draft, caret)
+  const stateOf = (id: string): Handle['state'] => {
+    if (id in speaking) return { text: 'thinking…', tone: 'text-indigo-300' }
+    if (approvals.some((r) => r.agent_id === id)) return { text: 'waiting on you', tone: 'text-warn' }
+    const live = sessions.find(
+      (x) => x.agent_id === id && (x.status === 'working' || x.status === 'planning'),
+    )
+    if (live) return { text: `working · ${live.feature_id}`, tone: 'text-ok' }
+    return { text: 'idle', tone: 'text-faint' }
+  }
   const handles: Handle[] = mention
     ? [
         { handle: 'you', name: 'you — puts it in the Inbox', kind: 'you' as const },
@@ -177,10 +195,22 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
           handle: b.node_name.trim().toLowerCase().replace(/\s+/g, '-'),
           name: b.name,
           kind: 'bot' as const,
+          meta: b.agent ? `runs ${b.agent}` : 'watches only',
+          state: b.every
+            ? { text: 'watching', tone: 'text-muted' }
+            : { text: 'no heartbeat', tone: 'text-faint' },
+          open: () => openBot(b.node_id, b.name),
         })),
         ...agents
           .filter((a) => a.id !== 'assistant')
-          .map((a) => ({ handle: a.id, name: a.name, kind: 'agent' as const })),
+          .map((a) => ({
+            handle: a.id,
+            name: a.name,
+            kind: 'agent' as const,
+            meta: `${a.provider === 'mock' ? 'mock' : a.provider} · ${a.model}`,
+            state: stateOf(a.id),
+            open: () => openAgentSettings(a.id),
+          })),
       ].filter(
         (h) =>
           h.handle.toLowerCase().startsWith(mention.word.toLowerCase()) ||
@@ -411,9 +441,9 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
         {mention && handles.length > 0 && (
           <div className="absolute bottom-full left-0 z-10 mb-1 w-[300px] overflow-hidden rounded-lg border border-line bg-menu shadow-lg">
             {handles.slice(0, 8).map((h, i) => (
-              <button
+              <div
                 key={h.kind + h.handle}
-                className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] ${
+                className={`group flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] ${
                   i === pick ? 'bg-hover text-ink' : 'text-body hover:bg-hover/50'
                 }`}
                 onMouseDown={(e) => {
@@ -428,8 +458,27 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
                   className="shrink-0 text-indigo-400"
                 />
                 <span className="font-mono text-[11.5px]">@{h.handle}</span>
-                <span className="min-w-0 flex-1 truncate text-[11px] text-muted">{h.name}</span>
-              </button>
+                <span className="min-w-0 flex-1 truncate">
+                  <span className="text-[11px] text-muted">{h.name}</span>
+                  {h.meta && <span className="ml-1.5 text-[10px] text-faint">{h.meta}</span>}
+                </span>
+                {h.state && (
+                  <span className={`shrink-0 text-[10px] ${h.state.tone}`}>{h.state.text}</span>
+                )}
+                {h.open && (
+                  <button
+                    className="shrink-0 rounded p-0.5 text-faint opacity-0 hover:bg-hover hover:text-ink group-hover:opacity-100"
+                    title={h.kind === 'bot' ? 'Open its page' : 'Provider, model, permissions'}
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      h.open?.()
+                    }}
+                  >
+                    <Icon name={h.kind === 'bot' ? 'external' : 'settings'} size={12} />
+                  </button>
+                )}
+              </div>
             ))}
             <div className="border-t border-line px-3 py-1 text-[10px] text-faint">
               A mention pulls them in. Add <span className="font-mono">take "an item"</span> to hand work over.

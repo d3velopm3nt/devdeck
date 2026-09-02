@@ -12,7 +12,8 @@ use super::commands::{run_demo, seed_demo};
 use super::context::ContextService;
 use super::events::EventType;
 use super::runtime::{AgentRuntime, StartAgentCommand};
-use super::assistant::Persona;
+use super::assistant::{ChatMessage, Persona};
+use super::events::now_iso;
 use super::state::Workspace;
 use super::tools::{ToolCall, TOOL_FILES};
 
@@ -1315,17 +1316,28 @@ fn two_bots_hold_a_conversation_in_one_feature_thread() {
         &bot("bot:1", "x-platform bot"),
     )
     .unwrap();
-    Assistant::send_as(
+    // The second bot answers the same message rather than posting it again —
+    // which is what a mention does in the app: one question, several voices.
+    Assistant::answer_as(
         &w,
         &c,
         &conv.id,
-        "Two failures, both in sync. @architect worth one answer?",
+        "@qa the suite is red again on this one.",
         &quiet,
         &bot("bot:2", "TrackX bot"),
     )
     .unwrap();
 
     let saved = c.load(&conv.id).unwrap();
+    assert_eq!(
+        saved
+            .messages
+            .iter()
+            .filter(|m| m.from == Speaker::User)
+            .count(),
+        1,
+        "the question is in the thread once, however many answered it"
+    );
     let speakers: Vec<&str> = saved
         .messages
         .iter()
@@ -1333,10 +1345,64 @@ fn two_bots_hold_a_conversation_in_one_feature_thread() {
         .collect();
     assert!(speakers.contains(&"bot:1"), "{speakers:?}");
     assert!(speakers.contains(&"bot:2"), "{speakers:?}");
-    // Both mentions pulled their agent in, and neither moved any work.
-    assert!(saved.participants.iter().any(|p| p == "qa"));
-    assert!(saved.participants.iter().any(|p| p == "architect"));
+    // The mention pulled qa in once, and talking moved no work at all.
+    assert_eq!(
+        saved.participants.iter().filter(|p| *p == "qa").count(),
+        1,
+        "answering the same message again must not pull anyone in twice"
+    );
     assert!(w.claims_for(Some("tyrex"), true).is_empty());
+}
+
+/// A thread must not lose what arrived while somebody was talking.
+///
+/// This is not hypothetical: a wake posts a receipt on a clock, an agent
+/// reports back when its session ends, and a second participant answers the
+/// same question — all of which can land in the seconds a model takes to
+/// reply. A turn that saved its own copy would silently drop them.
+#[test]
+fn a_message_that_arrives_mid_turn_survives_the_reply() {
+    let t = Tmp::new("mergethread");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
+    let c = convs(&t);
+    let conv = c
+        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .unwrap();
+
+    // Something lands from elsewhere while the turn below is in flight. The
+    // turn is holding the copy it loaded a moment ago.
+    let held = c.load(&conv.id).unwrap();
+    c.post(
+        &conv.id,
+        ChatMessage {
+            at: now_iso(),
+            from: Speaker::Assistant,
+            text: "dev-a finished — 2 turns, 1 file touched, 0 refused.".into(),
+            tool: Some("session".into()),
+            ok: Some(true),
+            by: Some("dev-a".into()),
+        },
+    )
+    .unwrap();
+    assert_eq!(held.messages.len(), 0, "the turn's copy predates that");
+
+    Assistant::send(&w, &c, &conv.id, "What is left on this?", &quiet).unwrap();
+
+    let saved = c.load(&conv.id).unwrap();
+    assert!(
+        saved
+            .messages
+            .iter()
+            .any(|m| m.by.as_deref() == Some("dev-a")),
+        "the receipt that arrived mid-turn is still there: {:?}",
+        saved.messages.iter().map(|m| m.text.clone()).collect::<Vec<_>>()
+    );
+    assert!(
+        saved.messages.iter().any(|m| m.from == Speaker::User),
+        "and so is the question"
+    );
 }
 
 /// The distinction that makes this an orchestrator rather than a chat window.

@@ -252,6 +252,25 @@ pub struct ConversationSummary {
 // Persistence
 // ---------------------------------------------------------------------------
 
+/// One writer at a time, for every conversation in the process.
+///
+/// A thread is a file, and appending to it is read-modify-write. Three things
+/// post into the same room — the turn you are having, an agent's session
+/// ending, a wake's receipt — and without this the last writer to finish wins,
+/// silently dropping whatever the others added. It was not theoretical: the
+/// first end-to-end run of a handover lost the assistant's own reply.
+///
+/// Deliberately global rather than per-`Conversations`, because the background
+/// thread that reports a session back opens its own handle on the same store.
+/// Writes are a few milliseconds, so one gate costs nothing worth measuring.
+static WRITING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Take the write gate, surviving a panic in whoever held it last: a poisoned
+/// lock must not mean the app can never write a message again.
+fn writing() -> std::sync::MutexGuard<'static, ()> {
+    WRITING.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 pub struct Conversations {
     store: PersonalStore,
 }
@@ -397,6 +416,7 @@ impl Conversations {
     /// last saw it — a session takes minutes, and overwriting what was said
     /// while it ran would lose exactly the messages worth keeping.
     pub fn post(&self, conv_id: &str, msg: ChatMessage) -> Result<ChatMessage, String> {
+        let _gate = writing();
         let mut conv = self.load(conv_id)?;
         conv.messages.push(msg.clone());
         conv.updated_at = now_iso();
@@ -404,9 +424,53 @@ impl Conversations {
         Ok(msg)
     }
 
+    /// Append a turn's messages to whatever is on disk *now*.
+    ///
+    /// Everything else about the conversation — its title, who is in it — is
+    /// carried over from the turn, because those are the fields a turn
+    /// changes. The messages are appended rather than replaced, which is what
+    /// makes two things writing to one room safe.
+    pub fn append(
+        &self,
+        conv: &ConversationMeta,
+        appended: &[ChatMessage],
+    ) -> Result<(), String> {
+        let _gate = writing();
+        let mut fresh = match self.load(&conv.id) {
+            Ok(f) => f,
+            // Gone from under us. Saving our copy is the honest fallback: the
+            // messages exist and belong somewhere.
+            Err(_) => conv.clone(),
+        };
+        fresh.title = conv.title.clone();
+        fresh.feature = conv.feature.clone();
+        fresh.node = conv.node;
+        fresh.bot_node = conv.bot_node;
+        for p in &conv.participants {
+            if !fresh.participants.iter().any(|x| x.eq_ignore_ascii_case(p)) {
+                fresh.participants.push(p.clone());
+            }
+        }
+        for m in appended {
+            // Same instant, same words, same speaker is the same message —
+            // which only happens if a caller retried, and appending it twice
+            // would be a second bug on top of the first.
+            let already = fresh
+                .messages
+                .iter()
+                .any(|x| x.at == m.at && x.text == m.text && x.by == m.by);
+            if !already {
+                fresh.messages.push(m.clone());
+            }
+        }
+        fresh.updated_at = now_iso();
+        self.save(&fresh)
+    }
+
     /// Record that someone is now in this thread. Idempotent: being mentioned
     /// twice does not make you two participants.
     pub fn add_participant(&self, conv_id: &str, who: &str) -> Result<bool, String> {
+        let _gate = writing();
         let mut conv = self.load(conv_id)?;
         if conv.participants.iter().any(|p| p.eq_ignore_ascii_case(who)) {
             return Ok(false);
@@ -489,9 +553,14 @@ fn render(m: &ConversationMeta) -> String {
     for msg in &m.messages {
         let who = match msg.from {
             Speaker::User => "You".to_string(),
-            Speaker::Assistant => {
-                if m.bot_node.is_some() { m.title.clone() } else { "Assistant".to_string() }
-            }
+            // Whoever actually said it. A room has several voices in it, and
+            // a transcript that calls all of them "Assistant" is unreadable
+            // outside the app — which is the one place this rendering is for.
+            Speaker::Assistant => match msg.by.as_deref() {
+                Some(id) if !id.is_empty() => id.to_string(),
+                _ if m.bot_node.is_some() => m.title.clone(),
+                _ => "Assistant".to_string(),
+            },
             Speaker::Tool => format!(
                 "{} {}",
                 msg.tool.clone().unwrap_or_else(|| "tool".into()),
@@ -550,6 +619,40 @@ impl Assistant {
         sink: ChatSink,
         persona: &Persona,
     ) -> Result<AssistantReply, String> {
+        Self::turn(ws, convs, conversation_id, text, sink, persona, true)
+    }
+
+    /// Answer something that is already in the thread.
+    ///
+    /// This is what makes a room a room: one message can be answered by more
+    /// than one participant. `@qa the suite is red` reaches the bot managing
+    /// the feature *and* anyone else it names, and each answers as itself — so
+    /// the second one must not post the question again on its way in.
+    ///
+    /// One hop, deliberately: replies are not re-read for mentions. Two bots
+    /// that each name the other would otherwise talk until the budget ran out,
+    /// which is a bill rather than a conversation.
+    pub fn answer_as(
+        ws: &Arc<Workspace>,
+        convs: &Conversations,
+        conversation_id: &str,
+        text: &str,
+        sink: ChatSink,
+        persona: &Persona,
+    ) -> Result<AssistantReply, String> {
+        Self::turn(ws, convs, conversation_id, text, sink, persona, false)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn turn(
+        ws: &Arc<Workspace>,
+        convs: &Conversations,
+        conversation_id: &str,
+        text: &str,
+        sink: ChatSink,
+        persona: &Persona,
+        echo: bool,
+    ) -> Result<AssistantReply, String> {
         if text.trim().is_empty() {
             return Err("nothing to send".into());
         }
@@ -562,24 +665,34 @@ impl Assistant {
         // The first thing said names the conversation. Better than "New
         // conversation" forever, and cheaper than asking a model for a title.
         // A bot's thread is already named after the bot.
-        if conv.messages.is_empty() && conv.bot_node.is_none() {
+        if echo && conv.messages.is_empty() && conv.bot_node.is_none() && conv.feature.is_none()
+            && conv.node.is_none()
+        {
             conv.title = truncate(text.trim(), 60);
         }
-        let mut appended = vec![ChatMessage::said(Speaker::User, text.trim())];
-        conv.messages.push(appended[0].clone());
+        let mut appended: Vec<ChatMessage> = Vec::new();
+        if echo {
+            let said = ChatMessage::said(Speaker::User, text.trim());
+            conv.messages.push(said.clone());
+            appended.push(said);
+        }
 
         // A message can pull people in and hand work over before anything has
         // answered it. Both are facts about the thread rather than something a
         // model decides, so they happen here and are recorded as receipts.
         let mut delegated: Vec<String> = Vec::new();
-        for note in Self::pull_in(ws, &mut conv, text, persona) {
+        for note in if echo {
+            Self::pull_in(ws, &mut conv, text, persona)
+        } else {
+            Vec::new()
+        } {
             appended.push(note.clone());
             sink(ChatEvent::Step {
                 conversation_id: conv.id.clone(),
                 message: note,
             });
         }
-        if let Some(h) = mentions::handover(text) {
+        if let Some(h) = mentions::handover(text).filter(|_| echo) {
             let note = Self::hand_over(ws, convs, &conv, persona, &h, &mut delegated);
             conv.messages.push(note.clone());
             appended.push(note.clone());
@@ -744,7 +857,17 @@ impl Assistant {
         conv.messages.push(msg.clone());
         appended.push(msg);
         conv.updated_at = now_iso();
-        convs.save(&conv)?;
+
+        // Write by appending to what is on disk *now*, not by saving the copy
+        // this turn started with.
+        //
+        // A turn holds its copy for as long as the model takes, and things
+        // arrive in the meantime: a wake posting a receipt, an agent reporting
+        // back, another participant answering the same question. Saving our
+        // copy would silently drop every one of them — and a thread that
+        // quietly loses messages is worse than one that fails loudly, because
+        // you only notice weeks later when the message you remember is gone.
+        convs.append(&conv, &appended)?;
 
         ws.bus.emit(
             DomainEvent::new(

@@ -88,38 +88,86 @@ fn feature_persona(
     }
 }
 
-/// Register any bot named with `@` as a participant.
+/// Register any bot named with `@` as a participant, and say who they are.
 ///
 /// Agents are resolved inside the assistant loop, which knows them. Bots are
 /// files in folders, so they are resolved here — the one place that can read
 /// both. A mention that matches nothing is left alone rather than invented.
-fn pull_in_bots(app: &tauri::AppHandle, ws: &Arc<Workspace>, conv_id: &str, text: &str) {
+///
+/// Returns the bots the message named, because they are also the ones that
+/// should answer it.
+fn pull_in_bots(
+    app: &tauri::AppHandle,
+    ws: &Arc<Workspace>,
+    conv_id: &str,
+    text: &str,
+) -> Vec<crate::bots::Bot> {
     let names = crate::aiw::mentions::mentions(text);
     if names.is_empty() {
-        return;
+        return Vec::new();
     }
-    let Some(db) = app.try_state::<Db>() else { return };
+    let Some(db) = app.try_state::<Db>() else {
+        return Vec::new();
+    };
     let bots = {
         let conn = db.0.lock().unwrap();
         crate::bots::all_bots(&conn)
     };
-    let Ok(convs) = ws.convs() else { return };
+    let Ok(convs) = ws.convs() else {
+        return Vec::new();
+    };
+    let mut named = Vec::new();
     for name in names {
         let Some(bot) = bots.iter().find(|b| crate::bots::answers_to(b, &name)) else {
             continue;
         };
         let id = format!("bot:{}", bot.node_id);
-        match convs.add_participant(conv_id, &id) {
-            Ok(true) => {
-                let _ = convs.post(
-                    conv_id,
-                    crate::aiw::assistant::ChatMessage::pulled_in(
-                        &id,
-                        format!("@{name} — {} — pulled into this thread", bot.name),
-                    ),
-                );
-            }
-            _ => continue,
+        if let Ok(true) = convs.add_participant(conv_id, &id) {
+            let _ = convs.post(
+                conv_id,
+                crate::aiw::assistant::ChatMessage::pulled_in(
+                    &id,
+                    format!("@{name} — {} — pulled into this thread", bot.name),
+                ),
+            );
+        }
+        if !named.iter().any(|b: &crate::bots::Bot| b.node_id == bot.node_id) {
+            named.push(bot.clone());
+        }
+    }
+    named
+}
+
+/// Let every bot the message named answer it, as itself.
+///
+/// This is bot-to-bot with nothing special about it: one conversation, several
+/// personas, each message carrying who said it. It runs after whoever owns the
+/// thread has answered, and only for bots the *incoming* message named — a
+/// reply is never re-read for mentions, so two bots that each name the other
+/// cannot talk each other into a bill.
+///
+/// A bot that would be answering itself is skipped, and so is one that fails:
+/// a second voice not arriving must not take the first one's answer with it.
+fn also_answer(
+    app: &tauri::AppHandle,
+    ws: &Arc<Workspace>,
+    conv_id: &str,
+    text: &str,
+    bots: Vec<crate::bots::Bot>,
+    already: &str,
+) {
+    for bot in bots {
+        let who = crate::bots::persona(&bot);
+        if who.agent_id == already {
+            continue;
+        }
+        let emit = app.clone();
+        let sink = move |e: crate::aiw::assistant::ChatEvent| {
+            let _ = emit.emit("aiw:chat", e);
+        };
+        let Ok(convs) = ws.convs() else { return };
+        if let Err(e) = Assistant::answer_as(ws, convs, conv_id, text, &sink, &who) {
+            eprintln!("[threads] {} was asked something and could not answer: {e}", bot.name);
         }
     }
 }
@@ -167,15 +215,20 @@ pub async fn feature_thread_send(
         .convs()?
         .for_feature(&node_id.to_string(), &feature_id, &name)?
         .id;
-    pull_in_bots(&app, &workspace, &conv_id, &text);
+    let named = pull_in_bots(&app, &workspace, &conv_id, &text);
 
     let emit = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
+        let progress = emit.clone();
         let sink = move |e: ChatEvent| {
-            let _ = emit.emit("aiw:chat", e);
+            let _ = progress.emit("aiw:chat", e);
         };
         let convs = workspace.convs()?;
-        Assistant::send_as(&workspace, convs, &conv_id, &text, &sink, &who)
+        let reply = Assistant::send_as(&workspace, convs, &conv_id, &text, &sink, &who)?;
+        // Then everyone else the message named. The room is the point: one
+        // question, several voices, one transcript.
+        also_answer(&emit, &workspace, &conv_id, &text, named, &who.agent_id);
+        Ok(reply)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -315,15 +368,18 @@ pub async fn node_thread_send(
     };
     let who = node_persona(&app, &workspace, node_id, &name)?;
     let conv_id = workspace.convs()?.for_node(node_id, &name)?.id;
-    pull_in_bots(&app, &workspace, &conv_id, &text);
+    let named = pull_in_bots(&app, &workspace, &conv_id, &text);
 
     let emit = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
+        let progress = emit.clone();
         let sink = move |e: ChatEvent| {
-            let _ = emit.emit("aiw:chat", e);
+            let _ = progress.emit("aiw:chat", e);
         };
         let convs = workspace.convs()?;
-        Assistant::send_as(&workspace, convs, &conv_id, &text, &sink, &who)
+        let reply = Assistant::send_as(&workspace, convs, &conv_id, &text, &sink, &who)?;
+        also_answer(&emit, &workspace, &conv_id, &text, named, &who.agent_id);
+        Ok(reply)
     })
     .await
     .map_err(|e| e.to_string())?

@@ -73,6 +73,49 @@ function Wake({ m, name }: { m: ChatMessage; name: string }) {
   )
 }
 
+/// A run of tool steps, folded into one line.
+///
+/// The steps are evidence and they have to stay — "I read the roadmap" is a
+/// claim, a `files.read` row is a fact. But fourteen of them between two
+/// sentences turn a room into a log, and the room is the thing worth reading.
+/// So a run collapses to one line that says how many and what they touched,
+/// and opens on a click.
+function Steps({ steps, who }: { steps: ChatMessage[]; who: (m: ChatMessage) => string }) {
+  const [open, setOpen] = useState(false)
+  if (steps.length === 1 && !open) {
+    return <Bubble m={steps[0]} who={who(steps[0])} />
+  }
+  const failed = steps.filter((m) => m.ok === false).length
+  const kinds = Array.from(new Set(steps.map((m) => (m.tool ?? '').split('.')[0]))).filter(Boolean)
+  return (
+    <div className="my-1.5 ml-9">
+      <button
+        className="inline-flex items-center gap-1.5 rounded border border-line bg-raise px-2 py-1 text-left text-[10.5px] text-muted hover:text-dim"
+        onClick={() => setOpen(!open)}
+      >
+        <Icon name={open ? 'chevron-down' : 'chevron-right'} size={11} />
+        {steps.length} step{steps.length === 1 ? '' : 's'}
+        <span className="text-faint">{kinds.join(' · ')}</span>
+        {failed > 0 && <span className="text-err">{failed} failed</span>}
+      </button>
+      {open && steps.map((m, i) => <Bubble key={i} m={m} who={who(m)} />)}
+    </div>
+  )
+}
+
+/// The transcript, with runs of tool steps folded together.
+function fold(messages: ChatMessage[]): (ChatMessage | ChatMessage[])[] {
+  const out: (ChatMessage | ChatMessage[])[] = []
+  for (const m of messages) {
+    const isStep = m.from === 'tool'
+    const last = out[out.length - 1]
+    if (isStep && Array.isArray(last)) last.push(m)
+    else if (isStep) out.push([m])
+    else out.push(m)
+  }
+  return out
+}
+
 export interface ThreadProps {
   /// Read the thread. Called on mount and after every send, because the
   /// backend decides the timestamps, the receipts and the tool steps — a
@@ -219,8 +262,10 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
             )}
           </div>
         ) : (
-          conv?.messages.map((m, i) =>
-            m.tool === 'wake' ? (
+          fold(conv?.messages ?? []).map((m, i) =>
+            Array.isArray(m) ? (
+              <Steps key={i} steps={m} who={who} />
+            ) : m.tool === 'wake' ? (
               <Wake key={i} m={m} name={who(m)} />
             ) : m.tool && RECEIPTS[m.tool] ? (
               <Receipt key={i} m={m} />

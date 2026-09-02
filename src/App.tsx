@@ -20,7 +20,7 @@ import { MachineSetup } from './components/MachineSetup'
 import { StashSidebar } from './components/StashSidebar'
 import { StashView } from './components/StashView'
 import { ConnectionsSidebar } from './components/ConnectionsSidebar'
-import { CAPTURE_RAIL } from './lib/devCapture'
+import { CAPTURE_NODE, CAPTURE_RAIL, CAPTURE_SAY } from './lib/devCapture'
 import { AiwSidebar } from './components/aiw/AiwSidebar'
 import { AiWorkspace } from './components/aiw/AiWorkspace'
 import { ConnectionsView } from './components/ConnectionsView'
@@ -32,7 +32,7 @@ import * as ipc from './lib/ipc'
 import { routeOutput } from './lib/termBus'
 import { useApp } from './store'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
-import { dockApi, openTerminalPanel, openEditor, openNodeSetup, openSingleton, saveLayout, restoreLayout } from './lib/dock'
+import { openNodeThread, dockApi, openTerminalPanel, openEditor, openNodeSetup, openSingleton, saveLayout, restoreLayout } from './lib/dock'
 import { openTerminal, launchProfile } from './lib/runner'
 import { resolveDir } from './lib/tree'
 
@@ -132,6 +132,47 @@ export default function App() {
   useEffect(() => {
     if (CAPTURE_RAIL && railView !== CAPTURE_RAIL) app.setRailView(CAPTURE_RAIL as typeof railView)
   })
+
+  // Screenshot harness: open a node's thread, and say things in it.
+  //
+  // This session cannot deliver clicks or keystrokes to WebView2, so evidence
+  // that a thread works has to be produced some other way. It goes through the
+  // same commands the composer calls — real personas, real provider, real
+  // transcript on disk. All this chooses is *what gets said*; nothing about
+  // what comes back is scripted, which is the only way a screenshot of it is
+  // worth anything.
+  useEffect(() => {
+    if (CAPTURE_NODE) {
+      const id = Number(CAPTURE_NODE)
+      const node = useApp.getState().nodes.find((n) => n.id === id)
+      if (node) openNodeThread(node.id, node.name)
+    }
+    if (CAPTURE_SAY.length === 0) return
+    let stopped = false
+    void (async () => {
+      for (const line of CAPTURE_SAY) {
+        if (stopped) return
+        const [kind, id, ...rest] = line.split(':')
+        try {
+          if (kind === 'feature') {
+            await ipc.featureThreadSend(Number(id), rest[0], rest.slice(1).join(':'))
+          } else if (kind === 'node') {
+            await ipc.nodeThreadSend(Number(id), rest.join(':'))
+          } else if (kind === 'bot') {
+            await ipc.botThreadSend(Number(id), rest.join(':'))
+          }
+        } catch (e) {
+          // Failing loudly in the console beats a screenshot of a thread that
+          // silently never got its message.
+          console.error('[capture] could not say', line, e)
+        }
+      }
+    })()
+    return () => {
+      stopped = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [app.nodes.length])
 
   // Apply the theme to <html> whenever it changes (bootstrap also sets it).
   useEffect(() => {

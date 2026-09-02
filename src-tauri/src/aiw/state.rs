@@ -619,15 +619,31 @@ impl Workspace {
                 "'{provider}' is not configured — set it up under Providers first"
             ));
         }
-        let mut agents = self.agents.lock().unwrap();
-        let Some(a) = agents.iter_mut().find(|a| a.id == agent_id) else {
-            return Err(format!("no agent '{agent_id}'"));
+        let updated = {
+            let mut agents = self.agents.lock().unwrap();
+            let Some(a) = agents.iter_mut().find(|a| a.id == agent_id) else {
+                return Err(format!("no agent '{agent_id}'"));
+            };
+            a.provider = provider.to_string();
+            if !model.is_empty() {
+                a.model = model.to_string();
+            }
+            a.clone()
         };
-        a.provider = provider.to_string();
-        if !model.is_empty() {
-            a.model = model.to_string();
+        // Write it through to the agent's file. Agents are loaded from their
+        // files — at every start, and again whenever a skill is saved — and a
+        // choice kept only in memory and a settings row was overwritten by
+        // the file's `provider: mock` each time. So the switch appeared to
+        // take and was gone at the next launch. The file is the record.
+        if let Ok(convs) = self.convs() {
+            let store = convs.store();
+            if let Some(mut doc) = store.agents().into_iter().find(|d| d.meta.id == agent_id) {
+                doc.meta.provider = updated.provider.clone();
+                doc.meta.model = updated.model.clone();
+                store.save_agent(&doc)?;
+            }
         }
-        Ok(a.clone())
+        Ok(updated)
     }
 
     /// Which provider and model each agent is pointed at, for persistence.

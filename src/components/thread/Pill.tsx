@@ -9,11 +9,93 @@
 // `@dev-a` in a sentence is the inline size of the same pill. Text that names
 // someone and does nothing about it looks like a mention that failed.
 
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useAiw } from '../../lib/aiwStore'
+import { aiw } from '../../lib/aiw'
 import { useApp } from '../../store'
 import { openAgentSettings, openBot } from '../../lib/dock'
 import { Icon } from '../../lib/icons'
+import { ModelPicker } from '../aiw/ModelPicker'
+
+/// The three kinds of provider an agent can run on. Same list the assistant's
+/// own chip offers, so a change made here is the same change made there.
+const PROVIDERS = ['mock', 'anthropic', 'openai-compatible']
+
+/// Change what an agent runs on, from inside its card.
+///
+/// "dev-a is on the mock provider" is only worth saying if fixing it is
+/// right there. Same call the assistant's chip makes; the agent list is
+/// re-read afterwards so every pill for this agent changes at once.
+function ProviderSwitch({ agent }: { agent: { id: string; provider: string; model: string } }) {
+  const a = useAiw()
+  const [draft, setDraft] = useState({ provider: agent.provider, model: agent.model })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    setDraft({ provider: agent.provider, model: agent.model })
+  }, [agent.provider, agent.model])
+  const dirty = draft.provider !== agent.provider || draft.model !== agent.model
+
+  const apply = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      await aiw.setAgentProvider(agent.id, draft.provider, draft.model)
+      await a.reloadAgents()
+    } catch (e) {
+      // A refused switch must not look like a switch: the card keeps saying
+      // what the agent actually runs on, and this says why.
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <span className="mt-2 block border-t border-line pt-2">
+      <span className="block text-[10px] font-semibold uppercase tracking-[0.06em] text-faint">
+        Runs on
+      </span>
+      <select
+        className="input mt-1 w-full text-[11.5px]"
+        value={draft.provider}
+        onChange={(e) => setDraft({ provider: e.target.value, model: '' })}
+      >
+        {PROVIDERS.map((p) => (
+          <option key={p} value={p}>
+            {p === 'mock' ? 'Mock (no AI)' : p}
+          </option>
+        ))}
+      </select>
+      <span className="mt-1.5 block">
+        <ModelPicker
+          key={draft.provider}
+          providerId={draft.provider}
+          value={draft.model}
+          onChange={(model) => setDraft({ ...draft, model })}
+          compact
+        />
+      </span>
+      {error && <span className="mt-1 block text-[10.5px] text-err">{error}</span>}
+      <span className="mt-2 flex items-center gap-1.5">
+        <button
+          className="btn-primary text-[11px]"
+          disabled={!dirty || saving || !draft.model}
+          onClick={() => void apply()}
+        >
+          {saving ? 'Applying…' : 'Apply'}
+        </button>
+        <button
+          className="btn-ghost text-[11px]"
+          title="Instructions, skills and permissions"
+          onClick={() => openAgentSettings(agent.id)}
+        >
+          <Icon name="settings" size={11} /> More
+        </button>
+      </span>
+    </span>
+  )
+}
 
 /// Who is mid-turn right now, by id, with the name the turn announced. The
 /// thread provides it; every pill inside reads it.
@@ -57,6 +139,22 @@ export function Pill({
   inline?: boolean
 }) {
   const [open, setOpen] = useState(false)
+  // Hover opens the card; using a control inside pins it, because a select's
+  // dropdown reaches outside the card and would otherwise close it mid-pick.
+  // A click anywhere else unpins.
+  const [pinned, setPinned] = useState(false)
+  const wrap = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    if (!pinned) return
+    const away = (e: MouseEvent) => {
+      if (!wrap.current?.contains(e.target as Node)) {
+        setPinned(false)
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', away)
+    return () => document.removeEventListener('mousedown', away)
+  }, [pinned])
   const speaking = useContext(SpeakingContext)
   const agents = useAiw((s) => s.agents)
   const sessions = useAiw((s) => s.sessions)
@@ -104,9 +202,13 @@ export function Pill({
 
   return (
     <span
+      ref={wrap}
       className="relative inline-block align-baseline"
       onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
+      onMouseLeave={() => {
+        if (!pinned) setOpen(false)
+      }}
+      onMouseDown={() => setPinned(true)}
     >
       <span
         className={`inline-flex cursor-default items-center gap-1.5 rounded-full border ${
@@ -168,18 +270,14 @@ export function Pill({
               last woke {new Date(bot.last_woke).toLocaleString()}
             </span>
           )}
-          {(bot || agent) && (
+          {agent && <ProviderSwitch agent={agent} />}
+          {bot && (
             <span className="mt-2 flex gap-1.5">
               <button
                 className="btn-ghost text-[11px]"
-                onMouseDown={(e) => {
-                  e.preventDefault()
-                  if (bot) openBot(bot.node_id, bot.name)
-                  else if (agent) openAgentSettings(agent.id)
-                }}
+                onClick={() => openBot(bot.node_id, bot.name)}
               >
-                <Icon name={bot ? 'bot' : 'settings'} size={11} />
-                {bot ? 'Open its page' : 'Provider, model, permissions'}
+                <Icon name="bot" size={11} /> Open its page
               </button>
             </span>
           )}

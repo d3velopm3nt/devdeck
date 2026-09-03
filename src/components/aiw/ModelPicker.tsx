@@ -19,8 +19,57 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Icon } from '../../lib/icons'
 import { aiw, type ModelCatalog, type ModelInfo } from '../../lib/aiw'
+import { knownPricing } from '../../lib/usage'
 
 const TYPE_IT = '__type__'
+
+/// What a model costs, in the fewest words that are still true.
+///
+/// Three answers, and the third is the point: a provider that publishes no
+/// prices gets silence rather than a guess. NVIDIA's catalogue is eighty-odd
+/// models with not a price among them, and "free" printed against one of those
+/// would be a claim about somebody's bill that nothing supports.
+export type Price = { kind: 'free' | 'paid'; label: string; why: string } | null
+
+export function priceOf(m: ModelInfo | undefined, providerId: string): Price {
+  if (!m) return null
+  if (m.free) {
+    return {
+      kind: 'free',
+      label: 'Free',
+      why:
+        m.input_per_mtok === 0
+          ? 'The provider prices this one at zero.'
+          : 'Runs on this machine — no account, no metering, nothing leaving it.',
+    }
+  }
+  if (m.input_per_mtok != null && m.output_per_mtok != null) {
+    return {
+      kind: 'paid',
+      label: `$${trim(m.input_per_mtok)}/$${trim(m.output_per_mtok)}`,
+      why: `${trim(m.input_per_mtok)} in, ${trim(m.output_per_mtok)} out, per million tokens — the provider's own published rate.`,
+    }
+  }
+  // Nothing published. We may still know it ourselves — and then it matters
+  // whose figure it is.
+  const ours = knownPricing(m.id, providerId)
+  if (!ours) return null
+  if (ours.inputPerMTok === 0 && ours.outputPerMTok === 0) {
+    return { kind: 'free', label: 'Free', why: ours.label }
+  }
+  return {
+    kind: 'paid',
+    label: `$${trim(ours.inputPerMTok)}/$${trim(ours.outputPerMTok)}`,
+    why: `${ours.label} list price per million tokens — from DevDeck's own table, not from the provider.`,
+  }
+}
+
+/// Money without a wall of zeros: 3 → "3", 0.1 → "0.1", 0.00015 → "0.0002".
+function trim(n: number): string {
+  if (n === 0) return '0'
+  if (n >= 1) return String(Math.round(n * 100) / 100)
+  return String(Number(n.toFixed(4)))
+}
 
 export function ModelPicker({
   providerId,
@@ -66,7 +115,11 @@ export function ModelPicker({
     [unlisted, value, models],
   )
 
-  const status = describe(catalog, loading, unlisted, hint)
+  const price = useMemo(
+    () => priceOf(options.find((m) => m.id === value), providerId),
+    [options, value, providerId],
+  )
+  const status = describe(catalog, loading, unlisted, hint, providerId)
 
   return (
     <div>
@@ -93,14 +146,33 @@ export function ModelPicker({
             }}
           >
             {value === '' && <option value="">Choose a model…</option>}
-            {options.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-                {m.context_window ? ` · ${Math.round(m.context_window / 1000)}k` : ''}
-              </option>
-            ))}
+            {/* A native select takes no markup, so the badge is text here and
+                a real one sits beside the control for whatever is chosen. */}
+            {options.map((m) => {
+              const p = priceOf(m, providerId)
+              return (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                  {m.context_window ? ` · ${Math.round(m.context_window / 1000)}k` : ''}
+                  {p ? ` · ${p.label}` : ''}
+                </option>
+              )
+            })}
             <option value={TYPE_IT}>Type one in…</option>
           </select>
+        )}
+
+        {!typing && price && (
+          <span
+            title={price.why}
+            className={`shrink-0 whitespace-nowrap rounded px-1.5 py-px text-[10px] font-semibold ${
+              price.kind === 'free'
+                ? 'bg-emerald-500/14 text-ok'
+                : 'bg-slate-500/14 text-muted'
+            }`}
+          >
+            {price.label}
+          </span>
         )}
 
         {typing ? (
@@ -142,7 +214,8 @@ function describe(
   catalog: ModelCatalog | null,
   loading: boolean,
   unlisted: boolean,
-  hint?: string,
+  hint: string | undefined,
+  providerId: string,
 ): { text: string; tone: string } | null {
   if (loading) return { text: 'Loading models…', tone: 'text-faint' }
 
@@ -162,7 +235,25 @@ function describe(
     }
   }
   if (catalog?.live) {
-    return { text: `${catalog.models.length} models available.`, tone: 'text-faint' }
+    return { text: `${catalog.models.length} models available. ${prices(catalog, providerId)}`, tone: 'text-faint' }
   }
   return hint ? { text: hint, tone: 'text-faint' } : null
+}
+
+/// How many of them cost nothing — or, more often, that nobody said.
+///
+/// The question this answers is "which of these 81 are free?", and for some
+/// providers the true answer is "the catalogue does not say". A list that
+/// silently showed no badges would look like a list of paid models; this says
+/// which it is.
+function prices(catalog: ModelCatalog, providerId: string): string {
+  const known = catalog.models.filter((m) => priceOf(m, providerId) !== null)
+  if (known.length === 0) {
+    return 'This provider publishes no prices, so none are marked — the catalogue says what it serves, not what it charges.'
+  }
+  const free = catalog.models.filter((m) => priceOf(m, providerId)?.kind === 'free').length
+  const priced = free === 0 ? 'none of them free' : `${free} of them free`
+  return known.length === catalog.models.length
+    ? `Priced per million tokens, ${priced}.`
+    : `${known.length} carry a price, ${priced}; the rest are unpriced.`
 }

@@ -53,6 +53,19 @@ export const FREE: ModelPricing = {
 /** Priced at the Opus tier when the model is not one we know. */
 export const DEFAULT_PRICING: ModelPricing = ANTHROPIC[2]
 
+/// The same lookup, but it admits when it does not know.
+///
+/// `resolvePricing` falls back to the Opus tier so a cost estimate is never
+/// blank — right for a total, wrong for a label: printing "$5 / $25 per M"
+/// beside a model nobody has priced would be inventing a number and putting it
+/// where someone will read it as fact.
+export function knownPricing(modelId?: string | null, provider?: string | null): ModelPricing | null {
+  if (provider === 'mock' || modelId === 'mock-1') return FREE
+  if (!modelId) return null
+  const id = modelId.toLowerCase()
+  return ANTHROPIC.find((r) => id.includes(r.match)) ?? null
+}
+
 export function resolvePricing(modelId?: string | null, provider?: string | null): ModelPricing {
   if (provider === 'mock' || modelId === 'mock-1') return FREE
   if (!modelId) return DEFAULT_PRICING

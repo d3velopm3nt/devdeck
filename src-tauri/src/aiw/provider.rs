@@ -16,12 +16,28 @@ use serde::{Deserialize, Serialize};
 
 use super::tools::{ToolCall, ToolDefinition};
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct ModelInfo {
     pub id: String,
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context_window: Option<u32>,
+    /// Dollars per million tokens, as the provider publishes them.
+    ///
+    /// `None` means nobody said — which is not the same as nothing, and is the
+    /// honest answer for a catalogue that lists what it serves without saying
+    /// what it charges. NVIDIA's is one of those: eighty-odd ids and not a
+    /// price among them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_per_mtok: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_per_mtok: Option<f64>,
+    /// Costs nothing to call, and we know why: the provider prices it at zero,
+    /// or it runs on this machine. Never a guess — an unpriced model is
+    /// `false` here and `None` above, and the interface says "not published"
+    /// rather than "free".
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub free: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -645,6 +661,11 @@ impl LLMProvider for MockProvider {
             id: "mock-1".into(),
             name: "Scripted replies".into(),
             context_window: Some(12_000),
+            input_per_mtok: Some(0.0),
+            output_per_mtok: Some(0.0),
+            // No network, no account, no bill. The one model that is free
+            // beyond argument.
+            free: true,
         }]
     }
     fn run(&self, request: &AgentRequest) -> Result<AgentResponse, String> {
@@ -817,10 +838,27 @@ pub fn parse_openai_models(body: &serde_json::Value) -> Vec<ModelInfo> {
                 .and_then(|c| c.as_u64())
                 .map(|c| c as u32)
                 .filter(|c| *c > 0);
+            // OpenRouter publishes per-*token* prices, as strings, and marks
+            // its free tier with a `:free` id and a price of exactly "0".
+            // Most OpenAI-shaped servers publish no `pricing` at all, and
+            // absent stays absent.
+            let per_mtok = |k: &str| {
+                m.get("pricing")
+                    .and_then(|p| p.get(k))
+                    .and_then(|v| v.as_str())
+                    .and_then(|v| v.parse::<f64>().ok())
+                    .map(|v| v * 1_000_000.0)
+            };
+            let input_per_mtok = per_mtok("prompt");
+            let output_per_mtok = per_mtok("completion");
+            let free = matches!((input_per_mtok, output_per_mtok), (Some(i), Some(o)) if i == 0.0 && o == 0.0);
             Some(ModelInfo {
                 id,
                 name,
                 context_window,
+                input_per_mtok,
+                output_per_mtok,
+                free,
             })
         })
         .collect();
@@ -854,6 +892,7 @@ pub fn parse_anthropic_models(body: &serde_json::Value) -> Vec<ModelInfo> {
                 id,
                 name,
                 context_window: None,
+                ..Default::default()
             })
         })
         .collect();
@@ -1651,11 +1690,13 @@ impl LLMProvider for AnthropicProvider {
                 id: "claude-opus-4-5".into(),
                 name: "Claude Opus 4.5".into(),
                 context_window: Some(200_000),
+                ..Default::default()
             },
             ModelInfo {
                 id: "claude-sonnet-4-5".into(),
                 name: "Claude Sonnet 4.5".into(),
                 context_window: Some(200_000),
+                ..Default::default()
             },
         ]
     }
@@ -1987,6 +2028,18 @@ impl OpenAICompatibleProvider {
         Ok((text, calls, dropped, usage))
     }
 
+    /// Whether this endpoint is on this machine.
+    ///
+    /// A local server costs nothing to call — no account, no metering, nothing
+    /// leaving the machine — which makes "free" a fact about it rather than a
+    /// guess, and worth saying next to every model it serves.
+    fn is_local(&self) -> bool {
+        let u = self.config.base_url.to_lowercase();
+        ["//localhost", "//127.0.0.1", "//[::1]", "//0.0.0.0"]
+            .iter()
+            .any(|h| u.contains(h))
+    }
+
     /// `GET {base}/models` — the OpenAI directory endpoint, which OpenRouter,
     /// Ollama, LM Studio and most gateways implement.
     pub fn fetch(&self) -> Result<Vec<ModelInfo>, String> {
@@ -2012,7 +2065,15 @@ impl OpenAICompatibleProvider {
         }
         let json: serde_json::Value =
             serde_json::from_str(&text).map_err(|e| format!("{url} returned invalid JSON: {e}"))?;
-        Ok(parse_openai_models(&json))
+        let mut models = parse_openai_models(&json);
+        // Nothing this server serves costs anything, whatever it says about
+        // itself — it is running on this machine.
+        if self.is_local() {
+            for m in &mut models {
+                m.free = true;
+            }
+        }
+        Ok(models)
     }
 
     /// A cheap round trip to prove the endpoint, key and model all work.
@@ -2058,6 +2119,8 @@ impl LLMProvider for OpenAICompatibleProvider {
                 id: self.config.model.clone(),
                 name: self.config.model.clone(),
                 context_window: None,
+                free: self.is_local(),
+                ..Default::default()
             }]
         }
     }
@@ -2547,6 +2610,75 @@ mod wire_tests {
         );
     }
 
+    /// Recorded from `openrouter.ai/api/v1/models` on 3 Sep 2026: prices are
+    /// per *token*, as strings, and the free tier is exactly "0".
+    ///
+    /// The point of the test is the third model. NVIDIA's catalogue publishes
+    /// no prices at all, and an unpriced model must come back unpriced — never
+    /// zero, which would render as "free" and be a lie about somebody's bill.
+    #[test]
+    fn published_prices_are_read_and_silence_is_not_zero() {
+        let body = serde_json::json!({
+            "data": [
+                {
+                    "id": "meta/muse-spark-1.3-contributor",
+                    "name": "Meta: Muse Spark 1.3 Contributor",
+                    "context_length": 1_048_576,
+                    "pricing": { "prompt": "0.0000001", "completion": "0.0000002" }
+                },
+                {
+                    "id": "inclusionai/ling-3.0-flash-fin:free",
+                    "name": "Ling 3.0 Flash (free)",
+                    "pricing": { "prompt": "0", "completion": "0" }
+                },
+                { "id": "nvidia/nemotron-3-super-120b-a12b", "object": "model" }
+            ]
+        });
+        let models = parse_openai_models(&body);
+        assert_eq!(models.len(), 3);
+
+        let paid = models.iter().find(|m| m.id.starts_with("meta/")).unwrap();
+        // A millionth of a dollar times a million is not exactly a dime, so
+        // this asks the question money actually cares about.
+        let near = |got: Option<f64>, want: f64| {
+            matches!(got, Some(v) if (v - want).abs() < 1e-9)
+        };
+        assert!(
+            near(paid.input_per_mtok, 0.1),
+            "per token became per million: {:?}",
+            paid.input_per_mtok
+        );
+        assert!(near(paid.output_per_mtok, 0.2));
+        assert!(!paid.free);
+
+        let free = models.iter().find(|m| m.id.ends_with(":free")).unwrap();
+        assert!(free.free, "zero on both sides is free, and says so");
+
+        let silent = models.iter().find(|m| m.id.starts_with("nvidia/")).unwrap();
+        assert_eq!(silent.input_per_mtok, None, "nobody said, so nobody knows");
+        assert_eq!(silent.output_per_mtok, None);
+        assert!(!silent.free, "unpriced is not free");
+    }
+
+    /// A server on this machine bills nothing, and that is a fact about where
+    /// it runs rather than something it has to publish.
+    #[test]
+    fn a_local_endpoint_is_free_by_where_it_is() {
+        let local = OpenAICompatibleProvider::new(OpenAICompatibleConfig {
+            base_url: "http://localhost:11434/v1".into(),
+            model: "qwen2.5-coder:14b".into(),
+            ..Default::default()
+        });
+        assert!(local.list_models()[0].free);
+
+        let hosted = OpenAICompatibleProvider::new(OpenAICompatibleConfig {
+            base_url: "https://integrate.api.nvidia.com/v1".into(),
+            model: "nvidia/nemotron-3-super-120b-a12b".into(),
+            ..Default::default()
+        });
+        assert!(!hosted.list_models()[0].free);
+    }
+
     #[test]
     fn openai_usage_is_read_and_missing_usage_stays_missing() {
         let body = serde_json::json!({
@@ -2864,6 +2996,7 @@ mod transport_tests {
             id: "x".into(),
             name: "X".into(),
             context_window: None,
+            ..Default::default()
         }]);
         assert!(live.live);
         assert!(live.note.is_empty());

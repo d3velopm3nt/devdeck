@@ -462,6 +462,12 @@ export interface ModelInfo {
   id: string
   name: string
   context_window?: number
+  /** Dollars per million tokens, as the provider publishes them. Absent means
+   *  nobody said — which is not the same as nothing. */
+  input_per_mtok?: number
+  output_per_mtok?: number
+  /** Known to cost nothing: priced at zero, or running on this machine. */
+  free?: boolean
 }
 
 /** Models a provider offers, and whether the answer is actually from it.

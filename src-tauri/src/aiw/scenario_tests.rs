@@ -1288,6 +1288,118 @@ fn a_bot_with_no_agent_can_talk_in_a_room_but_cannot_move_work() {
         .any(|m| m.by.as_deref() == Some("bot:99")));
 }
 
+/// Switching a context part off takes it out of what is sent.
+///
+/// The panel and the turn call the same function, which is the whole point:
+/// a breakdown that describes a different assembly than the one that ran is
+/// worse than none, because it is believed.
+#[test]
+fn a_context_part_switched_off_is_not_sent() {
+    let t = Tmp::new("ctx-off");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
+    let c = convs(&t);
+    let conv = c
+        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .unwrap();
+
+    let before = Assistant::context(&w, &c, &c.load(&conv.id).unwrap());
+    assert!(
+        before.contains("Project in focus"),
+        "the project part is there to begin with: {before}"
+    );
+    let parts = Assistant::context_parts(&w, &c, &c.load(&conv.id).unwrap());
+    assert!(
+        parts.iter().any(|p| p.key == "project" && p.on && p.tokens > 0),
+        "and the breakdown names it: {parts:?}"
+    );
+
+    c.update_meta(&conv.id, |m| m.context_off.push("project".into()))
+        .unwrap();
+
+    let after = Assistant::context(&w, &c, &c.load(&conv.id).unwrap());
+    assert!(
+        !after.contains("Project in focus"),
+        "switched off means not sent: {after}"
+    );
+    let parts = Assistant::context_parts(&w, &c, &c.load(&conv.id).unwrap());
+    assert!(
+        parts.iter().any(|p| p.key == "project" && !p.on),
+        "and it is still listed, as off — removing it from the panel too would \
+         leave no way to put it back: {parts:?}"
+    );
+}
+
+/// An edited part is sent as written. Assembly is a starting point.
+#[test]
+fn an_edited_context_part_is_sent_as_written() {
+    let t = Tmp::new("ctx-edit");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
+    let c = convs(&t);
+    let conv = c
+        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .unwrap();
+
+    c.update_meta(&conv.id, |m| {
+        m.context_edits
+            .insert("project".into(), "## Only this\n\nNothing else matters here.".into());
+    })
+    .unwrap();
+
+    let sent = Assistant::context(&w, &c, &c.load(&conv.id).unwrap());
+    assert!(sent.contains("Nothing else matters here."), "{sent}");
+    assert!(
+        !sent.contains("Features:"),
+        "the edit replaces the assembly rather than joining it: {sent}"
+    );
+    let parts = Assistant::context_parts(&w, &c, &c.load(&conv.id).unwrap());
+    assert!(
+        parts.iter().any(|p| p.key == "project" && p.edited),
+        "and it is marked as yours: {parts:?}"
+    );
+}
+
+/// A tool switched off in a room is not offered there — and is still governed
+/// by the matrix everywhere, which this cannot widen.
+#[test]
+fn a_tool_switched_off_is_not_offered_in_that_room() {
+    let t = Tmp::new("tools-off");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
+    let c = convs(&t);
+    let conv = c
+        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .unwrap();
+
+    let persona = Persona::assistant("You coordinate.");
+    let before = Assistant::context_view(&w, &c, &conv.id, &persona).unwrap();
+    assert!(
+        before.tools.iter().any(|t| t.id == "files" && t.on),
+        "files is on to begin with: {:?}",
+        before.tools
+    );
+    assert!(before.tool_tokens > 0, "offering a tool costs prompt");
+
+    c.update_meta(&conv.id, |m| m.tools_off.push("files".into()))
+        .unwrap();
+    let after = Assistant::context_view(&w, &c, &conv.id, &persona).unwrap();
+    assert!(
+        after.tools.iter().any(|t| t.id == "files" && !t.on),
+        "listed, and off: {:?}",
+        after.tools
+    );
+    assert!(
+        after.tool_tokens < before.tool_tokens,
+        "and the turn is cheaper for it: {} then {}",
+        before.tool_tokens,
+        after.tool_tokens
+    );
+}
+
 /// A turn that fails still says it stopped.
 ///
 /// The pill beside a name reads "thinking…" until a `Turn { done }` arrives,

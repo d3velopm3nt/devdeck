@@ -302,6 +302,54 @@ export const featureThreadSend = (nodeId: number, featureId: string, text: strin
 // says so rather than answering as though it had read code up there.
 export const nodeThread = (nodeId: number) =>
   invoke<import('./aiw').ConversationMeta>('node_thread', { nodeId })
+/** One piece of what a turn will be told, named and measured. */
+export interface ContextPart {
+  key: string
+  title: string
+  source: string
+  tokens: number
+  on: boolean
+  edited: boolean
+  body: string
+}
+
+/** One tool as a turn sees it: what it may do, and what offering it costs. */
+export interface ToolLine {
+  id: string
+  title: string
+  description: string
+  permission: string
+  actions: number
+  tokens: number
+  on: boolean
+}
+
+/** Everything a turn will carry, itemised. Assembled by the same code the
+ *  turn uses, so the panel and the request cannot describe different things. */
+export interface ContextView {
+  parts: ContextPart[]
+  tools: ToolLine[]
+  system_tokens: number
+  context_tokens: number
+  tool_tokens: number
+  history_turns: number
+  history_tokens: number
+  total_tokens: number
+}
+
+export const threadContext = (conversationId: string) =>
+  invoke<ContextView>('thread_context', { conversationId })
+
+export const threadContextSet = (
+  conversationId: string,
+  kind: 'context' | 'tool',
+  key: string,
+  on: boolean,
+) => invoke<ContextView>('thread_context_set', { conversationId, kind, key, on })
+
+export const threadContextEdit = (conversationId: string, key: string, body: string) =>
+  invoke<ContextView>('thread_context_edit', { conversationId, key, body })
+
 export const nodeThreadSend = (nodeId: number, text: string) =>
   invoke<import('./aiw').AssistantReply>('node_thread_send', { nodeId, text })
 

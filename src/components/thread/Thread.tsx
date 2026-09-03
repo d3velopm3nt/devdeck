@@ -23,6 +23,7 @@ import { Icon, type IconName } from '../../lib/icons'
 import { useSpeakers } from './speakers'
 import { useAiw } from '../../lib/aiwStore'
 import { MentionText, Pill, SpeakingContext, ThreadContext } from './Pill'
+import { ContextBar } from './ContextBar'
 import { openAgentSettings, openBot } from '../../lib/dock'
 import { useApp } from '../../store'
 
@@ -377,6 +378,8 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
           ))}
         </div>
       )}
+
+      {conv && <ContextBar conversationId={conv.id} />}
 
       {onMock && (
         <div className="mb-2 flex shrink-0 items-start gap-2 rounded-lg border border-line bg-raise px-3 py-2 text-[11px] leading-[1.55] text-dim">

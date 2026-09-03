@@ -254,6 +254,50 @@ How it works:
 
 ## Designed, not built
 
+### Time — a calendar, a day, and a bot that keeps you to it — brainstormed 3 Sep 2026
+
+Next up after the bots. Talked through, not designed; written down here so the
+shape survives the conversation.
+
+**What it is.** A calendar in the sidebar with day, week, month and year views,
+across every space at once: bot schedules and the wakes that actually
+happened, features and work items, and deadlines that remind you before they
+land. Under it, a day view on a time grid — 15 minutes by default, settable
+down to 5 — for running the day rather than watching it. And a bot whose space
+is *you*: it wakes through the day, keeps you to the routine, and asks for the
+notes you would not otherwise write down.
+
+**What already exists.** `schedule.rs` runs reminders, commands and bot wakes,
+with per-schedule catch-up — a missed reminder is recorded rather than fired
+late, on purpose. Bots carry the same rhythm in `_bot.md`. Sessions and wakes
+are already in the activity feed, so the past half of a calendar has data
+today.
+
+**What has to be built before any view is worth drawing.** Three gaps, in this
+order:
+
+1. **The scheduler knows rhythms, not moments.** `every` is
+   daily/weekdays/weekly/hourly plus a minute of the day. There is no one-off,
+   no date, no duration, no end — a 2pm meeting on the 11th cannot be said at
+   all. A calendar needs moments as a first-class kind alongside rhythms.
+2. **Work items have no dates.** `id, title, status, assignee, areas` and
+   nothing else, so a calendar of work has nothing to plot. A `due:` on a work
+   item is a change to the vault format — committed, durable, shared truth —
+   and should be decided as one.
+3. **Nothing turns a deadline into a reminder.** Reminders exist; "two days
+   before" is a rule nobody holds.
+
+**The store split applies, and decides the shape.** Your routine, your day
+grid and your notes are *yours*: personal store, never a repository. A work
+item's deadline is the project's: `.devdeck`, in the vault, beside the item.
+The calendar reads both and shows them together — which is the whole point of
+it being one surface.
+
+**Open, and worth deciding before building:** whether the primary lane is your
+time or the system's; and whether "add a calendar" ever means syncing a real
+one (Google, Outlook, ICS) rather than DevDeck keeping its own. The second
+changes the foundation, so it is a decision rather than a detail.
+
 ### Bots as teammates — every node is a conversation ✅ built · `design/node-thread/`
 
 Designed 1 September 2026, built 2 September. The canvas is at

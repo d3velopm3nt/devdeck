@@ -143,6 +143,25 @@ pub struct ConversationMeta {
     /// a project. Any level of the tree can be talked to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub node: Option<i64>,
+    /// Context parts this conversation has switched off, by key.
+    ///
+    /// Assembly decides what is *available*; this decides what is sent. A
+    /// thread where the profile is noise, or where twenty remembered notes are
+    /// crowding out the question, should be able to say so — and keep saying
+    /// it, which is why it is on the conversation rather than in a menu.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub context_off: Vec<String>,
+    /// Tools this conversation has switched off, by tool id.
+    ///
+    /// Not a permission: the matrix still decides what may ever run, and this
+    /// only decides what is offered in this room. Turning `files` off here
+    /// cannot grant it anywhere.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tools_off: Vec<String>,
+    /// Replacement text for a context part, by key. What you write is what is
+    /// sent — assembly is a starting point, not a verdict.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub context_edits: std::collections::BTreeMap<String, String>,
     /// Everyone who has been pulled in, by agent or bot id.
     ///
     /// Being in a thread is free — this list is what a mention writes, and it
@@ -303,6 +322,55 @@ pub enum ChatEvent {
     Done { conversation_id: String },
 }
 
+/// One piece of what a turn will be told, named and measured.
+///
+/// The context used to be a string built in one pass: right for the model,
+/// opaque to everyone else. You could not see what was in it, could not tell
+/// which part was crowding out the rest, and could not take one out without
+/// changing the code. Same assembly, in pieces — and the pieces are what the
+/// panel shows and what the turn sends, so the two cannot disagree.
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct ContextPart {
+    /// Stable across assemblies: what "off" and an edit are remembered by.
+    pub key: String,
+    pub title: String,
+    /// Where it came from, in words — a file, a store, a lookup.
+    pub source: String,
+    pub tokens: u32,
+    /// Whether this conversation is sending it.
+    pub on: bool,
+    /// Whether the body below is yours rather than the assembly's.
+    pub edited: bool,
+    pub body: String,
+}
+
+/// One tool as it appears to a turn: what it is, what it may do, what it
+/// costs to offer.
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct ToolLine {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    /// full | read | approval — what the matrix says, which this cannot widen.
+    pub permission: String,
+    pub actions: u32,
+    pub tokens: u32,
+    pub on: bool,
+}
+
+/// Everything a turn will carry, itemised, with what each piece costs.
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct ContextView {
+    pub parts: Vec<ContextPart>,
+    pub tools: Vec<ToolLine>,
+    pub system_tokens: u32,
+    pub context_tokens: u32,
+    pub tool_tokens: u32,
+    pub history_turns: u32,
+    pub history_tokens: u32,
+    pub total_tokens: u32,
+}
+
 /// Where progress goes. A no-op is a valid sink, and nothing about
 /// correctness may depend on anyone listening: the conversation on disk is the
 /// record, and progress is a courtesy.
@@ -414,6 +482,25 @@ impl Conversations {
         &self.store
     }
 
+    /// Change something about a conversation that is not a message.
+    ///
+    /// Under the same lock as appending, and re-reading inside it, because a
+    /// conversation is a whole file: a turn appending a message while a
+    /// checkbox was being saved would write one of them over the other. That
+    /// exact bug ate messages here once already, which is why the gate exists
+    /// rather than each writer being careful.
+    pub fn update_meta(
+        &self,
+        id: &str,
+        change: impl FnOnce(&mut ConversationMeta),
+    ) -> Result<ConversationMeta, String> {
+        let _gate = writing();
+        let mut conv = self.load(id)?;
+        change(&mut conv);
+        self.save(&conv)?;
+        Ok(conv)
+    }
+
     pub fn create(&self, project_id: Option<&str>) -> Result<ConversationMeta, String> {
         let now = now_iso();
         let meta = ConversationMeta {
@@ -427,6 +514,7 @@ impl Conversations {
             node: None,
             participants: Vec::new(),
             messages: Vec::new(),
+            ..Default::default()
         };
         self.save(&meta)?;
         Ok(meta)
@@ -461,6 +549,7 @@ impl Conversations {
             node: None,
             participants: Vec::new(),
             messages: Vec::new(),
+            ..Default::default()
         };
         self.save(&meta)?;
         Ok(meta)
@@ -488,6 +577,7 @@ impl Conversations {
             node: Some(node_id),
             participants: Vec::new(),
             messages: Vec::new(),
+            ..Default::default()
         };
         self.save(&meta)?;
         Ok(meta)
@@ -523,6 +613,7 @@ impl Conversations {
             node: None,
             participants: Vec::new(),
             messages: Vec::new(),
+            ..Default::default()
         };
         self.save(&meta)?;
         Ok(meta)
@@ -892,6 +983,17 @@ impl Assistant {
             }
             t
         };
+        // Switched off for this room. Not a permission — the matrix still
+        // decides what may ever run, and this only decides what is offered
+        // here. A thread about planning does not need `terminal` in front of
+        // it, and every tool offered is prompt spent whether it is used or not.
+        if !conv.tools_off.is_empty() {
+            tools.retain(|t| {
+                let tool = t.name.split('_').next().unwrap_or("");
+                !conv.tools_off.iter().any(|off| off == tool)
+            });
+        }
+
         // The project tools are only meaningful with a project in focus. Saying
         // so beats offering a model a `files_read` that cannot resolve a root.
         if conv.project_id.is_none() {
@@ -2285,8 +2387,34 @@ impl Assistant {
     /// where the project stands. Personal facts come from the personal store;
     /// project facts from the project. They are labelled so it is obvious in
     /// the prompt which is which.
-    pub fn context(ws: &Arc<Workspace>, convs: &Conversations, conv: &ConversationMeta) -> String {
-        let mut parts: Vec<String> = Vec::new();
+    /// The context this conversation will send, as the pieces it is made of.
+    ///
+    /// One function builds both the string and the breakdown, so what the
+    /// panel shows and what the model receives cannot drift — a panel that
+    /// describes a *different* assembly than the one that ran is worse than no
+    /// panel, because it is believed.
+    pub fn context_parts(
+        ws: &Arc<Workspace>,
+        convs: &Conversations,
+        conv: &ConversationMeta,
+    ) -> Vec<ContextPart> {
+        let mut out: Vec<ContextPart> = Vec::new();
+        let mut add = |key: &str, title: &str, source: &str, body: String| {
+            if body.trim().is_empty() {
+                return;
+            }
+            let edited = conv.context_edits.get(key).cloned();
+            let body = edited.clone().unwrap_or(body);
+            out.push(ContextPart {
+                tokens: super::context::estimate_tokens(&body) as u32,
+                key: key.to_string(),
+                title: title.to_string(),
+                source: source.to_string(),
+                on: !conv.context_off.iter().any(|k| k == key),
+                edited: edited.is_some(),
+                body,
+            });
+        };
 
         let profile = convs.store().profile();
         if !profile.body.trim().is_empty() || !profile.meta.preferences.is_empty() {
@@ -2297,7 +2425,7 @@ impl Assistant {
             if !profile.body.trim().is_empty() {
                 s.push_str(&format!("\n{}\n", profile.body.trim()));
             }
-            parts.push(s);
+            add("profile", "About you", "personal store · profile", s);
         }
 
         let memories = convs.store().memories();
@@ -2315,7 +2443,7 @@ impl Assistant {
                     truncate(&d.body, 200)
                 ));
             }
-            parts.push(s);
+            add("memory", "Remembered", "personal store · memory", s);
         }
 
         if let Some(pid) = &conv.project_id {
@@ -2331,18 +2459,115 @@ impl Assistant {
                         s.push_str(&format!("- {f}\n"));
                     }
                 }
-                parts.push(s);
+                add("project", "Project in focus", ".devdeck · features", s);
             }
         }
+
+        out
+    }
+
+    /// The same context, as the string a turn actually sends.
+    pub fn context(ws: &Arc<Workspace>, convs: &Conversations, conv: &ConversationMeta) -> String {
+        let parts: Vec<String> = Self::context_parts(ws, convs, conv)
+            .into_iter()
+            .filter(|p| p.on)
+            .map(|p| p.body)
+            .collect();
 
         if parts.is_empty() {
             // "Nothing yet" is a fact, and a better one than silence: a model
             // handed an empty context cannot tell an unconfigured workspace
-            // from a failure to assemble one, and neither can we.
+            // from a failure to assemble one, and neither can we. It is also
+            // what a conversation that switched everything off should hear.
             return "## Nothing in focus\n\nNo project is selected and nothing has been remembered yet."
                 .to_string();
         }
         parts.join("\n")
+    }
+
+    /// Everything this conversation will send on its next turn, itemised.
+    ///
+    /// Assembled by the same functions the turn uses, so the panel cannot
+    /// describe one context while another is sent. The tools are listed with
+    /// what they cost, because a tool definition is prompt too — twenty tools
+    /// nobody calls are still twenty tools paid for on every turn.
+    pub fn context_view(
+        ws: &Arc<Workspace>,
+        convs: &Conversations,
+        conversation_id: &str,
+        persona: &Persona,
+    ) -> Result<ContextView, String> {
+        let conv = convs.load(conversation_id)?;
+        let parts = Self::context_parts(ws, convs, &conv);
+
+        let mut tools: Vec<ToolLine> = Vec::new();
+        if !persona.talk_only {
+            let matrix = ws.permission_matrix();
+            let mut ids: Vec<String> = super::tools::registry()
+                .into_iter()
+                .map(|t| t.id)
+                .filter(|id| {
+                    !matches!(matrix.get(&persona.agent_id, id), super::tools::Permission::None)
+                        || persona.manages_with.iter().any(|m| m == id)
+                })
+                .collect();
+            ids.sort();
+            ids.dedup();
+            for id in ids {
+                let defs = super::tools::definitions_of(&id);
+                let tokens: usize = defs
+                    .iter()
+                    .map(|d| {
+                        super::context::estimate_tokens(&d.description)
+                            + super::context::estimate_tokens(&d.input_schema.to_string())
+                    })
+                    .sum();
+                let info = super::tools::registry().into_iter().find(|t| t.id == id);
+                tools.push(ToolLine {
+                    on: !conv.tools_off.iter().any(|off| off == &id),
+                    actions: defs.len() as u32,
+                    tokens: tokens as u32,
+                    // A manager's own plan is allowed by what it is rather
+                    // than by a row, and the matrix says "none" about it —
+                    // true, and misleading printed beside a tool that works.
+                    permission: if persona.manages_with.iter().any(|m| m == &id)
+                        && matches!(
+                            matrix.get(&persona.agent_id, &id),
+                            super::tools::Permission::None
+                        ) {
+                        "manager's own".to_string()
+                    } else {
+                        format!("{:?}", matrix.get(&persona.agent_id, &id)).to_lowercase()
+                    },
+                    title: info
+                        .as_ref()
+                        .map(|t| t.name.clone())
+                        .unwrap_or_else(|| id.clone()),
+                    description: info.map(|t| t.description).unwrap_or_default(),
+                    id,
+                });
+            }
+        }
+
+        let history = Self::history(&conv);
+        let history_tokens: usize = history
+            .iter()
+            .map(|t| super::context::estimate_tokens(&t.content))
+            .sum();
+
+        let sent: u32 = parts.iter().filter(|p| p.on).map(|p| p.tokens).sum();
+        let tool_tokens: u32 = tools.iter().filter(|t| t.on).map(|t| t.tokens).sum();
+        Ok(ContextView {
+            system_tokens: super::context::estimate_tokens(&persona.system) as u32,
+            context_tokens: sent,
+            tool_tokens,
+            history_turns: history.len() as u32,
+            history_tokens: history_tokens as u32,
+            total_tokens: sent + tool_tokens + history_tokens as u32
+                + super::context::estimate_tokens(&persona.system) as u32,
+            parts,
+            tools,
+        })
     }
 
     /// The recent conversation, verbatim. Tool results are folded in as

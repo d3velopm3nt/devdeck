@@ -97,6 +97,101 @@ fn feature_persona(
 ///
 /// Returns the bots the message named, because they are also the ones that
 /// should answer it.
+/// What a thread will send on its next turn, itemised.
+///
+/// The persona matters: a bot's thread assembles as that bot, with that bot's
+/// tools, so asking "what will this send" has to ask as whoever is going to
+/// answer. Which is why this lives here, beside the code that builds personas,
+/// rather than in `aiw` where nothing knows what a bot is.
+#[tauri::command]
+pub fn thread_context(
+    app: tauri::AppHandle,
+    ws: tauri::State<Arc<Workspace>>,
+    conversation_id: String,
+) -> Result<crate::aiw::assistant::ContextView, String> {
+    let ws = ws.inner().clone();
+    let convs = ws.convs()?;
+    let conv = convs.load(&conversation_id)?;
+    let persona = persona_for_thread(&app, &ws, &conv)?;
+    crate::aiw::assistant::Assistant::context_view(&ws, &convs, &conversation_id, &persona)
+}
+
+/// Switch one context part or one tool off, or back on.
+///
+/// Remembered on the conversation, because it is a fact about this room: a
+/// thread where the profile is noise stays that way, and does not have to be
+/// tidied again every time it is opened.
+#[tauri::command]
+pub fn thread_context_set(
+    app: tauri::AppHandle,
+    ws: tauri::State<Arc<Workspace>>,
+    conversation_id: String,
+    kind: String,
+    key: String,
+    on: bool,
+) -> Result<crate::aiw::assistant::ContextView, String> {
+    let ws = ws.inner().clone();
+    let convs = ws.convs()?;
+    if !matches!(kind.as_str(), "context" | "tool") {
+        return Err(format!("unknown kind '{kind}'"));
+    }
+    let conv = convs.update_meta(&conversation_id, |conv| {
+        let list = if kind == "context" {
+            &mut conv.context_off
+        } else {
+            &mut conv.tools_off
+        };
+        list.retain(|k| k != &key);
+        if !on {
+            list.push(key);
+        }
+    })?;
+    let persona = persona_for_thread(&app, &ws, &conv)?;
+    crate::aiw::assistant::Assistant::context_view(&ws, &convs, &conversation_id, &persona)
+}
+
+/// Replace what a context part says. An empty body puts the assembly back.
+#[tauri::command]
+pub fn thread_context_edit(
+    app: tauri::AppHandle,
+    ws: tauri::State<Arc<Workspace>>,
+    conversation_id: String,
+    key: String,
+    body: String,
+) -> Result<crate::aiw::assistant::ContextView, String> {
+    let ws = ws.inner().clone();
+    let convs = ws.convs()?;
+    let conv = convs.update_meta(&conversation_id, |conv| {
+        if body.trim().is_empty() {
+            conv.context_edits.remove(&key);
+        } else {
+            conv.context_edits.insert(key, body);
+        }
+    })?;
+    let persona = persona_for_thread(&app, &ws, &conv)?;
+    crate::aiw::assistant::Assistant::context_view(&ws, &convs, &conversation_id, &persona)
+}
+
+/// Whoever answers in this room: the bot whose thread it is, the bot managing
+/// the feature, or the assistant.
+fn persona_for_thread(
+    app: &tauri::AppHandle,
+    ws: &Arc<Workspace>,
+    conv: &crate::aiw::assistant::ConversationMeta,
+) -> Result<Persona, String> {
+    if let Some(node_id) = conv.bot_node.or(conv.node) {
+        let db = app.try_state::<Db>().ok_or("no database")?;
+        let conn = db.0.lock().unwrap();
+        if let Some(bot) = crate::bots::bot_on(&conn, node_id) {
+            return Ok(crate::bots::persona_in(&conn, ws, &bot));
+        }
+    }
+    let agent = ws
+        .agent(crate::aiw::assistant::ASSISTANT_ID)
+        .ok_or("no assistant agent")?;
+    Ok(Persona::assistant(&agent.system))
+}
+
 fn pull_in_bots(
     app: &tauri::AppHandle,
     ws: &Arc<Workspace>,

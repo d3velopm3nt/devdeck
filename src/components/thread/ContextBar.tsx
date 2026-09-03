@@ -89,10 +89,16 @@ function Row({
   )
 }
 
+/// Whether the panel is open, across threads and restarts.
+const OPEN_KEY = 'devdeck.thread.context.open'
+
 export function ContextBar({ conversationId }: { conversationId: string }) {
   const [view, setView] = useState<ContextView | null>(null)
-  // Screenshot harness: open on mount so a capture shows it expanded.
-  const [open, setOpen] = useState(CAPTURE_CONTEXT)
+  // Open is remembered, because someone who wants to watch what a thread
+  // sends wants to watch it in every thread, not re-open it in each one.
+  const [open, setOpen] = useState(
+    CAPTURE_CONTEXT || localStorage.getItem(OPEN_KEY) === '1',
+  )
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [err, setErr] = useState('')
@@ -110,9 +116,17 @@ export function ContextBar({ conversationId }: { conversationId: string }) {
       .catch((e) => setErr(String(e)))
   }, [conversationId])
 
+  // Loaded whether it is open or not: shut, this row is the only place that
+  // says what a turn costs before you send one, and a row that says nothing
+  // until clicked is a row nobody clicks. The call is local — reading files
+  // this app already has — so there is nothing to save by waiting.
   useEffect(() => {
-    if (open) load()
-  }, [open, load])
+    load()
+  }, [load])
+
+  useEffect(() => {
+    localStorage.setItem(OPEN_KEY, open ? '1' : '0')
+  }, [open])
 
   const set = async (kind: 'context' | 'tool', key: string, on: boolean) => {
     setBusy(true)
@@ -142,21 +156,30 @@ export function ContextBar({ conversationId }: { conversationId: string }) {
   return (
     <div className="mb-2 shrink-0 overflow-hidden rounded-lg border border-line bg-raise">
       <button
-        className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-hover/40"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-hover/40"
         onClick={() => setOpen(!open)}
       >
-        <Icon name={open ? 'chevron-down' : 'chevron-right'} size={11} className="text-faint" />
+        <Icon name="context" size={12} className="shrink-0 text-indigo-400" />
         <span className="text-[11px] font-semibold text-dim">Context</span>
-        <span className="text-[10.5px] text-muted">
+        <span className="min-w-0 flex-1 truncate text-[10.5px] text-muted">
           {view
-            ? `${view.parts.filter((p) => p.on).length} of ${view.parts.length} parts · ${
-                view.tools.filter((t) => t.on).length
-              } of ${view.tools.length} tools`
+            ? `${view.parts.filter((p) => p.on).length} of ${view.parts.length} part${
+                view.parts.length === 1 ? '' : 's'
+              } · ${view.tools.filter((t) => t.on).length} of ${view.tools.length} tool${
+                view.tools.length === 1 ? '' : 's'
+              } · ${view.history_turns} earlier message${view.history_turns === 1 ? '' : 's'}`
             : 'what this thread sends'}
         </span>
-        <span className="ml-auto text-[10.5px] text-faint">
-          {view ? `≈${k(view.total_tokens)} tokens a turn` : ''}
-        </span>
+        {view && (
+          <span className="shrink-0 rounded bg-soft px-1.5 py-px text-[10px] font-semibold text-dim">
+            ≈{k(view.total_tokens)} tok a turn
+          </span>
+        )}
+        <Icon
+          name={open ? 'chevron-down' : 'chevron-right'}
+          size={11}
+          className="shrink-0 text-faint"
+        />
       </button>
 
       {open && (

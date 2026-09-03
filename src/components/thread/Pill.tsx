@@ -18,10 +18,7 @@ import { useApp } from '../../store'
 import { openAgentSettings, openBot } from '../../lib/dock'
 import { Icon } from '../../lib/icons'
 import { ModelPicker } from '../aiw/ModelPicker'
-
-/// The three kinds of provider an agent can run on. Same list the assistant's
-/// own chip offers, so a change made here is the same change made there.
-const PROVIDERS = ['mock', 'anthropic', 'openai-compatible']
+import { useProviders, withCurrent } from '../../lib/providers'
 
 /// Change what an agent runs on, from inside its card.
 ///
@@ -30,6 +27,7 @@ const PROVIDERS = ['mock', 'anthropic', 'openai-compatible']
 /// re-read afterwards so every pill for this agent changes at once.
 function ProviderSwitch({ agent }: { agent: { id: string; provider: string; model: string } }) {
   const a = useAiw()
+  const providers = useProviders()
   const [draft, setDraft] = useState({ provider: agent.provider, model: agent.model })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -63,9 +61,9 @@ function ProviderSwitch({ agent }: { agent: { id: string; provider: string; mode
         value={draft.provider}
         onChange={(e) => setDraft({ provider: e.target.value, model: '' })}
       >
-        {PROVIDERS.map((p) => (
-          <option key={p} value={p}>
-            {p === 'mock' ? 'Mock (no AI)' : p}
+        {withCurrent(providers, draft.provider).map(([id, label]) => (
+          <option key={id} value={id}>
+            {label}
           </option>
         ))}
       </select>

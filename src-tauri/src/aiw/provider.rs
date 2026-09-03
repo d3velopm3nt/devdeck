@@ -1411,9 +1411,22 @@ pub fn key_target(provider_id: &str) -> String {
 
 #[derive(Clone, Debug, Default)]
 pub struct AnthropicConfig {
+    /// What this *instance* is called in the registry, in the agent files and
+    /// in the credential store. Empty means the one built-in Anthropic setup.
+    pub id: String,
     /// Credential Manager target, not the key.
     pub key_target: String,
     pub model: String,
+}
+
+impl AnthropicConfig {
+    pub fn instance_id(&self) -> &str {
+        if self.id.is_empty() {
+            AnthropicProvider::ID
+        } else {
+            &self.id
+        }
+    }
 }
 
 /// Anthropic's API version header. Required on every request; the API is
@@ -1627,7 +1640,7 @@ impl AnthropicProvider {
 
 impl LLMProvider for AnthropicProvider {
     fn id(&self) -> &str {
-        Self::ID
+        self.config.instance_id()
     }
     fn name(&self) -> &str {
         "Anthropic"
@@ -1699,6 +1712,15 @@ impl LLMProvider for AnthropicProvider {
 /// the property that makes "add a provider" a settings change.
 #[derive(Clone, Debug, Default)]
 pub struct OpenAICompatibleConfig {
+    /// What this endpoint is called everywhere it is referred to: the registry,
+    /// an agent's `provider:` line, its entry in Credential Manager.
+    ///
+    /// This is the whole of "you can have more than one". While a provider was
+    /// identified by the shape it speaks, NVIDIA and OpenRouter and a local
+    /// Ollama were three names for one slot, and setting up the second quietly
+    /// replaced the first. Empty means the original single slot, which is what
+    /// keeps agents configured before this change pointing at something.
+    pub id: String,
     pub name: String,
     pub base_url: String,
     /// Credential Manager target, not the key. See `key_target`.
@@ -1709,6 +1731,14 @@ pub struct OpenAICompatibleConfig {
 }
 
 impl OpenAICompatibleConfig {
+    pub fn instance_id(&self) -> &str {
+        if self.id.is_empty() {
+            OpenAICompatibleProvider::ID
+        } else {
+            &self.id
+        }
+    }
+
     fn api_key(&self) -> Option<String> {
         crate::creds::get(&self.key_target)
     }
@@ -2011,7 +2041,7 @@ impl OpenAICompatibleProvider {
 
 impl LLMProvider for OpenAICompatibleProvider {
     fn id(&self) -> &str {
-        Self::ID
+        self.config.instance_id()
     }
     fn name(&self) -> &str {
         if self.config.name.is_empty() {
@@ -2105,11 +2135,11 @@ pub struct ProviderRegistry {
     /// on an approval prompt held it for the length of the prompt — which made
     /// the app look hung exactly when you went to look at why.
     providers: Vec<Arc<dyn LLMProvider>>,
-    /// A typed copy of the OpenAI-compatible provider's config, so a probe can
-    /// be run without downcasting a trait object.
-    openai: Option<OpenAICompatibleConfig>,
+    /// Typed copies, one per configured instance, so a probe can be run
+    /// without downcasting a trait object.
+    openai: Vec<OpenAICompatibleConfig>,
     /// The same, for Anthropic.
-    anthropic: Option<AnthropicConfig>,
+    anthropic: Vec<AnthropicConfig>,
 }
 
 impl Default for ProviderRegistry {
@@ -2124,8 +2154,8 @@ impl ProviderRegistry {
     pub fn new() -> Self {
         Self {
             providers: vec![Arc::new(MockProvider)],
-            openai: None,
-            anthropic: None,
+            openai: Vec::new(),
+            anthropic: Vec::new(),
         }
     }
 
@@ -2134,23 +2164,49 @@ impl ProviderRegistry {
         self.providers.push(Arc::from(p));
     }
 
-    /// Remember the OpenAI-compatible config alongside the trait object.
+    /// Remember the config alongside the trait object, replacing whatever was
+    /// registered under the same instance id — and only that one.
     pub fn register_anthropic(&mut self, config: AnthropicConfig) {
-        self.anthropic = Some(config.clone());
+        self.anthropic
+            .retain(|c| c.instance_id() != config.instance_id());
+        self.anthropic.push(config.clone());
         self.register(Box::new(AnthropicProvider::new(config)));
     }
 
     pub fn register_openai(&mut self, config: OpenAICompatibleConfig) {
-        self.openai = Some(config.clone());
+        self.openai
+            .retain(|c| c.instance_id() != config.instance_id());
+        self.openai.push(config.clone());
         self.register(Box::new(OpenAICompatibleProvider::new(config)));
     }
 
-    pub fn openai_compatible(&self) -> Option<OpenAICompatibleProvider> {
-        self.openai.clone().map(OpenAICompatibleProvider::new)
+    pub fn openai_compatible(&self, id: &str) -> Option<OpenAICompatibleProvider> {
+        self.openai
+            .iter()
+            .find(|c| c.instance_id() == id)
+            .cloned()
+            .map(OpenAICompatibleProvider::new)
     }
 
-    pub fn anthropic(&self) -> Option<AnthropicProvider> {
-        self.anthropic.clone().map(AnthropicProvider::new)
+    pub fn anthropic(&self, id: &str) -> Option<AnthropicProvider> {
+        self.anthropic
+            .iter()
+            .find(|c| c.instance_id() == id)
+            .cloned()
+            .map(AnthropicProvider::new)
+    }
+
+    /// Forget one instance entirely — the endpoint and its typed config.
+    /// The mock is not removable: something must always be able to answer.
+    pub fn remove(&mut self, id: &str) -> bool {
+        if id == MockProvider::ID {
+            return false;
+        }
+        let had = self.providers.iter().any(|p| p.id() == id);
+        self.providers.retain(|p| p.id() != id);
+        self.openai.retain(|c| c.instance_id() != id);
+        self.anthropic.retain(|c| c.instance_id() != id);
+        had
     }
 
     pub fn get(&self, id: &str) -> Option<Arc<dyn LLMProvider>> {
@@ -2275,6 +2331,83 @@ Offline sync."
             "no base URL or model is not configured"
         );
         assert!(!unset.health().ok);
+    }
+
+    /// The bug this design removes: NVIDIA and OpenRouter and a local Ollama
+    /// all speak the OpenAI shape, and while that shape *was* the identity,
+    /// configuring the second silently replaced the first.
+    #[test]
+    fn endpoints_speaking_the_same_protocol_coexist() {
+        let mut r = ProviderRegistry::new();
+        for (id, name, url, model) in [
+            ("nvidia", "NVIDIA NIM", "https://integrate.api.nvidia.com/v1", "nvidia/nemotron-3-super-120b-a12b"),
+            ("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", "anthropic/claude-sonnet-4.5"),
+            ("ollama", "Ollama", "http://localhost:11434/v1", "llama3.1"),
+        ] {
+            r.register_openai(OpenAICompatibleConfig {
+                id: id.into(),
+                name: name.into(),
+                base_url: url.into(),
+                model: model.into(),
+                ..Default::default()
+            });
+        }
+        // Three endpoints and the mock, each answering to its own name.
+        assert_eq!(r.list().len(), 4);
+        assert_eq!(r.get("nvidia").unwrap().name(), "NVIDIA NIM");
+        assert_eq!(r.get("ollama").unwrap().name(), "Ollama");
+        assert_eq!(
+            r.openai_compatible("openrouter").unwrap().config.base_url,
+            "https://openrouter.ai/api/v1"
+        );
+
+        // Re-configuring one replaces that one only.
+        r.register_openai(OpenAICompatibleConfig {
+            id: "nvidia".into(),
+            name: "NVIDIA NIM".into(),
+            base_url: "https://integrate.api.nvidia.com/v1".into(),
+            model: "openai/gpt-oss-20b".into(),
+            ..Default::default()
+        });
+        assert_eq!(r.list().len(), 4);
+        assert_eq!(
+            r.openai_compatible("nvidia").unwrap().config.model,
+            "openai/gpt-oss-20b"
+        );
+
+        // Removing one leaves the others, and the mock cannot be removed —
+        // something must always be able to answer.
+        assert!(r.remove("ollama"));
+        assert!(r.get("ollama").is_none());
+        assert_eq!(r.list().len(), 3);
+        assert!(!r.remove(MockProvider::ID));
+        assert!(r.get(MockProvider::ID).is_some());
+    }
+
+    /// A setup made before endpoints had ids is called after the protocol it
+    /// speaks, and the agents pointing at it must keep working.
+    #[test]
+    fn a_config_with_no_id_keeps_answering_to_the_old_name() {
+        let mut r = ProviderRegistry::new();
+        r.register_openai(OpenAICompatibleConfig {
+            name: "NVIDIA NIM".into(),
+            base_url: "https://integrate.api.nvidia.com/v1".into(),
+            model: "nvidia/nemotron-3-super-120b-a12b".into(),
+            ..Default::default()
+        });
+        assert!(
+            r.get(OpenAICompatibleProvider::ID).is_some(),
+            "an agent saying provider: openai-compatible still finds it"
+        );
+        // And a named one alongside it is a second endpoint, not a replacement.
+        r.register_openai(OpenAICompatibleConfig {
+            id: "openrouter".into(),
+            name: "OpenRouter".into(),
+            base_url: "https://openrouter.ai/api/v1".into(),
+            model: "x/y".into(),
+            ..Default::default()
+        });
+        assert_eq!(r.list().len(), 3);
     }
 
     #[test]
@@ -2581,6 +2714,7 @@ mod transport_tests {
 
     fn cfg() -> OpenAICompatibleConfig {
         OpenAICompatibleConfig {
+            id: "openrouter".into(),
             name: "OpenRouter".into(),
             base_url: "https://openrouter.ai/api/v1".into(),
             // A target that will not exist, so no key is found and nothing in
@@ -2754,6 +2888,7 @@ mod transport_tests {
     #[test]
     fn fetching_models_without_configuration_fails_before_the_network() {
         let p = AnthropicProvider::new(AnthropicConfig {
+            id: String::new(),
             key_target: key_target("anthropic-test-nokey"),
             model: "claude-sonnet-4-5".into(),
         });
@@ -2951,6 +3086,7 @@ mod transport_tests {
     #[test]
     fn anthropic_refuses_to_call_out_half_configured() {
         let p = AnthropicProvider::new(AnthropicConfig {
+            id: String::new(),
             key_target: key_target("anthropic-test-missing"),
             model: String::new(),
         });

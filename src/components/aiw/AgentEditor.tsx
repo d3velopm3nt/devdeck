@@ -12,6 +12,7 @@ import { Icon } from '../../lib/icons'
 import { useAiw } from '../../lib/aiwStore'
 import { aiw, type AgentFile, type SkillFile } from '../../lib/aiw'
 import { ModelPicker } from './ModelPicker'
+import { useProviders, withCurrent } from '../../lib/providers'
 
 const PERMISSIONS: Array<[string, string]> = [
   ['full', 'Allowed'],
@@ -22,6 +23,7 @@ const PERMISSIONS: Array<[string, string]> = [
 
 export function AgentEditor({ id, onClose }: { id: string; onClose: () => void }) {
   const a = useAiw()
+  const providers = useProviders()
   const [file, setFile] = useState<AgentFile | null>(null)
   const [skills, setSkills] = useState<SkillFile[]>([])
   const [saving, setSaving] = useState(false)
@@ -120,9 +122,9 @@ export function AgentEditor({ id, onClose }: { id: string; onClose: () => void }
                 value={file.provider}
                 onChange={(e) => edit({ provider: e.target.value, model: '' })}
               >
-                {['mock', 'anthropic', 'openai-compatible'].map((p) => (
-                  <option key={p} value={p}>
-                    {p === 'mock' ? 'Mock (no AI)' : p}
+                {withCurrent(providers, file.provider).map(([id, label]) => (
+                  <option key={id} value={id}>
+                    {label}
                   </option>
                 ))}
               </select>

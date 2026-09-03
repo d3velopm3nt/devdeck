@@ -334,6 +334,9 @@ export interface ProviderHealth {
 /// Saved provider configuration. Never carries a key — the UI is told only
 /// *that* one is stored, never what it is.
 export interface ProviderSetup {
+  /** Which endpoint this is: the card it came from, and the name an agent's
+   *  `provider:` line uses. Several setups can share a `kind`. */
+  id: string
   kind: string
   name: string
   base_url: string
@@ -344,6 +347,8 @@ export interface ProviderSetup {
 }
 
 export interface ProviderConfigInput {
+  /** Omit for the one legacy setup that is named after its protocol. */
+  id?: string
   kind: string
   name: string
   baseUrl: string
@@ -628,9 +633,12 @@ export const aiw = {
   grantForget: (id: string) => invoke<void>('aiw_grant_forget', { id }),
   providers: () => invoke<[string, string, ProviderHealth][]>('aiw_providers'),
   providerSetups: () => invoke<ProviderSetup[]>('aiw_provider_setups'),
+  removeProvider: (providerId: string) =>
+    invoke<void>('aiw_provider_remove', { providerId }),
   configureProvider: (c: ProviderConfigInput) =>
     invoke<void>('aiw_configure_provider', {
       config: {
+        id: c.id ?? '',
         kind: c.kind,
         name: c.name,
         base_url: c.baseUrl,

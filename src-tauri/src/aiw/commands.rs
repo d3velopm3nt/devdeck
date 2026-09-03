@@ -1206,13 +1206,16 @@ pub fn aiw_configure_provider(
 ) -> Result<(), String> {
     ws.configure_provider(config.clone())?;
 
-    // Replace this kind's entry, keeping the others.
+    // Replace this endpoint's entry, keeping every other endpoint — including
+    // the ones speaking the same protocol, which is the point.
     let mut saved = {
         let conn = db.0.lock().unwrap();
         saved_provider_configs(&conn)
     };
-    saved.retain(|c| c.kind != config.kind);
+    let id = config.instance_id().to_string();
+    saved.retain(|c| c.instance_id() != id);
     let mut stored = config;
+    stored.id = id;
     // Belt and braces: the field is skip_serializing, and it is cleared here
     // too. A key must not reach the database by any route.
     stored.api_key = None;
@@ -1235,6 +1238,9 @@ pub fn saved_provider_configs(conn: &rusqlite::Connection) -> Vec<ProviderConfig
 /// is told *that* one is saved, never what it is.
 #[derive(Serialize, Clone, Debug)]
 pub struct ProviderSetup {
+    /// Which endpoint this is — the card it was set up from, and the name an
+    /// agent's `provider:` line uses.
+    pub id: String,
     pub kind: String,
     pub name: String,
     pub base_url: String,
@@ -1251,7 +1257,8 @@ pub fn aiw_provider_setups(db: tauri::State<crate::db::Db>) -> Vec<ProviderSetup
     saved_provider_configs(&conn)
         .into_iter()
         .map(|c| ProviderSetup {
-            has_key: crate::creds::exists(&super::provider::key_target(&c.kind)),
+            has_key: crate::creds::exists(&super::provider::key_target(c.instance_id())),
+            id: c.instance_id().to_string(),
             kind: c.kind,
             name: c.name,
             base_url: c.base_url,
@@ -1275,6 +1282,26 @@ pub async fn aiw_provider_test(ws: Ws<'_>, provider_id: String) -> Result<String
 #[tauri::command]
 pub fn aiw_provider_forget_key(ws: Ws, provider_id: String) -> bool {
     ws.forget_provider_key(&provider_id)
+}
+
+/// Remove an endpoint entirely: its registration, its saved configuration and
+/// its key. Agents pointed at it will report it as missing rather than quietly
+/// answering from another endpoint that happens to speak the same protocol.
+#[tauri::command]
+pub fn aiw_provider_remove(
+    ws: Ws,
+    db: tauri::State<crate::db::Db>,
+    provider_id: String,
+) -> Result<(), String> {
+    ws.remove_provider(&provider_id);
+    let mut saved = {
+        let conn = db.0.lock().unwrap();
+        saved_provider_configs(&conn)
+    };
+    saved.retain(|c| c.instance_id() != provider_id);
+    let json = serde_json::to_string(&saved).map_err(|e| e.to_string())?;
+    let conn = db.0.lock().unwrap();
+    crate::db::setting_set_conn(&conn, PROVIDERS_KEY, &json)
 }
 
 /// Where agent→provider assignments *used* to be remembered.

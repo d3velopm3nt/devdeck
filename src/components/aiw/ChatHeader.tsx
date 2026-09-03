@@ -11,6 +11,7 @@ import { Icon } from '../../lib/icons'
 import { useAiw } from '../../lib/aiwStore'
 import { aiw } from '../../lib/aiw'
 import { ModelPicker } from './ModelPicker'
+import { useProviders, withCurrent } from '../../lib/providers'
 
 export function ProviderChip() {
   const a = useAiw()
@@ -19,6 +20,7 @@ export function ProviderChip() {
   const wrap = useRef<HTMLDivElement>(null)
 
   const agent = a.agents.find((x) => x.id === 'assistant')
+  const providers = useProviders()
   const [draft, setDraft] = useState({ provider: '', model: '' })
 
   const provider = agent?.provider ?? ''
@@ -77,9 +79,9 @@ export function ProviderChip() {
             value={draft.provider}
             onChange={(e) => setDraft({ provider: e.target.value, model: '' })}
           >
-            {['mock', 'anthropic', 'openai-compatible'].map((p) => (
-              <option key={p} value={p}>
-                {p === 'mock' ? 'Mock (no AI)' : p}
+            {withCurrent(providers, draft.provider).map(([id, label]) => (
+              <option key={id} value={id}>
+                {label}
               </option>
             ))}
           </select>

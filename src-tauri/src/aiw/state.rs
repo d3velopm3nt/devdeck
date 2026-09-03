@@ -133,7 +133,13 @@ pub struct WorkClaim {
 /// What the Settings screen sends to point DevDeck at a real model.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct ProviderConfig {
-    /// "anthropic" | "openai-compatible"
+    /// What this endpoint is called: `nvidia`, `openrouter`, `ollama`, or a
+    /// slug for one you named yourself. Defaults to the kind, which is what
+    /// every setup made before providers could coexist is called.
+    #[serde(default)]
+    pub id: String,
+    /// "anthropic" | "openai-compatible" — the wire shape it speaks, which is
+    /// no longer its identity.
     pub kind: String,
     #[serde(default)]
     pub name: String,
@@ -150,6 +156,19 @@ pub struct ProviderConfig {
     pub headers: Vec<(String, String)>,
     #[serde(default)]
     pub timeout_secs: Option<u64>,
+}
+
+impl ProviderConfig {
+    /// The name this endpoint answers to. Falls back to the wire protocol,
+    /// which is what a setup saved before providers could coexist is called —
+    /// and what the agents configured then still point at.
+    pub fn instance_id(&self) -> &str {
+        if self.id.trim().is_empty() {
+            &self.kind
+        } else {
+            self.id.trim()
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -406,17 +425,19 @@ impl Workspace {
     /// dropped here. It is never written to SQLite, never returned over IPC and
     /// never kept in the provider's config — only the target to look it up by.
     pub fn configure_provider(&self, cfg: ProviderConfig) -> Result<(), String> {
-        let target = super::provider::key_target(&cfg.kind);
+        let id = cfg.instance_id().to_string();
+        let target = super::provider::key_target(&id);
         // An empty key means "leave whatever is saved alone", so someone can
         // change the model without retyping their key.
         if let Some(k) = cfg.api_key.as_deref().filter(|k| !k.is_empty()) {
-            crate::creds::set(&target, &cfg.kind, k)?;
+            crate::creds::set(&target, &id, k)?;
         }
 
         let mut reg = self.providers.lock().unwrap();
         match cfg.kind.as_str() {
             "anthropic" => {
                 reg.register_anthropic(AnthropicConfig {
+                    id,
                     key_target: target,
                     model: cfg.model,
                 });
@@ -427,6 +448,7 @@ impl Workspace {
                     return Err("an OpenAI-compatible provider needs a base URL".into());
                 }
                 reg.register_openai(OpenAICompatibleConfig {
+                    id,
                     name: cfg.name,
                     base_url: cfg.base_url,
                     key_target: target,
@@ -487,16 +509,12 @@ impl Workspace {
             let p = reg
                 .get(id)
                 .ok_or_else(|| format!("'{id}' is not configured"))?;
-            if id == super::provider::OpenAICompatibleProvider::ID {
-                match reg.openai_compatible() {
-                    Some(p) => Probe::Openai(p),
-                    None => return Err("no OpenAI-compatible provider is configured".into()),
-                }
-            } else if id == super::provider::AnthropicProvider::ID {
-                match reg.anthropic() {
-                    Some(p) => Probe::Anthropic(p),
-                    None => return Err("no Anthropic provider is configured".into()),
-                }
+            // By instance, not by protocol: several endpoints can speak the
+            // same shape, and the one being tested is the one named.
+            if let Some(o) = reg.openai_compatible(id) {
+                Probe::Openai(o)
+            } else if let Some(a) = reg.anthropic(id) {
+                Probe::Anthropic(a)
             } else {
                 Probe::Health(p.health())
             }
@@ -517,8 +535,18 @@ impl Workspace {
 
     /// Forget a provider's saved key. The configuration stays, so the form
     /// still shows what was set up — only the secret goes.
-    pub fn forget_provider_key(&self, kind: &str) -> bool {
-        crate::creds::delete(&super::provider::key_target(kind))
+    pub fn forget_provider_key(&self, id: &str) -> bool {
+        crate::creds::delete(&super::provider::key_target(id))
+    }
+
+    /// Remove an endpoint altogether: the registry entry, its typed config and
+    /// its key. Agents pointed at it are left naming a provider that is gone,
+    /// which reads as "not configured" rather than silently answering from
+    /// somewhere else.
+    pub fn remove_provider(&self, id: &str) -> bool {
+        let removed = self.providers.lock().unwrap().remove(id);
+        crate::creds::delete(&super::provider::key_target(id));
+        removed
     }
 
     // -- projects ---------------------------------------------------------

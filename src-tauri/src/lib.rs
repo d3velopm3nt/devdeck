@@ -1056,6 +1056,7 @@ pub fn run() {
             aiw::commands::aiw_provider_setups,
             aiw::commands::aiw_provider_test,
             aiw::commands::aiw_provider_forget_key,
+            aiw::commands::aiw_provider_remove,
             aiw::commands::aiw_set_agent_provider,
             aiw::commands::aiw_app_status,
             aiw::commands::aiw_changed_since,

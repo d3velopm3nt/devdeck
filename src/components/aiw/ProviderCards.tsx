@@ -203,10 +203,34 @@ export function ProviderCards({ onChanged }: { onChanged?: () => void }) {
 
   const def = DEFS.find((d) => d.id === selected) ?? DEFS[0]
 
-  // A saved config matches by *kind* — DevDeck registers one provider per wire
-  // protocol, so its name records which card it was set up from.
-  const saved = setups.find((s) => s.kind === def.kind && (s.name === def.name || def.custom))
+  // A saved config belongs to the card it was set up from. Endpoints used to
+  // be identified by the protocol they speak, so a setup made then is named
+  // after the protocol instead — matched here by name so it lands on its own
+  // card, and re-saved under the id it already has so the agents pointing at
+  // it keep working.
+  const savedFor = (d: Def) => {
+    const own = setups.find((s) => s.id === d.id)
+    if (own) return own
+    // A legacy row is named after its protocol, so it is placed by the name it
+    // was saved under. The Custom card takes one whose name matches no card at
+    // all — without that last clause it adopted every legacy row and reported
+    // itself connected to somebody else's endpoint.
+    const legacy = setups.filter((s) => s.id === s.kind)
+    return d.custom
+      ? legacy.find((s) => !!s.name && !DEFS.some((x) => x.name === s.name))
+      : legacy.find((s) => s.name === d.name)
+  }
+  const saved = savedFor(def)
   const connected = !!saved?.has_key || (!!saved && !!def.local)
+
+  /// Which endpoint the buttons on this card act on.
+  ///
+  /// A custom gateway is named after itself, so two of them are two endpoints
+  /// rather than one that overwrites the other.
+  const slug = (t: string) =>
+    t.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+  const instanceId =
+    saved?.id ?? (def.custom ? `custom-${slug(name) || 'endpoint'}` : def.id)
 
   const load = async () => {
     try {
@@ -247,6 +271,7 @@ export function ProviderCards({ onChanged }: { onChanged?: () => void }) {
     setResult(null)
     try {
       await aiw.configureProvider({
+        id: instanceId,
         kind: def.kind,
         name: def.custom ? name.trim() || 'Custom endpoint' : def.name,
         baseUrl: (def.custom ? baseUrl : def.baseUrl ?? '').trim(),
@@ -274,7 +299,7 @@ export function ProviderCards({ onChanged }: { onChanged?: () => void }) {
     setTesting(true)
     setResult(null)
     try {
-      setResult({ ok: true, text: await aiw.testProvider(def.kind) })
+      setResult({ ok: true, text: await aiw.testProvider(instanceId) })
     } catch (e) {
       setResult({ ok: false, text: e instanceof Error ? e.message : String(e) })
     } finally {
@@ -283,16 +308,30 @@ export function ProviderCards({ onChanged }: { onChanged?: () => void }) {
   }
 
   const forget = async () => {
-    await aiw.forgetProviderKey(def.kind)
+    await aiw.forgetProviderKey(instanceId)
     await load()
     onChanged?.()
     setResult({ ok: true, text: 'Key deleted from Credential Manager.' })
   }
 
+  // Removing an endpoint leaves any agent pointed at it naming something that
+  // is gone, which reads as "not configured" — better than silently answering
+  // from another endpoint that happens to speak the same protocol.
+  const remove = async () => {
+    await aiw.removeProvider(instanceId)
+    await load()
+    onChanged?.()
+    setResult({ ok: true, text: 'Endpoint removed. Agents using it will need another.' })
+  }
+
   const statusOf = (d: Def) => {
-    const s = setups.find((x) => x.kind === d.kind && (x.name === d.name || d.custom))
+    const s = savedFor(d)
     if (d.unavailable) return { text: 'Not available yet', cls: 'text-warn' }
-    if (s?.has_key || (s && d.local)) return { text: 'Connected', cls: 'text-ok' }
+    // "Connected" for a local server means only that it was written down: no
+    // round trip has happened, and the server may not even be running. Test
+    // connection is what earns the word.
+    if (s && d.local) return { text: 'Set up', cls: 'text-ok' }
+    if (s?.has_key) return { text: 'Connected', cls: 'text-ok' }
     if (d.local) return { text: 'No key needed', cls: 'text-faint' }
     return { text: 'Not connected', cls: 'text-faint' }
   }
@@ -350,8 +389,10 @@ export function ProviderCards({ onChanged }: { onChanged?: () => void }) {
         <div className="mt-3.5 flex items-start gap-2.5 border-t border-line pt-3">
           <Icon name="info" size={13} className="mt-px shrink-0 text-muted" />
           <div className="text-[11px] leading-[1.55] text-muted">
-            Connecting a provider does not switch anything by itself — assign it to an agent under{' '}
-            <span className="text-dim">Agents</span> below.
+            Connect as many as you like — NVIDIA, OpenRouter and a local Ollama can all be set up
+            at once. Connecting one does not switch anything by itself: assign it to an agent under{' '}
+            <span className="text-dim">Agents</span> below, where each agent also picks its own
+            model.
           </div>
         </div>
 
@@ -460,7 +501,7 @@ export function ProviderCards({ onChanged }: { onChanged?: () => void }) {
                 rather than showing an empty dropdown and a failed lookup. */}
             {connected ? (
               <ModelPicker
-                providerId={def.id}
+                providerId={instanceId}
                 value={model}
                 onChange={setModel}
                 hint={def.modelHint}
@@ -587,6 +628,11 @@ export function ProviderCards({ onChanged }: { onChanged?: () => void }) {
             {saved?.has_key && (
               <button className="btn-ghost text-[11px] text-muted" onClick={() => void forget()}>
                 Forget key
+              </button>
+            )}
+            {saved && (
+              <button className="btn-ghost text-[11px] text-muted" onClick={() => void remove()}>
+                Remove
               </button>
             )}
           </div>

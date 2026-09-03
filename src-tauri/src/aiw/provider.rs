@@ -734,6 +734,27 @@ pub fn to_anthropic_tools(tools: &[ToolDefinition]) -> serde_json::Value {
 /// The same schema under a different key, which is exactly why this belongs in
 /// one function rather than being written twice.
 #[allow(dead_code)]
+/// Which model this turn actually asks for.
+///
+/// An agent carries its own provider and model — that is what the picker on
+/// its card sets, and what the call log writes down. The providers were
+/// sending their *configured* model regardless, so choosing Opus for one agent
+/// and Sonnet for another changed the label and nothing else: the log said one
+/// thing and the wire carried another, which is the kind of quiet lie the
+/// analytics are built on.
+///
+/// The provider's own model stays the fallback, for an agent that names none.
+/// The mock's id is never valid on a real provider, so an agent left holding
+/// it after a provider switch falls back rather than asking NVIDIA for
+/// `mock-1`.
+pub fn model_for(request: &AgentRequest, configured: &str) -> String {
+    let named = request.model.trim();
+    if named.is_empty() || named == "mock-1" {
+        return configured.to_string();
+    }
+    named.to_string()
+}
+
 pub fn to_openai_tools(tools: &[ToolDefinition]) -> serde_json::Value {
     serde_json::Value::Array(
         tools
@@ -1151,9 +1172,14 @@ fn assemble(message: String, calls: &[RawToolCall], dropped: &[String]) -> Agent
 #[derive(Default)]
 pub struct StreamAccumulator {
     text: String,
+    /// What a reasoning model thought on the way. Kept apart from `text`
+    /// because it is not the answer — it is used only when nothing else
+    /// arrived, so that a turn is never silently empty.
+    reasoning: String,
     /// index -> (id, name, raw argument text so far)
     calls: std::collections::BTreeMap<u64, (String, String, String)>,
     done: bool,
+    usage: Option<TokenUsage>,
 }
 
 impl StreamAccumulator {
@@ -1163,6 +1189,15 @@ impl StreamAccumulator {
 
     pub fn finished(&self) -> bool {
         self.done
+    }
+
+    /// What the stream said it cost, if it said at all.
+    ///
+    /// OpenAI-compatible endpoints send this only when the request asked for
+    /// it (`stream_options.include_usage`), and some gateways never do — which
+    /// is why it stays `None` rather than becoming zero.
+    pub fn usage(&self) -> Option<TokenUsage> {
+        self.usage
     }
 
     /// Feed one raw SSE line. Returns any newly arrived visible text, so a
@@ -1181,6 +1216,15 @@ impl StreamAccumulator {
     }
 
     pub fn push_chunk(&mut self, chunk: &serde_json::Value) -> Option<String> {
+        // The usage chunk carries no delta and, on some endpoints, no choices
+        // at all, so it has to be read before anything gives up on the chunk.
+        if let Some(u) = TokenUsage::from_openai(chunk) {
+            self.usage = Some(match self.usage {
+                Some(prev) => prev.merge(u),
+                None => u,
+            });
+        }
+
         let delta = chunk
             .get("choices")
             .and_then(|c| c.as_array())
@@ -1192,6 +1236,15 @@ impl StreamAccumulator {
             if !t.is_empty() {
                 self.text.push_str(t);
                 fresh = Some(t.to_string());
+            }
+        }
+
+        // A reasoning model streams its thinking under its own key and leaves
+        // `content` null until it is done — NVIDIA's gpt-oss does exactly
+        // this. Collected, but not forwarded as if it were the answer.
+        for k in ["reasoning_content", "reasoning"] {
+            if let Some(t) = delta.get(k).and_then(|c| c.as_str()) {
+                self.reasoning.push_str(t);
             }
         }
 
@@ -1246,7 +1299,14 @@ impl StreamAccumulator {
                 None => dropped.push(name),
             }
         }
-        (self.text, calls, dropped)
+        // Nothing said and nothing called: a reasoning model that spent the
+        // whole turn thinking. Its own words beat an empty bubble.
+        let text = if self.text.trim().is_empty() && calls.is_empty() {
+            self.reasoning
+        } else {
+            self.text
+        };
+        (text, calls, dropped)
     }
 }
 
@@ -1263,6 +1323,16 @@ pub fn from_openai_response(body: &serde_json::Value) -> (String, Vec<RawToolCal
     let text = message
         .get("content")
         .and_then(|c| c.as_str())
+        .unwrap_or_default()
+        .to_string();
+
+    // `content: null` with the words under `reasoning` is what NVIDIA's
+    // gpt-oss returns, and taking the content field literally made the model
+    // look mute. Used only when there is nothing else in the turn — reasoning
+    // is not the answer when an answer exists.
+    let reasoning = ["reasoning_content", "reasoning"]
+        .iter()
+        .find_map(|k| message.get(*k).and_then(|c| c.as_str()))
         .unwrap_or_default()
         .to_string();
 
@@ -1289,6 +1359,11 @@ pub fn from_openai_response(body: &serde_json::Value) -> (String, Vec<RawToolCal
             });
         }
     }
+    let text = if text.trim().is_empty() && calls.is_empty() {
+        reasoning
+    } else {
+        text
+    };
     (text, calls)
 }
 
@@ -1382,7 +1457,7 @@ impl AnthropicProvider {
             return Err("Anthropic provider has no API key configured".into());
         }
         let mut body = serde_json::json!({
-            "model": self.config.model,
+            "model": model_for(request, &self.config.model),
             "max_tokens": ANTHROPIC_MAX_TOKENS,
             // Top-level, not a message: this is the first thing that differs
             // from the OpenAI shape, and sending it as a message is a 400.
@@ -1711,13 +1786,82 @@ impl OpenAICompatibleProvider {
     /// The request body for one turn. Shared so the streaming and blocking
     /// paths cannot ask for different things.
     fn body(&self, request: &AgentRequest, stream: bool) -> serde_json::Value {
-        serde_json::json!({
-            "model": self.config.model,
+        let mut body = serde_json::json!({
+            "model": model_for(request, &self.config.model),
             "messages": self.messages(request),
-            "tools": to_openai_tools(&request.tools),
-            "tool_choice": "auto",
             "stream": stream,
-        })
+        });
+        let map = body.as_object_mut().expect("just built an object");
+
+        // Only when there are any. A talk-only turn hands over no tools, and
+        // several NIM models reject `"tools": []` outright rather than reading
+        // it as "none" — which looks like the provider being broken when it is
+        // the request that is malformed.
+        if !request.tools.is_empty() {
+            map.insert("tools".into(), to_openai_tools(&request.tools));
+            map.insert("tool_choice".into(), serde_json::json!("auto"));
+        }
+        if stream {
+            // Without this a stream reports no usage at all, and every
+            // streamed turn lands in the analytics as "not reported".
+            map.insert(
+                "stream_options".into(),
+                serde_json::json!({ "include_usage": true }),
+            );
+        }
+        body
+    }
+
+    /// Turn a failed response into something a person can act on.
+    ///
+    /// The catalogue at `/models` is what a provider *publishes*, not what
+    /// your account may call: NVIDIA answers one of the others with a 404
+    /// naming an internal function id, which explains nothing to someone who
+    /// picked a model from a list. Two more are worth naming for the same
+    /// reason — a rejected key, and a model the endpoint has never heard of.
+    /// Everything else passes through verbatim, because the provider's own
+    /// words are usually better than ours.
+    fn explain(&self, status: reqwest::StatusCode, text: &str) -> String {
+        let body = text.to_lowercase();
+        let model = &self.config.model;
+        if status == reqwest::StatusCode::NOT_FOUND && body.contains("not found for account") {
+            return format!(
+                "{} lists '{model}' but this account cannot call it — a catalogue is what the                  provider publishes, not what your key is entitled to. Pick another model, or                  add this one to your account.",
+                self.name()
+            );
+        }
+        if status == reqwest::StatusCode::NOT_FOUND {
+            return format!(
+                "{} has no model called '{model}' at {}. The id must match the provider's                  catalogue exactly, vendor prefix included.",
+                self.name(),
+                self.config.base_url
+            );
+        }
+        if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+            return format!(
+                "{} rejected the API key ({status}). Save it again under Settings, and check it                  is a key for {}.",
+                self.name(),
+                self.config.base_url
+            );
+        }
+        format!("{} returned {status}: {}", self.name(), truncate(text, 400))
+    }
+
+    /// What went wrong before a response existed at all.
+    ///
+    /// A model that is listed, entitled and simply never answers is a real
+    /// state, and it is indistinguishable from a hung app unless the wait is
+    /// named.
+    fn transport_error(&self, e: &reqwest::Error) -> String {
+        if e.is_timeout() {
+            return format!(
+                "'{}' did not answer within {}s. It may be cold, busy, or not actually served on                  {} — trying another model tells the difference.",
+                self.config.model,
+                self.config.timeout_secs.unwrap_or(120),
+                self.config.base_url
+            );
+        }
+        format!("{}: {e}", self.config.endpoint())
     }
 
     fn client(&self) -> Result<reqwest::blocking::Client, String> {
@@ -1751,7 +1895,7 @@ impl OpenAICompatibleProvider {
             .request(&client)
             .json(body)
             .send()
-            .map_err(|e| format!("{}: {e}", self.config.endpoint()))?;
+            .map_err(|e| self.transport_error(&e))?;
 
         let status = response.status();
         let text = response
@@ -1761,12 +1905,8 @@ impl OpenAICompatibleProvider {
         if !status.is_success() {
             // The provider's own message says far more than a status code
             // ("model not found", "insufficient quota"), so it is surfaced
-            // rather than swallowed.
-            return Err(format!(
-                "{} returned {status}: {}",
-                self.name(),
-                truncate(&text, 400)
-            ));
+            // rather than swallowed — with the ones worth translating named.
+            return Err(self.explain(status, &text));
         }
         Ok(text)
     }
@@ -1780,7 +1920,7 @@ impl OpenAICompatibleProvider {
         &self,
         body: &serde_json::Value,
         on_delta: &dyn Fn(&str),
-    ) -> Result<(String, Vec<RawToolCall>, Vec<String>), String> {
+    ) -> Result<(String, Vec<RawToolCall>, Vec<String>, Option<TokenUsage>), String> {
         use std::io::BufRead;
 
         let client = self.client()?;
@@ -1788,18 +1928,14 @@ impl OpenAICompatibleProvider {
             .request(&client)
             .json(body)
             .send()
-            .map_err(|e| format!("{}: {e}", self.config.endpoint()))?;
+            .map_err(|e| self.transport_error(&e))?;
 
         let status = response.status();
         if !status.is_success() {
             // An error body is small and is JSON, not a stream. Read it whole
             // so the provider's own explanation survives.
             let text = response.text().unwrap_or_default();
-            return Err(format!(
-                "{} returned {status}: {}",
-                self.name(),
-                truncate(&text, 400)
-            ));
+            return Err(self.explain(status, &text));
         }
 
         let mut acc = StreamAccumulator::new();
@@ -1816,7 +1952,9 @@ impl OpenAICompatibleProvider {
                 break;
             }
         }
-        Ok(acc.finish())
+        let usage = acc.usage();
+        let (text, calls, dropped) = acc.finish();
+        Ok((text, calls, dropped, usage))
     }
 
     /// `GET {base}/models` — the OpenAI directory endpoint, which OpenRouter,
@@ -1910,7 +2048,9 @@ impl LLMProvider for OpenAICompatibleProvider {
             .map_err(|e| format!("{} returned invalid JSON: {e}", self.name()))?;
 
         let (message, calls) = from_openai_response(&json);
-        Ok(assemble(message, &calls, &[]))
+        let mut r = assemble(message, &calls, &[]);
+        r.usage = TokenUsage::from_openai(&json);
+        Ok(r)
     }
 
     fn run_streaming(
@@ -1924,8 +2064,10 @@ impl LLMProvider for OpenAICompatibleProvider {
         if self.config.model.is_empty() {
             return Err("OpenAI-compatible provider has no model configured".into());
         }
-        let (message, calls, dropped) = self.stream(&self.body(request, true), on_delta)?;
-        Ok(assemble(message, &calls, &dropped))
+        let (message, calls, dropped, usage) = self.stream(&self.body(request, true), on_delta)?;
+        let mut r = assemble(message, &calls, &dropped);
+        r.usage = usage;
+        Ok(r)
     }
     fn health(&self) -> ProviderHealth {
         // A key is optional here: local servers and some gateways take none.
@@ -2210,6 +2352,134 @@ mod wire_tests {
 
     /// OpenAI sends `arguments` as a JSON *string*. Treating it as an object
     /// silently yields empty arguments and a tool call that does nothing.
+    /// Recorded from `integrate.api.nvidia.com` on 3 Sep 2026, `openai/gpt-oss-20b`.
+    ///
+    /// A reasoning model answers with `content: null` and its words under
+    /// `reasoning`. Read literally that is a mute model, which is what it
+    /// looked like: an empty bubble and no explanation.
+    #[test]
+    fn a_reasoning_model_with_null_content_is_not_silent() {
+        let body = serde_json::json!({
+            "choices": [{
+                "finish_reason": "stop",
+                "message": {
+                    "role": "assistant",
+                    "content": null,
+                    "reasoning": "The user asked for ok. Answer: ok.",
+                    "tool_calls": []
+                }
+            }]
+        });
+        let (text, calls) = from_openai_response(&body);
+        assert!(calls.is_empty());
+        assert!(
+            text.contains("Answer: ok"),
+            "reasoning must stand in when there is nothing else, got {text:?}"
+        );
+
+        // But it is not the answer when there IS an answer.
+        let both = serde_json::json!({
+            "choices": [{ "message": {
+                "content": "ok",
+                "reasoning_content": "thinking out loud"
+            }}]
+        });
+        assert_eq!(from_openai_response(&both).0, "ok");
+    }
+
+    /// Same endpoint, same day: a tool call arrives with null content and the
+    /// reasoning beside it. The call is the turn; the thinking is not text.
+    #[test]
+    fn a_tool_call_beside_reasoning_stays_a_tool_call() {
+        let body = serde_json::json!({
+            "choices": [{
+                "finish_reason": "tool_calls",
+                "message": {
+                    "content": null,
+                    "reasoning": "We need to read README.md.",
+                    "tool_calls": [{
+                        "id": "chatcmpl-tool-8c60",
+                        "type": "function",
+                        "function": { "name": "read_file", "arguments": "{\"path\": \"README.md\"}" }
+                    }]
+                }
+            }]
+        });
+        let (text, calls) = from_openai_response(&body);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "read_file");
+        assert!(
+            text.is_empty(),
+            "reasoning must not become a message when a call was made, got {text:?}"
+        );
+    }
+
+    #[test]
+    fn openai_usage_is_read_and_missing_usage_stays_missing() {
+        let body = serde_json::json!({
+            "usage": { "prompt_tokens": 273, "completion_tokens": 46, "total_tokens": 319 }
+        });
+        let u = TokenUsage::from_openai(&body).expect("usage is there");
+        assert_eq!((u.input, u.output), (273, 46));
+        assert!(TokenUsage::from_openai(&serde_json::json!({})).is_none());
+    }
+
+    /// The usage chunk of a stream carries no `delta`, and on some endpoints
+    /// no `choices` either — so it has to be read before the chunk is judged
+    /// uninteresting.
+    #[test]
+    fn a_streams_usage_chunk_is_counted_even_with_no_delta() {
+        let mut acc = StreamAccumulator::new();
+        acc.push_chunk(&serde_json::json!({
+            "choices": [{ "delta": { "content": "ok" } }]
+        }));
+        acc.push_chunk(&serde_json::json!({
+            "choices": [],
+            "usage": { "prompt_tokens": 100, "completion_tokens": 7 }
+        }));
+        let u = acc.usage().expect("the usage chunk was counted");
+        assert_eq!((u.input, u.output), (100, 7));
+        assert_eq!(acc.finish().0, "ok");
+    }
+
+    #[test]
+    fn a_stream_that_only_thought_says_what_it_thought() {
+        let mut acc = StreamAccumulator::new();
+        for t in ["Let me ", "think about it."] {
+            acc.push_chunk(&serde_json::json!({
+                "choices": [{ "delta": { "reasoning_content": t } }]
+            }));
+        }
+        assert_eq!(acc.finish().0, "Let me think about it.");
+    }
+
+    /// A catalogue is what a provider publishes, not what a key may call.
+    /// Recorded verbatim: `mistralai/mistral-7b-instruct-v0.3`, listed at
+    /// `/models`, answers a chat request with this.
+    #[test]
+    fn a_model_your_account_cannot_call_is_explained_not_pasted() {
+        let p = OpenAICompatibleProvider::new(OpenAICompatibleConfig {
+            name: "NVIDIA NIM".into(),
+            base_url: "https://integrate.api.nvidia.com/v1".into(),
+            model: "mistralai/mistral-7b-instruct-v0.3".into(),
+            ..Default::default()
+        });
+        let msg = p.explain(
+            reqwest::StatusCode::NOT_FOUND,
+            "{\"status\":404,\"title\":\"Not Found\",\"detail\":\"Function 'cd89bd68': Not \
+             found for account 'L5-pudF6'\"}",
+        );
+        assert!(msg.contains("mistral-7b-instruct-v0.3"), "name the model");
+        assert!(
+            msg.to_lowercase().contains("cannot call it"),
+            "say what is actually wrong, got: {msg}"
+        );
+        assert!(!msg.contains("cd89bd68"), "an internal id explains nothing");
+
+        let rejected = p.explain(reqwest::StatusCode::UNAUTHORIZED, "unauthorized");
+        assert!(rejected.to_lowercase().contains("key"));
+    }
+
     #[test]
     fn openai_arguments_are_a_json_string_and_are_parsed_as_one() {
         let body = serde_json::json!({
@@ -2320,6 +2590,58 @@ mod transport_tests {
             headers: vec![("X-Team".into(), "platform".into())],
             timeout_secs: Some(30),
         }
+    }
+
+    /// Several NIM models reject `"tools": []` rather than reading it as
+    /// "none", which is exactly what a talk-only turn sends.
+    #[test]
+    fn an_empty_tool_list_is_left_out_of_the_body_entirely() {
+        let p = OpenAICompatibleProvider::new(cfg());
+        let mut request = req();
+        request.tools.clear();
+        let body = p.body(&request, false);
+        assert!(body.get("tools").is_none(), "no tools means no tools key");
+        assert!(body.get("tool_choice").is_none());
+
+        // And a streamed turn asks for the usage it would otherwise never get.
+        let streamed = p.body(&request, true);
+        assert_eq!(
+            streamed["stream_options"]["include_usage"],
+            serde_json::json!(true)
+        );
+    }
+
+    /// The picker on an agent's card sets its model; the wire has to carry
+    /// it, or the call log and the analytics are describing a request that was
+    /// never made.
+    #[test]
+    fn the_agents_own_model_is_the_one_that_gets_asked_for() {
+        let base = OpenAICompatibleConfig {
+            model: "nvidia/nemotron-3-super-120b-a12b".into(),
+            ..cfg()
+        };
+        let mut request = req();
+
+        request.model = "openai/gpt-oss-20b".into();
+        let body = OpenAICompatibleProvider::new(base.clone()).body(&request, false);
+        assert_eq!(body["model"], serde_json::json!("openai/gpt-oss-20b"));
+
+        // An agent that names none takes the provider's.
+        request.model = String::new();
+        let body = OpenAICompatibleProvider::new(base.clone()).body(&request, false);
+        assert_eq!(
+            body["model"],
+            serde_json::json!("nvidia/nemotron-3-super-120b-a12b")
+        );
+
+        // And one still holding the mock's id after a switch does too, rather
+        // than asking a real endpoint for `mock-1`.
+        request.model = "mock-1".into();
+        let body = OpenAICompatibleProvider::new(base).body(&request, false);
+        assert_eq!(
+            body["model"],
+            serde_json::json!("nvidia/nemotron-3-super-120b-a12b")
+        );
     }
 
     fn req() -> AgentRequest {

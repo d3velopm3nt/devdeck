@@ -1277,7 +1277,11 @@ pub fn aiw_provider_forget_key(ws: Ws, provider_id: String) -> bool {
     ws.forget_provider_key(&provider_id)
 }
 
-/// Where agent→provider assignments are remembered.
+/// Where agent→provider assignments *used* to be remembered.
+///
+/// Kept only to migrate it into the agent files at startup, after which the
+/// row is deleted. An agent's file is the one record; a second one that was
+/// re-applied at every launch quietly undid choices made in the interface.
 pub const AGENT_PROVIDERS_KEY: &str = "aiw.agentProviders";
 
 /// Point an agent at a provider. Registering a provider does nothing until an
@@ -1291,11 +1295,11 @@ pub fn aiw_set_agent_provider(
     provider: String,
     model: String,
 ) -> Result<AgentDef, String> {
-    let updated = ws.set_agent_provider(&agent_id, &provider, &model)?;
-    let json = serde_json::to_string(&ws.agent_providers()).map_err(|e| e.to_string())?;
-    let conn = db.0.lock().unwrap();
-    crate::db::setting_set_conn(&conn, AGENT_PROVIDERS_KEY, &json)?;
-    Ok(updated)
+    // Written through to the agent's file inside `set_agent_provider`. There
+    // is deliberately no settings row any more: two records of one fact meant
+    // the older one won at the next launch.
+    let _ = db;
+    ws.set_agent_provider(&agent_id, &provider, &model)
 }
 
 pub fn saved_agent_providers(conn: &rusqlite::Connection) -> Vec<(String, String, String)> {

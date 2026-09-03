@@ -662,9 +662,6 @@ pub fn run() {
                 eprintln!("[aiw] could not restore provider '{kind}': {e}");
             }
         }
-        // After the providers exist, not before -- an assignment to a provider
-        // that has not been registered yet is refused.
-        aiw_workspace.restore_agent_providers(&aiw::commands::saved_agent_providers(&conn));
         // After the agents exist, so saved grants land on the current default
         // set rather than being applied to nothing.
         // Agents come from disk now. Before the saved grants, so a
@@ -675,6 +672,18 @@ pub fn run() {
             Err(e) => eprintln!("[aiw] could not load agents: {e}"),
         }
         aiw_workspace.restore_permissions(&aiw::commands::saved_permissions(&conn));
+
+        // Which provider an agent uses lives in the agent's own file. It used
+        // to live in a settings row as well, re-applied at every launch --
+        // which meant a provider chosen on an agent's card was silently put
+        // back at the next start. Fold the row in once, then delete it, so
+        // there is one record and it is the one the interface writes to.
+        let old_row = aiw::commands::saved_agent_providers(&conn);
+        if !old_row.is_empty() {
+            let moved = aiw_workspace.migrate_agent_providers(&old_row);
+            let _ = db::setting_delete_conn(&conn, aiw::commands::AGENT_PROVIDERS_KEY);
+            eprintln!("[aiw] agent providers now live in the agent files ({moved} carried over)");
+        }
     }
     let aiw_for_setup = aiw_workspace.clone();
 

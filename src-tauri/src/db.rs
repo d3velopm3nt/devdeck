@@ -1065,6 +1065,17 @@ pub fn setting_set_conn(conn: &Connection, key: &str, value: &str) -> Result<(),
     Ok(())
 }
 
+/// Forget a setting entirely.
+///
+/// Different from writing an empty value: a key that is gone is a key nothing
+/// will read back and re-apply, which is the point when a row has been folded
+/// into a better record and must not speak again.
+pub fn setting_delete_conn(conn: &Connection, key: &str) -> Result<(), String> {
+    conn.execute("DELETE FROM settings WHERE key = ?1", params![key])
+        .map_err(err)?;
+    Ok(())
+}
+
 // ---------- recents (for the widget's Recent view + search ranking) ----------
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

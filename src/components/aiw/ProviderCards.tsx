@@ -127,8 +127,11 @@ const DEFS: Def[] = [
     protocol: 'OpenAI-compatible',
     tint: '118,185,0',
     baseUrl: 'https://integrate.api.nvidia.com/v1',
-    model: 'meta/llama-3.1-70b-instruct',
-    modelHint: 'As listed in the NIM catalogue.',
+    model: 'nvidia/nemotron-3-super-120b-a12b',
+    // The catalogue lists what NVIDIA publishes, not what a key may call:
+    // most of the eighty-odd ids answer "not found for account", and a few
+    // never answer at all. This one answers, and calls tools.
+    modelHint: 'As listed in the catalogue — but not every listed model is on your account.',
   },
   {
     id: 'openai',

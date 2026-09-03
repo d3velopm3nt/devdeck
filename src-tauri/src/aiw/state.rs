@@ -685,25 +685,39 @@ impl Workspace {
         Ok(updated)
     }
 
-    /// Which provider and model each agent is pointed at, for persistence.
-    pub fn agent_providers(&self) -> Vec<(String, String, String)> {
-        self.agents
-            .lock()
-            .unwrap()
-            .iter()
-            .map(|a| (a.id.clone(), a.provider.clone(), a.model.clone()))
-            .collect()
-    }
-
-    /// Re-apply saved assignments, skipping any whose provider has gone.
-    /// A provider that was removed should quietly leave its agents on Mock
-    /// rather than failing startup or pointing them at nothing.
-    pub fn restore_agent_providers(&self, saved: &[(String, String, String)]) {
+    /// Carry an old settings row into the agent files, once.
+    ///
+    /// Which provider an agent uses was written down twice: in the agent's own
+    /// file, and in a `settings` row. The row was re-applied at every launch,
+    /// so a choice made on an agent's card was overwritten by whatever the row
+    /// last remembered — Developer B moved to NVIDIA, restarted, and answered
+    /// on the mock again. The file is the record now, and this only fills in
+    /// an agent that is still on the seeded default.
+    ///
+    /// Returns how many it actually moved, so the caller can drop the row and
+    /// stop the two records disagreeing again.
+    pub fn migrate_agent_providers(&self, saved: &[(String, String, String)]) -> usize {
+        let mut moved = 0;
         for (id, provider, model) in saved {
-            if let Err(e) = self.set_agent_provider(id, provider, model) {
-                eprintln!("[aiw] leaving '{id}' on its default provider: {e}");
+            let on_mock = {
+                let agents = self.agents.lock().unwrap();
+                agents
+                    .iter()
+                    .find(|a| &a.id == id)
+                    .map(|a| a.provider == super::provider::MockProvider::ID)
+                    .unwrap_or(false)
+            };
+            if !on_mock || provider == super::provider::MockProvider::ID {
+                continue;
+            }
+            match self.set_agent_provider(id, provider, model) {
+                Ok(_) => moved += 1,
+                // A provider that was removed leaves its agents on the mock,
+                // which is a working state rather than a broken start.
+                Err(e) => eprintln!("[aiw] leaving '{id}' on its default provider: {e}"),
             }
         }
+        moved
     }
 
     pub fn set_permission(&self, agent_id: &str, tool: &str, perm: &str) -> Result<(), String> {

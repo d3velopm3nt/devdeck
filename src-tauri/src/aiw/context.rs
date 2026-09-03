@@ -914,6 +914,7 @@ mod tests {
                         status: "unclaimed".into(),
                         assignee: None,
                         areas: vec!["packages/sync".into()],
+                        due: None,
                     },
                     WorkItem {
                         id: "wi-2".into(),
@@ -921,6 +922,7 @@ mod tests {
                         status: "unclaimed".into(),
                         assignee: None,
                         areas: vec!["apps/mobile".into()],
+                        due: None,
                     },
                 ],
             },

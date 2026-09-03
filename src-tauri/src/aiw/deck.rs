@@ -216,6 +216,16 @@ pub struct WorkItem {
     pub assignee: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub areas: Vec<String>,
+    /// When it has to be done by: `YYYY-MM-DD`, or `YYYY-MM-DDTHH:MM` when the
+    /// hour matters.
+    ///
+    /// In the deck rather than the personal store, deliberately: a deadline on
+    /// a piece of work is the project's own truth, shared with whoever has the
+    /// repository, and it belongs beside the item it is about. *Your* day —
+    /// the routine, the notes — is the other side of that split and never
+    /// goes here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub due: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
@@ -848,6 +858,7 @@ mod tests {
                 status: "claimed".into(),
                 assignee: Some("claude".into()),
                 areas: vec!["packages/sync".into()],
+                due: None,
             }],
         };
         deck.save_work(&slug, &work).unwrap();

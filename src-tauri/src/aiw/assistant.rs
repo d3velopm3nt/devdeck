@@ -1513,6 +1513,7 @@ impl Assistant {
                     status: "unclaimed".into(),
                     assignee: None,
                     areas: Vec::new(),
+                    due: None,
                 };
                 items.push(new_item.clone());
                 let meta = super::deck::WorkMeta {
@@ -1633,6 +1634,7 @@ impl Assistant {
                 status: "unclaimed".into(),
                 assignee: None,
                 areas: Vec::new(),
+                due: None,
             });
             if let Err(e) = deck.save_work(&plan, &work) {
                 return refuse(format!("could not put “{title}” on {}: {e}", to.name));
@@ -2175,6 +2177,7 @@ impl Assistant {
                     status: "unclaimed".into(),
                     assignee: None,
                     areas: Vec::new(),
+                    due: None,
                 });
                 match deck.save_work(&feature, &work.meta) {
                     Ok(()) => (

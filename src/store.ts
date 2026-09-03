@@ -41,6 +41,7 @@ export type RailView =
   | 'bots'
   /// What the AI is costing, across every space.
   | 'analytics'
+  | 'calendar'
   /// The tree. Called Spaces on the rail; the id stayed to keep saved
   /// preferences and every existing link working.
   | 'projects'
@@ -367,6 +368,7 @@ const RAIL_VIEWS: readonly RailView[] = [
   'team',
   'bots',
   'analytics',
+  'calendar',
   'projects',
   'stash',
   'connections',

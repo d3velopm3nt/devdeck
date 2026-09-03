@@ -123,6 +123,8 @@ pub fn open() -> Connection {
         .expect("create schedule schema");
     conn.execute_batch(crate::focus::SCHEMA)
         .expect("create focus schema");
+    conn.execute_batch(crate::calendar::PINGS_SCHEMA)
+        .expect("create deadline-ping schema");
     conn.execute_batch(crate::calls::CHECKS_SCHEMA)
         .expect("create model-check schema");
     conn.execute_batch(crate::calls::SCHEMA)
@@ -379,6 +381,16 @@ pub fn checkpoint_state(app: &tauri::AppHandle) {
 /// alone is the *original* shape, and a test that skips this is testing a
 /// schema no running copy of DevDeck has.
 pub fn migrate(conn: &Connection) {
+    // A schedule can be a moment as well as a rhythm: a calendar needs the
+    // 2pm on the 11th that a recurrence cannot say.
+    if conn.prepare("SELECT at_ms FROM schedules LIMIT 1").is_err() {
+        let _ = conn.execute("ALTER TABLE schedules ADD COLUMN at_ms INTEGER", []);
+        let _ = conn.execute(
+            "ALTER TABLE schedules ADD COLUMN duration_min INTEGER NOT NULL DEFAULT 0",
+            [],
+        );
+    }
+
     // v2 model: add folder rel_path, and collapse the old
     // workspace→space→folder→project tree into workspace→project→folder.
     let has_rel_path = conn.prepare("SELECT rel_path FROM nodes LIMIT 1").is_ok();

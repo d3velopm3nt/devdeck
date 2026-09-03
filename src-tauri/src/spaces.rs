@@ -256,6 +256,9 @@ pub fn space_create(
             Some(ws.id),
             r.every.clone(),
             r.at_min,
+            // A starter's routines are rhythms, never moments.
+            None,
+            None,
             r.days.clone(),
             String::new(),
             // A reminder never catches up: being told to plan the week on

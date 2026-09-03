@@ -921,6 +921,7 @@ pub fn seed_demo(base: &Path) -> Result<(PathBuf, PathBuf), String> {
                     status: "unclaimed".into(),
                     assignee: None,
                     areas: vec!["packages/sync".into(), "api/sync".into()],
+                    due: None,
                 },
                 WorkItem {
                     id: "wi-ui".into(),
@@ -928,6 +929,7 @@ pub fn seed_demo(base: &Path) -> Result<(PathBuf, PathBuf), String> {
                     status: "unclaimed".into(),
                     assignee: None,
                     areas: vec!["apps/mobile".into()],
+                    due: None,
                 },
                 WorkItem {
                     id: "wi-tests".into(),
@@ -935,6 +937,7 @@ pub fn seed_demo(base: &Path) -> Result<(PathBuf, PathBuf), String> {
                     status: "unclaimed".into(),
                     assignee: None,
                     areas: vec!["tests".into()],
+                    due: None,
                 },
             ],
         },

@@ -829,6 +829,7 @@ fn plan_into(conn: &Connection, node_id: i64, steps: &[String]) -> Result<(Strin
             status: "unclaimed".into(),
             assignee: None,
             areas: vec![],
+            due: None,
         });
         added += 1;
     }
@@ -935,6 +936,7 @@ pub fn bot_work_save(
             status,
             assignee: assignee.filter(|a| !a.trim().is_empty()),
             areas: vec![],
+            due: None,
         }),
     }
     deck.save_work(&slug, &work)

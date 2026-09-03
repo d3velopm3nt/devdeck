@@ -671,6 +671,7 @@ mod tests {
             status: status.into(),
             assignee: None,
             areas: vec![],
+            due: None,
         }
     }
 

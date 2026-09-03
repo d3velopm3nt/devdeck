@@ -70,12 +70,23 @@ export const scheduleSave = (s: {
   name: string
   kind: string
   nodeId: number | null
+  /** daily | weekdays | weekly | hourly | once */
   every: string
   atMin: number
+  /** For `once`: the moment, unix ms. Ignored by every rhythm. */
+  atMs?: number | null
+  /** Minutes it lasts. 0 is an instant; more is a block on the calendar. */
+  durationMin?: number | null
   days: string
   payload: string
   catchUp: boolean
-}) => invoke<number>('schedule_save', { ...s, id: s.id ?? null })
+}) =>
+  invoke<number>('schedule_save', {
+    ...s,
+    id: s.id ?? null,
+    atMs: s.atMs ?? null,
+    durationMin: s.durationMin ?? null,
+  })
 export const scheduleEnable = (id: number, on: boolean) =>
   invoke<void>('schedule_enable', { id, on })
 export const scheduleDelete = (id: number) => invoke<void>('schedule_delete', { id })
@@ -351,6 +362,30 @@ export const threadContextSet = (
 
 export const threadContextEdit = (conversationId: string, key: string, body: string) =>
   invoke<ContextView>('thread_context_edit', { conversationId, key, body })
+
+/** One thing at one time, from whichever source had a time in it. */
+export interface CalendarItem {
+  id: string
+  /** schedule | deadline */
+  kind: string
+  /** reminder | command | bot | agent | work */
+  sort: string
+  title: string
+  at: number
+  end: number
+  node_id?: number | null
+  space: string
+  feature: string
+  work_item: string
+  status: string
+  past: boolean
+  schedule_id?: number | null
+}
+
+/** Everything between two moments, across every space. One query for every
+ *  view, so a day and the month containing it cannot disagree. */
+export const calendarRange = (from: number, to: number) =>
+  invoke<CalendarItem[]>('calendar_range', { from, to })
 
 export const nodeThreadSend = (nodeId: number, text: string) =>
   invoke<import('./aiw').AssistantReply>('node_thread_send', { nodeId, text })

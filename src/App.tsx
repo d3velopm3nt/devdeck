@@ -5,6 +5,7 @@ import { InboxPage } from './components/InboxPage'
 import { TeamPage } from './components/team/TeamPage'
 import { BotsPage } from './components/BotsPage'
 import { AnalyticsPage } from './components/AnalyticsPage'
+import { CalendarPage } from './components/CalendarPage'
 import { ApprovalBar } from './components/aiw/ApprovalBar'
 import { FocusBar } from './components/FocusBar'
 import { SetupModal } from './components/SetupModal'
@@ -22,7 +23,13 @@ import { MachineSetup } from './components/MachineSetup'
 import { StashSidebar } from './components/StashSidebar'
 import { StashView } from './components/StashView'
 import { ConnectionsSidebar } from './components/ConnectionsSidebar'
-import { CAPTURE_CHECK, CAPTURE_NODE, CAPTURE_RAIL, CAPTURE_SAY } from './lib/devCapture'
+import {
+  CAPTURE_CHECK,
+  CAPTURE_EVENT,
+  CAPTURE_NODE,
+  CAPTURE_RAIL,
+  CAPTURE_SAY,
+} from './lib/devCapture'
 import { AiwSidebar } from './components/aiw/AiwSidebar'
 import { AiWorkspace } from './components/aiw/AiWorkspace'
 import { ConnectionsView } from './components/ConnectionsView'
@@ -127,6 +134,7 @@ function Menu({
 /// Whether the capture harness has already said its piece this session.
 let said = false
 let checked = false
+let evented = false
 
 export default function App() {
   const app = useApp()
@@ -139,6 +147,35 @@ export default function App() {
   // fires on the first paint whatever else is still loading.
   useEffect(() => {
     void ipc.appReady().catch(() => {})
+  }, [])
+
+  // Screenshot harness: put a one-off on the calendar, through the same
+  // command the interface calls. `ISO|title|minutes`, comma-separated.
+  useEffect(() => {
+    if (!CAPTURE_EVENT || evented) return
+    evented = true
+    void (async () => {
+      for (const spec of CAPTURE_EVENT.split(',')) {
+        const [iso, title, mins] = spec.split('|')
+        if (!iso || !title) continue
+        try {
+          await ipc.scheduleSave({
+            name: title,
+            kind: 'reminder',
+            nodeId: null,
+            every: 'once',
+            atMin: 0,
+            atMs: new Date(iso).getTime(),
+            durationMin: Number(mins) || 0,
+            days: '',
+            payload: '',
+            catchUp: false,
+          })
+        } catch (e) {
+          console.error('[capture] could not add', spec, e)
+        }
+      }
+    })()
   }, [])
 
   // Screenshot harness: prove a model answers, through the same command the
@@ -821,6 +858,7 @@ export default function App() {
           {railView === 'team' && <TeamPage />}
           {railView === 'bots' && <BotsPage />}
           {railView === 'analytics' && <AnalyticsPage />}
+          {railView === 'calendar' && <CalendarPage />}
           {railView === 'settings' && <ConfigPage />}
         </main>
       </div>

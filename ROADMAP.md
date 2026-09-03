@@ -254,10 +254,23 @@ How it works:
 
 ## Designed, not built
 
-### Time — a calendar, a day, and a bot that keeps you to it — brainstormed 3 Sep 2026
+### Time — a calendar, a day, and a bot that keeps you to it
 
-Next up after the bots. Talked through, not designed; written down here so the
-shape survives the conversation.
+Brainstormed 3 September 2026. **The calendar is built** (4 September) — see
+`test-results/calendar/REPORT.md`. The day-plan and the life bot are not.
+
+**Built.** Moments as well as rhythms (`every = "once"` with `at_ms` and
+`duration_min`); `due:` on a work item, in the vault beside the item;
+deadlines that remind themselves on the clock, once per item per day, inside a
+48-hour lead; and a Calendar page with day, week, month and year views over a
+single `calendar_range` query, across every space.
+
+**Still to do.** Typing your own routine into the day grid — personal store,
+never a repository. Editing from the calendar rather than jumping to the page
+that owns the thing. And the bot whose space is you.
+
+The rest of this entry is the original brainstorm, kept because the reasoning
+still applies to what is left.
 
 **What it is.** A calendar in the sidebar with day, week, month and year views,
 across every space at once: bot schedules and the wakes that actually

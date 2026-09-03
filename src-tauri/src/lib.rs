@@ -16,6 +16,7 @@ mod aiw;
 mod botcatalog;
 mod botmind;
 mod bots;
+mod calendar;
 mod calls;
 mod conn;
 mod creds;
@@ -710,9 +711,13 @@ pub fn run() {
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_secs(4));
                     schedule::tick(&h, true);
+                    // A deadline is only worth writing down if it comes and
+                    // finds you. Same clock, same tick: nothing new to run.
+                    calendar::check_deadlines(&h);
                     loop {
                         std::thread::sleep(std::time::Duration::from_secs(30));
                         schedule::tick(&h, false);
+                        calendar::check_deadlines(&h);
                     }
                 });
             }
@@ -1057,6 +1062,7 @@ pub fn run() {
             aiw::commands::aiw_provider_test,
             aiw::commands::aiw_model_check,
             calls::model_checks,
+            calendar::calendar_range,
             aiw::commands::aiw_provider_forget_key,
             aiw::commands::aiw_provider_remove,
             aiw::commands::aiw_set_agent_provider,

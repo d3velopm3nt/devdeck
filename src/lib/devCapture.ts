@@ -17,3 +17,5 @@ export const CAPTURE_WORKSPACE: string = ''
 export const CAPTURE_BOTTOM: string = ''
 export const CAPTURE_CHECK: string = ''
 export const CAPTURE_CONTEXT: boolean = false
+export const CAPTURE_CAL_VIEW: string = ''
+export const CAPTURE_EVENT: string = ''

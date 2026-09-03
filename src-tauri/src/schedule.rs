@@ -15,6 +15,14 @@
 //! deliberately absent. A bot is what gives an unattended run a goal, a place
 //! and a record; a naked agent on a timer has none of those.
 //!
+//! **A rhythm or a moment.** `every` was always a recurrence — daily,
+//! weekdays, weekly, hourly. A calendar needs the other kind: a thing that
+//! happens once, at a stated time, and then is history. `every = "once"` with
+//! `at_ms` is that, and `duration_min` gives it a length so a meeting can be
+//! an hour rather than an instant. Everything else — catching up, running,
+//! recording — is unchanged, because a moment is just a recurrence that
+//! recurs no more than once.
+//!
 //! **Catching up is per schedule, not global.** A reminder whose moment has
 //! passed must not fire late — being told to go to the gym at nine when you
 //! meant half six is noise, and noise is how a scheduler gets ignored. A pull
@@ -40,8 +48,13 @@ CREATE TABLE IF NOT EXISTS schedules (
     kind TEXT NOT NULL,
     -- The node this belongs to. Null means it is not about any one space.
     node_id INTEGER REFERENCES nodes(id) ON DELETE CASCADE,
-    -- daily | weekdays | weekly | hourly
+    -- daily | weekdays | weekly | hourly | once
     every TEXT NOT NULL DEFAULT 'daily',
+    -- For 'once': the exact moment, unix ms. Null for every rhythm.
+    at_ms INTEGER,
+    -- How long it lasts. 0 is a point in time; anything else is a block on a
+    -- calendar, which is what makes an hour-long meeting expressible.
+    duration_min INTEGER NOT NULL DEFAULT 0,
     -- Minutes past midnight, local. Ignored by 'hourly'.
     at_min INTEGER NOT NULL DEFAULT 420,
     -- For 'weekly': comma-separated 0-6, Sunday first.
@@ -65,6 +78,12 @@ pub struct Schedule {
     pub node_id: Option<i64>,
     pub every: String,
     pub at_min: i64,
+    /// For `every = "once"`: when, exactly. Unix milliseconds, local clock.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at_ms: Option<i64>,
+    /// Minutes. 0 is an instant; more is a block with an end.
+    #[serde(default)]
+    pub duration_min: i64,
     pub days: String,
     pub payload: String,
     pub enabled: bool,
@@ -77,7 +96,10 @@ pub struct Schedule {
     pub next_run: Option<i64>,
 }
 
-fn row(r: &rusqlite::Row) -> rusqlite::Result<Schedule> {
+/// Public so the calendar can read the same rows without a second mapper —
+/// two readers of one table drifting apart is how a calendar starts showing
+/// something the scheduler will not run.
+pub fn row(r: &rusqlite::Row) -> rusqlite::Result<Schedule> {
     Ok(Schedule {
         id: r.get(0)?,
         name: r.get(1)?,
@@ -85,19 +107,21 @@ fn row(r: &rusqlite::Row) -> rusqlite::Result<Schedule> {
         node_id: r.get(3)?,
         every: r.get(4)?,
         at_min: r.get(5)?,
-        days: r.get(6)?,
-        payload: r.get(7)?,
-        enabled: r.get::<_, i64>(8)? != 0,
-        catch_up: r.get::<_, i64>(9)? != 0,
-        last_run: r.get(10)?,
-        last_ok: r.get::<_, i64>(11)? != 0,
-        last_note: r.get(12)?,
+        at_ms: r.get(6)?,
+        duration_min: r.get(7)?,
+        days: r.get(8)?,
+        payload: r.get(9)?,
+        enabled: r.get::<_, i64>(10)? != 0,
+        catch_up: r.get::<_, i64>(11)? != 0,
+        last_run: r.get(12)?,
+        last_ok: r.get::<_, i64>(13)? != 0,
+        last_note: r.get(14)?,
         next_run: None,
     })
 }
 
-const COLS: &str = "id, name, kind, node_id, every, at_min, days, payload, enabled, catch_up, \
-                    last_run, last_ok, last_note";
+pub const COLS: &str = "id, name, kind, node_id, every, at_min, at_ms, duration_min, days, payload, \
+                    enabled, catch_up, last_run, last_ok, last_note";
 
 // ---------------------------------------------------------------------------
 // When does it fire
@@ -107,6 +131,13 @@ const COLS: &str = "id, name, kind, node_id, every, at_min, days, payload, enabl
 /// never been due. Local time, because "07:00" means seven where you are.
 fn last_due(s: &Schedule, now: chrono::DateTime<chrono::Local>) -> Option<chrono::DateTime<chrono::Local>> {
     use chrono::{Datelike, Duration, Timelike};
+
+    // A moment is due once, when it arrives, and never again. `last_run`
+    // upstream is what stops it firing twice.
+    if s.every == "once" {
+        let at = chrono::DateTime::from_timestamp_millis(s.at_ms?)?.with_timezone(&chrono::Local);
+        return (at <= now).then_some(at);
+    }
 
     if s.every == "hourly" {
         return now
@@ -153,6 +184,13 @@ fn last_due(s: &Schedule, now: chrono::DateTime<chrono::Local>) -> Option<chrono
 /// The next time it fires after `now`.
 fn next_due(s: &Schedule, now: chrono::DateTime<chrono::Local>) -> Option<chrono::DateTime<chrono::Local>> {
     use chrono::{Datelike, Duration, Timelike};
+
+    if s.every == "once" {
+        let at = chrono::DateTime::from_timestamp_millis(s.at_ms?)?.with_timezone(&chrono::Local);
+        // Nothing next about a moment that has passed, which is what makes it
+        // fall off "what is coming" the instant it is over.
+        return (at > now).then_some(at);
+    }
 
     if s.every == "hourly" {
         return (now + Duration::hours(1))
@@ -231,6 +269,10 @@ pub fn schedule_save(
     node_id: Option<i64>,
     every: String,
     at_min: i64,
+    // For `every = "once"`: the moment, unix ms.
+    at_ms: Option<i64>,
+    // Minutes it lasts. 0 is an instant; more is a block on a calendar.
+    duration_min: Option<i64>,
     days: String,
     payload: String,
     catch_up: bool,
@@ -242,22 +284,34 @@ pub fn schedule_save(
     if kind == "command" && payload.trim().is_empty() {
         return Err("A command schedule needs something to run.".into());
     }
+    // A moment with no moment would sit in the table being due never, which is
+    // indistinguishable from a bug when you go looking for it on a calendar.
+    if every == "once" && at_ms.is_none() {
+        return Err("A one-off needs a date and a time.".into());
+    }
+    let duration_min = duration_min.unwrap_or(0).max(0);
     let conn = db.0.lock().unwrap();
     match id {
         Some(id) => {
             conn.execute(
                 "UPDATE schedules SET name=?1, kind=?2, node_id=?3, every=?4, at_min=?5, days=?6, \
-                 payload=?7, catch_up=?8 WHERE id=?9",
-                params![name, kind, node_id, every, at_min, days, payload, catch_up as i64, id],
+                 payload=?7, catch_up=?8, at_ms=?9, duration_min=?10 WHERE id=?11",
+                params![
+                    name, kind, node_id, every, at_min, days, payload, catch_up as i64, at_ms,
+                    duration_min, id
+                ],
             )
             .map_err(err)?;
             Ok(id)
         }
         None => {
             conn.execute(
-                "INSERT INTO schedules (name, kind, node_id, every, at_min, days, payload, catch_up) \
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
-                params![name, kind, node_id, every, at_min, days, payload, catch_up as i64],
+                "INSERT INTO schedules (name, kind, node_id, every, at_min, days, payload, \
+                 catch_up, at_ms, duration_min) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+                params![
+                    name, kind, node_id, every, at_min, days, payload, catch_up as i64, at_ms,
+                    duration_min
+                ],
             )
             .map_err(err)?;
             Ok(conn.last_insert_rowid())

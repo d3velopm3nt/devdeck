@@ -39,7 +39,12 @@ const TEAM: { id: TeamTab; icon: IconName; label: string }[] = [
 /// The Assistant is not here: it is the first contact on Bots, because it is
 /// one of the things you talk to rather than a place you go. What is left of
 /// its old surface is configuration, under Settings.
-const WORK: Item[] = [{ view: 'connections', icon: 'database', label: 'Connections' }]
+const WORK: Item[] = [
+  // Time sits with the places you go rather than with the app's own settings:
+  // a calendar is a thing you work out of, not a thing you configure.
+  { view: 'calendar', icon: 'schedule', label: 'Calendar' },
+  { view: 'connections', icon: 'database', label: 'Connections' },
+]
 
 /// The app itself, anchored to the bottom.
 const APP: Item[] = [

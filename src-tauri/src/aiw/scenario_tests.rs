@@ -1288,6 +1288,101 @@ fn a_bot_with_no_agent_can_talk_in_a_room_but_cannot_move_work() {
         .any(|m| m.by.as_deref() == Some("bot:99")));
 }
 
+/// A turn that fails still says it stopped.
+///
+/// The pill beside a name reads "thinking…" until a `Turn { done }` arrives,
+/// and a provider that timed out used to return early past the only place
+/// that sent one — so the interface showed an agent thinking for as long as
+/// the app stayed open, about a call that had failed two minutes earlier.
+#[test]
+fn a_failed_turn_still_reports_that_it_ended() {
+    /// Stands in for the real failure: a provider that takes the request and
+    /// returns an error, after the turn has already been announced.
+    struct AlwaysFails;
+    impl super::provider::LLMProvider for AlwaysFails {
+        fn id(&self) -> &str {
+            "boom"
+        }
+        fn name(&self) -> &str {
+            "Always fails"
+        }
+        fn list_models(&self) -> Vec<super::provider::ModelInfo> {
+            vec![super::provider::ModelInfo {
+                id: "boom-1".into(),
+                name: "boom-1".into(),
+                ..Default::default()
+            }]
+        }
+        fn run(
+            &self,
+            _request: &super::provider::AgentRequest,
+        ) -> Result<super::provider::AgentResponse, String> {
+            Err("the endpoint did not answer within 120s".into())
+        }
+        fn health(&self) -> super::provider::ProviderHealth {
+            super::provider::ProviderHealth {
+                ok: true,
+                configured: true,
+                detail: "always fails, on purpose".into(),
+            }
+        }
+    }
+
+    let t = Tmp::new("turn-ends");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
+    w.providers.lock().unwrap().register(Box::new(AlwaysFails));
+    w.set_agent_provider("dev-a", "boom", "boom-1").unwrap();
+
+    let c = convs(&t);
+    let conv = c
+        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .unwrap();
+
+    let voice = Persona {
+        agent_id: "dev-a".into(),
+        runs_as: "dev-a".into(),
+        name: "Developer A".into(),
+        system: "You implement work items.".into(),
+        may_delegate_to: None,
+        plan: None,
+        hand_on_to: Vec::new(),
+        manages_with: Vec::new(),
+        talk_only: false,
+    };
+
+    let seen = std::sync::Mutex::new(Vec::<(String, bool)>::new());
+    let sink = |e: crate::aiw::assistant::ChatEvent| {
+        if let crate::aiw::assistant::ChatEvent::Turn { by, done, .. } = e {
+            seen.lock().unwrap().push((by, done));
+        }
+    };
+    let out = Assistant::send_as(&w, &c, &conv.id, "are you there?", &sink, &voice);
+    assert!(out.is_err(), "the turn must actually fail: {out:?}");
+
+    let turns = seen.lock().unwrap().clone();
+    assert!(
+        turns.iter().any(|(_, done)| !*done),
+        "it started: {turns:?}"
+    );
+    assert!(
+        turns.iter().any(|(_, done)| *done),
+        "and it must report that it ended: {turns:?}"
+    );
+
+    // And the thread says so too, so the record does not end on the question.
+    let saved = c.load(&conv.id).unwrap();
+    assert!(
+        saved
+            .messages
+            .iter()
+            .any(|m| m.ok == Some(false) && m.text.contains("could not answer")),
+        "the failure is in the transcript: {:?}",
+        saved.messages
+    );
+}
+
 /// A manager can do the work itself.
 ///
 /// The prompt used to say "you manage; you do not do the work yourself", and

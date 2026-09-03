@@ -308,6 +308,37 @@ pub enum ChatEvent {
 /// record, and progress is a courtesy.
 pub type ChatSink<'a> = &'a (dyn Fn(ChatEvent) + Send + Sync);
 
+/// Says the turn ended, however it ended.
+///
+/// "Thinking…" beside a name is the interface believing a turn is still
+/// running, and it believes that until it is told otherwise. A turn that
+/// returned early — a provider that timed out, a conversation that could not
+/// be written — told nobody, so the pill span for as long as the app was open
+/// while the model call had failed two minutes ago.
+///
+/// A guard rather than a line at each exit, because the next early return
+/// added would forget it again. Dropping is the one thing every path does.
+struct TurnEnds<'a> {
+    sink: ChatSink<'a>,
+    conversation_id: String,
+    by: String,
+    name: String,
+}
+
+impl Drop for TurnEnds<'_> {
+    fn drop(&mut self) {
+        (self.sink)(ChatEvent::Turn {
+            conversation_id: self.conversation_id.clone(),
+            by: self.by.clone(),
+            name: self.name.clone(),
+            done: true,
+        });
+        (self.sink)(ChatEvent::Done {
+            conversation_id: self.conversation_id.clone(),
+        });
+    }
+}
+
 /// What one `send` produced.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct AssistantReply {
@@ -837,6 +868,15 @@ impl Assistant {
             name: persona.name.clone(),
             done: false,
         });
+        // From here on the turn is live in the interface, and every way out of
+        // this function — answered, refused, timed out, panicked — has to put
+        // that light out.
+        let _ends = TurnEnds {
+            sink,
+            conversation_id: conv.id.clone(),
+            by: persona.agent_id.clone(),
+            name: persona.name.clone(),
+        };
 
         let mut tools = if persona.talk_only {
             Vec::new()
@@ -941,7 +981,26 @@ impl Assistant {
                 tools: request.tools.len(),
                 usage: outcome.as_ref().ok().and_then(|r| r.usage),
             });
-            let response: AgentResponse = outcome?;
+            let response: AgentResponse = match outcome {
+                Ok(r) => r,
+                Err(e) => {
+                    // Into the transcript as well as the log. A turn that died
+                    // silently left a thread whose last word was the question,
+                    // which reads exactly like an answer still coming.
+                    let note = ChatMessage::note(
+                        &persona.agent_id,
+                        "turn",
+                        false,
+                        format!("{} could not answer: {e}", persona.name),
+                    );
+                    let _ = convs.append(&conv, std::slice::from_ref(&note));
+                    sink(ChatEvent::Step {
+                        conversation_id: conv_id.clone(),
+                        message: note,
+                    });
+                    return Err(e);
+                }
+            };
 
             if !response.message.trim().is_empty() {
                 reply = response.message.trim().to_string();
@@ -1093,15 +1152,7 @@ impl Assistant {
             .caused_by(&started),
         );
 
-        sink(ChatEvent::Turn {
-            conversation_id: conv_id.clone(),
-            by: persona.agent_id.clone(),
-            name: persona.name.clone(),
-            done: true,
-        });
-        sink(ChatEvent::Done {
-            conversation_id: conv_id,
-        });
+        // `_ends` says the turn is over, on this path and on every other.
 
         Ok(AssistantReply {
             conversation_id: conv.id,

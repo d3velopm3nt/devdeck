@@ -22,7 +22,7 @@ import { MachineSetup } from './components/MachineSetup'
 import { StashSidebar } from './components/StashSidebar'
 import { StashView } from './components/StashView'
 import { ConnectionsSidebar } from './components/ConnectionsSidebar'
-import { CAPTURE_NODE, CAPTURE_RAIL, CAPTURE_SAY } from './lib/devCapture'
+import { CAPTURE_CHECK, CAPTURE_NODE, CAPTURE_RAIL, CAPTURE_SAY } from './lib/devCapture'
 import { AiwSidebar } from './components/aiw/AiwSidebar'
 import { AiWorkspace } from './components/aiw/AiWorkspace'
 import { ConnectionsView } from './components/ConnectionsView'
@@ -31,6 +31,7 @@ import { ConfigPage } from './components/ConfigPage'
 import { Icon } from './lib/icons'
 import { tauriSelfUpdate } from './lib/updater'
 import * as ipc from './lib/ipc'
+import { aiw as aiwApi } from './lib/aiw'
 import { routeOutput } from './lib/termBus'
 import { useApp } from './store'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
@@ -125,6 +126,7 @@ function Menu({
 
 /// Whether the capture harness has already said its piece this session.
 let said = false
+let checked = false
 
 export default function App() {
   const app = useApp()
@@ -137,6 +139,27 @@ export default function App() {
   // fires on the first paint whatever else is still loading.
   useEffect(() => {
     void ipc.appReady().catch(() => {})
+  }, [])
+
+  // Screenshot harness: prove a model answers, through the same command the
+  // button calls. `provider:model`, comma-separated. A real request each, so
+  // it only ever runs when this is deliberately set.
+  useEffect(() => {
+    // Guarded like CAPTURE_SAY, and for the same reason: an effect that runs
+    // twice in development makes two real API calls.
+    if (!CAPTURE_CHECK || checked) return
+    checked = true
+    void (async () => {
+      for (const pair of CAPTURE_CHECK.split(',')) {
+        const [provider, ...rest] = pair.split(':')
+        if (!provider || rest.length === 0) continue
+        try {
+          console.log('[capture] check', await aiwApi.modelCheck(provider, rest.join(':')))
+        } catch (e) {
+          console.error('[capture] check failed', pair, e)
+        }
+      }
+    })()
   }, [])
 
   // Screenshot harness (temporary): applied at runtime so a hot module

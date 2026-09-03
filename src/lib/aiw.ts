@@ -458,6 +458,16 @@ export interface AssistantReply {
   turns: number
 }
 
+/** What happened the last time this model was actually called. A catalogue
+ *  lists what a provider serves; only a call says whether your key may use it. */
+export interface ModelCheck {
+  provider: string
+  model: string
+  ok: boolean
+  detail: string
+  at: number
+}
+
 export interface ModelInfo {
   id: string
   name: string
@@ -639,6 +649,11 @@ export const aiw = {
   grantForget: (id: string) => invoke<void>('aiw_grant_forget', { id }),
   providers: () => invoke<[string, string, ProviderHealth][]>('aiw_providers'),
   providerSetups: () => invoke<ProviderSetup[]>('aiw_provider_setups'),
+  /// Call one model once and remember the verdict. A real request, so it is
+  /// only ever made when someone asks for it.
+  modelCheck: (providerId: string, model: string) =>
+    invoke<ModelCheck>('aiw_model_check', { providerId, model }),
+  modelChecks: (provider: string) => invoke<ModelCheck[]>('model_checks', { provider }),
   removeProvider: (providerId: string) =>
     invoke<void>('aiw_provider_remove', { providerId }),
   configureProvider: (c: ProviderConfigInput) =>

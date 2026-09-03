@@ -533,6 +533,46 @@ impl Workspace {
         }
     }
 
+    /// Call one specific model, once, and say what happened.
+    ///
+    /// `test_provider` proves the *endpoint* works, using whatever model is
+    /// configured. This proves one model does — which is a different question
+    /// and, for a catalogue like NVIDIA's, the only one that matters: it lists
+    /// eighty-odd ids and most of them answer "not found for account", while a
+    /// few take the request and never reply at all.
+    ///
+    /// The timeout is deliberately shorter than a turn's. A model that cannot
+    /// manage sixteen tokens in half a minute is not one to hand an agent, and
+    /// waiting the full two minutes to be told so is its own small cruelty.
+    pub fn test_model(&self, id: &str, model: &str) -> Result<String, String> {
+        enum Probe {
+            Openai(super::provider::OpenAICompatibleProvider),
+            Anthropic(super::provider::AnthropicProvider),
+        }
+        let probe = {
+            let reg = self.providers.lock().unwrap();
+            if let Some(p) = reg.openai_compatible(id) {
+                let mut cfg = p.config.clone();
+                cfg.model = model.to_string();
+                cfg.timeout_secs = Some(cfg.timeout_secs.unwrap_or(120).min(30));
+                Probe::Openai(super::provider::OpenAICompatibleProvider::new(cfg))
+            } else if let Some(p) = reg.anthropic(id) {
+                let mut cfg = p.config.clone();
+                cfg.model = model.to_string();
+                Probe::Anthropic(super::provider::AnthropicProvider::new(cfg))
+            } else if reg.get(id).is_some() {
+                // The mock, or anything else with nothing to call.
+                return Ok(format!("'{id}' answers without a network."));
+            } else {
+                return Err(format!("'{id}' is not configured"));
+            }
+        };
+        match probe {
+            Probe::Openai(p) => p.probe(),
+            Probe::Anthropic(p) => p.probe(),
+        }
+    }
+
     /// Forget a provider's saved key. The configuration stays, so the form
     /// still shows what was set up — only the secret goes.
     pub fn forget_provider_key(&self, id: &str) -> bool {

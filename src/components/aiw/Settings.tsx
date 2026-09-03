@@ -10,7 +10,7 @@ import { Grants } from './Grants'
 import { useEffect, useState } from 'react'
 import { Icon, type IconName } from '../../lib/icons'
 import { useAiw } from '../../lib/aiwStore'
-import { aiw, type AgentDef, type ProviderHealth } from '../../lib/aiw'
+import { aiw, type AgentDef, type ModelCheck, type ProviderHealth } from '../../lib/aiw'
 import { ProviderCards } from './ProviderCards'
 import { ModelPicker } from './ModelPicker'
 
@@ -32,6 +32,11 @@ function AgentProviders() {
   const [drafts, setDrafts] = useState<Record<string, { provider: string; model: string }>>({})
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /// What each agent's model said the last time it was called, reported up by
+  /// its picker so the row can show it across its full width.
+  const [verdicts, setVerdicts] = useState<
+    Record<string, { verdict: ModelCheck | undefined; retry: () => void }>
+  >({})
 
   useEffect(() => {
     aiw.providers().then(setProviders).catch(() => setProviders([]))
@@ -97,10 +102,8 @@ function AgentProviders() {
           const dirty = d.provider !== ag.provider || d.model !== ag.model
           const isMock = ag.provider === 'mock'
           return (
-            <div
-              key={ag.id}
-              className="grid grid-cols-[minmax(0,1fr)_170px_minmax(0,220px)_88px] items-center border-b border-line last:border-0"
-            >
+            <div key={ag.id} className="border-b border-line last:border-0">
+              <div className="grid grid-cols-[minmax(0,1fr)_170px_minmax(0,220px)_88px] items-center">
               <div className="min-w-0 px-3 py-2.5">
                 <div className="flex items-center gap-1.5">
                   <span className="text-[12.5px] text-ink">{ag.name}</span>
@@ -136,6 +139,13 @@ function AgentProviders() {
                   providerId={d.provider}
                   value={d.model}
                   onChange={(model) => setDrafts({ ...drafts, [ag.id]: { ...d, model } })}
+                  // The refusal belongs to the agent, so the row prints it
+                  // across its own width rather than into the Model column.
+                  onVerdict={(verdict, retry) =>
+                    setVerdicts((prev) =>
+                      prev[ag.id]?.verdict === verdict ? prev : { ...prev, [ag.id]: { verdict, retry } },
+                    )
+                  }
                 />
               </div>
 
@@ -153,7 +163,27 @@ function AgentProviders() {
                     {isMock ? 'mock' : 'live'}
                   </span>
                 )}
+                </div>
               </div>
+
+              {/* Across the row, under the agent it is about. A model that
+                  refuses is the reason this agent will fail on its first turn,
+                  which is worth a sentence someone can read rather than a
+                  tooltip in a narrow column. */}
+              {verdicts[ag.id]?.verdict && !verdicts[ag.id].verdict!.ok && (
+                <div className="flex items-start gap-2 border-t border-red-500/20 bg-red-500/[0.05] px-3 py-2">
+                  <Icon name="alert" size={12} className="mt-px shrink-0 text-err" />
+                  <div className="min-w-0 flex-1 text-[11px] leading-[1.55] text-err">
+                    {verdicts[ag.id].verdict!.detail.replace(/\s+/g, ' ').trim()}
+                  </div>
+                  <button
+                    className="btn-ghost shrink-0 text-[10.5px] text-muted"
+                    onClick={() => verdicts[ag.id].retry()}
+                  >
+                    Check again
+                  </button>
+                </div>
+              )}
             </div>
           )
         })}

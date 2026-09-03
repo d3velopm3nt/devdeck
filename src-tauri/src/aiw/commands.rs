@@ -1277,6 +1277,58 @@ pub async fn aiw_provider_test(ws: Ws<'_>, provider_id: String) -> Result<String
     blocking(move || w.test_provider(&provider_id)).await?
 }
 
+/// Call one model once, and remember what happened.
+///
+/// The question the model list cannot answer on its own: a catalogue says what
+/// a provider serves, not what your key may call. NVIDIA lists eighty-odd ids
+/// and most of them refuse; the only way to know which is to ask one.
+///
+/// The verdict is kept so the picker can show it next time without calling
+/// again — a check costs a real request, small as it is.
+#[tauri::command]
+pub async fn aiw_model_check(
+    ws: Ws<'_>,
+    app: tauri::AppHandle,
+    provider_id: String,
+    model: String,
+) -> Result<crate::calls::ModelCheck, String> {
+    let w = ws.inner().clone();
+    let (p, m) = (provider_id.clone(), model.clone());
+    crate::calls::log_line(
+        &app,
+        "stdout",
+        format!("checking {model} on {provider_id}…"),
+    );
+    let outcome = blocking(move || w.test_model(&p, &m)).await?;
+    crate::calls::log_line(
+        &app,
+        if outcome.is_ok() { "stdout" } else { "stderr" },
+        match &outcome {
+            Ok(t) => format!("{model}: {t}"),
+            Err(e) => format!("{model}: {e}"),
+        },
+    );
+    let check = crate::calls::ModelCheck {
+        provider: provider_id,
+        model,
+        ok: outcome.is_ok(),
+        detail: match &outcome {
+            Ok(t) => t.clone(),
+            Err(e) => e.clone(),
+        },
+        at: chrono::Local::now().timestamp_millis(),
+    };
+    {
+        use tauri::Manager;
+        if let Some(db) = app.try_state::<crate::db::Db>() {
+            if let Ok(conn) = db.0.lock() {
+                crate::calls::remember_check(&conn, &check);
+            }
+        }
+    }
+    Ok(check)
+}
+
 /// Forget a provider's key. The configuration stays so the form still shows
 /// what was set up.
 #[tauri::command]

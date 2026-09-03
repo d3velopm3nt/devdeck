@@ -16,9 +16,9 @@
 // has never heard of it. A select with no matching option renders blank, which
 // would make a configured model look like no model at all.
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../../lib/icons'
-import { aiw, type ModelCatalog, type ModelInfo } from '../../lib/aiw'
+import { aiw, type ModelCatalog, type ModelCheck, type ModelInfo } from '../../lib/aiw'
 import { knownPricing } from '../../lib/usage'
 
 const TYPE_IT = '__type__'
@@ -64,6 +64,16 @@ export function priceOf(m: ModelInfo | undefined, providerId: string): Price {
   }
 }
 
+/// One space where a message has several.
+///
+/// Verdicts are stored as they were written, and a message built from a
+/// wrapped Rust string can carry the wrap with it. Fixing the text at the
+/// source is right; leaving old rows unreadable until someone re-runs them is
+/// not, so it is tidied on the way to the screen too.
+function tidy(s: string): string {
+  return s.replace(/\s+/g, ' ').trim()
+}
+
 /// Money without a wall of zeros: 3 → "3", 0.1 → "0.1", 0.00015 → "0.0002".
 function trim(n: number): string {
   if (n === 0) return '0'
@@ -77,6 +87,7 @@ export function ModelPicker({
   onChange,
   hint,
   compact,
+  onVerdict,
 }: {
   providerId: string
   value: string
@@ -84,10 +95,20 @@ export function ModelPicker({
   hint?: string
   /** Table rows have no room for a note; the tooltip carries it instead. */
   compact?: boolean
+  /** Hand the verdict to whoever owns the layout.
+   *
+   *  A refusal is about the *agent*, not about the dropdown, and in a table it
+   *  belongs across the row rather than squeezed into a 220px column. When
+   *  this is given the picker reports and renders nothing itself, and the
+   *  parent decides where the message goes. `retry` runs the same check the
+   *  button does. */
+  onVerdict?: (verdict: ModelCheck | undefined, retry: () => void) => void
 }) {
   const [catalog, setCatalog] = useState<ModelCatalog | null>(null)
   const [loading, setLoading] = useState(false)
   const [typing, setTyping] = useState(false)
+  const [checks, setChecks] = useState<Record<string, ModelCheck>>({})
+  const [checking, setChecking] = useState(false)
 
   const load = useCallback(async () => {
     if (!providerId) return
@@ -105,6 +126,47 @@ export function ModelPicker({
     void load()
   }, [load])
 
+  // What has already been proven about this provider's models, from earlier
+  // checks. Free to read — no calls are made here.
+  useEffect(() => {
+    if (!providerId) return
+    let alive = true
+    void aiw
+      .modelChecks(providerId)
+      .then((cs) => {
+        if (alive) setChecks(Object.fromEntries(cs.map((c) => [c.model, c])))
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [providerId])
+
+  /// Call the chosen model once. The only way to answer "will this one work",
+  /// because a catalogue lists what a provider serves and not what your key
+  /// may call.
+  const check = async () => {
+    if (!value) return
+    setChecking(true)
+    try {
+      const c = await aiw.modelCheck(providerId, value)
+      setChecks((prev) => ({ ...prev, [value]: c }))
+    } catch (e) {
+      setChecks((prev) => ({
+        ...prev,
+        [value]: {
+          provider: providerId,
+          model: value,
+          ok: false,
+          detail: e instanceof Error ? e.message : String(e),
+          at: Date.now(),
+        },
+      }))
+    } finally {
+      setChecking(false)
+    }
+  }
+
   const models = useMemo(() => catalog?.models ?? [], [catalog])
   const unlisted = value !== '' && !models.some((m) => m.id === value)
 
@@ -119,10 +181,20 @@ export function ModelPicker({
     () => priceOf(options.find((m) => m.id === value), providerId),
     [options, value, providerId],
   )
-  const status = describe(catalog, loading, unlisted, hint, providerId)
+  const checked = checks[value]
+  const status = describe(catalog, loading, unlisted, hint, providerId, checked)
+
+  // Kept in a ref so a parent that re-renders on every verdict cannot make
+  // this effect chase its own tail.
+  const report = useRef(onVerdict)
+  report.current = onVerdict
+  useEffect(() => {
+    report.current?.(checked, () => void check())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checked])
 
   return (
-    <div>
+    <div className="relative">
       <div className="flex items-center gap-1.5">
         {typing ? (
           <input
@@ -152,6 +224,7 @@ export function ModelPicker({
               const p = priceOf(m, providerId)
               return (
                 <option key={m.id} value={m.id}>
+                  {checks[m.id] ? (checks[m.id].ok ? '✓ ' : '✗ ') : ''}
                   {m.name}
                   {m.context_window ? ` · ${Math.round(m.context_window / 1000)}k` : ''}
                   {p ? ` · ${p.label}` : ''}
@@ -173,6 +246,33 @@ export function ModelPicker({
           >
             {price.label}
           </span>
+        )}
+
+        {!typing && value && (
+          <button
+            className="btn-ghost shrink-0 px-1.5 text-[11px]"
+            title={
+              checked
+                ? `${checked.ok ? 'Answered' : 'Did not answer'}: ${tidy(checked.detail)}`
+                : 'Call this model once to see whether your key can actually use it'
+            }
+            disabled={checking}
+            onClick={() => void check()}
+          >
+            <Icon
+              name={checking ? 'spinner' : checked ? (checked.ok ? 'check' : 'alert') : 'run'}
+              size={12}
+              className={
+                checking
+                  ? 'animate-spin'
+                  : checked
+                    ? checked.ok
+                      ? 'text-ok'
+                      : 'text-err'
+                    : ''
+              }
+            />
+          </button>
         )}
 
         {typing ? (
@@ -203,7 +303,35 @@ export function ModelPicker({
         )}
       </div>
 
-      {!compact && status && (
+      {/* A refusal gets its own block, in every layout including a table row.
+          It was a native tooltip: cramped, unselectable, gone the moment the
+          pointer moved, and the one message here that someone actually has to
+          read and act on. */}
+      {checked && !checked.ok && !onVerdict && (
+        <div
+          // In a table the Model column is a couple of hundred pixels wide,
+          // and a refusal wrapped into it becomes a tall thin ribbon that
+          // shoves every other row down the page. It hangs below the control
+          // instead, at a width someone can actually read.
+          className={`flex items-start gap-1.5 rounded border border-red-500/30 bg-red-500/[0.06] px-2 py-1.5 ${
+            compact ? 'absolute right-0 top-full z-30 mt-1 w-[340px] shadow-xl' : 'mt-1'
+          }`}
+        >
+          <Icon name="alert" size={11} className="mt-px shrink-0 text-err" />
+          <div className="min-w-0 flex-1 text-[10.5px] leading-[1.5] text-err">
+            {tidy(checked.detail)}
+          </div>
+          <button
+            className="btn-ghost shrink-0 px-1 text-[10px] text-muted"
+            title="Clear this and try again"
+            onClick={() => void check()}
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {!compact && status && !(checked && !checked.ok) && (
         <div className={`mt-1 text-[10.5px] leading-[1.5] ${status.tone}`}>{status.text}</div>
       )}
     </div>
@@ -216,8 +344,16 @@ function describe(
   unlisted: boolean,
   hint: string | undefined,
   providerId: string,
+  checked?: ModelCheck,
 ): { text: string; tone: string } | null {
   if (loading) return { text: 'Loading models…', tone: 'text-faint' }
+
+  // A model that has actually been called outranks everything else this line
+  // could say: a refusal here is the difference between an agent that works
+  // and one that fails on its first turn.
+  if (checked && !checked.ok) {
+    return { text: tidy(checked.detail), tone: 'text-err' }
+  }
 
   // A built-in list shown as though it came from the provider would be a
   // failed lookup reading as a successful one.
@@ -235,7 +371,11 @@ function describe(
     }
   }
   if (catalog?.live) {
-    return { text: `${catalog.models.length} models available. ${prices(catalog, providerId)}`, tone: 'text-faint' }
+    const proven = checked?.ok ? ' This one answered when it was checked.' : ''
+    return {
+      text: `${catalog.models.length} models available. ${prices(catalog, providerId)}${proven}`,
+      tone: 'text-faint',
+    }
   }
   return hint ? { text: hint, tone: 'text-faint' } : null
 }

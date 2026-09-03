@@ -30,6 +30,20 @@ const KEEP: i64 = 5_000;
 /// a model was told; not enough for one call to weigh a megabyte.
 const CAP: usize = 24_000;
 
+/// The log stream the AI's own failures go to, beside setup, git and the
+/// updater. Negative, like every other system stream.
+///
+/// The Models tab holds every call in full; this is the other half of the same
+/// idea — when a turn fails, you should not have to know where to look. It
+/// appears in Logs with everything else that went wrong today.
+pub const AI_LOG_ID: i64 = -500_000;
+
+/// Say something on the AI's log stream. Best effort: a line that cannot be
+/// written must never fail the thing it was describing.
+pub fn log_line(app: &tauri::AppHandle, stream: &str, line: String) {
+    crate::services::push_log(app, AI_LOG_ID, "ai", stream, line);
+}
+
 pub const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS llm_calls (
     id INTEGER PRIMARY KEY,
@@ -67,6 +81,64 @@ CREATE TABLE IF NOT EXISTS llm_calls (
 );
 CREATE INDEX IF NOT EXISTS idx_llm_calls_at ON llm_calls(at DESC);
 ";
+
+/// What happened the last time a model was actually called.
+///
+/// A catalogue is a list of names. Whether your key may call one of them, and
+/// whether it answers at all, is only knowable by trying — NVIDIA publishes
+/// eighty-odd ids of which most return "not found for account" and a few take
+/// the request and go quiet. So the answer is remembered per model, and the
+/// picker shows what is known and stays silent about the rest.
+pub const CHECKS_SCHEMA: &str = "
+CREATE TABLE IF NOT EXISTS model_checks (
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    ok INTEGER NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    at INTEGER NOT NULL,
+    PRIMARY KEY (provider, model)
+);
+";
+
+#[derive(Serialize, Clone, Debug)]
+pub struct ModelCheck {
+    pub provider: String,
+    pub model: String,
+    pub ok: bool,
+    pub detail: String,
+    pub at: i64,
+}
+
+/// Every verdict for one provider, for badging its list.
+#[tauri::command]
+pub fn model_checks(db: tauri::State<Db>, provider: String) -> Result<Vec<ModelCheck>, String> {
+    let conn = db.0.lock().unwrap();
+    let mut stmt = conn
+        .prepare("SELECT provider, model, ok, detail, at FROM model_checks WHERE provider = ?1")
+        .map_err(err)?;
+    let out = stmt
+        .query_map(params![provider], |r| {
+            Ok(ModelCheck {
+                provider: r.get(0)?,
+                model: r.get(1)?,
+                ok: r.get::<_, i64>(2)? != 0,
+                detail: r.get(3)?,
+                at: r.get(4)?,
+            })
+        })
+        .map_err(err)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(err)?;
+    Ok(out)
+}
+
+/// Remember one verdict, replacing whatever was known before.
+pub fn remember_check(conn: &rusqlite::Connection, c: &ModelCheck) {
+    let _ = conn.execute(
+        "INSERT INTO model_checks (provider, model, ok, detail, at) VALUES (?1,?2,?3,?4,?5)          ON CONFLICT(provider, model) DO UPDATE SET ok = excluded.ok, detail = excluded.detail,          at = excluded.at",
+        params![c.provider, c.model, c.ok as i64, c.detail, c.at],
+    );
+}
 
 #[derive(Serialize, Clone, Debug)]
 pub struct Call {
@@ -208,6 +280,19 @@ pub fn record(app: &tauri::AppHandle, c: crate::aiw::state::CallRecord) {
     if let Err(e) = res {
         eprintln!("[calls] could not record a model call: {e}");
         return;
+    }
+    // A failed turn goes to the log as well as the table. The table is where
+    // you look when you already suspect the model; the log is where you look
+    // when you only know something went wrong.
+    if !c.ok {
+        log_line(
+            app,
+            "stderr",
+            format!(
+                "{} ({} · {}) failed after {}ms: {}",
+                c.speaker_name, c.provider, c.model, c.ms, c.error
+            ),
+        );
     }
     let _ = conn.execute(
         "DELETE FROM llm_calls WHERE id NOT IN (SELECT id FROM llm_calls ORDER BY at DESC LIMIT ?1)",

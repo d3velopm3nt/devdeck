@@ -546,7 +546,7 @@ pub fn registry() -> Vec<ToolInfo> {
                 ),
                 act(
                     "drop",
-                    "Let an item go: unclaimed again, nobody assigned. For work that was handed                      over and never started, or that turned out not to be needed.",
+                    "Let an item go: unclaimed again, nobody assigned. For work that was handed over and never started, or that turned out not to be needed.",
                     Access::Write,
                     schema(
                         serde_json::json!({

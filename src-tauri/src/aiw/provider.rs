@@ -1897,20 +1897,20 @@ impl OpenAICompatibleProvider {
         let model = &self.config.model;
         if status == reqwest::StatusCode::NOT_FOUND && body.contains("not found for account") {
             return format!(
-                "{} lists '{model}' but this account cannot call it — a catalogue is what the                  provider publishes, not what your key is entitled to. Pick another model, or                  add this one to your account.",
+                "{} lists '{model}' but this account cannot call it — a catalogue is what the provider publishes, not what your key is entitled to. Pick another model, or add this one to your account.",
                 self.name()
             );
         }
         if status == reqwest::StatusCode::NOT_FOUND {
             return format!(
-                "{} has no model called '{model}' at {}. The id must match the provider's                  catalogue exactly, vendor prefix included.",
+                "{} has no model called '{model}' at {}. The id must match the provider's catalogue exactly, vendor prefix included.",
                 self.name(),
                 self.config.base_url
             );
         }
         if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
             return format!(
-                "{} rejected the API key ({status}). Save it again under Settings, and check it                  is a key for {}.",
+                "{} rejected the API key ({status}). Save it again under Settings, and check it is a key for {}.",
                 self.name(),
                 self.config.base_url
             );
@@ -1926,7 +1926,7 @@ impl OpenAICompatibleProvider {
     fn transport_error(&self, e: &reqwest::Error) -> String {
         if e.is_timeout() {
             return format!(
-                "'{}' did not answer within {}s. It may be cold, busy, or not actually served on                  {} — trying another model tells the difference.",
+                "'{}' did not answer within {}s. It may be cold, busy, or not actually served on {} — trying another model tells the difference.",
                 self.config.model,
                 self.config.timeout_secs.unwrap_or(120),
                 self.config.base_url

@@ -180,6 +180,31 @@ pub struct Persona {
     /// handed over from its own thread lands there, and `work.add` without a
     /// feature named means this one.
     pub plan: Option<String>,
+    /// The other managers this one may pass an item to.
+    ///
+    /// A bot hands work to its team, and a team is agents. But a manager also
+    /// has other managers around it — the bots below it in the tree, and any
+    /// bot someone pulls into the room — and giving one of them an item is a
+    /// different act from starting a session: it goes on *their* plan and is
+    /// announced in *their* thread, for them to put someone on.
+    ///
+    /// The shell fills this in, because `aiw` knows nothing about bots. What
+    /// arrives here is a plain list of rooms with plans.
+    pub hand_on_to: Vec<Colleague>,
+    /// Tools this persona may use without a row in the permission matrix.
+    ///
+    /// A bot has no row — an id nothing knows gets nothing, which is what
+    /// makes a bot with no agent unable to touch the machine. But it left a
+    /// bot unable to keep *its own plan* either, while its instructions told
+    /// it to, so it read the goal, said something sensible and could change
+    /// nothing. That is the "bots only know about goals" complaint, and it was
+    /// exactly right.
+    ///
+    /// Deliberately narrow: what belongs here is managing — the work items of
+    /// the feature this persona manages, which are files in the deck. Anything
+    /// that reaches the machine — files, git, the terminal, starting an agent
+    /// — is still the matrix's call and still happens in a session.
+    pub manages_with: Vec<String>,
     /// Words only: no tools this turn, whatever the matrix says.
     ///
     /// This is how an agent answers a mention. Being named in a room is free
@@ -188,6 +213,22 @@ pub struct Persona {
     /// handover by the back door. Work happens in a session, when someone
     /// hands it an item.
     pub talk_only: bool,
+}
+
+/// Another manager, as much of one as `aiw` needs to know: a name, a room,
+/// and somewhere to put an item.
+#[derive(Clone, Debug, Default)]
+pub struct Colleague {
+    /// What people type after the `@`.
+    pub handle: String,
+    pub name: String,
+    /// The conversation key of its thread — a node, as far as this is
+    /// concerned.
+    pub node_id: i64,
+    pub project_id: String,
+    /// The feature it manages. Without one there is nowhere to put an item,
+    /// and saying so is better than putting it nowhere.
+    pub plan: Option<String>,
 }
 
 impl Persona {
@@ -199,6 +240,8 @@ impl Persona {
             system: system.to_string(),
             may_delegate_to: None,
             plan: None,
+            hand_on_to: Vec::new(),
+            manages_with: Vec::new(),
             talk_only: false,
         }
     }
@@ -220,6 +263,8 @@ impl Persona {
             ),
             may_delegate_to: None,
             plan: None,
+            hand_on_to: Vec::new(),
+            manages_with: Vec::new(),
             talk_only: true,
         }
     }
@@ -796,7 +841,16 @@ impl Assistant {
         let mut tools = if persona.talk_only {
             Vec::new()
         } else {
-            super::tools::definitions_for(me, &ws.permission_matrix())
+            let mut t = super::tools::definitions_for(me, &ws.permission_matrix());
+            // A manager's own plan, offered even though a bot has no row.
+            for id in &persona.manages_with {
+                for extra in super::tools::definitions_of(id) {
+                    if !t.iter().any(|d| d.name == extra.name) {
+                        t.push(extra);
+                    }
+                }
+            }
+            t
         };
         // The project tools are only meaningful with a project in focus. Saying
         // so beats offering a model a `files_read` that cannot resolve a root.
@@ -905,6 +959,7 @@ impl Assistant {
                             convs,
                             &conv,
                             persona.plan.as_deref(),
+                            &persona.manages_with,
                             me,
                             call,
                             &scope,
@@ -1209,17 +1264,40 @@ impl Assistant {
                     .into(),
             );
         };
+        // Passing it to another manager is a different act from starting a
+        // session, and it is checked first: the receiver is a room with a
+        // plan, not an agent with hands.
+        if let Some(c) = persona
+            .hand_on_to
+            .iter()
+            .find(|c| c.handle.eq_ignore_ascii_case(&h.agent))
+            .cloned()
+        {
+            return Self::hand_on(ws, convs, conv, persona, h, &c);
+        }
+
         // The gate. For an agent or the assistant it is the matrix, and an id
         // the matrix has never heard of gets nothing. For a bot it is its
         // team: a manager may put work on the people it manages and nobody
         // else, which is what a team list is for.
-        let allowed = match &persona.may_delegate_to {
-            Some(team) => team.iter().any(|t| t.eq_ignore_ascii_case(&h.agent)),
-            None => !matches!(
-                ws.permission_matrix().get(&persona.agent_id, TOOL_DELEGATE),
-                super::tools::Permission::None
-            ),
-        };
+        //
+        // With one addition: itself. A bot that names an agent runs as that
+        // agent, and a manager rolling up its sleeves on its own plan needs no
+        // permission from a team list it is not on. It still goes through a
+        // session, so the work still leaves a receipt.
+        let mine = !persona.runs_as.is_empty()
+            && persona.runs_as != ASSISTANT_ID
+            && (h.agent.eq_ignore_ascii_case(&persona.runs_as)
+                || h.agent.eq_ignore_ascii_case("me")
+                || h.agent.eq_ignore_ascii_case("self"));
+        let allowed = mine
+            || match &persona.may_delegate_to {
+                Some(team) => team.iter().any(|t| t.eq_ignore_ascii_case(&h.agent)),
+                None => !matches!(
+                    ws.permission_matrix().get(&persona.agent_id, TOOL_DELEGATE),
+                    super::tools::Permission::None
+                ),
+            };
         if !allowed {
             return refuse(match &persona.may_delegate_to {
                 Some(team) if team.is_empty() => format!(
@@ -1239,8 +1317,11 @@ impl Assistant {
                 ),
             });
         }
-        let Some(agent) = ws.agent(&h.agent) else {
-            return refuse(format!("Nobody here is called @{}, so nothing moved.", h.agent));
+        let wanted_agent = if mine { persona.runs_as.clone() } else { h.agent.clone() };
+        let Some(agent) = ws.agent(&wanted_agent) else {
+            return refuse(format!(
+                "Nobody here is called @{wanted_agent}, so nothing moved."
+            ));
         };
         let Some(project) = ws.project(&project_id) else {
             return refuse(format!("No project '{project_id}', so nothing moved."));
@@ -1322,6 +1403,146 @@ impl Assistant {
             format!(
                 "“{}” claimed by @{} — was {was}. Handed over by {}.",
                 item.title, agent.id, persona.name
+            ),
+        )
+    }
+
+    /// Give an item to another manager.
+    ///
+    /// Not a session: a manager is not a pair of hands, so this puts the item
+    /// on *their* plan and says so in *their* room, which is where they will
+    /// see it and put someone on it. The sender's own copy is marked as passed
+    /// on rather than deleted — two rows, one on each side, so neither board
+    /// quietly loses the item and the Team page can show it moving.
+    ///
+    /// Everything here is refusable and says why. "I gave it to the platform
+    /// bot" with nothing on the platform bot's plan is exactly the sentence
+    /// this whole design exists to prevent.
+    fn hand_on(
+        ws: &Arc<Workspace>,
+        convs: &Conversations,
+        conv: &ConversationMeta,
+        persona: &Persona,
+        h: &Handover,
+        to: &Colleague,
+    ) -> ChatMessage {
+        let refuse = |why: String| ChatMessage::note(&persona.agent_id, "handover", false, why);
+        let title = h.what.trim().to_string();
+        if title.is_empty() {
+            return refuse("Say which work item to pass on.".into());
+        }
+        let Some(plan) = to.plan.clone().filter(|p| !p.trim().is_empty()) else {
+            return refuse(format!(
+                "{} manages no feature, so there is nowhere to put “{title}”. Nothing moved.",
+                to.name
+            ));
+        };
+        let Some(project) = ws.project(&to.project_id) else {
+            return refuse(format!(
+                "{} belongs to a space this cannot reach, so nothing moved.",
+                to.name
+            ));
+        };
+
+        // On their plan. An item already there is not added twice — being told
+        // about it again is not a second piece of work.
+        let deck = project.deck();
+        let mut work = deck.work(&plan).map(|w| w.meta).unwrap_or(super::deck::WorkMeta {
+            feature: plan.clone(),
+            items: vec![],
+        });
+        let already = work
+            .items
+            .iter()
+            .any(|i| i.title.eq_ignore_ascii_case(&title));
+        let their_id = if already {
+            work.items
+                .iter()
+                .find(|i| i.title.eq_ignore_ascii_case(&title))
+                .map(|i| i.id.clone())
+                .unwrap_or_default()
+        } else {
+            let id = format!(
+                "w{:02}-{}",
+                work.items.len() + 1,
+                super::deck::slugify(&title)
+            );
+            work.items.push(super::deck::WorkItem {
+                id: id.clone(),
+                title: title.clone(),
+                status: "unclaimed".into(),
+                assignee: None,
+                areas: Vec::new(),
+            });
+            if let Err(e) = deck.save_work(&plan, &work) {
+                return refuse(format!("could not put “{title}” on {}: {e}", to.name));
+            }
+            id
+        };
+
+        // The sender's own copy, if it has one, records where it went.
+        let mut mine_note = String::new();
+        if let (Some(project_id), Some(feature)) =
+            (conv.project_id.clone(), conv.feature.clone().or_else(|| persona.plan.clone()))
+        {
+            if let Some(p) = ws.project(&project_id) {
+                let d = p.deck();
+                if let Ok(w) = d.work(&feature) {
+                    let mut meta = w.meta;
+                    if let Some(i) = meta
+                        .items
+                        .iter_mut()
+                        .find(|i| i.title.eq_ignore_ascii_case(&title))
+                    {
+                        i.status = "passed on".into();
+                        i.assignee = Some(to.handle.clone());
+                        if d.save_work(&feature, &meta).is_ok() {
+                            mine_note = format!(" Marked passed on, on {feature}.");
+                        }
+                    }
+                }
+            }
+        }
+
+        // Their room hears about it, from the manager who asked.
+        match convs.for_bot(to.node_id, &to.project_id, &to.name) {
+            Ok(room) => {
+                let _ = convs.post(
+                    &room.id,
+                    ChatMessage::note(
+                        &persona.agent_id,
+                        "handover",
+                        true,
+                        format!(
+                            "{} passed “{title}” to you — it is on {plan} as {their_id}, \
+                             unclaimed. Put someone on it with @name take \"{title}\".",
+                            persona.name
+                        ),
+                    ),
+                );
+            }
+            Err(e) => {
+                return refuse(format!(
+                    "“{title}” is on {}'s plan as {their_id}, but its thread could not be \
+                     reached to tell it: {e}",
+                    to.name
+                ));
+            }
+        }
+
+        ChatMessage::note(
+            &persona.agent_id,
+            "handover",
+            true,
+            format!(
+                "“{title}” passed to @{} — {} on {plan}, unclaimed, and said so in its thread.{mine_note} \
+                 A manager takes work by putting someone on it, so nothing is running yet.",
+                to.handle,
+                if already {
+                    "already".to_string()
+                } else {
+                    format!("added as {their_id}")
+                }
             ),
         )
     }
@@ -1420,6 +1641,8 @@ impl Assistant {
         convs: &Conversations,
         conv: &ConversationMeta,
         persona_plan: Option<&str>,
+        // The tools this persona manages with, allowed without a matrix row.
+        persona_manages: &[String],
         me: &str,
         call: &ToolCall,
         scope: &EventScope,
@@ -1442,10 +1665,11 @@ impl Assistant {
             // agents is revocable like anything else — and a bot's is decided
             // by its own row in the matrix, not the assistant's.
             let permission = ws.permission_matrix().get(me, &call.tool);
-            if matches!(permission, super::tools::Permission::None) {
+            let manages = persona_manages.iter().any(|t| t == &call.tool);
+            if !manages && matches!(permission, super::tools::Permission::None) {
                 return (
                     false,
-                    format!("'{}' is denied for the assistant", call.tool),
+                    format!("'{}' is denied for {me}", call.tool),
                 );
             }
             return match call.tool.as_str() {
@@ -1813,6 +2037,53 @@ impl Assistant {
                 ),
                 Err(e) => (false, e),
             },
+            // Ticking one off and letting one go. Both find the item the same
+            // way `take` does — by id, then by exact title, then by a title
+            // that contains what was said — so a manager can name an item the
+            // way it appears in the thread rather than by its slug.
+            "done" | "drop" => {
+                let wanted = s("title").to_lowercase();
+                if wanted.is_empty() {
+                    return (false, "which item? name it by title or id".into());
+                }
+                let mut work = match deck.work(&feature) {
+                    Ok(w) => w.meta,
+                    Err(e) => return (false, e),
+                };
+                let found = work
+                    .items
+                    .iter()
+                    .position(|i| i.id.to_lowercase() == wanted || i.title.to_lowercase() == wanted)
+                    .or_else(|| {
+                        work.items
+                            .iter()
+                            .position(|i| i.title.to_lowercase().contains(&wanted))
+                    });
+                let Some(at) = found else {
+                    return (
+                        false,
+                        format!("nothing on {feature} matches “{}”, so nothing changed", s("title")),
+                    );
+                };
+                let was = work.items[at].status.clone();
+                let title = work.items[at].title.clone();
+                if call.action == "done" {
+                    work.items[at].status = "done".into();
+                } else {
+                    work.items[at].status = "unclaimed".into();
+                    work.items[at].assignee = None;
+                }
+                match deck.save_work(&feature, &work) {
+                    Ok(()) if call.action == "done" => {
+                        (true, format!("Marked “{title}” done on {feature} — was {was}."))
+                    }
+                    Ok(()) => (
+                        true,
+                        format!("Let “{title}” go on {feature} — unclaimed again, was {was}."),
+                    ),
+                    Err(e) => (false, e),
+                }
+            }
             other => (false, format!("unknown work action '{other}'")),
         }
     }

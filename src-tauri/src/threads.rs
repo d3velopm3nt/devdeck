@@ -61,12 +61,13 @@ fn feature_persona(
     let managing = {
         let db = app.try_state::<Db>().ok_or("no database")?;
         let conn = db.0.lock().unwrap();
-        crate::bots::bot_on(&conn, node_id).filter(|b| b.feature.trim() == feature_id)
+        crate::bots::bot_on(&conn, node_id)
+            .filter(|b| b.feature.trim() == feature_id)
+            .map(|b| (crate::bots::persona_in(&conn, ws, &b), b.name.clone()))
     };
     match managing {
-        Some(bot) => {
-            let name = bot.name.clone();
-            let mut p = crate::bots::persona_for(ws, &bot);
+        Some((persona, name)) => {
+            let mut p = persona;
             p.system.push_str(&format!(
                 "\n\nYou are in the thread for the feature “{feature_id}”. Other bots and agents \
                  are in here too. Address one with @name to pull them in; say @name take \"item\" \
@@ -157,7 +158,11 @@ fn also_answer(
     already: &str,
 ) {
     for bot in bots {
-        let who = crate::bots::persona_for(ws, &bot);
+        let who = {
+            let Some(db) = app.try_state::<Db>() else { continue };
+            let conn = db.0.lock().unwrap();
+            crate::bots::persona_in(&conn, ws, &bot)
+        };
         if who.agent_id == already {
             continue;
         }
@@ -374,10 +379,10 @@ fn node_persona(
     let bot = {
         let db = app.try_state::<Db>().ok_or("no database")?;
         let conn = db.0.lock().unwrap();
-        crate::bots::bot_on(&conn, node_id)
+        crate::bots::bot_on(&conn, node_id).map(|b| crate::bots::persona_in(&conn, ws, &b))
     };
     let mut p = match bot {
-        Some(b) => crate::bots::persona_for(ws, &b),
+        Some(p) => p,
         None => {
             let agent = ws
                 .agent(crate::aiw::assistant::ASSISTANT_ID)

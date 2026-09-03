@@ -532,6 +532,30 @@ pub fn registry() -> Vec<ToolInfo> {
                     Access::Read,
                     schema(serde_json::json!({ "feature": { "type": "string" } }), &[]),
                 ),
+                act(
+                    "done",
+                    "Mark an item done. Only when a receipt in the thread shows it finished —                      this records what happened, it does not make it so.",
+                    Access::Write,
+                    schema(
+                        serde_json::json!({
+                            "title": { "type": "string", "description": "The item's title or id." },
+                            "feature": { "type": "string" }
+                        }),
+                        &["title"],
+                    ),
+                ),
+                act(
+                    "drop",
+                    "Let an item go: unclaimed again, nobody assigned. For work that was handed                      over and never started, or that turned out not to be needed.",
+                    Access::Write,
+                    schema(
+                        serde_json::json!({
+                            "title": { "type": "string", "description": "The item's title or id." },
+                            "feature": { "type": "string" }
+                        }),
+                        &["title"],
+                    ),
+                ),
             ],
         },
         ToolInfo {
@@ -644,6 +668,26 @@ pub fn definitions_for(agent: &str, permissions: &PermissionMatrix) -> Vec<ToolD
         }
     }
     out
+}
+
+/// Every action of one tool, whatever the matrix says.
+///
+/// For a persona that is allowed a tool by what it *is* rather than by a row —
+/// a manager and its own plan. Narrow on purpose: the caller names one tool,
+/// and nothing here consults or bypasses a permission for anything else.
+pub fn definitions_of(tool_id: &str) -> Vec<ToolDefinition> {
+    registry()
+        .into_iter()
+        .filter(|t| t.id == tool_id)
+        .flat_map(|t| {
+            let name = t.name.clone();
+            t.actions.into_iter().map(move |a| ToolDefinition {
+                name: wire_name(&t.id, &a.name),
+                description: format!("{} — {}", name, a.description),
+                input_schema: a.params,
+            })
+        })
+        .collect()
 }
 
 /// Turn a model's function call back into a `ToolCall`.

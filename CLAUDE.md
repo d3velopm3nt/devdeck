@@ -104,18 +104,26 @@ agent like any other — it appears in the matrix and can be revoked.
 
 **A bot is a manager, and the thread is the unit.** Built 2 Sep 2026
 (`design/node-thread/`, and the "Bots as teammates" entry in ROADMAP.md). A
-bot holds a goal, wakes on a rhythm, and puts agents on what it finds; you
-talk to it in a thread, not a form. Three threads, one message model — a
-**node's** thread at any level of the tree (a parent sees its children as
-headlines and says it has no repository, because context anchors to a commit
-and a parent has none), a **feature's** thread (the feature *is* the room:
-`@name` pulls someone in for free, `@name take "item"` transfers the claim
-through the delegate gate, and a session started from a thread reports back
-into it), and **`@you`**, which is the Inbox. First view is **Team**, opening
-on **Goals**, with Features, Work and Bots as tabs; second is **Spaces** — the
-tree, reaching into the repository, with folders chipped by the feature whose
-work items name them. Config is a sentence with a receipt; `stop_at:` is a
-review point the runtime honours, and it is deliberately *not* a permission.
+bot holds a goal, wakes on a rhythm, and gets its space's work done: it keeps
+the plan (`work.add/list/done/drop` — the one tool a bot may use without a row
+in the permission matrix, because a plan is files in the deck, not the
+machine), puts its team on items (`@name take "…"`, which starts a session and
+posts a receipt), passes an item to a manager below it in the tree (`@handle
+take "…"`, which lands on *their* plan and is announced in *their* thread, and
+starts nobody — a manager is not a pair of hands), and, when it names an agent,
+takes an item itself (`@me take "…"`, in a real session with the same receipt
+and the same permissions as anyone else). You talk to it in a thread, not a
+form. Three threads, one message model — a **node's** thread at any level of
+the tree (a parent sees its children as headlines and says it has no
+repository, because context anchors to a commit and a parent has none), a
+**feature's** thread (the feature *is* the room: `@name` pulls someone in for
+free, `@name take "item"` transfers the claim through the delegate gate, and a
+session started from a thread reports back into it), and **`@you`**, which is
+the Inbox. First view is **Team**, opening on **Goals**, with Features, Work
+and Bots as tabs; second is **Spaces** — the tree, reaching into the
+repository, with folders chipped by the feature whose work items name them.
+Config is a sentence with a receipt; `stop_at:` is a review point the runtime
+honours, and it is deliberately *not* a permission.
 
 **The mock is a provider, not a bypass.** Everything works with no API key and
 no network, and the mock refuses an empty context so a broken assembly cannot

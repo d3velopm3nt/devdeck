@@ -1423,7 +1423,7 @@ fn repo_of(app: &tauri::AppHandle, node_id: i64) -> Option<PathBuf> {
 pub fn persona(bot: &Bot) -> crate::aiw::assistant::Persona {
     let acts = !bot.agent.trim().is_empty();
     let mut system = format!(
-        "You are {}, the bot managing {}. You manage; you do not do the work yourself — you read the space, say what you found, and put agents on what needs doing. Be brief and concrete. Say plainly what you did, what you did not, and what needs a person.
+        "You are {}, the bot managing {}. You run this space: you read it, keep its plan, and get its work done — mostly by putting other people on it, and sometimes by doing it yourself. Be brief and concrete. Say plainly what you did, what you did not, and what needs a person.
 
 The receipts in the thread are the record. A line such as \"claimed by @dev-a\" means work moved; a line such as \"could not take it\" or \"nothing moved\" means it did not, whatever you intended. Never say a claim moved, an item was assigned, or work is in progress unless a receipt in this thread says so. If a handover was refused, say it was refused and why.",
         bot.name, bot.node_name
@@ -1441,14 +1441,34 @@ The receipts in the thread are the record. A line such as \"claimed by @dev-a\" 
             bot.team.join(", ")
         ));
     }
-    if !acts {
+    system.push_str(
+        "\n\nWhat you can actually do, and how:\n\
+         - Put someone on an item: write @name take \"title\" in your reply. That starts them \
+           in a session and posts a receipt here.\n\
+         - Keep the plan: work.add to put something on it, work.done when a receipt shows it \
+           finished, work.drop to let go of one nobody is doing. work.list to see it.",
+    );
+    if acts {
+        system.push_str(&format!(
+            "\n         - Do it yourself: @{} take \"title\", or @me take \"title\". You run as \
+             that agent, in a real session, with a receipt like anyone else's. Prefer handing \
+             work to your team when there is someone for it; take it yourself when there is not, \
+             or when it is small.",
+            bot.agent.trim()
+        ));
+    } else {
         system.push_str(
-            "\n\nYou have no agent, so you cannot run tools yourself. You can still manage: \
-             add to your plan with work.add, and hand an item to someone on your team by \
-             writing @name take \"title\" in your reply — that is what moves the work.",
+            "\n         - You name no agent, so you cannot run tools on the machine or a session yourself. You can still \
+             plan, and put your team on things. If something needs hands and nobody has them, \
+             say so — someone will name an agent for you under Settings.",
         );
     }
     crate::aiw::assistant::Persona {
+        hand_on_to: Vec::new(),
+        // A manager keeps its own plan, with or without an agent. This is the
+        // only thing a bot may do without a row in the permission matrix, and
+        // it writes work items in the deck — never the machine.
+        manages_with: vec![crate::aiw::tools::TOOL_WORK.to_string()],
         agent_id: if acts { bot.agent.trim().to_string() } else { format!("bot:{}", bot.node_id) },
         runs_as: if acts {
             bot.agent.trim().to_string()
@@ -1477,6 +1497,30 @@ pub fn persona_for(
 ) -> crate::aiw::assistant::Persona {
     let mut p = persona(bot);
     p.may_delegate_to = Some(effective_team(ws, bot));
+    p
+}
+
+/// The same, plus the managers it may pass work to — which needs the tree, and
+/// so needs a connection.
+pub fn persona_in(
+    conn: &Connection,
+    ws: &std::sync::Arc<crate::aiw::state::Workspace>,
+    bot: &Bot,
+) -> crate::aiw::assistant::Persona {
+    let mut p = persona_for(ws, bot);
+    p.hand_on_to = colleagues(conn, ws, bot);
+    if !p.hand_on_to.is_empty() {
+        p.system.push_str(&format!(
+            "\n\nThe managers you may pass an item to, when it belongs to them rather than to \
+             you: {}. Write @handle take \"title\" and it goes onto their plan and is announced \
+             in their thread — it does not start anyone, because they decide who does it.",
+            p.hand_on_to
+                .iter()
+                .map(|c| format!("@{} ({})", c.handle, c.name))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
     p
 }
 
@@ -1576,6 +1620,71 @@ pub async fn bot_thread_send(
 /// participants are written: a mention is recorded when a *typed* message is
 /// sent, and nothing a bot posts on its own goes through that path. So a
 /// person can add to a team by talking; a bot cannot add to its own.
+/// The other managers this bot may pass an item to.
+///
+/// Two kinds, and the rule for each is the same rule the tree already
+/// implies: the bots on nodes *under* this one, because a parent manages what
+/// is beneath it; and any bot someone pulled into this thread, because being
+/// asked into a room is how anyone joins a conversation here.
+///
+/// Deliberately not "every bot on the machine". A bot that could put work on
+/// any other bot anywhere is not a manager, it is a loose end.
+pub fn colleagues(
+    conn: &Connection,
+    ws: &std::sync::Arc<crate::aiw::state::Workspace>,
+    bot: &Bot,
+) -> Vec<crate::aiw::assistant::Colleague> {
+    let nodes = db::nodes_on(conn).unwrap_or_default();
+
+    // Everything under this bot's node, however deep.
+    let mut under: Vec<i64> = Vec::new();
+    let mut frontier = vec![bot.node_id];
+    while let Some(id) = frontier.pop() {
+        for n in nodes.iter().filter(|n| n.parent_id == Some(id)) {
+            under.push(n.id);
+            frontier.push(n.id);
+        }
+    }
+
+    // Plus whoever is in the room.
+    if let Ok(convs) = ws.convs() {
+        if let Some(thread) = convs.list().into_iter().find(|c| c.bot_node == Some(bot.node_id)) {
+            for p in thread.participants {
+                if let Some(id) = p.strip_prefix("bot:").and_then(|n| n.parse::<i64>().ok()) {
+                    if id != bot.node_id && !under.contains(&id) {
+                        under.push(id);
+                    }
+                }
+            }
+        }
+    }
+
+    all_bots(conn)
+        .into_iter()
+        .filter(|b| under.contains(&b.node_id))
+        .map(|b| crate::aiw::assistant::Colleague {
+            handle: handle_of(&b),
+            name: b.name.clone(),
+            node_id: b.node_id,
+            project_id: b.node_id.to_string(),
+            plan: Some(b.feature.trim().to_string()).filter(|f| !f.is_empty()),
+        })
+        .collect()
+}
+
+/// What people type after the `@` to reach this bot.
+///
+/// `answers_to` accepts several spellings; this is the one to print back, so
+/// a receipt names a handle that will work if you copy it.
+pub fn handle_of(b: &Bot) -> String {
+    let slug = |s: &str| s.trim().to_lowercase().replace(' ', "-");
+    if !b.node_name.trim().is_empty() {
+        slug(&b.node_name)
+    } else {
+        slug(&b.name)
+    }
+}
+
 pub fn effective_team(
     ws: &std::sync::Arc<crate::aiw::state::Workspace>,
     bot: &Bot,

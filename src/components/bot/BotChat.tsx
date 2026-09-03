@@ -24,8 +24,8 @@ export function BotChat({ bot }: { bot: ipc.Bot }) {
       placeholder={`Message ${bot.name} — @ an agent to pull one in`}
       footnote={
         acts
-          ? `Runs as ${bot.agent}. Anything needing approval stops and asks you here.`
-          : 'No agent named, so it can answer but not act. Name one on Settings.'
+          ? `Runs as ${bot.agent} — it can take an item itself with @me take "…". Anything needing approval stops and asks you here.`
+          : 'Keeps the plan and puts its team on work. Name an agent on Settings for it to do the work itself.'
       }
       empty={
         <>

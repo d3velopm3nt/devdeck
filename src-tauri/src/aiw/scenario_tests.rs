@@ -12,7 +12,7 @@ use super::commands::{run_demo, seed_demo};
 use super::context::ContextService;
 use super::events::EventType;
 use super::runtime::{AgentRuntime, StartAgentCommand};
-use super::assistant::{ChatMessage, Persona};
+use super::assistant::{ChatMessage, Colleague, Persona};
 use super::events::now_iso;
 use super::state::Workspace;
 use super::tools::{ToolCall, TOOL_FILES};
@@ -1259,6 +1259,8 @@ fn a_bot_with_no_agent_can_talk_in_a_room_but_cannot_move_work() {
         system: "You manage TyreX.".into(),
         may_delegate_to: None,
         plan: None,
+        hand_on_to: Vec::new(),
+        manages_with: Vec::new(),
         talk_only: false,
     };
     Assistant::send_as(
@@ -1286,6 +1288,182 @@ fn a_bot_with_no_agent_can_talk_in_a_room_but_cannot_move_work() {
         .any(|m| m.by.as_deref() == Some("bot:99")));
 }
 
+/// A manager can do the work itself.
+///
+/// The prompt used to say "you manage; you do not do the work yourself", and
+/// the gate agreed: a bot's team is agents it may put work on, and a bot is
+/// not on its own team — so a bot naming an agent it runs as still could not
+/// pick up an item. It goes through a session like anyone else, so the receipt
+/// and the permissions are unchanged; what changes is that it is allowed.
+#[test]
+fn a_manager_can_take_an_item_itself() {
+    let t = Tmp::new("bot-self");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
+    let c = convs(&t);
+    let conv = c
+        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .unwrap();
+
+    // A bot that runs as dev-a, whose team is somebody else entirely.
+    let voice = Persona {
+        agent_id: "dev-a".into(),
+        runs_as: "dev-a".into(),
+        name: "TyreX bot".into(),
+        system: "You manage TyreX.".into(),
+        may_delegate_to: Some(vec!["qa".into()]),
+        plan: Some("offline-synchronisation".into()),
+        hand_on_to: Vec::new(),
+        manages_with: Vec::new(),
+        talk_only: false,
+    };
+    Assistant::send_as(&w, &c, &conv.id, "@me take \"Sync status UI\"", &quiet, &voice).unwrap();
+
+    let saved = c.load(&conv.id).unwrap();
+    let note = saved
+        .messages
+        .iter()
+        .find(|m| m.tool.as_deref() == Some("handover"))
+        .expect("the attempt is recorded either way");
+    assert_eq!(note.ok, Some(true), "it must be allowed: {}", note.text);
+    assert!(
+        w.claims_for(Some("tyrex"), false)
+            .iter()
+            .any(|c| c.agent_id == "dev-a"),
+        "and the claim is real"
+    );
+}
+
+/// A manager can pass an item to another manager.
+///
+/// Not a session: the receiver is a room with a plan, not a pair of hands. The
+/// item lands on their plan, their thread is told, and this thread gets a
+/// receipt that says nothing is running yet — which is the truth, and the
+/// sentence that stops "I gave it to the platform bot" from meaning nothing.
+#[test]
+fn a_manager_can_pass_an_item_to_another_manager() {
+    let t = Tmp::new("bot-to-bot-work");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
+    let c = convs(&t);
+    let conv = c
+        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .unwrap();
+
+    let voice = Persona {
+        agent_id: "bot:1".into(),
+        runs_as: ASSISTANT_ID.into(),
+        name: "TyreX bot".into(),
+        system: "You manage TyreX.".into(),
+        may_delegate_to: Some(vec![]),
+        plan: Some("offline-synchronisation".into()),
+        manages_with: Vec::new(),
+        hand_on_to: vec![Colleague {
+            handle: "assetx".into(),
+            name: "AssetX bot".into(),
+            node_id: 42,
+            project_id: "tyrex".into(),
+            plan: Some("offline-synchronisation".into()),
+        }],
+        talk_only: false,
+    };
+    Assistant::send_as(
+        &w,
+        &c,
+        &conv.id,
+        "@assetx take \"Retry backoff\"",
+        &quiet,
+        &voice,
+    )
+    .unwrap();
+
+    let saved = c.load(&conv.id).unwrap();
+    let note = saved
+        .messages
+        .iter()
+        .find(|m| m.tool.as_deref() == Some("handover"))
+        .expect("the attempt is recorded");
+    assert_eq!(note.ok, Some(true), "{}", note.text);
+    assert!(note.text.contains("Retry backoff"), "{}", note.text);
+    assert!(
+        note.text.contains("nothing is running"),
+        "a manager is not a pair of hands, and the receipt says so: {}",
+        note.text
+    );
+    // Nothing was started — that is the difference from handing to an agent.
+    assert!(
+        w.claims_for(Some("tyrex"), false).is_empty(),
+        "passing to a manager starts nobody"
+    );
+
+    // It is on their plan, and their room was told.
+    let items = w
+        .project("tyrex")
+        .unwrap()
+        .deck()
+        .work("offline-synchronisation")
+        .unwrap()
+        .meta
+        .items;
+    assert!(
+        items.iter().any(|i| i.title == "Retry backoff"),
+        "the item is on the receiving plan: {items:?}"
+    );
+    let theirs = c.for_bot(42, "tyrex", "AssetX bot").unwrap();
+    assert!(
+        c.load(&theirs.id)
+            .unwrap()
+            .messages
+            .iter()
+            .any(|m| m.text.contains("Retry backoff")),
+        "their thread hears about it"
+    );
+}
+
+/// A manager with nowhere to put it says so, rather than saying it moved.
+#[test]
+fn passing_to_a_manager_with_no_plan_is_refused_out_loud() {
+    let t = Tmp::new("bot-to-bot-noplan");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
+    let c = convs(&t);
+    let conv = c
+        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .unwrap();
+
+    let voice = Persona {
+        agent_id: "bot:1".into(),
+        runs_as: ASSISTANT_ID.into(),
+        name: "TyreX bot".into(),
+        system: "You manage TyreX.".into(),
+        may_delegate_to: Some(vec![]),
+        plan: Some("offline-synchronisation".into()),
+        manages_with: Vec::new(),
+        hand_on_to: vec![Colleague {
+            handle: "assetx".into(),
+            name: "AssetX bot".into(),
+            node_id: 42,
+            project_id: "tyrex".into(),
+            plan: None,
+        }],
+        talk_only: false,
+    };
+    Assistant::send_as(&w, &c, &conv.id, "@assetx take \"Retry backoff\"", &quiet, &voice)
+        .unwrap();
+
+    let saved = c.load(&conv.id).unwrap();
+    let note = saved
+        .messages
+        .iter()
+        .find(|m| m.tool.as_deref() == Some("handover"))
+        .expect("the attempt is recorded");
+    assert_eq!(note.ok, Some(false), "{}", note.text);
+    assert!(note.text.contains("manages no feature"), "{}", note.text);
+}
+
 /// Two bots in one room, talking to each other, in the same record.
 ///
 /// This is bot-to-bot communication with nothing special about it: two
@@ -1310,6 +1488,8 @@ fn two_bots_hold_a_conversation_in_one_feature_thread() {
         system: format!("You are {name}."),
         may_delegate_to: None,
         plan: None,
+        hand_on_to: Vec::new(),
+        manages_with: Vec::new(),
         talk_only: false,
     };
 

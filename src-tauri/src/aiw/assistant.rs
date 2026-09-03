@@ -336,6 +336,13 @@ pub struct ContextPart {
     pub title: String,
     /// Where it came from, in words — a file, a store, a lookup.
     pub source: String,
+    /// Which side of the store split it comes from, for the eye rather than
+    /// the model: `personal` is yours and never committed, `deck` is the
+    /// project's and lives in the vault, `yours` is text you wrote here.
+    ///
+    /// The same vocabulary the Context page on a feature already uses, so the
+    /// two screens do not teach two colour schemes for one idea.
+    pub origin: String,
     pub tokens: u32,
     /// Whether this conversation is sending it.
     pub on: bool,
@@ -2399,7 +2406,7 @@ impl Assistant {
         conv: &ConversationMeta,
     ) -> Vec<ContextPart> {
         let mut out: Vec<ContextPart> = Vec::new();
-        let mut add = |key: &str, title: &str, source: &str, body: String| {
+        let mut add = |key: &str, title: &str, source: &str, origin: &str, body: String| {
             if body.trim().is_empty() {
                 return;
             }
@@ -2410,6 +2417,8 @@ impl Assistant {
                 key: key.to_string(),
                 title: title.to_string(),
                 source: source.to_string(),
+                // What you wrote is yours, whatever assembled the original.
+                origin: if edited.is_some() { "yours" } else { origin }.to_string(),
                 on: !conv.context_off.iter().any(|k| k == key),
                 edited: edited.is_some(),
                 body,
@@ -2425,7 +2434,7 @@ impl Assistant {
             if !profile.body.trim().is_empty() {
                 s.push_str(&format!("\n{}\n", profile.body.trim()));
             }
-            add("profile", "About you", "personal store · profile", s);
+            add("profile", "About you", "personal store · profile", "personal", s);
         }
 
         let memories = convs.store().memories();
@@ -2443,7 +2452,7 @@ impl Assistant {
                     truncate(&d.body, 200)
                 ));
             }
-            add("memory", "Remembered", "personal store · memory", s);
+            add("memory", "Remembered", "personal store · memory", "personal", s);
         }
 
         if let Some(pid) = &conv.project_id {
@@ -2459,7 +2468,7 @@ impl Assistant {
                         s.push_str(&format!("- {f}\n"));
                     }
                 }
-                add("project", "Project in focus", ".devdeck · features", s);
+                add("project", "Project in focus", ".devdeck · features", "deck", s);
             }
         }
 

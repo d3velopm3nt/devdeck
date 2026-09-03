@@ -307,6 +307,8 @@ export interface ContextPart {
   key: string
   title: string
   source: string
+  /** personal | deck | yours — which side of the store split it came from. */
+  origin: string
   tokens: number
   on: boolean
   edited: boolean

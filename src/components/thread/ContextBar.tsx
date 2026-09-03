@@ -20,6 +20,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Icon } from '../../lib/icons'
 import * as ipc from '../../lib/ipc'
 import { CAPTURE_CONTEXT } from '../../lib/devCapture'
+import { originLabel, originStyle, permissionStyle } from '../../lib/aiw'
 import type { ContextView } from '../../lib/ipc'
 
 /// 1240 → "1.2k". Token counts are estimates; the last three digits are noise.
@@ -27,11 +28,25 @@ function k(n: number): string {
   return n < 1000 ? String(n) : `${(n / 1000).toFixed(1)}k`
 }
 
+/// The same chip the Context page on a feature draws beside a section, so
+/// "where did this come from" is one colour scheme across the app rather than
+/// two vocabularies for one idea.
+function Chip({ label, className }: { label: string; className: string }) {
+  return (
+    <span
+      className={`shrink-0 rounded px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-[0.04em] ${className}`}
+    >
+      {label}
+    </span>
+  )
+}
+
 function Row({
   on,
   title,
   meta,
   tokens,
+  chip,
   onToggle,
   children,
   right,
@@ -40,6 +55,7 @@ function Row({
   title: string
   meta: string
   tokens: number
+  chip?: React.ReactNode
   onToggle: () => void
   children?: React.ReactNode
   right?: React.ReactNode
@@ -54,7 +70,14 @@ function Row({
         >
           <Icon name={on ? 'check' : 'close'} size={12} className={on ? 'text-ok' : 'text-faint'} />
         </button>
-        <span className="min-w-0 flex-1 truncate text-[11.5px] text-ink">{title}</span>
+        <span
+          className={`min-w-0 flex-1 truncate text-[11.5px] ${
+            on ? 'text-ink' : 'text-muted line-through'
+          }`}
+        >
+          {title}
+        </span>
+        {chip}
         <span className="hidden shrink-0 truncate text-[10px] text-faint lg:block">{meta}</span>
         <span className="w-[52px] shrink-0 text-right text-[10.5px] text-muted">
           {k(tokens)} tok
@@ -169,8 +192,9 @@ export function ContextBar({ conversationId }: { conversationId: string }) {
                   key={p.key}
                   on={p.on}
                   title={p.title}
-                  meta={p.edited ? `${p.source} · edited` : p.source}
+                  meta={p.source}
                   tokens={p.tokens}
+                  chip={<Chip label={originLabel(p.origin)} className={originStyle(p.origin)} />}
                   onToggle={() => void set('context', p.key, !p.on)}
                   right={
                     <button
@@ -240,8 +264,9 @@ export function ContextBar({ conversationId }: { conversationId: string }) {
                   key={t.id}
                   on={t.on}
                   title={t.title}
-                  meta={`${t.actions} action${t.actions === 1 ? '' : 's'} · ${t.permission}`}
+                  meta={`${t.actions} action${t.actions === 1 ? '' : 's'}`}
                   tokens={t.tokens}
+                  chip={<Chip label={t.permission} className={permissionStyle(t.permission)} />}
                   onToggle={() => void set('tool', t.id, !t.on)}
                 >
                   <div className="pl-[22px] pr-2 text-[10px] leading-[1.5] text-muted">

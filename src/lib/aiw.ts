@@ -792,6 +792,57 @@ export const inclusionStyle = (i: Inclusion): string => {
   }
 }
 
+/** Where a context part came from, in the same palette the Context page on a
+ *  feature uses for `inclusion` — indigo for what a project hands down, sky
+ *  for what a person wrote, slate for the rest. Two screens, one colour scheme
+ *  for one idea.
+ *
+ *  The distinction is the store split, and it is worth seeing at a glance:
+ *  `personal` never leaves this machine and is never committed; `deck` is the
+ *  project's own truth, in the vault, shared with whoever has the repository. */
+export const originStyle = (origin: string): string => {
+  switch (origin) {
+    case 'deck':
+      return 'bg-indigo-500/16 text-indigo-300'
+    case 'yours':
+      return 'bg-sky-500/14 text-info'
+    case 'personal':
+      return 'bg-emerald-500/12 text-ok'
+    default:
+      return 'bg-slate-500/14 text-dim'
+  }
+}
+
+/** What to call it in a chip: short, and true. */
+export const originLabel = (origin: string): string => {
+  switch (origin) {
+    case 'deck':
+      return 'vault'
+    case 'yours':
+      return 'yours'
+    case 'personal':
+      return 'personal'
+    default:
+      return origin
+  }
+}
+
+/** A tool's permission, coloured by how much it may do without asking. */
+export const permissionStyle = (p: string): string => {
+  switch (p) {
+    case 'full':
+      return 'bg-emerald-500/12 text-ok'
+    case 'approval':
+      return 'bg-amber-500/14 text-warn'
+    case 'read':
+      return 'bg-sky-500/14 text-info'
+    case "manager's own":
+      return 'bg-indigo-500/16 text-indigo-300'
+    default:
+      return 'bg-slate-500/14 text-dim'
+  }
+}
+
 /** Two-letter badge for an agent, e.g. "dev-a" → "DA". */
 export const initials = (id: string): string => {
   const parts = id.split(/[-_\s]/).filter(Boolean)

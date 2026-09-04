@@ -26,6 +26,7 @@ import { ConnectionsSidebar } from './components/ConnectionsSidebar'
 import {
   CAPTURE_CHECK,
   CAPTURE_ENTRY,
+  CAPTURE_OPEN_FILE,
   CAPTURE_EVENT,
   CAPTURE_NODE,
   CAPTURE_RAIL,
@@ -43,7 +44,7 @@ import { aiw as aiwApi } from './lib/aiw'
 import { routeOutput } from './lib/termBus'
 import { useApp } from './store'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
-import { openNodeThread, dockApi, openTerminalPanel, openEditor, openNodeSetup, openSingleton, saveLayout, restoreLayout } from './lib/dock'
+import { openNodeThread, dockApi, openFile, openTerminalPanel, openEditor, openNodeSetup, openSingleton, saveLayout, restoreLayout } from './lib/dock'
 import { openTerminal, launchProfile } from './lib/runner'
 import { resolveDir } from './lib/tree'
 
@@ -137,6 +138,7 @@ let said = false
 let checked = false
 let evented = false
 let entered = false
+let filed = false
 
 export default function App() {
   const app = useApp()
@@ -149,6 +151,21 @@ export default function App() {
   // fires on the first paint whatever else is still loading.
   useEffect(() => {
     void ipc.appReady().catch(() => {})
+  }, [])
+
+  // Screenshot harness: open one file as a document. `nodeId|root|rel`.
+  // Waits for the dock, which mounts after the tree loads — opening a panel
+  // before it exists is a silent no-op that looks like the feature not working.
+  useEffect(() => {
+    if (!CAPTURE_OPEN_FILE || filed) return
+    filed = true
+    const [id, root, ...rest] = CAPTURE_OPEN_FILE.split('|')
+    const rel = rest.join('|')
+    const t = window.setInterval(() => {
+      openFile(Number(id), rel, root === 'vault' ? 'vault' : 'work')
+    }, 600)
+    window.setTimeout(() => window.clearInterval(t), 12000)
+    return () => window.clearInterval(t)
   }, [])
 
   // Screenshot harness: record entries against an occurrence, through the

@@ -111,6 +111,7 @@ import {
   GitPanel,
   FeaturesPanel,
 } from './components/aiw/ProjectPanels'
+import { FileViewer } from './components/FileViewer'
 
 const components = {
   'node-setup': (props: IDockviewPanelProps<{ id: number }>) => <NodeSetupPage {...props} />,
@@ -120,6 +121,9 @@ const components = {
   'space-detail': (props: IDockviewPanelProps<{ id: number }>) => <SpaceDetailPage {...props} />,
   'bot-detail': (props: IDockviewPanelProps<{ id: number; ask?: boolean }>) => <BotPage {...props} />,
   'service-detail': (props: IDockviewPanelProps<{ id: number }>) => <ServiceDetailPage {...props} />,
+  file: (props: IDockviewPanelProps<{ nodeId: number; rel: string; root: 'work' | 'vault' }>) => (
+    <FileViewer nodeId={props.params.nodeId} rel={props.params.rel} root={props.params.root} />
+  ),
   welcome: () => <Welcome />,
   terminal: (props: IDockviewPanelProps<{ ptyId: number }>) => (
     <TerminalView ptyId={props.params.ptyId} />

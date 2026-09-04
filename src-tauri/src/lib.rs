@@ -1088,6 +1088,7 @@ pub fn run() {
             bots::bot_thread,
             bots::bot_thread_send,
             files::node_files,
+            files::file_text,
             team::team_board,
             threads::thread_wake,
             threads::thread_context,

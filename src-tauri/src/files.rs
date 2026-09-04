@@ -180,6 +180,111 @@ pub fn node_files(
     Ok(dirs)
 }
 
+/// A file's text, with everything the viewer needs to say what it is holding.
+#[derive(Serialize, Clone, Debug)]
+pub struct FileText {
+    pub rel: String,
+    /// The absolute path, for "reveal in explorer" and for saying where you are.
+    pub path: String,
+    /// What is in it. Empty when `readable` is false.
+    pub text: String,
+    pub bytes: u64,
+    /// Whether this is text at all. A PNG opened in an editor is a screenful
+    /// of noise and a lie about what the file is.
+    pub readable: bool,
+    /// Why not, when not — shown instead of the text rather than beside it.
+    pub why: String,
+    /// True when the text stops before the file does.
+    pub truncated: bool,
+}
+
+/// The most of a file the viewer will take.
+///
+/// Monaco will happily open a hundred megabytes and then stop responding. A
+/// vault file is a page of YAML; anything past this is a log or a dump, and
+/// the honest move is to show the head and say so.
+const MAX_TEXT: u64 = 2_000_000;
+
+/// One file of a node, as text.
+///
+/// Same two roots as `node_files`, same refusal to climb out of them: a path
+/// with `..` in it is not a file, it is a way out of the sandbox.
+#[tauri::command]
+pub fn file_text(
+    db: tauri::State<Db>,
+    node_id: i64,
+    rel: String,
+    root: Option<String>,
+) -> Result<FileText, String> {
+    let vault = root.as_deref() == Some("vault");
+    let base = {
+        let conn = db.0.lock().unwrap();
+        let node = db::node_by_id(&conn, node_id)?;
+        if vault {
+            db::node_deck_dir(&conn, &node)
+                .ok_or("that node has no vault folder — it lives outside the vault")?
+        } else {
+            db::node_dir(&conn, &node).ok_or("that node has no folder yet")?
+        }
+    };
+    if rel.contains("..") {
+        return Err("that path leaves the node".into());
+    }
+    let path = base.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR));
+    let meta = std::fs::metadata(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    if meta.is_dir() {
+        return Err(format!("{} is a folder", path.display()));
+    }
+
+    let bytes = meta.len();
+    let mut out = FileText {
+        rel,
+        path: path.to_string_lossy().to_string(),
+        text: String::new(),
+        bytes,
+        readable: true,
+        why: String::new(),
+        truncated: false,
+    };
+
+    if bytes > MAX_TEXT {
+        // Read the head rather than refusing outright: the first page of a
+        // huge file is usually the part you wanted.
+        out.truncated = true;
+    }
+
+    let raw = std::fs::read(&path).map_err(|e| e.to_string())?;
+    let head = if raw.len() as u64 > MAX_TEXT {
+        &raw[..MAX_TEXT as usize]
+    } else {
+        &raw[..]
+    };
+
+    // A NUL byte in the first few kilobytes is the oldest and still the best
+    // test for "this is not text".
+    if head.iter().take(8_000).any(|b| *b == 0) {
+        out.readable = false;
+        out.why = "This is a binary file.".into();
+        return Ok(out);
+    }
+
+    match String::from_utf8(head.to_vec()) {
+        Ok(t) => out.text = t,
+        Err(e) => {
+            // A truncated read can cut a multi-byte character in half; that is
+            // not a broken file, so keep what decoded and drop the tail.
+            let good = e.utf8_error().valid_up_to();
+            if out.truncated && good > 0 {
+                out.text = String::from_utf8_lossy(&head[..good]).into_owned();
+            } else {
+                out.readable = false;
+                out.why = "This file is not UTF-8 text.".into();
+            }
+        }
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

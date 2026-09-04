@@ -231,6 +231,38 @@ export function openAiwDoc(kind: AiwDoc, projectId: string, projectName: string)
   })
 }
 
+/// Open (or focus) a file as a document.
+///
+/// In the dock rather than in the sidebar: the surface is for real documents,
+/// and a file is one — which is also how it lands beside the terminal you are
+/// running it in, with tabs and splits, without any of that being written
+/// here.
+///
+/// Keyed by node, root and path, so the same file from the vault and from the
+/// repository are two tabs. They are two files.
+export function openFile(
+  nodeId: number,
+  rel: string,
+  root: 'work' | 'vault',
+  title?: string,
+) {
+  if (!api) return
+  useApp.getState().setRailView('projects')
+  const id = `file-${nodeId}-${root}-${rel}`
+  const existing = api.getPanel(id)
+  if (existing) {
+    existing.api.setActive()
+    return
+  }
+  addToMain({
+    id,
+    component: 'file',
+    title: title ?? rel.split('/').pop() ?? rel,
+    params: { nodeId, rel, root },
+  })
+  api.getPanel(id)?.api.setActive()
+}
+
 export function openTerminalPanel(ptyId: number, title: string) {
   if (!api) return
   const id = `terminal-${ptyId}`

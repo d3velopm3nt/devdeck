@@ -243,6 +243,20 @@ export interface FileRow {
 export const nodeFiles = (nodeId: number, rel = '', root: 'work' | 'vault' = 'work') =>
   invoke<FileRow[]>('node_files', { nodeId, rel, root })
 
+/** One file's text, plus what to say when it is not text at all. */
+export interface FileText {
+  rel: string
+  path: string
+  text: string
+  bytes: number
+  readable: boolean
+  why: string
+  truncated: boolean
+}
+
+export const fileText = (nodeId: number, rel: string, root: 'work' | 'vault' = 'work') =>
+  invoke<FileText>('file_text', { nodeId, rel, root })
+
 /** One model call: what went in, what came back, whose it was, what it cost.
  *  Token fields are null when the provider did not report — never zero. */
 export interface LlmCall {

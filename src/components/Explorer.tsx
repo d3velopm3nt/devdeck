@@ -13,6 +13,7 @@ import {
   openAiwDoc,
   openBot,
   openEditor,
+  openFile,
   openNodeConfig,
   openNodeSetup,
   openNodeThread,
@@ -764,6 +765,7 @@ export function Explorer() {
             title={r.rel}
             onClick={() => {
               if (r.dir) toggleDir(node.id, r.rel)
+              else openFile(node.id, r.rel, rootOf(node.id))
             }}
           >
             <span className="flex w-5 shrink-0 items-center justify-center text-dim">

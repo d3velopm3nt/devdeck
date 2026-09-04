@@ -24,7 +24,7 @@ import { findNode, resolveDir } from '../lib/tree'
 import { SPACE_TAGS, labelColor, nodeColor } from '../lib/spaces'
 import { loadExampleWorkspace } from '../lib/example'
 import { PopMenu, type MenuItem } from './PopMenu'
-import { CAPTURE_EXPAND } from '../lib/devCapture'
+import { CAPTURE_EXPAND, CAPTURE_FILE_ROOT } from '../lib/devCapture'
 import { BotCreate } from './bot/BotCreate'
 import { GitHubImportModal } from './GitHubImportModal'
 import { Icon } from '../lib/icons'
@@ -177,6 +177,14 @@ export function Explorer() {
   const [files, setFiles] = useState<Record<string, ipc.FileRow[]>>({})
   const [fileErr, setFileErr] = useState<Record<string, string>>({})
   const [openDirs, setOpenDirs] = useState<Set<string>>(new Set())
+  /// Which of a node's two directories the tree is showing, per node.
+  ///
+  /// `work` is where things run — the repository, when the node names one.
+  /// `vault` is where what we know lives: the folder under the vault root
+  /// holding `.devdeck`, `_bot.md` and the features. They are different
+  /// questions and the tree used to answer only the first, which made the
+  /// vault invisible in an app built around keeping one.
+  const [fileRoot, setFileRoot] = useState<Record<number, 'work' | 'vault'>>({})
   const [wsMenu, setWsMenu] = useState<{ x: number; y: number } | null>(null)
   const [ghOpen, setGhOpen] = useState(false)
   const [newBotFor, setNewBotFor] = useState<number | null>(null)
@@ -681,11 +689,18 @@ export function Explorer() {
   ///
   /// Loaded when you expand and never before: a vault of thirty repositories
   /// would otherwise read every one of them to draw a sidebar.
+  const rootOf = (nodeId: number): 'work' | 'vault' =>
+    fileRoot[nodeId] ?? ((CAPTURE_FILE_ROOT as 'work' | 'vault') || 'work')
+  /// Keyed by root as well as path: the two sides have different trees, and a
+  /// cache that forgot which one it read would show the repository's folders
+  /// under the vault's name.
+  const dirKey = (nodeId: number, rel: string) => `${nodeId}:${rootOf(nodeId)}:${rel}`
+
   const loadDir = (nodeId: number, rel: string) => {
-    const k = `${nodeId}:${rel}`
+    const k = dirKey(nodeId, rel)
     if (files[k] || fileErr[k]) return
     void ipc
-      .nodeFiles(nodeId, rel)
+      .nodeFiles(nodeId, rel, rootOf(nodeId))
       .then((rows) => setFiles((f) => ({ ...f, [k]: rows })))
       // "I could not read this folder" and "this folder is empty" must never
       // render the same, so the failure is kept and shown.
@@ -693,7 +708,7 @@ export function Explorer() {
   }
 
   const toggleDir = (nodeId: number, rel: string) => {
-    const k = `${nodeId}:${rel}`
+    const k = dirKey(nodeId, rel)
     setOpenDirs((prev) => {
       const next = new Set(prev)
       if (next.has(k)) next.delete(k)
@@ -706,7 +721,7 @@ export function Explorer() {
   }
 
   const renderFiles = (node: TreeNode, rel: string, depth: number): ReactNode => {
-    const k = `${node.id}:${rel}`
+    const k = dirKey(node.id, rel)
     const rows = files[k]
     const err = fileErr[k]
     const pad = { paddingLeft: `${depth * 14 + 6}px` }
@@ -739,7 +754,7 @@ export function Explorer() {
       )
     }
     return visible.map((r) => {
-      const childKey = `${node.id}:${r.rel}`
+      const childKey = dirKey(node.id, r.rel)
       const open = openDirs.has(childKey)
       return (
         <div key={childKey}>
@@ -771,6 +786,52 @@ export function Explorer() {
         </div>
       )
     })
+  }
+
+  /// Two words that say which directory you are looking at.
+  ///
+  /// Deliberately a switch rather than two branches of one tree: a node's
+  /// repository and its vault folder are both "this node", and showing them
+  /// as siblings would suggest one contains the other. Switching also drops
+  /// the open folders for that node — the paths on the other side are not the
+  /// same paths, and carrying them over would open nothing and look broken.
+  const renderRootSwitch = (node: TreeNode, depth: number): ReactNode => {
+    const here = rootOf(node.id)
+    const pad = { paddingLeft: `${depth * 14 + 6}px` }
+    const pick = (want: 'work' | 'vault') => {
+      if (want === here) return
+      setFileRoot((r) => ({ ...r, [node.id]: want }))
+      setOpenDirs((prev) => {
+        const next = new Set<string>()
+        for (const k of prev) if (!k.startsWith(`${node.id}:`)) next.add(k)
+        return next
+      })
+    }
+    const tab = (want: 'work' | 'vault', label: string, title: string) => (
+      <button
+        className={`rounded px-1.5 text-[10px] font-semibold uppercase tracking-[0.04em] ${
+          here === want ? 'bg-indigo-500/14 text-indigo-400' : 'text-faint hover:text-dim'
+        }`}
+        title={title}
+        onClick={(e) => {
+          e.stopPropagation()
+          pick(want)
+        }}
+      >
+        {label}
+      </button>
+    )
+    return (
+      <div
+        key={`${node.id}-root`}
+        className="flex items-center gap-1 py-0.5 select-none"
+        style={pad}
+      >
+        <span className="flex w-5 shrink-0" />
+        {tab('work', 'Repo', 'The repository — where commands and terminals run')}
+        {tab('vault', 'Vault', 'The vault folder — .devdeck, _bot.md and the features')}
+      </div>
+    )
   }
 
   /// What is happening in this project right now, and what it is working on.
@@ -1063,10 +1124,13 @@ export function Explorer() {
             {node.kind === 'project' && renderLive(node, depth + 1)}
             {children.map((c) => renderNode(c, depth + 1))}
             {node.kind === 'project' && renderFeatures(node, depth + 1)}
+            {node.kind === 'project' && renderRootSwitch(node, depth + 1)}
             {node.kind === 'project' && renderFiles(node, '', depth + 1)}
-            {node.kind === 'project' && !files[`${node.id}:`] && !fileErr[`${node.id}:`] && (
-              <FetchOnce load={() => loadDir(node.id, '')} />
-            )}
+            {node.kind === 'project' &&
+              !files[dirKey(node.id, '')] &&
+              !fileErr[dirKey(node.id, '')] && (
+                <FetchOnce load={() => loadDir(node.id, '')} />
+              )}
             {showCommands &&
               renderCategory(
                 node,

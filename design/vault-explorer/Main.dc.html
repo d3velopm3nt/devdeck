@@ -1,0 +1,186 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: var(--accent); } a:hover { color: var(--ink); }
+    .row { display: flex; align-items: center; gap: 6px; padding: 2px 6px; border-radius: 4px;
+           font-size: 12.5px; color: var(--body); white-space: nowrap; }
+    .row.on { background: var(--hover); color: var(--ink); }
+    .row.mut { color: var(--dim); }
+    .chip { font-size: 9px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase;
+            padding: 1px 5px; border-radius: 999px; }
+    .vault { background: rgb(129 140 248 / .14); color: var(--accent); }
+    .mine { background: rgb(74 222 128 / .14); color: var(--ok); }
+    .cap { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+           color: var(--faint); }
+    .mono { font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --hover: {{c.hover}}; --line: {{c.line}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; background: var(--app); width: 760px; height: 620px; display: flex; overflow: hidden;">
+
+  <div style="width: 46px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; gap: 14px; padding-top: 12px;">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="1.7"><path d="M3 9.5 12 4l9 5.5V20H3z"/></svg>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 4v3M12 17v3M4 12h3M17 12h3"/></svg>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.7"><path d="M3 6h6l2 2h10v10H3z"/></svg>
+  </div>
+
+  <div style="width: 268px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column;">
+    <div style="display: flex; align-items: center; gap: 6px; padding: 10px 10px 8px;">
+      <span style="font-size: 12.5px; font-weight: 600; color: var(--ink);">Vault</span>
+      <span class="mono" style="font-size: 10px; color: var(--faint);">~/DevDeck</span>
+      <span style="flex: 1;"></span>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--dim)" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+    </div>
+
+    <div style="padding: 0 6px 8px; display: flex; flex-direction: column; gap: 1px; overflow: hidden;">
+      <div class="row" style="font-weight: 600; color: var(--ink);">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--dim)" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.7"><path d="M3 6h6l2 2h10v10H3z"/></svg>
+        <span>Innotrack</span>
+      </div>
+
+      <div class="row mut" style="padding-left: 24px;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>
+        <span class="mono">.devdeck</span>
+        <span class="chip vault">vault</span>
+      </div>
+
+      <div class="row on" style="padding-left: 24px; font-weight: 600;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--dim)" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.7"><path d="M3 6h6l2 2h10v10H3z"/></svg>
+        <span>Devdeck</span>
+        <span class="chip" style="background: rgb(148 163 184 / .16); color: var(--dim);">repo</span>
+      </div>
+
+      <div class="row" style="padding-left: 42px;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.6"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg>
+        <span class="mono">_devdeck.md</span>
+      </div>
+      <div class="row" style="padding-left: 42px;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6"><rect x="4" y="7" width="16" height="12" rx="2"/><path d="M9 12h.01M15 12h.01M12 3v4"/></svg>
+        <span class="mono">_bot.md</span>
+        <span class="chip vault">bot</span>
+      </div>
+
+      <div class="row mut" style="padding-left: 42px;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+        <span class="mono">.devdeck</span>
+      </div>
+      <div class="row" style="padding-left: 60px;"><span class="mono">project.md</span></div>
+      <div class="row mut" style="padding-left: 60px;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+        <span class="mono">features</span>
+        <span style="font-size: 10px; color: var(--faint);">2</span>
+      </div>
+      <div class="row on" style="padding-left: 78px;">
+        <span>node-as-conversation</span>
+        <span class="chip" style="background: rgb(251 191 36 / .14); color: var(--warn);">14/17</span>
+      </div>
+      <div class="row" style="padding-left: 96px;"><span class="mono">feature.md</span></div>
+      <div class="row" style="padding-left: 96px;"><span class="mono">context.md</span></div>
+      <div class="row" style="padding-left: 96px;"><span class="mono">work.md</span></div>
+      <div class="row mut" style="padding-left: 96px;"><span class="mono">decisions</span></div>
+      <div class="row mut" style="padding-left: 96px;"><span class="mono">sessions</span></div>
+      <div class="row mut" style="padding-left: 60px;"><span class="mono">agents · config · knowledge</span></div>
+
+      <div class="row" style="padding-left: 24px;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--dim)" stroke-width="1.7"><path d="M3 6h6l2 2h10v10H3z"/></svg>
+        <span>x-platform</span>
+      </div>
+      <div class="row" style="padding-left: 24px;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--dim)" stroke-width="1.7"><path d="M3 6h6l2 2h10v10H3z"/></svg>
+        <span>TrackX</span>
+      </div>
+      <div class="row" style="font-weight: 600; color: var(--ink); margin-top: 2px;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--dim)" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.7"><path d="M3 6h6l2 2h10v10H3z"/></svg>
+        <span>Demo</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="flex: 1; display: flex; flex-direction: column; background: var(--app); min-width: 0;">
+    <div style="padding: 12px 16px 10px; border-bottom: 1px solid var(--line);">
+      <div style="display: flex; align-items: baseline; gap: 8px;">
+        <span style="font-size: 14px; font-weight: 600; color: var(--ink);">node-as-conversation</span>
+        <span class="chip vault">vault</span>
+      </div>
+      <div class="mono" style="margin-top: 3px; font-size: 10.5px; color: var(--faint);">Innotrack / Devdeck / .devdeck / features / node-as-conversation</div>
+    </div>
+
+    <div style="padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; overflow: hidden;">
+      <div style="display: flex; gap: 8px;">
+        <div style="flex: 1; background: var(--raise); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;">
+          <div class="cap">Work</div>
+          <div style="font-size: 17px; font-weight: 600; color: var(--ink); line-height: 1.2;">14 <span style="font-size: 12px; color: var(--muted); font-weight: 400;">of 17</span></div>
+        </div>
+        <div style="flex: 1; background: var(--raise); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;">
+          <div class="cap">Decisions</div>
+          <div style="font-size: 17px; font-weight: 600; color: var(--ink); line-height: 1.2;">6</div>
+        </div>
+        <div style="flex: 1; background: var(--raise); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;">
+          <div class="cap">Sessions</div>
+          <div style="font-size: 17px; font-weight: 600; color: var(--ink); line-height: 1.2;">23</div>
+        </div>
+      </div>
+
+      <div style="border: 1px solid var(--line); border-radius: 8px; overflow: hidden;">
+        <div style="padding: 6px 10px; border-bottom: 1px solid var(--line);" class="cap">Files in this feature</div>
+        <div style="display: flex; flex-direction: column;">
+          <div style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--line);">
+            <span class="mono" style="font-size: 11.5px; color: var(--ink); width: 108px;">feature.md</span>
+            <span style="font-size: 11.5px; color: var(--dim); flex: 1; overflow: hidden; text-overflow: ellipsis;">Every node is a conversation</span>
+            <span style="font-size: 10.5px; color: var(--faint);">2 Sept</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--line);">
+            <span class="mono" style="font-size: 11.5px; color: var(--ink); width: 108px;">work.md</span>
+            <span style="font-size: 11.5px; color: var(--dim); flex: 1; overflow: hidden; text-overflow: ellipsis;">17 items · 1 blocked</span>
+            <span style="font-size: 10.5px; color: var(--faint);">today</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; padding: 6px 10px;">
+            <span class="mono" style="font-size: 11.5px; color: var(--ink); width: 108px;">context.md</span>
+            <span style="font-size: 11.5px; color: var(--dim); flex: 1; overflow: hidden; text-overflow: ellipsis;">Assembled at checkpoint 41a9c2</span>
+            <span style="font-size: 10.5px; color: var(--faint);">2 Sept</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: flex-start; gap: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.7" style="flex-shrink: 0; margin-top: 1px;"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
+        <div style="font-size: 11px; line-height: 1.55; color: var(--muted);">
+          Everything here is in the vault: committed with the repository and shared with whoever has it. Your conversations, memory and day live in the personal store, which this tree deliberately does not show.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', panel: '#11141c', raise: '#151923', hover: '#232b3b', line: '#1e293b',
+          ink: '#e2e8f0', body: '#cbd5e1', dim: '#94a3b8', muted: '#64748b', faint: '#475569',
+          accent: '#818cf8', ok: '#4ade80', warn: '#fbbf24' }
+      : { app: '#e9ebf0', panel: '#fdfdfe', raise: '#f0f2f6', hover: '#e7eaf1', line: '#d9dee7',
+          ink: '#16181d', body: '#333a45', dim: '#5a6472', muted: '#7d8794', faint: '#a5aebb',
+          accent: '#4f46e5', ok: '#15803d', warn: '#b45309' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

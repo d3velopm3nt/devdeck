@@ -1,0 +1,112 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: var(--accent); } a:hover { color: var(--ink); }
+    .row { display: flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 4px;
+           font-size: 12.5px; color: var(--body); white-space: nowrap; }
+    .row.on { background: var(--hover); color: var(--ink); }
+    .row.mut { color: var(--dim); }
+    .col { flex: 1; min-width: 0; border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+    .colcap { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+              color: var(--faint); padding: 8px 10px 6px; }
+    .chip { font-size: 9px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase;
+            padding: 1px 5px; border-radius: 999px; }
+    .vault { background: rgb(129 140 248 / .14); color: var(--accent); }
+    .mono { font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --hover: {{c.hover}}; --line: {{c.line}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --warn: {{c.warn}}; --ok: {{c.ok}}; background: var(--app); width: 760px; height: 620px; display: flex; flex-direction: column; overflow: hidden;">
+
+  <div style="display: flex; align-items: center; gap: 8px; padding: 11px 14px 9px; background: var(--panel); border-bottom: 1px solid var(--line);">
+    <span style="font-size: 12.5px; font-weight: 600; color: var(--ink);">Vault</span>
+    <span class="mono" style="font-size: 10.5px; color: var(--dim);">Innotrack / Devdeck / .devdeck / features / node-as-conversation</span>
+    <span style="flex: 1;"></span>
+    <span class="chip vault">vault</span>
+  </div>
+
+  <div style="flex: 1; display: flex; background: var(--panel); min-height: 0;">
+    <div class="col">
+      <div class="colcap">Vault</div>
+      <div style="padding: 0 4px; display: flex; flex-direction: column; gap: 1px;">
+        <div class="row on"><span>Innotrack</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--dim)" stroke-width="2" style="margin-left: auto;"><path d="m9 6 6 6-6 6"/></svg></div>
+        <div class="row"><span>Demo</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="2" style="margin-left: auto;"><path d="m9 6 6 6-6 6"/></svg></div>
+        <div class="row"><span>Life</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="2" style="margin-left: auto;"><path d="m9 6 6 6-6 6"/></svg></div>
+        <div class="row"><span>Fitness</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="2" style="margin-left: auto;"><path d="m9 6 6 6-6 6"/></svg></div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="colcap">Innotrack</div>
+      <div style="padding: 0 4px; display: flex; flex-direction: column; gap: 1px;">
+        <div class="row on"><span>Devdeck</span><span class="chip" style="background: rgb(148 163 184 / .16); color: var(--dim);">repo</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--dim)" stroke-width="2" style="margin-left: auto;"><path d="m9 6 6 6-6 6"/></svg></div>
+        <div class="row"><span>x-platform</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="2" style="margin-left: auto;"><path d="m9 6 6 6-6 6"/></svg></div>
+        <div class="row"><span>TrackX</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="2" style="margin-left: auto;"><path d="m9 6 6 6-6 6"/></svg></div>
+        <div class="row mut" style="margin-top: 6px;"><span class="mono">.devdeck</span><span class="chip vault">vault</span></div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="colcap">Devdeck</div>
+      <div style="padding: 0 4px; display: flex; flex-direction: column; gap: 1px;">
+        <div class="row"><span class="mono">_devdeck.md</span></div>
+        <div class="row"><span class="mono">_bot.md</span><span class="chip vault">bot</span></div>
+        <div class="row on"><span class="mono">.devdeck</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--dim)" stroke-width="2" style="margin-left: auto;"><path d="m9 6 6 6-6 6"/></svg></div>
+        <div class="row mut" style="margin-top: 6px; font-size: 11px;"><span>src · scripts · package.json</span></div>
+        <div class="row mut" style="font-size: 10.5px; color: var(--faint); white-space: normal; line-height: 1.5;">
+          The repository lives here too — the vault points at it, and this column shows both.
+        </div>
+      </div>
+    </div>
+
+    <div class="col" style="border-right: none;">
+      <div class="colcap">features / node-as-conversation</div>
+      <div style="padding: 0 4px; display: flex; flex-direction: column; gap: 1px;">
+        <div class="row on"><span class="mono">work.md</span><span class="chip" style="background: rgb(251 191 36 / .14); color: var(--warn);">14/17</span></div>
+        <div class="row"><span class="mono">feature.md</span></div>
+        <div class="row"><span class="mono">context.md</span></div>
+        <div class="row mut"><span class="mono">decisions</span><span style="font-size: 10px; color: var(--faint); margin-left: auto;">6</span></div>
+        <div class="row mut"><span class="mono">sessions</span><span style="font-size: 10px; color: var(--faint); margin-left: auto;">23</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="border-top: 1px solid var(--line); background: var(--raise); padding: 10px 14px; display: flex; gap: 14px; align-items: flex-start;">
+    <div style="flex: 1; min-width: 0;">
+      <div style="font-size: 12px; font-weight: 600; color: var(--ink);">work.md</div>
+      <div style="margin-top: 3px; font-size: 11px; color: var(--muted); line-height: 1.5;">17 work items, 14 done, 1 blocked. Last written today by the DevDeck bot.</div>
+    </div>
+    <div style="display: flex; gap: 6px; flex-shrink: 0;">
+      <span style="font-size: 10.5px; color: var(--dim); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px;">Open</span>
+      <span style="font-size: 10.5px; color: var(--dim); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px;">Reveal</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', panel: '#11141c', raise: '#151923', hover: '#232b3b', line: '#1e293b',
+          ink: '#e2e8f0', body: '#cbd5e1', dim: '#94a3b8', muted: '#64748b', faint: '#475569',
+          accent: '#818cf8', ok: '#4ade80', warn: '#fbbf24' }
+      : { app: '#e9ebf0', panel: '#fdfdfe', raise: '#f0f2f6', hover: '#e7eaf1', line: '#d9dee7',
+          ink: '#16181d', body: '#333a45', dim: '#5a6472', muted: '#7d8794', faint: '#a5aebb',
+          accent: '#4f46e5', ok: '#15803d', warn: '#b45309' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

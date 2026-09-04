@@ -101,17 +101,33 @@ fn chip(rel: &str, features: &[(String, Vec<String>)]) -> Option<String> {
 /// `rel` empty means the node's own root. Directories first, then files, both
 /// alphabetically — a listing whose order depends on the filesystem is one you
 /// cannot scan twice the same way.
+///
+/// **Which root, said out loud.** A node has two directories and they are
+/// different questions: `work` is where things *run* — the repository, when
+/// the node names one — and `vault` is where what we *know* lives, the folder
+/// under `~/DevDeck` holding `.devdeck`, `_bot.md` and the features. The
+/// Explorer only ever listed the first, so the vault was invisible in an app
+/// whose whole point is keeping one. The caller says which; there is no
+/// default that guesses, because one function answering both is the bug that
+/// put `_bot.md` in somebody's repository.
 #[tauri::command]
 pub fn node_files(
     ws: tauri::State<std::sync::Arc<crate::aiw::state::Workspace>>,
     db: tauri::State<Db>,
     node_id: i64,
     rel: String,
+    root: Option<String>,
 ) -> Result<Vec<FileRow>, String> {
+    let vault = root.as_deref() == Some("vault");
     let root = {
         let conn = db.0.lock().unwrap();
         let node = db::node_by_id(&conn, node_id)?;
-        db::node_dir(&conn, &node).ok_or("that node has no folder yet")?
+        if vault {
+            db::node_deck_dir(&conn, &node)
+                .ok_or("that node has no vault folder — it lives outside the vault")?
+        } else {
+            db::node_dir(&conn, &node).ok_or("that node has no folder yet")?
+        }
     };
     // A path that climbs out of the node is not a listing, it is a way out of
     // the sandbox. Refuse rather than normalising it into something plausible.

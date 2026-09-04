@@ -237,8 +237,11 @@ export interface FileRow {
 }
 
 /** What is in one folder of a node. `rel` empty means the node's own root. */
-export const nodeFiles = (nodeId: number, rel = '') =>
-  invoke<FileRow[]>('node_files', { nodeId, rel })
+/** One directory of a node. `root` picks which of its two directories: `work`
+ *  is where things run (the repository, when the node names one), `vault` is
+ *  where what we know lives — `.devdeck`, `_bot.md`, the features. */
+export const nodeFiles = (nodeId: number, rel = '', root: 'work' | 'vault' = 'work') =>
+  invoke<FileRow[]>('node_files', { nodeId, rel, root })
 
 /** One model call: what went in, what came back, whose it was, what it cost.
  *  Token fields are null when the provider did not report — never zero. */

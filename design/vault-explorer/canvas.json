@@ -1,0 +1,47 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 760, "h": 620, "title": "A · Tree + inspector" },
+    { "file": "OneTree.dc.html", "x": 860, "y": 0, "w": 760, "h": 620, "title": "B · One tree" },
+    { "file": "Columns.dc.html", "x": 1720, "y": 0, "w": 760, "h": 620, "title": "C · Columns" },
+    { "file": "FileView.dc.html", "x": 0, "y": 800, "w": 760, "h": 620, "title": "A · a file open" },
+    { "file": "BotsAgents.dc.html", "x": 860, "y": 800, "w": 760, "h": 620, "title": "Bots and agents" }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -190,
+      "w": 520,
+      "text": "Vault explorer — three directions for the same vault.\n\nAll three show the real tree on this machine: workspaces, project nodes, _bot.md beside a node, and .devdeck with its features. Indigo means vault (committed, travels with the repo); green means personal (never leaves this machine).\n\nEach artboard has a dark/light switch above it."
+    },
+    {
+      "id": "rec",
+      "x": 600,
+      "y": -190,
+      "w": 400,
+      "text": "Recommendation: A.\n\nIt is the only one that answers all three of your asks in one surface — the whole vault, one node in detail, and a place for bots and agents to live — without a second screen."
+    },
+    {
+      "id": "note-b",
+      "x": 860,
+      "y": 660,
+      "w": 340,
+      "text": "B trades the inspector for depth: you see more of the tree at once, and file meaning rides along each row. Best if you mostly want to find a file."
+    },
+    {
+      "id": "note-c",
+      "x": 1720,
+      "y": 660,
+      "w": 340,
+      "text": "C never makes you scroll a deep tree — each level is a column and the path is always visible. Costs the most horizontal room, and it is unfamiliar in a dev tool."
+    },
+    {
+      "id": "note-file",
+      "x": 0,
+      "y": 660,
+      "w": 520,
+      "text": "Pick a folder and the right side summarises it; pick a file and it becomes the file. Same layout, two states — no third pane.\n\nRead-only by default, because a bot writes most of these. Edit is a deliberate act, not a cursor landing in a file the DevDeck bot rewrites at 08:00."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

@@ -1,0 +1,151 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: var(--accent); } a:hover { color: var(--ink); }
+    .row { display: flex; align-items: center; gap: 6px; padding: 2px 6px; border-radius: 4px;
+           font-size: 12.5px; color: var(--body); white-space: nowrap; }
+    .row.on { background: var(--hover); color: var(--ink); }
+    .row.mut { color: var(--dim); }
+    .chip { font-size: 9px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase;
+            padding: 1px 5px; border-radius: 999px; }
+    .vault { background: rgb(129 140 248 / .14); color: var(--accent); }
+    .mono { font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; }
+    .ln { display: flex; }
+    .n { width: 30px; flex-shrink: 0; text-align: right; padding-right: 12px; color: var(--faint);
+         font-size: 11.5px; line-height: 19px; user-select: none; }
+    .t { font-size: 11.5px; line-height: 19px; white-space: pre; }
+    .key { color: var(--accent); }
+    .str { color: var(--ok); }
+    .pun { color: var(--dim); }
+    .cmt { color: var(--faint); }
+    .val { color: var(--body); }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --hover: {{c.hover}}; --line: {{c.line}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --edit: {{c.edit}}; background: var(--app); width: 760px; height: 620px; display: flex; overflow: hidden;">
+
+  <div style="width: 46px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--line);"></div>
+
+  <div style="width: 236px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column;">
+    <div style="display: flex; align-items: center; gap: 6px; padding: 10px 10px 8px;">
+      <span style="font-size: 12.5px; font-weight: 600; color: var(--ink);">Vault</span>
+      <span class="mono" style="font-size: 10px; color: var(--faint);">~/DevDeck</span>
+    </div>
+    <div style="padding: 0 6px; display: flex; flex-direction: column; gap: 1px;">
+      <div class="row" style="font-weight: 600; color: var(--ink);">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--dim)" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+        <span>Innotrack</span>
+      </div>
+      <div class="row" style="padding-left: 22px; font-weight: 600; color: var(--ink);">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--dim)" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+        <span>Devdeck</span>
+      </div>
+      <div class="row" style="padding-left: 40px;"><span class="mono">_bot.md</span><span class="chip vault">bot</span></div>
+      <div class="row mut" style="padding-left: 40px;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+        <span class="mono">.devdeck</span>
+      </div>
+      <div class="row mut" style="padding-left: 58px;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+        <span class="mono">features</span>
+      </div>
+      <div class="row" style="padding-left: 76px; color: var(--ink);">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--dim)" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+        <span>node-as-conversation</span>
+      </div>
+      <div class="row" style="padding-left: 96px;"><span class="mono">feature.md</span></div>
+      <div class="row" style="padding-left: 96px;"><span class="mono">context.md</span></div>
+      <div class="row on" style="padding-left: 96px;">
+        <span class="mono">work.md</span>
+        <span class="chip" style="background: rgb(251 191 36 / .14); color: var(--warn);">14/17</span>
+      </div>
+      <div class="row mut" style="padding-left: 96px;"><span class="mono">decisions</span></div>
+      <div class="row mut" style="padding-left: 96px;"><span class="mono">sessions</span></div>
+    </div>
+  </div>
+
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--page, var(--app));">
+
+    <div style="padding: 9px 14px 8px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px;">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--dim)" stroke-width="1.6"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg>
+      <div style="min-width: 0;">
+        <div style="font-size: 12.5px; font-weight: 600; color: var(--ink);">work.md</div>
+        <div class="mono" style="font-size: 10px; color: var(--faint);">…/.devdeck/features/node-as-conversation</div>
+      </div>
+      <span style="flex: 1;"></span>
+      <span class="chip vault">vault</span>
+      <span style="font-size: 10.5px; color: var(--dim); border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px;">Edit</span>
+    </div>
+
+    <div style="flex: 1; min-height: 0; background: var(--raise); padding: 8px 0 8px 6px; overflow: hidden; position: relative;">
+      <div class="mono">
+        <div class="ln"><span class="n">1</span><span class="t pun">---</span></div>
+        <div class="ln"><span class="n">2</span><span class="t"><span class="key">feature</span><span class="pun">:</span> <span class="val">node-as-conversation</span></span></div>
+        <div class="ln"><span class="n">3</span><span class="t"><span class="key">items</span><span class="pun">:</span></span></div>
+        <div class="ln"><span class="n">4</span><span class="t"><span class="pun">  - </span><span class="key">id</span><span class="pun">:</span> <span class="val">w01-feature-threads</span></span></div>
+        <div class="ln"><span class="n">5</span><span class="t"><span class="pun">    </span><span class="key">title</span><span class="pun">:</span> <span class="str">'Feature threads — a feature is a room'</span></span></div>
+        <div class="ln"><span class="n">6</span><span class="t"><span class="pun">    </span><span class="key">status</span><span class="pun">:</span> <span class="val">done</span></span></div>
+        <div class="ln"><span class="n">7</span><span class="t"><span class="pun">  - </span><span class="key">id</span><span class="pun">:</span> <span class="val">w13-what-happened</span></span></div>
+        <div class="ln"><span class="n">8</span><span class="t"><span class="pun">    </span><span class="key">title</span><span class="pun">:</span> <span class="str">'Collapse ''what happened'''</span></span></div>
+        <div class="ln" style="background: rgb(129 140 248 / .10); border-left: 2px solid var(--accent); margin-left: -6px; padding-left: 4px;"><span class="n">9</span><span class="t"><span class="pun">    </span><span class="key">status</span><span class="pun">:</span> <span class="val">blocked</span></span></div>
+        <div class="ln"><span class="n">10</span><span class="t"><span class="pun">    </span><span class="key">due</span><span class="pun">:</span> <span class="val">2026-09-02</span></span></div>
+        <div class="ln"><span class="n">11</span><span class="t"><span class="pun">  - </span><span class="key">id</span><span class="pun">:</span> <span class="val">w16-add-a-splash-screen</span></span></div>
+        <div class="ln"><span class="n">12</span><span class="t"><span class="pun">    </span><span class="key">title</span><span class="pun">:</span> <span class="str">'Add a splash screen'</span></span></div>
+        <div class="ln"><span class="n">13</span><span class="t"><span class="pun">    </span><span class="key">status</span><span class="pun">:</span> <span class="val">in-progress</span></span></div>
+        <div class="ln"><span class="n">14</span><span class="t"><span class="pun">    </span><span class="key">assignee</span><span class="pun">:</span> <span class="val">dev-a</span></span></div>
+        <div class="ln"><span class="n">15</span><span class="t"><span class="pun">    </span><span class="key">due</span><span class="pun">:</span> <span class="val">2026-09-05</span></span></div>
+        <div class="ln"><span class="n">16</span><span class="t pun">---</span></div>
+        <div class="ln"><span class="n">17</span><span class="t"> </span></div>
+        <div class="ln"><span class="n">18</span><span class="t cmt"># Work</span></div>
+        <div class="ln"><span class="n">19</span><span class="t"> </span></div>
+        <div class="ln"><span class="n">20</span><span class="t val">Fifteen items on the goal, plus what the bot has</span></div>
+        <div class="ln"><span class="n">21</span><span class="t val">added since.</span></div>
+      </div>
+
+      <div style="position: absolute; top: 8px; right: 8px; width: 34px; bottom: 8px; opacity: .35; display: flex; flex-direction: column; gap: 2px;">
+        <div style="height: 3px; background: var(--dim); width: 40%;"></div>
+        <div style="height: 3px; background: var(--accent); width: 80%;"></div>
+        <div style="height: 3px; background: var(--dim); width: 30%;"></div>
+        <div style="height: 3px; background: var(--dim); width: 70%;"></div>
+        <div style="height: 3px; background: var(--dim); width: 55%;"></div>
+        <div style="height: 3px; background: var(--dim); width: 65%;"></div>
+        <div style="height: 3px; background: var(--dim); width: 35%;"></div>
+      </div>
+    </div>
+
+    <div style="border-top: 1px solid var(--line); padding: 6px 14px; display: flex; align-items: center; gap: 12px; background: var(--panel);">
+      <span class="mono" style="font-size: 10px; color: var(--faint);">YAML + Markdown</span>
+      <span class="mono" style="font-size: 10px; color: var(--faint);">Ln 9, Col 13</span>
+      <span style="flex: 1;"></span>
+      <span style="font-size: 10px; color: var(--muted);">Read-only — the bot writes this file</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', panel: '#11141c', raise: '#0d1017', hover: '#232b3b', line: '#1e293b',
+          ink: '#e2e8f0', body: '#cbd5e1', dim: '#94a3b8', muted: '#64748b', faint: '#475569',
+          accent: '#818cf8', ok: '#4ade80', warn: '#fbbf24', edit: '#0d1017' }
+      : { app: '#e9ebf0', panel: '#fdfdfe', raise: '#f6f7f9', hover: '#e7eaf1', line: '#d9dee7',
+          ink: '#16181d', body: '#333a45', dim: '#5a6472', muted: '#7d8794', faint: '#a5aebb',
+          accent: '#4f46e5', ok: '#15803d', warn: '#b45309', edit: '#f6f7f9' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

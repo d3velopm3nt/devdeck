@@ -22,6 +22,7 @@ mod conn;
 mod creds;
 mod db;
 mod files;
+mod events;
 mod focus;
 mod git;
 mod github;
@@ -1063,6 +1064,9 @@ pub fn run() {
             aiw::commands::aiw_model_check,
             calls::model_checks,
             calendar::calendar_range,
+            events::event_entry,
+            events::event_entry_save,
+            events::event_history,
             aiw::commands::aiw_provider_forget_key,
             aiw::commands::aiw_provider_remove,
             aiw::commands::aiw_set_agent_provider,

@@ -108,6 +108,43 @@ also makes them right on the two days a year the clocks change.
 fold. It scrolls to now — or to the first thing on the day, when the day being
 looked at is not today.
 
+## The event page · `screenshots/07-event-page.png`
+
+Added 4 September. Clicking an occurrence opens *that occurrence* rather than
+the page that owns the rule behind it: what it is, when, did it happen, what
+you wrote, and the last few times. Entries are one file per date in the
+personal store — `%APPDATA%\devdeckssistant\events6-08-31.md` — because
+your Tuesday is yours and never goes near a repository. A deadline still opens
+Work: its record is the work item, in the vault, and there is nothing personal
+to write down beside it.
+
+`done` is three-valued on purpose. A week you never answered is not a week you
+skipped, and collapsing the two would turn every busy fortnight into a failed
+one.
+
+Verified with three real entries written through the same command the page
+calls: two rounds of golf and a rained-off Monday, showing "2 of the last 3".
+
+### Two bugs it took a white window to find
+
+**The app rendered nothing and said nothing.** A throw in one component
+unmounts the whole tree, and a desktop shell has no console you can reach — so
+a single bad property produced a blank window with no explanation. There is an
+error boundary now: it names the error, the component stack, and offers a
+reload and a copy button. Never let a failure look like a state.
+
+**And the throw itself:** `notes` had `#[serde(skip)]` to keep it out of the
+file's frontmatter, which also kept it out of the IPC payload — the page got
+`undefined` and called `.trim()` on it. The file's frontmatter and the wire
+type are two structs now: `Meta` for what is written beside the words, `Entry`
+for what the interface is sent.
+
+**Worth knowing about this session:** `devUrl` is baked into debug builds, so
+the running app loads `http://localhost:5173` when a Vite is up. One had been
+running since 2 September, which meant frontend rebuilds were largely
+irrelevant to what appeared on screen until it choked on a new file. Kill port
+5173 before trusting a debug build's UI.
+
 ## What is deliberately not here
 
 - **No personal day-plan blocks yet.** The day view places what the calendar

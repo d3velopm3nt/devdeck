@@ -25,6 +25,7 @@ import { StashView } from './components/StashView'
 import { ConnectionsSidebar } from './components/ConnectionsSidebar'
 import {
   CAPTURE_CHECK,
+  CAPTURE_ENTRY,
   CAPTURE_EVENT,
   CAPTURE_NODE,
   CAPTURE_RAIL,
@@ -135,6 +136,7 @@ function Menu({
 let said = false
 let checked = false
 let evented = false
+let entered = false
 
 export default function App() {
   const app = useApp()
@@ -147,6 +149,29 @@ export default function App() {
   // fires on the first paint whatever else is still loading.
   useEffect(() => {
     void ipc.appReady().catch(() => {})
+  }, [])
+
+  // Screenshot harness: record entries against an occurrence, through the
+  // same command the page calls. `scheduleId|ISO|done|notes`, comma-separated.
+  useEffect(() => {
+    if (!CAPTURE_ENTRY || entered) return
+    entered = true
+    void (async () => {
+      for (const spec of CAPTURE_ENTRY.split(',')) {
+        const [id, iso, done, ...rest] = spec.split('|')
+        if (!id || !iso) continue
+        try {
+          await ipc.eventEntrySave(
+            Number(id),
+            new Date(iso).getTime(),
+            done === 'yes' ? true : done === 'no' ? false : null,
+            rest.join('|'),
+          )
+        } catch (e) {
+          console.error('[capture] could not record', spec, e)
+        }
+      }
+    })()
   }, [])
 
   // Screenshot harness: put a one-off on the calendar, through the same

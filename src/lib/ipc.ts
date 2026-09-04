@@ -386,6 +386,30 @@ export interface CalendarItem {
   schedule_id?: number | null
 }
 
+/** What came of one occurrence. Lives as a file per date in the personal
+ *  store — `done` is three-valued, because a day you never answered is not a
+ *  day you skipped. */
+export interface EventEntry {
+  schedule_id: number
+  day: string
+  done?: boolean | null
+  notes: string
+  updated_at: string
+}
+
+export const eventEntry = (scheduleId: number, at: number) =>
+  invoke<EventEntry>('event_entry', { scheduleId, at })
+
+export const eventEntrySave = (
+  scheduleId: number,
+  at: number,
+  done: boolean | null,
+  notes: string,
+) => invoke<EventEntry>('event_entry_save', { scheduleId, at, done, notes })
+
+export const eventHistory = (scheduleId: number, limit?: number) =>
+  invoke<EventEntry[]>('event_history', { scheduleId, limit: limit ?? null })
+
 /** Everything between two moments, across every space. One query for every
  *  view, so a day and the month containing it cannot disagree. */
 export const calendarRange = (from: number, to: number) =>

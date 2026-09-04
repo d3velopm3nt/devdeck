@@ -19,7 +19,8 @@ import { Icon } from '../lib/icons'
 import * as ipc from '../lib/ipc'
 import type { CalendarItem } from '../lib/ipc'
 import { useApp } from '../store'
-import { CAPTURE_CAL_VIEW } from '../lib/devCapture'
+import { CAPTURE_CAL_VIEW, CAPTURE_EVENT_OPEN } from '../lib/devCapture'
+import { EventPage } from './EventPage'
 
 type View = 'day' | 'week' | 'month' | 'year'
 
@@ -189,15 +190,48 @@ export function CalendarPage() {
     return m
   }, [items])
 
-  /// Opening a thing means going where it lives: a deadline to its space, a
-  /// schedule to the page that owns schedules.
+  /// Opening an occurrence opens *that occurrence* — not the page that owns
+  /// the rule behind it, and certainly not the assistant. A deadline is the
+  /// exception and stays one: its record is the work item, so it goes there.
+  const [openItem, setOpenItem] = useState<CalendarItem | null>(null)
+
+  // Screenshot harness: open one occurrence on mount. `scheduleId|ISO`.
+  useEffect(() => {
+    if (!CAPTURE_EVENT_OPEN) return
+    const [sid, iso] = CAPTURE_EVENT_OPEN.split('|')
+    const at = new Date(iso).getTime()
+    const day = startOfDay(new Date(at)).getTime()
+    void ipc.calendarRange(day, day + DAY_MS - 1).then((list) => {
+      const found = list.find((c) => c.schedule_id === Number(sid))
+      if (found) setOpenItem(found)
+    })
+  }, [])
   const open = (i: CalendarItem) => {
     if (i.kind === 'deadline') {
       app.setRailView('team')
       app.setTeamTab('work')
       return
     }
-    app.setRailView('settings')
+    setOpenItem(i)
+  }
+
+  /// The same event a day either side, found by asking the calendar rather
+  /// than by guessing: a weekdays rhythm has no Saturday, and stepping onto
+  /// one would open a page for something that never happens.
+  const step1 = async (from: CalendarItem, days: number) => {
+    const dir = days > 0 ? 1 : -1
+    const base = new Date(from.at)
+    for (let n = 1; n <= 62; n++) {
+      const probe = new Date(base.getTime() + dir * n * DAY_MS)
+      const dayStart = startOfDay(probe).getTime()
+      const found = (await ipc.calendarRange(dayStart, dayStart + DAY_MS - 1)).find(
+        (c) => c.schedule_id === from.schedule_id,
+      )
+      if (found) {
+        setOpenItem(found)
+        return
+      }
+    }
   }
 
   const title = useMemo(() => {
@@ -295,12 +329,21 @@ export function CalendarPage() {
       )}
 
       <div className="min-h-0 flex-1 overflow-auto p-4">
-        {view === 'day' && <DayGrid day={from} slot={slot} items={items ?? []} onOpen={open} />}
-        {view === 'week' && <WeekGrid from={from} byDay={byDay} onOpen={open} />}
-        {view === 'month' && (
+        {openItem && (
+          <EventPage
+            item={openItem}
+            onBack={() => setOpenItem(null)}
+            onStep={(i, d) => void step1(i, d)}
+          />
+        )}
+        {!openItem && view === 'day' && (
+          <DayGrid day={from} slot={slot} items={items ?? []} onOpen={open} />
+        )}
+        {!openItem && view === 'week' && <WeekGrid from={from} byDay={byDay} onOpen={open} />}
+        {!openItem && view === 'month' && (
           <MonthGrid from={from} to={to} month={anchor.getMonth()} byDay={byDay} onOpen={open} />
         )}
-        {view === 'year' && <YearGrid year={anchor.getFullYear()} items={items ?? []} onOpen={open} />}
+        {!openItem && view === 'year' && <YearGrid year={anchor.getFullYear()} items={items ?? []} onOpen={open} />}
       </div>
     </div>
   )

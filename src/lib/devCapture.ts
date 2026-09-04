@@ -20,3 +20,5 @@ export const CAPTURE_CONTEXT: boolean = false
 export const CAPTURE_CAL_VIEW: string = ''
 export const CAPTURE_EVENT: string = ''
 export const CAPTURE_NEW_SCHEDULE: boolean = false
+export const CAPTURE_EVENT_OPEN: string = ''
+export const CAPTURE_ENTRY: string = ''

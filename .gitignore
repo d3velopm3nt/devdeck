@@ -28,5 +28,6 @@ Thumbs.db
 # updater signing keys (private key must never be committed)
 .keys/
 
-# Seeded design canvases are generated from the .dc.html sources beside them.
-design/**/vault-explorer.html
+# Seeded design canvases: a couple of megabytes each, and generated from the
+# .dc.html sources beside them. The sources are the record.
+design/*/[a-z]*-*.html

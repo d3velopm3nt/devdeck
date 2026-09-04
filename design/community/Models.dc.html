@@ -1,0 +1,293 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: var(--accent); } a:hover { color: var(--ink); }
+    .head { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .chip { display: inline-flex; align-items: center; gap: 4px; font-size: 9px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; padding: 2px 6px; border-radius: 999px; }
+    .btn { font-size: 11px; color: var(--dim); border: 1px solid var(--line2); border-radius: 6px; padding: 3px 9px; background: transparent; }
+    .btn.on { color: #fff; background: #4f46e5; border-color: #4f46e5; }
+    .mono { font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; }
+    .rail { display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 8px; border-radius: 8px; font-size: 12px; color: var(--muted); position: relative; }
+    .rail-on { background: var(--raise); color: var(--ink); }
+    .rail-on::before { content: ""; position: absolute; left: -6px; top: 6px; bottom: 6px; width: 2.5px; border-radius: 2px; background: #6366f1; }
+    .filt { display: flex; align-items: center; gap: 7px; padding: 5px 8px; border-radius: 6px; font-size: 11.5px; color: var(--dim); }
+    .filt-on { background: var(--hover); color: var(--ink); }
+    .stat { display: flex; align-items: baseline; gap: 6px; font-size: 11px; }
+    .stat b { color: var(--ink); font-weight: 600; }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --page: {{c.page}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --menu: {{c.menu}}; --hover: {{c.hover}}; --line: {{c.line}}; --line2: {{c.line2}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; width: 1456px; height: 909px; background: var(--app); color: var(--body); display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;">
+
+  <div style="height: 32px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--panel);">
+    <span style="font-size: 11.5px; color: var(--dim);">DevDeck</span>
+    <span style="font-size: 11.5px; color: var(--faint);">File</span>
+    <span style="font-size: 11.5px; color: var(--faint);">View</span>
+    <span style="font-size: 11.5px; color: var(--faint);">Build</span>
+    <span style="font-size: 11.5px; color: var(--faint);">Help</span>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; min-height: 0;">
+
+    <div style="width: 160px; flex-shrink: 0; background: var(--app); border-right: 1px solid var(--line); padding: 8px 6px; display: flex; flex-direction: column; gap: 2px;">
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 11 12 4l8.5 7"></path><path d="M5.5 9.8V19h13V9.8"></path></svg><span>Home</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 13.5 6 5.5h12l2.5 8v5h-17z"></path><path d="M3.5 13.5H9l1 2h4l1-2h5.5"></path></svg><span>Inbox</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"></circle><path d="M3.5 19a5.5 5.5 0 0 1 11 0"></path><circle cx="17" cy="9" r="2.6"></circle><path d="M15.5 14.2a4.5 4.5 0 0 1 5 4.3"></path></svg><span>Team</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="12" rx="2"></rect><path d="M9 12h.01M15 12h.01M12 3v4"></path></svg><span>Bots</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"></path><path d="M3.5 7 12 11.6 20.5 7M12 11.6v9.9"></path></svg><span>Spaces</span></div>
+      <div style="height: 1px; background: var(--line); margin: 9px 6px;"></div>
+      <div class="rail rail-on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5.5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="18.5" r="2.5"></circle><path d="M8.3 10.8 15.7 6.7M8.3 13.2l7.4 4.1"></path></svg><span>Community</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9M9.5 19V5M15 19v-6M20.5 19v-9"></path></svg><span>Analytics</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="5" rx="1.5"></rect><path d="M5.5 9.5v9h13v-9"></path><path d="M10 13h4"></path></svg><span>Stash</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="10" rx="2"></rect><path d="M7 19h10M21 9v10h-4"></path></svg><span>Machine</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12H3.5M18 6l-1.6 1.6M7.6 16.4 6 18M18 18l-1.6-1.6M7.6 7.6 6 6"></path></svg><span>Settings</span></div>
+    </div>
+
+    <div style="width: 260px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0;">
+      <div style="padding: 10px 12px; border-bottom: 1px solid var(--line);">
+        <div style="font-size: 12.5px; color: var(--ink); font-weight: 600;">Community</div>
+        <div style="font-size: 10.5px; color: var(--muted); margin-top: 2px;">Open-source AI your bots can use</div>
+      </div>
+
+      <div style="padding: 8px 6px 0;">
+        <div class="head" style="padding: 6px 8px 4px;">Where</div>
+        <div class="filt"><span style="flex: 1;">Browse</span><span style="font-size: 10px; color: var(--muted);">48</span></div>
+        <div class="filt"><span style="flex: 1;">Installed</span><span style="font-size: 10px; color: var(--muted);">9</span></div>
+        <div class="filt"><span style="flex: 1;">Permissions</span></div>
+        <div class="filt filt-on"><span style="flex: 1;">Models</span><span style="font-size: 10px; color: var(--muted);">3</span></div>
+        <div class="filt"><span style="flex: 1;">Bundles</span><span style="font-size: 10px; color: var(--muted);">3</span></div>
+      </div>
+
+      <div style="margin: 12px 12px 0; border: 1px solid var(--line2); border-radius: 10px; background: var(--raise); padding: 10px 11px;">
+        <div style="display: flex; align-items: center; gap: 7px;">
+          <span style="width: 7px; height: 7px; border-radius: 999px; background: var(--ok);"></span>
+          <span style="font-size: 11.5px; color: var(--ink);">ollama</span>
+          <span style="margin-left: auto; font-size: 10px; color: var(--ok);">running</span>
+        </div>
+        <div class="mono" style="font-size: 10px; color: var(--muted); margin-top: 5px;">127.0.0.1:11434 · pid 21884</div>
+        <div style="display: flex; gap: 6px; margin-top: 9px;">
+          <button class="btn" style="flex: 1; padding: 2px 0;">Logs</button>
+          <button class="btn" style="flex: 1; padding: 2px 0;">Restart</button>
+        </div>
+        <div style="font-size: 10px; color: var(--faint); margin-top: 8px; line-height: 1.5;">A supervised service like any other. It appears in the bottom bar with your dev servers.</div>
+      </div>
+
+      <div style="padding: 12px 6px 0;">
+        <div class="head" style="padding: 0 8px 4px;">Licence</div>
+        <div class="filt filt-on"><span style="flex: 1;">Open weights, OSI licence</span><span style="font-size: 10px; color: var(--muted);">5</span></div>
+        <div class="filt"><span style="flex: 1;">Open weights, own licence</span><span style="font-size: 10px; color: var(--warn);">2</span></div>
+
+        <div class="head" style="padding: 12px 8px 4px;">Fits this machine</div>
+        <div class="filt"><span style="width: 22px; height: 12px; border-radius: 999px; background: #4f46e5; position: relative;"><span style="position: absolute; right: 1.5px; top: 1.5px; width: 9px; height: 9px; border-radius: 999px; background: #fff;"></span></span><span>Hide what will not fit</span></div>
+      </div>
+
+      <div style="margin-top: auto; border-top: 1px solid var(--line); padding: 10px 12px;">
+        <div style="display: flex; align-items: baseline; gap: 6px;">
+          <span style="font-size: 10.5px; color: var(--dim);">Disk</span>
+          <span style="margin-left: auto; font-size: 10.5px; color: var(--ink); font-weight: 600;">45.6 GB free</span>
+        </div>
+        <div style="height: 5px; border-radius: 999px; background: var(--hover); overflow: hidden; display: flex; margin-top: 6px;">
+          <span style="width: 29%; background: #22c55e;"></span>
+        </div>
+        <div style="font-size: 10px; color: var(--faint); margin-top: 5px;">18.4 GB of weights on a 64 GB volume</div>
+      </div>
+    </div>
+
+    <div style="flex-grow: 1; min-width: 0; background: var(--page); padding: 16px 20px; display: flex; flex-direction: column; overflow: hidden;">
+
+      <div style="display: flex; align-items: flex-end; gap: 12px; flex-shrink: 0;">
+        <div>
+          <div style="font-size: 17px; font-weight: 600; color: var(--ink);">Models</div>
+          <div style="font-size: 11.5px; color: var(--muted); margin-top: 2px;">Open weights you run yourself. An agent on one of these needs no API key and reaches no network.</div>
+        </div>
+        <div style="margin-left: auto; display: flex; gap: 6px;">
+          <button class="btn">Providers</button>
+          <button class="btn on">Pull a model</button>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: baseline; gap: 8px; margin: 16px 0 8px;">
+        <span class="head">On this machine</span>
+        <span style="font-size: 10.5px; color: var(--faint);">speed measured on your last run here, not from the model card</span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; flex-shrink: 0;">
+        <div style="border: 1px solid #6366f1; border-radius: 12px; background: var(--panel); padding: 12px 13px; display: flex; flex-direction: column; gap: 8px; position: relative; overflow: hidden;">
+          <span style="position: absolute; inset: 0 0 auto 0; height: 2px; background: #6366f1;"></span>
+          <div style="display: flex; align-items: center; gap: 7px;">
+            <span class="mono" style="font-size: 12.5px; color: var(--ink); font-weight: 600;">qwen3-coder:30b</span>
+            <span class="chip" style="margin-left: auto; background: var(--hover); color: var(--dim);">Apache-2.0</span>
+          </div>
+          <div style="display: flex; gap: 14px;">
+            <span class="stat"><span style="color: var(--muted);">Size</span><b>18.6 GB</b></span>
+            <span class="stat"><span style="color: var(--muted);">Quant</span><b>q4_K_M</b></span>
+            <span class="stat"><span style="color: var(--muted);">Context</span><b>128k</b></span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span style="font-size: 10.5px; color: var(--muted);">Used by</span>
+            <span style="width: 19px; height: 19px; border-radius: 5px; background: rgb(99 102 241 / .18); color: #a5b4fc; font-size: 8px; font-weight: 700; display: flex; align-items: center; justify-content: center;">DB</span>
+            <span style="font-size: 10.5px; color: var(--dim);">dev-b</span>
+            <span style="margin-left: auto; font-size: 10.5px; color: var(--ok);">31 tok/s</span>
+          </div>
+          <div style="margin-top: auto; border-top: 1px solid var(--line); padding-top: 8px; display: flex; align-items: center; gap: 6px;">
+            <span style="font-size: 10px; color: var(--muted);">last used 12 min ago</span>
+            <button class="btn" style="margin-left: auto; padding: 2px 8px;">Assign</button>
+          </div>
+        </div>
+
+        <div style="border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 12px 13px; display: flex; flex-direction: column; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 7px;">
+            <span class="mono" style="font-size: 12.5px; color: var(--ink); font-weight: 600;">gpt-oss:20b</span>
+            <span class="chip" style="margin-left: auto; background: var(--hover); color: var(--dim);">Apache-2.0</span>
+          </div>
+          <div style="display: flex; gap: 14px;">
+            <span class="stat"><span style="color: var(--muted);">Size</span><b>13.8 GB</b></span>
+            <span class="stat"><span style="color: var(--muted);">Quant</span><b>mxfp4</b></span>
+            <span class="stat"><span style="color: var(--muted);">Context</span><b>128k</b></span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span style="font-size: 10.5px; color: var(--muted);">Used by</span>
+            <span style="width: 19px; height: 19px; border-radius: 5px; background: var(--hover); color: var(--dim); font-size: 8px; font-weight: 700; display: flex; align-items: center; justify-content: center;">RE</span>
+            <span style="font-size: 10.5px; color: var(--dim);">reviewer</span>
+            <span style="margin-left: auto; font-size: 10.5px; color: var(--ok);">44 tok/s</span>
+          </div>
+          <div style="margin-top: auto; border-top: 1px solid var(--line); padding-top: 8px; display: flex; align-items: center; gap: 6px;">
+            <span style="font-size: 10px; color: var(--muted);">last used yesterday</span>
+            <button class="btn" style="margin-left: auto; padding: 2px 8px;">Assign</button>
+          </div>
+        </div>
+
+        <div style="border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 12px 13px; display: flex; flex-direction: column; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 7px;">
+            <span class="mono" style="font-size: 12.5px; color: var(--dim); font-weight: 600;">deepseek-r1:14b</span>
+            <span class="chip" style="margin-left: auto; background: var(--hover); color: var(--dim);">MIT</span>
+          </div>
+          <div style="display: flex; gap: 14px;">
+            <span class="stat"><span style="color: var(--muted);">Size</span><b>9.0 GB</b></span>
+            <span class="stat"><span style="color: var(--muted);">Quant</span><b>q4_K_M</b></span>
+            <span class="stat"><span style="color: var(--muted);">Context</span><b>64k</b></span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span style="font-size: 10.5px; color: var(--muted);">Used by</span>
+            <span style="font-size: 10.5px; color: var(--faint);">nobody</span>
+          </div>
+          <div style="margin-top: auto; border-top: 1px solid var(--line); padding-top: 8px; display: flex; align-items: center; gap: 6px;">
+            <span style="font-size: 10px; color: var(--warn);">idle 21 days · 9.0 GB</span>
+            <button class="btn" style="margin-left: auto; padding: 2px 8px;">Remove</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: baseline; gap: 8px; margin: 18px 0 8px;">
+        <span class="head">Pull one</span>
+        <span style="font-size: 10.5px; color: var(--faint);">what will actually fit is worked out against your free disk, not the download size</span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; min-height: 0;">
+
+        <div style="border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 12px 13px; display: flex; flex-direction: column; gap: 7px;">
+          <div style="display: flex; align-items: center; gap: 7px;">
+            <span class="mono" style="font-size: 12.5px; color: var(--ink);">devstral-small:24b</span>
+            <span class="chip" style="margin-left: auto; background: var(--hover); color: var(--dim);">Apache-2.0</span>
+          </div>
+          <div style="font-size: 11px; line-height: 1.5; color: var(--body);">Built for agent loops rather than chat — tool calls and multi-file edits.</div>
+          <div style="display: flex; align-items: center; gap: 8px; margin-top: auto; padding-top: 7px; border-top: 1px solid var(--line);">
+            <span style="font-size: 10.5px; color: var(--dim);">14.3 GB</span>
+            <span style="font-size: 10px; color: var(--ok);">fits</span>
+            <button class="btn on" style="margin-left: auto; padding: 2px 8px;">Pull</button>
+          </div>
+        </div>
+
+        <div style="border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 12px 13px; display: flex; flex-direction: column; gap: 7px;">
+          <div style="display: flex; align-items: center; gap: 7px;">
+            <span class="mono" style="font-size: 12.5px; color: var(--ink);">mistral-small:24b</span>
+            <span class="chip" style="margin-left: auto; background: var(--hover); color: var(--dim);">Apache-2.0</span>
+          </div>
+          <div style="font-size: 11px; line-height: 1.5; color: var(--body);">A general model small enough to keep resident while you work.</div>
+          <div style="display: flex; align-items: center; gap: 8px; margin-top: auto; padding-top: 7px; border-top: 1px solid var(--line);">
+            <span style="font-size: 10.5px; color: var(--dim);">14.1 GB</span>
+            <span style="font-size: 10px; color: var(--ok);">fits</span>
+            <button class="btn" style="margin-left: auto; padding: 2px 8px;">Pull</button>
+          </div>
+        </div>
+
+        <div style="border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 12px 13px; display: flex; flex-direction: column; gap: 7px;">
+          <div style="display: flex; align-items: center; gap: 7px;">
+            <span class="mono" style="font-size: 12.5px; color: var(--ink);">qwen3-embedding:8b</span>
+            <span class="chip" style="margin-left: auto; background: var(--hover); color: var(--dim);">Apache-2.0</span>
+          </div>
+          <div style="font-size: 11px; line-height: 1.5; color: var(--body);">Embeddings, so context assembly and Stash search can run offline too.</div>
+          <div style="display: flex; align-items: center; gap: 8px; margin-top: auto; padding-top: 7px; border-top: 1px solid var(--line);">
+            <span style="font-size: 10.5px; color: var(--dim);">4.7 GB</span>
+            <span style="font-size: 10px; color: var(--ok);">fits</span>
+            <button class="btn" style="margin-left: auto; padding: 2px 8px;">Pull</button>
+          </div>
+        </div>
+
+        <div style="border: 1px solid rgb(251 191 36 / .35); border-radius: 12px; background: var(--panel); padding: 12px 13px; display: flex; flex-direction: column; gap: 7px;">
+          <div style="display: flex; align-items: center; gap: 7px;">
+            <span class="mono" style="font-size: 12.5px; color: var(--ink);">llama3.3:70b</span>
+            <span class="chip" style="margin-left: auto; background: rgb(251 191 36 / .16); color: var(--warn);">Own licence</span>
+          </div>
+          <div style="font-size: 11px; line-height: 1.5; color: var(--body);">Meta's community licence, not an OSI one. Read it before you ship anything on it.</div>
+          <div style="display: flex; align-items: center; gap: 8px; margin-top: auto; padding-top: 7px; border-top: 1px solid var(--line);">
+            <span style="font-size: 10.5px; color: var(--dim);">39.6 GB</span>
+            <span style="font-size: 10px; color: var(--warn);">leaves 6 GB free</span>
+            <button class="btn" style="margin-left: auto; padding: 2px 8px;">Pull</button>
+          </div>
+        </div>
+
+        <div style="border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 12px 13px; display: flex; flex-direction: column; gap: 7px; opacity: .55;">
+          <div style="display: flex; align-items: center; gap: 7px;">
+            <span class="mono" style="font-size: 12.5px; color: var(--ink);">deepseek-r1:671b</span>
+            <span class="chip" style="margin-left: auto; background: var(--hover); color: var(--dim);">MIT</span>
+          </div>
+          <div style="font-size: 11px; line-height: 1.5; color: var(--body);">The full model. Listed so you can see what the small one is a distillation of.</div>
+          <div style="display: flex; align-items: center; gap: 8px; margin-top: auto; padding-top: 7px; border-top: 1px solid var(--line);">
+            <span style="font-size: 10.5px; color: var(--dim);">404 GB</span>
+            <span style="font-size: 10px; color: var(--err);">will not fit</span>
+            <button class="btn" style="margin-left: auto; padding: 2px 8px;">Pull</button>
+          </div>
+        </div>
+
+        <div style="border: 1px dashed var(--line2); border-radius: 12px; background: transparent; padding: 12px 13px; display: flex; flex-direction: column; justify-content: center; gap: 6px;">
+          <div style="font-size: 11.5px; color: var(--dim);">Pull any tag by name</div>
+          <div class="mono" style="font-size: 10.5px; color: var(--faint);">ollama pull &lt;model&gt;:&lt;tag&gt;</div>
+          <div style="font-size: 10px; color: var(--faint); line-height: 1.5;">The list above is what the sources index. The runner will take anything it knows.</div>
+        </div>
+      </div>
+
+      <div style="margin-top: auto; padding-top: 12px; font-size: 10.5px; color: var(--faint);">Weights are large and licences differ from the code that runs them — an MIT runner will happily serve a model you may not ship. The chip on each card is the model's own licence.</div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', page: '#0d1017', panel: '#11141c', raise: '#151923', menu: '#1a1f2b',
+          hover: '#232b3b', line: '#1e293b', line2: '#334155', ink: '#e2e8f0', body: '#cbd5e1',
+          dim: '#94a3b8', muted: '#64748b', faint: '#475569', accent: '#818cf8', ok: '#4ade80',
+          warn: '#fbbf24', err: '#f87171' }
+      : { app: '#e9ebf0', page: '#f6f7f9', panel: '#fdfdfe', raise: '#f0f2f6', menu: '#ffffff',
+          hover: '#e7eaf1', line: '#d9dee7', line2: '#c3cbd8', ink: '#16181d', body: '#333a45',
+          dim: '#5a6472', muted: '#7d8794', faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d',
+          warn: '#b45309', err: '#dc2626' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

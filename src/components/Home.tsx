@@ -12,6 +12,7 @@ import { nodeColor, avatarLabel, projectUsage, rankSpaces } from '../lib/spaces'
 import { fmtUptime } from '../lib/time'
 import type { LogEntry, ProcStat, TreeNode } from '../lib/types'
 import { HomeAttention } from './HomeAttention'
+import { HomeBots } from './HomeBots'
 
 function hexA(hex: string, a: number): string {
   const n = parseInt(hex.slice(1), 16)
@@ -294,6 +295,11 @@ export function Home() {
             })}
           </div>
         )}
+
+        {/* The bots, between the spaces and the counters: high enough to be
+            seen without scrolling, below the spaces because a bot belongs to
+            one of them. */}
+        <HomeBots />
 
         {/* summary counters */}
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 lg:grid-cols-7">

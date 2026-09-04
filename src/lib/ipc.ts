@@ -207,6 +207,19 @@ export interface Bot {
 }
 
 export const botsList = () => invoke<Bot[]>('bots_list')
+
+/** Where one bot's plan stands. Counts only — what a number means (amber, red,
+ *  quiet) is the interface's decision, not the backend's. */
+export interface BotStanding {
+  node_id: number
+  done: number
+  total: number
+  blocked: number
+  unclaimed: number
+  feature: string
+}
+
+export const botsStanding = () => invoke<BotStanding[]>('bots_standing')
 export const botGet = (nodeId: number) => invoke<Bot | null>('bot_get', { nodeId })
 export const botSave = (b: {
   nodeId: number

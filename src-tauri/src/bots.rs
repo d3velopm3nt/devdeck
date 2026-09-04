@@ -1106,6 +1106,71 @@ pub fn bot_create(
 // ---------------------------------------------------------------------------
 
 /// What the bot found when it woke, or None when there is nothing worth
+/// Where each bot's plan stands, for the whole list at once.
+///
+/// One pass over every bot's deck rather than a call per bot from the
+/// interface: the Home band draws four of these side by side, and four round
+/// trips to answer one question is how a dashboard becomes slow.
+///
+/// Counts only, no prose. What a number *means* — amber, red, quiet — is the
+/// interface's decision, and it changes there without touching this.
+#[derive(Serialize, Clone, Debug)]
+pub struct BotStanding {
+    pub node_id: i64,
+    pub done: usize,
+    pub total: usize,
+    pub blocked: usize,
+    pub unclaimed: usize,
+    /// The feature the counts came from, or empty when they are the whole deck.
+    pub feature: String,
+}
+
+#[tauri::command]
+pub fn bots_standing(db: tauri::State<Db>) -> Vec<BotStanding> {
+    let Ok(conn) = db.0.lock() else { return Vec::new() };
+    all_bots(&conn)
+        .into_iter()
+        .map(|b| {
+            let mut out = BotStanding {
+                node_id: b.node_id,
+                done: 0,
+                total: 0,
+                blocked: 0,
+                unclaimed: 0,
+                feature: b.feature.trim().to_string(),
+            };
+            let Some(dir) = db::node_by_id(&conn, b.node_id).ok().and_then(|n| dir_of(&conn, &n))
+            else {
+                return out;
+            };
+            let deck = crate::aiw::deck::Deck::new(&dir);
+            if !deck.exists() {
+                return out;
+            }
+            // Its own plan when it has one; everything in the deck when it does
+            // not — a bot with no feature still manages what is there.
+            let slugs: Vec<String> = if out.feature.is_empty() {
+                deck.feature_slugs()
+            } else {
+                vec![out.feature.clone()]
+            };
+            for slug in slugs {
+                let Ok(work) = deck.work(&slug) else { continue };
+                for item in &work.meta.items {
+                    out.total += 1;
+                    match item.status.as_str() {
+                        "done" => out.done += 1,
+                        "blocked" => out.blocked += 1,
+                        "unclaimed" | "" => out.unclaimed += 1,
+                        _ => {}
+                    }
+                }
+            }
+            out
+        })
+        .collect()
+}
+
 /// saying. Silence is the common case and the correct one — a heartbeat that
 /// reports "all clear" every morning is a heartbeat you filter out.
 pub fn wake_report(conn: &Connection, node_id: i64) -> Option<String> {

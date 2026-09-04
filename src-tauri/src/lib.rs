@@ -901,6 +901,7 @@ pub fn run() {
             focus::focus_end,
             focus::focus_recent,
             bots::bots_list,
+            bots::bots_standing,
             bots::bot_get,
             bots::bot_save,
             bots::bot_delete,

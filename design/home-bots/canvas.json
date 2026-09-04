@@ -1,0 +1,30 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 1290, "h": 1400, "title": "Home" },
+    { "file": "BotStates.dc.html", "x": 1390, "y": 0, "w": 1080, "h": 430, "title": "Bot icon · states" }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -230,
+      "w": 560,
+      "text": "Home as it is today, with bots added — nothing removed.\n\nThe spaces, the seven counters, active sessions, errors and warnings, the master log and the Needs you rail are all still here, in their order, at their density, from src/components/Home.tsx.\n\nThe bots band sits between the spaces and the counters: big icons you glance at, the list beside them for what each one is for and where it got to.\n\nStatic mockups. Real names and numbers from this machine; dark by default, with a light switch above each artboard."
+    },
+    {
+      "id": "states",
+      "x": 1390,
+      "y": -230,
+      "w": 520,
+      "text": "The light has a rule, or it becomes wallpaper.\n\nA bot lights up only for something a person can act on — never for its own routine work. The ring breathes while a bot is awake; amber means work is waiting; red means it has stopped and needs you."
+    },
+    {
+      "id": "note-band",
+      "x": 1390,
+      "y": 560,
+      "w": 520,
+      "text": "Why the icons and the list together: the icons answer \"is anything wrong\" from across the room, the list answers \"what is this bot for\" when you lean in. Either alone leaves one of those unanswered.\n\nThe + tile is the only way a bot gets made from Home; everything else on the band is read-and-open."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

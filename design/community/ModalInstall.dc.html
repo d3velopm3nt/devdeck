@@ -1,0 +1,148 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: var(--accent); } a:hover { color: var(--ink); }
+    .head { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .chip { display: inline-flex; align-items: center; gap: 4px; font-size: 9px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; padding: 2px 6px; border-radius: 999px; }
+    .btn { font-size: 11.5px; color: var(--dim); border: 1px solid var(--line2); border-radius: 6px; padding: 5px 12px; background: transparent; }
+    .btn.on { color: #fff; background: #4f46e5; border-color: #4f46e5; }
+    .mono { font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; }
+    .opt { display: flex; gap: 9px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--raise); }
+    .opt-on { border-color: #6366f1; background: rgb(99 102 241 / .08); }
+    .dot { width: 13px; height: 13px; border-radius: 999px; border: 1.5px solid var(--line3); flex-shrink: 0; margin-top: 1px; }
+    .dot-on { border-color: #6366f1; background: radial-gradient(circle, #6366f1 0 4px, transparent 4px); }
+    .sel { display: flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 600; padding: 3px 8px; border-radius: 6px; }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --scrim: {{c.scrim}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --menu: {{c.menu}}; --hover: {{c.hover}}; --line: {{c.line}}; --line2: {{c.line2}}; --line3: {{c.line3}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; width: 760px; height: 830px; background: var(--scrim); box-sizing: border-box; padding: 24px 80px; display: flex; align-items: center;">
+
+  <div style="width: 600px; border: 1px solid var(--line2); border-radius: 12px; background: var(--menu); box-shadow: 0 18px 50px rgb(0 0 0 / .45); overflow: hidden;">
+
+    <div style="padding: 14px 18px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 11px;">
+      <span style="width: 34px; height: 34px; border-radius: 10px; background: rgb(56 189 248 / .16); color: #38bdf8; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="4" width="17" height="6.5" rx="2"></rect><rect x="3.5" y="13.5" width="17" height="6.5" rx="2"></rect><path d="M7 7.2h.01M7 16.8h.01"></path></svg></span>
+      <div style="min-width: 0;">
+        <div style="font-size: 14px; font-weight: 600; color: var(--ink);">Install playwright-mcp</div>
+        <div class="mono" style="font-size: 10.5px; color: var(--muted); margin-top: 2px;">microsoft · v0.0.41 · Apache-2.0</div>
+      </div>
+      <span style="margin-left: auto; color: var(--muted);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M6 6l12 12M18 6 6 18"></path></svg></span>
+    </div>
+
+    <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 16px;">
+
+      <div>
+        <div style="display: flex; align-items: baseline; gap: 8px;">
+          <span class="head">What it adds</span>
+          <span style="margin-left: auto; font-size: 10.5px; color: var(--muted);">one tool, twelve actions</span>
+        </div>
+        <div style="margin-top: 7px; display: flex; align-items: center; gap: 9px; border: 1px solid var(--line); border-radius: 9px; background: var(--raise); padding: 9px 11px;">
+          <span class="mono" style="font-size: 12px; color: var(--ink);">browser</span>
+          <span class="chip" style="background: rgb(74 222 128 / .14); color: var(--ok);">3 read</span>
+          <span class="chip" style="background: rgb(251 191 36 / .16); color: var(--warn);">9 write</span>
+          <span style="margin-left: auto; font-size: 10.5px; color: var(--accent);">See them all</span>
+        </div>
+        <div style="font-size: 10.5px; color: var(--faint); margin-top: 6px; line-height: 1.55;">Reads and writes are declared separately, which is what makes a Read grant worth having: it allows snapshot and console, and refuses navigate and click.</div>
+      </div>
+
+      <div>
+        <div class="head">Where it goes</div>
+        <div style="margin-top: 7px; display: flex; flex-direction: column; gap: 7px;">
+          <div class="opt opt-on">
+            <span class="dot dot-on"></span>
+            <div style="min-width: 0;">
+              <div style="font-size: 12px; color: var(--ink);">Personal — every space can use it</div>
+              <div class="mono" style="font-size: 10px; color: var(--muted); margin-top: 3px;">%APPDATA%\devdeckssistant\tools</div>
+            </div>
+          </div>
+          <div class="opt">
+            <span class="dot"></span>
+            <div style="min-width: 0;">
+              <div style="font-size: 12px; color: var(--body);">x-platform only</div>
+              <div class="mono" style="font-size: 10px; color: var(--muted); margin-top: 3px;">the vault's .devdeck, not the repository</div>
+            </div>
+          </div>
+        </div>
+        <div style="font-size: 10.5px; color: var(--faint); margin-top: 6px; line-height: 1.55;">A space's copy lives in the vault folder, so it is never committed to the repo it works on.</div>
+      </div>
+
+      <div>
+        <div style="display: flex; align-items: baseline; gap: 8px;">
+          <span class="head">Who can use it</span>
+          <span style="margin-left: auto; font-size: 10.5px; color: var(--muted);">everyone starts at None</span>
+        </div>
+        <div style="margin-top: 7px; border: 1px solid var(--line); border-radius: 9px; overflow: hidden;">
+          <div style="display: flex; align-items: center; gap: 9px; padding: 7px 11px; background: var(--raise);">
+            <span style="width: 20px; height: 20px; border-radius: 6px; background: rgb(56 189 248 / .18); color: #38bdf8; font-size: 8px; font-weight: 700; display: flex; align-items: center; justify-content: center;">QA</span>
+            <span style="font-size: 11.5px; color: var(--ink); flex: 1;">qa</span>
+            <span class="sel" style="background: rgb(251 191 36 / .16); color: var(--warn);">Approval <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m6 9 6 6 6-6"></path></svg></span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 9px; padding: 7px 11px; border-top: 1px solid var(--line);">
+            <span style="width: 20px; height: 20px; border-radius: 6px; background: rgb(99 102 241 / .18); color: #a5b4fc; font-size: 8px; font-weight: 700; display: flex; align-items: center; justify-content: center;">DA</span>
+            <span style="font-size: 11.5px; color: var(--ink); flex: 1;">dev-a</span>
+            <span class="sel" style="background: rgb(74 222 128 / .14); color: var(--ok);">Read <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m6 9 6 6 6-6"></path></svg></span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 9px; padding: 7px 11px; border-top: 1px solid var(--line);">
+            <span style="width: 20px; height: 20px; border-radius: 6px; background: var(--hover); color: var(--dim); font-size: 8px; font-weight: 700; display: flex; align-items: center; justify-content: center;">AS</span>
+            <span style="font-size: 11.5px; color: var(--dim); flex: 1;">Assistant</span>
+            <span class="sel" style="background: var(--hover); color: var(--faint);">None <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m6 9 6 6 6-6"></path></svg></span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 9px; padding: 7px 11px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px;">
+            <span style="flex: 1;">dev-b, architect, reviewer, x-platform bot</span>
+            <span class="sel" style="background: var(--hover); color: var(--faint);">None</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="head">It will need</div>
+        <div style="margin-top: 7px; display: flex; flex-direction: column; gap: 5px;">
+          <div style="display: flex; align-items: center; gap: 8px; font-size: 11.5px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" style="color: var(--ok);"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg>
+            <span style="color: var(--body);">Node 22.11.0 — already on PATH</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; font-size: 11.5px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--warn);"><path d="M12 4.5v10M7.5 10 12 14.5 16.5 10M5 19h14"></path></svg>
+            <span style="color: var(--body);">Chromium, 142 MB — downloaded the first time a bot calls it, not now</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding: 12px 18px; border-top: 1px solid var(--line); background: var(--panel); display: flex; align-items: center; gap: 10px;">
+      <div style="font-size: 10.5px; color: var(--muted); line-height: 1.5; max-width: 320px;">Apache-2.0 · commercial use allowed, keep the notice. Installing writes files; only the grants above let anything call it.</div>
+      <span style="margin-left: auto; display: flex; gap: 8px;">
+        <button class="btn">Cancel</button>
+        <button class="btn on">Install and grant</button>
+      </span>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', scrim: '#07090d', panel: '#11141c', raise: '#151923', menu: '#1a1f2b',
+          hover: '#232b3b', line: '#1e293b', line2: '#334155', line3: '#64748b', ink: '#e2e8f0',
+          body: '#cbd5e1', dim: '#94a3b8', muted: '#64748b', faint: '#475569', accent: '#818cf8',
+          ok: '#4ade80', warn: '#fbbf24', err: '#f87171' }
+      : { app: '#e9ebf0', scrim: '#97999c', panel: '#f6f7f9', raise: '#f0f2f6', menu: '#ffffff',
+          hover: '#e7eaf1', line: '#d9dee7', line2: '#c3cbd8', line3: '#9aa5b5', ink: '#16181d',
+          body: '#333a45', dim: '#5a6472', muted: '#7d8794', faint: '#a5aebb', accent: '#4f46e5',
+          ok: '#15803d', warn: '#b45309', err: '#dc2626' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

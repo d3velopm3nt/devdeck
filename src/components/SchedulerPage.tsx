@@ -20,6 +20,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import * as ipc from '../lib/ipc'
+import { CAPTURE_NEW_SCHEDULE } from '../lib/devCapture'
 import { useApp } from '../store'
 import { Icon, type IconName } from '../lib/icons'
 import { workspaceOf, findNode } from '../lib/tree'
@@ -37,7 +38,26 @@ const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const hhmm = (min: number) =>
   `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
 
+/// A local `YYYY-MM-DDTHH:MM` for `<input type="datetime-local">`, which
+/// refuses anything else — including the `Z` that `toISOString` puts on it.
+function localInput(ms: number): string {
+  const d = new Date(ms)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 function whenText(s: ipc.Schedule): string {
+  if (s.every === 'once') {
+    if (!s.at_ms) return 'Once · no date'
+    const when = new Date(s.at_ms).toLocaleString([], {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+    return s.duration_min ? `${when} · ${s.duration_min}m` : when
+  }
   if (s.every === 'hourly') return 'Every hour'
   if (s.every === 'daily') return `Daily · ${hhmm(s.at_min)}`
   if (s.every === 'weekdays') return `Weekdays · ${hhmm(s.at_min)}`
@@ -70,7 +90,12 @@ export function SchedulerPage() {
   // The history that was already being written and never read: `activity`
   // stamps every fire with the schedule's id.
   const [past, setPast] = useState<Record<number, Activity[]>>({})
-  const [editing, setEditing] = useState<Partial<ipc.Schedule> | null>(null)
+  const [editing, setEditing] = useState<Partial<ipc.Schedule> | null>(
+    // Screenshot harness: open the editor on the one-off form.
+    CAPTURE_NEW_SCHEDULE
+      ? { kind: 'reminder', every: 'once', at_min: 420, duration_min: 60 }
+      : null,
+  )
   const [err, setErr] = useState('')
 
   const load = () => void ipc.schedulesList().then(setList).catch((e) => setErr(String(e)))
@@ -104,6 +129,8 @@ export function SchedulerPage() {
         nodeId: editing.node_id ?? null,
         every: editing.every ?? 'daily',
         atMin: editing.at_min ?? 420,
+        atMs: editing.at_ms ?? null,
+        durationMin: editing.duration_min ?? null,
         days: editing.days ?? '',
         payload: editing.payload ?? '',
         // A reminder that fires late is worse than one that did not fire, so
@@ -385,8 +412,11 @@ export function SchedulerPage() {
                   <option value="weekdays">Weekdays</option>
                   <option value="weekly">Certain days</option>
                   <option value="hourly">Every hour</option>
+                  {/* A moment rather than a rhythm: the 2pm on the 11th that
+                      a recurrence cannot say. */}
+                  <option value="once">Once, at a time</option>
                 </select>
-                {editing.every !== 'hourly' && (
+                {editing.every !== 'hourly' && editing.every !== 'once' && (
                   <input
                     className="input w-28"
                     type="time"
@@ -398,6 +428,39 @@ export function SchedulerPage() {
                   />
                 )}
               </div>
+
+              {editing.every === 'once' && (
+                <div className="mt-2 flex gap-2">
+                  <input
+                    className="input flex-1"
+                    type="datetime-local"
+                    value={editing.at_ms ? localInput(editing.at_ms) : ''}
+                    onChange={(e) =>
+                      setEditing({
+                        ...editing,
+                        // An empty box is no date, not 1970.
+                        at_ms: e.target.value ? new Date(e.target.value).getTime() : undefined,
+                      })
+                    }
+                  />
+                  <select
+                    className="input w-32"
+                    value={editing.duration_min ?? 0}
+                    onChange={(e) =>
+                      setEditing({ ...editing, duration_min: Number(e.target.value) })
+                    }
+                    title="How long it lasts"
+                  >
+                    <option value={0}>No length</option>
+                    <option value={15}>15 min</option>
+                    <option value={30}>30 min</option>
+                    <option value={60}>1 hour</option>
+                    <option value={90}>90 min</option>
+                    <option value={120}>2 hours</option>
+                    <option value={240}>Half a day</option>
+                  </select>
+                </div>
+              )}
 
               {editing.every === 'weekly' && (
                 <div className="flex gap-1">

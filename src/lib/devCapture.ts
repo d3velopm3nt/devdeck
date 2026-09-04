@@ -19,3 +19,4 @@ export const CAPTURE_CHECK: string = ''
 export const CAPTURE_CONTEXT: boolean = false
 export const CAPTURE_CAL_VIEW: string = ''
 export const CAPTURE_EVENT: string = ''
+export const CAPTURE_NEW_SCHEDULE: boolean = false

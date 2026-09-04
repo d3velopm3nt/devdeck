@@ -48,10 +48,14 @@ export interface Schedule {
   /** reminder | command | agent */
   kind: string
   node_id: number | null
-  /** daily | weekdays | weekly | hourly */
+  /** daily | weekdays | weekly | hourly | once */
   every: string
-  /** Minutes past midnight, local. */
+  /** Minutes past midnight, local. Ignored by 'once' and 'hourly'. */
   at_min: number
+  /** For 'once': the moment, unix ms. */
+  at_ms?: number
+  /** Minutes it lasts. 0 is an instant; more is a block on the calendar. */
+  duration_min?: number
   /** For 'weekly': comma-separated 0-6, Sunday first. */
   days: string
   payload: string

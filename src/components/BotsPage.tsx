@@ -1,4 +1,4 @@
-// Bots — the people, on a page of their own.
+// Bots — the people, as Team's fourth view.
 //
 // Team is the work: goals, features, items. This is who does it. A list on
 // the left; on the right, whoever is selected — in full. Not a chat pane, the
@@ -6,6 +6,10 @@
 // its tools and its settings. A chat pane beside a list hid everything else a
 // bot has; the page opens on the thread anyway, so nothing is lost and the
 // rest is a tab away instead of unknown.
+//
+// `compact` is for living inside Team, which already names the view above it:
+// the title goes, the New button stays, because that is the only way to make
+// a bot from here.
 //
 // The Assistant is first, and it is a contact like the rest: the orchestrator,
 // in the permission matrix, talked to through the same loop with a different
@@ -35,7 +39,7 @@ function loadPicked(): Picked {
   return Number.isFinite(v) && v > 0 ? { kind: 'bot', nodeId: v } : { kind: 'assistant' }
 }
 
-export function BotsPage() {
+export function BotsPage({ compact }: { compact?: boolean } = {}) {
   const { bots, refreshBots, nodes, activeWorkspaceId } = useApp()
   const a = useAiw()
   const [threads, setThreads] = useState<ConversationSummary[] | null>(null)
@@ -77,11 +81,23 @@ export function BotsPage() {
     <div className="flex h-full min-h-0 bg-page">
       {/* The list */}
       <div className="flex w-[320px] shrink-0 flex-col border-r border-line bg-panel">
-        <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-3">
-          <div className="min-w-0">
-            <h2 className="text-[14px] font-semibold text-ink">Bots</h2>
-            <p className="text-[10.5px] text-muted">Who you talk to, and who they put to work.</p>
-          </div>
+        <div
+          className={`flex shrink-0 items-center gap-2 border-b border-line px-4 ${
+            compact ? 'py-2' : 'py-3'
+          }`}
+        >
+          {!compact && (
+            <div className="min-w-0">
+              <h2 className="text-[14px] font-semibold text-ink">Bots</h2>
+              <p className="text-[10.5px] text-muted">Who you talk to, and who they put to work.</p>
+            </div>
+          )}
+          {compact && (
+            <span className="text-[10.5px] text-muted">
+              {bots.length} bot{bots.length === 1 ? '' : 's'} · {a.agents.length} agent
+              {a.agents.length === 1 ? '' : 's'}
+            </span>
+          )}
           <button
             className="btn-primary ml-auto shrink-0 text-[11px]"
             disabled={candidates.length === 0}

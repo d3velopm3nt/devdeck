@@ -269,19 +269,27 @@ export function CalendarPage() {
         {view === 'day' && sameDay(anchor, new Date()) && (
           <span className="text-[10.5px] text-faint">today</span>
         )}
+        {/* One cluster, one height. The arrows were icon buttons and Today a
+            text button, so the three sat at different heights on one line.
+            Height is all that is set here: `.btn-ghost` carries its own
+            padding and wins over a utility, so a fixed width squeezed the
+            icon into a four-pixel box and the chevrons became dots. */}
         <span className="flex items-center gap-1">
           <button
-            className="btn-ghost px-1.5 text-[11px]"
+            className="btn-ghost h-[24px] text-[11px]"
             title="Back"
             onClick={() => app.setCalAnchor(step(view, anchor, -1).getTime())}
           >
             <Icon name="chevron-left" size={12} />
           </button>
-          <button className="btn-ghost text-[11px]" onClick={() => app.setCalAnchor(Date.now())}>
+          <button
+            className="btn-ghost h-[24px] text-[11px]"
+            onClick={() => app.setCalAnchor(Date.now())}
+          >
             Today
           </button>
           <button
-            className="btn-ghost px-1.5 text-[11px]"
+            className="btn-ghost h-[24px] text-[11px]"
             title="Forward"
             onClick={() => app.setCalAnchor(step(view, anchor, 1).getTime())}
           >

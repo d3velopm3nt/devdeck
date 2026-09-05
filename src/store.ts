@@ -373,15 +373,22 @@ const loadRecent = (): number[] => {
   }
 }
 
-export type TeamTab = 'goals' | 'features' | 'work'
+/// Goals, Features and Work are three questions about the same rows; Bots is
+/// who answers them. They are tabs of one page because moving between "what is
+/// being worked on" and "who is working on it" was a trip through the rail.
+const RAIL_KEY = 'devdeck.railView'
+
+export type TeamTab = 'goals' | 'features' | 'work' | 'bots'
 const TEAM_KEY = 'devdeck.team.tab'
 const loadTeamTab = (): TeamTab => {
   if (CAPTURE_TEAM_TAB) return CAPTURE_TEAM_TAB as TeamTab
+  // Bots had a rail entry of its own until it came back to Team; someone
+  // whose last view was that one lands on the tab it became.
+  if (localStorage.getItem(RAIL_KEY) === 'bots') return 'bots'
   const v = localStorage.getItem(TEAM_KEY)
-  return v === 'features' || v === 'work' ? v : 'goals'
+  return v === 'features' || v === 'work' || v === 'bots' ? v : 'goals'
 }
 
-const RAIL_KEY = 'devdeck.railView'
 /** When the Inbox was last looked at. Kept locally rather than in the database
  *  because it is about this screen, not about the work. */
 const SEEN_KEY = 'devdeck.inbox.seen'
@@ -407,6 +414,9 @@ const RAIL_VIEWS: readonly RailView[] = [
 const loadRailView = (): RailView => {
   if (CAPTURE_RAIL) return CAPTURE_RAIL as RailView
   const v = localStorage.getItem(RAIL_KEY) as RailView | null
+  // Bots moved back into Team. The old value still means something, so it is
+  // translated rather than failed — failing it would drop you on Home.
+  if (v === 'bots') return 'team'
   return v && RAIL_VIEWS.includes(v) ? v : 'home'
 }
 

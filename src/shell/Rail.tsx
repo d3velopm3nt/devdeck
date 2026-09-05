@@ -27,11 +27,16 @@ import type { TreeNode } from '../lib/types'
 
 type Item = { view: RailView; icon: IconName; label: string }
 
-/// Team's three views, as the sub-menu under it.
+/// Team's views, as the sub-menu under it.
+///
+/// Bots is here rather than beside Team: who does the work and what the work
+/// is are two questions about one team, and having them in different corners
+/// of the rail meant a trip through navigation to answer either one.
 const TEAM: { id: TeamTab; icon: IconName; label: string }[] = [
   { id: 'goals', icon: 'project', label: 'Goals' },
   { id: 'features', icon: 'list', label: 'Features' },
   { id: 'work', icon: 'check', label: 'Work' },
+  { id: 'bots', icon: 'bot', label: 'Bots' },
 ]
 
 /// Destinations that are neither the team nor the tree.
@@ -247,12 +252,15 @@ export function Rail() {
           icon="agent"
           active={railView === 'team'}
           expanded={expanded}
+          // Collapsed there is no sub-menu, so a bot at work has to say so
+          // here or not at all.
+          live={working}
           onClick={() => setRailView('team')}
         />
         {expanded && (
           <button
             className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-0.5 text-faint hover:bg-hover hover:text-dim"
-            title={teamOpen ? 'Hide Goals, Features and Work' : 'Show Goals, Features and Work'}
+            title={teamOpen ? 'Hide what Team holds' : 'Show what Team holds'}
             aria-label={teamOpen ? 'Collapse Team' : 'Expand Team'}
             onClick={(e) => {
               e.stopPropagation()
@@ -280,19 +288,11 @@ export function Rail() {
             {t.id === 'work' && moving > 0 && (
               <span className="shrink-0 text-[10px] font-semibold text-ok">{moving}</span>
             )}
+            {t.id === 'bots' && working > 0 && (
+              <span className="h-[6px] w-[6px] shrink-0 rounded-full bg-emerald-400" />
+            )}
           </button>
         ))}
-
-      {/* The people: the assistant, the bots, the agents. First-class, so a
-          rail entry of their own rather than a tab inside the work. */}
-      <RailButton
-        label="Bots"
-        icon="bot"
-        active={railView === 'bots'}
-        expanded={expanded}
-        live={working}
-        onClick={() => setRailView('bots')}
-      />
 
       <RailButton
         label="Inbox"

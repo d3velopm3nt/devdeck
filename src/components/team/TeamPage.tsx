@@ -1,9 +1,20 @@
-// Team — the first view: what is being worked on, everywhere, right now.
+// Team — what is being worked on, everywhere, and who is working on it.
 //
-// Three views over one board, because Goals, Features and Work are three
-// questions about the same rows and asking the backend three times would let
-// them disagree. Which one is open is the rail's sub-menu. The people — the
-// bots and agents — have a page of their own.
+// Four views over one board. Goals, Features and Work are three questions
+// about the same rows, so asking the backend three times would let them
+// disagree; Bots is who answers them, and it lived on a rail entry of its own
+// until the trip between "what is happening" and "who is doing it" turned out
+// to be the trip you make most.
+//
+// **One shape for all four: a list, and the thread beside it.** Features and
+// Work were full-width tables that replaced themselves with a thread when you
+// clicked a row, so reading two of them meant going back, finding your place
+// and clicking again. Now the list stays put and the right-hand side changes,
+// which is what the bots page always did.
+//
+// Which feature is open is held here rather than in each list, because Goals,
+// Features and Work are three ways of pointing at the same thing: switching
+// tabs keeps the room you were in.
 //
 // Global on purpose. Features live in each node's deck, so a page scoped to
 // whichever folder happened to be selected would hide the bot working two
@@ -16,15 +27,29 @@ import type { GoalRow } from '../../lib/aiw'
 import { aiw } from '../../lib/aiw'
 import { useApp, type TeamTab } from '../../store'
 import { Icon } from '../../lib/icons'
-import { Goals } from './Goals'
-import { FeaturesTab } from './FeaturesTab'
-import { WorkTab } from './WorkTab'
+import { GoalsList } from './Goals'
+import { FeaturesList } from './FeaturesTab'
+import { WorkList } from './WorkTab'
+import { FeatureThread } from './FeatureThread'
+import { BotsPage } from '../BotsPage'
+import { CAPTURE_GOAL } from '../../lib/devCapture'
 
 const TABS: { id: TeamTab; label: string }[] = [
   { id: 'goals', label: 'Goals' },
   { id: 'features', label: 'Features' },
   { id: 'work', label: 'Work' },
+  { id: 'bots', label: 'Bots' },
 ]
+
+const SAYS: Record<TeamTab, { title: string; sub: string }> = {
+  goals: {
+    title: 'Goals',
+    sub: 'Every space, right now, grouped by goal. Pick one to open its thread.',
+  },
+  features: { title: 'Features', sub: 'Every feature in every space, and who is on it.' },
+  work: { title: 'Work', sub: 'Every open item, and who is holding it.' },
+  bots: { title: 'Bots', sub: 'Who you talk to, and who they put to work.' },
+}
 
 /// What a failed read must never look like: an empty board.
 export interface Board {
@@ -40,6 +65,7 @@ export function TeamPage() {
   const tab = useApp((s) => s.teamTab)
   const setTab = useApp((s) => s.setTeamTab)
   const [board, setBoard] = useState<Board>({ rows: [], error: null, loaded: false })
+  const [picked, setPicked] = useState<string | null>(CAPTURE_GOAL || null)
   const refreshBots = useApp((s) => s.refreshBots)
 
   const reload = useCallback(() => {
@@ -66,22 +92,22 @@ export function TeamPage() {
   }, [])
 
   const waiting = board.rows.filter((r) => r.waiting > 0 || r.conflicts > 0).length
-  const moving = board.rows.filter((r) => r.waiting === 0 && r.conflicts === 0 && r.on_it.length > 0).length
+  const moving = board.rows.filter(
+    (r) => r.waiting === 0 && r.conflicts === 0 && r.on_it.length > 0,
+  ).length
+
+  const key = (g: GoalRow) => `${g.node_id}:${g.feature_id}`
+  // Nothing picked yet opens the first row rather than an empty half-page —
+  // but only once you have chosen nothing, never over a choice.
+  const current =
+    picked == null ? board.rows[0] : board.rows.find((g) => key(g) === picked)
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-page">
       <div className="flex shrink-0 items-center gap-3 border-b border-line px-5 py-3">
         <div className="min-w-0">
-          <h2 className="text-[15px] font-semibold text-ink">
-            {tab === 'goals' ? 'Goals' : tab === 'features' ? 'Features' : 'Work'}
-          </h2>
-          <p className="text-[11.5px] text-muted">
-            {tab === 'goals'
-              ? 'Every space, right now, grouped by goal. Pick one to open its thread.'
-              : tab === 'features'
-                ? 'Every feature in every space, and who is on it.'
-                : 'Every open item, and who is holding it.'}
-          </p>
+          <h2 className="text-[15px] font-semibold text-ink">{SAYS[tab].title}</h2>
+          <p className="text-[11.5px] text-muted">{SAYS[tab].sub}</p>
         </div>
         <div className="ml-auto flex items-center gap-3 text-[10.5px] text-faint">
           {board.error ? (
@@ -93,7 +119,11 @@ export function TeamPage() {
               {moving} moving · {waiting} waiting on you · every space
             </span>
           )}
-          <button className="text-muted hover:text-ink" title="Read it again" onClick={() => void reload()}>
+          <button
+            className="text-muted hover:text-ink"
+            title="Read it again"
+            onClick={() => void reload()}
+          >
             <Icon name="update" size={12} />
           </button>
         </div>
@@ -122,11 +152,35 @@ export function TeamPage() {
         </div>
       )}
 
-      <div className="min-h-0 flex-1">
-        {tab === 'goals' && <Goals board={board} />}
-        {tab === 'features' && <FeaturesTab board={board} />}
-        {tab === 'work' && <WorkTab board={board} />}
-      </div>
+      {/* Bots brings its own list and its own right-hand side: the whole bot
+          page, not a chat pane, so nothing a bot has is hidden behind one. */}
+      {tab === 'bots' ? (
+        <div className="min-h-0 flex-1">
+          <BotsPage compact />
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1">
+          <div className="flex w-[320px] shrink-0 flex-col border-r border-line bg-panel">
+            {tab === 'goals' && <GoalsList board={board} picked={picked} onPick={setPicked} />}
+            {tab === 'features' && (
+              <FeaturesList board={board} picked={picked} onPick={setPicked} />
+            )}
+            {tab === 'work' && <WorkList board={board} picked={picked} onPick={setPicked} />}
+          </div>
+
+          <div className="min-w-0 flex-1">
+            {current ? (
+              <FeatureThread goal={current} />
+            ) : (
+              <div className="flex h-full items-center justify-center px-8 text-center text-[12px] text-muted">
+                {board.loaded
+                  ? 'Pick one to open its thread.'
+                  : 'Reading the board…'}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

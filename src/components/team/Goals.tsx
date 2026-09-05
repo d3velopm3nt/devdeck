@@ -10,17 +10,16 @@
 // approval.
 //
 // Selecting a goal opens its thread — the feature *is* the room, so there is
-// nowhere else for it to go.
+// nowhere else for it to go. The list is one of four the page can put beside
+// that thread, so it renders the column and nothing else: which one is picked
+// belongs to the page, or switching tabs would lose your place.
 
-import { useState } from 'react'
 import type { GoalRow } from '../../lib/aiw'
 import { goalGroup } from '../../lib/aiw'
 import { Icon } from '../../lib/icons'
 import { fmtAgo } from '../../lib/time'
 import { useSpeakers } from '../thread/speakers'
-import { FeatureThread } from './FeatureThread'
 import type { Board } from './TeamPage'
-import { CAPTURE_GOAL } from '../../lib/devCapture'
 
 const GROUPS: { id: 'waiting' | 'moving' | 'quiet'; label: string }[] = [
   { id: 'moving', label: 'Moving' },
@@ -28,17 +27,20 @@ const GROUPS: { id: 'waiting' | 'moving' | 'quiet'; label: string }[] = [
   { id: 'quiet', label: 'Quiet' },
 ]
 
-export function Goals({ board }: { board: Board }) {
-  const first = board.rows[0]
-  const [picked, setPicked] = useState<string | null>(CAPTURE_GOAL || null)
+export function GoalsList({
+  board,
+  picked,
+  onPick,
+}: {
+  board: Board
+  picked: string | null
+  onPick: (key: string) => void
+}) {
   const speakers = useSpeakers()
-
   const key = (g: GoalRow) => `${g.node_id}:${g.feature_id}`
-  const current = board.rows.find((g) => key(g) === picked) ?? (picked ? undefined : first)
 
   return (
-    <div className="flex h-full min-h-0">
-      <div className="flex w-[320px] shrink-0 flex-col border-r border-line bg-panel">
+    <>
         <div className="min-h-0 flex-1 overflow-y-auto px-1.5 py-2">
           {board.loaded && board.rows.length === 0 && !board.error && (
             <div className="px-3 py-8 text-center text-[11.5px] leading-relaxed text-muted">
@@ -59,14 +61,14 @@ export function Goals({ board }: { board: Board }) {
                   {label}
                 </div>
                 {rows.map((g) => {
-                  const on = current && key(current) === key(g)
+                  const on = picked === key(g)
                   return (
                     <button
                       key={key(g)}
                       className={`flex w-full flex-col gap-1.5 rounded-lg px-3 py-2.5 text-left ${
                         on ? 'bg-hover' : 'hover:bg-hover/50'
                       }`}
-                      onClick={() => setPicked(key(g))}
+                      onClick={() => onPick(key(g))}
                     >
                       <div className="flex items-baseline gap-2">
                         <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink">
@@ -122,17 +124,6 @@ export function Goals({ board }: { board: Board }) {
         <div className="shrink-0 border-t border-line px-4 py-2 text-[10px] leading-[1.5] text-faint">
           Grouped by goal, not by bot. A bot on two goals appears twice.
         </div>
-      </div>
-
-      <div className="min-w-0 flex-1">
-        {current ? (
-          <FeatureThread goal={current} />
-        ) : (
-          <div className="flex h-full items-center justify-center px-8 text-center text-[12px] text-muted">
-            Pick a goal to open its thread.
-          </div>
-        )}
-      </div>
-    </div>
+    </>
   )
 }

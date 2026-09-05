@@ -9,15 +9,15 @@
 // and names nobody is a different thing from one an agent is holding right
 // now, and the difference is the whole point of showing both.
 //
-// Clicking a row opens the feature's thread, because that is where the item is
-// being talked about.
+// The list stays; the thread beside it changes. An item and its feature select
+// together, because the item has no room of its own — the feature *is* the
+// room, and that is where the item is being talked about.
 
 import { useEffect, useState } from 'react'
 import { useAiw } from '../../lib/aiwStore'
 import type { GoalRow } from '../../lib/aiw'
 import { Icon } from '../../lib/icons'
 import { useSpeakers } from '../thread/speakers'
-import { FeatureThread } from './FeatureThread'
 import type { Board } from './TeamPage'
 
 /// Colour per status. Blocked is the only warm one: it is the only status
@@ -30,10 +30,17 @@ function statusDot(status: string): string {
   return 'bg-line2'
 }
 
-export function WorkTab({ board }: { board: Board }) {
+export function WorkList({
+  board,
+  picked,
+  onPick,
+}: {
+  board: Board
+  picked: string | null
+  onPick: (key: string) => void
+}) {
   const a = useAiw()
   const [showDone, setShowDone] = useState(false)
-  const [open, setOpen] = useState<string | null>(null)
   const speakers = useSpeakers()
 
   useEffect(() => {
@@ -50,22 +57,6 @@ export function WorkTab({ board }: { board: Board }) {
   )
 
   const key = (g: { node_id: number; feature_id: string }) => `${g.node_id}:${g.feature_id}`
-  const current = board.rows.find((g) => key(g) === open)
-  if (current) {
-    return (
-      <div className="flex h-full min-h-0 flex-col">
-        <button
-          className="flex shrink-0 items-center gap-1.5 border-b border-line px-5 py-1.5 text-left text-[11px] text-muted hover:text-ink"
-          onClick={() => setOpen(null)}
-        >
-          <Icon name="chevron-left" size={12} /> All work
-        </button>
-        <div className="min-h-0 flex-1">
-          <FeatureThread goal={current} />
-        </div>
-      </div>
-    )
-  }
 
   const groups = a.allWork
     .map((f) => ({ ...f, items: f.items.filter((i) => showDone || i.status !== 'done') }))
@@ -78,104 +69,109 @@ export function WorkTab({ board }: { board: Board }) {
     board.rows.find((g) => String(g.node_id) === projectId && g.feature_id === featureId)
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center gap-3 px-5 py-2.5">
-        <span className="text-[11px] text-muted">
-          {openCount} open of {total}, across every space
+    <>
+      <div className="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2">
+        <span className="text-[10.5px] text-muted">
+          {openCount} open of {total}
         </span>
-        <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-[11px] text-muted">
+        <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-[10.5px] text-muted">
           <input
             type="checkbox"
-            className="h-3.5 w-3.5 accent-indigo-500"
+            className="h-3 w-3 accent-indigo-500"
             checked={showDone}
             onChange={(e) => setShowDone(e.target.checked)}
           />
-          Show finished
+          Finished
         </label>
-        <button className="btn-ghost text-[11px]" onClick={() => void a.loadAllWork()}>
-          Refresh
+        <button
+          className="text-muted hover:text-ink"
+          title="Read the work again"
+          onClick={() => void a.loadAllWork()}
+        >
+          <Icon name="update" size={11} />
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto px-5 pb-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-1.5 py-2">
         {a.allWork.length === 0 ? (
-          <div className="py-10 text-center text-[12px] leading-relaxed text-muted">
+          <div className="px-3 py-8 text-center text-[11.5px] leading-relaxed text-muted">
             Nothing here yet, in any space. Work items come from a feature — a bot&rsquo;s plan makes
             one, and so does creating a feature by hand.
           </div>
         ) : groups.length === 0 ? (
-          <div className="py-10 text-center text-[12px] text-muted">
-            {total} item{total === 1 ? '' : 's'}, all finished. Tick “show finished” to see them.
+          <div className="px-3 py-8 text-center text-[11.5px] text-muted">
+            {total} item{total === 1 ? '' : 's'}, all finished. Tick &ldquo;finished&rdquo; to see
+            them.
           </div>
         ) : (
-          <div className="flex flex-col gap-3">
-            {groups.map((f) => {
-              const row = rowFor(f.project_id, f.feature_id)
-              return (
-                <div
-                  key={`${f.project_id}:${f.feature_id}`}
-                  className="overflow-hidden rounded-xl border border-line bg-panel"
+          groups.map((f) => {
+            const row = rowFor(f.project_id, f.feature_id)
+            const on = row != null && picked === key(row)
+            return (
+              <div key={`${f.project_id}:${f.feature_id}`} className="mb-1">
+                <button
+                  className={`flex w-full items-baseline gap-2 rounded-lg px-2.5 py-1.5 text-left ${
+                    on ? 'bg-hover' : 'hover:bg-hover/50'
+                  }`}
+                  disabled={!row}
+                  title={row ? 'Open its thread' : 'This feature is not on the board'}
+                  onClick={() => row && onPick(key(row))}
                 >
-                  <button
-                    className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left hover:bg-hover/40"
-                    disabled={!row}
-                    onClick={() => row && setOpen(key(row))}
-                  >
-                    <span className="truncate text-[12.5px] font-semibold text-ink">
-                      {f.feature_name}
-                    </span>
-                    <span className="shrink-0 text-[10.5px] text-faint">
-                      {f.project_name} · {f.items.filter((i) => i.status === 'done').length} of{' '}
-                      {f.items.length}
-                    </span>
-                    {row?.managed_by && (
-                      <span className="ml-auto flex shrink-0 items-center gap-1 text-[10.5px] text-indigo-400">
-                        <Icon name="bot" size={10} /> {row.managed_by} manages
-                      </span>
-                    )}
-                  </button>
-                  {f.items.map((i) => {
-                    const by = held.get(i.id)
-                    return (
-                      <div
-                        key={i.id}
-                        className="flex items-center gap-2.5 border-t border-line px-4 py-1.5"
-                      >
-                        <span className={`h-[7px] w-[7px] shrink-0 rounded-full ${statusDot(i.status)}`} />
-                        <span
-                          className={`min-w-0 flex-1 truncate text-[12px] ${
-                            i.status === 'done' ? 'text-muted line-through' : 'text-body'
-                          }`}
-                        >
-                          {i.title}
-                        </span>
-                        {by ? (
-                          <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 text-[10px] font-semibold text-ok">
-                            {speakers(by)} has it
-                          </span>
-                        ) : i.assignee ? (
-                          <span className="shrink-0 text-[10.5px] text-muted">{i.assignee}</span>
-                        ) : (
-                          <span className="shrink-0 rounded-full border border-line px-2 text-[10px] text-faint">
-                            nobody yet
-                          </span>
-                        )}
-                        <span className="w-[74px] shrink-0 text-right text-[10.5px] text-faint">
-                          {i.status || 'unclaimed'}
-                        </span>
-                      </div>
-                    )
-                  })}
+                  <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-ink">
+                    {f.feature_name}
+                  </span>
+                  <span className="shrink-0 text-[10px] text-faint">
+                    {f.items.filter((i) => i.status === 'done').length}/{f.items.length}
+                  </span>
+                </button>
+                <div className="px-2.5 pb-1 text-[10px] text-faint">
+                  {f.project_name}
+                  {row?.managed_by && (
+                    <span className="text-indigo-400"> · {row.managed_by} manages</span>
+                  )}
                 </div>
-              )
-            })}
-          </div>
+
+                {f.items.map((i) => {
+                  const by = held.get(i.id)
+                  return (
+                    <button
+                      key={i.id}
+                      className="flex w-full items-center gap-2 rounded px-2.5 py-1 text-left hover:bg-hover/40"
+                      disabled={!row}
+                      onClick={() => row && onPick(key(row))}
+                    >
+                      <span
+                        className={`h-[6px] w-[6px] shrink-0 rounded-full ${statusDot(i.status)}`}
+                      />
+                      <span
+                        className={`min-w-0 flex-1 truncate text-[11.5px] ${
+                          i.status === 'done' ? 'text-muted line-through' : 'text-body'
+                        }`}
+                      >
+                        {i.title}
+                      </span>
+                      {by ? (
+                        <span className="shrink-0 rounded-full bg-emerald-500/15 px-1.5 text-[9.5px] font-semibold text-ok">
+                          {speakers(by)}
+                        </span>
+                      ) : i.assignee ? (
+                        <span className="shrink-0 text-[10px] text-muted">{i.assignee}</span>
+                      ) : (
+                        <span className="shrink-0 text-[10px] text-faint">nobody</span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          })
         )}
-        <p className="mt-2.5 text-[10.5px] leading-[1.5] text-faint">
-          “Has it” is a live claim; “nobody yet” means the item is unclaimed. Work items live in each
-          feature&rsquo;s work.md in the vault — editing that file changes this.
-        </p>
       </div>
-    </div>
+
+      <div className="shrink-0 border-t border-line px-4 py-2 text-[10px] leading-[1.5] text-faint">
+        A name in green is a live claim; &ldquo;nobody&rdquo; means unclaimed. Items live in each
+        feature&rsquo;s work.md in the vault.
+      </div>
+    </>
   )
 }

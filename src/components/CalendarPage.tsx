@@ -222,6 +222,13 @@ export function CalendarPage() {
     setOpenItem(i)
   }
 
+  /// A day, from a week or a month. Zooming in on what you just pointed at is
+  /// the one navigation both of those views owe you.
+  const openDay = (d: Date) => {
+    app.setCalAnchor(d.getTime())
+    app.setCalView('day')
+  }
+
   /// The same event a day either side, found by asking the calendar rather
   /// than by guessing: a weekdays rhythm has no Saturday, and stepping onto
   /// one would open a page for something that never happens.
@@ -372,18 +379,19 @@ export function CalendarPage() {
           <DayGrid day={from} slot={slot} items={shown} onOpen={open} />
         )}
         {!openItem && view === 'week' && (
-          <div className="h-full overflow-auto p-4">
-            <WeekGrid from={from} byDay={byDay} onOpen={open} />
+          <div className="h-full p-4">
+            <WeekGrid from={from} byDay={byDay} onOpen={open} onPickDay={openDay} />
           </div>
         )}
         {!openItem && view === 'month' && (
-          <div className="h-full overflow-auto p-4">
+          <div className="h-full p-4">
             <MonthGrid
               from={from}
               to={to}
               month={anchor.getMonth()}
               byDay={byDay}
               onOpen={open}
+              onPickDay={openDay}
             />
           </div>
         )}
@@ -759,73 +767,262 @@ function Lane({
   )
 }
 
+/// A week, in the same language as the day.
+///
+/// Two lanes will not fit seven times over, so agent time becomes a gutter
+/// down the left of each column — one stripe per run, red where it failed. You
+/// can see the machine's week without it competing with yours.
+///
+/// The scale is fixed rather than following the day's zoom: five minutes to a
+/// row across seven columns is a fortnight of scrolling, and a week is a thing
+/// you look at rather than run.
+const WEEK_PX_PER_HOUR = 34
+/// Blocks floor lower here than on the day. The columns are a seventh as wide,
+/// so the label is short whatever happens and the height is what carries the
+/// shape of the day.
+const WEEK_MIN_PX = 14
+
 function WeekGrid({
   from,
   byDay,
   onOpen,
+  onPickDay,
 }: {
   from: Date
   byDay: Map<string, CalendarItem[]>
   onOpen: (i: CalendarItem) => void
+  onPickDay: (d: Date) => void
 }) {
+  const days = daysFrom(from, new Date(from.getTime() + 6 * DAY_MS + 3_600_000)).slice(0, 7)
+  const now = Date.now()
   const today = new Date().toDateString()
+  const pxPerMin = WEEK_PX_PER_HOUR / 60
+  const height = 24 * 60 * pxPerMin
+  const minMs = (WEEK_MIN_PX / pxPerMin) * 60_000
+  const thisWeek = days.some((d) => d.toDateString() === today)
+
+  // Same rule as the day: open where the week is happening, not at midnight.
+  const scroller = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = scroller.current
+    if (!el) return
+    const all = days.flatMap((d) => byDay.get(d.toDateString()) ?? [])
+    const at = thisWeek ? now : all.length > 0 ? Math.min(...all.map((i) => i.at)) : 0
+    if (!at) {
+      el.scrollTop = 7 * WEEK_PX_PER_HOUR
+      return
+    }
+    const mins = (at - startOfDay(new Date(at)).getTime()) / 60_000
+    el.scrollTop = Math.max(0, mins - 90) * pxPerMin
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [from.getTime(), byDay])
+
   return (
-    <div className="grid grid-cols-7 gap-2">
-      {daysFrom(from, new Date(from.getTime() + 6 * DAY_MS + 3_600_000))
-        .slice(0, 7)
-        .map((day) => {
-          const list = byDay.get(day.toDateString()) ?? []
-          const isToday = day.toDateString() === today
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-line bg-panel">
+      <div className="flex shrink-0 border-b border-line pr-2">
+        <div className="w-[44px] shrink-0" />
+        {days.map((d) => {
+          const isToday = d.toDateString() === today
+          const n = (byDay.get(d.toDateString()) ?? []).length
+          return (
+            <button
+              key={d.toDateString()}
+              className={`flex flex-1 items-baseline justify-center gap-1.5 border-l border-line py-1.5 hover:bg-hover/40 ${
+                isToday ? 'bg-indigo-500/[0.06]' : ''
+              }`}
+              title="Open this day"
+              onClick={() => onPickDay(d)}
+            >
+              <span
+                className={`text-[11.5px] font-semibold ${isToday ? 'text-indigo-400' : 'text-ink'}`}
+              >
+                {d.toLocaleDateString([], { weekday: 'short' })}
+              </span>
+              <span className="text-[10.5px] text-muted">{d.getDate()}</span>
+              {n > 0 && <span className="text-[9.5px] text-faint">{n}</span>}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* What has no duration goes above the clock, never on it. */}
+      <div className="flex shrink-0 border-b border-line pr-2">
+        <div className="flex w-[44px] shrink-0 items-center justify-end pr-1.5 text-[8.5px] font-semibold uppercase tracking-wider text-muted">
+          Due
+        </div>
+        {days.map((d) => {
+          const due = (byDay.get(d.toDateString()) ?? []).filter((i) => i.kind === 'deadline')
           return (
             <div
-              key={day.toDateString()}
-              className={`min-h-[200px] overflow-hidden rounded-lg border bg-panel ${
-                isToday ? 'border-indigo-500/45' : 'border-line'
+              key={d.toDateString()}
+              className={`flex min-h-[24px] min-w-0 flex-1 flex-col gap-px border-l border-line px-1 py-1 ${
+                d.toDateString() === today ? 'bg-indigo-500/[0.06]' : ''
               }`}
             >
-              <div
-                className={`flex items-baseline gap-1.5 border-b px-2 py-1.5 ${
-                  isToday ? 'border-indigo-500/30 bg-indigo-500/[0.07]' : 'border-line'
-                }`}
-              >
-                <span className="text-[11px] font-semibold text-ink">
-                  {day.toLocaleDateString([], { weekday: 'short' })}
-                </span>
-                <span className="text-[11px] text-muted">{day.getDate()}</span>
-                {list.length > 0 && (
-                  <span className="ml-auto text-[10px] text-faint">{list.length}</span>
-                )}
-              </div>
-              <div className="flex flex-col gap-px p-1">
-                {list.map((i) => (
-                  <Line key={i.id} i={i} onOpen={onOpen} />
-                ))}
-              </div>
+              {due.slice(0, 2).map((i) => (
+                <button
+                  key={i.id}
+                  className={`truncate rounded border px-1 text-left text-[9px] ${
+                    i.at < now && i.status !== 'done'
+                      ? 'border-red-500/40 text-err'
+                      : 'border-amber-500/40 text-warn'
+                  }`}
+                  title={`${i.title} · ${i.space} · ${i.status}`}
+                  onClick={() => onOpen(i)}
+                >
+                  {i.title}
+                </button>
+              ))}
+              {due.length > 2 && (
+                <span className="px-1 text-[9px] text-faint">+{due.length - 2}</span>
+              )}
             </div>
           )
         })}
+      </div>
+
+      <div ref={scroller} className="min-h-0 flex-1 overflow-auto">
+        <div className="relative flex" style={{ height }}>
+          <div className="pointer-events-none absolute inset-0">
+            {Array.from({ length: 24 }, (_, h) => (
+              <div
+                key={h}
+                className="absolute left-0 right-0 border-t border-line"
+                style={{ top: h * WEEK_PX_PER_HOUR }}
+              >
+                <span className="absolute -top-[6px] left-0 w-[38px] pr-1 text-right font-mono text-[9px] text-faint">
+                  {String(h).padStart(2, '0')}:00
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div className="w-[44px] shrink-0" />
+          {days.map((d) => {
+            const dayStart = startOfDay(d).getTime()
+            const list = byDay.get(d.toDateString()) ?? []
+            const agents = list.filter((i) => i.kind !== 'deadline' && laneOf(i) === 'agents')
+            const yours = place(
+              list.filter((i) => i.kind !== 'deadline' && laneOf(i) === 'you'),
+              minMs,
+            )
+            const isToday = d.toDateString() === today
+            return (
+              <div
+                key={d.toDateString()}
+                className={`relative min-w-0 flex-1 border-l border-line ${
+                  isToday ? 'bg-indigo-500/[0.04]' : ''
+                }`}
+              >
+                {agents.map((i) => {
+                  const went = wentOf(i, now)
+                  const top = Math.max(0, ((i.at - dayStart) / 60_000) * pxPerMin)
+                  const h = Math.max(6, ((i.end - i.at) / 60_000) * pxPerMin)
+                  return (
+                    <button
+                      key={i.id}
+                      className={`absolute left-[2px] w-[3px] rounded-full ${
+                        went === 'failed'
+                          ? 'bg-red-400'
+                          : went === 'planned'
+                            ? 'bg-line3'
+                            : 'bg-emerald-400/70'
+                      }`}
+                      style={{ top, height: h }}
+                      title={`${hhmm(i.at)} · ${i.title}${i.space ? ` · ${i.space}` : ''} · ${went}`}
+                      onClick={() => onOpen(i)}
+                    />
+                  )
+                })}
+
+                {yours.map(({ i, col, cols }) => {
+                  const went = wentOf(i, now)
+                  const top = Math.max(0, ((i.at - dayStart) / 60_000) * pxPerMin)
+                  const h = Math.max(WEEK_MIN_PX, ((i.end - i.at) / 60_000) * pxPerMin)
+                  const w = 100 / cols
+                  const clickable = i.kind !== 'focus'
+                  return (
+                    <button
+                      key={i.id}
+                      type="button"
+                      className={`absolute overflow-hidden rounded border-l-2 px-1 text-left text-[9.5px] leading-[13px] ${blockSkin(
+                        i,
+                        now,
+                      )} ${clickable ? 'hover:brightness-125' : 'cursor-default'}`}
+                      style={{
+                        top,
+                        height: h,
+                        left: `calc(8px + ${col * w}%)`,
+                        width: `calc(${w}% - 10px)`,
+                      }}
+                      title={`${hhmm(i.at)}–${hhmm(i.end)} · ${i.title}${
+                        i.space ? ` · ${i.space}` : ' · personal'
+                      } · ${went}`}
+                      onClick={clickable ? () => onOpen(i) : undefined}
+                    >
+                      <span
+                        className={`block truncate ${went === 'planned' ? 'text-dim' : 'text-ink'} ${
+                          went === 'done' ? 'line-through' : ''
+                        }`}
+                      >
+                        {i.title}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          })}
+
+          {thisWeek && (
+            <div
+              className="pointer-events-none absolute left-0 right-0 flex items-center"
+              style={{ top: ((now - startOfDay(new Date()).getTime()) / 60_000) * pxPerMin }}
+            >
+              <span className="rounded bg-red-500 px-1 font-mono text-[8.5px] text-white">
+                {hhmm(now)}
+              </span>
+              <span className="h-px flex-1 bg-red-500/70" />
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="shrink-0 border-t border-line px-3 py-1.5 text-[9.5px] text-faint">
+        The green gutter is agent time — one stripe per run, red where it failed. Ahead of now
+        everything is hollow: the future is intent, not history.
+      </div>
     </div>
   )
 }
 
+/// A month is too dense for a clock, so it lists — in the same colours, with
+/// the things that have no duration first.
+///
+/// A deadline sits at the top of its day whatever hour it claims, because on a
+/// month the question is "what lands this week", never "at what minute".
 function MonthGrid({
   from,
   to,
   month,
   byDay,
   onOpen,
+  onPickDay,
 }: {
   from: Date
   to: Date
   month: number
   byDay: Map<string, CalendarItem[]>
   onOpen: (i: CalendarItem) => void
+  onPickDay: (d: Date) => void
 }) {
   const days = daysFrom(from, to)
   const today = new Date().toDateString()
+  const now = Date.now()
+
   return (
-    <div>
-      <div className="mb-1 grid grid-cols-7 gap-2">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="mb-1 grid shrink-0 grid-cols-7 gap-1.5">
         {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => (
           <div
             key={d}
@@ -835,25 +1032,84 @@ function MonthGrid({
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-2">
+
+      <div
+        className="grid min-h-0 flex-1 grid-cols-7 gap-1.5 overflow-auto"
+        style={{ gridAutoRows: 'minmax(96px, 1fr)' }}
+      >
         {days.map((day) => {
           const list = byDay.get(day.toDateString()) ?? []
           const outside = day.getMonth() !== month
           const isToday = day.toDateString() === today
+          const weekend = day.getDay() === 0 || day.getDay() === 6
+          const due = list.filter((i) => i.kind === 'deadline')
+          // The machine's routine, counted rather than listed. Three bots
+          // waking at eight every weekday is three identical lines a day and
+          // sixty a month — it buried the two things on here that were
+          // actually about you. One line says the same thing and leaves the
+          // room to what changes.
+          const agents = list.filter((i) => i.kind !== 'deadline' && laneOf(i) === 'agents')
+          const rest = list.filter((i) => i.kind !== 'deadline' && laneOf(i) !== 'agents')
+          const shownDue = due.slice(0, 2)
+          const room = Math.max(0, (agents.length > 0 ? 2 : 3) - shownDue.length)
+          const hidden = due.length - shownDue.length + Math.max(0, rest.length - room)
           return (
             <div
               key={day.toDateString()}
-              className={`min-h-[92px] overflow-hidden rounded-md border bg-panel p-1 ${
+              className={`flex min-h-0 flex-col overflow-hidden rounded-md border ${
                 isToday ? 'border-indigo-500/45' : 'border-line'
-              } ${outside ? 'opacity-45' : ''}`}
+              } ${weekend ? 'bg-app' : 'bg-panel'} ${outside ? 'opacity-45' : ''}`}
             >
-              <div className="px-1 text-[10.5px] text-muted">{day.getDate()}</div>
-              <div className="flex flex-col gap-px">
-                {list.slice(0, 3).map((i) => (
+              <button
+                className="flex shrink-0 items-baseline gap-1.5 px-1.5 pt-1 text-left"
+                title="Open this day"
+                onClick={() => onPickDay(day)}
+              >
+                <span
+                  className={`text-[11px] ${isToday ? 'font-bold text-indigo-400' : 'text-muted'}`}
+                >
+                  {day.getDate()}
+                </span>
+                {list.length > 0 && (
+                  <span className="ml-auto text-[9px] text-faint">{list.length}</span>
+                )}
+              </button>
+
+              <div className="flex min-h-0 flex-1 flex-col gap-px overflow-hidden px-1 pb-1 pt-0.5">
+                {shownDue.map((i) => (
+                  <button
+                    key={i.id}
+                    className={`truncate rounded border px-1 text-left text-[9.5px] ${
+                      i.at < now && i.status !== 'done'
+                        ? 'border-red-500/40 bg-red-500/[0.07] text-err'
+                        : 'border-amber-500/40 text-warn'
+                    }`}
+                    title={`due · ${i.title} · ${i.space} · ${i.status}`}
+                    onClick={() => onOpen(i)}
+                  >
+                    {i.title}
+                  </button>
+                ))}
+                {rest.slice(0, room).map((i) => (
                   <Line key={i.id} i={i} onOpen={onOpen} />
                 ))}
-                {list.length > 3 && (
-                  <span className="px-1 text-[9.5px] text-faint">+{list.length - 3} more</span>
+                {agents.length > 0 && (
+                  <button
+                    className="flex items-center gap-1.5 truncate px-1 text-left text-[9.5px] text-muted hover:text-dim"
+                    title={agents.map((i) => `${hhmm(i.at)} ${i.title}`).join(' · ')}
+                    onClick={() => onPickDay(day)}
+                  >
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
+                    {agents.length} agent run{agents.length === 1 ? '' : 's'}
+                  </button>
+                )}
+                {hidden > 0 && (
+                  <button
+                    className="px-1 text-left text-[9.5px] text-faint hover:text-dim"
+                    onClick={() => onPickDay(day)}
+                  >
+                    +{hidden} more
+                  </button>
                 )}
               </div>
             </div>

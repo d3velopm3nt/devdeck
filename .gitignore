@@ -27,3 +27,6 @@ Thumbs.db
 
 # updater signing keys (private key must never be committed)
 .keys/
+
+# Seeded design canvases (regenerate with seed-canvas.mjs)
+design/mail-canvas/devdeck-mail.html

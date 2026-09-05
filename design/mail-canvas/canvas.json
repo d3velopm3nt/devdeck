@@ -1,0 +1,68 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "Mail",
+      "is_interactive": true
+    },
+    {
+      "file": "Assistant.dc.html",
+      "x": 1520,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "Thread + assistant",
+      "is_interactive": true
+    },
+    {
+      "file": "Contacts.dc.html",
+      "x": 3040,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "Contacts",
+      "is_interactive": true
+    },
+    {
+      "file": "Accounts.dc.html",
+      "x": 0,
+      "y": 1020,
+      "w": 1440,
+      "h": 900,
+      "title": "Add an account",
+      "is_interactive": true
+    },
+    {
+      "file": "Compose.dc.html",
+      "x": 1520,
+      "y": 1020,
+      "w": 1440,
+      "h": 900,
+      "title": "Compose",
+      "is_interactive": true
+    }
+  ],
+  "annotations": [
+    {
+      "id": "shell",
+      "x": 0,
+      "y": -300,
+      "w": 700,
+      "text": "All five are the real DevDeck shell \u2014 tokens, rail, sidebar and bottom bars lifted from src/index.css and App.tsx.\nMail takes a rail slot next to Stash and reuses the Stash shape: sidebar -> list -> detail, fixed chrome, nothing in the dock.\nClick around: groups, filter chips, threads, the reader tabs, Reply."
+    },
+    {
+      "id": "contacts-home",
+      "x": 3040,
+      "y": -300,
+      "w": 620,
+      "text": "Open question: contacts sit inside Mail behind a Mail/Contacts switch rather than taking a rail slot of their own.\nCheap to change if you'd rather they were top-level \u2014 say which and I'll move it."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}

@@ -8,11 +8,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Icon } from '../lib/icons'
 import { useAiw } from '../lib/aiwStore'
+import { useApp } from '../store'
 import { initials, severityStyle } from '../lib/aiw'
 import * as ipc from '../lib/ipc'
 import { githubUser, type GithubUser } from '../lib/ipc'
 import { SignInModal } from '../components/SignInModal'
 import { ProjectTag } from '../components/aiw/ProjectTag'
+import { CAPTURE_BELL } from '../lib/devCapture'
 
 // ---------------------------------------------------------------------------
 // Who is working
@@ -61,12 +63,22 @@ export function AgentCluster() {
 
 export function NotificationBell() {
   const a = useAiw()
-  const [open, setOpen] = useState(false)
+  const activity = useApp((s) => s.activity)
+  const inboxSeen = useApp((s) => s.inboxSeen)
+  const setRailView = useApp((s) => s.setRailView)
+  // Screenshot harness: this panel only exists while it is being clicked.
+  const [open, setOpen] = useState(CAPTURE_BELL)
   const wrap = useRef<HTMLDivElement>(null)
 
   const approvals = a.approvals
   const blockers = a.conflicts.filter((c) => !c.resolved)
-  const total = approvals.length + blockers.length
+  // Things that broke and have not been looked at. This corner is where you
+  // check whether anything needs you, and until now a stopped agent was the
+  // one kind of "needs you" it could not say — you had to go and find it.
+  // Under the harness, what has been read is shown anyway: every screenshot
+  // taken after a visit to the Inbox would otherwise be of an empty panel.
+  const broken = activity.filter((x) => !x.ok && (CAPTURE_BELL || x.ts > inboxSeen)).slice(0, 5)
+  const total = approvals.length + blockers.length + broken.length
 
   useEffect(() => {
     if (!open) return
@@ -92,13 +104,19 @@ export function NotificationBell() {
         onClick={() => setOpen(!open)}
       >
         <Icon name="alert" size={15} />
-        {/* Approvals are the only thing that colours this. A badge that goes
-            amber for a suggestion teaches you to ignore it when an agent is
-            genuinely stopped. */}
+        {/* Three states, worst first: red for something broken, amber for
+            something waiting on an answer, grey for a disagreement to read.
+            A badge that goes amber for a suggestion teaches you to ignore it
+            when an agent is genuinely stopped — and one that never goes red
+            leaves you finding that out for yourself. */}
         {total > 0 && (
           <span
             className={`absolute -right-0.5 -top-0.5 flex h-[14px] min-w-[14px] items-center justify-center rounded-full border-[1.5px] border-panel px-[3px] text-[8.5px] font-bold ${
-              approvals.length > 0 ? 'bg-amber-400 text-app' : 'bg-line3 text-app'
+              broken.length > 0
+                ? 'bg-red-500 text-white'
+                : approvals.length > 0
+                  ? 'bg-amber-400 text-app'
+                  : 'bg-line3 text-app'
             }`}
           >
             {total}
@@ -115,7 +133,8 @@ export function NotificationBell() {
 
           {total === 0 && (
             <div className="px-3.5 py-5 text-center text-[11.5px] text-muted">
-              Nothing is waiting. Agents will show up here when they need an answer.
+              Nothing is waiting. Agents show up here when they need an answer, and when one
+              stops.
             </div>
           )}
 
@@ -147,6 +166,35 @@ export function NotificationBell() {
                 )}
               </div>
             </div>
+          ))}
+
+          {/* Under the approvals, not above them. An approval is the one
+              thing here that expires — an agent waiting for an answer is
+              denied when the wait runs out, and then it has failed too. What
+              already broke will still be broken in a minute. */}
+          {broken.map((x) => (
+            <button
+              key={x.id}
+              className="flex w-full items-start gap-2.5 border-b border-red-500/20 bg-red-500/[0.06] px-3.5 py-2.5 text-left hover:bg-red-500/[0.10]"
+              title="Open Needs you"
+              onClick={() => {
+                setOpen(false)
+                setRailView('inbox')
+              }}
+            >
+              <Icon name="alert" size={13} className="mt-px shrink-0 text-err" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[11.5px] text-err">{x.title}</div>
+                <div className="mt-0.5 truncate text-[10px] text-muted">
+                  {x.detail || x.kind}
+                </div>
+              </div>
+              {x.project_name && (
+                <span className="ml-1 shrink-0 rounded bg-raise px-1.5 text-[9.5px] text-muted">
+                  {x.project_name}
+                </span>
+              )}
+            </button>
           ))}
 
           {blockers.slice(0, 6).map((c) => {

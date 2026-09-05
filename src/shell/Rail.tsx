@@ -73,6 +73,7 @@ function RailButton({
   mini,
   dot,
   count,
+  alarm,
   live,
   onClick,
 }: {
@@ -88,6 +89,9 @@ function RailButton({
   /// How many things are waiting. Shown as a number rather than a dot: whether
   /// it is one reminder or nine changes whether you stop what you are doing.
   count?: number
+  /// Whether that count is something broken rather than something waiting.
+  /// Red is reserved for it, here as everywhere else.
+  alarm?: boolean
   /// How many are working right now. Green, because it is good news, and a
   /// number for the same reason `count` is.
   live?: number
@@ -137,7 +141,9 @@ function RailButton({
       )}
       {!!count && count > 0 && (
         <span
-          className={`shrink-0 rounded-full bg-indigo-500 px-1.5 text-[9.5px] font-bold text-white ${
+          className={`shrink-0 rounded-full px-1.5 text-[9.5px] font-bold text-white ${
+            alarm ? 'bg-red-500' : 'bg-indigo-500'
+          } ${
             expanded ? 'ml-auto' : 'absolute right-0.5 top-1 border-2 border-app'
           }`}
         >
@@ -188,7 +194,8 @@ export function Rail() {
   // fired, and a badge that is always lit is one you stop reading — so the
   // morning an agent is genuinely stuck would look like every other morning.
   const waiting = aiw.approvals.length + aiw.conflicts.filter((c) => !c.resolved).length
-  const unread = waiting + activity.filter((a) => !a.ok && a.ts > inboxSeen).length
+  const broken = activity.filter((a) => !a.ok && a.ts > inboxSeen).length
+  const unread = waiting + broken
   // What is moving, so the rail says so without being opened: items held by
   // a live claim under Work, agents mid-session under Bots. Green counts
   // rather than the Inbox's badge, because these are good news.
@@ -300,6 +307,7 @@ export function Rail() {
         active={railView === 'inbox'}
         expanded={expanded}
         count={unread}
+        alarm={broken > 0}
         onClick={() => setRailView('inbox')}
       />
 

@@ -711,6 +711,10 @@ pub fn run() {
                 let h = app.handle().clone();
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_secs(4));
+                    // Failures that happened while nothing was telling you
+                    // about them. Once, ever, before the first tick can add
+                    // any of its own.
+                    calls::tell_the_missed_failures(&h);
                     schedule::tick(&h, true);
                     // A deadline is only worth writing down if it comes and
                     // finds you. Same clock, same tick: nothing new to run.

@@ -24,6 +24,9 @@ use crate::db::{err, Db};
 
 /// How many calls to keep. Old ones stop being interesting long before they
 /// stop taking space; this bounds the table without anyone thinking about it.
+/// How long the same failure stays quiet after it has been said once.
+const QUIET_MS: i64 = 10 * 60_000;
+
 const KEEP: i64 = 5_000;
 
 /// The most of one text that is stored. Enough to read a prompt and see what
@@ -233,11 +236,34 @@ fn head(s: &str) -> (String, i64) {
     (s.chars().take(CAP).collect(), len)
 }
 
+/// Whether this failure has already been said recently enough to keep quiet
+/// about.
+///
+/// One row per problem, not one per retry. A bot whose model is cold fails on
+/// every wake, and an inbox that fills with the same sentence is one you stop
+/// opening — which is how the *next*, different failure gets missed. A
+/// different model, a different agent or a different reason is a different
+/// sentence, and says itself straight away.
+fn worth_saying(conn: &rusqlite::Connection, title: &str, detail: &str, at: i64) -> bool {
+    !conn
+        .query_row(
+            "SELECT 1 FROM activity WHERE kind = 'agent' AND title = ?1 AND detail = ?2              AND ts > ?3 LIMIT 1",
+            params![title, detail, at - QUIET_MS],
+            |_| Ok(true),
+        )
+        .unwrap_or(false)
+}
+
 /// Write one call down. Deliberately infallible: logging is a side effect of
 /// doing something useful, and failing to log must never fail the turn.
 pub fn record(app: &tauri::AppHandle, c: crate::aiw::state::CallRecord) {
     use tauri::Manager;
     let Some(db) = app.try_state::<Db>() else { return };
+    // What the rest of the app should be told, decided while the lock is held
+    // and acted on after it is dropped: `activity::record` takes the same lock,
+    // and calling it from in here freezes the window with no error anywhere.
+    let mut tell: Option<(String, String, String)> = None;
+    {
     let Ok(conn) = db.0.lock() else { return };
 
     let (prompt, prompt_len) = head(&c.prompt);
@@ -279,7 +305,6 @@ pub fn record(app: &tauri::AppHandle, c: crate::aiw::state::CallRecord) {
     );
     if let Err(e) = res {
         eprintln!("[calls] could not record a model call: {e}");
-        return;
     }
     // A failed turn goes to the log as well as the table. The table is where
     // you look when you already suspect the model; the log is where you look
@@ -293,11 +318,111 @@ pub fn record(app: &tauri::AppHandle, c: crate::aiw::state::CallRecord) {
                 c.speaker_name, c.provider, c.model, c.ms, c.error
             ),
         );
+
+        // And it goes where you actually look. A failed turn used to live in
+        // the calls table and the log and nowhere else, so the only way to
+        // find out an agent had stopped was to suspect it first and go
+        // digging. It is an activity now, which means the Inbox shows it in
+        // red, the rail counts it, and Home says so — none of which needed a
+        // new stream, because everything that went wrong already flows
+        // through this one.
+        let title = format!("{} could not finish", c.speaker_name);
+        let detail = if c.feature.is_empty() {
+            format!("{} · {} — {}", c.provider, c.model, c.error)
+        } else {
+            format!("{} · {} · {} — {}", c.feature, c.provider, c.model, c.error)
+        };
+        // One row per problem, not one per retry. A bot whose model is cold
+        // fails on every wake, and an inbox that fills up with the same
+        // sentence is one you stop opening — which is how the next, different
+        // failure gets missed.
+        if worth_saying(&conn, &title, &detail, c.at) {
+            tell = Some((title, detail, c.project_name.clone()));
+        }
     }
     let _ = conn.execute(
         "DELETE FROM llm_calls WHERE id NOT IN (SELECT id FROM llm_calls ORDER BY at DESC LIMIT ?1)",
         params![KEEP],
     );
+    }
+    if let Some((title, detail, project)) = tell {
+        crate::activity::record_in(app, "agent", title, detail, false, None, Some(project));
+    }
+}
+
+/// Say the failures nobody was ever told about.
+///
+/// Until now a failed turn went to this table and to the log and nowhere
+/// else, so the only way to learn that an agent had stopped was to suspect it
+/// and go digging — which is exactly how one sat unnoticed for an afternoon.
+/// The rule changed; the failures that happened under the old one are still
+/// true, so the recent ones are said once, at the time they actually
+/// happened, and never again.
+///
+/// Bounded on purpose: a day back, and once ever. Filling an inbox with a
+/// fortnight of history is its own way of being ignored.
+pub fn tell_the_missed_failures(app: &tauri::AppHandle) {
+    use tauri::Manager;
+    const A_DAY: i64 = 24 * 60 * 60_000;
+    let Some(db) = app.try_state::<Db>() else { return };
+
+    let told: Vec<(String, String, i64)> = {
+        let Ok(conn) = db.0.lock() else { return };
+        if crate::db::setting_get_conn(&conn, "calls.told_missed").ok().flatten().is_some() {
+            return;
+        }
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+        let mut stmt = match conn.prepare(
+            "SELECT speaker_name, provider, model, feature, error, at, project_name              FROM llm_calls WHERE ok = 0 AND at > ?1 ORDER BY at",
+        ) {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        let rows = stmt
+            .query_map(params![now - A_DAY], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, String>(3)?,
+                    r.get::<_, String>(4)?,
+                    r.get::<_, i64>(5)?,
+                    r.get::<_, String>(6)?,
+                ))
+            })
+            .and_then(|it| it.collect::<Result<Vec<_>, _>>())
+            .unwrap_or_default();
+
+        let mut out = Vec::new();
+        for (who, provider, model, feature, error, at, project) in rows {
+            let title = format!("{who} could not finish");
+            let detail = if feature.is_empty() {
+                format!("{provider} · {model} — {error}")
+            } else {
+                format!("{feature} · {provider} · {model} — {error}")
+            };
+            // The same quiet window as a live failure, so a morning of retries
+            // arrives as one line rather than forty.
+            if worth_saying(&conn, &title, &detail, at) {
+                let _ = conn.execute(
+                    "INSERT INTO activity (kind, title, detail, ok, project_name, ts)                      VALUES ('agent', ?1, ?2, 0, ?3, ?4)",
+                    params![&title, &detail, &project, at],
+                );
+                out.push((title, detail, at));
+            }
+        }
+        let _ = crate::db::setting_set_conn(&conn, "calls.told_missed", "1");
+        out
+    };
+
+    // No event: this runs at startup, before anything has read the stream, and
+    // every reader asks for it on mount.
+    if !told.is_empty() {
+        eprintln!("[calls] surfaced {} failure(s) that were never reported", told.len());
+    }
 }
 
 /// The calls, newest first.
@@ -418,4 +543,61 @@ pub fn calls_clear(db: tauri::State<Db>) -> Result<(), String> {
     let conn = db.0.lock().unwrap();
     conn.execute("DELETE FROM llm_calls", []).map_err(err)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Just the activity table, which is all `worth_saying` reads.
+    fn db() -> rusqlite::Connection {
+        let c = rusqlite::Connection::open_in_memory().unwrap();
+        c.execute_batch(crate::db::ACTIVITY_SCHEMA).unwrap();
+        c
+    }
+
+    fn said(c: &rusqlite::Connection, title: &str, detail: &str, ts: i64) {
+        c.execute(
+            "INSERT INTO activity (kind, title, detail, ok, project_name, ts)              VALUES ('agent', ?1, ?2, 0, '', ?3)",
+            params![title, detail, ts],
+        )
+        .unwrap();
+    }
+
+    const NOW: i64 = 1_756_000_000_000;
+    const T: &str = "Developer A could not finish";
+    const D: &str = "openai-compatible · nvidia/nemotron — did not answer within 120s";
+
+    #[test]
+    fn a_failure_nobody_has_heard_is_worth_saying() {
+        assert!(worth_saying(&db(), T, D, NOW));
+    }
+
+    #[test]
+    fn the_same_failure_again_a_minute_later_stays_quiet() {
+        let c = db();
+        said(&c, T, D, NOW - 60_000);
+        assert!(!worth_saying(&c, T, D, NOW));
+    }
+
+    #[test]
+    fn the_same_failure_after_the_quiet_window_says_itself_again() {
+        let c = db();
+        said(&c, T, D, NOW - QUIET_MS - 1);
+        assert!(worth_saying(&c, T, D, NOW));
+    }
+
+    #[test]
+    fn a_different_reason_is_a_different_failure() {
+        let c = db();
+        said(&c, T, D, NOW - 60_000);
+        assert!(worth_saying(&c, T, "openai-compatible · nvidia/nemotron — 401 no key", NOW));
+    }
+
+    #[test]
+    fn a_different_agent_failing_the_same_way_is_still_news() {
+        let c = db();
+        said(&c, T, D, NOW - 60_000);
+        assert!(worth_saying(&c, "Developer B could not finish", D, NOW));
+    }
 }

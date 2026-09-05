@@ -72,10 +72,30 @@ pub fn record(
     ok: bool,
     ref_id: Option<i64>,
 ) {
+    record_in(app, kind, title, detail, ok, ref_id, None)
+}
+
+/// The same, for something that knows which space it belongs to.
+///
+/// The default is the space you are *looking at*, which is right for a thing
+/// you just did and wrong for a thing that happened on its own: an agent
+/// failing in one space while you read another would be filed under the one
+/// you were reading, and the row would name the wrong project in the one place
+/// you go to find out what broke.
+pub fn record_in(
+    app: &tauri::AppHandle,
+    kind: &str,
+    title: impl Into<String>,
+    detail: impl Into<String>,
+    ok: bool,
+    ref_id: Option<i64>,
+    project: Option<String>,
+) {
     let title = title.into();
     let detail = detail.into();
     let ts = now_millis();
-    let project_name = crate::stash::current_context(app).project_name;
+    let project_name =
+        project.unwrap_or_else(|| crate::stash::current_context(app).project_name);
 
     let Some(db) = app.try_state::<Db>() else {
         return;

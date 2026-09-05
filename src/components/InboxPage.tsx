@@ -53,7 +53,7 @@ const TONE: Record<Tone, { dot: string; text: string }> = {
 }
 
 export function InboxPage() {
-  const { activity, refreshActivity, nodes, setRailView, focus, endFocus } = useApp()
+  const { activity, refreshActivity, nodes, setRailView, focus, endFocus, showBottom } = useApp()
   const aiw = useAiw()
   const [showHeld, setShowHeld] = useState(false)
   const [starting, setStarting] = useState(false)
@@ -91,7 +91,10 @@ export function InboxPage() {
         space: spaceOf(r.project_id),
         at: now,
         nodeId: Number(r.project_id),
-        onOpen: () => useAiw.getState().setPage('agents'),
+        onOpen: () => {
+          setRailView('aiworkspace')
+          useAiw.getState().setPage('agents')
+        },
       })
     }
 
@@ -106,7 +109,10 @@ export function InboxPage() {
         space: spaceOf(c.project_id),
         at: Date.parse(c.detected_at) || now,
         nodeId: Number(c.project_id),
-        onOpen: () => useAiw.getState().setPage('conflicts'),
+        onOpen: () => {
+          setRailView('aiworkspace')
+          useAiw.getState().setPage('conflicts')
+        },
       })
     }
 
@@ -126,13 +132,17 @@ export function InboxPage() {
         evidence: a.detail || `${a.kind}${a.project_name ? ` · ${a.project_name}` : ''}`,
         space: a.project_name,
         at: a.ts,
+        // A failed turn has one more thing to show than its sentence: the
+        // prompt that was sent and whatever came back. That is the Models
+        // tab, so the row opens it rather than leaving you to find it.
+        onOpen: a.kind === 'agent' ? () => showBottom('calls') : undefined,
       })
     }
 
     // Waiting sorts above everything, then newest first.
     const rank = (r: Row) => (r.tone === 'wait' ? 0 : 1)
     return out.sort((x, y) => rank(x) - rank(y) || y.at - x.at)
-  }, [activity, aiw.approvals, aiw.conflicts, aiw.agents, nodes])
+  }, [activity, aiw.approvals, aiw.conflicts, aiw.agents, nodes, showBottom, setRailView])
 
   // What the focus session holds. Only things that need you: news was never
   // going to interrupt, so hiding it would only make the page emptier.
@@ -226,7 +236,11 @@ export function InboxPage() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[12.5px] text-ink">{r.title}</span>
+                    <span
+                      className={`text-[12.5px] ${r.tone === 'fail' ? 'text-err' : 'text-ink'}`}
+                    >
+                      {r.title}
+                    </span>
                     {r.space && (
                       <span className="shrink-0 rounded-full bg-soft px-2 text-[9px] font-semibold uppercase tracking-[0.04em] text-muted">
                         {r.space}
@@ -240,10 +254,11 @@ export function InboxPage() {
                   {r.onOpen && (
                     <button
                       className="btn-ghost mt-2 text-[11px]"
-                      onClick={() => {
-                        setRailView('aiworkspace')
-                        r.onOpen?.()
-                      }}
+                      // Where a row goes is the row's business. This used to
+                      // jump to the Assistant first whatever the row was, which
+                      // was right for an approval and wrong for a failed turn:
+                      // the call is at the bottom of the page you are on.
+                      onClick={() => r.onOpen?.()}
                     >
                       Open
                     </button>

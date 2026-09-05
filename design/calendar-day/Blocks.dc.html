@@ -1,0 +1,136 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    .cap { font-size: 9.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+    .blk { border-radius: 6px; padding: 4px 8px; box-sizing: border-box; font-size: 10.5px;
+           border-left-width: 2.5px; border-left-style: solid; }
+    .blk .t { font-weight: 600; color: var(--ink); }
+    .blk .s { font-size: 9.5px; color: var(--muted); font-family: ui-monospace, Consolas, monospace; }
+    .col { display: flex; flex-direction: column; gap: 7px; }
+    .why { font-size: 10px; line-height: 1.5; color: var(--muted); }
+    .row { display: flex; align-items: flex-start; gap: 10px; }
+    .panel { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 11px 12px; }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --hover: {{c.hover}}; --line: {{c.line}}; --line2: {{c.line2}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; --ev: {{c.ev}}; --ag: {{c.ag}}; --rt: {{c.rt}}; --fc: {{c.fc}}; --hb: {{c.hb}}; background: var(--app); width: 1120px; height: 700px; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; overflow: hidden;">
+
+  <div>
+    <div style="font-size: 14px; font-weight: 600; color: var(--ink);">What a block says before you read it</div>
+    <div style="font-size: 11.5px; color: var(--muted); margin-top: 3px;">Colour is <b>what kind of time this is</b>. Height is <b>how long it takes</b>. The left edge is <b>how it went</b>. Nothing else carries meaning &mdash; and no block may mean two things at once.</div>
+  </div>
+
+  <div class="row">
+
+    <div class="panel" style="width: 300px;">
+      <div class="cap">Colour &mdash; the layer</div>
+      <div class="col" style="margin-top: 9px;">
+        <div class="blk" style="border-color: var(--ev); background: rgb(99 102 241 / .12);"><span class="t">Standup &middot; TrackX</span> <span class="s">09:00 &middot; 30m</span></div>
+        <div class="why">My events &mdash; a moment you put there.</div>
+        <div class="blk" style="border-color: var(--rt); background: var(--raise);"><span class="t" style="color: var(--dim);">Lunch</span> <span class="s">12:30 &middot; 45m</span></div>
+        <div class="why">Daily routine &mdash; the shape of the day, deliberately quiet.</div>
+        <div class="blk" style="border-color: var(--fc); background: rgb(245 158 11 / .13);"><span class="t">Deep work</span> <span class="s">14:00 &middot; 2h</span></div>
+        <div class="why">A focus session &mdash; the only block that holds things back for you.</div>
+        <div class="blk" style="border-color: var(--ag); background: rgb(34 197 94 / .10);"><span class="t">DevDeck bot</span> <span class="s">08:00 &middot; 2h30</span></div>
+        <div class="why">Agent working time &mdash; never in your lane, never moving your day.</div>
+        <div class="blk" style="border-color: var(--hb); background: rgb(34 211 238 / .10);"><span class="t">Mobility flow</span> <span class="s">10m &middot; habit</span></div>
+        <div class="why">A micro-habit, banked. It had no time until you gave it one.</div>
+      </div>
+    </div>
+
+    <div class="panel" style="width: 300px;">
+      <div class="cap">Left edge &mdash; how it went</div>
+      <div class="col" style="margin-top: 9px;">
+        <div class="blk" style="border-color: var(--line2); border-left-style: dashed; background: transparent;"><span class="t" style="color: var(--dim);">DevDeck bot</span> <span class="s">17:00 &middot; planned</span></div>
+        <div class="why">Dashed, hollow &mdash; hasn't happened yet.</div>
+        <div class="blk" style="border-color: var(--ok); background: rgb(34 197 94 / .10);"><span style="display: flex; align-items: center; gap: 5px;"><span style="width: 6px; height: 6px; border-radius: 999px; background: var(--ok);"></span><span class="t">Developer A</span> <span class="s">running &middot; 12m</span></span></div>
+        <div class="why">A live dot. Only a thing happening <i>now</i> gets one.</div>
+        <div class="blk" style="border-color: var(--ok); background: var(--raise); opacity: .75;"><span class="t" style="color: var(--dim); text-decoration: line-through;">Ship checklist</span> <span class="s">done 11:14</span></div>
+        <div class="why">Struck through and faded &mdash; done, and out of the way.</div>
+        <div class="blk" style="border-color: var(--err); background: rgb(248 113 113 / .09);"><span class="t">Developer A</span> <span class="s" style="color: var(--err);">failed 14:12 &middot; no model reply</span></div>
+        <div class="why">Red, with the reason on the block. A failure that only says &ldquo;failed&rdquo; sends you hunting.</div>
+        <div class="blk" style="border-color: var(--hb); border-left-style: dashed; background: var(--raise); opacity: .65;"><span class="t" style="color: var(--dim);">Walk outside</span> <span class="s">missed</span></div>
+        <div class="why">Missed is faded, not red. It was never going to fire late &mdash; being told to walk at noon at 3pm is noise.</div>
+      </div>
+    </div>
+
+    <div style="flex: 1; display: flex; flex-direction: column; gap: 12px;">
+
+      <div class="panel">
+        <div class="cap">Height &mdash; and the floor under it</div>
+        <div style="display: flex; gap: 12px; margin-top: 9px; align-items: flex-start;">
+          <div style="width: 190px; position: relative; height: 92px; border-left: 1px solid var(--line);">
+            <div style="position: absolute; left: 0; right: 0; top: 0; border-top: 1px solid var(--line);"></div>
+            <div style="position: absolute; left: 0; right: 0; top: 46px; border-top: 1px solid var(--line);"></div>
+            <div style="position: absolute; left: 0; right: 0; top: 92px; border-top: 1px solid var(--line);"></div>
+            <div class="blk" style="position: absolute; left: 6px; right: 0; top: 0; height: 18px; border-color: var(--hb); background: rgb(34 211 238 / .10);">
+              <span class="t" style="font-size: 10px;">Mobility flow</span> <span class="s">10m</span>
+            </div>
+            <div style="position: absolute; left: 6px; top: 0; width: 2.5px; height: 7.7px; background: var(--hb);"></div>
+            <div class="blk" style="position: absolute; left: 6px; right: 0; top: 24px; height: 66px; border-color: var(--fc); background: rgb(245 158 11 / .13);">
+              <span class="t" style="font-size: 10px;">Deep work</span> <span class="s">90m</span>
+            </div>
+          </div>
+          <div class="why" style="flex: 1;">
+            A block is as tall as it is long &mdash; except it never goes below <b>18px</b>, or the label goes and you are looking at a stripe you cannot click.
+            <br><br>
+            When a block is floored, a <b>full-strength tick</b> on the left edge shows its true length, so a 10-minute habit cannot masquerade as half an hour.
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="cap">Two things that are not blocks</div>
+        <div style="margin-top: 10px; position: relative; height: 34px; border: 1px solid var(--line); border-radius: 7px;">
+          <div style="position: absolute; left: 0; right: 0; top: 15px; border-top: 1px dashed var(--err); opacity: .8;"></div>
+          <div style="position: absolute; right: 8px; top: 7px; font-size: 9px; color: var(--err); background: var(--panel); padding: 0 4px; font-family: ui-monospace, Consolas, monospace;">DUE 17:00 &middot; Ship v0.4 &middot; 14/17</div>
+        </div>
+        <div class="why" style="margin-top: 5px;"><b>A deadline is a line, not a block.</b> Drawing it as an hour-long box would claim it takes an hour. It takes no time at all &mdash; it is a moment you must be past something by.</div>
+        <div style="margin-top: 11px; height: 32px; border: 1px dashed var(--line2); border-radius: 6px; display: flex; align-items: center; gap: 8px; padding: 0 8px;">
+          <span style="font-size: 10.5px; color: var(--ok); font-family: ui-monospace, Consolas, monospace;">120m free</span>
+          <span style="font-size: 10.5px; color: var(--dim);">Walk outside &middot; 15m</span>
+          <span style="flex: 1;"></span>
+          <span style="font-size: 10px; font-weight: 600; color: var(--ok); border: 1px solid rgb(74 222 128 / .4); border-radius: 5px; padding: 2px 9px;">Do it</span>
+        </div>
+        <div class="why" style="margin-top: 5px;"><b>Free time is offered once.</b> The largest gap after now, the smallest thing that fits it, and one button. Offer every gap and it is wallpaper by Wednesday.</div>
+      </div>
+
+      <div class="panel" style="display: flex; align-items: center; gap: 12px;">
+        <div style="width: 190px; display: flex; align-items: center;">
+          <span style="font-size: 9px; color: #fff; background: var(--err); border-radius: 4px; padding: 1px 4px; font-family: ui-monospace, Consolas, monospace;">14:36</span>
+          <span style="flex: 1; height: 1px; background: var(--err);"></span>
+        </div>
+        <div class="why" style="flex: 1;">Now is a line with the time on it, across both lanes. Today's grid is the only one that has one &mdash; a red line on next Tuesday is a lie.</div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', panel: '#11141c', raise: '#151923', hover: '#232b3b', line: '#1e293b',
+          line2: '#334155', ink: '#e2e8f0', body: '#cbd5e1', dim: '#94a3b8', muted: '#64748b',
+          faint: '#475569', accent: '#818cf8', ok: '#4ade80', warn: '#fbbf24', err: '#f87171',
+          ev: '#818cf8', ag: '#4ade80', rt: '#64748b', fc: '#fbbf24', hb: '#22d3ee' }
+      : { app: '#e9ebf0', panel: '#fdfdfe', raise: '#f0f2f6', hover: '#e7eaf1', line: '#d9dee7',
+          line2: '#c3cbd8', ink: '#16181d', body: '#333a45', dim: '#5a6472', muted: '#7d8794',
+          faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d', warn: '#b45309', err: '#dc2626',
+          ev: '#4f46e5', ag: '#15803d', rt: '#7d8794', fc: '#b45309', hb: '#0e7490' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

@@ -265,9 +265,34 @@ deadlines that remind themselves on the clock, once per item per day, inside a
 48-hour lead; and a Calendar page with day, week, month and year views over a
 single `calendar_range` query, across every space.
 
-**Still to do.** Typing your own routine into the day grid — personal store,
-never a repository. Editing from the calendar rather than jumping to the page
-that owns the thing. And the bot whose space is you.
+**Redrawn** (5 September, `design/calendar-day/`, canvas at
+https://claude.ai/code/artifact/1999014a-7d04-4eff-9ac2-acb797ff5dde). The day
+was a list with times beside it: every item was a chip inside a slot row, so an
+hour and ten minutes were the same size, and a bot's two-hour run sat on top of
+your lunch. Now a block is as tall as it is long, in one of two lanes — your
+day, and the agents' — which also answers the open question below: the primary
+lane is *both*, side by side, because the point is seeing them at once.
+
+Colour became the **layer** (events, routine, focus, agent time, commands,
+deadlines) and status moved to the left edge: dashed for planned, a live dot
+for running, struck through for done, red with the reason for failed, faded for
+missed. Two rules fell out of placing things — a block never shrinks below
+18px, and keeps a full-strength tick showing its true length when floored; and
+a deadline is a *line*, not a block, because drawing it as a box claims it
+takes an hour. The sidebar holds what has no duration: the month, the layers
+and their counts, the deadlines ahead, today's reminders. Focus sessions are
+drawn for the first time — `focus_sessions` always had a start and an end, and
+nothing was reading them.
+
+**Still to do**, in the order the design board argues for: a reminder lead time
+and a goal link on a schedule (two columns); micro-habits with a target per
+week, and the free-slot offer that makes the day usable rather than readable;
+and persisting agent sessions, because they live in memory — the agents lane is
+honest about today and blank about yesterday. Deliberately cut: a "meetings"
+counter, which counted nothing, since there are no people, invitations or
+attendance behind it. Also still to do: typing your own routine into the day
+grid — personal store, never a repository; editing from the calendar rather
+than jumping to the page that owns the thing; and the bot whose space is you.
 
 The rest of this entry is the original brainstorm, kept because the reasoning
 still applies to what is left.

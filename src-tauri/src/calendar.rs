@@ -35,6 +35,13 @@ pub struct Item {
     /// reminder | command | bot | agent | work — what sort of thing it is,
     /// under its kind.
     pub sort: String,
+    /// The rule that put it there: once | daily | weekdays | weekly | hourly,
+    /// and empty for anything that is not a schedule.
+    ///
+    /// A view cannot tell a Tuesday meeting from a daily routine without it,
+    /// and they are not the same thing to look at: one is today's news, the
+    /// other is the shape of every day.
+    pub every: String,
     pub title: String,
     /// When it starts, unix ms.
     pub at: i64,
@@ -202,6 +209,7 @@ pub fn calendar_range(
                     id: format!("schedule:{}:{at}", s.id),
                     kind: "schedule".into(),
                     sort: s.kind.clone(),
+                    every: s.every.clone(),
                     title: s.name.clone(),
                     at,
                     end: at + s.duration_min.max(0) * 60_000,
@@ -245,6 +253,7 @@ pub fn calendar_range(
                         id: format!("deadline:{}:{}:{}", p.id, slug, item.id),
                         kind: "deadline".into(),
                         sort: "work".into(),
+                        every: String::new(),
                         title: item.title.clone(),
                         at: due,
                         end: due,

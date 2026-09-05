@@ -404,6 +404,9 @@ export interface CalendarItem {
   kind: string
   /** reminder | command | bot | agent | work */
   sort: string
+  /** once | daily | weekdays | weekly | hourly — empty when it is not a
+   *  schedule. A one-off and a daily routine look different on a day. */
+  every: string
   title: string
   at: number
   end: number

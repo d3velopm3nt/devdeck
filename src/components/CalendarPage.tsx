@@ -6,158 +6,141 @@
 // afternoon.
 //
 // What lands here has a time: schedules, whether they are rhythms or moments;
-// and work items with a deadline, read from each space's `.devdeck`. A bot's
-// wake and your evening reminder sit on the same grid because they are both
-// things that happen at a time, and seeing them together is the point.
+// work items with a deadline, read from each space's `.devdeck`; and the focus
+// sessions you have run, which were always recorded and never drawn.
 //
-// The day view is a grid you can set the resolution of — five minutes up to an
-// hour — because a day you are running is a different thing from a day you are
-// glancing at.
+// **The day is placed, not listed.** A block is as tall as it is long, and it
+// sits in one of two lanes: your day, and the agents'. Before this it was a
+// chip inside a slot row, so an hour and ten minutes were the same size and
+// a bot's two-hour run could sit on top of your lunch. Two rules follow from
+// placing things:
+//
+//   * a block never shrinks below 18px, or the label goes and you are left
+//     clicking at a stripe — when it is floored, a full-strength tick on the
+//     left edge still shows its true length;
+//   * a deadline is a line, not a block. Drawing it as a box would claim it
+//     takes an hour. It takes no time at all.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../lib/icons'
 import * as ipc from '../lib/ipc'
 import type { CalendarItem } from '../lib/ipc'
 import { useApp } from '../store'
+import type { CalView } from '../store'
+import { findNode } from '../lib/tree'
 import { CAPTURE_CAL_VIEW, CAPTURE_EVENT_OPEN } from '../lib/devCapture'
 import { EventPage } from './EventPage'
+import { blockSkin, laneOf, layerMeta, layerOf, wentOf } from '../lib/calendarLayers'
+import { place } from '../lib/calendarPlace'
+import type { Placed } from '../lib/calendarPlace'
+import {
+  DAY_MS,
+  daysFrom,
+  hhmm,
+  sameDay,
+  startOfDay,
+  step,
+  windowFor,
+} from '../lib/calendarWindow'
 
-type View = 'day' | 'week' | 'month' | 'year'
-
-const VIEWS: Array<[View, string]> = [
+const VIEWS: Array<[CalView, string]> = [
   ['day', 'Day'],
   ['week', 'Week'],
   ['month', 'Month'],
   ['year', 'Year'],
 ]
 
-/// Minutes a row covers in the day view.
-const SLOTS = [5, 15, 30, 60]
+/// Minutes a row covers in the day view, and how tall that row is. With blocks
+/// placed by time rather than dropped into rows, this is a zoom: at five
+/// minutes the day is four thousand pixels tall and a ten-minute habit is a
+/// readable block; at an hour the whole day fits and you are glancing.
+const SLOTS: Array<[number, number]> = [
+  [5, 16],
+  [15, 22],
+  [30, 30],
+  [60, 46],
+]
 
-const DAY_MS = 86_400_000
+const rowHeight = (slot: number) => SLOTS.find(([m]) => m === slot)?.[1] ?? 22
 
-const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
-/// Weeks start on Monday: a working week that begins on Sunday puts the
-/// weekend in two different rows.
-const startOfWeek = (d: Date) => {
-  const s = startOfDay(d)
-  const back = (s.getDay() + 6) % 7
-  return new Date(s.getFullYear(), s.getMonth(), s.getDate() - back)
-}
-const startOfMonth = (d: Date) => new Date(d.getFullYear(), d.getMonth(), 1)
-
-/// Every day from one to the other, stepped by the calendar rather than by
-/// 86,400,000.
-///
-/// A day is not always that many milliseconds — the clocks change twice a year
-/// — and dividing a span by a fixed day gave the month grid a stray thirty-sixth
-/// cell containing the 5th of October on its own.
-function daysFrom(from: Date, to: Date): Date[] {
-  const out: Date[] = []
-  const d = startOfDay(from)
-  while (d.getTime() <= to.getTime()) {
-    out.push(new Date(d))
-    d.setDate(d.getDate() + 1)
-  }
-  return out
-}
-const startOfYear = (d: Date) => new Date(d.getFullYear(), 0, 1)
-
-/// The window a view asks for. Month and year are padded to whole weeks and
-/// whole months so the grid that draws them has no ragged edges.
-function windowFor(view: View, anchor: Date): { from: Date; to: Date } {
-  switch (view) {
-    case 'day':
-      return { from: startOfDay(anchor), to: new Date(startOfDay(anchor).getTime() + DAY_MS - 1) }
-    case 'week': {
-      const from = startOfWeek(anchor)
-      return { from, to: new Date(from.getTime() + 7 * DAY_MS - 1) }
-    }
-    case 'month': {
-      const first = startOfMonth(anchor)
-      const from = startOfWeek(first)
-      const last = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0)
-      const to = new Date(startOfWeek(last).getTime() + 7 * DAY_MS - 1)
-      return { from, to }
-    }
-    case 'year': {
-      const from = startOfYear(anchor)
-      return { from, to: new Date(anchor.getFullYear() + 1, 0, 1, 0, 0, 0, -1) }
-    }
-  }
-}
-
-function step(view: View, anchor: Date, by: number): Date {
-  const d = new Date(anchor)
-  if (view === 'day') d.setDate(d.getDate() + by)
-  if (view === 'week') d.setDate(d.getDate() + by * 7)
-  if (view === 'month') d.setMonth(d.getMonth() + by)
-  if (view === 'year') d.setFullYear(d.getFullYear() + by)
-  return d
-}
-
-const hhmm = (ms: number) =>
-  new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-
-/// What colour a thing is, by what it is. Deadlines are the only ones that can
-/// be late, so they are the only ones that go red on their own.
-function tone(i: CalendarItem): string {
-  if (i.kind === 'deadline') {
-    if (i.status === 'done') return 'border-emerald-500/40 bg-emerald-500/10 text-ok'
-    if (i.past) return 'border-red-500/45 bg-red-500/10 text-err'
-    return 'border-amber-500/40 bg-amber-500/10 text-warn'
-  }
-  if (i.sort === 'bot') return 'border-indigo-500/40 bg-indigo-500/12 text-indigo-300'
-  if (i.sort === 'command') return 'border-sky-500/35 bg-sky-500/10 text-info'
-  return 'border-line2 bg-raise text-dim'
-}
+/// A block small enough to lose its label is no longer a block.
+const MIN_BLOCK_PX = 18
 
 function Dot({ i }: { i: CalendarItem }) {
-  const c =
-    i.kind === 'deadline'
-      ? i.status === 'done'
-        ? 'bg-emerald-400'
-        : i.past
-          ? 'bg-red-400'
-          : 'bg-amber-400'
-      : i.sort === 'bot'
-        ? 'bg-indigo-400'
-        : i.sort === 'command'
-          ? 'bg-sky-400'
-          : 'bg-slate-400'
-  return <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${c}`} />
+  return <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${layerMeta(layerOf(i)).swatch}`} />
 }
 
 /// One line: what, when, where. The same in every view that lists rather than
 /// places.
 function Line({ i, onOpen }: { i: CalendarItem; onOpen: (i: CalendarItem) => void }) {
+  const went = wentOf(i)
   return (
     <button
       className={`flex w-full items-center gap-1.5 truncate rounded px-1 py-px text-left text-[10px] hover:brightness-125 ${
-        i.past && i.kind !== 'deadline' ? 'opacity-60' : ''
+        went === 'past' || went === 'missed' || went === 'done' ? 'opacity-60' : ''
       }`}
       title={`${hhmm(i.at)} · ${i.title}${i.space ? ` · ${i.space}` : ' · personal'}`}
       onClick={() => onOpen(i)}
     >
       <Dot i={i} />
       <span className="shrink-0 text-faint">{hhmm(i.at)}</span>
-      <span className="min-w-0 flex-1 truncate text-dim">{i.title}</span>
+      <span
+        className={`min-w-0 flex-1 truncate text-dim ${went === 'done' ? 'line-through' : ''}`}
+      >
+        {i.title}
+      </span>
     </button>
   )
 }
 
+/// A focus session is a thing that happened at a time, and it was in the
+/// database all along — `focus_sessions` has a start and an end. It is shaped
+/// into a calendar item here rather than in Rust because nothing about it is
+/// new: no table, no command, no rule.
+function focusAsItems(
+  sessions: ipc.Focus[],
+  from: number,
+  to: number,
+  now: number,
+  nameOf: (id: number | null | undefined) => string,
+): CalendarItem[] {
+  return sessions
+    .filter((f) => f.started_at <= to && (f.ended_at ?? now) >= from)
+    .map((f) => ({
+      id: `focus:${f.id}`,
+      kind: 'focus',
+      sort: 'focus',
+      every: '',
+      title: f.goal || 'Focus',
+      at: f.started_at,
+      // A session still running is as long as it has been so far, not zero.
+      end: f.ended_at ?? now,
+      node_id: f.node_id ?? null,
+      space: nameOf(f.node_id),
+      feature: '',
+      work_item: '',
+      status: f.ended_at == null ? 'running' : 'done',
+      past: (f.ended_at ?? now) <= now,
+      schedule_id: null,
+    }))
+}
+
 export function CalendarPage() {
   const app = useApp()
+  const { calView: view, calSlot: slot, calHidden, nodes } = app
+  const anchor = useMemo(() => new Date(app.calAnchor), [app.calAnchor])
+
   // Screenshot harness: `view` or `view@YYYY-MM-DD`.
   const [capView, capDay] = CAPTURE_CAL_VIEW.split('@')
-  const [view, setView] = useState<View>(
-    () => (capView as View) || (localStorage.getItem('devdeck.calendar.view') as View) || 'week',
-  )
-  const [anchor, setAnchor] = useState(() => (capDay ? new Date(`${capDay}T12:00`) : new Date()))
-  const [slot, setSlot] = useState(
-    () => Number(localStorage.getItem('devdeck.calendar.slot')) || 15,
-  )
+  useEffect(() => {
+    if (capView) app.setCalView(capView as CalView)
+    if (capDay) app.setCalAnchor(new Date(`${capDay}T12:00`).getTime())
+    // Once, on mount: the harness sets the scene and then leaves it alone.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const [items, setItems] = useState<CalendarItem[] | null>(null)
+  const [focus, setFocus] = useState<ipc.Focus[]>([])
   const [err, setErr] = useState('')
 
   const { from, to } = useMemo(() => windowFor(view, anchor), [view, anchor])
@@ -171,24 +154,44 @@ export function CalendarPage() {
       })
       // An empty calendar and a failed read must not look the same.
       .catch((e) => setErr(String(e)))
+    // Recent sessions cover any window a person is looking at in practice; a
+    // failure here dims one layer and must never take the calendar with it.
+    ipc
+      .focusRecent(60)
+      .then(setFocus)
+      .catch(() => setFocus([]))
   }, [from, to])
 
   useEffect(() => {
     load()
   }, [load])
-  useEffect(() => localStorage.setItem('devdeck.calendar.view', view), [view])
-  useEffect(() => localStorage.setItem('devdeck.calendar.slot', String(slot)), [slot])
+
+  const nameOf = useCallback(
+    (id: number | null | undefined) => (id == null ? '' : (findNode(nodes, id)?.name ?? '')),
+    [nodes],
+  )
+
+  /// Everything with a time on it, minus the layers you have switched off.
+  const shown = useMemo(() => {
+    const all = [
+      ...(items ?? []),
+      ...focusAsItems(focus, from.getTime(), to.getTime(), Date.now(), nameOf),
+    ]
+    return all
+      .filter((i) => !calHidden.includes(layerOf(i)))
+      .sort((a, b) => a.at - b.at)
+  }, [items, focus, from, to, calHidden, nameOf])
 
   const byDay = useMemo(() => {
     const m = new Map<string, CalendarItem[]>()
-    for (const i of items ?? []) {
+    for (const i of shown) {
       const key = startOfDay(new Date(i.at)).toDateString()
       const list = m.get(key)
       if (list) list.push(i)
       else m.set(key, [i])
     }
     return m
-  }, [items])
+  }, [shown])
 
   /// Opening an occurrence opens *that occurrence* — not the page that owns
   /// the rule behind it, and certainly not the assistant. A deadline is the
@@ -206,26 +209,30 @@ export function CalendarPage() {
       if (found) setOpenItem(found)
     })
   }, [])
+
   const open = (i: CalendarItem) => {
     if (i.kind === 'deadline') {
       app.setRailView('team')
       app.setTeamTab('work')
       return
     }
+    // A focus session has no rule behind it and no page of its own: it is a
+    // record of two hours you spent, and the block is the whole of it.
+    if (i.kind === 'focus') return
     setOpenItem(i)
   }
 
   /// The same event a day either side, found by asking the calendar rather
   /// than by guessing: a weekdays rhythm has no Saturday, and stepping onto
   /// one would open a page for something that never happens.
-  const step1 = async (from: CalendarItem, days: number) => {
+  const step1 = async (fromItem: CalendarItem, days: number) => {
     const dir = days > 0 ? 1 : -1
-    const base = new Date(from.at)
+    const base = new Date(fromItem.at)
     for (let n = 1; n <= 62; n++) {
       const probe = new Date(base.getTime() + dir * n * DAY_MS)
       const dayStart = startOfDay(probe).getTime()
       const found = (await ipc.calendarRange(dayStart, dayStart + DAY_MS - 1)).find(
-        (c) => c.schedule_id === from.schedule_id,
+        (c) => c.schedule_id === fromItem.schedule_id,
       )
       if (found) {
         setOpenItem(found)
@@ -247,10 +254,11 @@ export function CalendarPage() {
         [],
         { day: 'numeric', month: 'short', year: 'numeric' },
       )}`
-    if (view === 'month')
-      return anchor.toLocaleDateString([], { month: 'long', year: 'numeric' })
+    if (view === 'month') return anchor.toLocaleDateString([], { month: 'long', year: 'numeric' })
     return String(anchor.getFullYear())
   }, [view, anchor, from, to])
+
+  const hiddenCount = (items?.length ?? 0) + focus.length - shown.length
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-page">
@@ -258,18 +266,25 @@ export function CalendarPage() {
         <div className="min-w-0">
           <h2 className="text-[15px] font-semibold text-ink">Calendar</h2>
           <p className="text-[11.5px] text-muted">
-            Everything with a time on it, across every space — schedules, bot wakes and deadlines.
+            Everything with a time on it, across every space — your day on the left, the agents&rsquo;
+            work on the right.
           </p>
         </div>
 
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
-          <button className="btn-ghost px-1.5 text-[11px]" onClick={() => setAnchor(step(view, anchor, -1))}>
+          <button
+            className="btn-ghost px-1.5 text-[11px]"
+            onClick={() => app.setCalAnchor(step(view, anchor, -1).getTime())}
+          >
             <Icon name="chevron-left" size={12} />
           </button>
-          <button className="btn-ghost text-[11px]" onClick={() => setAnchor(new Date())}>
+          <button className="btn-ghost text-[11px]" onClick={() => app.setCalAnchor(Date.now())}>
             Today
           </button>
-          <button className="btn-ghost px-1.5 text-[11px]" onClick={() => setAnchor(step(view, anchor, 1))}>
+          <button
+            className="btn-ghost px-1.5 text-[11px]"
+            onClick={() => app.setCalAnchor(step(view, anchor, 1).getTime())}
+          >
             <Icon name="chevron-right" size={12} />
           </button>
           <span className="mx-1 h-4 w-px bg-line" />
@@ -277,9 +292,11 @@ export function CalendarPage() {
             <button
               key={v}
               className={`rounded-full border px-2.5 py-0.5 text-[11px] ${
-                view === v ? 'border-line2 bg-raise text-ink' : 'border-line text-muted hover:text-dim'
+                view === v
+                  ? 'border-line2 bg-raise text-ink'
+                  : 'border-line text-muted hover:text-dim'
               }`}
-              onClick={() => setView(v)}
+              onClick={() => app.setCalView(v)}
             >
               {label}
             </button>
@@ -288,10 +305,10 @@ export function CalendarPage() {
             <select
               className="input h-[24px] w-[86px] py-0 text-[11px]"
               value={slot}
-              onChange={(e) => setSlot(Number(e.target.value))}
-              title="How fine the grid is"
+              onChange={(e) => app.setCalSlot(Number(e.target.value))}
+              title="How tall an hour is"
             >
-              {SLOTS.map((m) => (
+              {SLOTS.map(([m]) => (
                 <option key={m} value={m}>
                   {m} min
                 </option>
@@ -307,19 +324,17 @@ export function CalendarPage() {
       <div className="flex shrink-0 items-center gap-3 border-b border-line px-5 py-1.5">
         <span className="text-[12.5px] font-semibold text-ink">{title}</span>
         <span className="text-[10.5px] text-muted">
-          {items == null ? 'reading…' : `${items.length} in view`}
+          {items == null ? 'reading…' : `${shown.length} in view`}
         </span>
-        <span className="ml-auto flex items-center gap-3 text-[10px] text-faint">
-          <span className="flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-amber-400" /> deadline
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" /> bot wake
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-slate-400" /> reminder
-          </span>
-        </span>
+        {hiddenCount > 0 && (
+          <button
+            className="text-[10.5px] text-warn hover:underline"
+            onClick={() => calHidden.forEach((l) => app.toggleCalLayer(l))}
+            title="Show every layer again"
+          >
+            {hiddenCount} hidden by a layer filter
+          </button>
+        )}
       </div>
 
       {err && (
@@ -328,28 +343,46 @@ export function CalendarPage() {
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-auto p-4">
+      <div className="min-h-0 flex-1 overflow-hidden">
         {openItem && (
-          <EventPage
-            item={openItem}
-            onBack={() => setOpenItem(null)}
-            onStep={(i, d) => void step1(i, d)}
-          />
+          <div className="h-full overflow-auto p-4">
+            <EventPage
+              item={openItem}
+              onBack={() => setOpenItem(null)}
+              onStep={(i, d) => void step1(i, d)}
+            />
+          </div>
         )}
         {!openItem && view === 'day' && (
-          <DayGrid day={from} slot={slot} items={items ?? []} onOpen={open} />
+          <DayGrid day={from} slot={slot} items={shown} onOpen={open} />
         )}
-        {!openItem && view === 'week' && <WeekGrid from={from} byDay={byDay} onOpen={open} />}
+        {!openItem && view === 'week' && (
+          <div className="h-full overflow-auto p-4">
+            <WeekGrid from={from} byDay={byDay} onOpen={open} />
+          </div>
+        )}
         {!openItem && view === 'month' && (
-          <MonthGrid from={from} to={to} month={anchor.getMonth()} byDay={byDay} onOpen={open} />
+          <div className="h-full overflow-auto p-4">
+            <MonthGrid
+              from={from}
+              to={to}
+              month={anchor.getMonth()}
+              byDay={byDay}
+              onOpen={open}
+            />
+          </div>
         )}
-        {!openItem && view === 'year' && <YearGrid year={anchor.getFullYear()} items={items ?? []} onOpen={open} />}
+        {!openItem && view === 'year' && (
+          <div className="h-full overflow-auto p-4">
+            <YearGrid year={anchor.getFullYear()} items={shown} onOpen={open} />
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
-/// The day you are running, on a grid you set the resolution of.
+/// The day you are running, placed on a clock you can zoom.
 function DayGrid({
   day,
   slot,
@@ -361,66 +394,210 @@ function DayGrid({
   items: CalendarItem[]
   onOpen: (i: CalendarItem) => void
 }) {
-  const rows = Math.round((24 * 60) / slot)
+  const pxPerMin = rowHeight(slot) / slot
+  const dayStart = day.getTime()
   const now = Date.now()
-  const start = day.getTime()
-  const height = slot <= 5 ? 16 : slot <= 15 ? 22 : 30
+  const isToday = sameDay(day, new Date())
+  const height = 24 * 60 * pxPerMin
+  const minMs = (MIN_BLOCK_PX / pxPerMin) * 60_000
 
-  // A day that opens at midnight hides the day. Scroll to now, or to the
-  // first thing on it when now is not on this day at all — nobody wants to
-  // scroll past seven hours of empty night to find the morning.
-  const nowRow = useRef<HTMLDivElement>(null)
-  const firstRow = useRef<HTMLDivElement>(null)
+  const deadlines = items.filter((i) => i.kind === 'deadline')
+  const timed = items.filter((i) => i.kind !== 'deadline')
+  const you = useMemo(
+    () => place(timed.filter((i) => laneOf(i) === 'you'), minMs),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [items, minMs],
+  )
+  const agents = useMemo(
+    () => place(timed.filter((i) => laneOf(i) === 'agents'), minMs),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [items, minMs],
+  )
+
+  // A day that opens at midnight hides the day. Scroll to now, or to the first
+  // thing on it — nobody wants to scroll past seven hours of empty night.
+  const scroller = useRef<HTMLDivElement>(null)
+  const firstAt = timed.length > 0 ? Math.min(...timed.map((i) => i.at)) : null
   useEffect(() => {
-    const el = nowRow.current ?? firstRow.current
-    el?.scrollIntoView({ block: 'center' })
-  }, [slot, day.getTime(), items.length])
+    const el = scroller.current
+    if (!el) return
+    const at = isToday ? now : (firstAt ?? dayStart + 8 * 3_600_000)
+    const min = Math.max(0, (at - dayStart) / 60_000 - 60)
+    el.scrollTop = min * pxPerMin
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slot, dayStart, items.length])
 
-  const firstAt = items.length > 0 ? Math.min(...items.map((i) => i.at)) : null
+  /// Lines every hour, and a fainter one between. Below a quarter of an hour
+  /// the grid stops being a rule and starts being stripes.
+  const gridEvery = Math.max(slot, 15)
+  const rows = Math.round((24 * 60) / gridEvery)
+
+  const topOf = (ms: number) => ((ms - dayStart) / 60_000) * pxPerMin
 
   return (
-    <div className="overflow-hidden rounded-lg border border-line bg-panel">
-      {Array.from({ length: rows }, (_, r) => {
-        const at = start + r * slot * 60_000
-        const end = at + slot * 60_000
-        const here = items.filter((i) => i.at >= at && i.at < end)
-        const onHour = (r * slot) % 60 === 0
-        const isNow = now >= at && now < end
-        const isFirst = firstAt != null && firstAt >= at && firstAt < end
-        return (
-          <div
-            key={r}
-            ref={isNow ? nowRow : isFirst ? firstRow : undefined}
-            className={`flex items-stretch border-t border-line first:border-0 ${
-              onHour ? '' : 'border-dashed'
-            } ${isNow ? 'bg-indigo-500/[0.07]' : ''}`}
-            style={{ minHeight: height }}
-          >
-            <div
-              className={`w-[54px] shrink-0 border-r border-line px-2 py-0.5 text-right text-[10px] ${
-                onHour ? 'text-dim' : 'text-faint'
-              }`}
+    <div className="flex h-full min-h-0 flex-col px-4 pb-4 pt-3">
+      <div className="flex shrink-0 items-center border-b border-line pb-1 pl-[52px] pr-2 text-[10px] font-semibold uppercase tracking-wider text-muted">
+        <span className="flex-[62]">Your day</span>
+        <span className="flex flex-[38] items-center gap-2">
+          Agents
+          {agents.some(({ i }) => wentOf(i, now) === 'running') && (
+            <span className="text-[9.5px] normal-case tracking-normal text-ok">running now</span>
+          )}
+        </span>
+      </div>
+
+      <div
+        ref={scroller}
+        className="min-h-0 flex-1 overflow-auto rounded-b-lg border-x border-b border-line bg-panel"
+      >
+        <div className="relative" style={{ height }}>
+          {/* the rule */}
+          {Array.from({ length: rows }, (_, r) => {
+            const min = r * gridEvery
+            const onHour = min % 60 === 0
+            return (
+              <div
+                key={r}
+                className={`absolute left-0 right-0 border-t ${
+                  onHour ? 'border-line' : 'border-dashed border-line/60'
+                }`}
+                style={{ top: min * pxPerMin }}
+              >
+                {onHour && (
+                  <span className="absolute -top-[6px] left-0 w-[44px] pr-1 text-right font-mono text-[9.5px] text-faint">
+                    {String(min / 60).padStart(2, '0')}:00
+                  </span>
+                )}
+              </div>
+            )
+          })}
+
+          {/* a deadline is a line, not a block */}
+          {deadlines.map((i) => (
+            <button
+              key={i.id}
+              className="absolute left-[52px] right-2 flex items-center justify-end border-t border-dashed border-red-400/80 hover:border-red-400"
+              style={{ top: topOf(i.at) }}
+              title={`${hhmm(i.at)} · ${i.title}${i.space ? ` · ${i.space}` : ''} · ${i.status}`}
+              onClick={() => onOpen(i)}
             >
-              {onHour || slot >= 30 ? hhmm(at) : ''}
-            </div>
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1 px-2 py-0.5">
-              {here.map((i) => (
-                <button
-                  key={i.id}
-                  className={`flex items-center gap-1.5 truncate rounded border px-1.5 py-px text-[10.5px] hover:brightness-125 ${tone(i)}`}
-                  onClick={() => onOpen(i)}
-                  title={`${i.title}${i.space ? ` · ${i.space}` : ' · personal'}`}
-                >
-                  <span className="truncate">{i.title}</span>
-                  {i.end > i.at && (
-                    <span className="shrink-0 text-[9.5px] opacity-70">
-                      {Math.round((i.end - i.at) / 60000)}m
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
+              <span className="-mt-[8px] bg-panel px-1 font-mono text-[9px] text-err">
+                DUE {hhmm(i.at)} · {i.title}
+                {i.feature ? ` · ${i.feature}` : ''}
+              </span>
+            </button>
+          ))}
+
+          {/* the two lanes */}
+          <div className="absolute bottom-0 left-[52px] right-2 top-0 flex gap-2">
+            <Lane placed={you} flex={62} {...{ dayStart, pxPerMin, now, onOpen }} />
+            <Lane placed={agents} flex={38} {...{ dayStart, pxPerMin, now, onOpen }} />
           </div>
+
+          {/* now — only ever on today */}
+          {isToday && (
+            <div
+              className="pointer-events-none absolute left-2 right-2 flex items-center"
+              style={{ top: topOf(now) }}
+            >
+              <span className="rounded bg-red-500 px-1 font-mono text-[9px] text-white">
+                {hhmm(now)}
+              </span>
+              <span className="h-px flex-1 bg-red-500" />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Lane({
+  placed,
+  flex,
+  dayStart,
+  pxPerMin,
+  now,
+  onOpen,
+}: {
+  placed: Placed[]
+  flex: number
+  dayStart: number
+  pxPerMin: number
+  now: number
+  onOpen: (i: CalendarItem) => void
+}) {
+  return (
+    <div className="relative min-w-0" style={{ flex }}>
+      {placed.map(({ i, col, cols }) => {
+        const startMin = Math.max(0, (i.at - dayStart) / 60_000)
+        const trueMin = Math.max(0, (i.end - i.at) / 60_000)
+        const top = startMin * pxPerMin
+        const trueH = trueMin * pxPerMin
+        const h = Math.max(MIN_BLOCK_PX, trueH)
+        const went = wentOf(i, now)
+        const meta = layerMeta(layerOf(i))
+        const w = 100 / cols
+        // A focus session has nowhere to open, so its block is inert rather
+        // than a button that lies about being one.
+        const clickable = i.kind !== 'focus'
+        return (
+          <button
+            key={i.id}
+            type="button"
+            className={`absolute overflow-hidden rounded border-l-2 px-1.5 py-0.5 text-left text-[10.5px] ${blockSkin(
+              i,
+              now,
+            )} ${clickable ? 'hover:brightness-125' : ''}`}
+            style={{ top, height: h, left: `${col * w}%`, width: `calc(${w}% - 2px)` }}
+            title={`${hhmm(i.at)}–${hhmm(i.end)} · ${i.title}${
+              i.space ? ` · ${i.space}` : ' · personal'
+            } · ${went}`}
+            onClick={clickable ? () => onOpen(i) : undefined}
+          >
+            {/* When the block is floored, the tick still tells the truth about
+                how long the thing actually takes. */}
+            {trueH < MIN_BLOCK_PX && (
+              <span
+                className={`absolute -left-[2px] top-0 w-[2px] ${meta.swatch}`}
+                style={{ height: Math.max(2, trueH) }}
+              />
+            )}
+            <span className="flex items-center gap-1.5">
+              {went === 'running' && (
+                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${meta.swatch} animate-pulse`} />
+              )}
+              <span
+                className={`min-w-0 flex-1 truncate font-semibold ${
+                  went === 'planned' ? 'text-dim' : 'text-ink'
+                } ${went === 'done' ? 'line-through' : ''}`}
+              >
+                {i.title}
+              </span>
+              {h >= 30 && (
+                <span className="shrink-0 font-mono text-[9px] text-muted">
+                  {trueMin >= 1 ? `${Math.round(trueMin)}m` : hhmm(i.at)}
+                </span>
+              )}
+            </span>
+            {h >= 30 && (
+              <span className="mt-0.5 block truncate font-mono text-[9px] text-muted">
+                {hhmm(i.at)}
+                {trueMin >= 1 ? `–${hhmm(i.end)}` : ''}
+                {i.space ? ` · ${i.space}` : ''}
+              </span>
+            )}
+            {h >= 52 && went === 'failed' && (
+              <span className="mt-0.5 block truncate text-[9.5px] text-err">
+                failed — see the log
+              </span>
+            )}
+            {h >= 52 && went === 'missed' && (
+              <span className="mt-0.5 block truncate text-[9.5px] text-muted">
+                missed — never fired late, on purpose
+              </span>
+            )}
+          </button>
         )
       })}
     </div>
@@ -439,37 +616,39 @@ function WeekGrid({
   const today = new Date().toDateString()
   return (
     <div className="grid grid-cols-7 gap-2">
-      {daysFrom(from, new Date(from.getTime() + 6 * DAY_MS + 3_600_000)).slice(0, 7).map((day) => {
-        const list = byDay.get(day.toDateString()) ?? []
-        const isToday = day.toDateString() === today
-        return (
-          <div
-            key={day.toDateString()}
-            className={`min-h-[200px] overflow-hidden rounded-lg border bg-panel ${
-              isToday ? 'border-indigo-500/45' : 'border-line'
-            }`}
-          >
+      {daysFrom(from, new Date(from.getTime() + 6 * DAY_MS + 3_600_000))
+        .slice(0, 7)
+        .map((day) => {
+          const list = byDay.get(day.toDateString()) ?? []
+          const isToday = day.toDateString() === today
+          return (
             <div
-              className={`flex items-baseline gap-1.5 border-b px-2 py-1.5 ${
-                isToday ? 'border-indigo-500/30 bg-indigo-500/[0.07]' : 'border-line'
+              key={day.toDateString()}
+              className={`min-h-[200px] overflow-hidden rounded-lg border bg-panel ${
+                isToday ? 'border-indigo-500/45' : 'border-line'
               }`}
             >
-              <span className="text-[11px] font-semibold text-ink">
-                {day.toLocaleDateString([], { weekday: 'short' })}
-              </span>
-              <span className="text-[11px] text-muted">{day.getDate()}</span>
-              {list.length > 0 && (
-                <span className="ml-auto text-[10px] text-faint">{list.length}</span>
-              )}
+              <div
+                className={`flex items-baseline gap-1.5 border-b px-2 py-1.5 ${
+                  isToday ? 'border-indigo-500/30 bg-indigo-500/[0.07]' : 'border-line'
+                }`}
+              >
+                <span className="text-[11px] font-semibold text-ink">
+                  {day.toLocaleDateString([], { weekday: 'short' })}
+                </span>
+                <span className="text-[11px] text-muted">{day.getDate()}</span>
+                {list.length > 0 && (
+                  <span className="ml-auto text-[10px] text-faint">{list.length}</span>
+                )}
+              </div>
+              <div className="flex flex-col gap-px p-1">
+                {list.map((i) => (
+                  <Line key={i.id} i={i} onOpen={onOpen} />
+                ))}
+              </div>
             </div>
-            <div className="flex flex-col gap-px p-1">
-              {list.map((i) => (
-                <Line key={i.id} i={i} onOpen={onOpen} />
-              ))}
-            </div>
-          </div>
-        )
-      })}
+          )
+        })}
     </div>
   )
 }
@@ -493,7 +672,10 @@ function MonthGrid({
     <div>
       <div className="mb-1 grid grid-cols-7 gap-2">
         {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => (
-          <div key={d} className="px-1 text-[10px] font-semibold uppercase tracking-[0.06em] text-faint">
+          <div
+            key={d}
+            className="px-1 text-[10px] font-semibold uppercase tracking-[0.06em] text-faint"
+          >
             {d}
           </div>
         ))}

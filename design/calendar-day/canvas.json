@@ -1,0 +1,47 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 1440, "h": 880, "title": "Calendar · Day" },
+    { "file": "Compose.dc.html", "x": 1560, "y": 0, "w": 1400, "h": 820, "title": "New · five kinds" },
+    { "file": "Week.dc.html", "x": 0, "y": 1010, "w": 1180, "h": 640, "title": "Calendar · Week" },
+    { "file": "Blocks.dc.html", "x": 1300, "y": 1010, "w": 1120, "h": 700, "title": "The block vocabulary" },
+    { "file": "Gaps.dc.html", "x": 0, "y": 1840, "w": 1240, "h": 860, "title": "What is behind it" }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -250,
+      "w": 620,
+      "text": "The calendar, redrawn — day and week.\n\nThree things change. Blocks get a height, so an hour looks like an hour and a ten-minute habit does not. Your day and the agents' work get their own lanes, so the machine never pushes your afternoon around. And the sidebar carries what has no duration: the month, the layers, the goal deadlines, today's reminders.\n\nThe day view today draws every item as a chip inside a slot row, coloured by status. That is why it reads as a list with times rather than a day.\n\nStatic mockups, on this machine's own names and numbers. Dark by default; there is a light switch above each artboard."
+    },
+    {
+      "id": "note-marker",
+      "x": 660,
+      "y": -250,
+      "w": 470,
+      "text": "The ◌ marker means nothing is behind it yet.\n\nIt is on the micro-habits strip, the habits counter and the agent-hours counter, and it is on three fields in the composer. The Gaps board says exactly what each one would cost.\n\nNothing else on these boards needs a new table — the redraw runs on the data calendar_range already returns."
+    },
+    {
+      "id": "note-compose",
+      "x": 1560,
+      "y": -250,
+      "w": 520,
+      "text": "Five kinds, five tab bodies — because the fields genuinely differ.\n\nA focus session has no repeat. A habit has no start time. A handover has an owner.\n\nOne refusal, kept from schedule.rs: there is no \"wake agent X at 9am\". A naked agent on a timer has no goal, nowhere to write and nobody to ask. Asking a bot is the supported shape of that wish."
+    },
+    {
+      "id": "note-week",
+      "x": 0,
+      "y": 1700,
+      "w": 520,
+      "text": "Week is the same day, thinner. Two lanes will not fit seven times, so agent time collapses into a gutter down each column — green for a run, red where one failed.\n\nEverything after now is hollow and dashed. The future is intent, not history, and should never be drawn as though it happened."
+    },
+    {
+      "id": "note-gaps",
+      "x": 1300,
+      "y": 1840,
+      "w": 520,
+      "text": "Read this board before agreeing to the picture.\n\nStep 1 is a redraw — no schema change, no new command, today's data drawn honestly.\n\nTwo entries are real work: micro-habits need their own table, and agent working time is only true for today until sessions are written down. The \"1 meeting\" card should be cut: there are no people, no invitations and no attendance behind it."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

@@ -1,0 +1,121 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    .cap { font-size: 9.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; }
+    .col { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); overflow: hidden; }
+    .ch { padding: 9px 11px 8px; border-bottom: 1px solid var(--line); }
+    .it { padding: 7px 11px; border-bottom: 1px solid var(--line); }
+    .it:last-child { border-bottom: 0; }
+    .n { font-size: 11.5px; font-weight: 600; color: var(--ink); }
+    .d { font-size: 10px; line-height: 1.5; color: var(--muted); margin-top: 2px; }
+    .f { font-size: 9px; color: var(--faint); font-family: ui-monospace, Consolas, monospace; margin-top: 3px; }
+    .step { flex: 1; border: 1px solid var(--line); border-radius: 9px; padding: 9px 11px; background: var(--panel); }
+    .num { width: 17px; height: 17px; border-radius: 999px; font-size: 10px; font-weight: 700;
+           display: inline-flex; align-items: center; justify-content: center; color: var(--app); }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --hover: {{c.hover}}; --line: {{c.line}}; --line2: {{c.line2}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; --hb: {{c.hb}}; background: var(--app); width: 1240px; height: 860px; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 13px; overflow: hidden;">
+
+  <div>
+    <div style="font-size: 14px; font-weight: 600; color: var(--ink);">What is behind the picture, and what is not</div>
+    <div style="font-size: 11.5px; color: var(--muted); margin-top: 3px;">Everything marked <span style="font-size: 9px; vertical-align: super;">&#9702;</span> on the day view is in the third column. Read this before agreeing to the design &mdash; the redraw is cheap, and two of these are not.</div>
+  </div>
+
+  <div style="flex: 1; min-height: 0; display: flex; gap: 12px; align-items: stretch;">
+
+    <div class="col">
+      <div class="ch" style="background: rgb(74 222 128 / .07);">
+        <div class="cap" style="color: var(--ok);">Already there</div>
+        <div style="font-size: 10px; color: var(--muted); margin-top: 2px;">Working today. The redraw uses it as is.</div>
+      </div>
+      <div class="it"><div class="n">One query, four views</div><div class="d">Day, week, month and year ask for a window and nothing else, so they cannot disagree.</div><div class="f">calendar.rs &middot; calendar_range</div></div>
+      <div class="it"><div class="n">Rhythms expanded, never stored</div><div class="d">A daily reminder is one row that occurs 365 times. Occurrences are computed for the window and thrown away.</div><div class="f">calendar.rs &middot; occurrences</div></div>
+      <div class="it"><div class="n">A moment with a length</div><div class="d"><span style="font-family: ui-monospace, Consolas, monospace;">every='once'</span> + <span style="font-family: ui-monospace, Consolas, monospace;">at_ms</span> + <span style="font-family: ui-monospace, Consolas, monospace;">duration_min</span> &mdash; an hour-long meeting is already expressible.</div><div class="f">schedule.rs</div></div>
+      <div class="it"><div class="n">Deadlines out of each vault</div><div class="d">Work items with a due date, read from every space's <span style="font-family: ui-monospace, Consolas, monospace;">.devdeck</span>. The store split holds.</div><div class="f">calendar.rs &middot; parse_due</div></div>
+      <div class="it"><div class="n">A deadline that finds you</div><div class="d">48 hours ahead, once per item per day, on the clock.</div><div class="f">calendar.rs &middot; check_deadlines</div></div>
+      <div class="it"><div class="n">5, 15, 30, 60-minute grid</div><div class="d">A day you are running is a different thing from a day you are glancing at.</div><div class="f">CalendarPage.tsx &middot; SLOTS</div></div>
+      <div class="it"><div class="n">The event page and its notes</div><div class="d">Per-occurrence entries with history &mdash; clicking an event opens it, not the assistant.</div><div class="f">events.rs &middot; EventPage.tsx</div></div>
+      <div class="it"><div class="n">Focus sessions</div><div class="d">A goal, a clock, held notifications and approvals. Started by hand, right now.</div><div class="f">focus.rs</div></div>
+    </div>
+
+    <div class="col">
+      <div class="ch" style="background: rgb(251 191 36 / .07);">
+        <div class="cap" style="color: var(--warn);">Half there</div>
+        <div style="font-size: 10px; color: var(--muted); margin-top: 2px;">The data exists; the view throws it away. Mostly front-end.</div>
+      </div>
+      <div class="it"><div class="n">Blocks with a height</div><div class="d">Items carry <span style="font-family: ui-monospace, Consolas, monospace;">at</span> and <span style="font-family: ui-monospace, Consolas, monospace;">end</span> already. The day draws chips inside slot rows, so an hour and ten minutes look identical.</div><div class="f">CalendarPage.tsx &middot; DayGrid</div></div>
+      <div class="it"><div class="n">Layers, colour and filters</div><div class="d">Every item has a <span style="font-family: ui-monospace, Consolas, monospace;">sort</span> &mdash; reminder, command, bot, work. Today colour means status; it should mean kind, with status on the edge.</div><div class="f">CalendarPage.tsx &middot; tone()</div></div>
+      <div class="it"><div class="n">Your lane and the agents' lane</div><div class="d">Derivable from <span style="font-family: ui-monospace, Consolas, monospace;">sort</span> with no backend change at all.</div><div class="f">front-end only</div></div>
+      <div class="it"><div class="n">A now line</div><div class="d">There is a tinted row for the current slot. Making it a line with the time on it is cosmetic.</div><div class="f">front-end only</div></div>
+      <div class="it"><div class="n">Goal deadlines with progress</div><div class="d">Counts per bot exist. Grouping items by feature and taking the nearest due date is a small read.</div><div class="f">bots.rs &middot; bots_standing</div></div>
+      <div class="it"><div class="n">&ldquo;Deep focus 2h&rdquo;</div><div class="d">Sessions are recorded with their length; the day just needs to sum them.</div><div class="f">focus.rs &middot; focus_recent</div></div>
+      <div class="it" style="background: rgb(251 191 36 / .05);"><div class="n">&ldquo;Agents working 2.5h&rdquo; <span style="font-size: 9px; vertical-align: super;">&#9702;</span></div><div class="d"><b>Today only.</b> Sessions live in memory with a start and an end; nothing is written down, so yesterday's agent time is blank and a restart erases this morning's. A runs table is the fix, and it is real work.</div><div class="f">aiw/state.rs &middot; runtime.rs</div></div>
+      <div class="it"><div class="n">Reminders due today</div><div class="d">A filter over the same window.</div><div class="f">front-end only</div></div>
+    </div>
+
+    <div class="col">
+      <div class="ch" style="background: rgb(248 113 113 / .07);">
+        <div class="cap" style="color: var(--err);">Not there at all</div>
+        <div style="font-size: 10px; color: var(--muted); margin-top: 2px;">New rows, new rules. Agree to these one at a time.</div>
+      </div>
+      <div class="it"><div class="n">Micro-habits</div><div class="d">The one thing on the board that is not a time: a name, a length, a target per week, and a tick when you do it. Needs its own table and its own page in the sidebar.</div><div class="f">new &middot; habits.rs</div></div>
+      <div class="it"><div class="n">The free-slot offer</div><div class="d">Find the gaps after now, take the largest, offer the smallest habit that fits and is behind. Pure arithmetic over items we already have &mdash; but it needs habits to exist first.</div><div class="f">new &middot; cheap, no storage</div></div>
+      <div class="it"><div class="n">Remind me: 10m / 1h / 1d</div><div class="d">Schedules have no lead time. Only deadlines warn ahead, and only at a fixed 48 hours.</div><div class="f">new column &middot; remind_min</div></div>
+      <div class="it"><div class="n">Linked goal on an event</div><div class="d">A schedule knows its space but not which feature or work item it serves. The link would live in the database and point into the vault &mdash; worth a minute's thought before writing it.</div><div class="f">new columns &middot; feature, item</div></div>
+      <div class="it"><div class="n">A focus block booked ahead</div><div class="d"><span style="font-family: ui-monospace, Consolas, monospace;">focus_start</span> means now. Booking 14:00&ndash;16:00 tomorrow needs a time and the clock to honour it.</div><div class="f">focus.rs</div></div>
+      <div class="it"><div class="n">Protect this time</div><div class="d">A flag the slot finder honours, so &ldquo;lunch&rdquo; is not offered as free.</div><div class="f">new column</div></div>
+      <div class="it"><div class="n">Ask a bot, from the calendar</div><div class="d">Bots can already take work; nothing lets you hand one a job with a due time from here.</div><div class="f">bots.rs &middot; new entry point</div></div>
+      <div class="it" style="background: rgb(248 113 113 / .05);"><div class="n">&ldquo;1 meeting&rdquo; &mdash; drop it</div><div class="d">There is no such thing as a meeting here: no people, no invitations, no attendance. A counter that counts nothing is the update checker saying &ldquo;up to date&rdquo; when it could not reach the server. <b>Cut the card.</b></div><div class="f">&mdash;</div></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="cap" style="color: var(--muted); margin-bottom: 7px;">A safe order</div>
+    <div style="display: flex; gap: 10px;">
+      <div class="step">
+        <div style="display: flex; align-items: center; gap: 7px;"><span class="num" style="background: var(--ok);">1</span><span style="font-size: 11.5px; font-weight: 600; color: var(--ink);">Redraw the day</span></div>
+        <div style="font-size: 10px; line-height: 1.5; color: var(--muted); margin-top: 5px;">Heights, lanes, layers, the now line, the deadline rail. No schema change, no new command &mdash; today's data, drawn honestly. Reversible in an afternoon.</div>
+      </div>
+      <div class="step">
+        <div style="display: flex; align-items: center; gap: 7px;"><span class="num" style="background: var(--accent);">2</span><span style="font-size: 11.5px; font-weight: 600; color: var(--ink);">Two small columns</span></div>
+        <div style="font-size: 10px; line-height: 1.5; color: var(--muted); margin-top: 5px;">Reminder lead time and the goal link, plus the focus-hours sum. Each is one migration and one field in the sheet.</div>
+      </div>
+      <div class="step">
+        <div style="display: flex; align-items: center; gap: 7px;"><span class="num" style="background: var(--hb);">3</span><span style="font-size: 11.5px; font-weight: 600; color: var(--ink);">Habits and free slots</span></div>
+        <div style="font-size: 10px; line-height: 1.5; color: var(--muted); margin-top: 5px;">The real new feature, and the one that makes the day view something you use rather than read. Build it whole or not at all &mdash; half a habit tracker is a to-do list that nags.</div>
+      </div>
+      <div class="step">
+        <div style="display: flex; align-items: center; gap: 7px;"><span class="num" style="background: var(--warn);">4</span><span style="font-size: 11.5px; font-weight: 600; color: var(--ink);">Write runs down</span></div>
+        <div style="font-size: 10px; line-height: 1.5; color: var(--muted); margin-top: 5px;">Persist agent sessions so the past has agent time in it. Until then the agents lane is honest only about today, and should say so rather than show an empty yesterday.</div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', panel: '#11141c', raise: '#151923', hover: '#232b3b', line: '#1e293b',
+          line2: '#334155', ink: '#e2e8f0', body: '#cbd5e1', dim: '#94a3b8', muted: '#64748b',
+          faint: '#475569', accent: '#818cf8', ok: '#4ade80', warn: '#fbbf24', err: '#f87171', hb: '#22d3ee' }
+      : { app: '#e9ebf0', panel: '#fdfdfe', raise: '#f0f2f6', hover: '#e7eaf1', line: '#d9dee7',
+          line2: '#c3cbd8', ink: '#16181d', body: '#333a45', dim: '#5a6472', muted: '#7d8794',
+          faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d', warn: '#b45309', err: '#dc2626', hb: '#0e7490' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

@@ -6,6 +6,7 @@ import { TeamPage } from './components/team/TeamPage'
 import { BotsPage } from './components/BotsPage'
 import { AnalyticsPage } from './components/AnalyticsPage'
 import { CalendarPage } from './components/CalendarPage'
+import { CalendarSidebar } from './components/CalendarSidebar'
 import { ApprovalBar } from './components/aiw/ApprovalBar'
 import { FocusBar } from './components/FocusBar'
 import { SetupModal } from './components/SetupModal'
@@ -883,6 +884,11 @@ export default function App() {
         {railView === 'aiworkspace' && (
           <aside className="w-[224px] shrink-0 overflow-hidden border-r border-line">
             <AiwSidebar />
+          </aside>
+        )}
+        {railView === 'calendar' && (
+          <aside className="w-[236px] shrink-0 overflow-hidden border-r border-line">
+            <CalendarSidebar />
           </aside>
         )}
         <main className="min-w-0 flex-1">

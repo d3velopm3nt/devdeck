@@ -4,6 +4,7 @@
 import { create } from 'zustand'
 import * as ipc from './lib/ipc'
 import type { GitInfo } from './lib/ipc'
+import type { Layer } from './lib/calendarLayers'
 import { findNode, projectOf, resolveDir, serviceDir, subtreeIds } from './lib/tree'
 import type {
   CommandDef,
@@ -27,6 +28,10 @@ import type {
   SvcState,
   TreeNode,
 } from './lib/types'
+
+/** Day, week, month, year — the only thing that differs between calendar
+ *  views is the window they ask for. */
+export type CalView = 'day' | 'week' | 'month' | 'year'
 
 const LOG_UI_LIMIT = 5000
 
@@ -195,6 +200,20 @@ export interface AppState {
   showBottom: (tab: BottomTab) => void
   setBottomTab: (tab: BottomTab) => void
   setBottomCollapsed: (collapsed: boolean) => void
+
+  // Calendar — which day you are looking at, how finely, and what you have
+  // switched off. It lives here rather than in the page because the sidebar
+  // shows the same day from outside it: two copies of "which Tuesday" is one
+  // copy too many.
+  calAnchor: number
+  calView: CalView
+  calSlot: number
+  /** Layers you have hidden. Empty means everything shows. */
+  calHidden: Layer[]
+  setCalAnchor: (at: number) => void
+  setCalView: (view: CalView) => void
+  setCalSlot: (min: number) => void
+  toggleCalLayer: (id: Layer) => void
 
   // Stash — the clip vault. The list carries previews only; `stashDetail`
   // holds the one selected row with its full content fetched on demand.
@@ -653,6 +672,26 @@ export const useApp = create<AppState>((set, get) => ({
   markPtyExited: (id) =>
     set((st) => ({
       terminals: st.terminals.map((t) => (t.id === id ? { ...t, alive: false } : t)),
+    })),
+
+  calAnchor: Date.now(),
+  calView: (localStorage.getItem('devdeck.calendar.view') as CalView) || 'day',
+  calSlot: Number(localStorage.getItem('devdeck.calendar.slot')) || 15,
+  calHidden: [],
+  setCalAnchor: (calAnchor) => set({ calAnchor }),
+  setCalView: (calView) => {
+    localStorage.setItem('devdeck.calendar.view', calView)
+    set({ calView })
+  },
+  setCalSlot: (calSlot) => {
+    localStorage.setItem('devdeck.calendar.slot', String(calSlot))
+    set({ calSlot })
+  },
+  toggleCalLayer: (id) =>
+    set((st) => ({
+      calHidden: st.calHidden.includes(id)
+        ? st.calHidden.filter((x) => x !== id)
+        : [...st.calHidden, id],
     })),
 
   stashItems: [],

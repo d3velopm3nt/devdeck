@@ -66,7 +66,21 @@ CREATE TABLE IF NOT EXISTS schedules (
     catch_up INTEGER NOT NULL DEFAULT 1,
     last_run INTEGER,
     last_ok INTEGER NOT NULL DEFAULT 1,
-    last_note TEXT NOT NULL DEFAULT ''
+    last_note TEXT NOT NULL DEFAULT '',
+    -- How long before it starts you want telling. 0 is no warning, which is
+    -- what everything did until now: a reminder arrived at the moment it was
+    -- about, which is too late to walk anywhere.
+    remind_min INTEGER NOT NULL DEFAULT 0,
+    -- Which occurrence has already been warned about, as its unix ms. One
+    -- warning per occurrence: the clock ticks every thirty seconds, and a
+    -- warning that repeats for ten minutes is not a warning.
+    last_remind INTEGER,
+    -- What it is for: a feature in a space's deck, and optionally one item on
+    -- it. The link is *yours* — it lives here in the database rather than in
+    -- the vault, because a reminder to look at something is not part of the
+    -- project's record of that thing.
+    feature TEXT NOT NULL DEFAULT '',
+    work_item TEXT NOT NULL DEFAULT ''
 );
 ";
 
@@ -91,6 +105,17 @@ pub struct Schedule {
     pub last_run: Option<i64>,
     pub last_ok: bool,
     pub last_note: String,
+    /// Minutes of warning before it starts. 0 says nothing early.
+    #[serde(default)]
+    pub remind_min: i64,
+    /// The occurrence already warned about, unix ms.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_remind: Option<i64>,
+    /// The feature in the space's deck this serves, and one item on it.
+    #[serde(default)]
+    pub feature: String,
+    #[serde(default)]
+    pub work_item: String,
     /// Filled on read: when this next fires, as a unix ms timestamp.
     #[serde(default)]
     pub next_run: Option<i64>,
@@ -116,12 +141,17 @@ pub fn row(r: &rusqlite::Row) -> rusqlite::Result<Schedule> {
         last_run: r.get(12)?,
         last_ok: r.get::<_, i64>(13)? != 0,
         last_note: r.get(14)?,
+        remind_min: r.get(15)?,
+        last_remind: r.get(16)?,
+        feature: r.get(17)?,
+        work_item: r.get(18)?,
         next_run: None,
     })
 }
 
 pub const COLS: &str = "id, name, kind, node_id, every, at_min, at_ms, duration_min, days, payload, \
-                    enabled, catch_up, last_run, last_ok, last_note";
+                    enabled, catch_up, last_run, last_ok, last_note, remind_min, last_remind, \
+                    feature, work_item";
 
 // ---------------------------------------------------------------------------
 // When does it fire
@@ -276,6 +306,11 @@ pub fn schedule_save(
     days: String,
     payload: String,
     catch_up: bool,
+    // Minutes of warning before it starts. None keeps whatever is there.
+    remind_min: Option<i64>,
+    // What it serves: a feature in the space's deck, and one item on it.
+    feature: Option<String>,
+    work_item: Option<String>,
 ) -> Result<i64, String> {
     let name = name.trim();
     if name.is_empty() {
@@ -290,15 +325,25 @@ pub fn schedule_save(
         return Err("A one-off needs a date and a time.".into());
     }
     let duration_min = duration_min.unwrap_or(0).max(0);
+    // A warning longer than a day is not a warning, it is a second schedule.
+    let remind_min = remind_min.unwrap_or(0).clamp(0, 24 * 60);
+    let feature = feature.unwrap_or_default();
+    // An item without the feature it belongs to points at nothing findable.
+    let work_item = if feature.is_empty() {
+        String::new()
+    } else {
+        work_item.unwrap_or_default()
+    };
     let conn = db.0.lock().unwrap();
     match id {
         Some(id) => {
             conn.execute(
                 "UPDATE schedules SET name=?1, kind=?2, node_id=?3, every=?4, at_min=?5, days=?6, \
-                 payload=?7, catch_up=?8, at_ms=?9, duration_min=?10 WHERE id=?11",
+                 payload=?7, catch_up=?8, at_ms=?9, duration_min=?10, remind_min=?11, \
+                 feature=?12, work_item=?13 WHERE id=?14",
                 params![
                     name, kind, node_id, every, at_min, days, payload, catch_up as i64, at_ms,
-                    duration_min, id
+                    duration_min, remind_min, feature, work_item, id
                 ],
             )
             .map_err(err)?;
@@ -307,10 +352,11 @@ pub fn schedule_save(
         None => {
             conn.execute(
                 "INSERT INTO schedules (name, kind, node_id, every, at_min, days, payload, \
-                 catch_up, at_ms, duration_min) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+                 catch_up, at_ms, duration_min, remind_min, feature, work_item) \
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
                 params![
                     name, kind, node_id, every, at_min, days, payload, catch_up as i64, at_ms,
-                    duration_min
+                    duration_min, remind_min, feature, work_item
                 ],
             )
             .map_err(err)?;
@@ -560,6 +606,9 @@ pub fn tick(app: &tauri::AppHandle, startup: bool) {
         /// starts an agent can take minutes and needs the database.
         Run(Schedule, Option<String>, bool, Option<String>, Option<crate::bots::Bot>),
         Missed(Schedule, i64),
+        /// Tell them it is coming: the schedule, the moment it starts, and how
+        /// many minutes away that is.
+        Warn(Schedule, i64, i64),
     }
 
     let Some(db) = app.try_state::<Db>() else { return };
@@ -570,6 +619,13 @@ pub fn tick(app: &tauri::AppHandle, startup: bool) {
         let Ok(list) = all(&conn) else { return };
         let mut todo = Vec::new();
         for s in list.into_iter().filter(|s| s.enabled) {
+            // Coming up. Checked before "is it due", because a warning is
+            // about the *next* occurrence and firing is about the last one —
+            // and a thing due in five minutes is both at once.
+            if let Some((next_ms, away)) = warning_due(&s, now) {
+                todo.push(Do::Warn(s.clone(), next_ms, away));
+            }
+
             let Some(due) = last_due(&s, now) else { continue };
             let due_ms = due.timestamp_millis();
             if s.last_run.is_some_and(|r| r >= due_ms) {
@@ -610,6 +666,33 @@ pub fn tick(app: &tauri::AppHandle, startup: bool) {
                     params![now.timestamp_millis(), ok as i64, note, s.id],
                 );
             }
+            Do::Warn(s, next_ms, away) => {
+                crate::activity::record(
+                    app,
+                    "schedule",
+                    if away <= 1 {
+                        format!("{} starts in a minute", s.name)
+                    } else {
+                        format!("{} starts in {away} minutes", s.name)
+                    },
+                    // What it is for, when it says. A warning you cannot act
+                    // on is just a noise with a name attached.
+                    if s.feature.is_empty() {
+                        String::new()
+                    } else if s.work_item.is_empty() {
+                        s.feature.clone()
+                    } else {
+                        format!("{} · {}", s.feature, s.work_item)
+                    },
+                    true,
+                    Some(s.id),
+                );
+                let conn = db.0.lock().unwrap();
+                let _ = conn.execute(
+                    "UPDATE schedules SET last_remind = ?1 WHERE id = ?2",
+                    params![next_ms, s.id],
+                );
+            }
             Do::Missed(s, due_ms) => {
                 crate::activity::record(
                     app,
@@ -627,6 +710,27 @@ pub fn tick(app: &tauri::AppHandle, startup: bool) {
             }
         }
     }
+}
+
+/// Whether this schedule should say "coming up" now, and how far off it is.
+///
+/// One warning per occurrence, which is the whole difficulty: the clock ticks
+/// every thirty seconds, so a rule that only asked "is it within ten minutes"
+/// would say so twenty times. `last_remind` holds the occurrence already
+/// warned about, so the next one is announced and this one is not announced
+/// again.
+fn warning_due(s: &Schedule, now: chrono::DateTime<chrono::Local>) -> Option<(i64, i64)> {
+    if s.remind_min <= 0 {
+        return None;
+    }
+    let next = next_due(s, now)?;
+    let next_ms = next.timestamp_millis();
+    let away = (next - now).num_minutes();
+    // Not yet in range, or already said for this one.
+    if away < 0 || away > s.remind_min || s.last_remind.is_some_and(|r| r == next_ms) {
+        return None;
+    }
+    Some((next_ms, away))
 }
 
 /// What one run did, so the row that asked for it can say so.
@@ -676,4 +780,79 @@ pub fn schedule_run_now(
     )
     .map_err(err)?;
     Ok(RunOutcome { ok, note, ran_at })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    fn at(h: u32, m: u32) -> chrono::DateTime<chrono::Local> {
+        chrono::Local.with_ymd_and_hms(2026, 9, 7, h, m, 0).single().unwrap()
+    }
+
+    /// A daily reminder at 09:00 that wants ten minutes' warning.
+    fn daily(remind_min: i64, last_remind: Option<i64>) -> Schedule {
+        Schedule {
+            id: 1,
+            name: "Stand-up".into(),
+            kind: "reminder".into(),
+            node_id: None,
+            every: "daily".into(),
+            at_min: 9 * 60,
+            at_ms: None,
+            duration_min: 0,
+            days: String::new(),
+            payload: String::new(),
+            enabled: true,
+            catch_up: false,
+            last_run: None,
+            last_ok: true,
+            last_note: String::new(),
+            remind_min,
+            last_remind,
+            feature: String::new(),
+            work_item: String::new(),
+            next_run: None,
+        }
+    }
+
+    #[test]
+    fn nothing_is_said_early_when_no_warning_was_asked_for() {
+        assert_eq!(warning_due(&daily(0, None), at(8, 55)), None);
+    }
+
+    #[test]
+    fn nothing_is_said_while_it_is_still_far_off() {
+        assert_eq!(warning_due(&daily(10, None), at(8, 30)), None);
+    }
+
+    #[test]
+    fn it_is_said_once_the_moment_is_in_range() {
+        let (_, away) = warning_due(&daily(10, None), at(8, 55)).expect("a warning");
+        assert_eq!(away, 5);
+    }
+
+    #[test]
+    fn the_same_occurrence_is_not_announced_twice() {
+        let s = daily(10, None);
+        let (next_ms, _) = warning_due(&s, at(8, 55)).expect("a warning");
+        // Half a minute later the clock ticks again, and the answer changes.
+        let told = daily(10, Some(next_ms));
+        assert_eq!(warning_due(&told, at(8, 56)), None);
+    }
+
+    #[test]
+    fn tomorrow_is_a_different_occurrence_and_says_itself() {
+        let s = daily(10, None);
+        let (today_ms, _) = warning_due(&s, at(8, 55)).expect("a warning");
+        let told = daily(10, Some(today_ms));
+        // The next day, in range again: a different moment, so it speaks.
+        let tomorrow = chrono::Local
+            .with_ymd_and_hms(2026, 9, 8, 8, 55, 0)
+            .single()
+            .unwrap();
+        let (next_ms, _) = warning_due(&told, tomorrow).expect("a warning");
+        assert_ne!(next_ms, today_ms);
+    }
 }

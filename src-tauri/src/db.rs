@@ -393,6 +393,23 @@ pub fn migrate(conn: &Connection) {
         );
     }
 
+    // A schedule can warn you before it starts, and can say what it is for.
+    if conn.prepare("SELECT remind_min FROM schedules LIMIT 1").is_err() {
+        let _ = conn.execute(
+            "ALTER TABLE schedules ADD COLUMN remind_min INTEGER NOT NULL DEFAULT 0",
+            [],
+        );
+        let _ = conn.execute("ALTER TABLE schedules ADD COLUMN last_remind INTEGER", []);
+        let _ = conn.execute(
+            "ALTER TABLE schedules ADD COLUMN feature TEXT NOT NULL DEFAULT ''",
+            [],
+        );
+        let _ = conn.execute(
+            "ALTER TABLE schedules ADD COLUMN work_item TEXT NOT NULL DEFAULT ''",
+            [],
+        );
+    }
+
     // v2 model: add folder rel_path, and collapse the old
     // workspace→space→folder→project tree into workspace→project→folder.
     let has_rel_path = conn.prepare("SELECT rel_path FROM nodes LIMIT 1").is_ok();

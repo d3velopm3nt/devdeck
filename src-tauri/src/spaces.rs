@@ -264,6 +264,11 @@ pub fn space_create(
             // A reminder never catches up: being told to plan the week on
             // Tuesday because the app was shut on Sunday is noise.
             false,
+            // No warning ahead and nothing linked: a starter's routine is a
+            // suggestion, and what it is for is for you to say.
+            None,
+            None,
+            None,
         ) {
             Ok(_) => made.routines.push(rname.to_string()),
             Err(e) => made.problems.push(format!("reminder “{rname}”: {e}")),

@@ -218,8 +218,11 @@ pub fn calendar_range(
                         .node_id
                         .and_then(|n| names.get(&n).cloned())
                         .unwrap_or_default(),
-                    feature: String::new(),
-                    work_item: String::new(),
+                    // What it is for, when it says so. The link lives on the
+                    // schedule row — a reminder to look at something is not
+                    // part of the project's record of that thing.
+                    feature: s.feature.clone(),
+                    work_item: s.work_item.clone(),
                     // What a past occurrence did, when it is the one that ran.
                     status: if at > now {
                         "planned".into()
@@ -397,6 +400,10 @@ mod tests {
             last_run: None,
             last_ok: true,
             last_note: String::new(),
+            remind_min: 0,
+            last_remind: None,
+            feature: String::new(),
+            work_item: String::new(),
             next_run: None,
         }
     }

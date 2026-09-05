@@ -65,6 +65,15 @@ export interface Schedule {
   last_run: number | null
   last_ok: boolean
   last_note: string
+  /** Minutes of warning before it starts. 0 says nothing early. */
+  remind_min?: number
+  /** The occurrence already warned about, unix ms. */
+  last_remind?: number | null
+  /** The feature in the space's deck this serves, and one item on it. The
+   *  link lives in the database, not the vault: a reminder to look at
+   *  something is not part of the project's record of that thing. */
+  feature?: string
+  work_item?: string
   next_run: number | null
 }
 
@@ -84,12 +93,19 @@ export const scheduleSave = (s: {
   days: string
   payload: string
   catchUp: boolean
+  /** Minutes of warning before it starts. */
+  remindMin?: number | null
+  feature?: string | null
+  workItem?: string | null
 }) =>
   invoke<number>('schedule_save', {
     ...s,
     id: s.id ?? null,
     atMs: s.atMs ?? null,
     durationMin: s.durationMin ?? null,
+    remindMin: s.remindMin ?? null,
+    feature: s.feature ?? null,
+    workItem: s.workItem ?? null,
   })
 export const scheduleEnable = (id: number, on: boolean) =>
   invoke<void>('schedule_enable', { id, on })

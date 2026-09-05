@@ -18,6 +18,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Icon } from '../lib/icons'
 import * as ipc from '../lib/ipc'
 import type { CalendarItem, EventEntry } from '../lib/ipc'
+import { useApp } from '../store'
 
 const longDate = (ms: number) =>
   new Date(ms).toLocaleDateString([], {
@@ -132,6 +133,24 @@ export function EventPage({
           {longDate(item.at)} · {hhmm(item.at)}
           {item.end > item.at && ` · ${Math.round((item.end - item.at) / 60000)}m`}
         </div>
+        {/* What it is for, when it says so — and a way through to it, since
+            the whole point of the link is not having to go and find the
+            thing this is about. */}
+        {item.feature && item.kind !== 'deadline' && (
+          <button
+            className="mt-1.5 flex items-center gap-1.5 text-[11.5px] text-indigo-400 hover:underline"
+            title="Open the feature this is for"
+            onClick={() => {
+              const app = useApp.getState()
+              app.setRailView('team')
+              app.setTeamTab('features')
+            }}
+          >
+            <Icon name="project" size={11} />
+            For {item.feature}
+            {item.work_item ? ` · ${item.work_item}` : ''}
+          </button>
+        )}
       </div>
 
       {err && (

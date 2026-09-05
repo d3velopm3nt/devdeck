@@ -21,6 +21,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import * as ipc from '../lib/ipc'
 import { CAPTURE_NEW_SCHEDULE } from '../lib/devCapture'
+import type { GoalRow } from '../lib/aiw'
 import { useApp } from '../store'
 import { Icon, type IconName } from '../lib/icons'
 import { workspaceOf, findNode } from '../lib/tree'
@@ -119,6 +120,14 @@ export function SchedulerPage() {
   const load = () => void ipc.schedulesList().then(setList).catch((e) => setErr(String(e)))
   useEffect(load, [])
 
+  // What a schedule can point at: every feature in every space, from the same
+  // board Team draws. Read once — a picker that refetches on open is a picker
+  // that is empty for the first half-second you look at it.
+  const [goals, setGoals] = useState<GoalRow[]>([])
+  useEffect(() => {
+    void ipc.teamBoard().then(setGoals).catch(() => setGoals([]))
+  }, [])
+
   const next = useMemo(
     () =>
       list
@@ -154,6 +163,9 @@ export function SchedulerPage() {
         // A reminder that fires late is worse than one that did not fire, so
         // the default follows the kind rather than the last thing you ticked.
         catchUp: editing.catch_up ?? kind !== 'reminder',
+        remindMin: editing.remind_min ?? 0,
+        feature: editing.feature ?? '',
+        workItem: editing.work_item ?? '',
       })
       .then(() => {
         setEditing(null)
@@ -519,6 +531,64 @@ export function SchedulerPage() {
                     </option>
                   ))}
               </select>
+
+              <div>
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted">
+                  Tell me before it starts
+                </div>
+                <div className="flex gap-1">
+                  {[0, 10, 60, 1440].map((m) => (
+                    <button
+                      key={m}
+                      className={`flex-1 rounded-md border px-2 py-1 text-[11.5px] ${
+                        (editing.remind_min ?? 0) === m
+                          ? 'border-indigo-500/60 bg-indigo-500/10 text-ink'
+                          : 'border-line text-muted hover:text-dim'
+                      }`}
+                      onClick={() => setEditing({ ...editing, remind_min: m })}
+                    >
+                      {m === 0 ? 'No warning' : m === 10 ? '10 min' : m === 60 ? '1 hour' : '1 day'}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted">
+                  Said once, when the moment comes into range. Until now everything told you at the
+                  moment it was about, which is too late to walk anywhere.
+                </p>
+              </div>
+
+              <div>
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted">
+                  What it is for
+                </div>
+                <select
+                  className="input w-full"
+                  value={editing.feature ? `${editing.node_id ?? ''}:${editing.feature}` : ''}
+                  onChange={(e) => {
+                    const [node, feature] = e.target.value.split(':')
+                    setEditing({
+                      ...editing,
+                      feature: feature ?? '',
+                      // The item belongs to the feature; changing one drops
+                      // the other rather than leaving it pointing elsewhere.
+                      work_item: '',
+                      node_id: node ? Number(node) : editing.node_id ?? null,
+                    })
+                  }}
+                >
+                  <option value="">Nothing in particular</option>
+                  {goals.map((g) => (
+                    <option key={`${g.node_id}:${g.feature_id}`} value={`${g.node_id}:${g.feature_id}`}>
+                      {g.space} · {g.feature_name}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted">
+                  The link is yours, kept here rather than in the vault — a reminder to look at
+                  something is not part of the project&rsquo;s record of it. Picking a feature also
+                  sets the space.
+                </p>
+              </div>
 
               <label className="flex cursor-pointer items-start gap-2.5">
                 <input

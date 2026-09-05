@@ -260,9 +260,19 @@ export interface AppState {
   /** The activity stream — every source writes to it, everything reads it. */
   activity: Activity[]
   refreshActivity: () => Promise<void>
-  /** When the Inbox was last opened. Everything newer is unread. */
-  inboxSeen: number
-  markInboxSeen: () => void
+  /** What has been read, by row id — `activity:12`, `approval:ab`. Absent
+   *  means nobody has said, which is unread. */
+  inboxRead: Record<string, boolean>
+  /** Whether the two reads above have come back. Until they have, nothing
+   *  counts as unread — see `unread` in lib/inbox. */
+  inboxLoaded: boolean
+  /** The moment before which history counts as read. Set once, from the old
+   *  single-timestamp scheme, so upgrading does not resurrect a month of
+   *  failures as unread. */
+  inboxFloor: number
+  refreshInbox: () => Promise<void>
+  /** Mark rows read, or unread again. */
+  markInbox: (items: string[], read: boolean) => Promise<void>
   /// Which of Team's three views is open. A sub-menu on the rail, not tabs
   /// on the page — one navigation, not two.
   teamTab: TeamTab
@@ -855,11 +865,44 @@ export const useApp = create<AppState>((set, get) => ({
     localStorage.setItem(TEAM_KEY, t)
     set({ teamTab: t, railView: 'team' })
   },
-  inboxSeen: loadSeen(),
-  markInboxSeen: () => {
-    const now = Date.now()
-    localStorage.setItem(SEEN_KEY, String(now))
-    set({ inboxSeen: now })
+  inboxRead: {},
+  inboxFloor: 0,
+  inboxLoaded: false,
+  refreshInbox: async () => {
+    // The old scheme's timestamp becomes the floor, once, and then the
+    // database owns it. Reading it here rather than at boot keeps the
+    // migration where the feature is.
+    // On a cold start the backend may not be answering yet. A failed read
+    // here used to leave an empty map, which reads as "nothing has ever been
+    // read" — a full inbox of false alarms. So it retries, and says plainly
+    // whether it ever got an answer.
+    for (let go = 0; go < 4; go++) {
+      try {
+        const floor = await ipc.inboxFloorSeed(loadSeen())
+        const marks = await ipc.inboxMarks()
+        const inboxRead: Record<string, boolean> = {}
+        for (const m of marks) inboxRead[m.item] = m.read
+        set({ inboxRead, inboxFloor: floor, inboxLoaded: true })
+        return
+      } catch (e) {
+        if (go === 3) {
+          console.warn('[inbox] could not read what has been read:', e)
+          return
+        }
+        await new Promise((r) => setTimeout(r, 400 * (go + 1)))
+      }
+    }
+  },
+  markInbox: async (items, read) => {
+    if (items.length === 0) return
+    // Optimistic: the click is the decision, and a round trip before the row
+    // changes makes marking a page of them feel broken.
+    set((st) => {
+      const inboxRead = { ...st.inboxRead }
+      for (const i of items) inboxRead[i] = read
+      return { inboxRead }
+    })
+    await ipc.inboxMark(items, read).catch(() => {})
   },
   toast: null,
   dismissToast: () => set({ toast: null }),
@@ -1086,12 +1129,10 @@ export const useApp = create<AppState>((set, get) => ({
   setRailView: (v) => {
     localStorage.setItem(RAIL_KEY, v)
     set({ railView: v })
-    // Opening the Inbox is what "seen" means. Anything that arrives while you
-    // are sitting on it is already in front of you.
-    if (v === 'inbox') {
-      get().markInboxSeen()
-      set({ toast: null })
-    }
+    // Opening the Inbox used to mark everything read, which is why one glance
+    // could bury a failure you had not looked at. Reading is now per row, and
+    // done on purpose; all this does is put the toast away.
+    if (v === 'inbox') set({ toast: null })
   },
   openSheet: (s) => set({ sheet: s }),
   closeSheet: () => set({ sheet: null }),

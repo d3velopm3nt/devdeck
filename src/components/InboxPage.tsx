@@ -15,6 +15,13 @@
 //     A feed where an agent waiting on a decision sits below a git pull is a
 //     feed that trains you to skim past the decision.
 //
+// **Read is per row, and reversible.** Opening the page used to mark
+// everything at once — one glance and a failure you had not looked at was
+// filed as read, with no way to put it back. Now a row is unread until you say
+// otherwise, and you can say otherwise twice: mark as read, mark as unread.
+// The rail's badge and the top bar's bell count the same rows through the same
+// rule, so they cannot disagree with what is on screen.
+//
 // And one rule of its own: while a focus session is running, anything that
 // needs you from outside the goal's space is *held* — still here, counted, one
 // click from view, and never dropped. Holding is a rendering rule and nothing
@@ -27,10 +34,13 @@ import { Icon, type IconName } from '../lib/icons'
 import { fmtAgo } from '../lib/time'
 import { findNode, subtreeIds, workspaceOf } from '../lib/tree'
 import { FocusStart } from './FocusBar'
+import { activityItem, approvalItem, conflictItem, unread } from '../lib/inbox'
+import { CAPTURE_INBOX_UNREAD } from '../lib/devCapture'
 
 type Tone = 'wait' | 'agent' | 'fail' | 'news'
 
 interface Row {
+  /// Stable across reloads, and the key its read state is stored under.
   id: string
   tone: Tone
   icon: IconName
@@ -53,16 +63,49 @@ const TONE: Record<Tone, { dot: string; text: string }> = {
 }
 
 export function InboxPage() {
-  const { activity, refreshActivity, nodes, setRailView, focus, endFocus, showBottom } = useApp()
+  const {
+    activity,
+    refreshActivity,
+    nodes,
+    setRailView,
+    focus,
+    endFocus,
+    showBottom,
+    inboxRead,
+    inboxFloor,
+    inboxLoaded,
+    refreshInbox,
+    markInbox,
+  } = useApp()
   const aiw = useAiw()
   const [showHeld, setShowHeld] = useState(false)
   const [starting, setStarting] = useState(false)
-  const [read, setRead] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+  /// Everything, or only what still wants looking at.
+  const [only, setOnly] = useState<'all' | 'unread'>('all')
 
   useEffect(() => {
-    void refreshActivity().finally(() => setRead(true))
+    void refreshActivity().finally(() => setLoaded(true))
+    void refreshInbox()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Screenshot harness: put the newest failure back to unread, through the
+  // same command the button calls. Without a mouse there is no other way to
+  // photograph a row in the state this whole feature is about.
+  useEffect(() => {
+    if (!CAPTURE_INBOX_UNREAD || !loaded) return
+    const newest = activity.find((a) => !a.ok)
+    if (newest) void markInbox([activityItem(newest.id)], false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded])
+
+  // One object, stable while the state is: it goes into a memo's deps, and a
+  // fresh object every render makes that memo decorative.
+  const marks = useMemo(
+    () => ({ read: inboxRead, floor: inboxFloor, loaded: inboxLoaded }),
+    [inboxRead, inboxFloor, inboxLoaded],
+  )
 
   const now = Date.now()
 
@@ -83,7 +126,7 @@ export function InboxPage() {
     // Waiting on you, first and always.
     for (const r of aiw.approvals) {
       out.push({
-        id: `approval-${r.id}`,
+        id: approvalItem(r.id),
         tone: 'wait',
         icon: 'alert',
         title: `${aiw.agents.find((a) => a.id === r.agent_id)?.name ?? r.agent_id} is waiting on you`,
@@ -100,7 +143,7 @@ export function InboxPage() {
 
     for (const c of aiw.conflicts.filter((x) => !x.resolved)) {
       out.push({
-        id: `conflict-${c.id}`,
+        id: conflictItem(c.id),
         tone: 'wait',
         icon: 'conflict',
         title: c.title,
@@ -125,7 +168,7 @@ export function InboxPage() {
     // stream is on Home now, where reading it is the point.
     for (const a of activity.filter((x) => !x.ok)) {
       out.push({
-        id: `activity-${a.id}`,
+        id: activityItem(a.id),
         tone: 'fail',
         icon: 'alert',
         title: a.title,
@@ -139,10 +182,14 @@ export function InboxPage() {
       })
     }
 
-    // Waiting sorts above everything, then newest first.
-    const rank = (r: Row) => (r.tone === 'wait' ? 0 : 1)
+    // What you have not read sorts above what you have; then anything
+    // waiting on you above anything that merely broke; then newest first.
+    // Read rows stay on the page rather than vanishing — an inbox you cannot
+    // look back at is a feed.
+    const rank = (r: Row) =>
+      (unread(r.id, r.at, marks) ? 0 : 2) + (r.tone === 'wait' ? 0 : 1)
     return out.sort((x, y) => rank(x) - rank(y) || y.at - x.at)
-  }, [activity, aiw.approvals, aiw.conflicts, aiw.agents, nodes, showBottom, setRailView])
+  }, [activity, aiw.approvals, aiw.conflicts, aiw.agents, nodes, showBottom, setRailView, marks])
 
   // What the focus session holds. Only things that need you: news was never
   // going to interrupt, so hiding it would only make the page emptier.
@@ -160,7 +207,9 @@ export function InboxPage() {
   }, [rows, focus, nodes])
 
   const waiting = visible.filter((r) => r.tone === 'wait').length
-  const shown = showHeld ? [...visible, ...held] : visible
+  const all = showHeld ? [...visible, ...held] : visible
+  const unreadRows = all.filter((r) => unread(r.id, r.at, marks))
+  const shown = only === 'unread' ? unreadRows : all
 
   return (
     <div className="flex h-full flex-col bg-page">
@@ -175,6 +224,31 @@ export function InboxPage() {
               {waiting} need{waiting === 1 ? 's' : ''} you
             </span>
           )}
+          <span className="flex items-center gap-0.5 rounded-lg border border-line bg-panel p-0.5">
+            {(['all', 'unread'] as const).map((v) => (
+              <button
+                key={v}
+                className={`rounded-md px-2.5 py-0.5 text-[11px] ${
+                  only === v ? 'bg-hover text-ink' : 'text-muted hover:text-dim'
+                }`}
+                onClick={() => setOnly(v)}
+              >
+                {v === 'all' ? 'All' : `Unread${unreadRows.length ? ` ${unreadRows.length}` : ''}`}
+              </button>
+            ))}
+          </span>
+          <button
+            className="btn-ghost text-[11.5px]"
+            disabled={unreadRows.length === 0}
+            title={
+              unreadRows.length === 0
+                ? 'Nothing is unread'
+                : `Mark ${unreadRows.length} as read`
+            }
+            onClick={() => void markInbox(unreadRows.map((r) => r.id), true)}
+          >
+            Mark all as read
+          </button>
           {focus ? (
             <button className="btn-ghost text-[11.5px]" onClick={() => void endFocus(held.length)}>
               <Icon name="focus" size={12} /> End focus
@@ -206,29 +280,52 @@ export function InboxPage() {
       )}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {shown.length === 0 && !read ? (
+        {shown.length === 0 && !loaded ? (
           <div className="flex h-full items-center justify-center text-[12px] text-muted">
             Reading what happened…
           </div>
         ) : shown.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-8 text-center">
             <Icon name="inbox" size={26} className="text-faint" />
-            <div className="text-[12.5px] text-dim">Nothing needs you</div>
+            <div className="text-[12.5px] text-dim">
+              {only === 'unread' ? 'Nothing unread' : 'Nothing needs you'}
+            </div>
             <div className="max-w-[380px] text-[11.5px] leading-relaxed text-muted">
-              An agent waiting on an answer, work that cannot continue, something that ran and
-              failed. Everything that simply happened is on Home.
+              {only === 'unread' ? (
+                <>
+                  You have read everything here.{' '}
+                  <button className="text-dim hover:text-ink" onClick={() => setOnly('all')}>
+                    Show all
+                  </button>{' '}
+                  to look back at it.
+                </>
+              ) : (
+                <>
+                  An agent waiting on an answer, work that cannot continue, something that ran and
+                  failed. Everything that simply happened is on Home.
+                </>
+              )}
             </div>
           </div>
         ) : (
           shown.map((r) => {
             const tone = TONE[r.tone]
+            const isUnread = unread(r.id, r.at, marks)
             return (
               <div
                 key={r.id}
-                className={`flex gap-3 border-b border-line px-5 py-3 ${
-                  r.tone === 'wait' ? 'bg-amber-500/[0.04]' : ''
-                }`}
+                className={`group flex gap-3 border-b border-line px-5 py-3 ${
+                  isUnread && r.tone === 'wait' ? 'bg-amber-500/[0.04]' : ''
+                } ${isUnread ? '' : 'opacity-60'}`}
               >
+                {/* Unread carries a mark of its own rather than only a
+                    weight: a bold line next to a slightly less bold line is
+                    not a state you can see down a list of thirty. */}
+                <span className="flex w-[6px] shrink-0 items-start pt-[9px]">
+                  {isUnread && (
+                    <span className={`h-[6px] w-[6px] rounded-full ${tone.dot.split(' ')[0]}`} />
+                  )}
+                </span>
                 <span
                   className={`flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-lg ${tone.dot}`}
                 >
@@ -237,7 +334,9 @@ export function InboxPage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span
-                      className={`text-[12.5px] ${r.tone === 'fail' ? 'text-err' : 'text-ink'}`}
+                      className={`text-[12.5px] ${r.tone === 'fail' ? 'text-err' : 'text-ink'} ${
+                        isUnread ? 'font-semibold' : ''
+                      }`}
                     >
                       {r.title}
                     </span>
@@ -251,18 +350,35 @@ export function InboxPage() {
                     </span>
                   </div>
                   <div className="mt-0.5 text-[11px] leading-[1.5] text-muted">{r.evidence}</div>
-                  {r.onOpen && (
+                  <div className="mt-2 flex items-center gap-1.5">
+                    {r.onOpen && (
+                      <button
+                        className="btn-ghost text-[11px]"
+                        // Where a row goes is the row's business. This used to
+                        // jump to the Assistant first whatever the row was,
+                        // which was right for an approval and wrong for a
+                        // failed turn: the call is at the bottom of the page
+                        // you are on. Opening it is also reading it.
+                        onClick={() => {
+                          void markInbox([r.id], true)
+                          r.onOpen?.()
+                        }}
+                      >
+                        Open
+                      </button>
+                    )}
                     <button
-                      className="btn-ghost mt-2 text-[11px]"
-                      // Where a row goes is the row's business. This used to
-                      // jump to the Assistant first whatever the row was, which
-                      // was right for an approval and wrong for a failed turn:
-                      // the call is at the bottom of the page you are on.
-                      onClick={() => r.onOpen?.()}
+                      className="text-[11px] text-muted hover:text-ink"
+                      title={
+                        isUnread
+                          ? 'Mark as read — it stays on the page, greyed'
+                          : 'Mark as unread — it comes back to the top and counts again'
+                      }
+                      onClick={() => void markInbox([r.id], isUnread)}
                     >
-                      Open
+                      {isUnread ? 'Mark as read' : 'Mark as unread'}
                     </button>
-                  )}
+                  </div>
                 </div>
               </div>
             )

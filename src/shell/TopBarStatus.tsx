@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Icon } from '../lib/icons'
 import { useAiw } from '../lib/aiwStore'
 import { useApp } from '../store'
+import { unreadFailures } from '../lib/inbox'
 import { initials, severityStyle } from '../lib/aiw'
 import * as ipc from '../lib/ipc'
 import { githubUser, type GithubUser } from '../lib/ipc'
@@ -64,7 +65,9 @@ export function AgentCluster() {
 export function NotificationBell() {
   const a = useAiw()
   const activity = useApp((s) => s.activity)
-  const inboxSeen = useApp((s) => s.inboxSeen)
+  const inboxRead = useApp((s) => s.inboxRead)
+  const inboxFloor = useApp((s) => s.inboxFloor)
+  const inboxLoaded = useApp((s) => s.inboxLoaded)
   const setRailView = useApp((s) => s.setRailView)
   // Screenshot harness: this panel only exists while it is being clicked.
   const [open, setOpen] = useState(CAPTURE_BELL)
@@ -76,8 +79,10 @@ export function NotificationBell() {
   // check whether anything needs you, and until now a stopped agent was the
   // one kind of "needs you" it could not say — you had to go and find it.
   // Under the harness, what has been read is shown anyway: every screenshot
-  // taken after a visit to the Inbox would otherwise be of an empty panel.
-  const broken = activity.filter((x) => !x.ok && (CAPTURE_BELL || x.ts > inboxSeen)).slice(0, 5)
+  // taken after reading the Inbox would otherwise be of an empty panel.
+  const marks = { read: inboxRead, floor: inboxFloor, loaded: inboxLoaded }
+  const broken = (CAPTURE_BELL ? activity.filter((x) => !x.ok) : unreadFailures(activity, marks))
+    .slice(0, 5)
   const total = approvals.length + blockers.length + broken.length
 
   useEffect(() => {

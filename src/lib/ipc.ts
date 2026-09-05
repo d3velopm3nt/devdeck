@@ -126,6 +126,25 @@ export const focusEnd = (held: number) => invoke<void>('focus_end', { held })
 export const focusRecent = (limit = 8) => invoke<Focus[]>('focus_recent', { limit })
 
 
+// ---- inbox: what has been read, and what has not ----
+
+/** One decision about one row. Absent means nobody has said, which is unread. */
+export interface InboxMark {
+  item: string
+  read: boolean
+  at: number
+}
+
+export const inboxMarks = () => invoke<InboxMark[]>('inbox_marks')
+/** Mark rows read, or unread again. */
+export const inboxMark = (items: string[], read: boolean) =>
+  invoke<void>('inbox_mark', { items, read })
+/** The moment before which history counts as read. */
+export const inboxFloor = () => invoke<number>('inbox_floor')
+/** Seed that moment from the old localStorage timestamp, once. */
+export const inboxFloorSeed = (at: number) => invoke<number>('inbox_floor_seed', { at })
+
+
 // ---- spaces: making a workspace with a first cut already drafted ----
 
 export interface FolderDraft {

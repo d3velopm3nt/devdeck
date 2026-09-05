@@ -18,6 +18,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useApp, type RailView, type TeamTab } from '../store'
+import { approvalItem, conflictItem, unread, unreadFailures } from '../lib/inbox'
 import { openBot, openNodeThread } from '../lib/dock'
 import { useAiw } from '../lib/aiwStore'
 import { Icon, type IconName } from '../lib/icons'
@@ -180,7 +181,9 @@ export function Rail() {
     recentLimit,
     touchRecent,
     activity,
-    inboxSeen,
+    inboxRead,
+    inboxFloor,
+    inboxLoaded,
     bots,
     teamTab,
     setTeamTab,
@@ -193,9 +196,16 @@ export function Rail() {
   // Counting what merely happened would light the rail every time a reminder
   // fired, and a badge that is always lit is one you stop reading — so the
   // morning an agent is genuinely stuck would look like every other morning.
-  const waiting = aiw.approvals.length + aiw.conflicts.filter((c) => !c.resolved).length
-  const broken = activity.filter((a) => !a.ok && a.ts > inboxSeen).length
-  const unread = waiting + broken
+  //
+  // Read state is per row now, so the count is what you have not looked at
+  // rather than what has arrived since you last glanced at the page.
+  const marks = { read: inboxRead, floor: inboxFloor, loaded: inboxLoaded }
+  const waiting =
+    aiw.approvals.filter((r) => unread(approvalItem(r.id), Date.now(), marks)).length +
+    aiw.conflicts.filter((c) => !c.resolved && unread(conflictItem(c.id), Date.now(), marks))
+      .length
+  const broken = unreadFailures(activity, marks).length
+  const unreadCount = waiting + broken
   // What is moving, so the rail says so without being opened: items held by
   // a live claim under Work, agents mid-session under Bots. Green counts
   // rather than the Inbox's badge, because these are good news.
@@ -306,7 +316,7 @@ export function Rail() {
         icon="inbox"
         active={railView === 'inbox'}
         expanded={expanded}
-        count={unread}
+        count={unreadCount}
         alarm={broken > 0}
         onClick={() => setRailView('inbox')}
       />

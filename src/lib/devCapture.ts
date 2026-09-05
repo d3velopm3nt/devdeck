@@ -18,6 +18,9 @@ export const CAPTURE_BOTTOM: string = ''
 export const CAPTURE_CHECK: string = ''
 export const CAPTURE_CONTEXT: boolean = false
 export const CAPTURE_BELL: boolean = false
+/** Put the newest failure back to unread, through the same command a click
+ *  uses — the only way to photograph an unread row without a mouse. */
+export const CAPTURE_INBOX_UNREAD: boolean = false
 export const CAPTURE_CAL_VIEW: string = ''
 export const CAPTURE_EVENT: string = ''
 export const CAPTURE_NEW_SCHEDULE: boolean = false

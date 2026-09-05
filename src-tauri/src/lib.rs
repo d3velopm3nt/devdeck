@@ -26,6 +26,7 @@ mod events;
 mod focus;
 mod git;
 mod github;
+mod inbox;
 mod legacy;
 mod machine;
 mod monitor;
@@ -1020,6 +1021,10 @@ pub fn run() {
             activity::activity_list,
             activity::activity_for,
             calls::calls_list,
+            inbox::inbox_marks,
+            inbox::inbox_mark,
+            inbox::inbox_floor,
+            inbox::inbox_floor_seed,
             calls::calls_usage,
             calls::calls_clear,
             activity::activity_clear,

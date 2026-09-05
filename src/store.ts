@@ -201,6 +201,14 @@ export interface AppState {
   setBottomTab: (tab: BottomTab) => void
   setBottomCollapsed: (collapsed: boolean) => void
 
+  /** Which Settings tab to land on, when something else sends you there. */
+  settingsTab: string | null
+  setSettingsTab: (tab: string | null) => void
+  /** "Make a new one-off at this moment" — set by the calendar, consumed by
+   *  the scheduler, which is the only thing that knows how to draw the form. */
+  newScheduleAt: number | null
+  setNewScheduleAt: (at: number | null) => void
+
   // Calendar — which day you are looking at, how finely, and what you have
   // switched off. It lives here rather than in the page because the sidebar
   // shows the same day from outside it: two copies of "which Tuesday" is one
@@ -673,6 +681,11 @@ export const useApp = create<AppState>((set, get) => ({
     set((st) => ({
       terminals: st.terminals.map((t) => (t.id === id ? { ...t, alive: false } : t)),
     })),
+
+  settingsTab: null,
+  setSettingsTab: (settingsTab) => set({ settingsTab }),
+  newScheduleAt: null,
+  setNewScheduleAt: (newScheduleAt) => set({ newScheduleAt }),
 
   calAnchor: Date.now(),
   calView: (localStorage.getItem('devdeck.calendar.view') as CalView) || 'day',

@@ -262,18 +262,17 @@ export function CalendarPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-page">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-5 py-3">
-        <div className="min-w-0">
-          <h2 className="text-[15px] font-semibold text-ink">Calendar</h2>
-          <p className="text-[11.5px] text-muted">
-            Everything with a time on it, across every space — your day on the left, the agents&rsquo;
-            work on the right.
-          </p>
-        </div>
-
-        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+      {/* One row, the way the design has it: the day is the title, and
+          everything that changes what you are looking at sits on the right. */}
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-4 py-2">
+        <span className="text-[14px] font-semibold text-ink">{title}</span>
+        {view === 'day' && sameDay(anchor, new Date()) && (
+          <span className="text-[10.5px] text-faint">today</span>
+        )}
+        <span className="flex items-center gap-1">
           <button
             className="btn-ghost px-1.5 text-[11px]"
+            title="Back"
             onClick={() => app.setCalAnchor(step(view, anchor, -1).getTime())}
           >
             <Icon name="chevron-left" size={12} />
@@ -283,46 +282,12 @@ export function CalendarPage() {
           </button>
           <button
             className="btn-ghost px-1.5 text-[11px]"
+            title="Forward"
             onClick={() => app.setCalAnchor(step(view, anchor, 1).getTime())}
           >
             <Icon name="chevron-right" size={12} />
           </button>
-          <span className="mx-1 h-4 w-px bg-line" />
-          {VIEWS.map(([v, label]) => (
-            <button
-              key={v}
-              className={`rounded-full border px-2.5 py-0.5 text-[11px] ${
-                view === v
-                  ? 'border-line2 bg-raise text-ink'
-                  : 'border-line text-muted hover:text-dim'
-              }`}
-              onClick={() => app.setCalView(v)}
-            >
-              {label}
-            </button>
-          ))}
-          {view === 'day' && (
-            <select
-              className="input h-[24px] w-[86px] py-0 text-[11px]"
-              value={slot}
-              onChange={(e) => app.setCalSlot(Number(e.target.value))}
-              title="How tall an hour is"
-            >
-              {SLOTS.map(([m]) => (
-                <option key={m} value={m}>
-                  {m} min
-                </option>
-              ))}
-            </select>
-          )}
-          <button className="btn-ghost px-1.5 text-[11px]" onClick={() => load()} title="Reload">
-            <Icon name="update" size={12} />
-          </button>
-        </div>
-      </div>
-
-      <div className="flex shrink-0 items-center gap-3 border-b border-line px-5 py-1.5">
-        <span className="text-[12.5px] font-semibold text-ink">{title}</span>
+        </span>
         <span className="text-[10.5px] text-muted">
           {items == null ? 'reading…' : `${shown.length} in view`}
         </span>
@@ -332,10 +297,52 @@ export function CalendarPage() {
             onClick={() => calHidden.forEach((l) => app.toggleCalLayer(l))}
             title="Show every layer again"
           >
-            {hiddenCount} hidden by a layer filter
+            {hiddenCount} hidden
           </button>
         )}
+
+        <span className="ml-auto flex shrink-0 items-center gap-1.5">
+          <Segmented
+            options={VIEWS}
+            value={view}
+            onChange={(v) => app.setCalView(v)}
+            accent
+          />
+          {view === 'day' && (
+            <Segmented
+              options={SLOTS.map(([m]) => [m, m < 60 ? `${m}m` : '1h'] as [number, string])}
+              value={slot}
+              onChange={(m) => app.setCalSlot(m)}
+              title="How tall an hour is"
+            />
+          )}
+          <button className="btn-ghost px-1.5 text-[11px]" onClick={() => load()} title="Reload">
+            <Icon name="update" size={12} />
+          </button>
+          <button
+            className="flex items-center gap-1 rounded-md bg-indigo-500 px-2.5 py-1 text-[11.5px] font-semibold text-white hover:bg-indigo-400"
+            title="A new one-off, on the day you are looking at"
+            onClick={() => {
+              // 09:00 on that day, or the next hour if the day is today and
+              // nine has been and gone.
+              const d = startOfDay(anchor)
+              d.setHours(9)
+              const now = new Date()
+              if (sameDay(anchor, now) && now.getHours() >= 9) {
+                d.setHours(now.getHours() + 1, 0, 0, 0)
+              }
+              app.setNewScheduleAt(d.getTime())
+              app.setSettingsTab('routines')
+              app.setRailView('settings')
+            }}
+          >
+            <Icon name="add" size={12} />
+            New
+          </button>
+        </span>
       </div>
+
+      {view === 'day' && !openItem && <DayStats items={shown} day={from} />}
 
       {err && (
         <div className="shrink-0 border-b border-red-500/25 bg-red-500/[0.06] px-5 py-2 text-[11.5px] text-err">
@@ -378,6 +385,146 @@ export function CalendarPage() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+/// One control, several choices, one of them on. Views and zoom are the same
+/// shape because they are the same gesture: change what you are looking at
+/// without leaving where you are.
+function Segmented<T extends string | number>({
+  options,
+  value,
+  onChange,
+  accent,
+  title,
+}: {
+  options: Array<[T, string]>
+  value: T
+  onChange: (v: T) => void
+  accent?: boolean
+  title?: string
+}) {
+  return (
+    <span
+      className="flex items-center gap-0.5 rounded-lg border border-line bg-panel p-0.5"
+      title={title}
+    >
+      {options.map(([v, label]) => (
+        <button
+          key={String(v)}
+          className={`rounded-md px-2.5 py-0.5 text-[11px] ${
+            v === value
+              ? accent
+                ? 'bg-indigo-500 font-medium text-white'
+                : 'bg-hover text-ink'
+              : 'text-muted hover:text-dim'
+          }`}
+          onClick={() => onChange(v)}
+        >
+          {label}
+        </button>
+      ))}
+    </span>
+  )
+}
+
+/// Minutes covered by any of these spans, counting overlap once.
+///
+/// Two hours of focus inside a three-hour block of your own time is three
+/// hours of day, not five. Summing durations is the easy way to a number that
+/// is always too big.
+function unionMinutes(spans: Array<[number, number]>, from: number, to: number): number {
+  const clipped = spans
+    .map(([a, b]) => [Math.max(a, from), Math.min(b, to)] as [number, number])
+    .filter(([a, b]) => b > a)
+    .sort((x, y) => x[0] - y[0])
+  let total = 0
+  let cur: [number, number] | null = null
+  for (const sp of clipped) {
+    if (cur && sp[0] <= cur[1]) cur[1] = Math.max(cur[1], sp[1])
+    else {
+      if (cur) total += cur[1] - cur[0]
+      cur = [sp[0], sp[1]]
+    }
+  }
+  if (cur) total += cur[1] - cur[0]
+  return Math.round(total / 60_000)
+}
+
+const hoursSaid = (min: number) =>
+  min === 0 ? '—' : min < 60 ? `${min}m` : `${Math.floor(min / 60)}h${min % 60 ? ` ${min % 60}m` : ''}`
+
+/// What the day adds up to.
+///
+/// Every card here is a real number over data that already exists. The design
+/// also had "agents working, 2.5h" and "habits banked" — one needs agent
+/// sessions written down (they live in memory, so yesterday would be a lie)
+/// and the other needs habits to exist at all. An empty card is worse than no
+/// card, so they are absent rather than zero.
+function DayStats({ items, day }: { items: CalendarItem[]; day: Date }) {
+  const from = day.getTime()
+  const to = from + DAY_MS - 1
+  const now = Date.now()
+
+  const focusMin = unionMinutes(
+    items.filter((i) => layerOf(i) === 'focus').map((i) => [i.at, i.end] as [number, number]),
+    from,
+    to,
+  )
+  const yoursMin = unionMinutes(
+    items
+      .filter((i) => i.kind !== 'deadline' && laneOf(i) === 'you')
+      .map((i) => [i.at, Math.max(i.end, i.at + 60_000)] as [number, number]),
+    from,
+    to,
+  )
+  const agentItems = items.filter((i) => i.kind !== 'deadline' && laneOf(i) === 'agents')
+  const running = agentItems.filter((i) => wentOf(i, now) === 'running').length
+  const due = items.filter((i) => i.kind === 'deadline')
+  const blocked = due.filter((i) => i.status === 'blocked').length
+
+  const cards: Array<{ n: string; label: string; sub?: string; bad?: boolean }> = [
+    { n: hoursSaid(focusMin), label: 'Deep focus', sub: focusMin === 0 ? 'none today' : undefined },
+    { n: hoursSaid(yoursMin), label: 'Your day', sub: 'booked' },
+    {
+      n: String(agentItems.length),
+      label: agentItems.length === 1 ? 'Agent run' : 'Agent runs',
+      sub: running > 0 ? `${running} running now` : undefined,
+    },
+    { n: String(due.length), label: due.length === 1 ? 'Deadline' : 'Deadlines', sub: 'today' },
+    // Scoped, or it argues with the sidebar: an overdue item blocked last
+    // week is not on this day, and a bare "Blocked · 0" beside a sidebar
+    // saying "blocked" is the kind of small lie that costs trust in the rest.
+    { n: String(blocked), label: 'Blocked', sub: 'of those', bad: blocked > 0 },
+  ]
+
+  return (
+    <div className="flex shrink-0 gap-2 border-b border-line px-4 py-2">
+      {cards.map((c) => (
+        <div
+          key={c.label}
+          className={`flex-1 rounded-lg border px-3 py-1.5 ${
+            c.bad ? 'border-red-500/30 bg-red-500/[0.06]' : 'border-line bg-panel'
+          }`}
+        >
+          <div
+            className={`text-[18px] font-semibold leading-tight ${c.bad ? 'text-err' : 'text-ink'}`}
+          >
+            {c.n}
+          </div>
+          <div className="flex items-baseline gap-1.5">
+            <span
+              className={`text-[9.5px] font-semibold uppercase tracking-wider ${
+                c.bad ? 'text-err' : 'text-muted'
+              }`}
+            >
+              {c.label}
+            </span>
+            {c.sub && <span className="truncate text-[9.5px] text-faint">{c.sub}</span>}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

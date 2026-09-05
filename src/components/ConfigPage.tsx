@@ -48,6 +48,16 @@ export function ConfigPage() {
   const [labelDraft, setLabelDraft] = useState('')
   const [labelMsg, setLabelMsg] = useState('')
   const [tab, setTab] = useState(() => CAPTURE_SETTINGS_TAB || localStorage.getItem(TAB_KEY) || 'general')
+
+  // Something elsewhere asked for a particular tab — the calendar's New
+  // button, which needs the routines form. Consumed once, so coming back to
+  // Settings later lands where you left it rather than where it sent you.
+  const settingsTab = useApp((s) => s.settingsTab)
+  useEffect(() => {
+    if (!settingsTab) return
+    setTab(settingsTab)
+    useApp.getState().setSettingsTab(null)
+  }, [settingsTab])
   useEffect(() => localStorage.setItem(TAB_KEY, tab), [tab])
 
   useEffect(() => {

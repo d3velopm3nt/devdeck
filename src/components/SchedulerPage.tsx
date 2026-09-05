@@ -98,6 +98,24 @@ export function SchedulerPage() {
   )
   const [err, setErr] = useState('')
 
+  // The calendar asked for a new one-off at a moment. It knows the day you
+  // were looking at; only this page knows how to draw the form, so the wish
+  // travels through the store and is consumed here.
+  const newScheduleAt = useApp((s) => s.newScheduleAt)
+  useEffect(() => {
+    if (newScheduleAt == null) return
+    const d = new Date(newScheduleAt)
+    setEditing({
+      kind: 'reminder',
+      every: 'once',
+      at_ms: newScheduleAt,
+      at_min: d.getHours() * 60 + d.getMinutes(),
+      duration_min: 60,
+      catch_up: false,
+    })
+    useApp.getState().setNewScheduleAt(null)
+  }, [newScheduleAt])
+
   const load = () => void ipc.schedulesList().then(setList).catch((e) => setErr(String(e)))
   useEffect(load, [])
 

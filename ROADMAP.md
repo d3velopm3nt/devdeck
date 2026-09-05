@@ -284,15 +284,27 @@ and their counts, the deadlines ahead, today's reminders. Focus sessions are
 drawn for the first time — `focus_sessions` always had a start and an end, and
 nothing was reading them.
 
-**Still to do**, in the order the design board argues for: a reminder lead time
-and a goal link on a schedule (two columns); micro-habits with a target per
-week, and the free-slot offer that makes the day usable rather than readable;
-and persisting agent sessions, because they live in memory — the agents lane is
-honest about today and blank about yesterday. Deliberately cut: a "meetings"
-counter, which counted nothing, since there are no people, invitations or
-attendance behind it. Also still to do: typing your own routine into the day
-grid — personal store, never a repository; editing from the calendar rather
-than jumping to the page that owns the thing; and the bot whose space is you.
+**Step 2 is built** (5 September): `remind_min` on a schedule, so a thing can
+warn you ten minutes, an hour or a day before it starts — said once per
+occurrence, which `last_remind` is for, because the clock ticks every thirty
+seconds; and `feature` / `work_item`, so a schedule can say what it is for and
+the calendar can carry that through to the day and the event page. Both columns
+live in the database rather than the vault: the teammates here are bots and
+agents, not people cloning the repository, and a reminder to look at something
+is not part of the project's record of that thing.
+
+**Still to do.** Micro-habits and the free-slot offer — now its own entry
+below, because it is a feature rather than a column. Persisting agent sessions,
+which has moved to the bots and agents work, since the calendar is only one of
+the places that suffers from runs living in memory. Typing your own routine
+into the day grid — personal store, never a repository. Editing from the
+calendar rather than jumping to the page that owns the thing. And the bot whose
+space is you. Deliberately cut: a "meetings" counter, which counted nothing,
+since there are no people, invitations or attendance behind it.
+
+**Known rough edge**: the goal link can dangle. Rename or delete a feature in
+the vault and the schedule still names the old slug; it shows a name that no
+longer resolves rather than saying the feature is gone.
 
 The rest of this entry is the original brainstorm, kept because the reasoning
 still applies to what is left.
@@ -335,6 +347,53 @@ it being one surface.
 time or the system's; and whether "add a calendar" ever means syncing a real
 one (Google, Outlook, ICS) rather than DevDeck keeping its own. The second
 changes the foundation, so it is a decision rather than a detail.
+
+### Micro-habits and the free slot — designed, not built · `design/calendar-day/`
+
+Step 3 of the calendar board, and the piece that makes the day view something
+you *use* rather than read. The canvas is at
+https://claude.ai/code/artifact/1999014a-7d04-4eff-9ac2-acb797ff5dde — the day
+artboard's habit strip, and the Habit tab on the "one sheet, five kinds"
+composer.
+
+**A habit is the one thing on that board that is not a time.** Everything else
+the calendar knows starts at a moment: a reminder, a routine, a focus session,
+a bot's wake. A habit has a name, a length, and a target for the week —
+"mobility flow, ten minutes, five times" — and no opinion about when. That is
+why it needs its own table rather than another `kind` on `schedules`, and why
+it cannot be half-built: a habit tracker with a fixed time is a routine, and a
+routine you keep missing is a to-do list that nags.
+
+**What it needs.**
+
+1. `habits` — name, minutes, target per week, an optional window (any gap /
+   mornings / evenings), enabled. Personal store: your habits are yours, so
+   SQLite, never the vault.
+2. `habit_ticks` — one row per time you did it, with the day it counted for.
+   Banked, not scheduled: the tick is the record, and the streak is derived
+   from it rather than stored.
+3. **The free-slot finder** — pure arithmetic over items the calendar already
+   returns. Find the gaps after now, take the largest, offer the smallest habit
+   that fits *and* is behind its target. No storage, no new source.
+4. The strip on the day view, the Habit tab in the composer, and the ticks row
+   on the week.
+
+**The rules the design commits to**, and they are the whole difference between
+this and a nagging app:
+
+- **Offered once.** The largest gap after now, one habit, one button. Offer
+  every gap and it is wallpaper by Wednesday.
+- **A missed habit fades, it does not go red.** Red is for something that
+  broke. Not walking today is not a failure of the machine.
+- **Protected time is not free time.** A routine can be marked protected, and
+  the finder never offers it — otherwise lunch is a slot.
+- **Nothing is scheduled behind your back.** Doing it is a click; the calendar
+  never books a habit for you, because a day that fills itself is a day you
+  stop trusting.
+
+**Why it is not built yet**: the two columns before it were one migration
+each, and this is a feature — two tables, a finder, three surfaces. It earns
+its place, but it earns it as a piece of work rather than as a field.
 
 ### Bots as teammates — every node is a conversation ✅ built · `design/node-thread/`
 

@@ -1,0 +1,180 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    .cap { font-size: 9.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+    .cell { border: 1px solid var(--line); border-radius: 6px; background: var(--panel); padding: 4px 5px;
+            display: flex; flex-direction: column; gap: 2px; overflow: hidden; min-height: 92px; box-sizing: border-box; }
+    .wknd { background: var(--app); }
+    .out { opacity: .45; }
+    .num { font-size: 11px; color: var(--muted); }
+    .n2 { font-size: 9px; color: var(--faint); margin-left: auto; }
+    .row { display: flex; align-items: center; gap: 5px; font-size: 9.5px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .row i { width: 5px; height: 5px; border-radius: 999px; flex: none; }
+    .row b { color: var(--faint); font-weight: 400; font-family: ui-monospace, Consolas, monospace; }
+    .due { font-size: 9.5px; border-radius: 4px; padding: 0 4px; border: 1px solid; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .late { border-color: rgb(248 113 113 / .4); background: rgb(248 113 113 / .07); color: var(--err); }
+    .soon { border-color: rgb(251 191 36 / .4); color: var(--warn); }
+    .more { font-size: 9.5px; color: var(--faint); }
+    .why { font-size: 10.5px; line-height: 1.55; color: var(--muted); }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --hover: {{c.hover}}; --line: {{c.line}}; --line2: {{c.line2}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; --ev: {{c.ev}}; --ag: {{c.ag}}; --rt: {{c.rt}}; --hb: {{c.hb}}; background: var(--app); width: 1240px; height: 780px; padding: 18px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px; overflow: hidden;">
+
+  <div style="display: flex; align-items: baseline; gap: 10px;">
+    <span style="font-size: 14px; font-weight: 600; color: var(--ink);">Month &mdash; what lands, not at what minute</span>
+    <span style="font-size: 11.5px; color: var(--muted);">Too dense for a clock, so it lists: the things with no duration first, then yours, then one line for the machine.</span>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px;">
+    <span class="cap">Mon</span><span class="cap">Tue</span><span class="cap">Wed</span><span class="cap">Thu</span>
+    <span class="cap">Fri</span><span class="cap">Sat</span><span class="cap">Sun</span>
+  </div>
+
+  <div style="flex: 1; display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: 1fr; gap: 5px; min-height: 0;">
+
+    <!-- week 1 -->
+    <div class="cell out"><div style="display: flex;"><span class="num">31</span><span class="n2">4</span></div>
+      <div class="row"><i style="background: var(--ev);"></i><b>09:00</b> Golf Practice</div>
+      <div class="row"><i style="background: var(--ag);"></i>3 agent runs</div>
+    </div>
+    <div class="cell"><div style="display: flex;"><span class="num">1</span><span class="n2">3</span></div>
+      <div class="row"><i style="background: var(--ag);"></i>3 agent runs</div>
+    </div>
+    <div class="cell"><div style="display: flex;"><span class="num">2</span><span class="n2">4</span></div>
+      <div class="due late">Collapse &lsquo;what happened&rsquo;</div>
+      <div class="row"><i style="background: var(--ag);"></i>3 agent runs</div>
+    </div>
+    <div class="cell"><div style="display: flex;"><span class="num">3</span><span class="n2">3</span></div>
+      <div class="row"><i style="background: var(--ag);"></i>3 agent runs</div>
+    </div>
+    <div class="cell"><div style="display: flex;"><span class="num">4</span><span class="n2">4</span></div>
+      <div class="row"><i style="background: var(--rt);"></i><b>09:30</b> Stand-up</div>
+      <div class="row"><i style="background: var(--ag);"></i>3 agent runs</div>
+    </div>
+    <div class="cell wknd" style="border-color: rgb(129 140 248 / .45);">
+      <div style="display: flex;"><span class="num" style="color: var(--accent); font-weight: 700;">5</span><span class="n2">3</span></div>
+      <div class="due soon">Add a splash screen</div>
+      <div class="row"><i style="background: var(--ev);"></i><b>14:00</b> Design review</div>
+      <div class="row"><i style="background: var(--ev);"></i><b>16:00</b> Ship v0.3.2</div>
+    </div>
+    <div class="cell wknd"><div style="display: flex;"><span class="num">6</span><span class="n2">1</span></div>
+      <div class="row"><i style="background: var(--rt);"></i><b>18:00</b> What did I learn</div>
+    </div>
+
+    <!-- week 2 -->
+    <div class="cell"><div style="display: flex;"><span class="num">7</span><span class="n2">4</span></div>
+      <div class="row"><i style="background: var(--ev);"></i><b>09:00</b> Golf Practice</div>
+      <div class="row"><i style="background: var(--ag);"></i>3 agent runs</div>
+    </div>
+    <div class="cell"><div style="display: flex;"><span class="num">8</span><span class="n2">3</span></div>
+      <div class="row"><i style="background: var(--ag);"></i>3 agent runs</div>
+    </div>
+    <div class="cell"><div style="display: flex;"><span class="num">9</span><span class="n2">5</span></div>
+      <div class="row"><i style="background: var(--hb);"></i><b>08:00</b> Mobility flow</div>
+      <div class="row"><i style="background: var(--ag);"></i>3 agent runs</div>
+      <div class="more">+1 more</div>
+    </div>
+    <div class="cell"><div style="display: flex;"><span class="num">10</span><span class="n2">3</span></div>
+      <div class="row"><i style="background: var(--ag);"></i>3 agent runs</div>
+    </div>
+    <div class="cell"><div style="display: flex;"><span class="num">11</span><span class="n2">3</span></div>
+      <div class="row"><i style="background: var(--ag);"></i>3 agent runs</div>
+    </div>
+    <div class="cell wknd"><div style="display: flex;"><span class="num">12</span></div></div>
+    <div class="cell wknd"><div style="display: flex;"><span class="num">13</span><span class="n2">2</span></div>
+      <div class="due soon">Read 4 papers</div>
+      <div class="row"><i style="background: var(--rt);"></i><b>18:00</b> What did I learn</div>
+    </div>
+
+    <!-- week 3 -->
+    <div class="cell"><div style="display: flex;"><span class="num">14</span><span class="n2">4</span></div>
+      <div class="row"><i style="background: var(--ev);"></i><b>09:00</b> Golf Practice</div>
+      <div class="row"><i style="background: var(--ag);"></i>3 agent runs</div>
+    </div>
+    <div class="cell"><div style="display: flex;"><span class="num">15</span><span class="n2">3</span></div>
+      <div class="row"><i style="background: var(--ag);"></i>3 agent runs</div>
+    </div>
+    <div class="cell"><div style="display: flex;"><span class="num">16</span><span class="n2">3</span></div>
+      <div class="row"><i style="background: var(--ag);"></i>3 agent runs</div>
+    </div>
+    <div class="cell"><div style="display: flex;"><span class="num">17</span><span class="n2">4</span></div>
+      <div class="row" style="color: var(--warn);"><i style="background: var(--warn);"></i><b style="color: var(--warn);">10:00</b> Release call</div>
+      <div class="row"><i style="background: var(--ag);"></i>3 agent runs</div>
+    </div>
+    <div class="cell"><div style="display: flex;"><span class="num">18</span><span class="n2">3</span></div>
+      <div class="row"><i style="background: var(--ag);"></i>3 agent runs</div>
+    </div>
+    <div class="cell wknd"><div style="display: flex;"><span class="num">19</span></div></div>
+    <div class="cell wknd"><div style="display: flex;"><span class="num">20</span><span class="n2">1</span></div>
+      <div class="row"><i style="background: var(--rt);"></i><b>18:00</b> What did I learn</div>
+    </div>
+
+    <!-- week 4 -->
+    <div class="cell"><div style="display: flex;"><span class="num">21</span><span class="n2">4</span></div>
+      <div class="row"><i style="background: var(--ev);"></i><b>09:00</b> Golf Practice</div>
+      <div class="row"><i style="background: var(--ag);"></i>3 agent runs</div>
+    </div>
+    <div class="cell"><div style="display: flex;"><span class="num">22</span><span class="n2">3</span></div>
+      <div class="row"><i style="background: var(--ag);"></i>3 agent runs</div>
+    </div>
+    <div class="cell"><div style="display: flex;"><span class="num">23</span><span class="n2">3</span></div>
+      <div class="row"><i style="background: var(--ag);"></i>3 agent runs</div>
+    </div>
+    <div class="cell"><div style="display: flex;"><span class="num">24</span><span class="n2">3</span></div>
+      <div class="row"><i style="background: var(--ag);"></i>3 agent runs</div>
+    </div>
+    <div class="cell"><div style="display: flex;"><span class="num">25</span><span class="n2">3</span></div>
+      <div class="row"><i style="background: var(--ag);"></i>3 agent runs</div>
+    </div>
+    <div class="cell wknd"><div style="display: flex;"><span class="num">26</span></div></div>
+    <div class="cell wknd"><div style="display: flex;"><span class="num">27</span><span class="n2">2</span></div>
+      <div class="due soon">Event-triggered routines</div>
+      <div class="row"><i style="background: var(--rt);"></i><b>18:00</b> What did I learn</div>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 16px; border-top: 1px solid var(--line); padding-top: 10px;">
+    <div style="flex: 1;">
+      <div class="cap">The machine is counted, not listed</div>
+      <div class="why" style="margin-top: 4px;">Three bots waking at eight every weekday is three identical lines a day and sixty a month. It buried the two things on the month that were about <i>you</i>. One green line says the same and gives the room back.</div>
+    </div>
+    <div style="flex: 1;">
+      <div class="cap">A deadline is first, whatever hour it claims</div>
+      <div class="why" style="margin-top: 4px;">On a month the question is what lands this week, never at what minute. Overdue is red, coming is amber, and both sit above everything else in the cell.</div>
+    </div>
+    <div style="flex: 1;">
+      <div class="cap">A day is a door</div>
+      <div class="why" style="margin-top: 4px;">The number, and &ldquo;+n more&rdquo;, open that day. Zooming in on what you just pointed at is the one navigation a month owes you &mdash; and it is where the times live.</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', panel: '#11141c', raise: '#151923', hover: '#232b3b', line: '#1e293b',
+          line2: '#334155', ink: '#e2e8f0', body: '#cbd5e1', dim: '#94a3b8', muted: '#64748b',
+          faint: '#475569', accent: '#818cf8', ok: '#4ade80', warn: '#fbbf24', err: '#f87171',
+          ev: '#818cf8', ag: '#4ade80', rt: '#64748b', hb: '#22d3ee' }
+      : { app: '#e9ebf0', panel: '#fdfdfe', raise: '#f0f2f6', hover: '#e7eaf1', line: '#d9dee7',
+          line2: '#c3cbd8', ink: '#16181d', body: '#333a45', dim: '#5a6472', muted: '#7d8794',
+          faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d', warn: '#b45309', err: '#dc2626',
+          ev: '#4f46e5', ag: '#15803d', rt: '#7d8794', hb: '#0e7490' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

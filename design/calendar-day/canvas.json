@@ -1,10 +1,53 @@
 {
   "artboards": [
-    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 1440, "h": 880, "title": "Calendar · Day" },
-    { "file": "Compose.dc.html", "x": 1560, "y": 0, "w": 1400, "h": 820, "title": "New · five kinds" },
-    { "file": "Week.dc.html", "x": 0, "y": 1010, "w": 1180, "h": 640, "title": "Calendar · Week" },
-    { "file": "Blocks.dc.html", "x": 1300, "y": 1010, "w": 1120, "h": 700, "title": "The block vocabulary" },
-    { "file": "Gaps.dc.html", "x": 0, "y": 1840, "w": 1240, "h": 860, "title": "What is behind it" }
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 880,
+      "title": "Calendar · Day"
+    },
+    {
+      "file": "Compose.dc.html",
+      "x": 1560,
+      "y": 0,
+      "w": 1400,
+      "h": 820,
+      "title": "New · five kinds"
+    },
+    {
+      "file": "Week.dc.html",
+      "x": 0,
+      "y": 1010,
+      "w": 1180,
+      "h": 640,
+      "title": "Calendar · Week"
+    },
+    {
+      "file": "Blocks.dc.html",
+      "x": 1300,
+      "y": 1010,
+      "w": 1120,
+      "h": 700,
+      "title": "The block vocabulary"
+    },
+    {
+      "file": "Gaps.dc.html",
+      "x": 0,
+      "y": 1840,
+      "w": 1240,
+      "h": 860,
+      "title": "What is behind it"
+    },
+    {
+      "file": "Month.dc.html",
+      "x": 1300,
+      "y": 1840,
+      "w": 1240,
+      "h": 780,
+      "title": "Calendar · Month"
+    }
   ],
   "annotations": [
     {
@@ -33,15 +76,17 @@
       "x": 0,
       "y": 1700,
       "w": 520,
-      "text": "Week is the same day, thinner. Two lanes will not fit seven times, so agent time collapses into a gutter down each column — green for a run, red where one failed.\n\nEverything after now is hollow and dashed. The future is intent, not history, and should never be drawn as though it happened."
+      "text": "Week is the same day, thinner. Two lanes will not fit seven times, so agent time collapses into a gutter down each column — green for a run, red where one failed.\n\nEverything after now is hollow and dashed. The future is intent, not history, and should never be drawn as though it happened.\n\nBuilt 5 September, with one change from this board: the habit ticks are not there yet. Habits have no table (step 3), and a row of empty ticks is a promise, not a feature."
     },
     {
       "id": "note-gaps",
       "x": 1300,
-      "y": 1840,
+      "y": 2700,
       "w": 520,
       "text": "Read this board before agreeing to the picture.\n\nStep 1 is a redraw — no schema change, no new command, today's data drawn honestly.\n\nTwo entries are real work: micro-habits need their own table, and agent working time is only true for today until sessions are written down. The \"1 meeting\" card should be cut: there are no people, no invitations and no attendance behind it."
     }
   ],
-  "launch": { "view": "canvas" }
+  "launch": {
+    "view": "canvas"
+  }
 }

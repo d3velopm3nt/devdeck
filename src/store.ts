@@ -94,6 +94,9 @@ export interface AppState {
   recents: Recent[]
   /** Git branch info per project node id (only repos appear). */
   gitByNode: Record<number, GitInfo>
+  /** Uncommitted paths per project node. Absent means not asked yet, which
+   *  is not the same as zero — only a project we counted appears here. */
+  changesByNode: Record<number, number>
   /** Background auto-fetch of git status (learns what's to pull). */
   gitMonitorEnabled: boolean
   /** Minutes between background fetches when monitoring is on. */
@@ -157,6 +160,8 @@ export interface AppState {
   refreshRecents: () => Promise<void>
   /** Resolve the current git branch for every project node into `gitByNode`. */
   refreshGit: () => Promise<void>
+  /** Count uncommitted paths for every project node into `changesByNode`. */
+  refreshChanges: () => Promise<void>
   /** Fetch remote-tracking refs for the active workspace's repos, then update
    *  ahead/behind. This is the networked monitoring pass. */
   fetchGitStatus: () => Promise<void>
@@ -460,6 +465,36 @@ const errText = (e: unknown) => (e instanceof Error ? e.message : String(e))
 // keeps saying, honestly, that the load has not succeeded yet.
 const TREE_RETRY_MS = [300, 900, 2500]
 let treeRetryTimer: number | undefined
+/// Reject if a call has not answered in `ms`.
+///
+/// A rejected promise reaches the retry ladder; a promise that never settles
+/// does not. The tree hung on "Loading your workspaces…" forever whenever the
+/// scan's *reply* went missing rather than the scan failing — Tauri drops
+/// in-flight callbacks when the IPC transport switches under it, which is a
+/// thing that happens on a reload. Nothing on screen could tell that apart
+/// from a scan still running, because there is nothing to tell it apart with.
+///
+/// Generous on purpose: a first scan of a large vault is slow, and turning a
+/// slow answer into an error would be its own kind of lying.
+function within<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = window.setTimeout(
+      () => reject(new Error(`${what} did not answer within ${Math.round(ms / 1000)}s.`)),
+      ms,
+    )
+    p.then(
+      (v) => {
+        window.clearTimeout(t)
+        resolve(v)
+      },
+      (e) => {
+        window.clearTimeout(t)
+        reject(e)
+      },
+    )
+  })
+}
+
 let treeRetries = 0
 const scheduleTreeRetry = () => {
   const delay = TREE_RETRY_MS[treeRetries]
@@ -482,6 +517,7 @@ export const useApp = create<AppState>((set, get) => ({
   logs: [],
   recents: [],
   gitByNode: {},
+  changesByNode: {},
   gitMonitorEnabled: true,
   gitMonitorIntervalMin: 5,
   treeError: null,
@@ -538,7 +574,7 @@ export const useApp = create<AppState>((set, get) => ({
       // The folders are the truth; SQLite is the index they are read into.
       // A scan is what refreshes the tree, so a folder made outside the app
       // shows up on the next read rather than never.
-      const nodes = await ipc.vaultScan()
+      const nodes = await within(ipc.vaultScan(), 30_000, 'Reading the workspace tree')
       const activeWorkspaceId = resolveActiveWs(nodes, get().activeWorkspaceId)
       persistActiveWs(activeWorkspaceId)
       treeRetries = 0
@@ -577,6 +613,31 @@ export const useApp = create<AppState>((set, get) => ({
     const gitByNode: Record<number, GitInfo> = {}
     for (const [id, info] of entries) if (info?.is_repo) gitByNode[id] = info
     set({ gitByNode })
+    void get().refreshChanges()
+  },
+
+  refreshChanges: async () => {
+    const { nodes, gitByNode } = get()
+    // Only repositories, and only ones we already know are repositories:
+    // `git status` on a folder that is not one is a process spawned to be
+    // told nothing, once per folder, on every tree refresh.
+    const projects = nodes.filter((n) => n.kind === 'project' && gitByNode[n.id]?.is_repo)
+    const entries = await Promise.all(
+      projects.map(async (p) => {
+        const dir = resolveDir(nodes, p)
+        if (!dir) return [p.id, null] as const
+        try {
+          return [p.id, (await ipc.gitChanges(dir)).length] as const
+        } catch {
+          // A count we could not take is left out rather than shown as zero:
+          // "nothing to commit" is a claim, and we would be guessing at it.
+          return [p.id, null] as const
+        }
+      }),
+    )
+    const changesByNode: Record<number, number> = {}
+    for (const [id, n] of entries) if (n != null) changesByNode[id] = n
+    set({ changesByNode })
   },
   fetchGitStatus: async () => {
     const { nodes, activeWorkspaceId } = get()

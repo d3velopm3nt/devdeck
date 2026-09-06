@@ -25,7 +25,7 @@ import { findNode, resolveDir } from '../lib/tree'
 import { SPACE_TAGS, labelColor, nodeColor } from '../lib/spaces'
 import { loadExampleWorkspace } from '../lib/example'
 import { PopMenu, type MenuItem } from './PopMenu'
-import { CAPTURE_ADD, CAPTURE_EXPAND, CAPTURE_FILE_ROOT, CAPTURE_VAULT } from '../lib/devCapture'
+import { CAPTURE_ADD, CAPTURE_EXPAND, CAPTURE_FILE_ROOT, CAPTURE_GIT, CAPTURE_META, CAPTURE_VAULT } from '../lib/devCapture'
 import { BotCreate } from './bot/BotCreate'
 import { AddToWorkspace } from './AddToWorkspace'
 import { GitHubImportModal } from './GitHubImportModal'
@@ -111,7 +111,7 @@ function FetchOnce({ load }: { load: () => void }) {
 
 export function Explorer() {
   const {
-    nodes, commands, services, profiles, svcStates, gitByNode,
+    nodes, commands, services, profiles, svcStates, gitByNode, changesByNode,
     selectedNodeId, setSelectedNode, setRailView,
     activeWorkspaceId, activeWorkspace, setActiveWorkspace,
     activeSolutionId, setActiveSolution, createSolution, labels, touchRecent,
@@ -204,9 +204,31 @@ export function Explorer() {
   const [ghOpen, setGhOpen] = useState(false)
   /// Which workspace the Add sheet is pointed at, or null when it is shut.
   const [addTo, setAddTo] = useState<number | null>(null)
+  /// Which nodes have their "Project" group open. Nothing is in here to
+  /// begin with: the group exists so that expanding a project shows you
+  /// its files, and it would not be doing its job if it opened itself.
+  const [openMeta, setOpenMeta] = useState<Set<number>>(
+    // Screenshot harness only; empty in every shipped build.
+    () => new Set(CAPTURE_META.split(',').map(Number).filter(Boolean)),
+  )
+  /// A git refusal that arrives synchronously, per node — "no remote to push
+  /// to" and its kin. Everything a running git command says goes to Logs.
+  const [gitErr, setGitErr] = useState<Record<number, string>>({})
+  const toggleMeta = (id: number) =>
+    setOpenMeta((prev) => {
+      const next = new Set(prev)
+      if (!next.delete(id)) next.add(id)
+      return next
+    })
   // Screenshot harness: a sheet nobody can click is a sheet nobody can check.
   useEffect(() => {
     if (CAPTURE_ADD && activeWorkspaceId != null) setAddTo(activeWorkspaceId)
+    if (CAPTURE_GIT) {
+      // Deferred: the dock has no api until it has mounted, and openAiwDoc
+      // silently does nothing before then.
+      const n = findNode(nodes, Number(CAPTURE_GIT))
+      if (n) window.setTimeout(() => openAiwDoc('git', String(n.id), n.name), 1500)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWorkspaceId])
   const [newBotFor, setNewBotFor] = useState<number | null>(null)
@@ -351,6 +373,23 @@ export function Explorer() {
   const viewService = (svc: ServiceDef) => {
     useApp.getState().showBottom('logs')
     focusServiceLogs(svc.name)
+  }
+
+  // Push a project's branch. Same shape as the pull below: fire and let the
+  // Logs bus and `git:done` tell the story, because a push can take a while
+  // and a button that waits for it looks broken.
+  const pushProject = async (node: TreeNode) => {
+    const dir = resolveDir(nodes, node)
+    if (!dir) return
+    try {
+      await ipc.gitPush(dir)
+      setGitErr((prev) => ({ ...prev, [node.id]: '' }))
+    } catch (e) {
+      // A refusal here is synchronous and specific ("no remote to push to"),
+      // so it belongs on screen. Everything the push itself has to say goes
+      // to the Logs bus, which is where a long-running command belongs.
+      setGitErr((prev) => ({ ...prev, [node.id]: String(e) }))
+    }
   }
 
   // Fast-forward pull for a project. Streams to Logs; git:done refreshes counts.
@@ -1087,6 +1126,113 @@ export function Explorer() {
     return hit
   }, [q, nodes, commands, services, profiles])
 
+  /// One row standing in for everything under a node that is not a file.
+  ///
+  /// A project used to expand into eight kinds of thing at once — running
+  /// agents, approvals, child folders, features, a Repo/Vault switch, the
+  /// files, then Commands, Services and Profiles. Files are what a tree is
+  /// for, so they stay where they are and the other five move in here,
+  /// closed. Nothing was deleted; it is one click further away.
+  ///
+  /// Closed does not mean silent. The row carries a count of what is inside
+  /// and, when something is waiting on a person, an amber badge — because
+  /// "an agent needs you" is exactly the thing that must not become invisible
+  /// by being tidied up.
+  const renderProjectGroup = (
+    node: TreeNode,
+    depth: number,
+    own: {
+      commands: CommandDef[]
+      services: ServiceDef[]
+      profiles: ProfileDef[]
+      features: number
+      running: number
+      waiting: number
+    },
+  ): ReactNode => {
+    const counts = {
+      commands: own.commands.length,
+      services: own.services.length,
+      profiles: own.profiles.length,
+      features: own.features,
+      running: own.running,
+      waiting: own.waiting,
+    }
+    const total =
+      counts.commands + counts.services + counts.profiles + counts.features + counts.running
+    if (total === 0 && counts.waiting === 0) return null
+
+    const open = openMeta.has(node.id)
+    // Said in words, in the order a person would ask: what needs me, what is
+    // running, then what merely exists.
+    const parts: string[] = []
+    if (counts.running > 0) parts.push(`${counts.running} running`)
+    if (counts.features > 0) parts.push(`${counts.features} feature${counts.features === 1 ? '' : 's'}`)
+    if (counts.commands > 0) parts.push(`${counts.commands} command${counts.commands === 1 ? '' : 's'}`)
+    if (counts.services > 0) parts.push(`${counts.services} service${counts.services === 1 ? '' : 's'}`)
+    if (counts.profiles > 0) parts.push(`${counts.profiles} profile${counts.profiles === 1 ? '' : 's'}`)
+
+    return (
+      <div key={`${node.id}-meta`}>
+        <div
+          className="group flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-1 text-[12.5px] text-dim select-none hover:bg-hover hover:text-body"
+          style={{ paddingLeft: `${depth * 14 + 6}px` }}
+          title={parts.join(' · ') || 'Nothing yet'}
+          onClick={() => toggleMeta(node.id)}
+        >
+          <span className="flex w-5 shrink-0 items-center justify-center">
+            <Icon name={open ? 'chevron-down' : 'chevron-right'} size={15} />
+          </span>
+          <span className="flex w-5 shrink-0 items-center justify-center text-faint">
+            <Icon name="settings" size={13} />
+          </span>
+          <span className="flex-1 truncate">Project</span>
+          {counts.waiting > 0 && (
+            <span
+              className="shrink-0 rounded bg-amber-500/20 px-1.5 text-[10px] font-semibold text-warn"
+              title={`${counts.waiting} waiting for you`}
+            >
+              {counts.waiting} waiting
+            </span>
+          )}
+          {!open && parts.length > 0 && (
+            <span className="shrink-0 pr-1 text-[10.5px] tabular-nums text-faint">{total}</span>
+          )}
+        </div>
+        {open && (
+          <>
+            {renderLive(node, depth + 1)}
+            {renderFeatures(node, depth + 1)}
+            {counts.commands > 0 &&
+              renderCategory(
+                node,
+                'commands',
+                counts.commands,
+                depth + 1,
+                own.commands.map((c) => renderCommand(c, depth + 2)),
+              )}
+            {counts.services > 0 &&
+              renderCategory(
+                node,
+                'services',
+                counts.services,
+                depth + 1,
+                own.services.map((sv) => renderService(sv, depth + 2)),
+              )}
+            {counts.profiles > 0 &&
+              renderCategory(
+                node,
+                'profiles',
+                counts.profiles,
+                depth + 1,
+                own.profiles.map((pr) => renderProfile(pr, depth + 2)),
+              )}
+          </>
+        )}
+      </div>
+    )
+  }
+
   const renderNode = (node: TreeNode, depth: number) => {
     if (visible && !visible.has(node.id)) return null
     const children = nodes.filter((n) => n.parent_id === node.id)
@@ -1098,8 +1244,16 @@ export function Explorer() {
     const showCommands = nodeCommands.length > 0
     const showServices = nodeServices.length > 0
     const showProfiles = nodeProfiles.length > 0
+    // A project always has something inside it: the folder it points at. Left
+    // out of this, a repository with no configured commands drew no chevron at
+    // all, so the one thing it definitely contains — its files — looked like
+    // nothing.
     const hasKids =
-      children.length > 0 || showCommands || showServices || showProfiles
+      node.kind === 'project' ||
+      children.length > 0 ||
+      showCommands ||
+      showServices ||
+      showProfiles
     const isOpen = visible ? true : expanded.has(node.id)
     const selected = selectedNodeId === node.id
     const renaming = renamingId === node.id
@@ -1214,13 +1368,37 @@ export function Explorer() {
                   </button>
                 )}
                 {g.ahead > 0 && (
-                  <span
-                    className="flex items-center gap-0.5"
-                    title={`${g.ahead} commit${g.ahead === 1 ? '' : 's'} to push`}
+                  <button
+                    className="flex items-center gap-0.5 rounded px-0.5 hover:bg-hover hover:text-ink"
+                    title={`${g.ahead} commit${g.ahead === 1 ? '' : 's'} to push — click to push`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void pushProject(node)
+                    }}
                   >
                     <Icon name="arrow-up" size={9} />
                     {g.ahead}
-                  </span>
+                  </button>
+                )}
+                {/* Uncommitted work, next to the branch it is on. Only ever
+                    drawn from a count we actually took — a project missing
+                    from `changesByNode` is one we could not ask, and drawing
+                    a calm zero for it would be a lie. */}
+                {(changesByNode[node.id] ?? 0) > 0 && (
+                  <button
+                    className="flex items-center gap-0.5 rounded bg-indigo-500/15 px-1 text-indigo-300 hover:bg-indigo-500/30"
+                    title={`${changesByNode[node.id]} uncommitted change${
+                      changesByNode[node.id] === 1 ? '' : 's'
+                    } — click to review and commit`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSelectedNode(node.id)
+                      openAiwDoc('git', String(node.id), node.name)
+                    }}
+                  >
+                    <Icon name="commit" size={9} />
+                    {changesByNode[node.id]}
+                  </button>
                 )}
               </span>
             )
@@ -1252,41 +1430,49 @@ export function Explorer() {
             <Icon name="more" size={15} />
           </button>
         </div>
+        {/* A git refusal sits under the row that caused it, open or not —
+            "no remote to push to" answers a click that would otherwise look
+            like it did nothing at all. */}
+        {gitErr[node.id] && (
+          <div
+            className="flex items-start gap-1.5 py-0.5 pr-2 text-[11px] leading-4 text-err"
+            style={{ paddingLeft: `${depth * 14 + 32}px` }}
+          >
+            <Icon name="alert" size={11} className="mt-px shrink-0" />
+            <span className="min-w-0 flex-1">{gitErr[node.id]}</span>
+            <button
+              className="shrink-0 text-faint hover:text-ink"
+              title="Dismiss"
+              onClick={(e) => {
+                e.stopPropagation()
+                setGitErr((prev) => ({ ...prev, [node.id]: '' }))
+              }}
+            >
+              <Icon name="close" size={11} />
+            </button>
+          </div>
+        )}
         {isOpen && (
           <>
-            {node.kind === 'project' && renderLive(node, depth + 1)}
             {children.map((c) => renderNode(c, depth + 1))}
-            {node.kind === 'project' && renderFeatures(node, depth + 1)}
             {node.kind === 'project' && renderRootSwitch(node, depth + 1)}
+            {renderProjectGroup(node, depth + 1, {
+              commands: nodeCommands,
+              services: nodeServices,
+              profiles: nodeProfiles,
+              features: aiwProjectId === String(node.id) ? aiwFeatures.length : 0,
+              running: aiwSessions.filter(
+                (x) =>
+                  x.project_id === String(node.id) &&
+                  (x.status === 'working' || x.status === 'planning'),
+              ).length,
+              waiting: aiwApprovals.filter((r) => r.project_id === String(node.id)).length,
+            })}
             {node.kind === 'project' && renderFiles(node, '', depth + 1)}
             {node.kind === 'project' &&
               !files[dirKey(node.id, '')] &&
               !fileErr[dirKey(node.id, '')] && (
                 <FetchOnce load={() => loadDir(node.id, '')} />
-              )}
-            {showCommands &&
-              renderCategory(
-                node,
-                'commands',
-                nodeCommands.length,
-                depth + 1,
-                nodeCommands.map((c) => renderCommand(c, depth + 2)),
-              )}
-            {showServices &&
-              renderCategory(
-                node,
-                'services',
-                nodeServices.length,
-                depth + 1,
-                nodeServices.map((s) => renderService(s, depth + 2)),
-              )}
-            {showProfiles &&
-              renderCategory(
-                node,
-                'profiles',
-                nodeProfiles.length,
-                depth + 1,
-                nodeProfiles.map((p) => renderProfile(p, depth + 2)),
               )}
           </>
         )}

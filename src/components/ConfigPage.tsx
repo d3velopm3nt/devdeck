@@ -9,6 +9,7 @@ import { useApp } from '../store'
 import { loadExampleWorkspace } from '../lib/example'
 import { Icon } from '../lib/icons'
 import { SchedulerPage } from './SchedulerPage'
+import { GitHubToken } from './GitHubToken'
 import { CAPTURE_SETTINGS_TAB } from '../lib/devCapture'
 
 /** A labelled checkbox row, the shape the Git section already uses. */
@@ -455,6 +456,11 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
               <h2 className="text-[16px] font-semibold text-ink">Development</h2>
               <p className="text-[12px] text-muted">Repositories and the shells DevDeck can run.</p>
             </div>
+        {/* First, because it is the thing that makes the rest of this tab
+            work: a private repo cannot be fetched, pulled or pushed without
+            it. */}
+        <GitHubToken />
+
         <section>
           <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
             Git monitoring

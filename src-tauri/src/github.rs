@@ -412,6 +412,173 @@ fn on_path(binary: &str) -> bool {
     cmd.status().map(|s| s.success()).unwrap_or(false)
 }
 
+// ---------------------------------------------------------------------------
+// The other way in: a token pasted by hand
+// ---------------------------------------------------------------------------
+//
+// The device flow needs a registered OAuth App, and this build has none
+// (`CLIENT_ID` is empty). Until it does, a Personal Access Token typed into
+// Settings is the whole of GitHub authentication here, so it is a real path
+// and not a hidden fallback: same credential target, same `gh` hand-off, same
+// promise that the frontend never learns the token back.
+//
+// The one thing it adds is SCOPES. A PAT is minted by a person ticking boxes,
+// and the box they forget is `repo` -- which fails at the first private clone,
+// a long way from the screen where the mistake was made. GitHub returns the
+// granted scopes in a header on any authenticated request, so we read them at
+// paste time and say what is missing while the user is still looking.
+
+/// What a pasted token turned out to be.
+#[derive(serde::Serialize, Clone, Debug, Default)]
+pub struct TokenPasted {
+    /// The GitHub account the token belongs to.
+    pub login: String,
+    /// Whether `gh` took the same token. False means the chip is signed in
+    /// and the CLI is not -- said out loud rather than papered over.
+    pub gh: bool,
+    /// Scopes GitHub reports for this token. Empty for a fine-grained token,
+    /// which reports none at all -- see `scopes_known`.
+    pub scopes: Vec<String>,
+    /// Scopes we asked for that this token does not carry.
+    pub missing: Vec<String>,
+    /// Whether GitHub told us the scopes. A fine-grained PAT sends no
+    /// `X-OAuth-Scopes` header, so "no scopes" and "not said" look identical
+    /// and only one of them is worth warning about.
+    pub scopes_known: bool,
+}
+
+/// Store a token the user pasted, after proving it works.
+///
+/// Validated first, always: writing an unusable token would light up every
+/// signed-in surface in the app and fail at the first push. The token is
+/// trimmed because a copy from GitHub's UI often brings whitespace, and a
+/// leading space is an invisible reason for a 401.
+#[tauri::command(async)]
+pub async fn github_token_paste(token: String) -> Result<TokenPasted, String> {
+    tauri::async_runtime::spawn_blocking(move || paste_blocking(&token))
+        .await
+        .map_err(|e| format!("the sign-in task did not finish: {e}"))?
+}
+
+fn paste_blocking(token: &str) -> Result<TokenPasted, String> {
+    let token = token.trim();
+    if token.is_empty() {
+        return Err("Paste a token first.".into());
+    }
+    // Not a format check -- GitHub owns that, and prefixes change. This only
+    // catches the paste that obviously went wrong: a URL, a username, a
+    // whole page of text.
+    if token.contains(char::is_whitespace) {
+        return Err(
+            "That does not look like a token -- it has spaces in it. Copy just the token, \
+             which is one unbroken line."
+                .into(),
+        );
+    }
+
+    let (login, scopes, scopes_known) = whoami_with_scopes(token)?;
+
+    let missing = missing_scopes(SCOPES, &scopes);
+
+    creds::set(CRED_TARGET, &login, token)?;
+    let gh = hand_token_to_gh(token);
+
+    Ok(TokenPasted {
+        login,
+        gh,
+        scopes,
+        // A fine-grained token reports nothing, so we have nothing to say is
+        // missing. Guessing would warn every fine-grained token forever.
+        missing: if scopes_known { missing } else { Vec::new() },
+        scopes_known,
+    })
+}
+
+/// Which of the scopes we want this token does not carry.
+///
+/// `repo` implies its children (`repo:status`, `repo_deployment`), and `admin:org`
+/// implies `read:org` -- so a token minted with the broader box ticked is not
+/// missing the narrower one, and saying it is would send people back to GitHub
+/// to fix a token that already works.
+fn missing_scopes(want: &str, have: &[String]) -> Vec<String> {
+    fn covers(have: &str, need: &str) -> bool {
+        if have == need {
+            return true;
+        }
+        // `repo` is the parent of `repo:status`, `repo_deployment` and the rest.
+        if have == "repo" && (need.starts_with("repo:") || need.starts_with("repo_")) {
+            return true;
+        }
+        // `admin:x` outranks `write:x` outranks `read:x` -- and only that way.
+        match (have.split_once(':'), need.split_once(':')) {
+            (Some((hl, hr)), Some((nl, nr))) if hr == nr => matches!(
+                (hl, nl),
+                ("admin", "read") | ("admin", "write") | ("write", "read")
+            ),
+            _ => false,
+        }
+    }
+    want.split_whitespace()
+        .filter(|need| !have.iter().any(|h| covers(h, need)))
+        .map(str::to_string)
+        .collect()
+}
+
+/// `whoami`, plus the scopes GitHub reports for the token.
+///
+/// Separate from `whoami` rather than replacing it: the device flow does not
+/// need the scopes, because it asked for them itself and GitHub either
+/// granted them or refused the sign-in.
+fn whoami_with_scopes(token: &str) -> Result<(String, Vec<String>, bool), String> {
+    let res = http()?
+        .get("https://api.github.com/user")
+        .header("Accept", "application/vnd.github+json")
+        .header("Authorization", format!("Bearer {token}"))
+        .send()
+        .map_err(|e| format!("could not reach GitHub: {e}"))?;
+
+    let status = res.status();
+    // The header is absent for a fine-grained token and present-but-empty for
+    // a classic token with no scopes ticked. Those are different facts.
+    let header = res
+        .headers()
+        .get("x-oauth-scopes")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string);
+    let scopes_known = header.is_some();
+    let scopes: Vec<String> = header
+        .unwrap_or_default()
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    if !status.is_success() {
+        return Err(match status.as_u16() {
+            401 => "GitHub rejected that token. It may be expired, revoked, or copied \
+                    incompletely."
+                .to_string(),
+            403 => "GitHub refused the token (403). If it is an organisation token, SSO may \
+                    need authorising for that org."
+                .to_string(),
+            other => format!("GitHub would not accept the token ({other})"),
+        });
+    }
+
+    let json: serde_json::Value = res
+        .json()
+        .map_err(|e| format!("GitHub returned something unreadable: {e}"))?;
+    let login = json
+        .get("login")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+    if login.is_empty() {
+        return Err("GitHub answered without a login".into());
+    }
+    Ok((login, scopes, scopes_known))
+}
+
 /// Do we hold a token of our own? Never *what* it is.
 #[tauri::command]
 pub fn github_token_stored() -> bool {
@@ -477,4 +644,50 @@ pub fn user_from_stored_token() -> Option<(String, String, String)> {
         }
     };
     Some((login, name, s("avatar_url")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn have(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn a_token_with_everything_is_missing_nothing() {
+        assert!(missing_scopes(SCOPES, &have(&["repo", "read:org", "gist"])).is_empty());
+    }
+
+    #[test]
+    fn the_box_people_forget_is_named() {
+        // The failure this whole check exists for: a token minted without
+        // `repo` clones public repos happily and dies on the first private one.
+        assert_eq!(
+            missing_scopes(SCOPES, &have(&["read:org", "gist"])),
+            vec!["repo".to_string()]
+        );
+    }
+
+    #[test]
+    fn a_broader_scope_covers_the_narrower_one() {
+        // `admin:org` is strictly more than `read:org`. Sending someone back
+        // to GitHub to add `read:org` to a token that already administers the
+        // org would be a lie dressed as helpfulness.
+        assert!(missing_scopes("read:org", &have(&["admin:org"])).is_empty());
+        assert!(missing_scopes("read:org", &have(&["write:org"])).is_empty());
+    }
+
+    #[test]
+    fn a_narrower_scope_does_not_cover_the_broader_one() {
+        assert_eq!(
+            missing_scopes("admin:org", &have(&["read:org"])),
+            vec!["admin:org".to_string()]
+        );
+    }
+
+    #[test]
+    fn a_token_with_no_scopes_at_all_is_missing_all_of_them() {
+        assert_eq!(missing_scopes(SCOPES, &[]).len(), 3);
+    }
 }

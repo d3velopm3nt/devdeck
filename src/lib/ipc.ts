@@ -879,6 +879,21 @@ export const githubDevicePoll = (deviceCode: string, interval: number) =>
 export const githubTokenStored = () => invoke<boolean>('github_token_stored')
 export const githubSignOut = (alsoGh = true) => invoke<void>('github_sign_out', { alsoGh })
 
+/** What a hand-pasted token turned out to be. Never the token itself. */
+export interface TokenPasted {
+  login: string
+  /** Whether the `gh` CLI took the same token — false means git push is still logged out. */
+  gh: boolean
+  scopes: string[]
+  /** Scopes we want that this token lacks. Empty when GitHub did not say. */
+  missing: string[]
+  /** A fine-grained token reports no scopes at all; that is not the same as none. */
+  scopes_known: boolean
+}
+/** Store a personal access token, after proving GitHub accepts it. */
+export const githubTokenPaste = (token: string) =>
+  invoke<TokenPasted>('github_token_paste', { token })
+
 // ---- git ----
 export interface GitInfo {
   is_repo: boolean
@@ -894,6 +909,27 @@ export const gitInfo = (dir: string) => invoke<GitInfo>('git_info', { dir })
 export const gitFetch = (dir: string) => invoke<GitInfo>('git_fetch', { dir })
 /** Fast-forward pull, streaming to Logs; emits git:done when finished. */
 export const gitPull = (dir: string) => invoke<void>('git_pull', { dir })
+/** One path git has something to say about. */
+export interface GitChange {
+  path: string
+  /** Status letter for the staged column, ' ' when clean. */
+  index: string
+  /** Status letter for the working-tree column, ' ' when clean. */
+  work: string
+  from: string | null
+  untracked: boolean
+  conflict: boolean
+  /** One word for the status letters — decided in Rust, so there is one copy. */
+  label: string
+}
+/** Everything the working tree has to say, untracked files included. */
+export const gitChanges = (dir: string) => invoke<GitChange[]>('git_changes', { dir })
+/** Stage exactly these paths, commit them, and optionally push. Streams to Logs. */
+export const gitCommit = (dir: string, message: string, paths: string[], push: boolean) =>
+  invoke<void>('git_commit', { dir, message, paths, push })
+/** Push the current branch, setting an upstream if it has none. */
+export const gitPush = (dir: string) => invoke<void>('git_push', { dir })
+
 export function onGitDone(cb: (ok: boolean) => void): Promise<UnlistenFn> {
   return listen<boolean>('git:done', (e) => cb(e.payload))
 }

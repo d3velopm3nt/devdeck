@@ -31,4 +31,8 @@ export const CAPTURE_FILE_ROOT: string = ''
 export const CAPTURE_VAULT: string = ''
 /** Open the Add sheet on the active workspace. */
 export const CAPTURE_ADD: boolean = false
+/** Open the Git document for this node id on mount. */
+export const CAPTURE_GIT: string = ''
+/** Open the collapsed "Project" group for these node ids. */
+export const CAPTURE_META: string = ''
 export const CAPTURE_OPEN_FILE: string = ''

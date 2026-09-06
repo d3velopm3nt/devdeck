@@ -13,6 +13,7 @@ import { AgentEditor } from './AgentEditor'
 import { Skills } from './Skills'
 import { Chat } from './Chat'
 import { ProjectTag } from './ProjectTag'
+import { GitChanges } from './GitChanges'
 import { CAPTURE_FEATURE, CAPTURE_PAGE } from '../../lib/devCapture'
 import {
   aiw,
@@ -1628,10 +1629,21 @@ function GitList() {
 }
 
 export function Git() {
+  const a = useAiw()
+  // The working tree comes first. History is what already happened; the
+  // uncommitted work is the thing you came here to do something about.
+  const nodeId = a.projectId ? Number(a.projectId) : null
   return (
     <div className="flex h-full flex-col">
-      <PageHead title="Git" subtitle="Commits are the version layer for context — each one is a checkpoint agents can be measured against." />
+      <PageHead
+        title="Git"
+        subtitle="What has changed and is not committed yet, and the commits behind it — each one a checkpoint agents can be measured against."
+      />
       <div className="min-h-0 flex-1 overflow-auto p-5">
+        <GitChanges nodeId={Number.isFinite(nodeId) ? nodeId : null} />
+        <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
+          History
+        </h3>
         <GitList />
       </div>
     </div>

@@ -1376,20 +1376,19 @@ export function Explorer() {
         )}
         {isOpen && (
           <>
-            {/* The order this had before any of it was rearranged: what is
-                running, the folders, Features, then the files, and the
-                category folders under them. Files sit at the top because
-                that is what the tree is mostly used for, and moving them
-                down to make the sections easier to find traded the common
-                case for the rare one.
+            {/* Repo/Vault and the files come first: opening a project is
+                mostly about looking at what is in it, so nothing standing
+                between the project and its own file list earns its place.
+                Git joins the category folders underneath — it is a way in to
+                a page, like Commands and Services are, not something the
+                file list needs above it.
 
-                Git is the one addition — a single row, kept above the files
-                with Features, because it is what this project *is* rather
-                than something it contains. */}
+                The two rows that can still appear above are the ones that
+                are about right now: an agent working, and an approval
+                waiting on you. Neither is drawn unless it is true. */}
             {node.kind === 'project' && renderLive(node, depth + 1)}
             {children.map((c) => renderNode(c, depth + 1))}
             {node.kind === 'project' && renderFeatures(node, depth + 1)}
-            {node.kind === 'project' && renderGit(node, depth + 1)}
             {node.kind === 'project' && renderRootSwitch(node, depth + 1)}
             {node.kind === 'project' && renderFiles(node, '', depth + 1)}
             {node.kind === 'project' &&
@@ -1397,6 +1396,7 @@ export function Explorer() {
               !fileErr[dirKey(node.id, '')] && (
                 <FetchOnce load={() => loadDir(node.id, '')} />
               )}
+            {node.kind === 'project' && renderGit(node, depth + 1)}
             {showCommands &&
               renderCategory(
                 node,

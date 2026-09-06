@@ -120,14 +120,14 @@ pub struct Bot {
 // The file
 // ---------------------------------------------------------------------------
 
-fn parse_at(v: &str) -> i64 {
+pub fn parse_at(v: &str) -> i64 {
     let (h, m) = v.split_once(':').unwrap_or((v, "0"));
     let h: i64 = h.trim().parse().unwrap_or(7);
     let m: i64 = m.trim().parse().unwrap_or(0);
     (h.clamp(0, 23) * 60 + m.clamp(0, 59)).clamp(0, 1439)
 }
 
-fn fmt_at(at_min: i64) -> String {
+pub fn fmt_at(at_min: i64) -> String {
     format!("{:02}:{:02}", at_min / 60, at_min % 60)
 }
 

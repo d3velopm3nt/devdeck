@@ -29,6 +29,7 @@ mod github;
 mod inbox;
 mod legacy;
 mod machine;
+mod managers;
 mod monitor;
 mod pty;
 mod scan;
@@ -712,6 +713,32 @@ pub fn run() {
                 let h = app.handle().clone();
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_secs(4));
+                    // Managers move out of their folders. Once, ever, and it
+                    // does its file writing on this thread rather than on the
+                    // path the window is waiting on.
+                    {
+                        let moved = match h.try_state::<db::Db>() {
+                            Some(db) => match db.0.lock() {
+                                Ok(conn) => managers::migrate_from_bots(&conn),
+                                Err(_) => Vec::new(),
+                            },
+                            None => Vec::new(),
+                        };
+                        if !moved.is_empty() {
+                            activity::record(
+                                &h,
+                                "setup",
+                                format!("{} manager(s) moved out of their folders", moved.len()),
+                                format!(
+                                    "{} — now in .devdeck/team, and the features they managed say who owns them.",
+                                    moved.join(", ")
+                                ),
+                                true,
+                                None,
+                            );
+                        }
+                    }
+
                     // Failures that happened while nothing was telling you
                     // about them. Once, ever, before the first tick can add
                     // any of its own.

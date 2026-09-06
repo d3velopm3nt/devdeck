@@ -130,6 +130,12 @@ pub struct FeatureMeta {
     pub id: String,
     #[serde(default)]
     pub name: String,
+    /// The manager accountable for it, by handle. One field, so "one owner per
+    /// feature" enforces itself, and "who is accountable for this" is
+    /// answerable from the feature alone rather than from a roster that can
+    /// drift from it.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub owner: String,
     /// planned | in-progress | review | blocked | completed
     #[serde(default)]
     pub status: String,
@@ -532,6 +538,10 @@ impl Deck {
                 meta: FeatureMeta {
                     id: slug.clone(),
                     name: name.to_string(),
+                    // Unowned until a manager takes it: a feature that arrives
+                    // pre-assigned to whoever happened to create it is how
+                    // accountability becomes a side effect.
+                    owner: String::new(),
                     status: "planned".into(),
                     areas: areas.to_vec(),
                     goal: Some(goal.to_string()),
@@ -714,6 +724,7 @@ mod tests {
             meta: FeatureMeta {
                 id: "offline-sync".into(),
                 name: "Offline Synchronisation".into(),
+                owner: "marketing".into(),
                 status: "in-progress".into(),
                 areas: vec!["packages/sync".into(), "api/sync".into()],
                 goal: Some("Keep working with no connectivity.".into()),

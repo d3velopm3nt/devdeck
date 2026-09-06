@@ -1376,19 +1376,27 @@ export function Explorer() {
         )}
         {isOpen && (
           <>
-            {/* Everything this project *is*, before the files it contains.
-                These were briefly folded into one collapsed "Project" row.
-                That made the tree shorter and the app worse: a service you
-                cannot see is a service you cannot start, and the row that
-                hid them was one more thing to know about. They are back, and
-                they are above the file list rather than below it — under a
-                repository's files they sat past a screen of scrolling, which
-                is where they used to be and the reason they were easy to
-                lose. Each is still collapsible on its own. */}
+            {/* The order this had before any of it was rearranged: what is
+                running, the folders, Features, then the files, and the
+                category folders under them. Files sit at the top because
+                that is what the tree is mostly used for, and moving them
+                down to make the sections easier to find traded the common
+                case for the rare one.
+
+                Git is the one addition — a single row, kept above the files
+                with Features, because it is what this project *is* rather
+                than something it contains. */}
             {node.kind === 'project' && renderLive(node, depth + 1)}
             {children.map((c) => renderNode(c, depth + 1))}
             {node.kind === 'project' && renderFeatures(node, depth + 1)}
             {node.kind === 'project' && renderGit(node, depth + 1)}
+            {node.kind === 'project' && renderRootSwitch(node, depth + 1)}
+            {node.kind === 'project' && renderFiles(node, '', depth + 1)}
+            {node.kind === 'project' &&
+              !files[dirKey(node.id, '')] &&
+              !fileErr[dirKey(node.id, '')] && (
+                <FetchOnce load={() => loadDir(node.id, '')} />
+              )}
             {showCommands &&
               renderCategory(
                 node,
@@ -1412,13 +1420,6 @@ export function Explorer() {
                 nodeProfiles.length,
                 depth + 1,
                 nodeProfiles.map((pr) => renderProfile(pr, depth + 2)),
-              )}
-            {node.kind === 'project' && renderRootSwitch(node, depth + 1)}
-            {node.kind === 'project' && renderFiles(node, '', depth + 1)}
-            {node.kind === 'project' &&
-              !files[dirKey(node.id, '')] &&
-              !fileErr[dirKey(node.id, '')] && (
-                <FetchOnce load={() => loadDir(node.id, '')} />
               )}
           </>
         )}

@@ -25,7 +25,7 @@ import { findNode, resolveDir } from '../lib/tree'
 import { SPACE_TAGS, labelColor, nodeColor } from '../lib/spaces'
 import { loadExampleWorkspace } from '../lib/example'
 import { PopMenu, type MenuItem } from './PopMenu'
-import { CAPTURE_EXPAND, CAPTURE_FILE_ROOT } from '../lib/devCapture'
+import { CAPTURE_EXPAND, CAPTURE_FILE_ROOT, CAPTURE_VAULT } from '../lib/devCapture'
 import { BotCreate } from './bot/BotCreate'
 import { GitHubImportModal } from './GitHubImportModal'
 import { Icon } from '../lib/icons'
@@ -186,6 +186,19 @@ export function Explorer() {
   /// questions and the tree used to answer only the first, which made the
   /// vault invisible in an app built around keeping one.
   const [fileRoot, setFileRoot] = useState<Record<number, 'work' | 'vault'>>({})
+  /// The vault read from its own root, rather than through a node.
+  ///
+  /// The tree above is the *registered* vault: workspaces, projects, folders
+  /// that have a row. That is the right default and it hides two things —
+  /// anything in the vault nobody has registered, and `.devdeck/team`, which
+  /// belongs to no node by design now that a manager is not a folder. This is
+  /// the view for looking at what the app has actually written down.
+  const [wholeOpen, setWholeOpen] = useState(CAPTURE_VAULT !== '')
+  const [whole, setWhole] = useState<Record<string, ipc.FileRow[]>>({})
+  const [wholeErr, setWholeErr] = useState<Record<string, string>>({})
+  const [wholeDirs, setWholeDirs] = useState<Set<string>>(
+    new Set(CAPTURE_VAULT ? CAPTURE_VAULT.split(',') : []),
+  )
   const [wsMenu, setWsMenu] = useState<{ x: number; y: number } | null>(null)
   const [ghOpen, setGhOpen] = useState(false)
   const [newBotFor, setNewBotFor] = useState<number | null>(null)
@@ -718,6 +731,95 @@ export function Explorer() {
         loadDir(nodeId, rel)
       }
       return next
+    })
+  }
+
+  const loadWhole = (rel: string) => {
+    if (whole[rel] || wholeErr[rel]) return
+    void ipc
+      .vaultFiles(rel)
+      // Same rule as the node tree: "I could not read this" and "this is
+      // empty" must never render the same.
+      .then((rows) => setWhole((f) => ({ ...f, [rel]: rows })))
+      .catch((e) => setWholeErr((x) => ({ ...x, [rel]: String(e) })))
+  }
+
+  // Screenshot harness: open the section and the folders it names, since a
+  // collapsed tree photographs as a single grey line.
+  useEffect(() => {
+    if (!CAPTURE_VAULT) return
+    loadWhole('')
+    for (const rel of CAPTURE_VAULT.split(',')) loadWhole(rel)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const toggleWhole = (rel: string) => {
+    setWholeDirs((prev) => {
+      const next = new Set(prev)
+      if (next.has(rel)) next.delete(rel)
+      else {
+        next.add(rel)
+        loadWhole(rel)
+      }
+      return next
+    })
+  }
+
+  const renderWhole = (rel: string, depth: number): ReactNode => {
+    const rows = whole[rel]
+    const err = wholeErr[rel]
+    const pad = { paddingLeft: `${depth * 14 + 6}px` }
+    if (err) {
+      return (
+        <div key={`w-${rel}-err`} className="px-1.5 py-0.5 text-[11px] text-err" style={pad}>
+          <span className="pl-10">could not read this folder — {err}</span>
+        </div>
+      )
+    }
+    if (!rows) {
+      return (
+        <div key={`w-${rel}-load`} className="px-1.5 py-0.5 text-[11px] text-muted" style={pad}>
+          <span className="pl-10">reading the folder…</span>
+        </div>
+      )
+    }
+    if (rows.length === 0) {
+      return (
+        <div key={`w-${rel}-empty`} className="px-1.5 py-0.5 text-[11px] text-faint" style={pad}>
+          <span className="pl-10">nothing in this folder</span>
+        </div>
+      )
+    }
+    return rows.map((r) => {
+      const open = wholeDirs.has(r.rel)
+      // `.devdeck` and the team inside it are what this view exists to show,
+      // so they are marked rather than merely present.
+      const isDeck = r.name === '.devdeck'
+      return (
+        <div key={`w-${r.rel}`}>
+          <div
+            className="group flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 text-[12px] text-body select-none hover:bg-hover"
+            style={pad}
+            title={r.rel}
+            onClick={() => (r.dir ? toggleWhole(r.rel) : openFile(0, r.rel, 'whole'))}
+          >
+            <span className="flex w-5 shrink-0 items-center justify-center text-dim">
+              {r.dir && <Icon name={open ? 'chevron-down' : 'chevron-right'} size={13} />}
+            </span>
+            <span
+              className={`flex w-5 shrink-0 items-center justify-center ${
+                isDeck ? 'text-indigo-400' : 'text-faint'
+              }`}
+            >
+              <Icon name={r.dir ? 'folder' : 'note'} size={12} />
+            </span>
+            <span className={`min-w-0 flex-1 truncate ${isDeck ? 'text-indigo-400' : ''}`}>
+              {r.name}
+            </span>
+          </div>
+          {r.dir && open && renderWhole(r.rel, depth + 1)}
+        </div>
+      )
     })
   }
 
@@ -1307,6 +1409,28 @@ export function Explorer() {
         ) : (
           roots.map((n) => renderNode(n, 0))
         )}
+
+        {/* The vault itself, at the bottom because it is the thing you go
+            looking for rather than the thing you work in. */}
+        <div className="mt-2 border-t border-line pt-2">
+          <div
+            className="flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 text-[12px] select-none hover:bg-hover"
+            title="Everything under the vault root, including .devdeck"
+            onClick={() => {
+              setWholeOpen((o) => !o)
+              loadWhole('')
+            }}
+          >
+            <span className="flex w-5 shrink-0 items-center justify-center text-dim">
+              <Icon name={wholeOpen ? 'chevron-down' : 'chevron-right'} size={13} />
+            </span>
+            <span className="flex w-5 shrink-0 items-center justify-center text-faint">
+              <Icon name="package" size={12} />
+            </span>
+            <span className="min-w-0 flex-1 truncate text-dim">Whole vault</span>
+          </div>
+          {wholeOpen && renderWhole('', 1)}
+        </div>
       </div>
       {menu && (
         <PopMenu x={menu.x} y={menu.y} items={menuItems(menu.target)} onClose={() => setMenu(null)} />

@@ -302,6 +302,12 @@ export interface FileText {
   truncated: boolean
 }
 
+/** The vault from the top: the workspaces as folders, and `.devdeck/team`,
+ *  which belongs to no node and so cannot be reached through `nodeFiles`. */
+export const vaultFiles = (rel: string) => invoke<FileRow[]>('vault_files', { rel })
+/** One file anywhere in the vault, by path from its root. */
+export const vaultFileText = (rel: string) => invoke<FileText>('vault_file_text', { rel })
+
 export const fileText = (nodeId: number, rel: string, root: 'work' | 'vault' = 'work') =>
   invoke<FileText>('file_text', { nodeId, rel, root })
 

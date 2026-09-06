@@ -180,6 +180,88 @@ pub fn node_files(
     Ok(dirs)
 }
 
+/// The vault itself, from the top.
+///
+/// `node_files` answers "what is in this node", which cannot see two things
+/// that matter: the workspaces as folders on disk, and `.devdeck/team` at the
+/// root, which belongs to no node by design. Browsing the vault whole is the
+/// only way to look at what the app has actually written down.
+///
+/// Hidden folders are *not* skipped here. `.devdeck` is the point of the
+/// vault, and hiding it in the one view meant for seeing everything would be
+/// the same mistake as a file manager that hides the folder you came to find.
+#[tauri::command]
+pub fn vault_files(db: tauri::State<Db>, rel: String) -> Result<Vec<FileRow>, String> {
+    let root = {
+        let conn = db.0.lock().unwrap();
+        let raw = crate::db::setting_get_conn(&conn, "vault_root")?
+            .filter(|s| !s.trim().is_empty())
+            .ok_or("No vault folder has been chosen yet.")?;
+        std::path::PathBuf::from(raw)
+    };
+    // Same refusal as everywhere else: a path that climbs out is not a listing.
+    if rel.contains("..") {
+        return Err("that path leaves the vault".into());
+    }
+    let here = if rel.trim().is_empty() {
+        root.clone()
+    } else {
+        root.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR))
+    };
+    if !here.is_dir() {
+        return Err(format!("{} is not a folder", here.display()));
+    }
+
+    let mut dirs: Vec<FileRow> = Vec::new();
+    let mut files: Vec<FileRow> = Vec::new();
+    for e in std::fs::read_dir(&here).map_err(|e| e.to_string())?.flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        // `.git` stays out: it is thousands of objects and none of them are
+        // anything you came here to read.
+        if name == ".git" || name == "node_modules" {
+            continue;
+        }
+        let is_dir = e.path().is_dir();
+        let child = if rel.trim().is_empty() {
+            name.clone()
+        } else {
+            format!("{}/{name}", rel.trim_matches('/'))
+        };
+        let row = FileRow {
+            item: None,
+            name,
+            rel: child,
+            dir: is_dir,
+        };
+        if is_dir {
+            dirs.push(row)
+        } else {
+            files.push(row)
+        }
+    }
+    let by_name = |a: &FileRow, b: &FileRow| a.name.to_lowercase().cmp(&b.name.to_lowercase());
+    dirs.sort_by(by_name);
+    files.sort_by(by_name);
+    dirs.extend(files);
+    Ok(dirs)
+}
+
+/// One file anywhere in the vault, as text. Same root, same refusal.
+#[tauri::command]
+pub fn vault_file_text(db: tauri::State<Db>, rel: String) -> Result<FileText, String> {
+    let root = {
+        let conn = db.0.lock().unwrap();
+        let raw = crate::db::setting_get_conn(&conn, "vault_root")?
+            .filter(|s| !s.trim().is_empty())
+            .ok_or("No vault folder has been chosen yet.")?;
+        std::path::PathBuf::from(raw)
+    };
+    if rel.contains("..") {
+        return Err("that path leaves the vault".into());
+    }
+    read_text_at(&root.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR)), &rel)
+}
+
 /// A file's text, with everything the viewer needs to say what it is holding.
 #[derive(Serialize, Clone, Debug)]
 pub struct FileText {
@@ -230,15 +312,24 @@ pub fn file_text(
     if rel.contains("..") {
         return Err("that path leaves the node".into());
     }
-    let path = base.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR));
-    let meta = std::fs::metadata(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    read_text_at(&base.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR)), &rel)
+}
+
+/// One file, read honestly: binary says so, too big says so, and a cut
+/// multi-byte character at the end of a truncated read is not a broken file.
+///
+/// Shared by the node reader and the vault reader, because "what is in this
+/// file" cannot be allowed to mean two different things depending on which
+/// tree you were looking at.
+fn read_text_at(path: &std::path::Path, rel: &str) -> Result<FileText, String> {
+    let meta = std::fs::metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
     if meta.is_dir() {
         return Err(format!("{} is a folder", path.display()));
     }
 
     let bytes = meta.len();
     let mut out = FileText {
-        rel,
+        rel: rel.to_string(),
         path: path.to_string_lossy().to_string(),
         text: String::new(),
         bytes,
@@ -253,7 +344,7 @@ pub fn file_text(
         out.truncated = true;
     }
 
-    let raw = std::fs::read(&path).map_err(|e| e.to_string())?;
+    let raw = std::fs::read(path).map_err(|e| e.to_string())?;
     let head = if raw.len() as u64 > MAX_TEXT {
         &raw[..MAX_TEXT as usize]
     } else {

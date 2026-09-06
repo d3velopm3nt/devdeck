@@ -121,7 +121,14 @@ const components = {
   'space-detail': (props: IDockviewPanelProps<{ id: number }>) => <SpaceDetailPage {...props} />,
   'bot-detail': (props: IDockviewPanelProps<{ id: number; ask?: boolean }>) => <BotPage {...props} />,
   'service-detail': (props: IDockviewPanelProps<{ id: number }>) => <ServiceDetailPage {...props} />,
-  file: (props: IDockviewPanelProps<{ nodeId: number; rel: string; root: 'work' | 'vault' }>) => (
+  file: (
+    props: IDockviewPanelProps<{
+      nodeId: number
+      rel: string
+      /// `whole` reads from the vault root and ignores the node.
+      root: 'work' | 'vault' | 'whole'
+    }>,
+  ) => (
     <FileViewer nodeId={props.params.nodeId} rel={props.params.rel} root={props.params.root} />
   ),
   welcome: () => <Welcome />,

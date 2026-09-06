@@ -243,7 +243,9 @@ export function openAiwDoc(kind: AiwDoc, projectId: string, projectName: string)
 export function openFile(
   nodeId: number,
   rel: string,
-  root: 'work' | 'vault',
+  /// `whole` is the vault read from its root rather than through a node —
+  /// the only way to reach `.devdeck/team`, which belongs to no node.
+  root: 'work' | 'vault' | 'whole',
   title?: string,
 ) {
   if (!api) return

@@ -31,7 +31,8 @@ export function FileViewer({
 }: {
   nodeId: number
   rel: string
-  root: 'work' | 'vault'
+  /// `whole` reads from the vault root and ignores the node entirely.
+  root: 'work' | 'vault' | 'whole'
 }) {
   const theme = useApp((s) => s.theme)
   const host = useRef<HTMLDivElement>(null)
@@ -42,8 +43,7 @@ export function FileViewer({
   useEffect(() => {
     setFile(null)
     setErr('')
-    void ipc
-      .fileText(nodeId, rel, root)
+    void (root === 'whole' ? ipc.vaultFileText(rel) : ipc.fileText(nodeId, rel, root))
       .then(setFile)
       // A file that could not be read and a file that is empty must never
       // render the same.

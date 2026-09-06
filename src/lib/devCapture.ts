@@ -27,4 +27,6 @@ export const CAPTURE_NEW_SCHEDULE: boolean = false
 export const CAPTURE_EVENT_OPEN: string = ''
 export const CAPTURE_ENTRY: string = ''
 export const CAPTURE_FILE_ROOT: string = ''
+/** Open the whole-vault section, and these folder paths inside it. */
+export const CAPTURE_VAULT: string = ''
 export const CAPTURE_OPEN_FILE: string = ''

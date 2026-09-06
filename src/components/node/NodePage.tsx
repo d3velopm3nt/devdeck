@@ -160,6 +160,7 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
           // Where a code block's Run opens its terminal: the space's own
           // folder, so `git status` in the chat is about this repository.
           dir={resolveDir(nodes, node)}
+          nodeId={nodeId}
           // A bot that names an agent answers as that agent; otherwise the
           // orchestrator does, and the bar under the box says which.
           agentId={bot?.agent?.trim() ? bot.agent : 'assistant'}

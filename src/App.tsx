@@ -44,6 +44,7 @@ import * as ipc from './lib/ipc'
 import { aiw as aiwApi } from './lib/aiw'
 import { routeOutput } from './lib/termBus'
 import { useApp } from './store'
+import { forgetFileListings } from './lib/fileIndex'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { openNodeThread, dockApi, openFile, openTerminalPanel, openEditor, openNodeSetup, openSingleton, saveLayout, restoreLayout } from './lib/dock'
 import { openTerminal, launchProfile } from './lib/runner'
@@ -518,7 +519,12 @@ export default function App() {
         void s.refreshProfiles()
       }),
       // After a pull finishes, re-read local git status (counts change).
-      ipc.onGitDone(() => void useApp.getState().refreshGit()),
+      ipc.onGitDone(() => {
+        void useApp.getState().refreshGit()
+        // Files moved. A path the assistant mentioned before a pull may
+        // exist now, and a cached listing would keep saying it does not.
+        forgetFileListings()
+      }),
       // A clip was captured, or the capture toast edited one — the Stash view
       // refreshes if it's on screen.
       ipc.onStashItem(() => useApp.getState().ingestStashItem()),

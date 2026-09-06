@@ -25,6 +25,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Icon } from '../../lib/icons'
 import { CodeBlock } from './CodeBlock'
+import { FileRef } from './FileRef'
 
 /// Run a text transform (the @mention pills) over the strings inside a node,
 /// leaving every element alone.
@@ -48,10 +49,14 @@ export const Markdown = memo(function Markdown({
   renderText,
   /** Where a Run button should open its terminal. Empty disables Run. */
   dir,
+  /** Whose files an inline path can be opened from. Empty leaves every code
+   *  span as plain text — a link needs a tree to point into. */
+  nodeId,
 }: {
   text: string
   renderText?: (t: string) => ReactNode
   dir?: string
+  nodeId?: number
 }) {
   const T = (children: ReactNode) => mapText(children, renderText)
 
@@ -153,12 +158,16 @@ export const Markdown = memo(function Markdown({
           pre: ({ children }) => <CodeBlock node={children} dir={dir} />,
 
           // Which leaves `code` handling inline spans only: `--ff-only`, a
-          // path, a flag.
-          code: ({ children }) => (
-            <code className="rounded bg-raise px-1 py-px font-mono text-[11.5px] text-ink">
-              {children}
-            </code>
-          ),
+          // path, a flag. A span that is a real file in this node becomes a
+          // link to it; `FileRef` decides, by looking.
+          code: ({ children }) =>
+            typeof children === 'string' ? (
+              <FileRef text={children} nodeId={nodeId} />
+            ) : (
+              <code className="rounded bg-raise px-1 py-px font-mono text-[11.5px] text-ink">
+                {children}
+              </code>
+            ),
         }}
       >
         {text}

@@ -61,6 +61,7 @@ export function Bubble({
   nameNode,
   renderText,
   dir,
+  nodeId,
 }: {
   m: ChatMessage
   who?: string
@@ -71,6 +72,8 @@ export function Bubble({
   /// Where a code block's Run button should open its terminal. Without it,
   /// blocks still render and copy; they just do not offer to run.
   dir?: string
+  /// Whose files an inline path can be opened from.
+  nodeId?: number
 }) {
   if (m.from === 'tool') return <ToolRow m={m} />
   const mine = m.from === 'user'
@@ -98,7 +101,7 @@ export function Bubble({
             {renderText ? renderText(m.text) : m.text}
           </div>
         ) : (
-          <Markdown text={m.text} renderText={renderText} dir={dir} />
+          <Markdown text={m.text} renderText={renderText} dir={dir} nodeId={nodeId} />
         )}
       </div>
     </div>

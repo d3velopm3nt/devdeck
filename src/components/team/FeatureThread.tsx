@@ -69,6 +69,7 @@ export function FeatureThread({ goal }: { goal: GoalRow }) {
           // A feature's room belongs to a node, so a command in it runs where
           // that node's work runs.
           dir={resolveDir(nodes, findNode(nodes, goal.node_id))}
+          nodeId={goal.node_id}
           load={() => ipc.featureThread(goal.node_id, goal.feature_id)}
           send={(text) => ipc.featureThreadSend(goal.node_id, goal.feature_id, text)}
           name={answers}

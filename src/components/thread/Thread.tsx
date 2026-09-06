@@ -170,6 +170,8 @@ export interface ThreadProps {
   /// Whose provider and model the bar under the box edits. Defaults to the
   /// orchestrator, which is what answers a thread nobody else is watching.
   agentId?: string
+  /// The node whose files a path in the transcript can be opened from.
+  nodeId?: number
 }
 
 export function Thread({
@@ -182,6 +184,7 @@ export function Thread({
   reloadKey,
   dir,
   agentId = 'assistant',
+  nodeId,
 }: ThreadProps) {
   const [conv, setConv] = useState<ConversationMeta | null>(null)
   const [err, setErr] = useState('')
@@ -437,6 +440,7 @@ export function Thread({
                 who={who(m)}
                 nameNode={m.by ? <Pill id={m.by} label={who(m)} /> : hostId ? <Pill id={hostId} label={name} host /> : undefined}
                 dir={dir}
+                nodeId={nodeId}
                 renderText={(t) => <MentionText text={t} />}
               />
             ),
@@ -448,6 +452,7 @@ export function Thread({
             m={m}
             who={who(m)}
             dir={dir}
+            nodeId={nodeId}
             renderText={(t) => <MentionText text={t} />}
           />
         ))}

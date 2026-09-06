@@ -78,8 +78,12 @@ export function ModelBar({ agentId }: { agentId: string }) {
         <Icon name={open ? 'chevron-down' : 'chevron-right'} size={10} className="shrink-0" />
       </button>
 
+      {/* Anchored to its right edge, not its left. The button sits at the right
+          of the composer, so a panel growing rightwards from it ran off the
+          side of the pane and clipped the model name — the one thing the
+          popover exists to show. */}
       {open && (
-        <div className="absolute bottom-full left-0 z-20 mb-1.5 w-[320px] rounded-lg border border-line2 bg-menu p-3 shadow-lg">
+        <div className="absolute bottom-full right-0 z-20 mb-1.5 w-[320px] rounded-lg border border-line2 bg-menu p-3 shadow-lg">
           <div className="mb-1 flex items-baseline gap-1.5">
             <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-faint">
               {agent.name || agent.id} runs on

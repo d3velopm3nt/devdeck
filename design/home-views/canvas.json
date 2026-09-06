@@ -1,0 +1,39 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 1280, "h": 860, "title": "Home · someone using it" },
+    { "file": "Productivity.dc.html", "x": 1400, "y": 0, "w": 1280, "h": 860, "title": "Today" },
+    { "file": "WhoSeesWhat.dc.html", "x": 0, "y": 990, "w": 1120, "h": 620, "title": "Two people, one app" },
+    { "file": "Behind.dc.html", "x": 1240, "y": 990, "w": 1180, "h": 700, "title": "What is behind it" }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -250,
+      "w": 620,
+      "text": "Two homes for someone who is not building the app.\n\nNot a mode: a different person. Which home you get is decided once, at setup, and the rail follows from it — a clean page with a twelve-item rail beside it is not a clean page.\n\nHome answers \"what should I look at\". Today answers \"what am I doing now, and next\". The developer dashboard is untouched.\n\nLight by default here, because that is what this person's machine looks like; there is a dark switch above each artboard."
+    },
+    {
+      "id": "note-home",
+      "x": 660,
+      "y": -250,
+      "w": 520,
+      "text": "The managers are the page.\n\nThree tiles, one line of goal each, and one state word — and the words are the point: \"one item is stuck\", not \"1 blocked\". Same count, different reader.\n\nOne thing may want you at a time. If two managers are stuck it says one sentence and the second waits; everything queued is in Team, one tap away. A clean page that grows a list is a dashboard with more white space."
+    },
+    {
+      "id": "note-today",
+      "x": 1400,
+      "y": -250,
+      "w": 520,
+      "text": "Today is the calendar's own day, not a second one — otherwise two day views drift the first week.\n\nThe dashed row in the gap is the whole idea: the largest free stretch after now, the smallest habit that fits and is behind, one button. It is drawn here and does not exist yet; habits are step 3 on the calendar board.\n\nThe habit ticks carry the same warning at the bottom of their card rather than pretending."
+    },
+    {
+      "id": "note-behind",
+      "x": 1240,
+      "y": 1740,
+      "w": 520,
+      "text": "Read this before agreeing to the pictures.\n\nAlmost everything on both pages already exists — the managers, what needs you, today, due, focus. That is the only reason a third home is affordable.\n\nFour things are not built, and one of them is a promise rather than a panel: an Ask bar that cannot act is a chat window wearing a search box. Draw it last."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

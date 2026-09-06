@@ -8,6 +8,7 @@ import { Icon, type IconName } from '../lib/icons'
 const ITEMS: Array<{ view: RailView; icon: IconName; label: string }> = [
   { view: 'home', icon: 'home', label: 'Home' },
   { view: 'projects', icon: 'project', label: 'Projects' },
+  { view: 'mail', icon: 'mail', label: 'Mail' },
   { view: 'stash', icon: 'stash', label: 'Stash' },
   { view: 'connections', icon: 'database', label: 'Connections' },
   { view: 'machine', icon: 'machine', label: 'Machine' },
@@ -46,8 +47,9 @@ function RailButton({
 }
 
 export function Rail() {
-  const { railView, setRailView, svcStates } = useApp()
+  const { railView, setRailView, svcStates, mailCounts } = useApp()
   const anyRunning = Object.values(svcStates).some((s) => s.status === 'running')
+  const unread = mailCounts?.unread ?? 0
 
   return (
     <nav className="flex w-[52px] shrink-0 flex-col items-center gap-1 border-r border-line bg-app py-2">
@@ -56,7 +58,7 @@ export function Rail() {
           key={it.view}
           {...it}
           active={railView === it.view}
-          dot={it.view === 'projects' && anyRunning}
+          dot={(it.view === 'projects' && anyRunning) || (it.view === 'mail' && unread > 0)}
           onClick={setRailView}
         />
       ))}

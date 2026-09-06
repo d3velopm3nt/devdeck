@@ -8,6 +8,11 @@ import { Rail } from './shell/Rail'
 import { Home } from './components/Home'
 import { Explorer } from './components/Explorer'
 import { MachineSetup } from './components/MachineSetup'
+import { MailSidebar } from './components/MailSidebar'
+import { MailView } from './components/MailView'
+import { MailCompose } from './components/MailCompose'
+import { MailAccountEditor } from './components/MailAccountEditor'
+import { ContactsView } from './components/ContactsView'
 import { StashSidebar } from './components/StashSidebar'
 import { StashView } from './components/StashView'
 import { ConnectionsSidebar } from './components/ConnectionsSidebar'
@@ -488,6 +493,11 @@ export default function App() {
             <Explorer />
           </aside>
         )}
+        {railView === 'mail' && (
+          <aside className="w-[250px] shrink-0 overflow-hidden border-r border-line">
+            <MailSidebar />
+          </aside>
+        )}
         {railView === 'stash' && (
           <aside className="w-[230px] shrink-0 overflow-hidden border-r border-line">
             <StashSidebar />
@@ -505,6 +515,7 @@ export default function App() {
           <div className={railView === 'projects' ? 'h-full' : 'hidden'}>
             <Dock />
           </div>
+          {railView === 'mail' && (app.mailPane === 'contacts' ? <ContactsView /> : <MailView />)}
           {railView === 'stash' && <StashView />}
           {railView === 'connections' && <ConnectionsView />}
           {railView === 'machine' && <MachineSetup />}
@@ -538,6 +549,8 @@ export default function App() {
       {/* Slide-over editor sheets */}
       <Sheet />
       <ConnectionEditor />
+      <MailAccountEditor />
+      <MailCompose />
 
       {/* Project Setup: prepare-to-run prompt */}
       {app.setupPrompt && (

@@ -31,6 +31,16 @@ tauri-plugin-process = "2"
 # in every format decoder for no benefit.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
+# Mail. rustls everywhere on purpose: native-tls would mean SChannel on Windows
+# but OpenSSL headers on any other machine, and a mail client that only builds
+# on the maintainer's laptop is not a mail client.
+imap = { version = "2.4", default-features = false }
+rustls-connector = "0.19"
+lettre = { version = "0.11", default-features = false, features = [
+    "smtp-transport", "builder", "rustls-tls", "rustls-native-certs", "hostname",
+] }
+mailparse = "0.15"
+
 [profile.release]
 opt-level = 2
 lto = true

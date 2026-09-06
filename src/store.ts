@@ -16,6 +16,14 @@ import type {
   ServiceDef,
   ShellDef,
   ConnDef,
+  AssistantNote,
+  ComposeDraft,
+  MailAccount,
+  MailBody,
+  MailContact,
+  MailCounts,
+  MailMessage,
+  MailQuery,
   QueryResult,
   SavedQuery,
   Activity,
@@ -31,7 +39,7 @@ import type {
 const LOG_UI_LIMIT = 5000
 
 export type Theme = 'dark' | 'light'
-export type RailView = 'home' | 'projects' | 'stash' | 'connections' | 'machine' | 'settings'
+export type RailView = 'home' | 'projects' | 'mail' | 'stash' | 'connections' | 'machine' | 'settings'
 export type BottomTab = 'logs' | 'processes'
 
 /** What the Stash view is currently showing. `noProject` narrows to clips
@@ -207,6 +215,46 @@ export interface AppState {
   connStatus: Record<number, 'ok' | 'bad' | 'unknown' | 'testing'>
   /** Which connection the editor sheet is on (0 = new), or null when closed. */
   connEditing: number | null
+
+  // ---- mail ----
+  mailAccounts: MailAccount[]
+  mailMessages: MailMessage[]
+  mailCounts: MailCounts | null
+  mailQuery: MailQuery
+  mailSelectedId: number | null
+  mailBody: MailBody | null
+  mailNotes: AssistantNote[]
+  mailSyncing: boolean
+  /** Last sync/send failure, shown rather than swallowed. */
+  mailError: string
+  /** Which account the editor sheet is on (0 = new), or null when closed. */
+  mailAccountEditing: number | null
+  /** Compose sheet state; null when closed. */
+  mailCompose: ComposeDraft | null
+  mailContacts: MailContact[]
+  mailContactSelectedId: number | null
+  /** Mail sidebar shows the mailboxes or the address book. */
+  mailPane: 'mail' | 'contacts'
+  refreshMail: () => Promise<void>
+  refreshMailAccounts: () => Promise<void>
+  refreshMailContacts: () => Promise<void>
+  setMailQuery: (patch: Partial<MailQuery>) => Promise<void>
+  selectMailMessage: (id: number | null) => Promise<void>
+  syncMail: (accountId?: number) => Promise<void>
+  toggleMailFlag: (id: number) => Promise<void>
+  archiveMailMessage: (id: number) => Promise<void>
+  deleteMailMessage: (id: number) => Promise<void>
+  openMailAccountEditor: (id: number | null) => void
+  openCompose: (draft?: Partial<ComposeDraft>) => void
+  closeCompose: () => void
+  updateCompose: (patch: Partial<ComposeDraft>) => void
+  sendCompose: () => Promise<void>
+  replyToSelected: () => void
+  selectContact: (id: number | null) => void
+  saveContact: (def: MailContact) => Promise<void>
+  linkContact: (id: number, nodeId: number | null) => Promise<void>
+  setMailPane: (p: 'mail' | 'contacts') => void
+  setAssistantStatus: (id: number, status: AssistantNote['status']) => Promise<void>
   refreshConnections: () => Promise<void>
   refreshConnQueries: () => Promise<void>
   selectConnection: (id: number | null) => Promise<void>
@@ -485,6 +533,11 @@ export const useApp = create<AppState>((set, get) => ({
     void get().refreshActivity()
     void get().refreshConnections()
     void get().refreshConnQueries()
+    // Mail loads from the local cache, so the inbox is there before any
+    // network round-trip — and still there when there is no network.
+    void get().refreshMailAccounts()
+    void get().refreshMail()
+    void get().refreshMailContacts()
   },
   retryBootstrap: async () => {
     treeRetries = 0
@@ -666,6 +719,21 @@ export const useApp = create<AppState>((set, get) => ({
   connStatus: {},
   connEditing: null,
 
+  mailAccounts: [],
+  mailMessages: [],
+  mailCounts: null,
+  mailQuery: { group: 'inbox', chip: 'all', search: '', account_id: null },
+  mailSelectedId: null,
+  mailBody: null,
+  mailNotes: [],
+  mailSyncing: false,
+  mailError: '',
+  mailAccountEditing: null,
+  mailCompose: null,
+  mailContacts: [],
+  mailContactSelectedId: null,
+  mailPane: 'mail',
+
   refreshConnections: async () => {
     const connections = await ipc.connList()
     set({ connections })
@@ -818,5 +886,192 @@ export const useApp = create<AppState>((set, get) => ({
   searchLogs: (term) => {
     get().showBottom('logs')
     set((st) => ({ logFocus: { name: 'all', search: term, n: (st.logFocus?.n ?? 0) + 1 } }))
+  },
+
+  // ---- mail ----
+
+  refreshMail: async () => {
+    const [mailMessages, mailCounts] = await Promise.all([
+      ipc.mailList(get().mailQuery),
+      ipc.mailCounts(),
+    ])
+    set({ mailMessages, mailCounts })
+    // Keep the selection on something that is still in the list.
+    const { mailSelectedId } = get()
+    if (mailSelectedId != null && !mailMessages.some((m) => m.id === mailSelectedId)) {
+      await get().selectMailMessage(mailMessages[0]?.id ?? null)
+    } else if (mailSelectedId == null && mailMessages.length > 0) {
+      await get().selectMailMessage(mailMessages[0].id)
+    }
+  },
+
+  refreshMailAccounts: async () => set({ mailAccounts: await ipc.mailAccountsList() }),
+
+  refreshMailContacts: async () => {
+    const mailContacts = await ipc.mailContactsList()
+    set({ mailContacts })
+    const { mailContactSelectedId } = get()
+    if (mailContactSelectedId == null && mailContacts.length > 0) {
+      set({ mailContactSelectedId: mailContacts[0].id })
+    }
+  },
+
+  setMailQuery: async (patch) => {
+    set((st) => ({ mailQuery: { ...st.mailQuery, ...patch } }))
+    await get().refreshMail()
+  },
+
+  selectMailMessage: async (id) => {
+    set({ mailSelectedId: id, mailBody: null, mailNotes: [] })
+    if (id == null) return
+    const msg = get().mailMessages.find((m) => m.id === id)
+    // Opening a message reads it — locally only; the server copy is left
+    // alone so DevDeck does not surprise you on your phone.
+    if (msg?.unread) {
+      await ipc.mailMarkRead(id, true)
+      set((st) => ({
+        mailMessages: st.mailMessages.map((m) => (m.id === id ? { ...m, unread: false } : m)),
+      }))
+      set({ mailCounts: await ipc.mailCounts() })
+    }
+    const [body, notes] = await Promise.all([
+      ipc.mailBody(id),
+      msg ? ipc.mailAssistantList(msg.thread_key) : Promise.resolve([]),
+    ])
+    // A slower fetch for a message you already clicked away from must not
+    // overwrite the one you are looking at now.
+    if (get().mailSelectedId !== id) return
+    set({ mailBody: body, mailNotes: notes })
+  },
+
+  syncMail: async (accountId = 0) => {
+    set({ mailSyncing: true, mailError: '' })
+    try {
+      await ipc.mailSync(accountId)
+      await get().refreshMail()
+      await get().refreshMailAccounts()
+      await get().refreshMailContacts()
+    } catch (e) {
+      // Failure honesty: never let a failed sync look like an empty inbox.
+      set({ mailError: e instanceof Error ? e.message : String(e) })
+    } finally {
+      set({ mailSyncing: false })
+    }
+  },
+
+  toggleMailFlag: async (id) => {
+    const msg = get().mailMessages.find((m) => m.id === id)
+    if (!msg) return
+    const flagged = !msg.flagged
+    await ipc.mailSetFlag(id, flagged)
+    set((st) => ({
+      mailMessages: st.mailMessages.map((m) => (m.id === id ? { ...m, flagged } : m)),
+    }))
+    set({ mailCounts: await ipc.mailCounts() })
+  },
+
+  archiveMailMessage: async (id) => {
+    await ipc.mailArchive(id)
+    await get().refreshMail()
+  },
+
+  deleteMailMessage: async (id) => {
+    await ipc.mailDelete(id)
+    await get().refreshMail()
+  },
+
+  openMailAccountEditor: (id) => set({ mailAccountEditing: id }),
+
+  openCompose: (draft) => {
+    const accounts = get().mailAccounts
+    const fallback = accounts.find((a) => a.is_default) ?? accounts[0]
+    set({
+      mailCompose: {
+        account_id: fallback?.id ?? 0,
+        to: '',
+        cc: '',
+        subject: '',
+        body: '',
+        in_reply_to: '',
+        attachments: [],
+        showCc: false,
+        sending: false,
+        error: '',
+        ...draft,
+      },
+    })
+  },
+
+  closeCompose: () => set({ mailCompose: null }),
+
+  updateCompose: (patch) =>
+    set((st) => (st.mailCompose ? { mailCompose: { ...st.mailCompose, ...patch } } : {})),
+
+  sendCompose: async () => {
+    const draft = get().mailCompose
+    if (!draft) return
+    set({ mailCompose: { ...draft, sending: true, error: '' } })
+    try {
+      await ipc.mailSend({
+        account_id: draft.account_id,
+        to: draft.to,
+        cc: draft.cc,
+        subject: draft.subject,
+        body: draft.body,
+        in_reply_to: draft.in_reply_to,
+        attachments: draft.attachments,
+      })
+      set({ mailCompose: null })
+      await get().refreshMail()
+    } catch (e) {
+      // The draft stays open with its text intact — losing what you wrote
+      // because the server said no is unforgivable.
+      set((st) => ({
+        mailCompose: st.mailCompose
+          ? { ...st.mailCompose, sending: false, error: e instanceof Error ? e.message : String(e) }
+          : null,
+      }))
+    }
+  },
+
+  replyToSelected: () => {
+    const { mailMessages, mailSelectedId, mailAccounts } = get()
+    const msg = mailMessages.find((m) => m.id === mailSelectedId)
+    if (!msg) return
+    // Reply from the address it arrived at, whatever the default is: a reply
+    // that silently changes your address splits the thread across two inboxes.
+    const account =
+      mailAccounts.find((a) => a.id === msg.account_id) ??
+      mailAccounts.find((a) => a.is_default) ??
+      mailAccounts[0]
+    get().openCompose({
+      account_id: account?.id ?? 0,
+      to: msg.from_addr,
+      subject: /^re:/i.test(msg.subject) ? msg.subject : `Re: ${msg.subject}`,
+      in_reply_to: msg.message_id,
+    })
+  },
+
+  selectContact: (id) => set({ mailContactSelectedId: id }),
+
+  saveContact: async (def) => {
+    const id = await ipc.mailContactSave(def)
+    await get().refreshMailContacts()
+    set({ mailContactSelectedId: id })
+  },
+
+  linkContact: async (id, nodeId) => {
+    await ipc.mailContactLink(id, nodeId)
+    await get().refreshMailContacts()
+    await get().refreshMail()
+  },
+
+  setMailPane: (p) => set({ mailPane: p }),
+
+  setAssistantStatus: async (id, status) => {
+    await ipc.mailAssistantStatus(id, status)
+    set((st) => ({
+      mailNotes: st.mailNotes.map((n) => (n.id === id ? { ...n, status } : n)),
+    }))
   },
 }))

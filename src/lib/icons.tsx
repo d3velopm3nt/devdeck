@@ -72,6 +72,15 @@ import {
   StickyNote,
   Tag,
   Database,
+  Mail,
+  Inbox,
+  Send,
+  Paperclip,
+  Users,
+  Bot,
+  Reply,
+  Building2,
+  Clock,
   Play as PlayIcon,
   type LucideIcon,
 } from 'lucide-react'
@@ -144,6 +153,15 @@ export type IconName =
   | 'tag'
   | 'database'
   | 'query'
+  | 'mail'
+  | 'inbox'
+  | 'send'
+  | 'attachment'
+  | 'contacts'
+  | 'bot'
+  | 'reply'
+  | 'client'
+  | 'clock'
 
 const REGISTRY: Record<IconName, LucideIcon> = {
   workspace: Boxes,
@@ -211,6 +229,15 @@ const REGISTRY: Record<IconName, LucideIcon> = {
   tag: Tag,
   database: Database,
   query: PlayIcon,
+  mail: Mail,
+  inbox: Inbox,
+  send: Send,
+  attachment: Paperclip,
+  contacts: Users,
+  bot: Bot,
+  reply: Reply,
+  client: Building2,
+  clock: Clock,
 }
 
 export function iconFor(name: string): LucideIcon | undefined {

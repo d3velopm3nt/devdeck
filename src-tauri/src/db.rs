@@ -107,6 +107,8 @@ pub fn open() -> Connection {
         .expect("create stash schema");
     conn.execute_batch(CONN_SCHEMA)
         .expect("create connections schema");
+    conn.execute_batch(MAIL_SCHEMA)
+        .expect("create mail schema");
     conn.execute_batch(ACTIVITY_SCHEMA)
         .expect("create activity schema");
     // A run that was "running" when the app was killed did not survive.
@@ -305,6 +307,108 @@ pub const CONN_SCHEMA: &str = r#"
             ran_at INTEGER NOT NULL
         );
         CREATE INDEX IF NOT EXISTS conn_runs_conn ON conn_runs(connection_id, ran_at DESC);
+"#;
+
+/// Mail. Same rule as Connections: there is no password column here and there
+/// never will be one. IMAP and SMTP credentials live in Windows Credential
+/// Manager under `devdeck:mail:<id>`; SQLite holds only the parts of an
+/// account you would happily read out loud.
+///
+/// Messages are cached locally so search is full-text and mail still opens
+/// with the network down. Attachments are metadata only until you save one --
+/// syncing a mailbox must not quietly fill the disk.
+pub const MAIL_SCHEMA: &str = r#"
+        CREATE TABLE IF NOT EXISTS mail_accounts (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            address TEXT NOT NULL,
+            kind TEXT NOT NULL DEFAULT 'imap',   -- imap | gmail
+            imap_host TEXT NOT NULL DEFAULT '',
+            imap_port INTEGER NOT NULL DEFAULT 993,
+            smtp_host TEXT NOT NULL DEFAULT '',
+            smtp_port INTEGER NOT NULL DEFAULT 465,
+            username TEXT NOT NULL DEFAULT '',
+            signature TEXT NOT NULL DEFAULT '',
+            is_default INTEGER NOT NULL DEFAULT 0,
+            sort INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL DEFAULT 0,
+            last_sync INTEGER NOT NULL DEFAULT 0,
+            last_error TEXT NOT NULL DEFAULT ''
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS mail_accounts_addr ON mail_accounts(address);
+
+        -- People. A contact is one person; the client they belong to is a node
+        -- in the project tree, which is what makes a thread, an invoice and a
+        -- repo able to find each other.
+        CREATE TABLE IF NOT EXISTS mail_contacts (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL DEFAULT '',
+            email TEXT NOT NULL,
+            alt_email TEXT NOT NULL DEFAULT '',
+            role TEXT NOT NULL DEFAULT '',
+            company TEXT NOT NULL DEFAULT '',
+            phone TEXT NOT NULL DEFAULT '',
+            notes TEXT NOT NULL DEFAULT '',
+            tags TEXT NOT NULL DEFAULT '',
+            node_id INTEGER REFERENCES nodes(id) ON DELETE SET NULL,
+            kind TEXT NOT NULL DEFAULT 'person', -- person | bot
+            created_at INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS mail_contacts_email ON mail_contacts(email);
+
+        CREATE TABLE IF NOT EXISTS mail_messages (
+            id INTEGER PRIMARY KEY,
+            account_id INTEGER NOT NULL REFERENCES mail_accounts(id) ON DELETE CASCADE,
+            uid INTEGER NOT NULL DEFAULT 0,
+            message_id TEXT NOT NULL DEFAULT '',
+            thread_key TEXT NOT NULL DEFAULT '',
+            mailbox TEXT NOT NULL DEFAULT 'INBOX',  -- INBOX | Sent | Drafts | Archive
+            from_name TEXT NOT NULL DEFAULT '',
+            from_addr TEXT NOT NULL DEFAULT '',
+            to_addrs TEXT NOT NULL DEFAULT '',
+            cc_addrs TEXT NOT NULL DEFAULT '',
+            subject TEXT NOT NULL DEFAULT '',
+            preview TEXT NOT NULL DEFAULT '',
+            body_text TEXT NOT NULL DEFAULT '',
+            body_html TEXT NOT NULL DEFAULT '',
+            raw_headers TEXT NOT NULL DEFAULT '',
+            ts INTEGER NOT NULL DEFAULT 0,
+            unread INTEGER NOT NULL DEFAULT 1,
+            flagged INTEGER NOT NULL DEFAULT 0,
+            is_bot INTEGER NOT NULL DEFAULT 0,
+            contact_id INTEGER REFERENCES mail_contacts(id) ON DELETE SET NULL,
+            node_id INTEGER REFERENCES nodes(id) ON DELETE SET NULL
+        );
+        -- One row per (account, mailbox, uid): a re-sync updates rather than
+        -- duplicating, which is the difference between an inbox and a pile.
+        CREATE UNIQUE INDEX IF NOT EXISTS mail_messages_uid
+            ON mail_messages(account_id, mailbox, uid);
+        CREATE INDEX IF NOT EXISTS mail_messages_ts ON mail_messages(ts DESC);
+        CREATE INDEX IF NOT EXISTS mail_messages_thread ON mail_messages(thread_key);
+
+        CREATE TABLE IF NOT EXISTS mail_attachments (
+            id INTEGER PRIMARY KEY,
+            message_id INTEGER NOT NULL REFERENCES mail_messages(id) ON DELETE CASCADE,
+            filename TEXT NOT NULL DEFAULT '',
+            mime TEXT NOT NULL DEFAULT '',
+            bytes INTEGER NOT NULL DEFAULT 0,
+            part_index INTEGER NOT NULL DEFAULT 0,
+            file_path TEXT NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS mail_attachments_msg ON mail_attachments(message_id);
+
+        -- What the assistant said or did about a thread, kept beside the mail
+        -- so its suggestions and its actions are auditable after the fact.
+        CREATE TABLE IF NOT EXISTS mail_assistant (
+            id INTEGER PRIMARY KEY,
+            thread_key TEXT NOT NULL,
+            account_id INTEGER NOT NULL DEFAULT 0,
+            kind TEXT NOT NULL DEFAULT 'summary', -- summary | draft | action
+            body TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'new',   -- new | accepted | dismissed | done
+            created_at INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS mail_assistant_thread ON mail_assistant(thread_key);
 "#;
 
 /// The Stash full-text index: an external-content FTS5 table kept in sync by
@@ -998,6 +1102,7 @@ mod tests {
         conn.execute_batch(CORE_SCHEMA).expect("core schema");
         conn.execute_batch(STASH_SCHEMA).expect("stash schema");
         conn.execute_batch(CONN_SCHEMA).expect("conn schema");
+        conn.execute_batch(MAIL_SCHEMA).expect("mail schema");
         conn.execute_batch(ACTIVITY_SCHEMA)
             .expect("activity schema");
         migrate(conn);

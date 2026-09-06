@@ -18,6 +18,7 @@ mod db;
 mod git;
 mod legacy;
 mod machine;
+mod mail;
 mod monitor;
 mod pty;
 mod scan;
@@ -765,6 +766,29 @@ pub fn run() {
             conn::conn_query_save,
             conn::conn_query_delete,
             conn::conn_runs_list,
+            mail::mail_accounts_list,
+            mail::mail_account_save,
+            mail::mail_account_delete,
+            mail::mail_account_set_password,
+            mail::mail_account_clear_password,
+            mail::mail_account_test,
+            mail::mail_sync,
+            mail::mail_list,
+            mail::mail_counts,
+            mail::mail_body,
+            mail::mail_mark_read,
+            mail::mail_set_flag,
+            mail::mail_archive,
+            mail::mail_delete,
+            mail::mail_link_node,
+            mail::mail_send,
+            mail::mail_contacts_list,
+            mail::mail_contact_save,
+            mail::mail_contact_delete,
+            mail::mail_contact_link,
+            mail::mail_assistant_list,
+            mail::mail_assistant_add,
+            mail::mail_assistant_status,
             activity::activity_list,
             activity::activity_clear,
             activity::service_runs,

@@ -325,3 +325,168 @@ export interface StashStatus {
   /** Days an untouched clip is kept; 0 = forever. */
   retention_days: number
 }
+
+// ---- mail ----
+
+/** How an account talks to its server. `gmail` is IMAP + SMTP with Google's
+ *  hosts prefilled; the transport is identical. */
+export type MailKind = 'imap' | 'gmail'
+
+export interface MailAccount {
+  id: number
+  name: string
+  address: string
+  kind: MailKind
+  imap_host: string
+  imap_port: number
+  smtp_host: string
+  smtp_port: number
+  username: string
+  signature: string
+  is_default: boolean
+  sort: number
+  created_at: number
+  last_sync: number
+  /** Why the last sync failed, '' when it worked. A failed sync that looks
+   *  like an empty inbox is how you miss mail for a week. */
+  last_error: string
+  /** Whether a password is stored. Never the password — nothing reads one back. */
+  has_password: boolean
+}
+
+/** A message as the list needs it: no bodies, so 300 rows stay cheap. */
+export interface MailMessage {
+  id: number
+  account_id: number
+  uid: number
+  message_id: string
+  thread_key: string
+  mailbox: MailMailbox
+  from_name: string
+  from_addr: string
+  to_addrs: string
+  cc_addrs: string
+  subject: string
+  preview: string
+  ts: number
+  unread: boolean
+  flagged: boolean
+  is_bot: boolean
+  contact_id: number | null
+  node_id: number | null
+  account_address: string
+  attachments: number
+}
+
+export type MailMailbox = 'INBOX' | 'Sent' | 'Drafts' | 'Archive'
+
+export interface MailAttachment {
+  id: number
+  message_id: number
+  filename: string
+  mime: string
+  bytes: number
+  part_index: number
+  /** Set only once you save it — sync never writes attachments to disk. */
+  file_path: string
+}
+
+/** Fetched only when a message is opened. */
+export interface MailBody {
+  id: number
+  body_text: string
+  body_html: string
+  raw_headers: string
+  attachments: MailAttachment[]
+}
+
+export interface MailContact {
+  id: number
+  name: string
+  email: string
+  alt_email: string
+  role: string
+  company: string
+  phone: string
+  notes: string
+  /** Comma-separated, like Stash tags. */
+  tags: string
+  /** The client: a node in the project tree. */
+  node_id: number | null
+  kind: 'person' | 'bot'
+  created_at: number
+  threads: number
+  last_ts: number
+}
+
+export type MailGroup =
+  | 'inbox' | 'unread' | 'flagged' | 'clients' | 'projects'
+  | 'bots' | 'sent' | 'drafts' | 'archive'
+
+export type MailChip = 'all' | 'unread' | 'flagged' | 'files'
+
+export interface MailQuery {
+  group: MailGroup
+  chip: MailChip
+  search: string
+  account_id: number | null
+  limit?: number
+}
+
+export interface MailCounts {
+  inbox: number
+  unread: number
+  flagged: number
+  clients: number
+  projects: number
+  bots: number
+  sent: number
+  drafts: number
+  archive: number
+}
+
+export interface SendRequest {
+  account_id: number
+  to: string
+  cc: string
+  subject: string
+  body: string
+  in_reply_to: string
+  attachments: string[]
+}
+
+/** Reachability for both halves of an account, reported separately: IMAP can
+ *  work while SMTP does not, and one "failed" helps nobody. */
+export interface MailTestResult {
+  imap_ok: boolean
+  imap_detail: string
+  smtp_ok: boolean
+  smtp_detail: string
+}
+
+/** What the assistant said or did about a thread, kept beside the mail so it
+ *  is auditable after the fact. */
+export interface AssistantNote {
+  id: number
+  thread_key: string
+  account_id: number
+  kind: 'summary' | 'draft' | 'action'
+  body: string
+  status: 'new' | 'accepted' | 'dismissed' | 'done'
+  created_at: number
+}
+
+/** The compose sheet's working state. Wider than SendRequest because it also
+ *  holds what the UI needs: whether Cc is showing, and why a send failed. */
+export interface ComposeDraft {
+  account_id: number
+  to: string
+  cc: string
+  subject: string
+  body: string
+  in_reply_to: string
+  attachments: string[]
+  showCc: boolean
+  sending: boolean
+  error: string
+}

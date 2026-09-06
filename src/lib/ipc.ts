@@ -16,6 +16,15 @@ import type {
   ShellDef,
   Activity,
   ConnDef,
+  MailAccount,
+  MailBody,
+  MailContact,
+  MailCounts,
+  MailMessage,
+  MailQuery,
+  MailTestResult,
+  AssistantNote,
+  SendRequest,
   ServiceRun,
   QueryResult,
   QueryRun,
@@ -431,3 +440,45 @@ export function onSvcStatus(cb: (e: SvcState) => void): Promise<UnlistenFn> {
 export function onStats(cb: (e: ProcStat[]) => void): Promise<UnlistenFn> {
   return listen<ProcStat[]>('stats:update', (e) => cb(e.payload))
 }
+
+// ---- mail ----
+export const mailAccountsList = () => invoke<MailAccount[]>('mail_accounts_list')
+export const mailAccountSave = (def: MailAccount) => invoke<number>('mail_account_save', { def })
+export const mailAccountDelete = (id: number) => invoke<void>('mail_account_delete', { id })
+/** Store an IMAP/SMTP password in Windows Credential Manager. Nothing reads it back. */
+export const mailAccountSetPassword = (id: number, username: string, password: string) =>
+  invoke<void>('mail_account_set_password', { id, username, password })
+export const mailAccountClearPassword = (id: number) =>
+  invoke<boolean>('mail_account_clear_password', { id })
+/** Log in over IMAP and SMTP and report each separately. */
+export const mailAccountTest = (id: number) => invoke<MailTestResult>('mail_account_test', { id })
+/** Fetch new mail. `id` 0 syncs every account. Returns messages stored. */
+export const mailSync = (id = 0) => invoke<number>('mail_sync', { id })
+export const mailList = (query: MailQuery) => invoke<MailMessage[]>('mail_list', { query })
+export const mailCounts = () => invoke<MailCounts>('mail_counts')
+/** Bodies and attachment metadata, only for the message you opened. */
+export const mailBody = (id: number) => invoke<MailBody>('mail_body', { id })
+export const mailMarkRead = (id: number, read: boolean) =>
+  invoke<void>('mail_mark_read', { id, read })
+export const mailSetFlag = (id: number, flagged: boolean) =>
+  invoke<void>('mail_set_flag', { id, flagged })
+export const mailArchive = (id: number) => invoke<void>('mail_archive', { id })
+export const mailDelete = (id: number) => invoke<void>('mail_delete', { id })
+/** Link a whole thread to a project node. */
+export const mailLinkNode = (id: number, nodeId: number | null) =>
+  invoke<void>('mail_link_node', { id, nodeId })
+export const mailSend = (req: SendRequest) => invoke<number>('mail_send', { req })
+
+export const mailContactsList = () => invoke<MailContact[]>('mail_contacts_list')
+export const mailContactSave = (def: MailContact) => invoke<number>('mail_contact_save', { def })
+export const mailContactDelete = (id: number) => invoke<void>('mail_contact_delete', { id })
+/** Link (or unlink) a contact to the client node they belong to. */
+export const mailContactLink = (id: number, nodeId: number | null) =>
+  invoke<void>('mail_contact_link', { id, nodeId })
+
+export const mailAssistantList = (threadKey: string) =>
+  invoke<AssistantNote[]>('mail_assistant_list', { threadKey })
+export const mailAssistantAdd = (note: AssistantNote) =>
+  invoke<number>('mail_assistant_add', { note })
+export const mailAssistantStatus = (id: number, status: AssistantNote['status']) =>
+  invoke<void>('mail_assistant_status', { id, status })

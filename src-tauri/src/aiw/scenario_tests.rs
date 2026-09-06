@@ -2591,3 +2591,259 @@ fn the_draft_that_was_approved_is_the_draft_that_is_made() {
     assert_eq!(got.every, "weekly");
     assert_eq!(got.at_min, 18 * 60);
 }
+
+// ---------------------------------------------------------------------------
+// The goal layer, end to end: a manager, its team, and the board that watches
+// ---------------------------------------------------------------------------
+//
+// Everything above tests one hop — a handover, a claim, a receipt. This walks
+// the whole chain the Team page opens on: a goal, the feature under it, the
+// work items under that, a manager who owns it and a team of agents beneath,
+// and it asserts through `board_from` after every beat rather than through the
+// pieces individually.
+//
+// `board_from` is the assembly `team_board` does. It was untestable until this
+// went in, because the command needs a `tauri::AppHandle` to read the node
+// table — which is why the screen the whole Team view opens on had exactly one
+// test in it, about sort order.
+
+use crate::bots::Bot;
+use crate::team::{board_from, GoalRow};
+
+/// The node table, as `board_from` wants it: a project under a workspace.
+fn tree() -> (
+    std::collections::HashMap<i64, String>,
+    std::collections::HashMap<i64, Option<i64>>,
+) {
+    let mut names = std::collections::HashMap::new();
+    let mut parents = std::collections::HashMap::new();
+    names.insert(1, "Innotrack".to_string());
+    parents.insert(1, None);
+    names.insert(7, "TyreX".to_string());
+    parents.insert(7, Some(1));
+    (names, parents)
+}
+
+/// A dev manager with a goal, a team, and one feature it owns.
+fn dev_manager(feature: &str) -> Bot {
+    Bot {
+        handle: "dev".into(),
+        name: "Dev".into(),
+        node_id: 7,
+        node_name: "TyreX".into(),
+        goal: "Get offline sync shipped without losing anyone's data.".into(),
+        feature: feature.into(),
+        agent: "dev-a".into(),
+        team: vec!["dev-a".into(), "dev-b".into(), "qa".into()],
+        every: "weekdays".into(),
+        ..Default::default()
+    }
+}
+
+fn row_for<'a>(board: &'a [GoalRow], slug: &str) -> &'a GoalRow {
+    board
+        .iter()
+        .find(|r| r.feature_id == slug)
+        .unwrap_or_else(|| panic!("the board has no row for {slug}: {board:?}"))
+}
+
+/// Wait for something the runtime does on its own thread, or say what never
+/// happened. Every timing assertion in this file goes through one of these
+/// rather than a bare sleep, because a sleep that is too short fails as a
+/// mystery.
+fn until<T>(what: &str, mut f: impl FnMut() -> Option<T>) -> T {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    loop {
+        if let Some(v) = f() {
+            return v;
+        }
+        assert!(std::time::Instant::now() < deadline, "never happened: {what}");
+        std::thread::sleep(std::time::Duration::from_millis(150));
+    }
+}
+
+#[test]
+fn a_goal_a_manager_and_its_team_move_work_and_the_board_follows() {
+    let t = Tmp::new("goalboard");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    // A numeric id, because a manager is attached to a feature by node — the
+    // demo's named projects can never have one, which is a real limit of the
+    // fixture rather than of the product.
+    w.register_project("7", "TyreX", tyrex.clone(), tyrex);
+    let (names, parents) = tree();
+    let slug = "offline-synchronisation";
+    let bots = vec![dev_manager(slug)];
+    // The threads the board reads, on the temp store. `team_board` passes the
+    // workspace's own; a test passing that would read the real one.
+    let c = convs(&t);
+
+    // --- Beat 0: the goal exists, nobody is on it ---------------------------
+    let board = board_from(&w, Some(&c), &names, &parents, &bots);
+    let r = row_for(&board, slug);
+    assert_eq!(r.workspace, "Innotrack", "the row knows which workspace");
+    assert_eq!(r.space, "TyreX");
+    assert_eq!(r.managed_by.as_deref(), Some("Dev"), "the manager owns it");
+    assert_eq!(r.bot_node, Some(7));
+    assert!(r.items_total > 0, "the feature has work items to move");
+    assert!(r.on_it.is_empty(), "nobody has claimed anything yet");
+    assert_eq!(r.items_done, 0);
+    let total = r.items_total;
+    let unclaimed_before = r.items_unclaimed;
+    assert!(unclaimed_before > 0, "there is something to pick up");
+
+    // --- Beat 1: the manager puts one of its team on an item ---------------
+    let conv = c.for_feature("7", slug, "Offline synchronisation").unwrap();
+    let reply = Assistant::send(&w, &c, &conv.id, "@dev-a take \"Sync status UI\"", &quiet).unwrap();
+    assert_eq!(reply.delegated.len(), 1, "a session started: {reply:?}");
+
+    // The board sees the claim, not just the runtime.
+    let board = board_from(&w, Some(&c), &names, &parents, &bots);
+    let r = row_for(&board, slug);
+    assert!(
+        r.on_it.iter().any(|a| a == "dev-a"),
+        "the board says who is on it: {:?}",
+        r.on_it
+    );
+    assert_eq!(r.items_total, total, "delegating invents no work");
+
+    // --- Beat 2: the agent reports back into the same thread ---------------
+    let receipt = until("the agent reported back into the thread", || {
+        c.load(&conv.id)
+            .ok()?
+            .messages
+            .into_iter()
+            .find(|m| m.tool.as_deref() == Some("session"))
+    });
+    assert_eq!(receipt.by.as_deref(), Some("dev-a"), "the receipt is signed");
+
+    // --- Beat 3: a second agent, pulled in for free ------------------------
+    let before = c.load(&conv.id).unwrap().messages.len();
+    let reply = Assistant::send(&w, &c, &conv.id, "@qa what did you see?", &quiet).unwrap();
+    assert!(reply.delegated.is_empty(), "a mention starts nobody");
+    let after = c.load(&conv.id).unwrap();
+    assert!(after.messages.len() > before, "it was said in the room");
+    let board = board_from(&w, Some(&c), &names, &parents, &bots);
+    let r = row_for(&board, slug);
+    assert!(
+        r.participants.iter().any(|p| p == "qa"),
+        "the board lists everyone in the room, team or not: {:?}",
+        r.participants
+    );
+
+    // --- Beat 4: work finished on disk moves the board ---------------------
+    // The agent that ran in beat 1 has already closed something of its own —
+    // which is the first thing worth asserting, because it means the board is
+    // reading the deck the session wrote rather than a number held in memory.
+    let done_by_agent = r.items_done;
+    assert!(
+        done_by_agent > 0,
+        "the session that ran should have closed something: {r:?}"
+    );
+
+    // Then one more, through the deck, the way a tool call does it — not by
+    // editing a struct, which would prove only that a struct can be edited.
+    let project = w.project("7").unwrap();
+    let deck = project.deck();
+    let mut work = deck.work(slug).unwrap();
+    let next = work
+        .meta
+        .items
+        .iter()
+        .find(|i| i.status != "done")
+        .map(|i| i.id.clone())
+        .expect("something is still open");
+    for item in work.meta.items.iter_mut() {
+        if item.id == next {
+            item.status = "done".into();
+        }
+    }
+    deck.save_work(slug, &work.meta).unwrap();
+
+    let board = board_from(&w, Some(&c), &names, &parents, &bots);
+    let r = row_for(&board, slug);
+    assert_eq!(
+        r.items_done,
+        done_by_agent + 1,
+        "the board counts what the deck says"
+    );
+    assert_eq!(r.items_total, total, "and closing one invents no others");
+
+    // --- Beat 5: the goal itself is on the row -----------------------------
+    // The feature's goal, not the manager's. A board that showed the manager's
+    // sentence against every one of its features would say the same thing in
+    // every row and mean nothing in any of them.
+    assert!(
+        r.goal.is_some(),
+        "the feature's goal reaches the board: {r:?}"
+    );
+}
+
+/// The other half of "bot to me": an approval is the channel a bot uses when
+/// it needs a person, and the board has to show it as needing one.
+///
+/// Its own fixture rather than `approval_fixture`, because that one registers
+/// the project under a name. A manager attaches to a feature by node id, so a
+/// named project can never have a manager and the row would come back
+/// unmanaged — the test would pass while proving nothing about a bot.
+#[test]
+fn a_bot_that_needs_a_person_shows_as_waiting_on_the_board() {
+    let t = Tmp::new("goalwait");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = Arc::new(Workspace::with_approval_timeout(
+        std::time::Duration::from_secs(15),
+    ));
+    Workspace::install_handlers(&w);
+    w.register_project("7", "TyreX", tyrex.clone(), tyrex);
+    w.set_permission("dev-a", "files", "approval").unwrap();
+
+    let (names, parents) = tree();
+    let slug = "offline-synchronisation";
+    let bots = vec![dev_manager(slug)];
+    let c = convs(&t);
+
+    // Nothing is waiting before anyone asks.
+    let board = board_from(&w, Some(&c), &names, &parents, &bots);
+    assert_eq!(row_for(&board, slug).waiting, 0);
+
+    let call = ToolCall::new(
+        TOOL_FILES,
+        "write",
+        serde_json::json!({ "path": "approved.txt", "content": "a human said yes" }),
+    );
+    let scope = super::events::EventScope::feature("7", slug);
+    let runner = {
+        let w = w.clone();
+        std::thread::spawn(move || {
+            let p = w.project("7").unwrap();
+            p.tools.execute(&w.bus, "dev-a", &scope, &call, None)
+        })
+    };
+
+    let req = wait_for_prompt(&w);
+    assert_eq!(req.agent_id, "dev-a", "the board's claim is about this agent");
+
+    // The board is what the Team page draws, so this is the assertion that
+    // matters: a person can see they are being waited on without opening the
+    // thread the agent is stuck in.
+    let board = board_from(&w, Some(&c), &names, &parents, &bots);
+    let r = row_for(&board, slug);
+    assert_eq!(r.waiting, 1, "the board says someone is waiting on you");
+    assert_eq!(
+        r.group(),
+        "waiting",
+        "and it outranks everything merely moving"
+    );
+
+    w.resolve_approval(&req.id, super::approval::Decision::Allow)
+        .expect("the waiter is still there");
+    let result = runner.join().unwrap();
+    assert!(result.ok, "an approved call runs: {:?}", result.error);
+
+    let board = board_from(&w, Some(&c), &names, &parents, &bots);
+    assert_eq!(
+        row_for(&board, slug).waiting,
+        0,
+        "answering clears it from the board"
+    );
+}

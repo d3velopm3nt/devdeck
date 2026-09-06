@@ -98,6 +98,28 @@ pub fn team_board(app: tauri::AppHandle, ws: Ws) -> Result<Vec<GoalRow>, String>
         (names, parents, crate::bots::all_bots(&conn))
     };
 
+    let convs = workspace.convs().ok();
+    Ok(board_from(&workspace, convs, &names, &parents, &bots))
+}
+
+/// The board itself, given everything it reads.
+///
+/// Split out from `team_board` so it can be checked. The command above needs a
+/// `tauri::AppHandle` to reach the node table, and needing a running Tauri app
+/// is why the screen the Team page opens on had one test in it — about sort
+/// order — while the assembly underneath, which is where the counts and the
+/// claims and the thread previews come from, had none.
+pub fn board_from(
+    workspace: &Arc<Workspace>,
+    // The threads to read previews and participants from. Passed in rather
+    // than taken from the workspace, which opens the *real* personal store on
+    // first use — a board assembled from a global singleton cannot be checked
+    // without reading the developer's own conversation history.
+    convs: Option<&crate::aiw::assistant::Conversations>,
+    names: &std::collections::HashMap<i64, String>,
+    parents: &std::collections::HashMap<i64, Option<i64>>,
+    bots: &[crate::bots::Bot],
+) -> Vec<GoalRow> {
     let workspace_of = |mut id: i64| -> String {
         let mut guard = 0;
         while let Some(Some(p)) = parents.get(&id) {
@@ -113,8 +135,6 @@ pub fn team_board(app: tauri::AppHandle, ws: Ws) -> Result<Vec<GoalRow>, String>
     let claims = workspace.claims_for(None, true);
     let approvals = workspace.pending_approvals();
     let conflicts = workspace.conflicts.list(None, false);
-    let convs = workspace.convs().ok();
-
     let mut out = Vec::new();
     for id in workspace.project_ids() {
         let Some(project) = workspace.project(&id) else { continue };
@@ -202,7 +222,7 @@ pub fn team_board(app: tauri::AppHandle, ws: Ws) -> Result<Vec<GoalRow>, String>
             .cmp(&rank(b.group()))
             .then_with(|| b.last_at.cmp(&a.last_at))
     });
-    Ok(out)
+    out
 }
 
 #[cfg(test)]

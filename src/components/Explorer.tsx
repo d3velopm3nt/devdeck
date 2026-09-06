@@ -1383,12 +1383,18 @@ export function Explorer() {
                 a page, like Commands and Services are, not something the
                 file list needs above it.
 
-                The two rows that can still appear above are the ones that
-                are about right now: an agent working, and an approval
-                waiting on you. Neither is drawn unless it is true. */}
+                Features goes down there too. It is a list of what the
+                project is working on — a way in to the same page Git and
+                Commands are — and a section that appears only for whichever
+                project the workspace happens to have selected is exactly the
+                kind of row that should not shift the file list around.
+
+                What is left above the switch is only ever about right now:
+                an agent working, and an approval waiting on you. Neither is
+                drawn unless it is true, so the ordinary case is that
+                Repo/Vault is the first thing under the project. */}
             {node.kind === 'project' && renderLive(node, depth + 1)}
             {children.map((c) => renderNode(c, depth + 1))}
-            {node.kind === 'project' && renderFeatures(node, depth + 1)}
             {node.kind === 'project' && renderRootSwitch(node, depth + 1)}
             {node.kind === 'project' && renderFiles(node, '', depth + 1)}
             {node.kind === 'project' &&
@@ -1396,6 +1402,7 @@ export function Explorer() {
               !fileErr[dirKey(node.id, '')] && (
                 <FetchOnce load={() => loadDir(node.id, '')} />
               )}
+            {node.kind === 'project' && renderFeatures(node, depth + 1)}
             {node.kind === 'project' && renderGit(node, depth + 1)}
             {showCommands &&
               renderCategory(

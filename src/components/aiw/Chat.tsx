@@ -16,6 +16,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Icon } from '../../lib/icons'
+import { Markdown } from '../thread/Markdown'
 import { useAiw } from '../../lib/aiwStore'
 import { aiw, ago, type ChatMessage } from '../../lib/aiw'
 import { useProjectsByWorkspace } from '../../lib/aiwLabels'
@@ -59,6 +60,7 @@ export function Bubble({
   who = 'Assistant',
   nameNode,
   renderText,
+  dir,
 }: {
   m: ChatMessage
   who?: string
@@ -66,6 +68,9 @@ export function Bubble({
   nameNode?: React.ReactNode
   /// Something richer than the words — a thread draws @names as pills.
   renderText?: (text: string) => React.ReactNode
+  /// Where a code block's Run button should open its terminal. Without it,
+  /// blocks still render and copy; they just do not offer to run.
+  dir?: string
 }) {
   if (m.from === 'tool') return <ToolRow m={m} />
   const mine = m.from === 'user'
@@ -85,12 +90,16 @@ export function Bubble({
           </span>
           <span className="text-[10px] text-faint">{ago(m.at)}</span>
         </div>
-        {/* Pre-wrap rather than a Markdown renderer: the assistant's answers are
-            short prose, and a half-working renderer that mangles a path or a
-            snippet is worse than none. */}
-        <div className="whitespace-pre-wrap break-words text-[12.5px] leading-[1.65] text-body">
-          {renderText ? renderText(m.text) : m.text}
-        </div>
+        {/* Markdown for what came back, pre-wrap for what you typed.
+            Rendering your own message would eat the asterisks out of a
+            sentence you wrote and can still see in the box above. */}
+        {mine ? (
+          <div className="whitespace-pre-wrap break-words text-[12.5px] leading-[1.65] text-body">
+            {renderText ? renderText(m.text) : m.text}
+          </div>
+        ) : (
+          <Markdown text={m.text} renderText={renderText} dir={dir} />
+        )}
       </div>
     </div>
   )

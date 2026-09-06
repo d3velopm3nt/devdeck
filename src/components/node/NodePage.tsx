@@ -22,7 +22,7 @@ import { useApp } from '../../store'
 import { useAiw } from '../../lib/aiwStore'
 import { Icon } from '../../lib/icons'
 import { avatarLabel, nodeColor } from '../../lib/spaces'
-import { findNode, subtreeIds, workspaceOf } from '../../lib/tree'
+import { findNode, resolveDir, subtreeIds, workspaceOf } from '../../lib/tree'
 import { openAiwDoc, openBot, openNodeConfig, openNodeSetup, openSpace } from '../../lib/dock'
 import { Thread } from '../thread/Thread'
 
@@ -157,6 +157,12 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
       <div className="min-h-0 flex-1 px-5 py-3">
         <Thread
           reloadKey={nodeId}
+          // Where a code block's Run opens its terminal: the space's own
+          // folder, so `git status` in the chat is about this repository.
+          dir={resolveDir(nodes, node)}
+          // A bot that names an agent answers as that agent; otherwise the
+          // orchestrator does, and the bar under the box says which.
+          agentId={bot?.agent?.trim() ? bot.agent : 'assistant'}
           load={() => ipc.nodeThread(nodeId)}
           send={(text) => ipc.nodeThreadSend(nodeId, text)}
           name={bot ? bot.name : 'Assistant'}

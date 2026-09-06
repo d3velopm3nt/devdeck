@@ -18,6 +18,8 @@ export function BotChat({ bot }: { bot: ipc.Bot }) {
   return (
     <Thread
       reloadKey={bot.node_id}
+      dir={bot.dir}
+      agentId={acts ? bot.agent : 'assistant'}
       load={() => ipc.botThread(bot.node_id)}
       send={(text) => ipc.botThreadSend(bot.node_id, text)}
       name={bot.name}

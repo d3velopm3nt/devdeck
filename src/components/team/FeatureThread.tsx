@@ -16,9 +16,12 @@ import * as ipc from '../../lib/ipc'
 import { Icon } from '../../lib/icons'
 import { Thread } from '../thread/Thread'
 import { useSpeakers } from '../thread/speakers'
+import { useApp } from '../../store'
+import { findNode, resolveDir } from '../../lib/tree'
 
 export function FeatureThread({ goal }: { goal: GoalRow }) {
   const speakers = useSpeakers()
+  const nodes = useApp((s) => s.nodes)
   const answers = goal.managed_by ?? 'Assistant'
 
   return (
@@ -63,6 +66,9 @@ export function FeatureThread({ goal }: { goal: GoalRow }) {
       <div className="min-h-0 flex-1 px-5 py-3">
         <Thread
           reloadKey={`${goal.node_id}:${goal.feature_id}`}
+          // A feature's room belongs to a node, so a command in it runs where
+          // that node's work runs.
+          dir={resolveDir(nodes, findNode(nodes, goal.node_id))}
           load={() => ipc.featureThread(goal.node_id, goal.feature_id)}
           send={(text) => ipc.featureThreadSend(goal.node_id, goal.feature_id, text)}
           name={answers}

@@ -23,6 +23,8 @@ import { Icon, type IconName } from '../../lib/icons'
 import { useSpeakers } from './speakers'
 import { useAiw } from '../../lib/aiwStore'
 import { MentionText, Pill, SpeakingContext, ThreadContext } from './Pill'
+import { Markdown } from './Markdown'
+import { ModelBar } from './ModelBar'
 import { ContextBar } from './ContextBar'
 import { openAgentSettings, openBot } from '../../lib/dock'
 import { useApp } from '../../store'
@@ -161,9 +163,26 @@ export interface ThreadProps {
   empty?: React.ReactNode
   /// Re-read when this changes.
   reloadKey?: string | number
+  /// The directory a code block's Run button should open a terminal in.
+  /// Omitted for a thread with no folder of its own, which is why Run is an
+  /// offer rather than a fixture.
+  dir?: string
+  /// Whose provider and model the bar under the box edits. Defaults to the
+  /// orchestrator, which is what answers a thread nobody else is watching.
+  agentId?: string
 }
 
-export function Thread({ load, send, name, placeholder, footnote, empty, reloadKey }: ThreadProps) {
+export function Thread({
+  load,
+  send,
+  name,
+  placeholder,
+  footnote,
+  empty,
+  reloadKey,
+  dir,
+  agentId = 'assistant',
+}: ThreadProps) {
   const [conv, setConv] = useState<ConversationMeta | null>(null)
   const [err, setErr] = useState('')
   const [draft, setDraft] = useState('')
@@ -417,13 +436,20 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
                 m={m}
                 who={who(m)}
                 nameNode={m.by ? <Pill id={m.by} label={who(m)} /> : hostId ? <Pill id={hostId} label={name} host /> : undefined}
+                dir={dir}
                 renderText={(t) => <MentionText text={t} />}
               />
             ),
           )
         )}
         {steps.map((m, i) => (
-          <Bubble key={`s-${i}`} m={m} who={who(m)} renderText={(t) => <MentionText text={t} />} />
+          <Bubble
+            key={`s-${i}`}
+            m={m}
+            who={who(m)}
+            dir={dir}
+            renderText={(t) => <MentionText text={t} />}
+          />
         ))}
         {sending && (
           <div className="flex gap-3 py-2.5">
@@ -439,9 +465,10 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
                 )}
               </div>
               {streaming ? (
-                <div className="whitespace-pre-wrap break-words text-[12.5px] leading-[1.65] text-body">
-                  {streaming}
-                </div>
+                /* No `dir` mid-stream: half of a fenced command is not a
+                   command, and a Run button on one is an invitation to run
+                   the first half of something. */
+                <Markdown text={streaming} />
               ) : (
                 <div className="flex items-center gap-2 text-[11.5px] text-muted">
                   <Icon name="spinner" size={12} className="animate-spin" />
@@ -552,7 +579,14 @@ export function Thread({ load, send, name, placeholder, footnote, empty, reloadK
             Send
           </button>
         </div>
-        {footnote && <div className="mt-1.5 text-[10.5px] text-faint">{footnote}</div>}
+        {/* What it can do, and what it runs on — the two things worth knowing
+            at the moment you are about to ask. */}
+        <div className="mt-1.5 flex items-start gap-3">
+          {footnote && <div className="min-w-0 flex-1 text-[10.5px] text-faint">{footnote}</div>}
+          <div className="ml-auto shrink-0">
+            <ModelBar agentId={agentId} />
+          </div>
+        </div>
       </div>
     </div>
     </ThreadContext.Provider>

@@ -158,7 +158,7 @@ pub fn row(r: &rusqlite::Row) -> rusqlite::Result<Schedule> {
 
 pub const COLS: &str = "id, name, kind, node_id, every, at_min, at_ms, duration_min, days, payload, \
                     enabled, catch_up, last_run, last_ok, last_note, remind_min, last_remind, \
-                    feature, work_item";
+                    feature, work_item, manager";
 
 // ---------------------------------------------------------------------------
 // When does it fire
@@ -826,6 +826,40 @@ mod tests {
             work_item: String::new(),
             next_run: None,
         }
+    }
+
+    /// The column list and the row reader have to agree, and nothing else
+    /// checks that they do.
+    ///
+    /// `manager` was added to the struct and to `row()` but never to `COLS`,
+    /// so every read of a schedule failed with "Invalid column index: 19" —
+    /// the calendar, the scheduler page and the tick, all at once — while
+    /// the whole suite stayed green, because every test reached the table
+    /// through hand-written SQL instead of the query the app uses.
+    #[test]
+    fn a_schedule_reads_back_through_the_query_the_app_uses() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(crate::db::CORE_SCHEMA).unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        crate::db::migrate(&conn);
+
+        conn.execute(
+            "INSERT INTO schedules (name, kind, every, at_min, days, payload, catch_up, \
+             remind_min, feature, work_item, manager) \
+             VALUES ('Stand-up', 'bot', 'weekdays', 540, '', '', 1, 10, 'ship-it', 'w13', 'devdeck')",
+            [],
+        )
+        .unwrap();
+
+        let out = all(&conn).expect("every column the reader wants is in COLS");
+        assert_eq!(out.len(), 1);
+        let s = &out[0];
+        // Every field added since the original shape, read back in order.
+        assert_eq!(s.name, "Stand-up");
+        assert_eq!(s.remind_min, 10);
+        assert_eq!(s.feature, "ship-it");
+        assert_eq!(s.work_item, "w13");
+        assert_eq!(s.manager, "devdeck");
     }
 
     #[test]

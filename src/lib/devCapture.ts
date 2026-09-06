@@ -29,4 +29,6 @@ export const CAPTURE_ENTRY: string = ''
 export const CAPTURE_FILE_ROOT: string = ''
 /** Open the whole-vault section, and these folder paths inside it. */
 export const CAPTURE_VAULT: string = ''
+/** Open the Add sheet on the active workspace. */
+export const CAPTURE_ADD: boolean = false
 export const CAPTURE_OPEN_FILE: string = ''

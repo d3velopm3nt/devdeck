@@ -25,8 +25,9 @@ import { findNode, resolveDir } from '../lib/tree'
 import { SPACE_TAGS, labelColor, nodeColor } from '../lib/spaces'
 import { loadExampleWorkspace } from '../lib/example'
 import { PopMenu, type MenuItem } from './PopMenu'
-import { CAPTURE_EXPAND, CAPTURE_FILE_ROOT, CAPTURE_VAULT } from '../lib/devCapture'
+import { CAPTURE_ADD, CAPTURE_EXPAND, CAPTURE_FILE_ROOT, CAPTURE_VAULT } from '../lib/devCapture'
 import { BotCreate } from './bot/BotCreate'
+import { AddToWorkspace } from './AddToWorkspace'
 import { GitHubImportModal } from './GitHubImportModal'
 import { Icon } from '../lib/icons'
 
@@ -201,6 +202,13 @@ export function Explorer() {
   )
   const [wsMenu, setWsMenu] = useState<{ x: number; y: number } | null>(null)
   const [ghOpen, setGhOpen] = useState(false)
+  /// Which workspace the Add sheet is pointed at, or null when it is shut.
+  const [addTo, setAddTo] = useState<number | null>(null)
+  // Screenshot harness: a sheet nobody can click is a sheet nobody can check.
+  useEffect(() => {
+    if (CAPTURE_ADD && activeWorkspaceId != null) setAddTo(activeWorkspaceId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeWorkspaceId])
   const [newBotFor, setNewBotFor] = useState<number | null>(null)
   const [filtering, setFiltering] = useState(false)
   const [filter, setFilter] = useState('')
@@ -256,29 +264,17 @@ export function Explorer() {
   // to be the first question, which quietly asserted that everything is a
   // repo — and a Topic has no folder at all. Choosing a folder on that page is
   // what promotes it to a project.
-  // Adding makes a folder. The name is asked for because the folder *is* the
-  // name — and the folder picker that used to open here asked the wrong
-  // question entirely, since a topic has no repo to point at.
-  const addNode = async () => {
-    if (activeWorkspaceId == null) return
-    const name = prompt('Name for the new folder')
-    if (name === null) return
-    const parent = activeSolutionId ?? activeWorkspaceId
-    try {
-      const created = await ipc.vaultCreate(parent, name)
-      expand(parent)
-      await refreshTree()
-      setSelectedNode(created.id)
-      openNodeConfig(created.id, created.name)
-    } catch (e) {
-      alert(String(e))
-    }
-  }
+  // `addNode` used to live here: a `prompt()` for a name, and always a
+  // folder. Every caller now opens the Add sheet instead, which asks what
+  // you meant first — so the one function that could only ever make one of
+  // the four things is gone rather than left as a fifth way in.
 
   const addProjectTo = async (parentId: number) => {
     const dir = await openDialog({ directory: true, title: 'Select the project base folder (repo root)' })
     if (typeof dir !== 'string') return
-    const name = dir.split(/[\/]/).filter(Boolean).pop() ?? 'project'
+    // Windows hands back `F:\Work\thing`, so a `/`-only split named the
+    // project after the whole path.
+    const name = dir.split(/[\\/]/).filter(Boolean).pop() ?? 'project'
     const created = await ipc.vaultCreate(parentId, name)
     await ipc.vaultSetMeta(created.id, { repo: dir })
     expand(parentId)
@@ -389,7 +385,15 @@ export function Explorer() {
   const nodeMenuItems = (node: TreeNode | null): MenuItem[] => {
     if (!node) {
       return [
-        { icon: 'add', label: 'Add…', disabled: activeWorkspaceId == null, onClick: () => void addNode() },
+        // The same sheet as everywhere else. Two menu items called "Add…"
+        // that did different things is how the folder-every-time surprise
+        // stayed hidden for so long.
+        {
+          icon: 'add',
+          label: 'Add…',
+          disabled: activeWorkspaceId == null,
+          onClick: () => activeWorkspaceId != null && setAddTo(activeWorkspaceId),
+        },
         { icon: 'solution', label: 'New solution…', disabled: activeWorkspaceId == null, onClick: () => void addSolution() },
       ]
     }
@@ -425,6 +429,17 @@ export function Explorer() {
         onClick: () => setActiveSolution(node.id),
       })
       items.push({ icon: 'project', label: 'Add project…', onClick: () => void addProjectTo(node.id) })
+    }
+
+    // A workspace is the thing people actually right-click when they want to
+    // put something in it, and it was the one place with no way to.
+    if (node.kind === 'workspace') {
+      items.push({ icon: 'add', label: 'Add…', onClick: () => setAddTo(node.id) })
+      items.push({
+        icon: 'project',
+        label: 'Add project…',
+        onClick: () => void addProjectTo(node.id),
+      })
     }
 
     if (node.kind === 'project') {
@@ -1210,6 +1225,20 @@ export function Explorer() {
               </span>
             )
           })()}
+          {/* Adding to *this* workspace, without going through a menu to
+              find out it is not there. */}
+          {node.kind === 'workspace' && (
+            <button
+              className="hidden items-center rounded px-1 text-dim hover:bg-hover hover:text-ink group-hover:flex"
+              title={`Add to ${node.name}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                setAddTo(node.id)
+              }}
+            >
+              <Icon name="add" size={14} />
+            </button>
+          )}
           <button
             className="hidden items-center rounded px-1 text-dim hover:bg-hover hover:text-ink group-hover:flex"
             title="Actions"
@@ -1294,13 +1323,20 @@ export function Explorer() {
         >
           <Icon name="search" size={14} />
         </button>
+        {/* It used to be a bare + whose tooltip promised "a project, topic or
+            anything else" and always made a folder. A button that names one
+            thing and does another is worse than no button. */}
         <button
-          className="flex shrink-0 items-center rounded p-1 text-dim hover:bg-hover hover:text-ink disabled:opacity-40"
-          title={activeWorkspaceId == null ? 'Create a workspace first' : 'Add a project, topic or anything else'}
+          className="btn-primary shrink-0 px-2 py-0.5 text-[11.5px] disabled:opacity-40"
+          title={
+            activeWorkspaceId == null
+              ? 'Create a workspace first'
+              : 'Add a project, an area, or a folder'
+          }
           disabled={activeWorkspaceId == null}
-          onClick={() => void addNode()}
+          onClick={() => activeWorkspaceId != null && setAddTo(activeWorkspaceId)}
         >
-          <Icon name="add" size={14} />
+          <Icon name="add" size={12} /> Add
         </button>
         <button
           className="flex shrink-0 items-center rounded p-1 text-dim hover:bg-hover hover:text-ink"
@@ -1395,15 +1431,26 @@ export function Explorer() {
           </div>
         ) : roots.length === 0 ? (
           <div className="p-3 text-[12px] leading-5 text-muted">
-            <p>
-              “{ws?.name}” has no projects yet. A project is an app / repo root with a base path;
-              folders inside it are subpaths.
+            <p className="text-body">Nothing in “{ws?.name}” yet.</p>
+            <p className="mt-1">
+              A workspace holds code projects and areas like Marketing or Money.
             </p>
+            {/* The empty state is where a person is most stuck, so it is the
+                one place worth spelling the choice out rather than opening a
+                menu of four. */}
             <button
               className="btn-primary mt-3 flex w-full items-center justify-center gap-1.5 text-[12px]"
-              onClick={() => void addNode()}
+              disabled={activeWorkspaceId == null}
+              onClick={() => activeWorkspaceId != null && setAddTo(activeWorkspaceId)}
             >
-              <Icon name="add" size={14} /> Add something
+              <Icon name="add" size={14} /> Add a code project
+            </button>
+            <button
+              className="btn-ghost mt-1.5 flex w-full items-center justify-center gap-1.5 text-[12px]"
+              disabled={activeWorkspaceId == null}
+              onClick={() => activeWorkspaceId != null && setAddTo(activeWorkspaceId)}
+            >
+              An area with no code
             </button>
           </div>
         ) : (
@@ -1439,6 +1486,27 @@ export function Explorer() {
         <PopMenu x={wsMenu.x} y={wsMenu.y} items={workspaceMenuItems()} onClose={() => setWsMenu(null)} />
       )}
       {ghOpen && <GitHubImportModal onClose={() => setGhOpen(false)} />}
+      {addTo != null && (
+        <AddToWorkspace
+          workspaceId={addTo}
+          onClose={() => setAddTo(null)}
+          onGithub={() => {
+            setAddTo(null)
+            setGhOpen(true)
+          }}
+          onCreated={(created, kind) => {
+            setAddTo(null)
+            expand(created.parent_id ?? addTo)
+            void refreshTree().then(() => {
+              setSelectedNode(created.id)
+              // A project has a repository to point at and a name to confirm,
+              // so it opens setup. An area or a folder is finished already.
+              if (kind === 'project') openNodeSetup(created.id, created.name)
+              else openNodeConfig(created.id, created.name)
+            })
+          }}
+        />
+      )}
       {newBotFor != null && (
         <BotCreate
           nodeId={newBotFor}

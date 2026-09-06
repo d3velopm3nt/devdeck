@@ -46,6 +46,14 @@ fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
 
+/// One thing a manager owns: a feature, and the space it lives in.
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct Owned {
+    pub node_id: i64,
+    pub node_name: String,
+    pub feature: String,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Bot {
     /// What people type after the `@`, and the identity. A manager is a file
@@ -77,9 +85,14 @@ pub struct Bot {
     /// the bot can still be told what that starter offers.
     #[serde(default)]
     pub template: String,
-    /// The `.devdeck` feature holding its work items. Empty until it has a plan.
+    /// The first feature it owns, kept for the pages that still ask for one.
     #[serde(default)]
     pub feature: String,
+    /// Everything it owns, across every space. A manager is responsible for
+    /// features rather than for a folder, so this — not `feature` — is what it
+    /// actually does.
+    #[serde(default)]
+    pub portfolio: Vec<Owned>,
     /// The agent its heartbeat wakes, or empty for a heartbeat that only reads
     /// and reports.
     ///
@@ -378,6 +391,7 @@ fn from_manager(
     // something. When it owns exactly one thing those are usually the same
     // node, which is what the migration produced.
     let first = portfolio.first().cloned();
+    let owned = portfolio.clone();
     let node_id = if m.home != 0 {
         m.home
     } else {
@@ -405,6 +419,14 @@ fn from_manager(
         skills: m.skills.clone(),
         template: m.template.clone(),
         feature: first.map(|(_, f)| f).unwrap_or_default(),
+        portfolio: owned
+            .iter()
+            .map(|(n, f)| Owned {
+                node_id: *n,
+                node_name: names.get(n).cloned().unwrap_or_default(),
+                feature: f.clone(),
+            })
+            .collect(),
         agent: m.agent.clone(),
         team: m.team.clone(),
         wake_intent: m.wake_intent.clone(),
@@ -1199,6 +1221,8 @@ pub fn bot_create(
 /// interface's decision, and it changes there without touching this.
 #[derive(Serialize, Clone, Debug)]
 pub struct BotStanding {
+    /// Whose standing this is. The identity, now that a manager is not a node.
+    pub handle: String,
     pub node_id: i64,
     pub done: usize,
     pub total: usize,
@@ -1206,6 +1230,10 @@ pub struct BotStanding {
     pub unclaimed: usize,
     /// The feature the counts came from, or empty when they are the whole deck.
     pub feature: String,
+    /// How many spaces it works across, and how many features it owns — the
+    /// two numbers that say a manager is not a folder.
+    pub spaces: usize,
+    pub features: usize,
 }
 
 #[tauri::command]
@@ -1215,29 +1243,44 @@ pub fn bots_standing(db: tauri::State<Db>) -> Vec<BotStanding> {
         .into_iter()
         .map(|b| {
             let mut out = BotStanding {
+                handle: b.handle.clone(),
                 node_id: b.node_id,
                 done: 0,
                 total: 0,
                 blocked: 0,
                 unclaimed: 0,
                 feature: b.feature.trim().to_string(),
+                spaces: 0,
+                features: b.portfolio.len(),
             };
-            let Some(dir) = db::node_by_id(&conn, b.node_id).ok().and_then(|n| dir_of(&conn, &n))
-            else {
-                return out;
-            };
-            let deck = crate::aiw::deck::Deck::new(&dir);
-            if !deck.exists() {
-                return out;
+            // Everything it owns, wherever it lives. A manager works across
+            // spaces, so counting one folder would under-report the moment it
+            // owns anything in a second.
+            let mut spaces: std::collections::HashSet<i64> = std::collections::HashSet::new();
+            let mut work: Vec<(i64, String)> =
+                b.portfolio.iter().map(|o| (o.node_id, o.feature.clone())).collect();
+            if work.is_empty() && b.node_id != 0 {
+                // Owning nothing yet: report what is in its home space, which
+                // is what it would adopt.
+                if let Some(dir) =
+                    db::node_by_id(&conn, b.node_id).ok().and_then(|n| dir_of(&conn, &n))
+                {
+                    let deck = crate::aiw::deck::Deck::new(&dir);
+                    if deck.exists() {
+                        work = deck.feature_slugs().into_iter().map(|s| (b.node_id, s)).collect();
+                    }
+                }
             }
-            // Its own plan when it has one; everything in the deck when it does
-            // not — a bot with no feature still manages what is there.
-            let slugs: Vec<String> = if out.feature.is_empty() {
-                deck.feature_slugs()
-            } else {
-                vec![out.feature.clone()]
-            };
-            for slug in slugs {
+            for (node_id, slug) in work {
+                spaces.insert(node_id);
+                let Some(dir) = db::node_by_id(&conn, node_id).ok().and_then(|n| dir_of(&conn, &n))
+                else {
+                    continue;
+                };
+                let deck = crate::aiw::deck::Deck::new(&dir);
+                if !deck.exists() {
+                    continue;
+                }
                 let Ok(work) = deck.work(&slug) else { continue };
                 for item in &work.meta.items {
                     out.total += 1;
@@ -1249,6 +1292,7 @@ pub fn bots_standing(db: tauri::State<Db>) -> Vec<BotStanding> {
                     }
                 }
             }
+            out.spaces = spaces.len();
             out
         })
         .collect()

@@ -348,6 +348,135 @@ time or the system's; and whether "add a calendar" ever means syncing a real
 one (Google, Outlook, ICS) rather than DevDeck keeping its own. The second
 changes the foundation, so it is a decision rather than a detail.
 
+### Managers, roles and the one-to-one — designed, not built
+
+Brainstormed 6 September 2026. This replaces the shape bots have had since
+they were built, and the reason is one sentence: **a bot was pinned to a
+folder, and a manager is not.**
+
+**The inversion.** A marketing manager covers a DevDeck feature *and* the
+TrackX site. That cannot be expressed while a bot is `_bot.md` inside one
+node, and it breaks the thing that made the old model tidy — reporting lines
+were the directory layout. So:
+
+> The tree is the work. The org is the people. They were only ever conflated
+> because a bot lived in a folder.
+
+**A manager owns features, never spaces.** Owning a folder was the trap. One
+owner per feature, because "who is accountable for this" must have an answer;
+any number of managers pulled in beside them. A space is covered by whoever
+owns the features in it, and a space with no owned features shows up as
+unmanaged — which is a fact worth seeing rather than a state to hide.
+
+**What a manager is:** a name, a handle, a role, a goal, a rhythm, a team of
+agents it may put to work, and a portfolio of features across any number of
+spaces. It lives at the vault root — `DevDeck/.devdeck/team/<handle>.md`, one
+file per manager. Not in a space, since it belongs to none of them; not in the
+personal store, which is for things about *you* and your team is not a
+preference. Files stay the truth, the team travels with the vault, and nothing
+lands inside a repository.
+
+**No reporting lines yet.** Everyone reports to you. `reports_to` can arrive
+when there is a manager who should answer to another manager rather than to
+you; the escalation ladder works either way.
+
+**A role carries its skills and its agents.** `botcatalog.rs` already has this
+and reasons about it well — a template holds a goal, a rhythm, steps that
+become work items, standards, skills, and tool offers on a deliberate ladder
+("a skill is words, an agent is words plus permissions, software is a real
+install, self-hosted is something that keeps running"). What changes is what
+applying one *produces*: a manager with a portfolio, not a bot dropped on a
+folder. Hiring a marketing manager brings the marketing skills and its default
+agents with it.
+
+**Skills start implying tools**, the way they do for Claude Code: a skill is a
+folder with a manifest — name, one-line "when to use", a body, and what it
+needs. Two rules keep it honest. *Listing is not loading*: prompts carry names
+and one-liners, bodies load on use, or five skills cost context on every wake.
+*Installing is not granting*: a skill declares `needs: [files:read, terminal]`
+and installing shows you that, but the permission matrix stays the only thing
+that grants. This overlaps the Community module by design — they must be one
+system, not two.
+
+#### Managers working together
+
+`@` reaches **any** manager, not only those below you in a tree — the tree is
+no longer the org, so the old subtree rule in `colleagues()` goes. Pulling
+someone in is free; `@name take "item"` moves the claim through the delegate
+gate, as it already does.
+
+A manager pulled onto an item **lends its own agents** to it. The item stays
+on the owning manager's plan; receipts name both, so accountability does not
+blur. And **a manager always hands off to its team** — managers are strictly
+hands-off, which makes the org legible and has one sharp consequence: a
+manager with no agents can keep a plan and ask questions, and nothing else.
+That is a vacancy, and it should read as one.
+
+**Permissions follow the work, not the worker.** Grants are keyed by agent and
+tool and know nothing about spaces, so lending an agent across spaces would
+quietly carry its powers into another repository. The rule: an agent runs
+under the grants of *the item's space*. One rule, no per-space matrix to
+maintain, and lending can never widen what an agent may touch.
+
+#### The one-to-one
+
+**One shared page, owned by you**, not one per manager: three managers wanting
+fifteen minutes is one meeting.
+
+A question is anchored to a goal, a feature or a work item, and is one of
+three things: unblock me, approve this plan change, or a suggestion. It is not
+a new object — it is a message in the feature's thread, marked as awaiting an
+answer, and the page is an index over those marks. Answering in the thread
+answers it. Two inboxes is one too many.
+
+The rules, which are the difference between a manager and a nuisance:
+
+- **No guessing.** If you do not answer, it asks again — it does not start
+  work it is unsure about. It re-raises on a backoff, never more than once per
+  wake, and meanwhile **carries on with the rest of its plan**. One question
+  must not freeze a space.
+- **Questions never expire.** They stay until answered, or until the manager
+  withdraws one because the work moved on — and withdrawing says so.
+- **Three open per manager.** Past that it prioritises or bundles. A manager
+  with twelve open questions is not managing.
+- **It books a free slot inside your working times**, and if there is none it
+  says *"no free time found this week"* and leaves the question untimed rather
+  than booking you at ten at night.
+- **The event only protects the time.** The page is where you answer; there is
+  no live meeting mode.
+- **An answer that is a decision becomes a decision** in the deck, so the next
+  manager to look does not re-ask. An answer that changes the plan produces a
+  receipt saying what changed.
+
+**Working times live in Settings**: seven days, a start and an end for each,
+one default applied to the weekdays, weekends set separately. They decide
+which gaps are free and when anything may be booked. Managers still wake on
+their own rhythm — a machine working at three in the morning is fine — but
+nothing is ever *booked* outside your hours.
+
+**The ladder**: question → the one-to-one → blocking and going stale → Needs
+you → a deadline at risk → interrupt. And a split that the org model forces:
+**safety approvals still come straight to you**, because a permission is not a
+decision, while **work blockers go to the manager**, who decides whether it
+becomes a question or something they can solve by lending an agent. An agent's
+blocker reaching you directly is a manager being skipped.
+
+#### What it costs, honestly
+
+`bots.rs` keys everything off `node_id` — `colleagues()`, the wake report, the
+permission personas — and all of it moves to a bot id plus a portfolio lookup.
+A manager spanning spaces has no single repository, so context anchors per
+item worked on rather than per bot; the precedent exists, since a parent node
+already says outright that it has no repository. Migration is mechanical: each
+existing bot becomes a manager whose portfolio is that node's features. Copy
+changes too — Home currently says "one per space, awake on a rhythm", which
+stops being true.
+
+**Open**: whether a manager may create work in a space it covers nothing in
+(assumption: no — it asks the owner, or you); what an idle manager does when
+its plan is empty; and whether the organogram page is the first thing built or
+the last.
+
 ### Micro-habits and the free slot — designed, not built · `design/calendar-day/`
 
 Step 3 of the calendar board, and the piece that makes the day view something

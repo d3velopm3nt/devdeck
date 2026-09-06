@@ -61,7 +61,7 @@ fn feature_persona(
     let managing = {
         let db = app.try_state::<Db>().ok_or("no database")?;
         let conn = db.0.lock().unwrap();
-        crate::bots::bot_on(&conn, node_id)
+        crate::bots::bot_on_node(&conn, node_id)
             .filter(|b| b.feature.trim() == feature_id)
             .map(|b| (crate::bots::persona_in(&conn, ws, &b), b.name.clone()))
     };
@@ -182,7 +182,7 @@ fn persona_for_thread(
     if let Some(node_id) = conv.bot_node.or(conv.node) {
         let db = app.try_state::<Db>().ok_or("no database")?;
         let conn = db.0.lock().unwrap();
-        if let Some(bot) = crate::bots::bot_on(&conn, node_id) {
+        if let Some(bot) = crate::bots::bot_on_node(&conn, node_id) {
             return Ok(crate::bots::persona_in(&conn, ws, &bot));
         }
     }
@@ -417,7 +417,7 @@ fn headlines(app: &tauri::AppHandle, ws: &Arc<Workspace>, node_id: i64) -> Strin
         let kids: Vec<(i64, String, Option<crate::bots::Bot>)> = all
             .iter()
             .filter(|n| n.parent_id == Some(node_id))
-            .map(|n| (n.id, n.name.clone(), crate::bots::bot_on(&conn, n.id)))
+            .map(|n| (n.id, n.name.clone(), crate::bots::bot_on_node(&conn, n.id)))
             .collect();
         (kids, repo)
     };
@@ -474,7 +474,7 @@ fn node_persona(
     let bot = {
         let db = app.try_state::<Db>().ok_or("no database")?;
         let conn = db.0.lock().unwrap();
-        crate::bots::bot_on(&conn, node_id).map(|b| crate::bots::persona_in(&conn, ws, &b))
+        crate::bots::bot_on_node(&conn, node_id).map(|b| crate::bots::persona_in(&conn, ws, &b))
     };
     let mut p = match bot {
         Some(p) => p,

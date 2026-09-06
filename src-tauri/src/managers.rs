@@ -81,6 +81,14 @@ pub struct Manager {
     /// migration can be read back rather than guessed at.
     #[serde(default)]
     pub was: String,
+    /// The node this manager's *memory* is filed under — its interview, its
+    /// beliefs, the suggestions you turned down. Not what it owns: ownership
+    /// is on the feature. This exists because that memory lives at
+    /// `<personal>/bots/<node>/mind.md` and re-keying those folders by handle
+    /// is its own migration. A manager that owns nothing still has a mind, and
+    /// this is how it is found until then.
+    #[serde(default)]
+    pub home: i64,
 }
 
 /// `<vault>/.devdeck/team`, or None when no vault has been chosen yet.
@@ -145,6 +153,7 @@ fn parse(handle: &str, raw: &str) -> Manager {
                         "stop_at" => m.stop_at = list(&v),
                         "skills" => m.skills = list(&v),
                         "was" => m.was = v,
+                        "home" => m.home = v.parse().unwrap_or(0),
                         _ => {}
                     }
                 }
@@ -197,6 +206,9 @@ fn serialise(m: &Manager) -> String {
     }
     if !m.was.trim().is_empty() {
         out.push_str(&format!("was: {}\n", m.was.trim()));
+    }
+    if m.home != 0 {
+        out.push_str(&format!("home: {}\n", m.home));
     }
     out.push_str("---\n");
     if !m.body.trim().is_empty() {
@@ -251,9 +263,86 @@ pub fn delete(conn: &Connection, handle: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Who owns what, read from the features themselves.
+///
+/// One pass over every node's deck rather than a lookup per manager: the
+/// portfolio is derived, so the only way it can be wrong is if the features
+/// say something different, and then the features are right.
+pub fn portfolios(conn: &Connection) -> std::collections::HashMap<String, Vec<(i64, String)>> {
+    let mut out: std::collections::HashMap<String, Vec<(i64, String)>> =
+        std::collections::HashMap::new();
+    for n in db::nodes_on(conn).unwrap_or_default() {
+        let Some(deck_dir) = db::node_deck_dir(conn, &n) else { continue };
+        let deck = crate::aiw::deck::Deck::new(deck_dir);
+        if !deck.exists() {
+            continue;
+        }
+        for slug in deck.feature_slugs() {
+            let Ok(doc) = deck.feature(&slug) else { continue };
+            let owner = doc.meta.owner.trim().to_string();
+            if owner.is_empty() {
+                continue;
+            }
+            out.entry(owner).or_default().push((n.id, slug));
+        }
+    }
+    out
+}
+
+/// What one manager owns.
+pub fn owned_by(conn: &Connection, handle: &str) -> Vec<(i64, String)> {
+    portfolios(conn).remove(handle).unwrap_or_default()
+}
+
 // ---------------------------------------------------------------------------
 // Coming from the old shape
 // ---------------------------------------------------------------------------
+
+/// Give a manager back its `home` when it has none.
+///
+/// The first migration ran before `home` existed, so the managers it wrote
+/// have no idea where their own memory is filed — and a bot page opened from a
+/// space could not find them. The answer is already in the file: `was:` names
+/// the folder the `_bot.md` came out of. Failing that, the first feature it
+/// owns is the next best truth.
+///
+/// Idempotent, and silent when there is nothing to do.
+pub fn backfill_home(conn: &Connection) -> Vec<String> {
+    let mut fixed = Vec::new();
+    let owned = portfolios(conn);
+    let nodes = db::nodes_on(conn).unwrap_or_default();
+
+    for m in all(conn) {
+        if m.home != 0 {
+            continue;
+        }
+        // `was` is "<the node's vault folder>/_bot.md", so the folder it names
+        // is the node we are looking for.
+        let from_was = m
+            .was
+            .trim()
+            .rsplit_once(['/', '\\'])
+            .map(|(dir, _)| dir.replace('\\', "/"))
+            .and_then(|dir| {
+                nodes.iter().find(|n| {
+                    db::node_deck_dir(conn, n)
+                        .map(|d| d.to_string_lossy().replace('\\', "/") == dir)
+                        .unwrap_or(false)
+                })
+            })
+            .map(|n| n.id);
+
+        let home = from_was.or_else(|| owned.get(&m.handle).and_then(|p| p.first().map(|(n, _)| *n)));
+        let Some(home) = home else { continue };
+
+        let mut m = m;
+        m.home = home;
+        if save(conn, &m).is_ok() {
+            fixed.push(m.handle);
+        }
+    }
+    fixed
+}
 
 /// Move every `_bot.md` into the team, and stamp the feature it managed with
 /// its new owner.
@@ -292,6 +381,7 @@ pub fn migrate_from_bots(conn: &Connection) -> Vec<String> {
             wake_intent: b.wake_intent.clone(),
             stop_at: b.stop_at.clone(),
             was: format!("{}/{}", b.dir.trim_end_matches(['/', '\\']), crate::bots::FILE),
+            home: b.node_id,
         };
         if fs::create_dir_all(&d).is_err() {
             return done;
@@ -350,6 +440,7 @@ mod tests {
             wake_intent: "check the launch plan".into(),
             stop_at: vec!["before any push".into()],
             was: String::new(),
+            home: 0,
         };
         let back = parse("marketing", &serialise(&m));
         assert_eq!(back.name, m.name);

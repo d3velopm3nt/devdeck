@@ -393,6 +393,16 @@ pub fn migrate(conn: &Connection) {
         );
     }
 
+    // A bot's heartbeat belongs to a manager, not to a folder: a manager is a
+    // file at the vault root now and can be responsible for several spaces or
+    // none.
+    if conn.prepare("SELECT manager FROM schedules LIMIT 1").is_err() {
+        let _ = conn.execute(
+            "ALTER TABLE schedules ADD COLUMN manager TEXT NOT NULL DEFAULT ''",
+            [],
+        );
+    }
+
     // A schedule can warn you before it starts, and can say what it is for.
     if conn.prepare("SELECT remind_min FROM schedules LIMIT 1").is_err() {
         let _ = conn.execute(

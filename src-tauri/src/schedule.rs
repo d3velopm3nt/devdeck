@@ -46,6 +46,9 @@ CREATE TABLE IF NOT EXISTS schedules (
     name TEXT NOT NULL,
     -- reminder | command | bot | agent
     kind TEXT NOT NULL,
+    -- For a bot heartbeat: whose it is, by handle. A manager is not a folder,
+    -- so node_id cannot name one.
+    manager TEXT NOT NULL DEFAULT '',
     -- The node this belongs to. Null means it is not about any one space.
     node_id INTEGER REFERENCES nodes(id) ON DELETE CASCADE,
     -- daily | weekdays | weekly | hourly | once
@@ -116,6 +119,9 @@ pub struct Schedule {
     pub feature: String,
     #[serde(default)]
     pub work_item: String,
+    /// For a bot heartbeat: the manager it wakes, by handle.
+    #[serde(default)]
+    pub manager: String,
     /// Filled on read: when this next fires, as a unix ms timestamp.
     #[serde(default)]
     pub next_run: Option<i64>,
@@ -145,6 +151,7 @@ pub fn row(r: &rusqlite::Row) -> rusqlite::Result<Schedule> {
         last_remind: r.get(16)?,
         feature: r.get(17)?,
         work_item: r.get(18)?,
+        manager: r.get(19)?,
         next_run: None,
     })
 }
@@ -573,10 +580,14 @@ pub fn on_event(app: &tauri::AppHandle, event_type: &str, project_id: Option<&st
             let (report, bot) = {
                 let Some(db) = h.try_state::<Db>() else { return };
                 let conn = db.0.lock().unwrap();
-                match s.node_id {
-                    Some(n) => (crate::bots::wake_report(&conn, n), crate::bots::bot_on(&conn, n)),
-                    None => (None, None),
-                }
+                // The heartbeat names its manager; the report is about the
+                // space that manager's memory is filed under.
+                let bot = crate::bots::bot_on(&conn, &s.manager);
+                let report = bot
+                    .as_ref()
+                    .filter(|b| b.node_id != 0)
+                    .and_then(|b| crate::bots::wake_report(&conn, b.node_id));
+                (report, bot)
             };
             let (ok, note) = run_one(&h, &s, dir, false, report, bot);
             if let Some(db) = h.try_state::<Db>() {
@@ -640,13 +651,12 @@ pub fn tick(app: &tauri::AppHandle, startup: bool) {
             } else {
                 let dir = dir_for(&conn, s.node_id);
                 let (report, bot) = if s.kind == "bot" {
-                    match s.node_id {
-                        Some(n) => (
-                            crate::bots::wake_report(&conn, n),
-                            crate::bots::bot_on(&conn, n),
-                        ),
-                        None => (None, None),
-                    }
+                    let bot = crate::bots::bot_on(&conn, &s.manager);
+                    let report = bot
+                        .as_ref()
+                        .filter(|b| b.node_id != 0)
+                        .and_then(|b| crate::bots::wake_report(&conn, b.node_id));
+                    (report, bot)
                 } else {
                     (None, None)
                 };
@@ -762,7 +772,7 @@ pub fn schedule_run_now(
             match s.node_id {
                 Some(n) => (
                     crate::bots::wake_report(&conn, n),
-                    crate::bots::bot_on(&conn, n),
+                    crate::bots::bot_on_node(&conn, n),
                 ),
                 None => (None, None),
             }
@@ -811,6 +821,7 @@ mod tests {
             last_note: String::new(),
             remind_min,
             last_remind,
+            manager: String::new(),
             feature: String::new(),
             work_item: String::new(),
             next_run: None,

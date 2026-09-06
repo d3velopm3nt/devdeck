@@ -213,6 +213,11 @@ export const spaceCreate = (s: {
 // ---- bots: a file in a folder, not a new entity ----
 
 export interface Bot {
+  /** What people type after the `@`, and the identity: a manager is a file at
+   *  the vault root, so this — not a node — is what names it. */
+  handle: string
+  /** Where its memory is filed. Not what it owns: ownership is on the
+   *  feature. 0 for a manager with no home. */
   node_id: number
   node_name: string
   dir: string
@@ -255,7 +260,10 @@ export interface BotStanding {
 }
 
 export const botsStanding = () => invoke<BotStanding[]>('bots_standing')
-export const botGet = (nodeId: number) => invoke<Bot | null>('bot_get', { nodeId })
+export const botGet = (handle: string) => invoke<Bot | null>('bot_get', { handle })
+/** The manager whose memory lives on a node — how a bot page opened from a
+ *  space still finds it. */
+export const botForNode = (nodeId: number) => invoke<Bot | null>('bot_for_node', { nodeId })
 export const botSave = (b: {
   nodeId: number
   name: string

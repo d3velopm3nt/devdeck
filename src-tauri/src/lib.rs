@@ -719,7 +719,13 @@ pub fn run() {
                     {
                         let moved = match h.try_state::<db::Db>() {
                             Some(db) => match db.0.lock() {
-                                Ok(conn) => managers::migrate_from_bots(&conn),
+                                Ok(conn) => {
+                                    let moved = managers::migrate_from_bots(&conn);
+                                    // The first migration predated `home`, so
+                                    // give it back to anyone missing it.
+                                    managers::backfill_home(&conn);
+                                    moved
+                                }
                                 Err(_) => Vec::new(),
                             },
                             None => Vec::new(),
@@ -935,6 +941,7 @@ pub fn run() {
             bots::bots_list,
             bots::bots_standing,
             bots::bot_get,
+            bots::bot_for_node,
             bots::bot_save,
             bots::bot_delete,
             bots::bot_create,

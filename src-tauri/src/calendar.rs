@@ -402,6 +402,7 @@ mod tests {
             last_note: String::new(),
             remind_min: 0,
             last_remind: None,
+            manager: String::new(),
             feature: String::new(),
             work_item: String::new(),
             next_run: None,

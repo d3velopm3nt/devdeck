@@ -48,7 +48,13 @@ fn err(e: impl std::fmt::Display) -> String {
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Bot {
-    /// The node it runs. A bot has exactly one, and a node has at most one bot.
+    /// What people type after the `@`, and the identity. A manager is a file
+    /// at the vault root now, so this — not a node — is what names it.
+    #[serde(default)]
+    pub handle: String,
+    /// Where its *memory* is filed: the interview, the beliefs, the
+    /// suggestions you turned down. Not what it owns — ownership is on the
+    /// feature — and 0 for a manager with no home yet.
     pub node_id: i64,
     pub node_name: String,
     pub dir: String,
@@ -241,10 +247,10 @@ fn write(dir: &Path, b: &Bot) -> Result<(), String> {
 // The heartbeat row
 // ---------------------------------------------------------------------------
 
-fn heartbeat(conn: &Connection, node_id: i64) -> Option<(i64, Option<i64>)> {
+fn heartbeat(conn: &Connection, handle: &str) -> Option<(i64, Option<i64>)> {
     conn.query_row(
-        "SELECT id, last_run FROM schedules WHERE kind = 'bot' AND node_id = ?1 LIMIT 1",
-        params![node_id],
+        "SELECT id, last_run FROM schedules WHERE kind = 'bot' AND manager = ?1 LIMIT 1",
+        params![handle],
         |r| Ok((r.get(0)?, r.get(1)?)),
     )
     .ok()
@@ -253,7 +259,7 @@ fn heartbeat(conn: &Connection, node_id: i64) -> Option<(i64, Option<i64>)> {
 /// Keep the `schedules` row in step with the file. The file decides; this only
 /// makes the clock agree with it.
 fn sync_heartbeat(conn: &Connection, b: &Bot) -> Result<Option<i64>, String> {
-    let existing = heartbeat(conn, b.node_id).map(|(id, _)| id);
+    let existing = heartbeat(conn, &b.handle).map(|(id, _)| id);
 
     if b.every.trim().is_empty() {
         if let Some(id) = existing {
@@ -282,9 +288,19 @@ fn sync_heartbeat(conn: &Connection, b: &Bot) -> Result<Option<i64>, String> {
             // which is a stream you stop reading, for the sake of a distinction
             // that does not exist here.
             conn.execute(
-                "INSERT INTO schedules (name, kind, node_id, every, at_min, days, payload, catch_up) \
-                 VALUES (?1, 'bot', ?2, ?3, ?4, ?5, '', 1)",
-                params![b.name.trim(), b.node_id, b.every, b.at_min, b.days],
+                "INSERT INTO schedules (name, kind, node_id, manager, every, at_min, days, \
+                 payload, catch_up) VALUES (?1, 'bot', ?2, ?3, ?4, ?5, ?6, '', 1)",
+                params![
+                    b.name.trim(),
+                    // Null rather than 0: a manager with no home belongs to no
+                    // node, and a foreign key pointing at nothing is worse
+                    // than one that admits it.
+                    (b.node_id != 0).then_some(b.node_id),
+                    b.handle,
+                    b.every,
+                    b.at_min,
+                    b.days
+                ],
             )
             .map_err(err)?;
             Ok(Some(conn.last_insert_rowid()))
@@ -333,19 +349,69 @@ fn dir_of(conn: &Connection, node: &db::Node) -> Option<PathBuf> {
 /// it is safe to call from inside another command's lock — which is what a
 /// thread does when it has to work out whether `@marketing` is anybody.
 pub fn all_bots(conn: &Connection) -> Vec<Bot> {
-    let mut out = Vec::new();
-    for n in db::nodes_on(conn).unwrap_or_default() {
-        let Some(dir) = dir_of(conn, &n) else { continue };
-        let Some(mut b) = read(&dir) else { continue };
-        b.node_id = n.id;
-        b.node_name = n.name.clone();
-        b.dir = dir.to_string_lossy().to_string();
-        if b.name.trim().is_empty() {
-            b.name = format!("{} bot", n.name);
-        }
-        out.push(b);
+    let names: std::collections::HashMap<i64, String> = db::nodes_on(conn)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|n| (n.id, n.name))
+        .collect();
+    let owned = crate::managers::portfolios(conn);
+
+    crate::managers::all(conn)
+        .into_iter()
+        .map(|m| from_manager(conn, &m, owned.get(&m.handle).cloned().unwrap_or_default(), &names))
+        .collect()
+}
+
+/// One manager, in the shape the rest of the app still speaks.
+///
+/// `feature` and `node_id` used to be what a bot *was*; they are derived now.
+/// A manager with one owned feature looks exactly as it did, which is why
+/// nothing above this had to change at once — and a manager with none is
+/// simply a manager with nothing on its plate, rather than a broken row.
+fn from_manager(
+    conn: &Connection,
+    m: &crate::managers::Manager,
+    portfolio: Vec<(i64, String)>,
+    names: &std::collections::HashMap<i64, String>,
+) -> Bot {
+    // Its memory lives under `home`; its work lives wherever it owns
+    // something. When it owns exactly one thing those are usually the same
+    // node, which is what the migration produced.
+    let first = portfolio.first().cloned();
+    let node_id = if m.home != 0 {
+        m.home
+    } else {
+        first.as_ref().map(|(n, _)| *n).unwrap_or(0)
+    };
+    Bot {
+        handle: m.handle.clone(),
+        node_id,
+        node_name: names.get(&node_id).cloned().unwrap_or_default(),
+        dir: db::node_by_id(conn, node_id)
+            .ok()
+            .and_then(|n| dir_of(conn, &n))
+            .map(|d| d.to_string_lossy().to_string())
+            .unwrap_or_default(),
+        name: if m.name.trim().is_empty() {
+            m.handle.clone()
+        } else {
+            m.name.clone()
+        },
+        goal: m.goal.clone(),
+        every: m.every.clone(),
+        at_min: m.at_min,
+        days: m.days.clone(),
+        body: m.body.clone(),
+        skills: m.skills.clone(),
+        template: m.template.clone(),
+        feature: first.map(|(_, f)| f).unwrap_or_default(),
+        agent: m.agent.clone(),
+        team: m.team.clone(),
+        wake_intent: m.wake_intent.clone(),
+        stop_at: m.stop_at.clone(),
+        schedule_id: None,
+        last_woke: None,
     }
-    out
 }
 
 /// Whether a bot answers to `@name`.
@@ -380,63 +446,48 @@ pub fn answers_to(b: &Bot, mention: &str) -> bool {
 #[tauri::command]
 pub fn bots_list(db: tauri::State<Db>) -> Result<Vec<Bot>, String> {
     let conn = db.0.lock().unwrap();
-    let mut out = Vec::new();
-    let mut seen = Vec::new();
-    for n in db::nodes_on(&conn)? {
-        let Some(dir) = dir_of(&conn, &n) else { continue };
-        let Some(mut b) = read(&dir) else { continue };
-        b.node_id = n.id;
-        b.node_name = n.name.clone();
-        b.dir = dir.to_string_lossy().to_string();
-        if b.name.trim().is_empty() {
-            b.name = format!("{} bot", n.name);
-        }
-        b.schedule_id = sync_heartbeat(&conn, &b)?;
-        if let Some((_, last)) = heartbeat(&conn, n.id) {
+    let mut out = all_bots(&conn);
+    for b in out.iter_mut() {
+        b.schedule_id = sync_heartbeat(&conn, b)?;
+        if let Some((_, last)) = heartbeat(&conn, &b.handle) {
             b.last_woke = last;
         }
-        seen.push(n.id);
-        out.push(b);
     }
 
-    // A heartbeat whose `_bot.md` is gone — deleted in Explorer, or on a branch
-    // that never had it — has nothing left to wake for.
-    if !seen.is_empty() {
-        let list = seen
-            .iter()
-            .map(|i| i.to_string())
-            .collect::<Vec<_>>()
-            .join(",");
-        conn.execute(
-            &format!("DELETE FROM schedules WHERE kind = 'bot' AND node_id NOT IN ({list})"),
-            [],
-        )
+    // A heartbeat whose manager is gone — the file deleted, or a vault pulled
+    // from a branch that never had it — has nothing left to wake for.
+    let mut stmt = conn
+        .prepare("SELECT id, manager FROM schedules WHERE kind = 'bot'")
         .map_err(err)?;
-    } else {
-        conn.execute("DELETE FROM schedules WHERE kind = 'bot'", [])
-            .map_err(err)?;
+    let rows: Vec<(i64, String)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get::<_, String>(1)?)))
+        .map_err(err)?
+        .filter_map(|r| r.ok())
+        .collect();
+    drop(stmt);
+    for (id, handle) in rows {
+        if !out.iter().any(|b| b.handle == handle) {
+            conn.execute("DELETE FROM schedules WHERE id = ?1", params![id])
+                .map_err(err)?;
+        }
     }
     Ok(out)
 }
 
 #[tauri::command]
-pub fn bot_get(db: tauri::State<Db>, node_id: i64) -> Result<Option<Bot>, String> {
+pub fn bot_get(db: tauri::State<Db>, handle: String) -> Result<Option<Bot>, String> {
     let conn = db.0.lock().unwrap();
-    let n = db::node_by_id(&conn, node_id)?;
-    let Some(dir) = dir_of(&conn, &n) else {
-        return Ok(None);
-    };
-    let Some(mut b) = read(&dir) else {
-        return Ok(None);
-    };
-    b.node_id = n.id;
-    b.node_name = n.name;
-    b.dir = dir.to_string_lossy().to_string();
-    if let Some((id, last)) = heartbeat(&conn, node_id) {
-        b.schedule_id = Some(id);
-        b.last_woke = last;
-    }
-    Ok(Some(b))
+    Ok(bot_on(&conn, &handle))
+}
+
+/// The manager whose memory lives on this node.
+///
+/// The bot page is still opened from a space, and a space still knows which
+/// manager came from it. When ownership drives that page instead, this goes.
+#[tauri::command]
+pub fn bot_for_node(db: tauri::State<Db>, node_id: i64) -> Result<Option<Bot>, String> {
+    let conn = db.0.lock().unwrap();
+    Ok(bot_on_node(&conn, node_id))
 }
 
 /// Set when something happens, from a sentence.
@@ -583,46 +634,56 @@ fn save_into(
         );
     }
 
-    let n = db::node_by_id(conn, node_id)?;
-    let dir = dir_of(conn, &n).ok_or("That folder has no place on disk yet.")?;
-    if !dir.is_dir() {
-        return Err(format!("{} is not there.", dir.display()));
-    }
-
     let team = vet_team(name, agent, team)?;
 
-    // Two fields the editor never sends, and must never lose: which starter it
-    // came from and which feature holds its work. Saving a name change is not a
-    // reason to forget where a bot's plan lives.
-    let existing = read(&dir);
-    let created = existing.is_none();
+    // The handle is the identity, and it does not move when a name is edited:
+    // renaming "DevDeck bot" must not silently break every `@devdeck` in every
+    // thread. A manager made from a node takes that node's name, which is what
+    // people were already typing.
+    let existing_by_home = crate::managers::all(conn)
+        .into_iter()
+        .find(|m| node_id != 0 && m.home == node_id);
+    let handle = match &existing_by_home {
+        Some(m) => m.handle.clone(),
+        None => {
+            let from = db::node_by_id(conn, node_id).map(|n| n.name).unwrap_or_default();
+            crate::managers::handle_from(if from.trim().is_empty() { name } else { &from })
+        }
+    };
+    let created = existing_by_home.is_none();
 
-    let mut b = Bot {
-        node_id,
-        node_name: n.name.clone(),
-        dir: dir.to_string_lossy().to_string(),
+    // Fields the editor never sends, and must never lose: which role template
+    // it came from, and the review points, which are edited in the file
+    // because "not without me" is a sentence rather than a checkbox.
+    let prior = crate::managers::get(conn, &handle);
+    let m = crate::managers::Manager {
+        handle: handle.clone(),
         name: name.to_string(),
+        role: prior.as_ref().map(|p| p.role.clone()).unwrap_or_default(),
         goal: goal.trim().to_string(),
         every: every.trim().to_string(),
         at_min: at_min.clamp(0, 1439),
         days: days.to_string(),
         body: body.to_string(),
         skills: skills.into_iter().filter(|s| !s.trim().is_empty()).collect(),
-        template: existing.as_ref().map(|e| e.template.clone()).unwrap_or_default(),
-        feature: existing.as_ref().map(|e| e.feature.clone()).unwrap_or_default(),
+        template: prior.as_ref().map(|p| p.template.clone()).unwrap_or_default(),
         agent: agent.trim().to_string(),
         team,
         wake_intent: wake_intent.trim().to_string(),
-        // Review points are edited in the file rather than in the form:
-        // "not without me" is a sentence, and a checkbox would have to
-        // pretend it is a permission.
-        stop_at: existing.as_ref().map(|e| e.stop_at.clone()).unwrap_or_default(),
-        schedule_id: None,
-        last_woke: None,
+        stop_at: prior.as_ref().map(|p| p.stop_at.clone()).unwrap_or_default(),
+        was: prior.as_ref().map(|p| p.was.clone()).unwrap_or_default(),
+        home: prior.as_ref().map(|p| p.home).unwrap_or(node_id),
     };
-    write(&dir, &b)?;
+    crate::managers::save(conn, &m)?;
+
+    let names: std::collections::HashMap<i64, String> = db::nodes_on(conn)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|n| (n.id, n.name))
+        .collect();
+    let mut b = from_manager(conn, &m, crate::managers::owned_by(conn, &handle), &names);
     b.schedule_id = sync_heartbeat(conn, &b)?;
-    if let Some((_, last)) = heartbeat(conn, node_id) {
+    if let Some((_, last)) = heartbeat(conn, &handle) {
         b.last_woke = last;
     }
     Ok((b, created))
@@ -672,14 +733,19 @@ pub fn bot_save(
 /// never gave it is worse than one that knows nothing.
 fn delete_into(conn: &Connection, mind: &Mind, node_id: i64) -> Result<String, String> {
     let n = db::node_by_id(conn, node_id)?;
-    let dir = dir_of(conn, &n).ok_or("That folder has no place on disk.")?;
-    let name = read(&dir).map(|b| b.name).unwrap_or_else(|| n.name.clone());
-    let _ = fs::remove_file(dir.join(FILE));
-    conn.execute(
-        "DELETE FROM schedules WHERE kind = 'bot' AND node_id = ?1",
-        params![node_id],
-    )
-    .map_err(err)?;
+    let bot = bot_on_node(conn, node_id);
+    let name = bot.as_ref().map(|b| b.name.clone()).unwrap_or_else(|| n.name.clone());
+    if let Some(b) = &bot {
+        crate::managers::delete(conn, &b.handle)?;
+        conn.execute(
+            "DELETE FROM schedules WHERE kind = 'bot' AND manager = ?1",
+            params![&b.handle],
+        )
+        .map_err(err)?;
+    }
+    // What it owned stays owned by a handle nobody answers to any more, which
+    // is the honest state: the work did not go anywhere, and the feature will
+    // say so until someone takes it.
     mind.forget(node_id);
     Ok(name)
 }
@@ -758,15 +824,27 @@ pub fn bot_work(db: tauri::State<Db>, node_id: i64) -> Result<Vec<WorkRow>, Stri
     Ok(out)
 }
 
+/// Write the owner onto a feature. This is what "a manager's plan" means now:
+/// the feature says whose it is, so a portfolio cannot drift from the work.
+fn take_feature(deck: &crate::aiw::deck::Deck, slug: &str, handle: &str) -> Result<(), String> {
+    let mut doc = deck.feature(slug)?;
+    if doc.meta.owner == handle {
+        return Ok(());
+    }
+    doc.meta.owner = handle.to_string();
+    let p = deck.feature_md(slug);
+    deck.write_doc_at(&p, &doc)
+}
+
 /// Give the bot's goal a plan: a feature in the deck, one work item per step.
 ///
 /// This writes into the project's committed context, which is a bigger gesture
 /// than dropping one file in a folder — so it happens on purpose, from a
 /// button, and never as a side effect of creating a bot.
 fn plan_into(conn: &Connection, node_id: i64, steps: &[String]) -> Result<(String, String, usize), String> {
-    let (deck, dir) = deck_of(conn, node_id)?;
+    let (deck, _dir) = deck_of(conn, node_id)?;
     let n = db::node_by_id(conn, node_id)?;
-    let mut bot = read(&dir).ok_or("There is no bot in that folder.")?;
+    let bot = bot_on_node(conn, node_id).ok_or("There is no manager for that space.")?;
 
     if !deck.exists() {
         deck.init(&node_id.to_string(), &n.name)?;
@@ -835,8 +913,9 @@ fn plan_into(conn: &Connection, node_id: i64, steps: &[String]) -> Result<(Strin
     }
     deck.save_work(&slug, &work)?;
 
-    bot.feature = slug.clone();
-    write(&dir, &bot)?;
+    // The feature takes the manager's name, rather than the manager taking the
+    // feature's. That is the whole inversion in one line.
+    take_feature(&deck, &slug, &bot.handle)?;
     Ok((slug, bot.name, added))
 }
 
@@ -905,8 +984,8 @@ pub fn bot_work_save(
     }
 
     let conn = db.0.lock().unwrap();
-    let (deck, dir) = deck_of(&conn, node_id)?;
-    let mut bot = read(&dir).ok_or("There is no bot in that folder.")?;
+    let (deck, _dir) = deck_of(&conn, node_id)?;
+    let bot = bot_on_node(&conn, node_id).ok_or("There is no manager for that space.")?;
     let n = db::node_by_id(&conn, node_id)?;
     if !deck.exists() {
         deck.init(&node_id.to_string(), &n.name)?;
@@ -917,8 +996,7 @@ pub fn bot_work_save(
     } else {
         let base = if bot.goal.trim().is_empty() { bot.name.clone() } else { bot.goal.clone() };
         let s = deck.create_feature(&base, &bot.goal, &[])?;
-        bot.feature = s.clone();
-        write(&dir, &bot)?;
+        take_feature(&deck, &s, &bot.handle)?;
         s
     };
 
@@ -945,8 +1023,8 @@ pub fn bot_work_save(
 #[tauri::command]
 pub fn bot_work_delete(db: tauri::State<Db>, node_id: i64, id: String) -> Result<(), String> {
     let conn = db.0.lock().unwrap();
-    let (deck, dir) = deck_of(&conn, node_id)?;
-    let bot = read(&dir).ok_or("There is no bot in that folder.")?;
+    let (deck, _dir) = deck_of(&conn, node_id)?;
+    let bot = bot_on_node(&conn, node_id).ok_or("There is no manager for that space.")?;
     let slug = if bot.feature.is_empty() { return Ok(()) } else { bot.feature };
     let mut work = deck.work(&slug)?.meta;
     work.items.retain(|i| i.id != id);
@@ -987,9 +1065,10 @@ pub(crate) fn create_into(
     if !dir.is_dir() {
         return Err(format!("{} is not there.", dir.display()));
     }
-    // A folder has at most one bot. Two would each think they owned the goal.
-    if read(&dir).is_some() {
-        return Err(format!("{} already has a bot.", n.name));
+    // One manager per handle. Two would each think they owned the goal.
+    let handle = crate::managers::handle_from(&n.name);
+    if crate::managers::get(conn, &handle).is_some() {
+        return Err(format!("There is already a manager called @{handle}."));
     }
 
     // Standards go in the body, not the frontmatter, because they are the part
@@ -1005,11 +1084,10 @@ pub(crate) fn create_into(
         _ => String::new(),
     };
 
-    let mut b = Bot {
-        node_id,
-        node_name: n.name.clone(),
-        dir: dir.to_string_lossy().to_string(),
+    let m = crate::managers::Manager {
+        handle: handle.clone(),
         name: name.to_string(),
+        role: tpl.as_ref().map(|t| t.name.clone()).unwrap_or_default(),
         goal: goal.trim().to_string(),
         every: every.trim().to_string(),
         at_min: at_min.clamp(0, 1439),
@@ -1017,19 +1095,24 @@ pub(crate) fn create_into(
         body,
         skills: tpl.as_ref().map(|t| t.skills.clone()).unwrap_or_default(),
         template: tpl.as_ref().map(|t| t.id.clone()).unwrap_or_default(),
-        feature: String::new(),
-        // A new bot watches. Naming who it manages — and which of them it
+        // A new manager watches. Naming who it manages — and which of them it
         // wakes — is a separate, deliberate act.
         agent: String::new(),
         team: vec![],
         wake_intent: String::new(),
-        // A new bot has no review points. They are the kind of rule you add
-        // once you have seen it do something you would rather see first.
+        // A new manager has no review points. They are the kind of rule you
+        // add once you have seen it do something you would rather see first.
         stop_at: vec![],
-        schedule_id: None,
-        last_woke: None,
+        was: String::new(),
+        home: node_id,
     };
-    write(&dir, &b)?;
+    crate::managers::save(conn, &m)?;
+    let names: std::collections::HashMap<i64, String> = db::nodes_on(conn)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|x| (x.id, x.name))
+        .collect();
+    let mut b = from_manager(conn, &m, Vec::new(), &names);
     b.schedule_id = sync_heartbeat(conn, &b)?;
 
     // "Make it" makes what you asked for, or nothing. A bot left on disk beside
@@ -1038,10 +1121,13 @@ pub(crate) fn create_into(
         if let Some(t) = &tpl {
             if !t.steps.is_empty() {
                 if let Err(e) = plan_into(conn, node_id, &t.steps) {
-                    let _ = fs::remove_file(dir.join(FILE));
+                    // Made what you asked for, or nothing at all: a manager
+                    // left behind beside an error about its plan is a state
+                    // you then have to clean up by hand.
+                    let _ = crate::managers::delete(conn, &handle);
                     let _ = conn.execute(
-                        "DELETE FROM schedules WHERE kind = 'bot' AND node_id = ?1",
-                        params![node_id],
+                        "DELETE FROM schedules WHERE kind = 'bot' AND manager = ?1",
+                        params![&handle],
                     );
                     return Err(e);
                 }
@@ -1049,12 +1135,9 @@ pub(crate) fn create_into(
         }
     }
 
-    // Re-read so the caller gets the feature the plan just set.
-    let mut fresh = read(&dir).unwrap_or(b);
-    fresh.node_id = node_id;
-    fresh.node_name = n.name;
-    fresh.dir = dir.to_string_lossy().to_string();
-    if let Some((id, last)) = heartbeat(conn, node_id) {
+    // Re-read so the caller gets the feature the plan just took ownership of.
+    let mut fresh = bot_on(conn, &handle).unwrap_or(b);
+    if let Some((id, last)) = heartbeat(conn, &handle) {
         fresh.schedule_id = Some(id);
         fresh.last_woke = last;
     }
@@ -1356,13 +1439,15 @@ pub fn bot_tool_decide(
             // scheduler's first tick, and `schedule_run_now` before it).
             let name = {
                 let conn = db.0.lock().unwrap();
-                let (_, dir) = deck_of(&conn, node_id)?;
-                let mut bot = read(&dir).ok_or("There is no bot in that folder.")?;
+                let bot =
+                    bot_on_node(&conn, node_id).ok_or("There is no manager for that space.")?;
+                let mut m = crate::managers::get(&conn, &bot.handle)
+                    .ok_or("That manager is no longer in the team.")?;
                 let slug = crate::aiw::deck::slugify(&offer.name);
-                if !bot.skills.contains(&slug) {
-                    bot.skills.push(slug);
+                if !m.skills.contains(&slug) {
+                    m.skills.push(slug);
                 }
-                write(&dir, &bot)?;
+                crate::managers::save(&conn, &m)?;
                 bot.name
             };
             crate::activity::record(
@@ -1455,13 +1540,18 @@ pub fn bot_suggestion_answer(
 /// Separate from `bot_get` because the scheduler gathers everything it needs
 /// while it has the database and then lets go — running a wake can take
 /// minutes, and holding the lock across it would freeze the app.
-pub fn bot_on(conn: &Connection, node_id: i64) -> Option<Bot> {
-    let n = db::node_by_id(conn, node_id).ok()?;
-    let dir = dir_of(conn, &n)?;
-    let mut b = read(&dir)?;
-    b.node_id = node_id;
-    b.node_name = n.name;
-    b.dir = dir.to_string_lossy().to_string();
+pub fn bot_on(conn: &Connection, handle: &str) -> Option<Bot> {
+    let m = crate::managers::get(conn, handle)?;
+    let names: std::collections::HashMap<i64, String> = db::nodes_on(conn)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|n| (n.id, n.name))
+        .collect();
+    let mut b = from_manager(conn, &m, crate::managers::owned_by(conn, handle), &names);
+    if let Some((id, last)) = heartbeat(conn, handle) {
+        b.schedule_id = Some(id);
+        b.last_woke = last;
+    }
     Some(b)
 }
 
@@ -1616,6 +1706,29 @@ pub fn thread_post(app: &tauri::AppHandle, bot: &Bot, text: &str) {
 }
 
 /// The bot's thread, found or made.
+/// The manager whose memory is filed under this node.
+///
+/// The bridge while the per-manager pages are still keyed by node: a thread,
+/// an interview and a set of beliefs all live under a node id today. Ownership
+/// does not go through here — that is on the feature.
+pub fn bot_on_node(conn: &Connection, node_id: i64) -> Option<Bot> {
+    let all = crate::managers::all(conn);
+    let m = all
+        .iter()
+        .find(|m| m.home == node_id)
+        // A manager written before `home` existed, or by hand without it, is
+        // still findable through what it owns here.
+        .or_else(|| {
+            let owned = crate::managers::portfolios(conn);
+            all.iter().find(|m| {
+                owned
+                    .get(&m.handle)
+                    .is_some_and(|p| p.iter().any(|(n, _)| *n == node_id))
+            })
+        })?;
+    bot_on(conn, &m.handle)
+}
+
 #[tauri::command]
 pub fn bot_thread(
     ws: tauri::State<std::sync::Arc<crate::aiw::state::Workspace>>,
@@ -1624,7 +1737,7 @@ pub fn bot_thread(
 ) -> Result<crate::aiw::assistant::ConversationMeta, String> {
     let bot = {
         let conn = db.0.lock().unwrap();
-        bot_on(&conn, node_id).ok_or("There is no bot in that folder.")?
+        bot_on_node(&conn, node_id).ok_or("There is no manager for that space.")?
     };
     let convs = ws.convs()?;
     convs.for_bot(node_id, &node_id.to_string(), &bot.name)
@@ -1647,7 +1760,7 @@ pub async fn bot_thread_send(
     use tauri::Emitter;
     let bot = {
         let conn = db.0.lock().unwrap();
-        bot_on(&conn, node_id).ok_or("There is no bot in that folder.")?
+        bot_on_node(&conn, node_id).ok_or("There is no manager for that space.")?
     };
     // The space has to be registered before the bot can read it — the same
     // step a wake takes, for the same reason.

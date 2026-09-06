@@ -88,7 +88,7 @@ export function BotDetail({
   // here it would be followed by a write that replaced everything you told it.
   const reload = useCallback(() => {
     setErr('')
-    void ipc.botGet(nodeId).then(setBot).catch((e) => setErr(String(e)))
+    void ipc.botForNode(nodeId).then(setBot).catch((e) => setErr(String(e)))
     void ipc.botWork(nodeId).then(setWork).catch((e) => {
       setWork([])
       setErr(String(e))

@@ -41,21 +41,32 @@ impl World {
     }
 
     fn bot(&self, node_id: i64) -> Bot {
-        let n = db::node_by_id(&self.conn, node_id).unwrap();
-        let dir = dir_of(&self.conn, &n).unwrap();
-        let mut b = read(&dir).expect("a bot on disk");
-        b.node_id = node_id;
-        if let Some((id, last)) = heartbeat(&self.conn, node_id) {
-            b.schedule_id = Some(id);
-            b.last_woke = last;
-        }
-        b
+        bot_on_node(&self.conn, node_id).expect("a manager for that space")
+    }
+
+    /// The file a manager lives in — at the vault root, not in a folder.
+    fn team_file(&self, node_id: i64) -> PathBuf {
+        let m = crate::managers::all(&self.conn)
+            .into_iter()
+            .find(|m| m.home == node_id)
+            .expect("a manager for that space");
+        self.root.join(".devdeck").join("team").join(format!("{}.md", m.handle))
+    }
+
+    /// The heartbeat row for the manager whose memory lives on this node.
+    /// A manager is not a folder any more, so the clock is keyed by handle.
+    fn hb(&self, node_id: i64) -> Option<(i64, Option<i64>)> {
+        let m = crate::managers::all(&self.conn)
+            .into_iter()
+            .find(|m| m.home == node_id)?;
+        heartbeat(&self.conn, &m.handle)
     }
 
     fn work(&self, node_id: i64) -> Vec<crate::aiw::deck::WorkItem> {
         let (deck, dir) = deck_of(&self.conn, node_id).unwrap();
-        let bot = read(&dir);
-        let only = bot.map(|b| b.feature).unwrap_or_default();
+        let only = bot_on_node(&self.conn, node_id)
+            .map(|b| b.feature)
+            .unwrap_or_default();
         let mut out = Vec::new();
         if !deck.exists() {
             return out;
@@ -73,7 +84,7 @@ impl World {
 
     fn set_status(&self, node_id: i64, title: &str, status: &str) {
         let (deck, dir) = deck_of(&self.conn, node_id).unwrap();
-        let slug = read(&dir).unwrap().feature;
+        let slug = bot_on_node(&self.conn, node_id).unwrap().feature;
         let mut w = deck.work(&slug).unwrap().meta;
         let item = w
             .items
@@ -180,14 +191,18 @@ fn the_website_bot_from_nothing_to_deleted() {
     assert_eq!(bot.template, "website");
     assert!(bot.skills.contains(&"seo".to_string()), "starter skills are written on");
     assert!(!bot.feature.is_empty(), "a plan means a feature");
-    assert!(w.dir("Business/Marketing site").join(FILE).is_file());
+    assert!(w.team_file(2).is_file(), "the manager is a file at the vault root");
+    assert!(
+        !w.dir("Business/Marketing site").join(FILE).is_file(),
+        "and not one in the folder it works on"
+    );
     assert!(
         bot.body.contains("One page, one job"),
         "standards land in the body, where they can be edited"
     );
 
     // The heartbeat exists and, unlike a reminder, catches up.
-    let (sched, _) = heartbeat(&w.conn, 2).expect("a heartbeat row");
+    let (sched, _) = w.hb(2).expect("a heartbeat row");
     let catch_up: i64 = w
         .conn
         .query_row("SELECT catch_up FROM schedules WHERE id = ?1", params![sched], |r| r.get(0))
@@ -268,7 +283,7 @@ fn the_website_bot_from_nothing_to_deleted() {
     let name = delete_into(&w.conn, &w.mind, 2).unwrap();
     assert_eq!(name, "Marketing site bot");
     assert!(!w.dir("Business/Marketing site").join(FILE).exists(), "the file goes");
-    assert!(heartbeat(&w.conn, 2).is_none(), "the clock goes");
+    assert!(w.hb(2).is_none(), "the clock goes");
     assert!(
         ops::beliefs(&w.mind, 2, NOW).unwrap().is_empty(),
         "what it knew about you goes"
@@ -347,7 +362,7 @@ fn renaming_a_bot_does_not_lose_its_starter_or_its_plan() {
     assert_eq!(w.work(2).len(), 7, "and the steps themselves");
 
     // The routine change reached the clock.
-    let (id, _) = heartbeat(&w.conn, 2).unwrap();
+    let (id, _) = w.hb(2).unwrap();
     let (every, at, days): (String, i64, String) = w
         .conn
         .query_row(
@@ -363,11 +378,11 @@ fn renaming_a_bot_does_not_lose_its_starter_or_its_plan() {
 fn taking_a_bots_heartbeat_away_removes_the_row() {
     let w = world();
     create_into(&w.conn, 2, "blank", "Quiet bot", "Just be there", "daily", 420, "", false).unwrap();
-    assert!(heartbeat(&w.conn, 2).is_some());
+    assert!(w.hb(2).is_some());
 
     save_into(&w.conn, 2, "Quiet bot", "Just be there", "", 420, "", "", vec![], "", vec![], "")
         .unwrap();
-    assert!(heartbeat(&w.conn, 2).is_none(), "no routine, no clock");
+    assert!(w.hb(2).is_none(), "no routine, no clock");
     assert!(w.has(2, "heartbeat", NOW), "and it says so");
 }
 
@@ -377,7 +392,7 @@ fn a_folder_gets_one_bot_and_a_bot_needs_a_goal() {
     create_into(&w.conn, 2, "blank", "First", "A goal", "daily", 420, "", false).unwrap();
 
     let second = create_into(&w.conn, 2, "blank", "Second", "Another goal", "daily", 420, "", false);
-    assert!(second.unwrap_err().contains("already has a bot"));
+    assert!(second.unwrap_err().contains("already a manager"));
 
     let goalless =
         create_into(&w.conn, 3, "blank", "Nameless purpose", "   ", "daily", 420, "", false);
@@ -535,38 +550,52 @@ fn not_now_comes_back_and_wrong_never_does() {
 #[test]
 fn a_hand_written_bot_gets_its_clock_and_a_deleted_one_loses_it() {
     let w = world();
-    let dir = w.dir("Business/Ops");
+    // Written straight into the team folder, the way a pulled branch or a
+    // hand edit would leave it. `home` is how it finds its own memory.
+    let team = w.root.join(".devdeck").join("team");
+    std::fs::create_dir_all(&team).unwrap();
     std::fs::write(
-        dir.join(FILE),
-        "---\nname: Pulled from a branch\ngoal: Keep the lights on\nevery: weekdays\nat: \"06:30\"\n---\n\nSomeone else wrote this.\n",
+        team.join("ops.md"),
+        "---\nname: Pulled from a branch\ngoal: Keep the lights on\nevery: weekdays\nat: \"06:30\"\nhome: 3\n---\n\nSomeone else wrote this.\n",
     )
     .unwrap();
 
-    assert!(heartbeat(&w.conn, 3).is_none(), "nothing has looked yet");
+    assert!(w.hb(3).is_none(), "nothing has looked yet");
 
     // Listing reconciles — otherwise a bot could sit on disk claiming a routine
     // and never once wake.
     let mut seen = Vec::new();
-    for n in db::nodes_on(&w.conn).unwrap() {
-        let Some(d) = dir_of(&w.conn, &n) else { continue };
-        let Some(mut b) = read(&d) else { continue };
-        b.node_id = n.id;
+    for b in all_bots(&w.conn) {
         sync_heartbeat(&w.conn, &b).unwrap();
-        seen.push(n.id);
+        seen.push(b.node_id);
     }
-    let (id, _) = heartbeat(&w.conn, 3).expect("reconciled");
+    let (id, _) = w.hb(3).expect("reconciled");
     let at: i64 = w
         .conn
         .query_row("SELECT at_min FROM schedules WHERE id = ?1", params![id], |r| r.get(0))
         .unwrap();
     assert_eq!(at, 390, "06:30, as the file says");
 
-    // And when the file goes, so does the row.
-    std::fs::remove_file(dir.join(FILE)).unwrap();
-    w.conn
-        .execute("DELETE FROM schedules WHERE kind = 'bot' AND node_id NOT IN (2)", [])
-        .unwrap();
-    assert!(heartbeat(&w.conn, 3).is_none());
+    // And when the file goes, so does the row. `bots_list` is what
+    // reconciles: a heartbeat whose manager is gone has nothing to wake.
+    let handle = "ops".to_string();
+    crate::managers::delete(&w.conn, &handle).unwrap();
+    for (id, who) in w
+        .conn
+        .prepare("SELECT id, manager FROM schedules WHERE kind = 'bot'")
+        .unwrap()
+        .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))
+        .unwrap()
+        .filter_map(|r| r.ok())
+        .collect::<Vec<_>>()
+    {
+        if crate::managers::get(&w.conn, &who).is_none() {
+            w.conn
+                .execute("DELETE FROM schedules WHERE id = ?1", params![id])
+                .unwrap();
+        }
+    }
+    assert!(w.hb(3).is_none());
 }
 
 #[test]
@@ -663,9 +692,9 @@ fn two_bots_keep_their_own_work_and_their_own_memory() {
 
     // Deleting one leaves the other entirely alone.
     delete_into(&w.conn, &w.mind, 2).unwrap();
-    assert!(heartbeat(&w.conn, 3).is_some());
+    assert!(w.hb(3).is_some());
     assert_eq!(w.work(3).len(), 7);
-    assert!(w.dir("Business/Ops").join(FILE).is_file());
+    assert!(w.team_file(3).is_file(), "each manager has its own file");
 }
 
 // ---------------------------------------------------------------------------
@@ -718,7 +747,7 @@ fn a_failed_plan_leaves_no_half_made_bot() {
         create_into(&w.conn, 2, "website", "Site bot", "Ship the site", "weekdays", 480, "", true);
     assert!(made.is_err(), "it refused");
     assert!(!dir.join(FILE).exists(), "and left nothing behind");
-    assert!(heartbeat(&w.conn, 2).is_none(), "including no orphaned clock");
+    assert!(w.hb(2).is_none(), "including no orphaned clock");
 }
 
 // ---------------------------------------------------------------------------
@@ -751,10 +780,10 @@ fn naming_an_agent_is_written_down_and_survives_a_save() {
     assert_eq!(back.agent, "release-checker");
     assert!(back.wake_intent.contains("version files"));
     assert!(
-        std::fs::read_to_string(w.dir("Business/Marketing site").join(FILE))
+        std::fs::read_to_string(w.team_file(2))
             .unwrap()
             .contains("agent: release-checker"),
-        "it is in the file, so it travels with the folder"
+        "it is in the file, so it travels with the vault"
     );
 
     // And taking it away again puts the bot back to only watching.
@@ -763,9 +792,7 @@ fn naming_an_agent_is_written_down_and_survives_a_save() {
     )
     .unwrap();
     assert_eq!(w.bot(2).agent, "");
-    assert!(!std::fs::read_to_string(w.dir("Business/Marketing site").join(FILE))
-        .unwrap()
-        .contains("agent:"));
+    assert!(!std::fs::read_to_string(w.team_file(2)).unwrap().contains("agent:"));
 }
 
 /// The half-made feature guard has to cover *both* ways a slug is chosen. The
@@ -783,13 +810,12 @@ fn a_bot_that_already_names_a_half_made_feature_is_refused_too() {
     let dir = w.dir("Business/Marketing site");
     std::fs::create_dir_all(dir.join(".devdeck").join("features").join("hand-made")).unwrap();
     save_into(
-        &w.conn, 2, "Site bot", "Ship the site", "weekdays", 480, "", "", vec![], "", vec![], "",
+        &w.conn, 2, "Site bot", "Hand made", "weekdays", 480, "", "", vec![], "", vec![], "",
     )
     .unwrap();
-    // Point the bot at it the way a hand-edited file would.
-    let mut b = read(&dir).unwrap();
-    b.feature = "hand-made".into();
-    write(&dir, &b).unwrap();
+    // A half-made feature cannot be *owned* — ownership is a line inside
+    // the `feature.md` that is missing. So the manager reaches it the only
+    // other way it can: its goal slugifies to the same name.
 
     let err = plan_into(&w.conn, 2, &["A step".into()]).unwrap_err();
     assert!(err.contains("no feature.md"), "{err}");

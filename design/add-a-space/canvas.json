@@ -1,0 +1,31 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 1180, "h": 760, "title": "The sidebar, with a way in" },
+    { "file": "Picker.dc.html", "x": 1300, "y": 0, "w": 1180, "h": 720, "title": "Add · four things" },
+    { "file": "Empty.dc.html", "x": 0, "y": 900, "w": 1100, "h": 620, "title": "Empty, and where else" }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -250,
+      "w": 600,
+      "text": "Adding a project is not hard — it is hidden.\n\nTwo real faults, found in the code rather than guessed at:\n\n1. The Explorer's + says it adds \"a project, topic or anything else\" and always makes a folder.\n\n2. \"Add project…\" exists, but only on a solution's right-click menu. From the Develtech workspace there is no way in at all.\n\nSo this keeps the sidebar exactly as it is and gives adding a front door. Static mockups, in the app's own tokens."
+    },
+    {
+      "id": "note-picker",
+      "x": 1300,
+      "y": -250,
+      "w": 520,
+      "text": "Four kinds, named in the words you would use rather than the app's: a code project here, a code project from GitHub, an area with no code, a folder inside a project.\n\nTwo of them need a second step — a folder to point at, or a repository to clone. The other two are one field and Enter.\n\nOne thing is deliberately absent: \"new empty repository\". An app that quietly runs git init in your folders is one you stop trusting. Easy to add if you want it."
+    },
+    {
+      "id": "note-empty",
+      "x": 0,
+      "y": 1570,
+      "w": 520,
+      "text": "Four ways in, all opening the same picker, none of them removing anything that is there now.\n\nThe sidebar you called complex is untouched on purpose: making adding obvious and simplifying the tree are two jobs, and doing both at once leaves you unable to tell which one helped."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

@@ -1,0 +1,180 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: var(--accent); } a:hover { color: var(--ink); }
+    .row { display: flex; align-items: center; gap: 6px; border-radius: 4px; padding: 4px 6px;
+           font-size: 13px; color: var(--body); }
+    .row.on { background: var(--hover); }
+    .ico { display: flex; width: 16px; flex: none; align-items: center; justify-content: center; color: var(--dim); }
+    .chip { flex: none; border-radius: 999px; padding: 0 8px; font-size: 9px; font-weight: 600;
+            text-transform: uppercase; letter-spacing: .04em; line-height: 1.6; }
+    .plus { margin-left: auto; display: flex; align-items: center; border-radius: 4px; padding: 0 4px;
+            color: var(--dim); }
+    .cap { font-size: 10px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); }
+    .note { font-size: 11px; line-height: 1.55; color: var(--muted); }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --page: {{c.page}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --menu: {{c.menu}}; --hover: {{c.hover}}; --line: {{c.line}}; --line2: {{c.line2}}; --line3: {{c.line3}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; background: var(--app); width: 1180px; height: 760px; box-sizing: border-box; display: flex; overflow: hidden;">
+
+  <!-- rail, as it is -->
+  <div style="width: 48px; flex: none; border-right: 1px solid var(--line); background: var(--panel);"></div>
+
+  <!-- the sidebar, unchanged except for two things -->
+  <div style="width: 300px; flex: none; border-right: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column;">
+
+    <div style="display: flex; align-items: center; gap: 4px; padding: 8px 10px 6px;">
+      <span style="font-size: 12.5px; font-weight: 600; color: var(--ink);">Explorer</span>
+      <span style="flex: 1;"></span>
+      <span style="display: flex; align-items: center; border-radius: 4px; padding: 4px; color: var(--dim);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      </span>
+      <!-- CHANGE 1: the + becomes a labelled button, and it no longer lies -->
+      <span style="display: inline-flex; align-items: center; gap: 5px; border-radius: 4px; background: #4f46e5; padding: 3px 9px; color: #fff; font-size: 11.5px; font-weight: 500;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+        Add
+      </span>
+      <span style="display: flex; align-items: center; border-radius: 4px; padding: 4px; color: var(--dim);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="m6 15 6-6 6 6"/></svg>
+      </span>
+      <span style="display: flex; align-items: center; border-radius: 4px; padding: 4px; color: var(--dim);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+      </span>
+    </div>
+
+    <div style="padding: 2px 6px; display: flex; flex-direction: column; gap: 1px;">
+
+      <!-- CHANGE 2: a workspace row carries its own +, on hover -->
+      <div class="row on" style="font-weight: 600; color: var(--ink);">
+        <span class="ico" style="color: var(--dim);">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="m6 9 6-6 6 6"/></svg>
+        </span>
+        <span class="ico" style="color: var(--accent);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><circle cx="5" cy="18" r="2.5"/><circle cx="19" cy="18" r="2.5"/><path d="M12 15v1M9.5 13.5 7 16M14.5 13.5 17 16"/></svg>
+        </span>
+        Develtech
+        <span class="chip" style="background: rgb(129 140 248 / .16); color: var(--accent);">Business</span>
+        <span class="plus" style="background: var(--hover); color: var(--ink);">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>
+        </span>
+      </div>
+
+      <div class="row" style="padding-left: 22px;">
+        <span class="ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7h6l2 2h10v10H3z"/></svg></span>
+        Clients
+      </div>
+      <div class="row" style="padding-left: 22px;">
+        <span class="ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7h6l2 2h10v10H3z"/></svg></span>
+        Marketing
+      </div>
+      <div class="row" style="padding-left: 22px;">
+        <span class="ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7h6l2 2h10v10H3z"/></svg></span>
+        Money
+      </div>
+
+      <div style="height: 10px;"></div>
+
+      <div class="row" style="font-weight: 600; color: var(--ink);">
+        <span class="ico" style="color: var(--dim);">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="m9 6 6 6-6 6"/></svg>
+        </span>
+        <span class="ico" style="color: var(--accent);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><circle cx="5" cy="18" r="2.5"/><circle cx="19" cy="18" r="2.5"/><path d="M12 15v1M9.5 13.5 7 16M14.5 13.5 17 16"/></svg>
+        </span>
+        Innotrack
+        <span class="chip" style="background: rgb(129 140 248 / .16); color: var(--accent);">Business</span>
+      </div>
+    </div>
+
+    <div style="margin-top: auto; border-top: 1px solid var(--line); padding: 9px 12px;">
+      <div class="note">
+        Nothing else moved. The tree, the chips, the right-click menus and the whole-vault
+        section are as they were.
+      </div>
+    </div>
+  </div>
+
+  <!-- what the two changes are, said plainly beside the sidebar -->
+  <div style="flex: 1; min-width: 0; background: var(--page); padding: 26px 30px; display: flex; flex-direction: column; gap: 18px;">
+
+    <div>
+      <div style="font-size: 16px; font-weight: 600; color: var(--ink);">Two changes, nothing removed</div>
+      <div class="note" style="margin-top: 5px; max-width: 560px;">
+        The sidebar stays. What changes is that adding something is visible, and that the button
+        which says it adds a project actually adds one.
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 14px;">
+      <div style="flex: 1; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 15px 16px;">
+        <div class="cap" style="margin-bottom: 7px;">1 &middot; The header button</div>
+        <div style="font-size: 12.5px; line-height: 1.6; color: var(--body);">
+          A bare <b>+</b> with a tooltip promising &ldquo;a project, topic or anything else&rdquo;
+          today runs <span style="font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: var(--dim);">addNode()</span>,
+          which asks for a name and makes a <b>folder</b> &mdash; every time.
+        </div>
+        <div class="note" style="margin-top: 8px;">
+          It becomes a labelled <b>Add</b> and opens the picker instead. A button that names one
+          thing and does another is worse than no button.
+        </div>
+      </div>
+
+      <div style="flex: 1; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 15px 16px;">
+        <div class="cap" style="margin-bottom: 7px;">2 &middot; The workspace row</div>
+        <div style="font-size: 12.5px; line-height: 1.6; color: var(--body);">
+          Adding to <i>this</i> workspace currently means right-clicking &mdash; and
+          <b>Add project…</b> only appears on a <i>solution</i>, never on a workspace. From
+          Develtech there is genuinely no way in.
+        </div>
+        <div class="note" style="margin-top: 8px;">
+          Every workspace row gets a <b>+</b> on hover, opening the same picker already pointed
+          at that workspace.
+        </div>
+      </div>
+    </div>
+
+    <div style="border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 15px 16px;">
+      <div class="cap" style="margin-bottom: 7px;">The right-click menus keep everything</div>
+      <div class="note">
+        New folder, Give it a bot, Workspace settings, Open terminal here, New command, New
+        service, New profile, Reveal in File Explorer, Rename, Delete. The picker is a second way
+        in, not a replacement &mdash; and <b>Add project…</b> stops being hidden on one node kind.
+      </div>
+    </div>
+
+    <div style="margin-top: auto; border-left: 2px solid var(--accent); padding: 2px 0 2px 12px;">
+      <div class="note" style="color: var(--dim);">
+        The one thing that is <i>not</i> a design change: the flow behind &ldquo;a project from a
+        folder&rdquo; already exists and works &mdash; pick the repo root, it records the path and
+        opens setup. It was only ever unreachable.
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', page: '#0d1017', panel: '#11141c', raise: '#151923', menu: '#1a1f2b',
+          hover: '#232b3b', line: '#1e293b', line2: '#334155', line3: '#64748b', ink: '#e2e8f0',
+          body: '#cbd5e1', dim: '#94a3b8', muted: '#64748b', faint: '#475569', accent: '#818cf8', ok: '#4ade80' }
+      : { app: '#e9ebf0', page: '#f6f7f9', panel: '#fdfdfe', raise: '#f0f2f6', menu: '#ffffff',
+          hover: '#e7eaf1', line: '#d9dee7', line2: '#c3cbd8', line3: '#9aa5b5', ink: '#16181d',
+          body: '#333a45', dim: '#5a6472', muted: '#7d8794', faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

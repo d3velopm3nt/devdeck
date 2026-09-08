@@ -273,6 +273,14 @@ export function MailView() {
   const now = Date.now()
   const selected = mailMessages.find((m) => m.id === mailSelectedId) ?? null
 
+  // Which account a sync failure is about, when we can say. An error names a
+  // reason and never a way out of it, and the settings that caused it are the
+  // ones you cannot reach — so the banner offers the account it can identify,
+  // and stays silent rather than guessing between several.
+  const failing =
+    mailAccounts.find((a) => a.last_error) ??
+    (mailAccounts.length === 1 ? mailAccounts[0] : undefined)
+
   return (
     <div className="flex h-full">
       {/* ---- thread list ---- */}
@@ -318,7 +326,15 @@ export function MailView() {
           {/* A failed sync must never look like an empty inbox. */}
           {mailError && (
             <div className="mb-2 rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 text-[11.5px] leading-[1.55] text-err">
-              {mailError}
+              <div>{mailError}</div>
+              {failing && (
+                <button
+                  className="mt-1.5 inline-flex items-center gap-1 rounded border border-red-500/40 px-2 py-0.5 text-[11px] hover:bg-red-500/10"
+                  onClick={() => openMailAccountEditor(failing.id)}
+                >
+                  <Icon name="settings" size={11} /> Fix {failing.address}
+                </button>
+              )}
             </div>
           )}
           {mailMessages.length === 0 && !mailError && (
@@ -334,6 +350,17 @@ export function MailView() {
                     Add one
                   </button>{' '}
                   to start fetching.
+                </>
+              ) : failing?.last_error ? (
+                <>
+                  Nothing fetched — {failing.address} could not sync.
+                  <br />
+                  <button
+                    className="mt-2 text-indigo-300 hover:text-ink"
+                    onClick={() => openMailAccountEditor(failing.id)}
+                  >
+                    Check its settings
+                  </button>
                 </>
               ) : (
                 <>Nothing here. Sync, or widen the filters.</>

@@ -125,35 +125,66 @@ export function MailSidebar() {
 
         {mailAccounts.map((a) => {
           const active = mailQuery.account_id === a.id
+          // A row that can only be filtered is a dead end for the account that
+          // was typed wrong: the settings that failed are the settings you
+          // cannot reach. So the row is a container with two controls in it
+          // rather than one button — a button inside a button is not valid
+          // markup, and the filter had claimed the whole row.
+          const broken = !!a.last_error || !a.has_password
           return (
-            <button
+            <div
               key={a.id}
-              className={`flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left ${
+              className={`group flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 ${
                 active ? 'bg-raise' : 'hover:bg-hover/50'
               }`}
-              title={a.last_error || `${a.address} — click to filter to this account`}
-              onClick={() => void setMailQuery({ account_id: active ? null : a.id })}
             >
-              {/* Failure honesty: a red dot and the reason, never a silent
-                  nothing that looks like an empty inbox. */}
-              <span
-                className={`h-[7px] w-[7px] shrink-0 rounded-full ${
-                  a.last_error ? 'bg-red-400' : a.has_password ? 'bg-emerald-400' : 'bg-faint'
-                }`}
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[12px] text-body">{a.address}</span>
-                <span className="block truncate font-mono text-[9.5px] text-faint">
-                  {a.last_error
-                    ? a.last_error
-                    : a.last_sync
-                      ? `synced ${fmtAgo(a.last_sync, now)}`
-                      : a.has_password
-                        ? 'never synced'
-                        : 'no password stored'}
+              <button
+                className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                title={a.last_error || `${a.address} — click to filter to this account`}
+                onClick={() => void setMailQuery({ account_id: active ? null : a.id })}
+                onDoubleClick={() => openMailAccountEditor(a.id)}
+              >
+                {/* Failure honesty: a red dot and the reason, never a silent
+                    nothing that looks like an empty inbox. */}
+                <span
+                  className={`h-[7px] w-[7px] shrink-0 rounded-full ${
+                    a.last_error ? 'bg-red-400' : a.has_password ? 'bg-emerald-400' : 'bg-faint'
+                  }`}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[12px] text-body">{a.address}</span>
+                  <span
+                    className={`block truncate font-mono text-[9.5px] ${
+                      a.last_error ? 'text-err' : 'text-faint'
+                    }`}
+                  >
+                    {a.last_error
+                      ? a.last_error
+                      : a.last_sync
+                        ? `synced ${fmtAgo(a.last_sync, now)}`
+                        : a.has_password
+                          ? 'never synced'
+                          : 'no password stored'}
+                  </span>
                 </span>
-              </span>
-            </button>
+              </button>
+              {/* Always shown on an account that is not working, hover-only on
+                  one that is. Hiding the way out of a failure behind a hover
+                  is how the failure became permanent. */}
+              <button
+                className={`shrink-0 rounded p-1 text-dim hover:bg-hover hover:text-ink ${
+                  broken ? 'flex' : 'hidden group-hover:flex'
+                }`}
+                title={
+                  a.last_error
+                    ? `Fix the settings for ${a.address}`
+                    : `Settings for ${a.address}`
+                }
+                onClick={() => openMailAccountEditor(a.id)}
+              >
+                <Icon name="settings" size={12} />
+              </button>
+            </div>
           )
         })}
 

@@ -29,5 +29,6 @@ Thumbs.db
 .keys/
 
 # Seeded design canvases: a couple of megabytes each, and generated from the
-# .dc.html sources beside them. The sources are the record.
+# .dc.html sources beside them. The sources are the record. The pattern covers
+# design/mail-canvas/devdeck-mail.html, which used to be listed on its own.
 design/*/[a-z]*-*.html

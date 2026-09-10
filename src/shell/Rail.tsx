@@ -49,6 +49,10 @@ const WORK: Item[] = [
   // Time sits with the places you go rather than with the app's own settings:
   // a calendar is a thing you work out of, not a thing you configure.
   { view: 'calendar', icon: 'schedule', label: 'Calendar' },
+  // Mail is the same kind of thing, and it is deliberately not next to Inbox:
+  // the Inbox is what the team needs from you, and mixing other people's
+  // email into that count is how the badge stops meaning anything.
+  { view: 'mail', icon: 'mail', label: 'Mail' },
   { view: 'connections', icon: 'database', label: 'Connections' },
 ]
 
@@ -173,6 +177,7 @@ export function Rail() {
     railView,
     setRailView,
     svcStates,
+    mailCounts,
     nodes,
     activeWorkspaceId,
     activeSolutionId,
@@ -371,6 +376,10 @@ export function Rail() {
           icon={it.icon}
           active={railView === it.view}
           expanded={expanded}
+          // A dot rather than a count: unread mail is worth noticing and is
+          // not something the team is waiting on you for, which is what the
+          // numbered badge above means.
+          dot={it.view === 'mail' && (mailCounts?.unread ?? 0) > 0}
           onClick={() => setRailView(it.view)}
         />
       ))}

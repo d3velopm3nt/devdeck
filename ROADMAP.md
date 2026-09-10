@@ -42,6 +42,12 @@ things land so we never have to reconstruct state from memory.
 - [x] **Update-check honesty** — a failed check no longer reports "up to date";
       re-checks hourly and on window focus
 - [x] **Website** — redesign, real screenshots, animated walkthrough
+- [x] **Mail** — IMAP sync + SMTP send, accounts with credentials in Windows
+      Credential Manager, groups and filters, HTML bodies in a sandboxed frame,
+      attachments, raw source, per-thread assistant notes, and contacts linked
+      to clients. See **[docs/TEST-REPORT-MAIL.md](docs/TEST-REPORT-MAIL.md)** —
+      built and verified in a Linux container, so the Credential Manager path
+      and a real mailbox are still untested.
 - [x] **Stash Phase 1** — event-driven clipboard capture, classifier, secret
       guardrail, auto project tag, and the vault view (rail → sidebar → list +
       detail, FTS5 search)

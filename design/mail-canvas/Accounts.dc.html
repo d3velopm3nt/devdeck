@@ -1,0 +1,327 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:#0b0e14;color:#cbd5e1;-webkit-font-smoothing:antialiased}
+    a{color:#818cf8;text-decoration:none}
+    a:hover{color:#a5b4fc}
+    button{font:inherit;color:inherit;background:none;border:none;padding:0;cursor:pointer;text-align:left}
+    .i{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+    .mono{font-family:Consolas,'Liberation Mono',Menlo,monospace}
+    .sec{font-family:Consolas,'Liberation Mono',Menlo,monospace;font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;padding:12px 8px 4px}
+    .row{display:flex;align-items:center;gap:10px;border-radius:6px;padding:6px 8px;font-size:12.5px;color:#cbd5e1;width:100%}
+    .row:hover{background:rgba(35,43,59,.5)}
+    .n{margin-left:auto;font-family:Consolas,'Liberation Mono',Menlo,monospace;font-size:10px;color:#64748b}
+    .chip{display:inline-flex;align-items:center;gap:4px;border-radius:999px;border:1px solid #334155;padding:1px 7px;font-family:Consolas,'Liberation Mono',Menlo,monospace;font-size:9.5px;color:#64748b;white-space:nowrap}
+    .ghost{border-radius:4px;border:1px solid #334155;background:rgba(30,41,59,.4);padding:4px 10px;font-size:12px;color:#cbd5e1;display:inline-flex;align-items:center;gap:6px}
+    .ghost:hover{border-color:#64748b;color:#e2e8f0}
+    .rb{display:flex;align-items:center;justify-content:center;height:40px;width:40px;border-radius:8px;color:#64748b;position:relative}
+    .rb:hover{background:rgba(35,43,59,.5);color:#94a3b8}
+    .on{background:#151923;color:#e2e8f0}
+    .tb{display:flex;align-items:center;gap:8px;border-bottom:1px solid #1e293b;background:#11141c;padding:6px 8px}
+    .sbh{display:flex;align-items:center;gap:8px;border-bottom:1px solid #1e293b;padding:9px 12px}
+    .fld{display:block;margin-bottom:3px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#64748b}
+    .inp{width:100%;border-radius:4px;border:1px solid #334155;background:#0d1017;padding:5px 8px;font-size:12px;color:#e2e8f0}
+  </style>
+</helmet>
+<div style="width:1440px;height:900px;display:flex;flex-direction:column;background:#0b0e14;overflow:hidden">
+
+  <div class="tb">
+    <span style="margin-right:4px;font-size:13px;font-weight:600;color:#e2e8f0"><span style="color:#818cf8">&#10095;_</span> DevDeck</span>
+    <button style="border-radius:4px;background:{{accent}};padding:4px 10px;font-size:12px;color:#fff;display:inline-flex;align-items:center;gap:6px">
+      <svg class="i" width="13" height="13" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></svg> Terminal
+    </button>
+    <button class="ghost">Launch</button>
+    <button class="ghost">Layout</button>
+    <div style="flex:1"></div>
+    <button class="ghost">Widget</button>
+  </div>
+
+  <div style="position:relative;display:flex;flex:1;min-height:0">
+
+    <nav style="display:flex;width:52px;flex-shrink:0;flex-direction:column;align-items:center;gap:4px;border-right:1px solid #1e293b;background:#0b0e14;padding:8px 0">
+      <button class="rb"><svg class="i" width="17" height="17" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
+      <button class="rb"><svg class="i" width="17" height="17" viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></button>
+      <button class="rb"><svg class="i" width="17" height="17" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg><span style="position:absolute;right:2px;top:3px;border-radius:999px;border:2px solid #0b0e14;background:#6366f1;padding:0 3px;font-family:Consolas,monospace;font-size:8.5px;font-weight:700;color:#fff">3</span></button>
+      <button class="rb"><svg class="i" width="17" height="17" viewBox="0 0 24 24"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg></button>
+      <button class="rb"><svg class="i" width="17" height="17" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg></button>
+      <button class="rb"><svg class="i" width="17" height="17" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg></button>
+      <div style="flex:1"></div>
+      <button class="rb on">
+        <span style="position:absolute;left:-7px;top:8px;bottom:8px;width:2.5px;border-radius:2px;background:{{accent}}"></span>
+        <svg class="i" width="17" height="17" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+    </nav>
+
+    <!-- ── Settings surface ─────────────────────────────────────────── -->
+    <main style="flex:1;min-width:0;overflow:hidden;background:#0d1017;padding:18px 24px">
+      <div style="max-width:672px">
+        <div style="margin-bottom:15px">
+          <h2 style="margin:0;font-size:16px;font-weight:600;color:#e2e8f0">Mail accounts</h2>
+          <p style="margin:3px 0 0;font-size:12px;line-height:1.6;color:#64748b">Mail is fetched to this machine and indexed in SQLite. Passwords and OAuth tokens go to Windows Credential Manager &mdash; DevDeck can tell you a credential exists, never show you one.</p>
+        </div>
+
+        <section style="margin-bottom:16px">
+          <h3 style="margin:0 0 8px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#64748b">Connected</h3>
+
+          <sc-for list="{{accounts}}" as="a" hint-placeholder-count="2">
+            <div style="margin-bottom:8px;border-radius:8px;border:1px solid #1e293b;background:#11141c;padding:11px 15px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="{{a.badge}}">{{a.tag}}</span>
+                <span style="font-size:12.5px;color:#e2e8f0">{{a.addr}}</span>
+                <span class="chip" style="{{a.stateCss}}">
+                  <span style="{{a.dot}}"></span>{{a.state}}
+                </span>
+                <span style="flex:1"></span>
+                <button class="ghost" style="font-size:11px;padding:3px 8px">Sync now</button>
+                <button class="ghost" style="font-size:11px;padding:3px 8px">Edit</button>
+                <button class="ghost" style="font-size:11px;padding:3px 8px;border-color:rgba(248,113,113,.3);color:#f87171">Remove</button>
+              </div>
+              <div class="mono" style="margin-top:9px;font-size:10.5px;line-height:1.7;color:#64748b">{{a.line1}}<br>{{a.line2}}</div>
+              <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:9px">
+                <span class="chip" style="border-color:rgba(74,222,128,.3);color:#4ade80">
+                  <svg class="i" width="9" height="9" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>{{a.cred}}
+                </span>
+                <span class="chip">{{a.mailboxes}}</span>
+                <span class="chip">{{a.synced}}</span>
+              </div>
+            </div>
+          </sc-for>
+
+          <button class="row" style="justify-content:center;border:1px dashed #334155;padding:9px;font-size:12px;color:#94a3b8">
+            <svg class="i" width="12" height="12" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></svg> Add another account
+          </button>
+        </section>
+
+        <section style="margin-bottom:16px">
+          <h3 style="margin:0 0 8px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#64748b">Sending</h3>
+          <div style="border-radius:8px;border:1px solid #1e293b;background:#11141c;padding:13px 15px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+              <span style="font-size:12.5px;color:#cbd5e1">Send new mail from</span>
+              <span style="flex:1"></span>
+              <sc-for list="{{sendFrom}}" as="s" hint-placeholder-count="2">
+                <button style="{{s.css}}" onClick="{{s.pick}}">{{s.label}}</button>
+              </sc-for>
+            </div>
+            <div style="font-size:12px;line-height:1.6;color:#64748b">Replies always go out from the address the mail arrived at, whichever default you pick here. A reply that silently changes your address is how a client thread ends up split across two inboxes.</div>
+          </div>
+        </section>
+
+        <section>
+          <h3 style="margin:0 0 8px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#64748b">Sync and privacy</h3>
+          <div style="border-radius:8px;border:1px solid #1e293b;background:#11141c;padding:4px 15px">
+            <sc-for list="{{toggles}}" as="t" hint-placeholder-count="4">
+              <div style="{{t.rowCss}}">
+                <span style="min-width:0;flex:1">
+                  <span style="display:block;font-size:12.5px;color:#cbd5e1">{{t.label}}</span>
+                  <span style="display:block;margin-top:2px;font-size:11px;line-height:1.5;color:#64748b">{{t.hint}}</span>
+                </span>
+                <button style="{{t.trackCss}}" onClick="{{t.toggle}}"><span style="{{t.knobCss}}"></span></button>
+              </div>
+            </sc-for>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- ── Add-account sheet ────────────────────────────────────────── -->
+    <div style="position:absolute;inset:0;background:rgba(0,0,0,.35)"></div>
+    <div style="position:absolute;right:0;top:0;bottom:0;display:flex;width:460px;flex-direction:column;border-left:1px solid #1e293b;background:#0d1017;box-shadow:-24px 0 60px rgba(0,0,0,.45)">
+
+      <div style="display:flex;align-items:center;gap:8px;border-bottom:1px solid #1e293b;padding:11px 16px">
+        <span style="color:#818cf8"><svg class="i" width="15" height="15" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg></span>
+        <span style="font-size:13.5px;font-weight:600;color:#e2e8f0">Add mail account</span>
+        <button style="margin-left:auto;color:#64748b"><svg class="i" width="14" height="14" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+      </div>
+
+      <div style="flex:1;min-height:0;overflow:hidden;padding:16px">
+
+        <div class="fld">Provider</div>
+        <div style="display:flex;gap:6px;margin-bottom:16px">
+          <button style="{{provGmail.css}}" onClick="{{provGmail.pick}}">
+            <span style="display:block;font-size:12px">Gmail</span>
+            <span style="display:block;margin-top:1px;font-size:10.5px;color:#64748b">Sign in with Google</span>
+          </button>
+          <button style="{{provImap.css}}" onClick="{{provImap.pick}}">
+            <span style="display:block;font-size:12px">IMAP + SMTP</span>
+            <span style="display:block;margin-top:1px;font-size:10.5px;color:#64748b">Any mail host</span>
+          </button>
+        </div>
+
+        <!-- Gmail / OAuth -->
+        <sc-if value="{{isGmail}}" hint-placeholder-val="{{true}}">
+          <div>
+            <button style="display:flex;width:100%;align-items:center;justify-content:center;gap:9px;border-radius:6px;border:1px solid #334155;background:#151923;padding:11px;font-size:13px;font-weight:600;color:#e2e8f0">
+              <svg width="17" height="17" viewBox="0 0 24 24"><path fill="#4285F4" d="M23 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.2a5.3 5.3 0 0 1-2.3 3.5v2.9h3.7c2.2-2 3.4-5 3.4-8.6z"/><path fill="#34A853" d="M12 24c3.1 0 5.7-1 7.6-2.8l-3.7-2.9c-1 .7-2.3 1.1-3.9 1.1-3 0-5.5-2-6.4-4.7H1.8v3C3.7 21.4 7.6 24 12 24z"/><path fill="#FBBC05" d="M5.6 14.7a7.2 7.2 0 0 1 0-4.6v-3H1.8a12 12 0 0 0 0 10.6l3.8-3z"/><path fill="#EA4335" d="M12 4.8c1.7 0 3.2.6 4.4 1.7l3.3-3.3C17.7 1.2 15.1 0 12 0 7.6 0 3.7 2.6 1.8 6.1l3.8 3c.9-2.7 3.4-4.7 6.4-4.7z"/></svg>
+              Sign in with Google
+            </button>
+            <div style="margin-top:14px;border-radius:8px;border:1px solid #1e293b;background:#11141c;padding:13px 15px">
+              <div class="mono" style="margin-bottom:8px;font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:#64748b">DevDeck will ask for</div>
+              <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px;font-size:12px;line-height:1.5;color:#cbd5e1"><span style="margin-top:3px;color:#4ade80"><svg class="i" width="11" height="11" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span>Read your mail and its labels</div>
+              <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px;font-size:12px;line-height:1.5;color:#cbd5e1"><span style="margin-top:3px;color:#4ade80"><svg class="i" width="11" height="11" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span>Send mail as you</div>
+              <div style="display:flex;align-items:flex-start;gap:8px;font-size:12px;line-height:1.5;color:#cbd5e1"><span style="margin-top:3px;color:#4ade80"><svg class="i" width="11" height="11" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span>Change labels on messages you archive or flag</div>
+            </div>
+            <div style="margin-top:12px;display:flex;gap:9px;border-radius:8px;border:1px solid rgba(251,191,36,.3);background:rgba(251,191,36,.05);padding:11px 13px">
+              <span style="flex-shrink:0;margin-top:1px;color:#fbbf24"><svg class="i" width="14" height="14" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></span>
+              <span style="font-size:11.5px;line-height:1.6;color:#cbd5e1">The refresh token is written to Windows Credential Manager under <span class="mono" style="color:#fbbf24">devdeck/mail/gmail</span>. It is never written to <span class="mono">devdeck.sqlite</span>, and revoking DevDeck in your Google account kills it immediately.</span>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- IMAP + SMTP -->
+        <sc-if value="{{isImap}}" hint-placeholder-val="{{true}}">
+          <div>
+            <div style="display:flex;gap:10px;margin-bottom:11px">
+              <label style="flex:1"><span class="fld">Display name</span><span class="inp" style="display:block">Dewald &middot; DevelTech</span></label>
+              <label style="flex:1"><span class="fld">Email address</span><span class="inp" style="display:block">hello@develtech.co.za</span></label>
+            </div>
+
+            <div class="fld" style="margin-top:14px">Incoming &mdash; IMAP</div>
+            <div style="display:flex;gap:8px;margin-bottom:11px">
+              <span class="inp" style="flex:2">mail.develtech.co.za</span>
+              <span class="inp" style="width:64px">993</span>
+              <span class="inp" style="width:104px;display:flex;align-items:center;justify-content:space-between">SSL/TLS <svg class="i" width="11" height="11" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+            </div>
+
+            <div class="fld">Outgoing &mdash; SMTP</div>
+            <div style="display:flex;gap:8px;margin-bottom:11px">
+              <span class="inp" style="flex:2">mail.develtech.co.za</span>
+              <span class="inp" style="width:64px">465</span>
+              <span class="inp" style="width:104px;display:flex;align-items:center;justify-content:space-between">SSL/TLS <svg class="i" width="11" height="11" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+            </div>
+
+            <label style="display:block;margin-bottom:11px"><span class="fld">Username</span><span class="inp" style="display:block">hello@develtech.co.za</span></label>
+
+            <label style="display:block"><span class="fld">Password</span>
+              <span class="inp" style="display:flex;align-items:center;justify-content:space-between">
+                <span class="mono" style="letter-spacing:.14em;color:#94a3b8">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span>
+                <span style="color:#475569"><svg class="i" width="13" height="13" viewBox="0 0 24 24"><path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"/><circle cx="12" cy="12" r="3"/></svg></span>
+              </span>
+            </label>
+            <div style="margin-top:7px;display:flex;gap:8px;font-size:11px;line-height:1.6;color:#64748b">
+              <span style="flex-shrink:0;margin-top:1px;color:#fbbf24"><svg class="i" width="12" height="12" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></span>
+              <span>Written straight to Windows Credential Manager and never read back &mdash; this form can tell you a password exists, but can never show you one.</span>
+            </div>
+
+            <sc-if value="{{tested}}" hint-placeholder-val="{{true}}">
+              <div style="margin-top:14px;border-radius:8px;border:1px solid rgba(74,222,128,.3);background:rgba(74,222,128,.05);padding:11px 13px">
+                <div class="mono" style="display:flex;align-items:center;gap:7px;margin-bottom:5px;font-size:11px;color:#4ade80"><svg class="i" width="12" height="12" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>IMAP 993 &mdash; connected, 6 mailboxes</div>
+                <div class="mono" style="display:flex;align-items:center;gap:7px;font-size:11px;color:#4ade80"><svg class="i" width="12" height="12" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>SMTP 465 &mdash; authenticated, STARTTLS not needed</div>
+              </div>
+            </sc-if>
+          </div>
+        </sc-if>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:8px;border-top:1px solid #1e293b;padding:11px 16px">
+        <sc-if value="{{isImap}}" hint-placeholder-val="{{true}}">
+          <button class="ghost" onClick="{{runTest}}">Test connection</button>
+        </sc-if>
+        <span style="flex:1"></span>
+        <button class="ghost">Cancel</button>
+        <button style="border-radius:4px;background:{{accent}};padding:5px 14px;font-size:12px;font-weight:600;color:#fff">Add account</button>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-shrink:0;align-items:center;gap:4px;border-top:1px solid #1e293b;background:#11141c;padding:0 4px">
+    <span style="padding:4px 10px;font-size:11.5px;color:#64748b">Logs <span style="border-radius:3px;background:rgba(30,41,59,.4);padding:0 4px;font-size:9.5px;color:#cbd5e1">128</span></span>
+    <span style="padding:4px 10px;font-size:11.5px;color:#64748b">Processes <span style="border-radius:3px;background:rgba(30,41,59,.4);padding:0 4px;font-size:9.5px;color:#cbd5e1">3</span></span>
+    <span style="flex:1"></span>
+    <span style="padding:4px 8px;color:#94a3b8"><svg class="i" width="14" height="14" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></svg></span>
+  </div>
+  <div style="display:flex;flex-shrink:0;align-items:center;gap:16px;border-top:1px solid #1e293b;background:#11141c;padding:4px 12px;font-size:11px;color:#64748b">
+    <span><span style="color:#4ade80">3</span> services running</span>
+    <span>2 terminals</span>
+    <span style="flex:1"></span>
+    <span>Ctrl+Alt+Space summons &middot; local-first &middot; SQLite</span>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#6366f1","options":["#6366f1","#0ea5e9","#10b981","#f59e0b"],"tsType":"string"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props)
+    this.state = {
+      prov: 'imap',
+      tested: false,
+      from: 'develtech',
+      toggles: { images: false, offline: true, notify: true, files: false },
+    }
+  }
+
+  renderVals() {
+    const accent = this.props.accent ?? '#6366f1'
+    const st = this.state
+
+    const provBtn = (key, on) =>
+      'flex:1;border-radius:8px;border:1px solid ' + (on ? accent : '#334155') +
+      ';background:' + (on ? 'rgba(99,102,241,.10)' : 'transparent') +
+      ';padding:9px 11px;color:' + (on ? '#e2e8f0' : '#94a3b8')
+
+    const segBtn = (on) =>
+      'border-radius:4px;border:1px solid ' + (on ? accent : '#334155') +
+      ';background:' + (on ? 'rgba(99,102,241,.12)' : 'transparent') +
+      ';padding:4px 11px;font-size:11.5px;color:' + (on ? '#e2e8f0' : '#94a3b8')
+
+    const TOGGLES = [
+      { key: 'notify', label: 'Notify me for client mail only', hint: 'Bot and automated senders stay quiet — they are still there when you go looking.' },
+      { key: 'offline', label: 'Keep messages on this machine', hint: 'Full-text search over everything, and mail still opens with the network down.' },
+      { key: 'images', label: 'Load remote images automatically', hint: 'Off means a tracking pixel cannot report that you opened the mail.' },
+      { key: 'files', label: 'Write attachments to disk on sync', hint: 'Off means an attachment only lands on disk when you save it somewhere.' },
+    ]
+
+    const toggles = TOGGLES.map((t, i) => {
+      const on = !!st.toggles[t.key]
+      return {
+        label: t.label, hint: t.hint,
+        rowCss: 'display:flex;align-items:center;gap:14px;padding:8px 0' + (i < TOGGLES.length - 1 ? ';border-bottom:1px solid #1e293b' : ''),
+        trackCss: 'position:relative;flex-shrink:0;height:18px;width:32px;border-radius:999px;background:' + (on ? accent : '#334155'),
+        knobCss: 'position:absolute;top:2px;left:' + (on ? '16px' : '2px') + ';height:14px;width:14px;border-radius:999px;background:#fff',
+        toggle: () => this.setState({ toggles: Object.assign({}, st.toggles, { [t.key]: !on }) }),
+      }
+    })
+
+    return {
+      accent,
+      accounts: [
+        { addr: 'd3velopm3nt@gmail.com', tag: 'GMAIL',
+          badge: 'border-radius:4px;background:rgba(234,67,53,.12);padding:2px 7px;font-family:Consolas,monospace;font-size:9px;font-weight:700;letter-spacing:.05em;color:#f87171',
+          state: 'connected', stateCss: 'border-color:rgba(74,222,128,.3);color:#4ade80',
+          dot: 'height:5px;width:5px;border-radius:999px;background:#4ade80',
+          line1: 'OAuth 2.0 · imap.gmail.com:993 · smtp.gmail.com:465',
+          line2: 'token: Credential Manager → devdeck/mail/gmail',
+          cred: 'token stored', mailboxes: '9 labels', synced: 'synced 2 min ago' },
+        { addr: 'hello@develtech.co.za', tag: 'SMTP',
+          badge: 'border-radius:4px;background:rgba(99,102,241,.15);padding:2px 7px;font-family:Consolas,monospace;font-size:9px;font-weight:700;letter-spacing:.05em;color:#a5b4fc',
+          state: 'connected', stateCss: 'border-color:rgba(74,222,128,.3);color:#4ade80',
+          dot: 'height:5px;width:5px;border-radius:999px;background:#4ade80',
+          line1: 'IMAP mail.develtech.co.za:993 SSL · SMTP mail.develtech.co.za:465 SSL',
+          line2: 'password: Credential Manager → devdeck/mail/develtech',
+          cred: 'password stored', mailboxes: '6 mailboxes', synced: 'synced 2 min ago' },
+      ],
+      sendFrom: [
+        { label: 'gmail', css: segBtn(st.from === 'gmail'), pick: () => this.setState({ from: 'gmail' }) },
+        { label: 'develtech.co.za', css: segBtn(st.from === 'develtech'), pick: () => this.setState({ from: 'develtech' }) },
+      ],
+      toggles,
+      provGmail: { css: provBtn('gmail', st.prov === 'gmail'), pick: () => this.setState({ prov: 'gmail' }) },
+      provImap: { css: provBtn('imap', st.prov === 'imap'), pick: () => this.setState({ prov: 'imap' }) },
+      isGmail: st.prov === 'gmail',
+      isImap: st.prov === 'imap',
+      tested: st.tested,
+      runTest: () => this.setState({ tested: !st.tested }),
+    }
+  }
+}
+</script>
+</body>
+</html>

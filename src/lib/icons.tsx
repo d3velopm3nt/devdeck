@@ -84,6 +84,13 @@ import {
   StickyNote,
   Tag,
   Database,
+  Mail,
+  Send,
+  Paperclip,
+  Users,
+  Reply,
+  Building2,
+  Clock,
   Play as PlayIcon,
   type LucideIcon,
 } from 'lucide-react'
@@ -161,15 +168,25 @@ export type IconName =
   | 'tag'
   | 'database'
   | 'query'
+  // Mail.
+  | 'mail'
+  | 'inbox'
+  | 'send'
+  | 'attachment'
+  | 'contacts'
+  | 'reply'
+  | 'client'
+  | 'clock'
+  // Assistant.
   | 'ai'
   | 'agent'
+  | 'bot'
+  | 'focus'
   | 'context'
   | 'decision'
   | 'conflict'
   | 'pause'
   | 'commit'
-  | 'bot'
-  | 'focus'
 
 const REGISTRY: Record<IconName, LucideIcon> = {
   workspace: Boxes,
@@ -242,6 +259,15 @@ const REGISTRY: Record<IconName, LucideIcon> = {
   tag: Tag,
   database: Database,
   query: PlayIcon,
+  // Mail. `inbox` is not re-declared here — the Inbox rail view already
+  // claimed that name, and it is the same tray either way.
+  mail: Mail,
+  send: Send,
+  attachment: Paperclip,
+  contacts: Users,
+  reply: Reply,
+  client: Building2,
+  clock: Clock,
   // Assistant. Semantic names, so swapping the glyph is one line.
   ai: Sparkle,
   agent: Bot,

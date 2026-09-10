@@ -1,0 +1,802 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:#0b0e14;color:#cbd5e1;-webkit-font-smoothing:antialiased}
+    a{color:#818cf8;text-decoration:none}
+    a:hover{color:#a5b4fc}
+    button{font:inherit;color:inherit;background:none;border:none;padding:0;cursor:pointer;text-align:left}
+    .i{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+    .mono{font-family:Consolas,'Liberation Mono',Menlo,monospace}
+    .sec{font-family:Consolas,'Liberation Mono',Menlo,monospace;font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;padding:12px 8px 4px}
+    .row{display:flex;align-items:center;gap:10px;border-radius:6px;padding:6px 8px;font-size:12.5px;color:#cbd5e1;width:100%}
+    .row:hover{background:rgba(35,43,59,.5)}
+    .n{margin-left:auto;font-family:Consolas,'Liberation Mono',Menlo,monospace;font-size:10px;color:#64748b}
+    .chip{display:inline-flex;align-items:center;gap:4px;border-radius:999px;border:1px solid #334155;padding:1px 7px;font-family:Consolas,'Liberation Mono',Menlo,monospace;font-size:9.5px;color:#64748b;white-space:nowrap}
+    .ghost{border-radius:4px;border:1px solid #334155;background:rgba(30,41,59,.4);padding:4px 10px;font-size:12px;color:#cbd5e1;display:inline-flex;align-items:center;gap:6px}
+    .ghost:hover{border-color:#64748b;color:#e2e8f0}
+    .rb{display:flex;align-items:center;justify-content:center;height:40px;width:40px;border-radius:8px;color:#64748b;position:relative}
+    .rb:hover{background:rgba(35,43,59,.5);color:#94a3b8}
+    .on{background:#151923;color:#e2e8f0}
+    .tb{display:flex;align-items:center;gap:8px;border-bottom:1px solid #1e293b;background:#11141c;padding:6px 8px}
+    .sbh{display:flex;align-items:center;gap:8px;border-bottom:1px solid #1e293b;padding:9px 12px}
+    .fld{display:block;margin-bottom:3px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#64748b}
+    .inp{width:100%;border-radius:4px;border:1px solid #334155;background:#0d1017;padding:5px 8px;font-size:12px;color:#e2e8f0}
+  </style>
+</helmet>
+<div style="width:1440px;height:900px;display:flex;flex-direction:column;background:#0b0e14;overflow:hidden">
+
+  <!-- ── DevDeck top bar ────────────────────────────────────────────── -->
+  <div class="tb">
+    <span style="margin-right:4px;font-size:13px;font-weight:600;color:#e2e8f0"><span style="color:#818cf8">&#10095;_</span> DevDeck</span>
+    <button style="border-radius:4px;background:{{accent}};padding:4px 10px;font-size:12px;color:#fff;display:inline-flex;align-items:center;gap:6px">
+      <svg class="i" width="13" height="13" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></svg> Terminal
+    </button>
+    <button class="ghost">Launch</button>
+    <button class="ghost">Layout</button>
+    <div style="flex:1"></div>
+    <span style="display:inline-flex;align-items:center;gap:5px;border-radius:4px;background:rgba(16,185,129,.10);padding:2px 8px;font-size:11px;color:#4ade80">
+      <svg class="i" width="12" height="12" viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg> tyrex
+    </span>
+    <button class="ghost">Widget</button>
+  </div>
+
+  <div style="position:relative;display:flex;flex:1;min-height:0">
+
+    <!-- ── Rail ─────────────────────────────────────────────────────── -->
+    <nav style="display:flex;width:52px;flex-shrink:0;flex-direction:column;align-items:center;gap:4px;border-right:1px solid #1e293b;background:#0b0e14;padding:8px 0">
+      <button class="rb"><svg class="i" width="17" height="17" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
+      <button class="rb"><svg class="i" width="17" height="17" viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg><span style="position:absolute;right:4px;top:4px;height:7px;width:7px;border-radius:999px;border:2px solid #0b0e14;background:#34d399"></span></button>
+      <button class="rb on">
+        <span style="position:absolute;left:-7px;top:8px;bottom:8px;width:2.5px;border-radius:2px;background:{{accent}}"></span>
+        <svg class="i" width="17" height="17" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+        <span style="position:absolute;right:2px;top:3px;border-radius:999px;border:2px solid #0b0e14;background:#6366f1;padding:0 3px;font-family:Consolas,monospace;font-size:8.5px;font-weight:700;color:#fff">3</span>
+      </button>
+      <button class="rb"><svg class="i" width="17" height="17" viewBox="0 0 24 24"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg></button>
+      <button class="rb"><svg class="i" width="17" height="17" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg></button>
+      <button class="rb"><svg class="i" width="17" height="17" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg></button>
+      <div style="flex:1"></div>
+      <button class="rb"><svg class="i" width="17" height="17" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>
+    </nav>
+
+    <!-- ── Mail sidebar ─────────────────────────────────────────────── -->
+    <aside style="display:flex;width:250px;flex-shrink:0;flex-direction:column;border-right:1px solid #1e293b;background:#0b0e14">
+      <div class="sbh">
+        <span style="color:#818cf8"><svg class="i" width="14" height="14" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg></span>
+        <span style="font-size:12.5px;font-weight:600;color:#e2e8f0">Mail</span>
+        <button class="ghost" style="margin-left:auto;font-size:11px;padding:3px 8px">
+          <svg class="i" width="11" height="11" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></svg> Compose
+        </button>
+      </div>
+
+      <div style="flex:1;min-height:0;overflow:hidden;padding:6px">
+        <div class="sec" style="padding-top:4px">Accounts</div>
+        <sc-for list="{{accounts}}" as="a" hint-placeholder-count="2">
+          <button class="row" style="padding:5px 8px">
+            <span style="height:7px;width:7px;flex-shrink:0;border-radius:999px;background:#34d399"></span>
+            <span style="min-width:0;flex:1">
+              <span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:#cbd5e1">{{a.addr}}</span>
+              <span class="mono" style="display:block;font-size:9.5px;color:#475569">{{a.kind}}</span>
+            </span>
+            <span class="n">{{a.unread}}</span>
+          </button>
+        </sc-for>
+        <button class="row" style="border:1px dashed #334155;padding:4px 8px;font-size:11.5px;color:#64748b">
+          <svg class="i" width="11" height="11" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></svg> Add account
+        </button>
+
+        <div class="sec">Groups</div>
+        <button class="row" style="{{g.inbox.css}}" onClick="{{g.inbox.pick}}">
+          <span style="{{g.inbox.tint}};display:inline-flex"><svg class="i" width="13" height="13" viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></span>
+          <span>Inbox</span>
+          <span class="n">{{g.inbox.n}}</span>
+        </button>
+        <button class="row" style="{{g.unread.css}}" onClick="{{g.unread.pick}}">
+          <span style="{{g.unread.tint}};display:inline-flex"><svg class="i" width="13" height="13" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg></span>
+          <span>Unread</span>
+          <span class="n">{{g.unread.n}}</span>
+        </button>
+        <button class="row" style="{{g.flagged.css}}" onClick="{{g.flagged.pick}}">
+          <span style="{{g.flagged.tint}};display:inline-flex"><svg class="i" width="13" height="13" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>
+          <span>Flagged</span>
+          <span class="n">{{g.flagged.n}}</span>
+        </button>
+        <button class="row" style="{{g.clients.css}}" onClick="{{g.clients.pick}}">
+          <span style="{{g.clients.tint}};display:inline-flex"><svg class="i" width="13" height="13" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/></svg></span>
+          <span>Clients</span>
+          <span class="n">{{g.clients.n}}</span>
+        </button>
+        <button class="row" style="{{g.projects.css}}" onClick="{{g.projects.pick}}">
+          <span style="{{g.projects.tint}};display:inline-flex"><svg class="i" width="13" height="13" viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
+          <span>Projects</span>
+          <span class="n">{{g.projects.n}}</span>
+        </button>
+        <button class="row" style="{{g.bots.css}}" onClick="{{g.bots.pick}}">
+          <span style="{{g.bots.tint}};display:inline-flex"><svg class="i" width="13" height="13" viewBox="0 0 24 24"><rect width="18" height="12" x="3" y="8" rx="2"/><path d="M12 2v6"/><path d="M8 14h.01"/><path d="M16 14h.01"/></svg></span>
+          <span>Bot &amp; automated</span>
+          <span class="n">{{g.bots.n}}</span>
+        </button>
+        <button class="row" style="{{g.sent.css}}" onClick="{{g.sent.pick}}">
+          <span style="{{g.sent.tint}};display:inline-flex"><svg class="i" width="13" height="13" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></span>
+          <span>Sent</span>
+          <span class="n">{{g.sent.n}}</span>
+        </button>
+        <button class="row" style="{{g.drafts.css}}" onClick="{{g.drafts.pick}}">
+          <span style="{{g.drafts.tint}};display:inline-flex"><svg class="i" width="13" height="13" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg></span>
+          <span>Drafts</span>
+          <span class="n">{{g.drafts.n}}</span>
+        </button>
+        <button class="row" style="{{g.archive.css}}" onClick="{{g.archive.pick}}">
+          <span style="{{g.archive.tint}};display:inline-flex"><svg class="i" width="13" height="13" viewBox="0 0 24 24"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg></span>
+          <span>Archive</span>
+          <span class="n">{{g.archive.n}}</span>
+        </button>
+
+        <div class="sec">Linked to</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;padding:0 8px">
+          <span class="chip" style="border-color:rgba(99,102,241,.3);color:#a5b4fc">Northbound Logistics &middot; 5</span>
+          <span class="chip" style="border-color:rgba(99,102,241,.3);color:#a5b4fc">Sable Retail &middot; 4</span>
+          <span class="chip" style="border-color:rgba(99,102,241,.3);color:#a5b4fc">Kruger &amp; Co &middot; 3</span>
+          <span class="chip">tyrex &middot; 2</span>
+          <span class="chip">devdeck &middot; 1</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── Thread list ──────────────────────────────────────────────── -->
+    <section style="display:flex;width:400px;flex-shrink:0;flex-direction:column;border-right:1px solid #1e293b;background:#0d1017">
+      <div style="display:flex;align-items:center;gap:8px;border-bottom:1px solid #1e293b;padding:8px 10px">
+        <div style="display:flex;flex:1;align-items:center;gap:6px;border-radius:4px;border:1px solid #334155;background:#0d1017;padding:4px 8px">
+          <span style="color:#475569"><svg class="i" width="12" height="12" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>
+          <span style="font-size:11.5px;color:#475569">Search mail, people, attachments</span>
+        </div>
+        <button class="ghost" style="padding:4px 7px" title="Refresh">
+          <svg class="i" width="12" height="12" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+        </button>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:6px;border-bottom:1px solid #1e293b;padding:6px 10px">
+        <sc-for list="{{chips}}" as="c" hint-placeholder-count="4">
+          <button class="chip" style="{{c.css}}" onClick="{{c.pick}}">{{c.label}}</button>
+        </sc-for>
+        <span style="flex:1"></span>
+        <span class="mono" style="font-size:9.5px;color:#475569">{{count}}</span>
+      </div>
+
+      <div style="flex:1;min-height:0;overflow:hidden;padding:6px">
+        <sc-for list="{{list}}" as="t" hint-placeholder-count="7">
+          <button style="{{t.css}}" onClick="{{t.pick}}">
+            <span style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+              <span style="{{t.avatar}}">{{t.init}}</span>
+              <span style="{{t.nameCss}}">{{t.name}}</span>
+              <sc-if value="{{t.starred}}" hint-placeholder-val="{{true}}">
+                <span style="color:#fbbf24;display:inline-flex"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>
+              </sc-if>
+              <span style="margin-left:auto;flex-shrink:0;font-family:Consolas,monospace;font-size:9.5px;color:#64748b">{{t.time}}</span>
+            </span>
+            <span style="{{t.subjCss}}">{{t.subj}}</span>
+            <span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;line-height:1.5;color:#64748b">{{t.prev}}</span>
+            <span style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px">
+              <sc-if value="{{t.link}}" hint-placeholder-val="{{true}}">
+                <span class="chip" style="{{t.linkCss}}">{{t.link}}</span>
+              </sc-if>
+              <sc-if value="{{t.files}}" hint-placeholder-val="{{true}}">
+                <span class="chip"><svg class="i" width="9" height="9" viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>{{t.files}}</span>
+              </sc-if>
+              <span class="chip" style="border:none;padding-left:0;color:#475569">{{t.acct}}</span>
+            </span>
+          </button>
+        </sc-for>
+      </div>
+    </section>
+
+    <!-- ── Reader ───────────────────────────────────────────────────── -->
+    <section style="display:flex;flex:1;min-width:0;flex-direction:column;background:#0d1017">
+
+      <div style="border-bottom:1px solid #1e293b;padding:14px 20px 12px">
+        <div style="display:flex;align-items:flex-start;gap:10px">
+          <div style="min-width:0;flex:1">
+            <div style="font-size:15px;font-weight:600;line-height:1.35;color:#e2e8f0">{{sel.subj}}</div>
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:7px">
+              <span style="{{sel.avatar}}">{{sel.init}}</span>
+              <span style="font-size:12.5px;color:#cbd5e1">{{sel.name}}</span>
+              <span class="mono" style="font-size:10.5px;color:#64748b">&lt;{{sel.email}}&gt;</span>
+              <span class="chip" style="{{sel.linkCss}}">{{sel.link}}</span>
+            </div>
+            <div class="mono" style="margin-top:5px;font-size:10.5px;color:#475569">to {{sel.acctAddr}} &middot; {{sel.date}}</div>
+          </div>
+          <button style="flex-shrink:0;color:#fbbf24" onClick="{{toggleStar}}">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="{{sel.starFill}}" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:6px;border-bottom:1px solid #1e293b;padding:7px 20px">
+        <button style="border-radius:4px;background:{{accent}};padding:4px 10px;font-size:12px;color:#fff;display:inline-flex;align-items:center;gap:6px" onClick="{{openReply}}">
+          <svg class="i" width="12" height="12" viewBox="0 0 24 24"><path d="M20 20v-7a4 4 0 0 0-4-4H4"/><path d="m9 14-5-5 5-5"/></svg> Reply
+        </button>
+        <button class="ghost">Reply all</button>
+        <button class="ghost">Forward</button>
+        <span style="width:1px;height:16px;background:#1e293b;margin:0 3px"></span>
+        <button class="ghost" style="padding:4px 7px" title="Archive"><svg class="i" width="12" height="12" viewBox="0 0 24 24"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg></button>
+        <button class="ghost" style="padding:4px 7px" title="Delete"><svg class="i" width="12" height="12" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+        <span style="flex:1"></span>
+        <button class="ghost" style="border-color:rgba(99,102,241,.35);background:rgba(99,102,241,.10);color:#a5b4fc">
+          <svg class="i" width="12" height="12" viewBox="0 0 24 24"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg> Assistant
+        </button>
+      </div>
+
+      <div style="display:flex;gap:2px;border-bottom:1px solid #1e293b;padding:0 20px">
+        <sc-for list="{{tabs}}" as="tb" hint-placeholder-count="3">
+          <button style="{{tb.css}}" onClick="{{tb.pick}}">{{tb.label}}</button>
+        </sc-for>
+      </div>
+
+      <div style="flex:1;min-height:0;overflow:hidden;padding:16px 20px">
+
+        <!-- Message tab -->
+        <sc-if value="{{tabMsg}}" hint-placeholder-val="{{true}}">
+          <div>
+            <!-- a real branded HTML email, rendered -->
+            <sc-if value="{{sel.html}}" hint-placeholder-val="{{true}}">
+              <div style="margin-bottom:16px;overflow:hidden;border-radius:8px;border:1px solid #1e293b;background:#ffffff">
+                <div style="background:#0f766e;padding:16px 20px">
+                  <div style="font-family:Georgia,serif;font-size:17px;font-weight:700;letter-spacing:.04em;color:#ffffff">SABLE RETAIL</div>
+                  <div style="margin-top:2px;font-size:11.5px;color:#99f6e4">Retainer proposal &middot; October 2025</div>
+                </div>
+                <div style="padding:13px 20px">
+                  <p style="margin:0 0 10px;font-size:13px;line-height:1.6;color:#334155">Hi Dewald, the numbers below match what we agreed on the call. Countersign the PDF and we are good to start on the 7th.</p>
+                  <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+                    <tbody>
+                      <tr><td style="border-bottom:1px solid #e2e8f0;padding:6px 0;color:#475569">Sprint capacity &mdash; 2 devs &times; 4 weeks</td><td style="border-bottom:1px solid #e2e8f0;padding:6px 0;text-align:right;color:#0f172a">R 148 000</td></tr>
+                      <tr><td style="border-bottom:1px solid #e2e8f0;padding:6px 0;color:#475569">Support &amp; on-call &mdash; 20 hrs</td><td style="border-bottom:1px solid #e2e8f0;padding:6px 0;text-align:right;color:#0f172a">R 24 000</td></tr>
+                      <tr><td style="padding:6px 0;font-weight:600;color:#0f172a">Total excl. VAT</td><td style="padding:6px 0;text-align:right;font-weight:600;color:#0f172a">R 172 000</td></tr>
+                    </tbody>
+                  </table>
+                  <div style="margin-top:11px"><span style="display:inline-block;border-radius:4px;background:#0f766e;padding:8px 16px;font-size:12.5px;font-weight:600;color:#ffffff">View the full proposal</span></div>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-for list="{{sel.paras}}" as="p" hint-placeholder-count="3">
+              <p style="margin:0 0 10px;font-size:13px;line-height:1.7;color:#cbd5e1">{{p}}</p>
+            </sc-for>
+
+            <div style="margin-top:4px;font-size:13px;line-height:1.7;color:#94a3b8">{{sel.signoff}}<br>{{sel.name}}</div>
+
+            <button class="ghost" style="margin-top:14px;font-size:11px;color:#64748b">&middot;&middot;&middot; show {{sel.quoted}} quoted replies</button>
+
+            <sc-if value="{{sel.files}}" hint-placeholder-val="{{true}}">
+              <div style="margin-top:12px;border-top:1px solid #1e293b;padding-top:10px">
+                <div class="mono" style="margin-bottom:8px;font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:#64748b">{{sel.files}} attachments</div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px">
+                  <sc-for list="{{sel.attach}}" as="f" hint-placeholder-count="3">
+                    <span style="display:inline-flex;align-items:center;gap:8px;border-radius:8px;border:1px solid #1e293b;background:#11141c;padding:7px 11px">
+                      <span style="{{f.tint}}"><svg class="i" width="14" height="14" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg></span>
+                      <span>
+                        <span style="display:block;font-size:11.5px;color:#cbd5e1">{{f.name}}</span>
+                        <span class="mono" style="display:block;font-size:9.5px;color:#475569">{{f.size}}</span>
+                      </span>
+                    </span>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <!-- Attachments tab -->
+        <sc-if value="{{tabFiles}}" hint-placeholder-val="{{true}}">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+              <span class="mono" style="font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:#64748b">Attachments on this thread</span>
+              <span style="flex:1"></span>
+              <button class="ghost" style="font-size:11px"><svg class="i" width="11" height="11" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg> Save all to project</button>
+            </div>
+            <sc-for list="{{sel.attach}}" as="f" hint-placeholder-count="3">
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;border-radius:8px;border:1px solid #1e293b;background:#11141c;padding:11px 14px">
+                <span style="{{f.tint}}"><svg class="i" width="18" height="18" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg></span>
+                <span style="min-width:0;flex:1">
+                  <span style="display:block;font-size:12.5px;color:#e2e8f0">{{f.name}}</span>
+                  <span class="mono" style="display:block;font-size:10px;color:#64748b">{{f.size}} &middot; {{f.type}}</span>
+                </span>
+                <button class="ghost" style="font-size:11px">Preview</button>
+                <button class="ghost" style="font-size:11px">Save as&hellip;</button>
+                <button class="ghost" style="font-size:11px;border-color:rgba(99,102,241,.35);color:#a5b4fc">Attach to Sable Retail</button>
+              </div>
+            </sc-for>
+            <div style="margin-top:14px;border-radius:8px;border:1px solid #1e293b;background:#11141c;padding:12px 14px;font-size:12px;line-height:1.6;color:#94a3b8">
+              Attachments stay in the message store until you save one. &ldquo;Save to project&rdquo; drops the file into the linked project&rsquo;s folder so it is where the code is, not in a downloads pile.
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- Source tab -->
+        <sc-if value="{{tabSrc}}" hint-placeholder-val="{{true}}">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+              <span class="mono" style="font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:#64748b">Raw message</span>
+              <span style="flex:1"></span>
+              <span class="chip" style="border-color:rgba(74,222,128,.3);color:#4ade80">SPF pass</span>
+              <span class="chip" style="border-color:rgba(74,222,128,.3);color:#4ade80">DKIM pass</span>
+              <span class="chip" style="border-color:rgba(74,222,128,.3);color:#4ade80">DMARC pass</span>
+              <button class="ghost" style="font-size:11px">Copy</button>
+            </div>
+            <pre style="margin:0;max-height:470px;overflow:hidden;border-radius:8px;border:1px solid #1e293b;background:#11141c;padding:14px;font-family:Consolas,'Liberation Mono',Menlo,monospace;font-size:11.5px;line-height:1.65;color:#94a3b8;white-space:pre-wrap;word-break:break-all">{{sel.source}}</pre>
+            <div style="margin-top:10px;font-size:12px;line-height:1.6;color:#64748b">Remote images are blocked until you allow the sender &mdash; a tracking pixel is a read receipt you did not agree to.</div>
+          </div>
+        </sc-if>
+      </div>
+
+      <!-- Inline reply composer -->
+      <sc-if value="{{reply}}" hint-placeholder-val="{{true}}">
+        <div style="border-top:1px solid #1e293b;background:#11141c;padding:12px 20px 14px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span class="mono" style="font-size:10px;color:#64748b">from</span>
+            <span class="chip" style="border-color:#334155;color:#cbd5e1">hello@develtech.co.za <svg class="i" width="9" height="9" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+            <span class="mono" style="font-size:10px;color:#64748b">to</span>
+            <span class="chip" style="border-color:#334155;color:#cbd5e1">{{sel.email}}</span>
+            <span style="flex:1"></span>
+            <button style="color:#64748b" onClick="{{closeReply}}"><svg class="i" width="13" height="13" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+          </div>
+          <div style="min-height:76px;border-radius:6px;border:1px solid #334155;background:#0d1017;padding:10px 12px;font-size:13px;line-height:1.7;color:#cbd5e1">Thanks Lerato &mdash; countersigned copy attached. We will kick off on the 7th as planned.<span style="display:inline-block;width:1px;height:15px;vertical-align:-3px;background:#818cf8"></span></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
+            <button style="border-radius:4px;background:{{accent}};padding:5px 14px;font-size:12px;font-weight:600;color:#fff;display:inline-flex;align-items:center;gap:6px">
+              <svg class="i" width="12" height="12" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg> Send
+            </button>
+            <button class="ghost" style="padding:5px 8px" title="Attach"><svg class="i" width="12" height="12" viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>
+            <button class="ghost" style="border-color:rgba(99,102,241,.35);background:rgba(99,102,241,.10);color:#a5b4fc">
+              <svg class="i" width="12" height="12" viewBox="0 0 24 24"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg> Draft with assistant
+            </button>
+            <span style="flex:1"></span>
+            <span class="mono" style="font-size:9.5px;color:#475569">saved as draft 12s ago</span>
+          </div>
+        </div>
+      </sc-if>
+    </section>
+
+    <!-- ── Compose ──────────────────────────────────────────────────── -->
+    <div style="position:absolute;inset:0;background:rgba(0,0,0,.35)"></div>
+    <div style="position:absolute;right:0;top:0;bottom:0;display:flex;width:720px;flex-direction:column;border-left:1px solid #1e293b;background:#0d1017;box-shadow:-24px 0 60px rgba(0,0,0,.45)">
+
+      <div style="display:flex;align-items:center;gap:8px;border-bottom:1px solid #1e293b;padding:11px 18px">
+        <span style="color:#818cf8"><svg class="i" width="15" height="15" viewBox="0 0 24 24"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg></span>
+        <span style="font-size:13.5px;font-weight:600;color:#e2e8f0">New message</span>
+        <span class="chip" style="border-color:rgba(99,102,241,.3);color:#a5b4fc">
+          <svg class="i" width="9" height="9" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/></svg>Sable Retail
+        </span>
+        <span style="flex:1"></span>
+        <button style="color:#64748b"><svg class="i" width="14" height="14" viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+        <button style="color:#64748b"><svg class="i" width="14" height="14" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+      </div>
+
+      <!-- From -->
+      <div style="display:flex;align-items:center;gap:11px;border-bottom:1px solid #1e293b;padding:9px 18px">
+        <span class="mono" style="width:46px;flex-shrink:0;font-size:10.5px;color:#64748b">From</span>
+        <sc-for list="{{from}}" as="f" hint-placeholder-count="2">
+          <button style="{{f.css}}" onClick="{{f.pick}}">{{f.label}}</button>
+        </sc-for>
+        <span style="flex:1"></span>
+        <span class="mono" style="font-size:9.5px;color:#475569">{{fromHint}}</span>
+      </div>
+
+      <!-- To -->
+      <div style="border-bottom:1px solid #1e293b;padding:9px 18px">
+        <div style="display:flex;align-items:center;gap:11px">
+          <span class="mono" style="width:46px;flex-shrink:0;font-size:10.5px;color:#64748b">To</span>
+          <span style="display:inline-flex;align-items:center;gap:7px;border-radius:999px;border:1px solid #334155;background:#151923;padding:2px 9px 2px 3px">
+            <span style="display:inline-flex;align-items:center;justify-content:center;height:19px;width:19px;border-radius:999px;background:#a78bfa22;font-family:Consolas,monospace;font-size:9px;font-weight:700;color:#a78bfa">LM</span>
+            <span style="font-size:11.5px;color:#cbd5e1">Lerato Mahlangu</span>
+            <span style="color:#475569"><svg class="i" width="10" height="10" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span>
+          </span>
+          <button style="font-size:11.5px;color:#64748b" onClick="{{toggleSug}}">{{sugLabel}}</button>
+          <span style="flex:1"></span>
+          <button style="font-size:11.5px;color:#818cf8" onClick="{{toggleCc}}">Cc / Bcc</button>
+        </div>
+
+        <sc-if value="{{sugOpen}}" hint-placeholder-val="{{true}}">
+          <div style="margin-top:9px;margin-left:57px;overflow:hidden;border-radius:8px;border:1px solid #334155;background:#1a1f2b;box-shadow:0 12px 30px rgba(0,0,0,.5)">
+            <div class="mono" style="border-bottom:1px solid #1e293b;padding:6px 12px;font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:#64748b">From your contacts</div>
+            <sc-for list="{{suggestions}}" as="p" hint-placeholder-count="3">
+              <div style="display:flex;align-items:center;gap:10px;padding:8px 12px">
+                <span style="{{p.avatar}}">{{p.init}}</span>
+                <span style="min-width:0;flex:1">
+                  <span style="display:block;font-size:12px;color:#e2e8f0">{{p.name}}</span>
+                  <span class="mono" style="display:block;font-size:10px;color:#64748b">{{p.email}}</span>
+                </span>
+                <span class="chip" style="border-color:rgba(99,102,241,.3);color:#a5b4fc">{{p.company}}</span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ccOpen}}" hint-placeholder-val="{{true}}">
+          <div style="display:flex;align-items:center;gap:11px;margin-top:9px">
+            <span class="mono" style="width:46px;flex-shrink:0;font-size:10.5px;color:#64748b">Cc</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;border-radius:999px;border:1px solid #334155;background:#151923;padding:2px 9px 2px 3px">
+              <span style="display:inline-flex;align-items:center;justify-content:center;height:19px;width:19px;border-radius:999px;background:#38bdf822;font-family:Consolas,monospace;font-size:9px;font-weight:700;color:#38bdf8">TN</span>
+              <span style="font-size:11.5px;color:#cbd5e1">Thabo Nkosi</span>
+              <span style="color:#475569"><svg class="i" width="10" height="10" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span>
+            </span>
+          </div>
+        </sc-if>
+      </div>
+
+      <!-- Subject -->
+      <div style="display:flex;align-items:center;gap:11px;border-bottom:1px solid #1e293b;padding:10px 18px">
+        <span class="mono" style="width:46px;flex-shrink:0;font-size:10.5px;color:#64748b">Subject</span>
+        <span style="font-size:13px;color:#e2e8f0">Re: Sable Retail &mdash; October retainer &amp; checkout traces</span>
+      </div>
+
+      <!-- Formatting -->
+      <div style="display:flex;align-items:center;gap:2px;border-bottom:1px solid #1e293b;padding:5px 14px">
+        <span style="padding:4px 8px;font-size:12px;font-weight:700;color:#94a3b8">B</span>
+        <span style="padding:4px 8px;font-size:12px;font-style:italic;color:#94a3b8">I</span>
+        <span style="padding:4px 8px;font-size:12px;text-decoration:underline;color:#94a3b8">U</span>
+        <span style="width:1px;height:14px;background:#1e293b;margin:0 5px"></span>
+        <span style="display:inline-flex;padding:4px 8px;color:#94a3b8"><svg class="i" width="13" height="13" viewBox="0 0 24 24"><path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/></svg></span>
+        <span style="display:inline-flex;padding:4px 8px;color:#94a3b8"><svg class="i" width="13" height="13" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
+        <span style="display:inline-flex;padding:4px 8px;color:#94a3b8"><svg class="i" width="13" height="13" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></span>
+        <span style="flex:1"></span>
+        <button style="{{aiBtn.css}}" onClick="{{aiBtn.toggle}}">
+          <svg class="i" width="12" height="12" viewBox="0 0 24 24"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg> {{aiBtn.label}}
+        </button>
+      </div>
+
+      <!-- Body -->
+      <div style="flex:1;min-height:0;overflow:hidden;padding:16px 18px">
+        <sc-if value="{{aiOpen}}" hint-placeholder-val="{{true}}">
+          <div style="margin-bottom:14px;border-radius:8px;border:1px solid rgba(99,102,241,.28);border-left:3px solid {{accent}};background:rgba(99,102,241,.05);padding:11px 13px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+              <span style="font-size:11.5px;font-weight:600;color:#e2e8f0">Ask for a rewrite</span>
+              <span style="flex:1"></span>
+              <span class="mono" style="font-size:9.5px;color:#64748b">applies to the body below</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+              <span class="chip" style="border-color:rgba(99,102,241,.3);color:#a5b4fc">Shorter</span>
+              <span class="chip" style="border-color:rgba(99,102,241,.3);color:#a5b4fc">More formal</span>
+              <span class="chip" style="border-color:rgba(99,102,241,.3);color:#a5b4fc">Add the timeline</span>
+              <span class="chip" style="border-color:rgba(99,102,241,.3);color:#a5b4fc">Check what we promised</span>
+            </div>
+          </div>
+        </sc-if>
+
+        <div style="font-size:13px;line-height:1.75;color:#cbd5e1">
+          <p style="margin:0 0 13px">Hi Lerato,</p>
+          <p style="margin:0 0 13px">Countersigned copy attached &mdash; we are good for the 7th.</p>
+          <p style="margin:0 0 13px">I have had a first look at the traces. The 19:40&ndash;20:10 window lines up with your peak, and every failure is the gateway timing out at 30s rather than our checkout falling over. I will confirm against our own logs tomorrow and come back with something you can send them.<span style="display:inline-block;width:1px;height:16px;vertical-align:-3px;background:#818cf8"></span></p>
+          <p style="margin:0;color:#94a3b8">Regards,<br>Dewald<br><span class="mono" style="font-size:11px;color:#64748b">DevelTech &middot; develtech.co.za</span></p>
+        </div>
+      </div>
+
+      <!-- Attachments -->
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;border-top:1px solid #1e293b;padding:10px 18px">
+        <span style="display:inline-flex;align-items:center;gap:8px;border-radius:8px;border:1px solid #1e293b;background:#11141c;padding:6px 11px">
+          <span style="color:#f87171"><svg class="i" width="13" height="13" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg></span>
+          <span>
+            <span style="display:block;font-size:11.5px;color:#cbd5e1">Sable-Retainer-Oct-signed.pdf</span>
+            <span class="mono" style="display:block;font-size:9.5px;color:#475569">262 KB</span>
+          </span>
+          <span style="color:#475569"><svg class="i" width="11" height="11" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span>
+        </span>
+        <button class="ghost" style="font-size:11.5px">
+          <svg class="i" width="12" height="12" viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg> Attach
+        </button>
+        <button class="ghost" style="font-size:11.5px">From the linked project</button>
+      </div>
+
+      <!-- Send -->
+      <div style="display:flex;align-items:center;gap:9px;border-top:1px solid #1e293b;background:#11141c;padding:11px 18px">
+        <button style="border-radius:4px;background:{{accent}};padding:6px 16px;font-size:12.5px;font-weight:600;color:#fff;display:inline-flex;align-items:center;gap:7px">
+          <svg class="i" width="13" height="13" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg> Send
+        </button>
+        <button class="ghost" style="padding:6px 8px" title="Send later"><svg class="i" width="13" height="13" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></button>
+        <span style="flex:1"></span>
+        <span class="mono" style="font-size:9.5px;color:#475569">draft saved 8s ago &middot; goes out via {{smtpHost}}</span>
+        <button class="ghost" style="padding:6px 8px;border-color:rgba(248,113,113,.3);color:#f87171" title="Discard"><svg class="i" width="13" height="13" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Bottom bar (collapsed) + status bar ──────────────────────── -->
+  <div style="display:flex;flex-shrink:0;align-items:center;gap:4px;border-top:1px solid #1e293b;background:#11141c;padding:0 4px">
+    <span style="border-bottom:2px solid transparent;padding:4px 10px;font-size:11.5px;color:#64748b">Logs <span style="border-radius:3px;background:rgba(30,41,59,.4);padding:0 4px;font-size:9.5px;color:#cbd5e1">128</span></span>
+    <span style="border-bottom:2px solid transparent;padding:4px 10px;font-size:11.5px;color:#64748b">Processes <span style="border-radius:3px;background:rgba(30,41,59,.4);padding:0 4px;font-size:9.5px;color:#cbd5e1">3</span></span>
+    <span style="flex:1"></span>
+    <span style="padding:4px 8px;color:#94a3b8"><svg class="i" width="14" height="14" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></svg></span>
+  </div>
+  <div style="display:flex;flex-shrink:0;align-items:center;gap:16px;border-top:1px solid #1e293b;background:#11141c;padding:4px 12px;font-size:11px;color:#64748b">
+    <span><span style="color:#4ade80">3</span> services running</span>
+    <span>2 terminals</span>
+    <span><span style="color:#818cf8">3</span> unread mail &middot; synced 2 min ago</span>
+    <span style="flex:1"></span>
+    <span>Ctrl+Alt+Space summons &middot; local-first &middot; SQLite</span>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#6366f1","options":["#6366f1","#0ea5e9","#10b981","#f59e0b"],"tsType":"string"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props)
+    this.state = { group: 'inbox', chip: 'all', sel: 2, tab: 'msg', reply: false,
+      acct: 'develtech', cc: false, sug: false, ai: false, star: { 2: true, 4: true } }
+  }
+
+  threads() {
+    return [
+      { id: 1, box: 'inbox', bot: false, name: 'Riaan Botha', email: 'riaan@northbound.example', init: 'RB', tint: '#38bdf8',
+        subj: 'Re: Phase 2 quote — approved, please invoice', prev: 'Board signed it off this morning. Send the invoice against PO 4471 and we settle on 30 days.',
+        time: '09:42', date: 'Today at 09:42', unread: true, files: 1, link: 'Northbound Logistics', linkType: 'client', acct: 'develtech',
+        paras: ['Morning Dewald,', 'The board signed off Phase 2 this morning — no changes to the scope we discussed. Please invoice against PO 4471 and we will settle on the usual 30 days.', 'One ask: can the migration window land on a Sunday? Warehouse runs a full shift on Saturdays now.'],
+        signoff: 'Thanks,', quoted: 4,
+        attach: [{ name: 'PO-4471.pdf', size: '86 KB', type: 'application/pdf', tint: 'color:#f87171' }] },
+
+      { id: 2, box: 'inbox', bot: false, name: 'Lerato Mahlangu', email: 'lerato@sableretail.example', init: 'LM', tint: '#a78bfa',
+        subj: 'Sable Retail — October retainer & checkout traces', prev: 'Signed retainer attached, plus the timeout traces you asked for from Friday night.',
+        time: '08:15', date: 'Today at 08:15', unread: true, files: 3, link: 'Sable Retail', linkType: 'client', acct: 'develtech', html: true,
+        paras: ['Hi Dewald,', 'Attached is the countersigned retainer and the checkout traces from Friday night — the timeouts cluster between 19:40 and 20:10, which is exactly our peak.', 'Our ops lead thinks it is the payment gateway rather than us, but I would rather you looked before we go back to them.'],
+        signoff: 'Best,', quoted: 2,
+        attach: [
+          { name: 'Sable-Retainer-Oct.pdf', size: '248 KB', type: 'application/pdf', tint: 'color:#f87171' },
+          { name: 'checkout-timeouts.png', size: '1.2 MB', type: 'image/png', tint: 'color:#4ade80' },
+          { name: 'gateway-errors.csv', size: '4 KB', type: 'text/csv', tint: 'color:#38bdf8' } ] },
+
+      { id: 3, box: 'inbox', bot: true, name: 'GitHub', email: 'notifications@github.com', init: 'GH', tint: '#64748b',
+        subj: '[d3velopm3nt/tyrex] CI failed on main', prev: 'build (windows-latest) failed in 2m 14s — cargo test: 1 failing, 0 skipped',
+        time: '07:58', date: 'Today at 07:58', unread: true, files: 0, link: 'tyrex', linkType: 'project', acct: 'gmail',
+        paras: ['build (windows-latest) failed in 2m 14s.', 'cargo test — 1 failing: pty::tests::survives_reload'],
+        signoff: '—', quoted: 0, attach: [] },
+
+      { id: 4, box: 'inbox', bot: false, name: 'Sipho Ndlovu', email: 'sipho@northbound.example', init: 'SN', tint: '#4ade80',
+        subj: 'Staging credentials for tyrex', prev: 'Rotated this morning. The new pair is in the vault — deliberately not in this mail.',
+        time: 'Yest', date: 'Yesterday at 16:20', unread: false, files: 1, link: 'tyrex', linkType: 'project', acct: 'gmail',
+        paras: ['Hi,', 'Rotated the staging pair this morning. They are in the vault under northbound/staging — deliberately not in this mail.', 'The connection profile is attached so you do not have to retype the host.'],
+        signoff: 'Cheers,', quoted: 1,
+        attach: [{ name: 'staging.connection.json', size: '2 KB', type: 'application/json', tint: 'color:#38bdf8' }] },
+
+      { id: 5, box: 'inbox', bot: false, name: 'Anja de Wet', email: 'anja@kruger.example', init: 'AW', tint: '#fbbf24',
+        subj: 'Re: Domain and mailbox migration', prev: 'MX records are live. The old host keeps the archive until the 30th.',
+        time: 'Yest', date: 'Yesterday at 11:05', unread: false, files: 0, link: 'Kruger & Co', linkType: 'client', acct: 'develtech',
+        paras: ['Hi Dewald,', 'MX records went live overnight and mail is flowing to the new host. The old provider keeps the archive until the 30th, so pull anything you need before then.'],
+        signoff: 'Regards,', quoted: 6, attach: [] },
+
+      { id: 6, box: 'inbox', bot: true, name: 'Sentry', email: 'noreply@sentry.io', init: 'SY', tint: '#f87171',
+        subj: 'New issue: TypeError in checkout.ts', prev: 'Cannot read properties of undefined (reading "total") — 42 events, 11 users affected',
+        time: 'Yest', date: 'Yesterday at 20:04', unread: false, files: 0, link: 'sable-checkout', linkType: 'project', acct: 'gmail',
+        paras: ['TypeError: Cannot read properties of undefined (reading "total")', '42 events across 11 users, first seen 19:41.'],
+        signoff: '—', quoted: 0, attach: [] },
+
+      { id: 7, box: 'inbox', bot: false, name: 'Thabo Nkosi', email: 'thabo@sableretail.example', init: 'TN', tint: '#38bdf8',
+        subj: 'Invoice INV-0147 — paid', prev: 'Payment went out Friday afternoon, proof of payment attached.',
+        time: 'Mon', date: 'Monday at 14:32', unread: false, files: 1, link: 'Sable Retail', linkType: 'client', acct: 'develtech',
+        paras: ['Hi,', 'INV-0147 was paid on Friday afternoon. Proof of payment is attached — it should reflect on Tuesday.'],
+        signoff: 'Thanks,', quoted: 2,
+        attach: [{ name: 'POP-INV-0147.pdf', size: '112 KB', type: 'application/pdf', tint: 'color:#f87171' }] },
+
+      { id: 8, box: 'inbox', bot: false, name: 'Marli Steyn', email: 'marli@kruger.example', init: 'MS', tint: '#a78bfa',
+        subj: 'Can we move Thursday’s demo to 14:00?', prev: 'Two of the stakeholders are only free after lunch.',
+        time: 'Mon', date: 'Monday at 09:10', unread: false, files: 0, link: 'Kruger & Co', linkType: 'client', acct: 'gmail',
+        paras: ['Hi Dewald,', 'Two of the stakeholders are only free after lunch on Thursday. Does 14:00 work for the demo?'],
+        signoff: 'Thanks,', quoted: 0, attach: [] },
+
+      { id: 9, box: 'inbox', bot: true, name: 'GitHub Actions', email: 'noreply@github.com', init: 'GA', tint: '#64748b',
+        subj: 'devdeck 0.2.9 published', prev: 'latest.json generated, installer signed, release assets live.',
+        time: 'Mon', date: 'Monday at 06:02', unread: false, files: 0, link: 'devdeck', linkType: 'project', acct: 'gmail',
+        paras: ['Release v0.2.9 published.', 'latest.json generated, installer minisign-signed, assets live.'],
+        signoff: '—', quoted: 0, attach: [] },
+
+      { id: 10, box: 'sent', bot: false, name: 'To: Riaan Botha', email: 'riaan@northbound.example', init: 'RB', tint: '#38bdf8',
+        subj: 'Phase 2 quote — revision 3', prev: 'Revised quote attached with the support hours split out, as asked.',
+        time: 'Fri', date: 'Friday at 15:48', unread: false, files: 1, link: 'Northbound Logistics', linkType: 'client', acct: 'develtech',
+        paras: ['Hi Riaan,', 'Revised quote attached with the support hours split out on their own line, as asked.'],
+        signoff: 'Regards,', quoted: 3,
+        attach: [{ name: 'Quote-Phase2-r3.pdf', size: '196 KB', type: 'application/pdf', tint: 'color:#f87171' }] },
+
+      { id: 11, box: 'drafts', bot: false, name: 'To: Anja de Wet', email: 'anja@kruger.example', init: 'AW', tint: '#fbbf24',
+        subj: 'Re: Domain and mailbox migration', prev: 'Draft — Thanks Anja. Before we cut the archive over, can you confirm…',
+        time: 'Fri', date: 'Friday at 17:12', unread: false, files: 0, link: 'Kruger & Co', linkType: 'client', acct: 'develtech',
+        paras: ['Thanks Anja. Before we cut the archive over, can you confirm the mailbox count so I size the transfer window?'],
+        signoff: 'Regards,', quoted: 6, attach: [] },
+
+      { id: 12, box: 'archive', bot: false, name: 'Pieter van Zyl', email: 'pieter@northbound.example', init: 'PZ', tint: '#4ade80',
+        subj: 'Handover notes — warehouse API', prev: 'Everything you need is in the wiki, but here is the short version.',
+        time: '12 Sep', date: '12 September at 08:30', unread: false, files: 0, link: 'Northbound Logistics', linkType: 'client', acct: 'develtech',
+        paras: ['Everything is in the wiki, but the short version: the warehouse API rate-limits at 60 rpm per key.'],
+        signoff: 'Cheers,', quoted: 0, attach: [] },
+    ]
+  }
+
+  renderVals() {
+    const accent = this.props.accent ?? '#6366f1'
+    const st = this.state
+    const all = this.threads()
+    const star = st.star
+
+    const inGroup = (t, g) => {
+      if (g === 'inbox') return t.box === 'inbox'
+      if (g === 'unread') return t.box === 'inbox' && t.unread
+      if (g === 'flagged') return !!star[t.id]
+      if (g === 'clients') return t.linkType === 'client' && t.box === 'inbox'
+      if (g === 'projects') return t.linkType === 'project' && t.box === 'inbox'
+      if (g === 'bots') return t.bot && t.box === 'inbox'
+      return t.box === g
+    }
+    const inChip = (t) => {
+      if (st.chip === 'unread') return t.unread
+      if (st.chip === 'flag') return !!star[t.id]
+      if (st.chip === 'files') return t.files > 0
+      return true
+    }
+
+    const GROUPS = [
+      { key: 'inbox', tint: 'color:#94a3b8' },
+      { key: 'unread', tint: 'color:#818cf8' },
+      { key: 'flagged', tint: 'color:#fbbf24' },
+      { key: 'clients', tint: 'color:#38bdf8' },
+      { key: 'projects', tint: 'color:#4ade80' },
+      { key: 'bots', tint: 'color:#a78bfa' },
+      { key: 'sent', tint: 'color:#94a3b8' },
+      { key: 'drafts', tint: 'color:#94a3b8' },
+      { key: 'archive', tint: 'color:#94a3b8' },
+    ]
+
+    // Keyed by group so the sidebar rows can stay literal markup (real icons,
+    // retypable labels) and bind only their state.
+    const g = {}
+    for (const grp of GROUPS) {
+      const on = st.group === grp.key
+      g[grp.key] = {
+        n: all.filter((t) => inGroup(t, grp.key)).length,
+        tint: on ? 'color:#e2e8f0' : grp.tint,
+        // No background when inactive, so the stylesheet hover still lands.
+        css: on ? 'background:#151923;color:#e2e8f0' : 'color:#cbd5e1',
+        pick: () => this.setState({ group: grp.key }),
+      }
+    }
+
+    const CHIPS = [
+      { key: 'all', label: 'All' }, { key: 'unread', label: 'Unread' },
+      { key: 'flag', label: 'Flagged' }, { key: 'files', label: 'Has files' },
+    ]
+    const chips = CHIPS.map((c) => {
+      const on = st.chip === c.key
+      return {
+        label: c.label,
+        css: on ? 'border-radius:999px;border:1px solid transparent;background:rgba(99,102,241,.2);padding:2px 9px;font-family:Consolas,monospace;font-size:9.5px;color:#a5b4fc'
+                : 'border-radius:999px;border:1px solid #334155;padding:2px 9px;font-family:Consolas,monospace;font-size:9.5px;color:#94a3b8',
+        pick: () => this.setState({ chip: c.key }),
+      }
+    })
+
+    const avatarFor = (t, size) =>
+      'display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;height:' + size + 'px;width:' + size + 'px;border-radius:999px;' +
+      'background:' + t.tint + '22;color:' + t.tint + ';font-family:Consolas,monospace;font-size:' + (size < 30 ? 9.5 : 11) + 'px;font-weight:700'
+
+    const linkCssFor = (t) => t.linkType === 'client'
+      ? 'border-color:rgba(99,102,241,.3);color:#a5b4fc'
+      : 'border-color:rgba(74,222,128,.28);color:#4ade80'
+
+    const visible = all.filter((t) => inGroup(t, st.group) && inChip(t))
+
+    const list = visible.map((t) => {
+      const on = st.sel === t.id
+      return {
+        init: t.init, name: t.name, time: t.time, subj: t.subj, prev: t.prev,
+        link: t.link, files: t.files, acct: t.acct === 'gmail' ? 'gmail' : 'develtech',
+        starred: !!star[t.id], avatar: avatarFor(t, 24), linkCss: linkCssFor(t),
+        css: 'display:block;width:100%;margin-bottom:6px;border-radius:8px;padding:9px 12px;border:1px solid ' +
+             (on ? accent + '80' : '#1e293b') + ';background:' + (on ? '#151923' : '#11141c'),
+        nameCss: 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;color:' + (t.unread ? '#e2e8f0' : '#cbd5e1') + ';font-weight:' + (t.unread ? '600' : '400'),
+        subjCss: 'display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:3px;font-size:12px;color:' + (t.unread ? '#e2e8f0' : '#94a3b8') + ';font-weight:' + (t.unread ? '600' : '400'),
+        pick: () => this.setState({ sel: t.id, tab: 'msg', reply: false }),
+      }
+    })
+
+    const fromBtn = (on) =>
+      'border-radius:4px;border:1px solid ' + (on ? accent : '#334155') +
+      ';background:' + (on ? 'rgba(99,102,241,.12)' : 'transparent') +
+      ';padding:3px 11px;font-family:Consolas,monospace;font-size:11px;color:' + (on ? '#e2e8f0' : '#94a3b8')
+    const sugAvatar = (c) =>
+      'display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;height:26px;width:26px;border-radius:999px;background:' +
+      c + '22;color:' + c + ';font-family:Consolas,monospace;font-size:9.5px;font-weight:700'
+
+    const cur = all.find((t) => t.id === st.sel) || all[0]
+    const TABS = [
+      { key: 'msg', label: 'Message' },
+      { key: 'files', label: 'Attachments · ' + cur.files },
+      { key: 'src', label: 'Source' },
+    ]
+    const tabs = TABS.map((tb) => {
+      const on = st.tab === tb.key
+      return {
+        label: tb.label,
+        css: 'border-bottom:2px solid ' + (on ? accent : 'transparent') + ';padding:7px 12px;font-size:12px;color:' + (on ? '#e2e8f0' : '#64748b'),
+        pick: () => this.setState({ tab: tb.key }),
+      }
+    })
+
+    // Headers follow the actual message: which account received it, which host
+    // it came from. A source view that always says the same thing is a source
+    // view nobody trusts.
+    const acctAddr = cur.acct === 'gmail' ? 'd3velopm3nt@gmail.com' : 'hello@develtech.co.za'
+    const senderHost = 'mail.' + cur.email.split('@')[1]
+    const mx = cur.acct === 'gmail' ? 'mx.google.com' : 'mx.develtech.co.za'
+    const htmlPart = cur.html
+      ? '--=_2f9c\nContent-Type: text/html; charset=UTF-8\n\n' +
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">\n' +
+        '  <tr><td style="background:#0f766e;padding:16px 20px">\n' +
+        '    <h1 style="font:700 17px Georgia,serif;color:#fff">SABLE RETAIL</h1>\n' +
+        '  </td></tr>\n</table>\n\n--=_2f9c--'
+      : '--=_2f9c--'
+
+    const source = 'Return-Path: <' + cur.email + '>\n' +
+      'Delivered-To: ' + acctAddr + '\n' +
+      'Received: from ' + senderHost + ' (196.34.12.8)\n' +
+      '  by ' + mx + ' with ESMTPS id 4bYq2n; ' + cur.date + '\n' +
+      'Authentication-Results: ' + mx + ';\n' +
+      '  spf=pass  dkim=pass  dmarc=pass\n' +
+      'From: ' + cur.name + ' <' + cur.email + '>\n' +
+      'To: Dewald <' + acctAddr + '>\n' +
+      'Subject: ' + cur.subj + '\n' +
+      'Content-Type: multipart/alternative; boundary="=_2f9c"\n\n' +
+      '--=_2f9c\nContent-Type: text/plain; charset=UTF-8\n\n' +
+      cur.paras[1] + '\n\n' +
+      htmlPart
+
+    return {
+      accent,
+      from: [
+        { label: 'd3velopm3nt@gmail.com', css: fromBtn(st.acct === 'gmail'), pick: () => this.setState({ acct: 'gmail' }) },
+        { label: 'hello@develtech.co.za', css: fromBtn(st.acct === 'develtech'), pick: () => this.setState({ acct: 'develtech' }) },
+      ],
+      fromHint: st.acct === 'gmail' ? 'signature: personal' : 'signature: DevelTech',
+      smtpHost: st.acct === 'gmail' ? 'smtp.gmail.com:465' : 'mail.develtech.co.za:465',
+      ccOpen: st.cc,
+      toggleCc: () => this.setState({ cc: !st.cc }),
+      sugOpen: st.sug,
+      sugLabel: st.sug ? '— close' : '+ add recipient',
+      toggleSug: () => this.setState({ sug: !st.sug }),
+      suggestions: [
+        { init: 'TN', name: 'Thabo Nkosi', email: 'thabo@sableretail.example', company: 'Sable Retail', avatar: sugAvatar('#38bdf8') },
+        { init: 'RB', name: 'Riaan Botha', email: 'riaan@northbound.example', company: 'Northbound Logistics', avatar: sugAvatar('#38bdf8') },
+        { init: 'AW', name: 'Anja de Wet', email: 'anja@kruger.example', company: 'Kruger & Co', avatar: sugAvatar('#fbbf24') },
+      ],
+      aiOpen: st.ai,
+      aiBtn: {
+        label: 'Assistant',
+        css: 'border-radius:4px;border:1px solid ' + (st.ai ? accent : 'rgba(99,102,241,.35)') +
+             ';background:rgba(99,102,241,.10);padding:4px 10px;font-size:11.5px;color:#a5b4fc;display:inline-flex;align-items:center;gap:6px',
+        toggle: () => this.setState({ ai: !st.ai }),
+      },
+      accounts: [
+        { addr: 'd3velopm3nt@gmail.com', kind: 'Gmail · OAuth', unread: 1 },
+        { addr: 'hello@develtech.co.za', kind: 'IMAP + SMTP', unread: 2 },
+      ],
+      g, chips, list, tabs,
+      count: visible.length + ' of ' + all.length,
+      tabMsg: st.tab === 'msg', tabFiles: st.tab === 'files', tabSrc: st.tab === 'src',
+      reply: st.reply,
+      openReply: () => this.setState({ reply: true }),
+      closeReply: () => this.setState({ reply: false }),
+      toggleStar: () => this.setState({ star: Object.assign({}, star, { [cur.id]: !star[cur.id] }) }),
+      sel: Object.assign({}, cur, {
+        avatar: avatarFor(cur, 22),
+        linkCss: linkCssFor(cur),
+        acctAddr,
+        starFill: star[cur.id] ? '#fbbf24' : 'none',
+        source,
+      }),
+    }
+  }
+}
+</script>
+</body>
+</html>

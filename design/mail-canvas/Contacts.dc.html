@@ -1,0 +1,437 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:#0b0e14;color:#cbd5e1;-webkit-font-smoothing:antialiased}
+    a{color:#818cf8;text-decoration:none}
+    a:hover{color:#a5b4fc}
+    button{font:inherit;color:inherit;background:none;border:none;padding:0;cursor:pointer;text-align:left}
+    .i{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+    .mono{font-family:Consolas,'Liberation Mono',Menlo,monospace}
+    .sec{font-family:Consolas,'Liberation Mono',Menlo,monospace;font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;padding:12px 8px 4px}
+    .row{display:flex;align-items:center;gap:10px;border-radius:6px;padding:6px 8px;font-size:12.5px;color:#cbd5e1;width:100%}
+    .row:hover{background:rgba(35,43,59,.5)}
+    .n{margin-left:auto;font-family:Consolas,'Liberation Mono',Menlo,monospace;font-size:10px;color:#64748b}
+    .chip{display:inline-flex;align-items:center;gap:4px;border-radius:999px;border:1px solid #334155;padding:1px 7px;font-family:Consolas,'Liberation Mono',Menlo,monospace;font-size:9.5px;color:#64748b;white-space:nowrap}
+    .ghost{border-radius:4px;border:1px solid #334155;background:rgba(30,41,59,.4);padding:4px 10px;font-size:12px;color:#cbd5e1;display:inline-flex;align-items:center;gap:6px}
+    .ghost:hover{border-color:#64748b;color:#e2e8f0}
+    .rb{display:flex;align-items:center;justify-content:center;height:40px;width:40px;border-radius:8px;color:#64748b;position:relative}
+    .rb:hover{background:rgba(35,43,59,.5);color:#94a3b8}
+    .on{background:#151923;color:#e2e8f0}
+    .tb{display:flex;align-items:center;gap:8px;border-bottom:1px solid #1e293b;background:#11141c;padding:6px 8px}
+    .sbh{display:flex;align-items:center;gap:8px;border-bottom:1px solid #1e293b;padding:9px 12px}
+    .fld{display:block;margin-bottom:3px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#64748b}
+    .inp{width:100%;border-radius:4px;border:1px solid #334155;background:#0d1017;padding:5px 8px;font-size:12px;color:#e2e8f0}
+  </style>
+</helmet>
+<div style="width:1440px;height:900px;display:flex;flex-direction:column;background:#0b0e14;overflow:hidden">
+
+  <!-- ── DevDeck top bar ────────────────────────────────────────────── -->
+  <div class="tb">
+    <span style="margin-right:4px;font-size:13px;font-weight:600;color:#e2e8f0"><span style="color:#818cf8">&#10095;_</span> DevDeck</span>
+    <button style="border-radius:4px;background:{{accent}};padding:4px 10px;font-size:12px;color:#fff;display:inline-flex;align-items:center;gap:6px">
+      <svg class="i" width="13" height="13" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></svg> Terminal
+    </button>
+    <button class="ghost">Launch</button>
+    <button class="ghost">Layout</button>
+    <div style="flex:1"></div>
+    <span style="display:inline-flex;align-items:center;gap:5px;border-radius:4px;background:rgba(16,185,129,.10);padding:2px 8px;font-size:11px;color:#4ade80">
+      <svg class="i" width="12" height="12" viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg> tyrex
+    </span>
+    <button class="ghost">Widget</button>
+  </div>
+
+  <div style="display:flex;flex:1;min-height:0">
+
+    <!-- ── Rail ─────────────────────────────────────────────────────── -->
+    <nav style="display:flex;width:52px;flex-shrink:0;flex-direction:column;align-items:center;gap:4px;border-right:1px solid #1e293b;background:#0b0e14;padding:8px 0">
+      <button class="rb"><svg class="i" width="17" height="17" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
+      <button class="rb"><svg class="i" width="17" height="17" viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg><span style="position:absolute;right:4px;top:4px;height:7px;width:7px;border-radius:999px;border:2px solid #0b0e14;background:#34d399"></span></button>
+      <button class="rb on">
+        <span style="position:absolute;left:-7px;top:8px;bottom:8px;width:2.5px;border-radius:2px;background:{{accent}}"></span>
+        <svg class="i" width="17" height="17" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+        <span style="position:absolute;right:2px;top:3px;border-radius:999px;border:2px solid #0b0e14;background:#6366f1;padding:0 3px;font-family:Consolas,monospace;font-size:8.5px;font-weight:700;color:#fff">3</span>
+      </button>
+      <button class="rb"><svg class="i" width="17" height="17" viewBox="0 0 24 24"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg></button>
+      <button class="rb"><svg class="i" width="17" height="17" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg></button>
+      <button class="rb"><svg class="i" width="17" height="17" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg></button>
+      <div style="flex:1"></div>
+      <button class="rb"><svg class="i" width="17" height="17" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>
+    </nav>
+
+    <!-- ── Contacts sidebar ─────────────────────────────────────── -->
+    <aside style="display:flex;width:250px;flex-shrink:0;flex-direction:column;border-right:1px solid #1e293b;background:#0b0e14">
+      <div class="sbh">
+        <span style="color:#818cf8"><svg class="i" width="14" height="14" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+        <span style="font-size:12.5px;font-weight:600;color:#e2e8f0">Contacts</span>
+        <button class="ghost" style="margin-left:auto;font-size:11px;padding:3px 8px">
+          <svg class="i" width="11" height="11" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></svg> Add
+        </button>
+      </div>
+
+      <!-- Contacts live inside Mail rather than taking a rail slot of their own -->
+      <div style="display:flex;gap:3px;border-bottom:1px solid #1e293b;padding:7px 10px">
+        <button style="flex:1;border-radius:4px;border:1px solid #334155;padding:3px 0;text-align:center;font-size:11.5px;color:#94a3b8">Mail</button>
+        <button style="flex:1;border-radius:4px;border:1px solid {{accent}};background:rgba(99,102,241,.12);padding:3px 0;text-align:center;font-size:11.5px;color:#e2e8f0">Contacts</button>
+      </div>
+
+      <div style="flex:1;min-height:0;overflow:hidden;padding:6px">
+        <div class="sec" style="padding-top:4px">Groups</div>
+        <button class="row" style="{{g.all.css}}" onClick="{{g.all.pick}}">
+          <span style="{{g.all.tint}};display:inline-flex"><svg class="i" width="13" height="13" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg></span>
+          <span>All contacts</span><span class="n">{{g.all.n}}</span>
+        </button>
+        <button class="row" style="{{g.client.css}}" onClick="{{g.client.pick}}">
+          <span style="{{g.client.tint}};display:inline-flex"><svg class="i" width="13" height="13" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/></svg></span>
+          <span>Clients</span><span class="n">{{g.client.n}}</span>
+        </button>
+        <button class="row" style="{{g.recent.css}}" onClick="{{g.recent.pick}}">
+          <span style="{{g.recent.tint}};display:inline-flex"><svg class="i" width="13" height="13" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg></span>
+          <span>In touch this week</span><span class="n">{{g.recent.n}}</span>
+        </button>
+        <button class="row" style="{{g.none.css}}" onClick="{{g.none.pick}}">
+          <span style="{{g.none.tint}};display:inline-flex"><svg class="i" width="13" height="13" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></span>
+          <span>Not linked yet</span><span class="n">{{g.none.n}}</span>
+        </button>
+
+        <div class="sec">Companies</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;padding:0 8px">
+          <span class="chip" style="border-color:rgba(99,102,241,.3);color:#a5b4fc">Northbound Logistics &middot; 3</span>
+          <span class="chip" style="border-color:rgba(99,102,241,.3);color:#a5b4fc">Sable Retail &middot; 2</span>
+          <span class="chip" style="border-color:rgba(99,102,241,.3);color:#a5b4fc">Kruger &amp; Co &middot; 2</span>
+          <span class="chip">Independent &middot; 1</span>
+        </div>
+
+        <div class="sec">Tags</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;padding:0 8px">
+          <span class="chip">decision-maker &middot; 3</span>
+          <span class="chip">billing &middot; 2</span>
+          <span class="chip">technical &middot; 3</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── Contact list ─────────────────────────────────────────────── -->
+    <section style="display:flex;width:400px;flex-shrink:0;flex-direction:column;border-right:1px solid #1e293b;background:#0d1017">
+      <div style="display:flex;align-items:center;gap:8px;border-bottom:1px solid #1e293b;padding:8px 10px">
+        <div style="display:flex;flex:1;align-items:center;gap:6px;border-radius:4px;border:1px solid #334155;background:#0d1017;padding:4px 8px">
+          <span style="color:#475569"><svg class="i" width="12" height="12" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>
+          <span style="font-size:11.5px;color:#475569">Search name, company, address</span>
+        </div>
+        <span class="mono" style="font-size:9.5px;color:#475569">{{count}}</span>
+      </div>
+
+      <div style="flex:1;min-height:0;overflow:hidden;padding:6px">
+        <sc-for list="{{list}}" as="c" hint-placeholder-count="8">
+          <button style="{{c.css}}" onClick="{{c.pick}}">
+            <span style="display:flex;align-items:center;gap:10px">
+              <span style="{{c.avatar}}">{{c.init}}</span>
+              <span style="min-width:0;flex:1">
+                <span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;font-weight:600;color:#e2e8f0">{{c.name}}</span>
+                <span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px;font-size:11.5px;color:#94a3b8">{{c.role}}</span>
+              </span>
+              <span class="mono" style="flex-shrink:0;font-size:9.5px;color:#64748b">{{c.last}}</span>
+            </span>
+            <span class="mono" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:6px;font-size:10.5px;color:#64748b">{{c.email}}</span>
+            <span style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">
+              <span class="chip" style="{{c.linkCss}}">{{c.company}}</span>
+              <span class="chip">{{c.threads}} threads</span>
+            </span>
+          </button>
+        </sc-for>
+      </div>
+    </section>
+
+    <!-- ── Contact detail ───────────────────────────────────────────── -->
+    <section style="display:flex;flex:1;min-width:0;flex-direction:column;background:#0d1017">
+      <div style="border-bottom:1px solid #1e293b;padding:16px 20px 13px">
+        <div style="display:flex;align-items:center;gap:13px">
+          <span style="{{sel.bigAvatar}}">{{sel.init}}</span>
+          <span style="min-width:0;flex:1">
+            <span style="display:block;font-size:16px;font-weight:600;color:#e2e8f0">{{sel.name}}</span>
+            <span style="display:block;margin-top:2px;font-size:12.5px;color:#94a3b8">{{sel.role}} &middot; {{sel.company}}</span>
+          </span>
+          <span style="display:flex;gap:7px">
+            <button style="border-radius:4px;background:{{accent}};padding:5px 12px;font-size:12px;color:#fff;display:inline-flex;align-items:center;gap:6px">
+              <svg class="i" width="12" height="12" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg> Compose
+            </button>
+            <button class="ghost">Edit</button>
+          </span>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:2px;border-bottom:1px solid #1e293b;padding:0 20px">
+        <sc-for list="{{tabs}}" as="tb" hint-placeholder-count="3">
+          <button style="{{tb.css}}" onClick="{{tb.pick}}">{{tb.label}}</button>
+        </sc-for>
+      </div>
+
+      <div style="flex:1;min-height:0;overflow:hidden;padding:16px 20px">
+
+        <sc-if value="{{tabOverview}}" hint-placeholder-val="{{true}}">
+          <div>
+            <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:10px;margin-bottom:16px">
+              <div style="border-radius:8px;border:1px solid #1e293b;background:#11141c;padding:11px 14px">
+                <div class="mono" style="margin-bottom:5px;font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:#64748b">Work address</div>
+                <div class="mono" style="font-size:12px;color:#cbd5e1">{{sel.email}}</div>
+              </div>
+              <div style="border-radius:8px;border:1px solid #1e293b;background:#11141c;padding:11px 14px">
+                <div class="mono" style="margin-bottom:5px;font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:#64748b">Phone</div>
+                <div class="mono" style="font-size:12px;color:#cbd5e1">{{sel.phone}}</div>
+              </div>
+              <div style="border-radius:8px;border:1px solid #1e293b;background:#11141c;padding:11px 14px">
+                <div class="mono" style="margin-bottom:5px;font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:#64748b">Also seen as</div>
+                <div class="mono" style="font-size:12px;color:#cbd5e1">{{sel.alt}}</div>
+              </div>
+              <div style="border-radius:8px;border:1px solid #1e293b;background:#11141c;padding:11px 14px">
+                <div class="mono" style="margin-bottom:5px;font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:#64748b">Added</div>
+                <div style="font-size:12px;color:#cbd5e1">{{sel.added}}</div>
+              </div>
+            </div>
+
+            <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px">
+              <span class="mono" style="font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:#64748b">Linked to</span>
+              <span style="flex:1"></span>
+              <button class="ghost" style="font-size:11px;padding:3px 8px"><svg class="i" width="11" height="11" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></svg> Link</button>
+            </div>
+
+            <div style="border-radius:8px;border:1px solid rgba(99,102,241,.28);background:rgba(99,102,241,.05);padding:13px 15px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="display:inline-flex;align-items:center;justify-content:center;height:30px;width:30px;border-radius:7px;background:rgba(99,102,241,.18);color:#a5b4fc"><svg class="i" width="15" height="15" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/></svg></span>
+                <span style="min-width:0;flex:1">
+                  <span style="display:block;font-size:13px;font-weight:600;color:#e2e8f0">{{sel.company}}</span>
+                  <span style="display:block;margin-top:2px;font-size:11.5px;color:#94a3b8">{{sel.clientLine}}</span>
+                </span>
+                <button class="ghost" style="font-size:11px;padding:3px 8px">Open client</button>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:11px;border-top:1px solid rgba(99,102,241,.18);padding-top:10px">
+                <span class="mono" style="font-size:9.5px;color:#64748b">projects</span>
+                <sc-for list="{{sel.projects}}" as="p" hint-placeholder-count="2">
+                  <span class="chip" style="border-color:rgba(74,222,128,.28);color:#4ade80">
+                    <svg class="i" width="9" height="9" viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/></svg>{{p}}
+                  </span>
+                </sc-for>
+                <span style="flex:1"></span>
+                <span class="mono" style="font-size:9.5px;color:#64748b">tags</span>
+                <sc-for list="{{sel.tags}}" as="t" hint-placeholder-count="2">
+                  <span class="chip">{{t}}</span>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:8px;margin-top:16px;margin-bottom:8px">
+              <span class="mono" style="font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:#64748b">Recent</span>
+              <span style="flex:1"></span>
+              <button class="ghost" style="font-size:11px;padding:3px 8px" onClick="{{seeAll}}">See all {{sel.threads}}</button>
+            </div>
+            <sc-for list="{{sel.recentTop}}" as="r" hint-placeholder-count="3">
+              <div style="display:flex;align-items:center;gap:11px;margin-bottom:6px;border-radius:8px;border:1px solid #1e293b;background:#11141c;padding:9px 13px">
+                <span style="{{r.dir}}"><svg class="i" width="12" height="12" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></span>
+                <span style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:#cbd5e1">{{r.subj}}</span>
+                <span class="mono" style="flex-shrink:0;font-size:9.5px;color:#64748b">{{r.when}}</span>
+              </div>
+            </sc-for>
+
+            <div style="margin-top:12px;border-radius:8px;border:1px solid #1e293b;background:#11141c;padding:12px 14px;font-size:12px;line-height:1.65;color:#94a3b8">
+              A contact is one person; a client is the company you bill. Linking the two is what lets a thread, an invoice and a project folder all find each other &mdash; and it is why mail from a new address at a known company can be offered the right client on arrival.
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{tabThreads}}" hint-placeholder-val="{{true}}">
+          <div>
+            <sc-for list="{{sel.recent}}" as="r" hint-placeholder-count="4">
+              <div style="display:flex;align-items:center;gap:11px;margin-bottom:7px;border-radius:8px;border:1px solid #1e293b;background:#11141c;padding:11px 14px">
+                <span style="{{r.dir}}"><svg class="i" width="13" height="13" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></span>
+                <span style="min-width:0;flex:1">
+                  <span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;color:#e2e8f0">{{r.subj}}</span>
+                  <span style="display:block;margin-top:2px;font-size:11px;color:#64748b">{{r.who}}</span>
+                </span>
+                <span class="mono" style="flex-shrink:0;font-size:9.5px;color:#64748b">{{r.when}}</span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{tabNotes}}" hint-placeholder-val="{{true}}">
+          <div>
+            <div style="border-radius:8px;border:1px solid #1e293b;background:#11141c;padding:13px 15px;font-size:12.5px;line-height:1.7;color:#cbd5e1">Signs off on scope but not on budget &mdash; anything over R100k goes via Thabo in finance. Prefers a written summary before a call, and reads mail early: replies almost always land before 09:00.</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
+              <button class="ghost" style="font-size:11.5px"><svg class="i" width="11" height="11" viewBox="0 0 24 24"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg> Edit note</button>
+              <span class="mono" style="font-size:9.5px;color:#475569">notes stay on this machine</span>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </section>
+  </div>
+
+  <!-- ── Bottom bar (collapsed) + status bar ──────────────────────── -->
+  <div style="display:flex;flex-shrink:0;align-items:center;gap:4px;border-top:1px solid #1e293b;background:#11141c;padding:0 4px">
+    <span style="border-bottom:2px solid transparent;padding:4px 10px;font-size:11.5px;color:#64748b">Logs <span style="border-radius:3px;background:rgba(30,41,59,.4);padding:0 4px;font-size:9.5px;color:#cbd5e1">128</span></span>
+    <span style="border-bottom:2px solid transparent;padding:4px 10px;font-size:11.5px;color:#64748b">Processes <span style="border-radius:3px;background:rgba(30,41,59,.4);padding:0 4px;font-size:9.5px;color:#cbd5e1">3</span></span>
+    <span style="flex:1"></span>
+    <span style="padding:4px 8px;color:#94a3b8"><svg class="i" width="14" height="14" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></svg></span>
+  </div>
+  <div style="display:flex;flex-shrink:0;align-items:center;gap:16px;border-top:1px solid #1e293b;background:#11141c;padding:4px 12px;font-size:11px;color:#64748b">
+    <span><span style="color:#4ade80">3</span> services running</span>
+    <span>2 terminals</span>
+    <span><span style="color:#818cf8">3</span> unread mail &middot; synced 2 min ago</span>
+    <span style="flex:1"></span>
+    <span>Ctrl+Alt+Space summons &middot; local-first &middot; SQLite</span>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#6366f1","options":["#6366f1","#0ea5e9","#10b981","#f59e0b"],"tsType":"string"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props)
+    this.state = { group: 'all', sel: 1, tab: 'overview' }
+  }
+
+  people() {
+    return [
+      { id: 1, recent7: true, kind: 'client', init: 'LM', tint: '#a78bfa', name: 'Lerato Mahlangu', role: 'Head of Digital',
+        company: 'Sable Retail', email: 'lerato@sableretail.example', alt: 'l.mahlangu@sableretail.example',
+        phone: '+27 82 415 7729', last: '08:15', threads: 9, added: 'March 2025 — from a thread',
+        clientLine: '9 threads · 2 projects · retainer active since April',
+        projects: ['sable-checkout', 'sable-pos'], tags: ['decision-maker', 'technical'],
+        recent: [
+          { subj: 'Sable Retail — October retainer & checkout traces', who: 'from Lerato', when: '08:15', dir: 'color:#38bdf8;transform:rotate(180deg);display:inline-flex' },
+          { subj: 'Re: Phase 2 quote — revision 3', who: 'to Lerato', when: 'Fri', dir: 'color:#4ade80;display:inline-flex' },
+          { subj: 'Checkout timeouts — first findings', who: 'to Lerato', when: '18 Sep', dir: 'color:#4ade80;display:inline-flex' },
+          { subj: 'Kickoff notes and access', who: 'from Lerato', when: '02 Sep', dir: 'color:#38bdf8;transform:rotate(180deg);display:inline-flex' } ] },
+
+      { id: 2, recent7: true, kind: 'client', init: 'RB', tint: '#38bdf8', name: 'Riaan Botha', role: 'Operations Director',
+        company: 'Northbound Logistics', email: 'riaan@northbound.example', alt: '—',
+        phone: '+27 83 220 1184', last: '09:42', threads: 12, added: 'January 2025 — added by hand',
+        clientLine: '12 threads · 1 project · Phase 2 approved',
+        projects: ['tyrex'], tags: ['decision-maker', 'billing'],
+        recent: [
+          { subj: 'Re: Phase 2 quote — approved, please invoice', who: 'from Riaan', when: '09:42', dir: 'color:#38bdf8;transform:rotate(180deg);display:inline-flex' },
+          { subj: 'Phase 2 quote — revision 3', who: 'to Riaan', when: 'Fri', dir: 'color:#4ade80;display:inline-flex' } ] },
+
+      { id: 3, recent7: true, kind: 'client', init: 'TN', tint: '#38bdf8', name: 'Thabo Nkosi', role: 'Financial Manager',
+        company: 'Sable Retail', email: 'thabo@sableretail.example', alt: 'accounts@sableretail.example',
+        phone: '+27 82 771 3306', last: 'Mon', threads: 5, added: 'April 2025 — from a thread',
+        clientLine: '5 threads · handles all invoicing',
+        projects: ['sable-checkout'], tags: ['billing'],
+        recent: [ { subj: 'Invoice INV-0147 — paid', who: 'from Thabo', when: 'Mon', dir: 'color:#38bdf8;transform:rotate(180deg);display:inline-flex' } ] },
+
+      { id: 4, recent7: true, kind: 'client', init: 'AW', tint: '#fbbf24', name: 'Anja de Wet', role: 'IT Manager',
+        company: 'Kruger & Co', email: 'anja@kruger.example', alt: '—',
+        phone: '+27 21 447 9920', last: 'Yest', threads: 7, added: 'June 2025 — from a thread',
+        clientLine: '7 threads · mailbox migration in progress',
+        projects: ['kruger-mail'], tags: ['technical'],
+        recent: [ { subj: 'Re: Domain and mailbox migration', who: 'from Anja', when: 'Yest', dir: 'color:#38bdf8;transform:rotate(180deg);display:inline-flex' } ] },
+
+      { id: 5, recent7: true, kind: 'client', init: 'MS', tint: '#a78bfa', name: 'Marli Steyn', role: 'Product Owner',
+        company: 'Kruger & Co', email: 'marli@kruger.example', alt: '—',
+        phone: '+27 21 447 9931', last: 'Mon', threads: 4, added: 'June 2025 — from a thread',
+        clientLine: '4 threads · runs the Thursday demos',
+        projects: ['kruger-mail'], tags: ['decision-maker'],
+        recent: [ { subj: 'Can we move Thursday’s demo to 14:00?', who: 'from Marli', when: 'Mon', dir: 'color:#38bdf8;transform:rotate(180deg);display:inline-flex' } ] },
+
+      { id: 6, recent7: true, kind: 'client', init: 'SN', tint: '#4ade80', name: 'Sipho Ndlovu', role: 'DevOps',
+        company: 'Northbound Logistics', email: 'sipho@northbound.example', alt: '—',
+        phone: '+27 83 220 1190', last: 'Yest', threads: 6, added: 'February 2025 — from a thread',
+        clientLine: '6 threads · owns staging and CI',
+        projects: ['tyrex'], tags: ['technical'],
+        recent: [ { subj: 'Staging credentials for tyrex', who: 'from Sipho', when: 'Yest', dir: 'color:#38bdf8;transform:rotate(180deg);display:inline-flex' } ] },
+
+      { id: 7, recent7: false, kind: 'client', init: 'PZ', tint: '#4ade80', name: 'Pieter van Zyl', role: 'CTO',
+        company: 'Northbound Logistics', email: 'pieter@northbound.example', alt: '—',
+        phone: '+27 83 220 1102', last: '12 Sep', threads: 3, added: 'January 2025 — added by hand',
+        clientLine: '3 threads · technical sign-off',
+        projects: ['tyrex'], tags: ['decision-maker', 'technical'],
+        recent: [ { subj: 'Handover notes — warehouse API', who: 'from Pieter', when: '12 Sep', dir: 'color:#38bdf8;transform:rotate(180deg);display:inline-flex' } ] },
+
+      { id: 8, recent7: false, kind: 'none', init: 'NP', tint: '#64748b', name: 'Nadia Petersen', role: 'Freelance designer',
+        company: 'Independent', email: 'nadia@petersen.example', alt: '—',
+        phone: '+27 84 118 6642', last: '08 Sep', threads: 2, added: 'September 2025 — from a thread',
+        clientLine: 'not linked to a client yet',
+        projects: [], tags: [],
+        recent: [ { subj: 'Rate card and availability', who: 'from Nadia', when: '08 Sep', dir: 'color:#38bdf8;transform:rotate(180deg);display:inline-flex' } ] },
+    ]
+  }
+
+  renderVals() {
+    const accent = this.props.accent ?? '#6366f1'
+    const st = this.state
+    const all = this.people()
+
+    const inGroup = (p, key) => key === 'all' ? true
+      : key === 'recent' ? p.recent7
+      : p.kind === key
+
+    const GROUPS = [
+      { key: 'all', tint: 'color:#94a3b8' },
+      { key: 'client', tint: 'color:#38bdf8' },
+      { key: 'recent', tint: 'color:#4ade80' },
+      { key: 'none', tint: 'color:#fbbf24' },
+    ]
+    const g = {}
+    for (const grp of GROUPS) {
+      const on = st.group === grp.key
+      g[grp.key] = {
+        n: all.filter((p) => inGroup(p, grp.key)).length,
+        tint: on ? 'color:#e2e8f0' : grp.tint,
+        css: on ? 'background:#151923;color:#e2e8f0' : 'color:#cbd5e1',
+        pick: () => this.setState({ group: grp.key }),
+      }
+    }
+
+    const avatarFor = (p, size) =>
+      'display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;height:' + size + 'px;width:' + size + 'px;border-radius:999px;' +
+      'background:' + p.tint + '22;color:' + p.tint + ';font-family:Consolas,monospace;font-size:' + (size < 34 ? 10 : 14) + 'px;font-weight:700'
+
+    const visible = all.filter((p) => inGroup(p, st.group))
+    const list = visible.map((p) => {
+      const on = st.sel === p.id
+      return {
+        init: p.init, name: p.name, role: p.role, email: p.email, company: p.company,
+        threads: p.threads, last: p.last, avatar: avatarFor(p, 30),
+        linkCss: p.kind === 'none' ? 'border-color:#334155;color:#64748b' : 'border-color:rgba(99,102,241,.3);color:#a5b4fc',
+        css: 'display:block;width:100%;margin-bottom:6px;border-radius:8px;padding:10px 12px;border:1px solid ' +
+             (on ? accent + '80' : '#1e293b') + ';background:' + (on ? '#151923' : '#11141c'),
+        pick: () => this.setState({ sel: p.id, tab: 'overview' }),
+      }
+    })
+
+    const cur = all.find((p) => p.id === st.sel) || all[0]
+    const TABS = [
+      { key: 'overview', label: 'Overview' },
+      { key: 'threads', label: 'Threads · ' + cur.threads },
+      { key: 'notes', label: 'Notes' },
+    ]
+    const tabs = TABS.map((tb) => {
+      const on = st.tab === tb.key
+      return {
+        label: tb.label,
+        css: 'border-bottom:2px solid ' + (on ? accent : 'transparent') + ';padding:7px 12px;font-size:12px;color:' + (on ? '#e2e8f0' : '#64748b'),
+        pick: () => this.setState({ tab: tb.key }),
+      }
+    })
+
+    return {
+      accent, g, list, tabs,
+      count: visible.length + ' of ' + all.length,
+      tabOverview: st.tab === 'overview',
+      tabThreads: st.tab === 'threads',
+      tabNotes: st.tab === 'notes',
+      seeAll: () => this.setState({ tab: 'threads' }),
+      sel: Object.assign({}, cur, { bigAvatar: avatarFor(cur, 44), recentTop: cur.recent.slice(0, 3) }),
+    }
+  }
+}
+</script>
+</body>
+</html>

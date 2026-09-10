@@ -1,40 +1,40 @@
 # Community — install for your bots, then decide who may use it
 
-**DevDeck · branch `feat/community` · 10 September 2026**
+**DevDeck · branch `feat/community` · 11 September 2026**
 
 Open-source skills, agents and tools installed from inside the app, landing
-where bots and agents actually read them. Built against the design at
-`design/community/` and the roadmap entry that goes with it.
+where bots and agents actually read them — and, since the MCP client landed,
+actually running. Built against `design/community/` and the roadmap entry that
+goes with it.
 
 | | |
 |---|---|
-| **Rust suite** | 400 passing, 10 new |
-| **Kinds installable** | 3 — skill, agent, tool |
-| **Fully usable after granting** | skill, agent |
-| **Bugs found by checking** | 1, mine — a tool grant that did not survive a restart |
+| **Rust suite** | 437 passing, 47 new |
+| **Slices shipped** | 4 of 4 |
+| **Index sources** | 5 — registry, most-starred, trending week, trending month, year |
+| **Bugs found by running it** | 3, all mine |
 
 ---
 
-## The claim being tested
+## The claim
 
-> Install open-source agents, skills and tools from the app, and have it land
-> on the bots and agents to use.
-
-Four screenshots, in order, each one a state the app was actually in.
+> Install open-source agents, skills and tools from the app, have it land on
+> the bots and agents to use — and show an MCP tool installed, granted, and
+> actually called.
 
 ---
 
-## 1 · Browse — seven things, and what installing does
+## 1 · Browse — and what installing does
 
-![Community Browse: seven cards across skills, agents and tools](1-browse.png)
+![Community Browse: cards across skills, agents and tools](1-browse.png)
 
 The rail entry sits **directly above Machine**, and the adjacency is the idea:
 Machine installs tools for you, Community installs them for your bots.
 
-Every card carries author, version and licence — licence on every row because
-this is meant to be sold, and an AGPL runner inside a bot's kit is a decision
-somebody has to make knowingly. And every Install button is followed by the
-sentence that the rest of the module is built around:
+Author, version and licence on every row — licence because this is meant to be
+sold, and an AGPL runner inside a bot's kit is a decision somebody has to make
+knowingly. Every Install button is followed by the sentence the module is built
+around:
 
 > **Writes files. Grants nothing.**
 
@@ -44,26 +44,11 @@ sentence that the rest of the module is built around:
 
 ![Installed tab: two items, both saying no agent can use them](2-installed-ungranted.png)
 
-Two things installed, and the header says the uncomfortable version out loud:
-
 > **2 installed, no agent can use them**
 
-Each row repeats it where a green tick would otherwise go:
-
-> No agent can use this yet. Installing wrote the files; granting is the
-> separate step below.
-
-This is the whole design. Installing and granting are two acts, so there is a
-state in between — and it is the state a module like this fails in silently. A
-row that installed and granted in one click could never show it.
-
-The MCP row carries a second, different limit:
-
-> Declared and grantable, but not callable yet — DevDeck has no MCP client, so
-> nothing can run this server.
-
-That is true and it is said on the row, rather than letting a tool look ready
-because it appears in a list.
+Installing and granting are two acts, so there is a state in between — and it
+is the state a module like this fails in silently. A row that did both in one
+click could never show it.
 
 ---
 
@@ -71,12 +56,8 @@ because it appears in a list.
 
 ![Installed tab after granting: in use by dev-a, qa](3-granted.png)
 
-`failure-honesty` → **In use by dev-a, qa**. `MCP fetch` → **In use by dev-a**.
-The chips for those agents are lit; the amber header badge is gone, because
+`failure-honesty` → **In use by dev-a, qa**. The amber badge is gone because
 nothing is unreachable any more.
-
-Note what did *not* change: the MCP row still says it cannot be called. Granted
-and callable are different facts, and the row reports both.
 
 ---
 
@@ -84,105 +65,184 @@ and callable are different facts, and the row reports both.
 
 ![The Assistant's Skills page listing failure-honesty, used by 2 agents](4-on-the-agent.png)
 
-This is the Assistant's own **Skills** page. It knows nothing about Community —
-it existed before this module did. It now lists:
-
-> **failure-honesty** · Never let a failed check look like a success. · **2 agents**
-
-And on disk, `%APPDATA%\devdeck\assistant\agents\dev-a.md`:
+The Assistant's own **Skills** page — which knows nothing about Community and
+existed before it — now lists `failure-honesty · 2 agents`. On disk,
+`dev-a.md` gained one line, with provider, model, permissions and body
+untouched:
 
 ```yaml
-id: dev-a
-name: Developer A
-role: developer
-provider: boom
-model: boom-1
-permissions:
-  terminal: approval
-  git: full
-  knowledge: full
-  files: full
-  process: approval
-  tests: full
 skills:
-- failure-honesty      # ← installed from Community, granted separately
-builtin: true
-```
-
-Everything else preserved — provider, model, every existing permission, the
-body. The grant added one line.
-
----
-
-## What was found by checking rather than assuming
-
-**The tool grant did not survive a restart, and the screen said it had.**
-
-`failure-honesty` was on disk in `dev-a.md` and `qa.md`. `mcp.fetch` was not
-anywhere — and the Installed page cheerfully said *in use by dev-a*.
-
-`Workspace::set_permission` only mutates the in-memory agent list and rebuilds
-the tool services. The matrix is persisted separately, as one JSON setting,
-which `aiw_set_permission` writes immediately afterwards — and
-`community_grant` called the first without the second. So the skill grants were
-real and the tool grant was memory-deep.
-
-That is the failure-honesty rule broken by the module that ships a skill about
-it. It was caught by reading `aiw.permissions` out of SQLite instead of
-trusting the row that said it worked: the screen was the thing under test, so
-the screen could not be the evidence.
-
-Fixed in `68d38c3` — `set_tool` pairs them, on granting and on revoking.
-Verified the same way:
-
-```
-mcp.fetch persisted: True
+- failure-honesty      # installed from Community, granted separately
 ```
 
 ---
 
-## What is deliberately not here
+## 5 · Discover — five lists, each saying what its order means
 
-The roadmap entry describes Browse and Trending fed from GitHub, and lists
-three things that have to be built first:
+![The Discover tab showing the live MCP registry](5-discover.png)
 
-1. **A scrape is a dependency on someone else's HTML.** It will break, and the
-   list has to say so — an explicit `ok` flag and the last-good timestamp,
-   never "nothing is trending" when the truth is "we could not look".
-2. **The year needs history DevDeck does not have.** There is no endpoint for
-   stars gained over twelve months.
-3. **Trending is unfiltered, and this page is not.** That is a manifest
-   detection step, with *No manifest* as the honest fallback.
+Live, from the official registry. Five sources, deliberately **not merged**: a
+list whose order is partly a documented sort and partly somebody's unpublished
+algorithm cannot describe itself in a sentence, and each of these can.
 
-None of it is built. The index here is a starter pack that ships with DevDeck,
-and the module is shaped so a GitHub-backed one drops in beside it —
-`Item::source` already carries the repository a thing came from. Entries
-authored here say **DevDeck** in the author column rather than being filed
-under somebody else's repository name, which is the same reason the licence
-column exists.
+| Source | What it knows | What its order means |
+|---|---|---|
+| **MCP registry** | what a server is, and how to run it | most recently published — it carries no popularity signal |
+| **Most starred** | stars | a documented GitHub sort, `topic:mcp` and friends |
+| **Trending week / month** | nothing but a name | GitHub's own judgement, by an algorithm never published |
+| **Over the year** | growth | DevDeck's own subtraction — *not comparable* with the two above |
 
-Also not here, and named on the row where it matters: **an MCP client**. Tools
-install, appear, and can be granted. Nothing can run one yet.
+The goal said to check for an official MCP registry first. There is one, it is
+live, and it is the only source that knows both what a server is and how to run
+it. Its `packages` become a command — npm through `npx -y`, pypi through `uvx`
+— and a registry type we cannot run yields no command, because an Install
+button that fails on click is worse than no button. Only stdio servers are
+listed; the registry is full of HTTP ones and this client speaks stdio.
+
+Nothing fetches on page load. Refreshing is a button, because this is the only
+outbound call the module makes.
 
 ---
 
-## The tests
+## 6 · An MCP server, installed and granted
 
-10 new, 400 total. The ones worth naming:
+![The Installed tab with an MCP server installed and granted to dev-a](6-mcp-granted.png)
+
+**MCP memory** — installed today, **In use by dev-a**, the `dev-a` chip lit.
+
+Note what is *not* on this row any more. Before the client existed it read
+*"Declared and grantable, but not callable yet — DevDeck has no MCP client, so
+nothing can run this server."* That sentence is gone rather than softened,
+because it stopped being true — and the test that asserted it was inverted
+rather than deleted.
+
+---
+
+## The payoff, asserted rather than described
+
+`an_installed_server_is_refused_until_granted_and_then_really_runs` — a real
+Node process over real stdio, no mocks in the transport:
+
+```rust
+// 1. Installed, not granted.
+let before = p.tools.execute(&w.bus, "dev-a", &scope, &call, None);
+assert!(before.denied);
+assert!(w.mcp.statuses().is_empty(), "a refusal starts no process");
+
+// 2. The separate, deliberate act.
+w.set_permission("dev-a", "mcp.notes", "full").unwrap();
+
+// 3. Called for real.
+let after = p.tools.execute(&w.bus, "dev-a", &scope, &call, None);
+assert_eq!(after.output.trim(), "remembered: the sync bug is in the retry loop");
+assert_eq!(w.mcp.statuses()[0].id, "notes");   // one process, started on demand
+
+// 4. And qa still cannot: a grant is to one agent, not to the installation.
+assert!(p.tools.execute(&w.bus, "qa", &scope, &call, None).denied);
+```
+
+Writing it surfaced a subtlety now recorded in the test: a tool service holds a
+snapshot of the matrix, so granting **rebuilds** the services, and a handle
+taken before the grant keeps the old answer.
+
+**What is not proven here.** The model half. "Called by an agent" in the live
+app needs a configured provider, and the agents on this machine point at a
+provider named `boom` that no longer exists — so a real turn cannot happen.
+What is proven is that a permission and a process meet correctly, which is the
+part this module owns. The MCP tools *are* offered to the model
+(`mcp_definitions_for`, folded into the same list as the built-ins in both the
+agent runtime and the assistant), and only when granted and running.
+
+---
+
+## Three bugs, all found by running it
+
+### The app aborted on launch, and every test passed
+
+`reqwest::blocking` builds its own tokio runtime and drops it when the call
+returns. Dropping a runtime inside another runtime's async context panics —
+*"Cannot drop a runtime in a context where blocking is not allowed"* — and a
+Tauri command body is exactly that context. It took the process down and
+poisoned the database mutex on the way, so the visible second panic was a
+`PoisonError` somewhere unrelated-looking.
+
+Every test was green throughout, because they all exercise the parsers and none
+of them exercise a fetcher. The fetchers are the one part only the running app
+touches. `off_runtime` hops to a plain OS thread.
+
+### A catalog entry that named a package which does not exist
+
+The starter pack shipped `@modelcontextprotocol/server-fetch`. npm answers
+**404**. Nobody would have found out until they clicked Install. I wrote it
+from memory without running it — the same class of mistake as a green tick over
+a failed check.
+
+The starter pack now carries one MCP server, and it is one that has actually
+been spoken to from this client. It does not need to be a catalogue any more:
+Discover reads the registry, which is where servers publish themselves.
+
+### Five rows for one server
+
+The registry serves every version ever published, so *Aether Wealth* arrived as
+five rows differing only in a version number. `isLatest` and `status` are
+exactly the fields for it. A server whose metadata says neither is **kept** —
+absent means the registry did not say, not that the answer is no.
+
+---
+
+## The rule the whole module is built on
+
+**A failed fetch is never an empty list.** The cache keeps the last good answer
+with the time it was taken; a failure returns that, with `ok: false` and the
+reason, and the page shows which of the two facts it has. Trending is the
+sharpest case — it is a scrape of markup that will change without notice, so a
+page that loads and yields nothing recognisable is an *error*:
+
+```rust
+assert!(parse_trending("<html>a redesign happened</html>", "week").is_empty());
+// …and fetch_trending turns exactly that into an Err, which refresh renders
+// as the last good list plus a reason.
+```
+
+---
+
+## Tests worth naming
 
 | Test | Why it exists |
 |---|---|
-| `a_fresh_install_reaches_nobody` | The split, in one assertion: files landed, no agent gained anything |
+| `an_mcp_call_from_an_agent_with_no_grant_is_refused_before_anything_starts` | Points a grant-less agent at a server whose command could not possibly run — if the refusal weren't real, it would fail with a spawn error instead of a denial |
+| `a_reply_is_matched_by_id_not_by_arriving_next` | A server may interleave notifications; a client taking the next line hands a log message back as a tool result |
+| `the_handshake_sends_initialize_then_says_it_is_initialized` | A correct server may refuse everything until the notification arrives — skipping it works against lenient servers and hangs against correct ones |
+| `a_tool_that_reports_an_error_is_an_error_not_an_answer` | `isError` is the server saying the tool failed; returning its text as a result puts a failure into a transcript as fact |
 | `a_tool_granted_at_none_is_not_reach` | `none` is stored exactly as a real grant is — counting it would make every install look wired up |
-| `a_grant_on_a_different_tool_is_not_this_one` | Reach is about *this* tool, not any grant on the agent |
-| `idle_is_about_reach_not_about_age` | Something in use is never nagged about, however old |
-| `a_clock_that_went_backwards_is_zero_days_old_not_negative` | Never "installed in the future" |
-| `only_a_tool_reports_a_reason_it_cannot_run` | And it names what is missing, not just that something is |
-| `the_catalogue_is_internally_consistent` | Every row has a licence, a source, and something to install |
+| `markup_we_cannot_read_is_a_failure_not_an_empty_trending_list` | The scrape will break; the day it does the answer must be "we could not look" |
+| `one_reading_is_a_number_not_a_change` | Every repository is new once; a gain of zero would fill the year with rows that have not earned a place |
+| `the_year_says_it_is_empty_and_why_rather_than_pretending` | `ok: true`, `fetched_at: 0` — nothing was measured, so no time is claimed |
+| `only_the_latest_active_version_of_a_server_is_listed` | The five-rows bug, kept fixed |
+| `nothing_is_blocked_now_that_there_is_an_mcp_client` | Inverted rather than deleted: a claim that stopped being true is worth a test saying so |
 
 ---
 
-**Evidence.** `cargo test` — 400 passed, 0 failed. Screenshots captured from
-the running debug build via per-window `PrintWindow`. Agent files quoted
-verbatim from `%APPDATA%\devdeck\assistant\agents`. Persistence checked by
-reading the `aiw.permissions` setting directly out of `devdeck.sqlite`.
+## Still not built
+
+From slice 4's tail, and named rather than quietly skipped:
+
+- **One repo in full** — the single-repository page.
+- **Permissions as its own page.** Community servers *are* in the matrix
+  already, beside the built-ins; what is missing is the dedicated screen.
+- **Models, and the runners that serve them.**
+- **Bundles that carry grants.** The design puts bundles on Browse as a strip;
+  a Community bundle also carries grants, and the roadmap flags that as
+  possibly deserving its own page. It has neither yet.
+- **Installing from Discover.** The registry list is read-only for now:
+  `community_install` resolves ids against the starter catalogue. Wiring it to
+  registry entries is small, and it is the obvious next thing.
+
+---
+
+**Evidence.** `cargo test` — 437 passed, 0 failed. `npx tsc -b` and `cargo
+check` clean. Screenshots captured from the running debug build via per-window
+`PrintWindow`. Agent files quoted verbatim from the personal store. The MCP
+handshake and tool call verified against a real spawned Node process, and
+`@modelcontextprotocol/server-memory` verified by running it and reading its
+`tools/list` before it was put in the catalogue.

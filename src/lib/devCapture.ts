@@ -1,4 +1,4 @@
-export const CAPTURE_RAIL: string = 'community'
+export const CAPTURE_RAIL: string = ''
 export const CAPTURE_PAGE = ''
 export const CAPTURE_PROJECT = ''
 export const CAPTURE_FEATURE = ''
@@ -17,8 +17,6 @@ export const CAPTURE_SAY: string[] = [
  *  split has to be produced some other way. It goes through the same commands
  *  the buttons call. Empty in every shipped build. */
 export const CAPTURE_COMMUNITY: string[] = [
-  'tab:discover',
-  'refresh',
 ]
 export const CAPTURE_TEAM_TAB: string = ''
 export const CAPTURE_GOAL: string = ''

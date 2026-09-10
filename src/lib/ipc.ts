@@ -955,6 +955,22 @@ export const communityInstall = (id: string) =>
 export const communityUninstall = (id: string) =>
   invoke<void>('community_uninstall', { id })
 /** The separate, deliberate act: who may use it, and how. */
+/** An MCP server running right now. */
+export interface McpServerStatus {
+  id: string
+  name: string
+  pid: number
+  started_at: string
+  protocol: string
+  tools: number
+}
+/** Which servers are up. An MCP server is a process; a process nobody can see
+ *  is a process nobody can stop. */
+export const communityServers = () => invoke<McpServerStatus[]>('community_servers')
+/** Stop one. It restarts on the next call that needs it. */
+export const communityStopServer = (id: string) =>
+  invoke<boolean>('community_stop_server', { id })
+
 export const communityGrant = (
   id: string,
   agentId: string,

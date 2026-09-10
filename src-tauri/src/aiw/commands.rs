@@ -577,8 +577,18 @@ pub struct PermissionRow {
 #[tauri::command]
 pub fn aiw_permissions(ws: Ws) -> Vec<PermissionRow> {
     let agents = ws.agents();
+    // Community servers are judged in the same table as the built-ins, which
+    // is the whole point of putting them in a matrix rather than a settings
+    // page of their own: "what may this agent touch" has one answer.
+    let mcp = ws.mcp_servers().into_iter().map(|s| ToolInfo {
+        id: format!("{}{}", crate::mcp::PREFIX, s.id),
+        name: s.name,
+        description: "An MCP server installed from Community.".into(),
+        actions: Vec::new(),
+    });
     registry()
         .into_iter()
+        .chain(mcp)
         .map(|t| PermissionRow {
             tool: t.id.clone(),
             grants: agents

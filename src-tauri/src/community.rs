@@ -316,17 +316,15 @@ pub fn days_since(at_ms: i64, now_ms: i64) -> i64 {
 
 /// Why an item cannot be called even after it is granted, or empty when it can.
 ///
-/// Only tools have an answer here, and only until there is an MCP client. It
-/// is a sentence rather than a flag because the person reading it needs to
-/// know what to do next, and "false" tells them nothing.
-pub fn blocked_reason(kind: &str) -> String {
-    if kind == KIND_TOOL {
-        "Declared and grantable, but not callable yet — DevDeck has no MCP \
-         client, so nothing can run this server."
-            .into()
-    } else {
-        String::new()
-    }
+/// It used to say, for every tool, that DevDeck had no MCP client. It has one
+/// now, so the sentence is gone rather than softened — a caveat kept past the
+/// day it stopped being true teaches people to skip caveats.
+///
+/// The function stays because the question does: a runner that will not start,
+/// a server whose command is missing. Those answers belong here when they
+/// exist, and until then the honest answer is silence.
+pub fn blocked_reason(_kind: &str) -> String {
+    String::new()
 }
 
 /// Turn a stored row plus the current agent list into what the page shows.
@@ -351,6 +349,30 @@ pub fn standing(
 /// reach, which is honest: we can no longer say what it was wired to.
 fn tool_id_of(i: &Installed) -> String {
     item(&i.id).map(|c| c.tool_id).unwrap_or_default()
+}
+
+/// The MCP servers that are installed, as the runtime wants them.
+///
+/// Read from the catalogue rather than stored: the command a server runs is
+/// the index's to say, and an install that had frozen its own copy would go on
+/// running last month's command after the entry was corrected.
+pub fn servers(installed: &[Installed]) -> Vec<crate::mcp::ServerSpec> {
+    installed
+        .iter()
+        .filter(|i| i.kind == KIND_TOOL)
+        .filter_map(|i| {
+            let entry = item(&i.id)?;
+            let id = crate::mcp::server_of(&entry.tool_id)?.to_string();
+            if entry.command.trim().is_empty() {
+                return None;
+            }
+            Some(crate::mcp::ServerSpec {
+                id,
+                name: entry.name,
+                command: entry.command,
+            })
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -441,6 +463,18 @@ fn agent_view(ws: &Arc<Workspace>) -> Vec<(String, Vec<String>, Vec<(String, Str
         .into_iter()
         .map(|a| (a.id, a.skills, a.permissions.into_iter().collect::<Vec<_>>()))
         .collect()
+}
+
+/// Tell the workspace which MCP servers exist, so its tool services can reach
+/// them. Called after anything that changes the installed set — and at
+/// startup, where nothing else would.
+pub fn sync_servers(db: &Db, ws: &Arc<Workspace>) -> Result<(), String> {
+    let rows = {
+        let conn = db.0.lock().unwrap();
+        all(&conn)?
+    };
+    ws.set_mcp_servers(servers(&rows));
+    Ok(())
 }
 
 fn now_ms() -> i64 {
@@ -543,6 +577,7 @@ pub fn community_install(db: tauri::State<Db>, ws: Ws, id: String) -> Result<Sta
         let conn = db.0.lock().unwrap();
         record(&conn, &row)?;
     }
+    sync_servers(&db, &ws)?;
     let agents = agent_view(&ws);
     Ok(standing(row, &agents, now_ms()))
 }
@@ -585,8 +620,19 @@ pub fn community_uninstall(db: tauri::State<Db>, ws: Ws, id: String) -> Result<(
         _ => {}
     }
 
-    let conn = db.0.lock().unwrap();
-    forget(&conn, &id)
+    {
+        let conn = db.0.lock().unwrap();
+        forget(&conn, &id)?;
+    }
+    // A server whose install is gone must stop being reachable *and* stop
+    // running: the process would otherwise outlive the only thing that knew
+    // why it was there.
+    if let Some(e) = &entry {
+        if let Some(server) = crate::mcp::server_of(&e.tool_id) {
+            ws.mcp.stop(server);
+        }
+    }
+    sync_servers(&db, &ws)
 }
 
 /// Change a tool permission *and* write the matrix down.
@@ -627,6 +673,23 @@ fn set_skill(ws: &Arc<Workspace>, agent_id: &str, skill: &str, on: bool) -> Resu
         doc.meta.skills.retain(|s| !s.eq_ignore_ascii_case(skill));
     }
     ws.save_agent(&doc)
+}
+
+/// MCP servers running right now.
+///
+/// An MCP server is a process, and a process nobody can see is a process
+/// nobody can stop. It is not in the Processes bottom bar — that watches
+/// services you configured, and these start themselves on an agent's first
+/// call — so Community answers the question instead.
+#[tauri::command]
+pub fn community_servers(ws: Ws) -> Vec<crate::mcp::ServerStatus> {
+    ws.mcp.statuses()
+}
+
+/// Stop a running server. It restarts on the next call that needs it.
+#[tauri::command]
+pub fn community_stop_server(ws: Ws, id: String) -> bool {
+    ws.mcp.stop(&id)
 }
 
 /// The separate, deliberate act: say who may use an installed thing.
@@ -764,13 +827,17 @@ mod tests {
     }
 
     #[test]
-    fn only_a_tool_reports_a_reason_it_cannot_run() {
-        assert!(blocked_reason(KIND_SKILL).is_empty());
-        assert!(blocked_reason(KIND_AGENT).is_empty());
-        assert!(
-            blocked_reason(KIND_TOOL).contains("MCP"),
-            "and it says what is missing, not just that something is"
-        );
+    fn nothing_is_blocked_now_that_there_is_an_mcp_client() {
+        // This test used to assert the opposite: that a tool always reported
+        // "DevDeck has no MCP client". It does now, so the caveat is gone
+        // rather than softened, and the assertion is inverted rather than
+        // deleted — a claim that stopped being true is worth a test saying so.
+        for kind in [KIND_SKILL, KIND_AGENT, KIND_TOOL] {
+            assert!(
+                blocked_reason(kind).is_empty(),
+                "{kind} should have nothing to apologise for"
+            );
+        }
     }
 
     #[test]

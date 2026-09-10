@@ -30,6 +30,7 @@ mod github;
 mod inbox;
 mod legacy;
 mod machine;
+mod mcp;
 mod mail;
 mod managers;
 mod monitor;
@@ -707,6 +708,19 @@ pub fn run() {
         // first invoke from a webview cannot arrive before it exists.
         .manage(aiw_workspace)
         .setup(move |app| {
+            // MCP servers installed from Community, made reachable before any
+            // agent asks. Without this an installed server would only wake up
+            // after somebody happened to open the Community page, which is a
+            // strange thing for a grant to depend on.
+            if let (Some(db), Some(ws)) = (
+                app.try_state::<db::Db>(),
+                app.try_state::<Arc<aiw::state::Workspace>>(),
+            ) {
+                if let Err(e) = community::sync_servers(&db, &ws) {
+                    eprintln!("[community] could not read installed servers: {e}");
+                }
+            }
+
             // The clock. One pass at startup, which is what makes catching up
             // possible at all — while the app runs a schedule fires because its
             // moment arrived; at launch it fires because its moment passed
@@ -1025,6 +1039,8 @@ pub fn run() {
             community::community_install,
             community::community_uninstall,
             community::community_grant,
+            community::community_servers,
+            community::community_stop_server,
             git::git_changes,
             git::git_commit,
             git::git_push,

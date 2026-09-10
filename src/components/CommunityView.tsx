@@ -57,12 +57,18 @@ export function CommunityView() {
   const [rows, setRows] = useState<ipc.CommunityListing[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  /// The server a trust modal is asking about, or null.
+  const [trust, setTrust] = useState<ipc.CommunityListing | null>(null)
+  const [servers, setServers] = useState<ipc.McpServerStatus[]>([])
   const agents = useAiw((s) => s.agents)
   const reloadAgents = useAiw((s) => s.reloadAgents)
 
   const load = useCallback(async () => {
     try {
       setRows(await ipc.communityCatalog())
+      // Best effort and separate: a failure to list processes must not blank
+      // the catalogue, which is the thing the page is for.
+      setServers(await ipc.communityServers().catch(() => []))
       setErr(null)
     } catch (e) {
       // Never an empty catalogue on failure: "nothing to install" and "we
@@ -185,9 +191,46 @@ export function CommunityView() {
                 key={r.id}
                 row={r}
                 busy={busy === r.id}
-                onInstall={() => void act(r.id, () => ipc.communityInstall(r.id))}
+                onInstall={() =>
+                  // A skill or an agent is text. A tool is a program that will
+                  // run on this machine, so it is shown before it is agreed
+                  // to — not after, in a row nobody re-reads.
+                  r.kind === 'tool'
+                    ? setTrust(r)
+                    : void act(r.id, () => ipc.communityInstall(r.id))
+                }
                 onRemove={() => void act(r.id, () => ipc.communityUninstall(r.id))}
               />
+            ))}
+          </div>
+        )}
+
+        {rows !== null && tab === 'installed' && servers.length > 0 && (
+          <div className="mb-3 rounded-lg border border-line bg-panel p-3">
+            <div className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-faint">
+              Running now
+            </div>
+            {/* An MCP server is a process. It is not in the Processes bar —
+                that watches services you configured, and these start
+                themselves on an agent's first call — so it is said here
+                instead of nowhere. */}
+            {servers.map((sv) => (
+              <div key={sv.id} className="flex items-center gap-2 py-0.5 text-[11.5px]">
+                <span className="h-[6px] w-[6px] shrink-0 rounded-full bg-emerald-400" />
+                <span className="text-body">{sv.name}</span>
+                <span className="font-mono text-[10.5px] text-faint">
+                  pid {sv.pid} · {sv.tools} tool{sv.tools === 1 ? '' : 's'}
+                  {sv.protocol ? ` · MCP ${sv.protocol}` : ''}
+                </span>
+                <span className="flex-1" />
+                <button
+                  className="btn-ghost text-[11px]"
+                  title="Stop it. It starts again on the next call that needs it."
+                  onClick={() => void act(sv.id, () => ipc.communityStopServer(sv.id))}
+                >
+                  Stop
+                </button>
+              </div>
             ))}
           </div>
         )}
@@ -204,6 +247,83 @@ export function CommunityView() {
             onBrowse={() => setTab('browse')}
           />
         )}
+      </div>
+
+      {trust && (
+        <Trust
+          row={trust}
+          onCancel={() => setTrust(null)}
+          onConfirm={() => {
+            const id = trust.id
+            setTrust(null)
+            void act(id, () => ipc.communityInstall(id))
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+/// What installing a server actually means, before you agree to it.
+///
+/// An MCP server is not a document — it is a program that will run on this
+/// machine, started by an agent rather than by you, outliving the click that
+/// installed it. So the command is shown verbatim, and the two things people
+/// assume wrongly are said plainly: installing does not grant, and the process
+/// is real.
+function Trust({
+  row,
+  onCancel,
+  onConfirm,
+}: {
+  row: ipc.CommunityListing
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/55"
+      onClick={onCancel}
+    >
+      <div
+        className="w-[520px] rounded-xl border border-line2 bg-panel p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-[14px] font-semibold text-ink">Install {row.name}?</h2>
+        <p className="mt-1 text-[12px] leading-[1.55] text-body">{row.summary}</p>
+
+        <div className="mt-3">
+          <div className="mb-1 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-faint">
+            It will run this on your machine
+          </div>
+          <pre className="overflow-x-auto rounded-md border border-line bg-app px-3 py-2 font-mono text-[11.5px] text-body">
+{row.command}
+          </pre>
+        </div>
+
+        <ul className="mt-3 space-y-1.5 text-[11.5px] leading-[1.5] text-muted">
+          <li>
+            <span className="text-body">It is a process</span>, started the first time an agent
+            calls it and running until you stop it or close DevDeck.
+          </li>
+          <li>
+            <span className="text-body">Installing grants nothing.</span> No agent can call it
+            until you say which, on the Installed tab.
+          </li>
+          <li>
+            From <span className="font-mono text-[11px]">{row.source}</span> · {row.author} ·{' '}
+            {row.licence}.
+          </li>
+        </ul>
+
+        <div className="mt-4 flex justify-end gap-2">
+          <button className="btn-ghost text-[12px]" onClick={onCancel}>
+            Cancel
+          </button>
+          <button className="btn-primary text-[12px]" onClick={onConfirm}>
+            Install
+          </button>
+        </div>
       </div>
     </div>
   )

@@ -323,6 +323,14 @@ pub type RoutineMaker = Box<dyn Fn(RoutineDraft) -> Result<String, String> + Sen
 pub struct Workspace {
     pub bus: SharedBus,
     pub conflicts: ConflictService,
+    /// MCP servers installed from Community: the hub that runs them, and the
+    /// specs every project's tool service is handed.
+    ///
+    /// One hub for the whole app rather than one per project: an MCP server is
+    /// a process, and starting a second copy of the same server for a second
+    /// project would double the processes without doubling what they can do.
+    pub mcp: Arc<crate::mcp::Hub>,
+    mcp_servers: Mutex<Vec<crate::mcp::ServerSpec>>,
     /// Shared by every project's tool service, so one queue holds every
     /// pending request no matter which agent raised it.
     pub approvals: Arc<ApprovalBroker>,
@@ -377,6 +385,8 @@ impl Workspace {
     pub fn with_approval_timeout(timeout: std::time::Duration) -> Self {
         Self {
             bus: Arc::new(EventBus::new()),
+            mcp: crate::mcp::Hub::new(),
+            mcp_servers: Mutex::new(Vec::new()),
             conflicts: ConflictService::new(),
             approvals: Arc::new(ApprovalBroker::new(timeout)),
             bot_maker: std::sync::OnceLock::new(),
@@ -846,6 +856,27 @@ impl Workspace {
         m
     }
 
+    pub fn mcp_servers(&self) -> Vec<crate::mcp::ServerSpec> {
+        self.mcp_servers.lock().unwrap().clone()
+    }
+
+    /// Say which MCP servers are installed.
+    ///
+    /// Rebuilds the tool services, for the same reason a permission change
+    /// does: they hold a snapshot, so a server installed after they were built
+    /// would be invisible to every agent until something else happened to
+    /// rebuild them.
+    pub fn set_mcp_servers(&self, servers: Vec<crate::mcp::ServerSpec>) {
+        {
+            let mut held = self.mcp_servers.lock().unwrap();
+            if *held == servers {
+                return;
+            }
+            *held = servers;
+        }
+        self.rebuild_tool_services();
+    }
+
     fn rebuild_tool_services(&self) {
         let matrix = self.permission_matrix();
         let mut projects = self.projects.lock().unwrap();
@@ -860,7 +891,8 @@ impl Workspace {
                     tools: ToolService::new(old.root.clone(), &old.id, matrix.clone())
                         .with_deck_root(old.deck_root.clone())
                         .with_approvals(self.approvals.clone())
-                        .with_grants(self.grants()),
+                        .with_grants(self.grants())
+                        .with_mcp(self.mcp.clone(), self.mcp_servers()),
                 });
                 projects.insert(id, handle);
             }

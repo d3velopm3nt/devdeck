@@ -670,6 +670,58 @@ pub fn definitions_for(agent: &str, permissions: &PermissionMatrix) -> Vec<ToolD
     out
 }
 
+/// The MCP tools an agent may call, as the model sees them.
+///
+/// Separate from `definitions_for` rather than folded into it: that function
+/// is pure and takes only a matrix, and hundreds of tests build one. Making it
+/// need a running hub would make every one of those tests carry a process
+/// manager it has no use for.
+///
+/// Only servers that are already up contribute. A server is started lazily, on
+/// the first call, so before that DevDeck genuinely does not know what it
+/// offers — and inventing a plausible tool list would hand the model callables
+/// that may not exist.
+pub fn mcp_definitions_for(
+    agent: &str,
+    permissions: &PermissionMatrix,
+    hub: &crate::mcp::Hub,
+    servers: &[crate::mcp::ServerSpec],
+) -> Vec<ToolDefinition> {
+    let mut out = Vec::new();
+    for spec in servers {
+        let tool_id = format!("{}{}", crate::mcp::PREFIX, spec.id);
+        let permission = permissions.get(agent, &tool_id);
+        if matches!(permission, Permission::None) {
+            continue;
+        }
+        for t in hub.tools(&spec.id) {
+            // A read-only tool is offered to a read-only grant; anything else
+            // needs more than read. Same rule the built-ins follow.
+            if matches!(permission, Permission::Read) && !t.read_only {
+                continue;
+            }
+            let description = if matches!(permission, Permission::Approval) {
+                format!(
+                    "{} — {} (requires human approval; the call waits for an answer)",
+                    spec.name, t.description
+                )
+            } else {
+                format!("{} — {}", spec.name, t.description)
+            };
+            out.push(ToolDefinition {
+                name: wire_name(&tool_id, &t.name),
+                description,
+                input_schema: if t.input_schema.is_null() {
+                    serde_json::json!({"type": "object"})
+                } else {
+                    t.input_schema.clone()
+                },
+            });
+        }
+    }
+    out
+}
+
 /// Every action of one tool, whatever the matrix says.
 ///
 /// For a persona that is allowed a tool by what it *is* rather than by a row —
@@ -799,6 +851,15 @@ pub struct ToolService {
     pub grants: Arc<GrantStore>,
     /// Processes started by the process tool, keyed by project.
     pub apps: std::sync::Mutex<HashMap<String, RunningApp>>,
+    /// MCP servers installed from Community, and the hub that runs them.
+    ///
+    /// Held here rather than reached for globally because this is the one
+    /// place a tool call is allowed to become an action: an MCP call arrives
+    /// through `execute` like every other, is judged by the same matrix, and
+    /// only then reaches a server. A hub the runtime could call directly
+    /// would be a second door into the machine with no lock on it.
+    pub mcp: Arc<crate::mcp::Hub>,
+    pub mcp_servers: Vec<crate::mcp::ServerSpec>,
 }
 
 impl ToolService {
@@ -814,7 +875,45 @@ impl ToolService {
             approvals: Arc::new(ApprovalBroker::immediate_denial()),
             grants: Arc::new(GrantStore::ephemeral()),
             apps: std::sync::Mutex::new(HashMap::new()),
+            mcp: crate::mcp::Hub::new(),
+            mcp_servers: Vec::new(),
         }
+    }
+
+    /// The MCP servers this project's agents may reach, and the hub that runs
+    /// them. A service built without this has no MCP tools at all, which is
+    /// what every test that does not care about them wants.
+    pub fn with_mcp(
+        mut self,
+        hub: Arc<crate::mcp::Hub>,
+        servers: Vec<crate::mcp::ServerSpec>,
+    ) -> Self {
+        self.mcp = hub;
+        self.mcp_servers = servers;
+        self
+    }
+
+    /// The spec behind a tool id, or nothing when no such server is installed.
+    fn mcp_spec(&self, tool_id: &str) -> Option<&crate::mcp::ServerSpec> {
+        let id = crate::mcp::server_of(tool_id)?;
+        self.mcp_servers.iter().find(|s| s.id == id)
+    }
+
+    /// What an MCP call needs, by the server's own hint.
+    ///
+    /// A server that lies can only narrow what it may do, never widen it: an
+    /// unhinted tool counts as a write, so the mistake costs an approval
+    /// prompt rather than an unasked-for change.
+    fn mcp_access(&self, call: &ToolCall) -> Access {
+        crate::mcp::server_of(&call.tool)
+            .map(|server| self.mcp.tools(server))
+            .and_then(|tools| {
+                tools
+                    .iter()
+                    .find(|t| t.name == call.action)
+                    .map(|t| if t.read_only { Access::Read } else { Access::Write })
+            })
+            .unwrap_or(Access::Write)
     }
 
     /// Route `Approval` through a broker a human is actually watching.
@@ -877,7 +976,11 @@ impl ToolService {
         };
 
         let permission = self.permissions.get(agent_id, &call.tool);
-        let needed = required_access(call);
+        let needed = if crate::mcp::is_mcp(&call.tool) {
+            self.mcp_access(call)
+        } else {
+            required_access(call)
+        };
 
         // `Approval` is the one level that asks rather than deciding on its
         // own. Everything else is settled here without blocking.
@@ -1084,6 +1187,9 @@ impl ToolService {
             TOOL_PROCESS => self.process(call),
             TOOL_TESTS => self.tests(call),
             TOOL_KNOWLEDGE => self.knowledge(call),
+            // An MCP server, reached only from here — after the matrix and the
+            // approval gate have already had their say.
+            t if crate::mcp::is_mcp(t) => self.mcp_call(call),
             // Reaching here means the assistant did not intercept a tool only
             // it can run. Failing loudly beats a project-scoped service quietly
             // doing something with the personal store or the whole workspace.
@@ -1109,6 +1215,27 @@ impl ToolService {
             return Err(format!("path escapes the project: {rel}"));
         }
         Ok(self.root.join(p))
+    }
+
+    /// Run one tool on an installed MCP server.
+    ///
+    /// The action *is* the server's tool name: `mcp.fetch` + `fetch` means the
+    /// tool called `fetch` on the server called `fetch`. Starting the server
+    /// is lazy and happens here, so installing one costs nothing until an
+    /// agent is actually allowed to use it.
+    fn mcp_call(&self, call: &ToolCall) -> ToolResult {
+        let Some(spec) = self.mcp_spec(&call.tool) else {
+            // Granted, then uninstalled. Saying so beats "unknown tool", which
+            // would read as a bug in DevDeck rather than a missing install.
+            return ToolResult::failed(
+                call,
+                format!("'{}' is not installed — install it from Community", call.tool),
+            );
+        };
+        match self.mcp.call(spec, &call.action, call.args.clone()) {
+            Ok(text) => ToolResult::ok(call, text),
+            Err(e) => ToolResult::failed(call, e),
+        }
     }
 
     fn files(&self, call: &ToolCall) -> ToolResult {

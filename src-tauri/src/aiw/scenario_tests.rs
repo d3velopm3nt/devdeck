@@ -2847,3 +2847,95 @@ fn a_bot_that_needs_a_person_shows_as_waiting_on_the_board() {
         "answering clears it from the board"
     );
 }
+
+// ---------------------------------------------------------------------------
+// MCP: a community server is judged by the same matrix as a built-in tool
+// ---------------------------------------------------------------------------
+//
+// The protocol itself is checked in `mcp.rs` against a scripted transport.
+// What matters here is the join: a call to an installed server arrives through
+// `ToolService::execute` like every other, and the permission matrix has its
+// say *before* anything is spawned. A tool that reached a process by any other
+// route would be a second door into the machine with no lock on it.
+
+#[test]
+fn an_mcp_call_from_an_agent_with_no_grant_is_refused_before_anything_starts() {
+    let t = Tmp::new("mcpgate");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    w.register_project("7", "TyreX", tyrex.clone(), tyrex);
+
+    // A server whose command could not possibly run. That is the point: if the
+    // refusal is real, nothing is ever spawned and the command is never
+    // reached, so a nonsense command is harmless. If it is not real, this test
+    // fails with a spawn error instead of a denial — which is the failure we
+    // want to be told about.
+    w.set_mcp_servers(vec![crate::mcp::ServerSpec {
+        id: "fetch".into(),
+        name: "MCP fetch".into(),
+        command: "devdeck-no-such-program-exists".into(),
+    }]);
+
+    let p = w.project("7").unwrap();
+    let scope = super::events::EventScope::feature("7", "offline-synchronisation");
+    let call = ToolCall::new("mcp.fetch", "fetch", serde_json::json!({"url": "https://example.invalid"}));
+
+    let r = p.tools.execute(&w.bus, "dev-a", &scope, &call, None);
+    assert!(!r.ok, "no grant, no call");
+    assert!(r.denied, "and it is a refusal, not a failure to run: {:?}", r.error);
+    assert!(
+        !r.error.clone().unwrap_or_default().contains("no-such-program"),
+        "the matrix answered before anything was spawned: {:?}",
+        r.error
+    );
+}
+
+#[test]
+fn an_mcp_tool_that_is_not_installed_says_so_rather_than_unknown_tool() {
+    // Granted, then uninstalled. "Unknown tool" would read as a bug in
+    // DevDeck; the truth is that a person removed it.
+    let t = Tmp::new("mcpgone");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    w.register_project("7", "TyreX", tyrex.clone(), tyrex);
+    w.set_permission("dev-a", "mcp.fetch", "full").unwrap();
+
+    let p = w.project("7").unwrap();
+    let scope = super::events::EventScope::feature("7", "offline-synchronisation");
+    let call = ToolCall::new("mcp.fetch", "fetch", serde_json::json!({}));
+    let r = p.tools.execute(&w.bus, "dev-a", &scope, &call, None);
+
+    assert!(!r.ok);
+    let e = r.error.unwrap_or_default();
+    assert!(e.contains("not installed"), "{e}");
+    assert!(e.contains("Community"), "and it says where to get it back: {e}");
+}
+
+#[test]
+fn an_mcp_server_is_offered_to_the_model_only_when_it_is_granted_and_up() {
+    // Two separate reasons a tool is not advertised, and both are honest: a
+    // server nobody granted, and a server nothing has started yet — before the
+    // first call DevDeck genuinely does not know what it offers, and inventing
+    // a plausible list would hand the model callables that may not exist.
+    use crate::aiw::tools::{mcp_definitions_for, Permission, PermissionMatrix};
+
+    let hub = crate::mcp::Hub::new();
+    let servers = vec![crate::mcp::ServerSpec {
+        id: "fetch".into(),
+        name: "MCP fetch".into(),
+        command: "irrelevant".into(),
+    }];
+
+    let mut granted = PermissionMatrix::default();
+    granted.set("dev-a", "mcp.fetch", Permission::Full);
+    assert!(
+        mcp_definitions_for("dev-a", &granted, &hub, &servers).is_empty(),
+        "granted but never started: nothing to offer yet"
+    );
+
+    let ungranted = PermissionMatrix::default();
+    assert!(
+        mcp_definitions_for("dev-a", &ungranted, &hub, &servers).is_empty(),
+        "and no grant means nothing either way"
+    );
+}

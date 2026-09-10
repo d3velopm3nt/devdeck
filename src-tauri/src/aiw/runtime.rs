@@ -397,7 +397,20 @@ impl AgentRuntime {
                 goal: intent.clone(),
                 // Filtered by this agent's permissions, so what a provider is
                 // offered is exactly what it is allowed to call.
-                tools: super::tools::definitions_for(&agent.id, &ws.permission_matrix()),
+                tools: {
+                    // Built-ins, then whatever the installed MCP servers
+                    // offer this agent. One list: the model has no idea which
+                    // of its callables came from where, and should not.
+                    let m = ws.permission_matrix();
+                    let mut t = super::tools::definitions_for(&agent.id, &m);
+                    t.extend(super::tools::mcp_definitions_for(
+                        &agent.id,
+                        &m,
+                        &ws.mcp,
+                        &ws.mcp_servers(),
+                    ));
+                    t
+                },
                 observations: observations.clone(),
                 turn,
                 // A goal-driven agent has no conversation to carry.

@@ -979,7 +979,16 @@ impl Assistant {
         let mut tools = if persona.talk_only {
             Vec::new()
         } else {
-            let mut t = super::tools::definitions_for(me, &ws.permission_matrix());
+            let matrix = ws.permission_matrix();
+            let mut t = super::tools::definitions_for(me, &matrix);
+            // Whatever the installed MCP servers offer this speaker, judged by
+            // the same matrix as everything else.
+            t.extend(super::tools::mcp_definitions_for(
+                me,
+                &matrix,
+                &ws.mcp,
+                &ws.mcp_servers(),
+            ));
             // A manager's own plan, offered even though a bot has no row.
             for id in &persona.manages_with {
                 for extra in super::tools::definitions_of(id) {

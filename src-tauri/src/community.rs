@@ -577,7 +577,7 @@ pub fn community_uninstall(db: tauri::State<Db>, ws: Ws, id: String) -> Result<(
             if let Some(e) = &entry {
                 for a in ws.agents() {
                     if a.permissions.get(&e.tool_id).is_some_and(|p| p != "none") {
-                        ws.set_permission(&a.id, &e.tool_id, "none")?;
+                        set_tool(&db, &ws, &a.id, &e.tool_id, "none")?;
                     }
                 }
             }
@@ -587,6 +587,27 @@ pub fn community_uninstall(db: tauri::State<Db>, ws: Ws, id: String) -> Result<(
 
     let conn = db.0.lock().unwrap();
     forget(&conn, &id)
+}
+
+/// Change a tool permission *and* write the matrix down.
+///
+/// `Workspace::set_permission` only touches the in-memory list and rebuilds
+/// the tool services; the whole matrix is persisted separately, as one JSON
+/// setting. Calling the first without the second gives a grant that works
+/// until the next restart and then silently is not there — the Installed page
+/// would go on saying "in use by dev-a" about a permission that no longer
+/// exists. `aiw_set_permission` pairs them for the same reason.
+fn set_tool(
+    db: &tauri::State<Db>,
+    ws: &Arc<Workspace>,
+    agent_id: &str,
+    tool: &str,
+    level: &str,
+) -> Result<(), String> {
+    ws.set_permission(agent_id, tool, level)?;
+    let json = serde_json::to_string(&ws.permission_grants()).map_err(|e| e.to_string())?;
+    let conn = db.0.lock().unwrap();
+    crate::db::setting_set_conn(&conn, crate::aiw::commands::PERMISSIONS_KEY, &json)
 }
 
 /// Add or remove a skill on one agent, through the agent's own file.
@@ -645,7 +666,7 @@ pub fn community_grant(
             } else {
                 "none".into()
             };
-            ws.set_permission(&agent_id, &entry.tool_id, &level)
+            set_tool(&db, &ws, &agent_id, &entry.tool_id, &level)
         }
         _ => Err("an agent is not granted to another agent".into()),
     }

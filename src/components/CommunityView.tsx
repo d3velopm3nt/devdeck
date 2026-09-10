@@ -88,7 +88,8 @@ export function CommunityView() {
       for (const line of CAPTURE_COMMUNITY) {
         const [verb, id, who] = line.split(':')
         try {
-          if (verb === 'install') await ipc.communityInstall(id)
+          if (verb === 'tab') setTab(id as Tab)
+          else if (verb === 'install') await ipc.communityInstall(id)
           else if (verb === 'grant') await ipc.communityGrant(id, who, true)
           else if (verb === 'revoke') await ipc.communityGrant(id, who, false)
         } catch (e) {

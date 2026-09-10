@@ -11,7 +11,8 @@ export const CAPTURE_SAY: string[] = [
 ]
 
 /** Community actions to run once on mount, in order:
- *  `install:<id>` | `grant:<id>:<agentId>` | `revoke:<id>:<agentId>`.
+ *  `install:<id>` | `grant:<id>:<agentId>` | `revoke:<id>:<agentId>` |
+ *  `tab:browse` | `tab:installed`.
  *  This session cannot deliver clicks, so a screenshot of the install/grant
  *  split has to be produced some other way. It goes through the same commands
  *  the buttons call. Empty in every shipped build. */

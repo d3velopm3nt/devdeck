@@ -254,6 +254,93 @@ How it works:
 
 ## Designed, not built
 
+### Community — open-source AI your bots can use · `design/community/`
+
+Designed 5 September 2026. The canvas is at
+https://claude.ai/code/artifact/51727d14-a9ea-4e28-991f-c0aebb4206bf
+(page 1 is the seven pages, page 2 the seven modals; **Trending** is a
+clickable prototype — press Week / Month / Year).
+
+**What it is.** A rail entry directly above Machine, and the pairing is the
+idea: Machine installs tools for *you*, Community installs them for *your
+bots*. Five kinds of thing come through it — MCP servers (which become tools
+in the permission matrix), skills, agents, models, and the runners that serve
+them.
+
+**Installing is not granting, and the module is built around that split.** An
+install writes files. It gives no agent the ability to call anything: everyone
+lands on `None`, and a separate, deliberate act says who may use it and how.
+That is why Installed and Permissions are two pages rather than one list with
+toggles — and it lets Installed say the uncomfortable thing, that a server has
+been sitting there six days and no bot can reach it.
+
+**The pages.** Browse · Trending · one repo in full · Installed · Permissions
+(the matrix, with community and built-in tools judged in the same table) ·
+Models. A seventh artboard is not a Community page at all: it is a feature
+thread showing the payoff — `@qa` asks, you answer the approval, the tool
+runs, and one call is refused for being outside the host you allowed. If that
+panel is ever empty for a real day's work, the module has not earned its rail
+slot.
+
+#### Trending — the week, the month, the year
+
+Three periods, and they are **not** three windows onto one list. The design
+changes the band under the header to say which is which:
+
+- **Week and Month are GitHub's own trending page.** There is no API for it.
+  It is scraped HTML, from a page whose markup GitHub can change without
+  notice, ranked by an algorithm GitHub has never published. The page reports
+  when the read last *succeeded* and calls the order their judgement rather
+  than a star count.
+- **Year does not exist on GitHub.** Trending offers today, this week and this
+  month, full stop. So Year is DevDeck's own arithmetic — stars gained over
+  twelve months — and the page says outright that its ranks are not comparable
+  with the other two tabs. It behaves differently too, which is the point: a
+  repo that is large and declining shows up over a year and never over a week.
+
+**What has to be built before it is worth shipping.** Three gaps, in this
+order:
+
+1. **A scrape is a dependency on someone else's HTML.** It will break, and
+   when it does the list has to say so. A failed fetch rendering an empty
+   Trending page is the update-checker bug again — an explicit `ok` flag, the
+   last-good timestamp, and never "nothing is trending" when the truth is "we
+   could not look".
+2. **The year needs history DevDeck does not have.** There is no endpoint for
+   "stars gained in the last twelve months". Either DevDeck records its own
+   weekly snapshot of every repo in the index from the day it is installed —
+   accurate, and empty for the first few months — or it walks the stargazers
+   API for timestamps, which is paginated, slow and capped. The sparklines in
+   the mock assume the first. Worth deciding before drawing a single curve.
+3. **Trending is unfiltered, and this page is not.** GitHub's list is every
+   repository on the site; this page only wants things a bot could hold. That
+   is a detection step — is there a manifest, and what kind is it — and the
+   honest fallback is already drawn: rows that declare nothing say *No
+   manifest* rather than being guessed at. Three of the eight rows in the mock
+   are in exactly that state, on purpose.
+
+**Rate limits, and the local-first promise.** Fetching means a call to
+github.com. The index is names and links, cached in SQLite the way Machine's
+catalog already is, and no code is fetched until an install — but it is still
+an outbound call, and it should be visible rather than quiet. Unauthenticated
+GitHub is 60 requests an hour, which will not carry a year count across an
+index of any size, so this is the second thing in DevDeck after Connections to
+want a credential — and therefore Windows Credential Manager, never SQLite.
+
+**Open, and worth deciding before building:**
+
+- Is Community its own rail entry, or a tab inside Machine? The design puts it
+  on the rail because the audience is your bots rather than your machine, but
+  that is an argument, not a fact.
+- Bundles are a strip on Browse rather than a page. Machine already calls the
+  same idea *bundles*, which is why the word is reused — but a Community
+  bundle also carries grants, and that may deserve the page it does not have.
+- An MCP server is a process. Should it show up in Processes? Today it would
+  not, and the trust modal has to warn about exactly that.
+- Licences are shown on every row (permissive, copyleft, restricted, missing)
+  because this is meant to be sold. Nobody has decided what DevDeck does when
+  a bot's kit contains an AGPL runner.
+
 ### Time — a calendar, a day, and a bot that keeps you to it
 
 Brainstormed 3 September 2026. **The calendar is built** (4 September) — see

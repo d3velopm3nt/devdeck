@@ -10,6 +10,7 @@
     { "file": "Grants.dc.html", "title": "4 · Permissions — the spine", "page": "page-1", "x": 0, "y": 1060, "w": 1456, "h": 909 },
     { "file": "Models.dc.html", "title": "5 · Models you run yourself", "page": "page-1", "x": 1576, "y": 1060, "w": 1456, "h": 909 },
     { "file": "InUse.dc.html", "title": "6 · Where it lands — a bot using it", "page": "page-1", "x": 3152, "y": 1060, "w": 1456, "h": 909 },
+    { "file": "Trending.dc.html", "title": "7 · Trending — click Week / Month / Year", "page": "page-1", "x": 0, "y": 2120, "w": 1456, "h": 909, "is_interactive": true },
 
     { "file": "ModalInstall.dc.html", "title": "A · Install — the grant, not the download", "page": "page-2", "x": 0, "y": 0, "w": 760, "h": 830 },
     { "file": "ModalTrust.dc.html", "title": "B · Read this before installing", "page": "page-2", "x": 880, "y": 0, "w": 760, "h": 730 },
@@ -67,6 +68,22 @@
       "y": 2020,
       "w": 460,
       "text": "OPEN QUESTIONS FOR YOU\n\n1 · Bundles are on Browse as a strip rather than their own page. Machine calls the same idea bundles, which is why the word is reused — but a Community bundle also carries grants, and that may deserve the fifth sidebar entry it currently has.\n\n2 · Is Community its own rail entry, or a tab inside Machine? I put it on the rail because the audience is your bots, not your machine — but that is an argument, not a fact.\n\n3 · Should an MCP server's process show up in Processes? Today it would not, and the Trust modal has to warn about exactly that."
+    },
+    {
+      "id": "trending",
+      "page": "page-1",
+      "x": -560,
+      "y": 2120,
+      "w": 460,
+      "text": "TRENDING (artboard 7) — this one is clickable. Press Week, Month and Year.\n\nIt sits beside Browse in the product; it is down here only so the first six kept their numbers.\n\nThe three tabs are NOT three windows onto one list, and the band under the header changes to say so:\n\n· Week and Month are GitHub's own trending page. There is no API for it — it is scraped HTML — and GitHub has never published how it ranks. So the page reports when the read last succeeded and calls the order their judgement, not a star count.\n\n· Year does not exist on GitHub. Trending offers today, this week and this month, full stop. So the Year tab is DevDeck's own arithmetic — stars gained over 12 months from the search API — and it says outright that the ranks are not comparable with the other two tabs. That band turns amber to mark the change of source."
+    },
+    {
+      "id": "trending-craft",
+      "page": "page-1",
+      "x": -560,
+      "y": 2620,
+      "w": 460,
+      "text": "WHAT EACH ROW HAS TO EARN\n\nThe delta is the headline number, but the sparkline is the argument: on Month, playwright-mcp sits third on three flat weeks and one enormous one, and you can see that without reading anything.\n\nOne series, so one hue and no legend — the number stays in text ink rather than being painted the line's colour.\n\nThe last column is the only thing here that is about you: Installed, Update, Install, or \"No manifest\" — which is the honest answer for unsloth, qdrant and chroma. They are real libraries and genuinely trending; they are just not things a bot can hold, and the page says it cannot tell you what they would add rather than inventing chips.\n\nStars are attention, not fitness. That line is at the foot of the page for a reason."
     },
     {
       "id": "modal-note",

@@ -1,0 +1,399 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: var(--accent); } a:hover { color: var(--ink); }
+    .head { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .chip { display: inline-flex; align-items: center; gap: 4px; font-size: 9px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; padding: 2px 6px; border-radius: 999px; }
+    .btn { font-size: 11px; color: var(--dim); border: 1px solid var(--line2); border-radius: 6px; padding: 3px 9px; background: transparent; cursor: pointer; font-family: inherit; }
+    .btn.on { color: #fff; background: #4f46e5; border-color: #4f46e5; }
+    .mono { font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; }
+    .rail { display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 8px; border-radius: 8px; font-size: 12px; color: var(--muted); position: relative; }
+    .rail-on { background: var(--raise); color: var(--ink); }
+    .rail-on::before { content: ""; position: absolute; left: -6px; top: 6px; bottom: 6px; width: 2.5px; border-radius: 2px; background: #6366f1; }
+    .filt { display: flex; align-items: center; gap: 7px; padding: 5px 8px; border-radius: 6px; font-size: 11.5px; color: var(--dim); }
+    .filt-on { background: var(--hover); color: var(--ink); }
+    .seg { font-size: 11.5px; padding: 4px 14px; border-radius: 6px; color: var(--dim); cursor: pointer; border: none; background: transparent; font-family: inherit; }
+    .row { display: flex; flex-direction: column; gap: 5px; padding: 10px 12px; border-top: 1px solid var(--line); }
+    .tool { font-size: 9.5px; padding: 1px 5px; border-radius: 4px; }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --page: {{c.page}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --menu: {{c.menu}}; --hover: {{c.hover}}; --line: {{c.line}}; --line2: {{c.line2}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; width: 1456px; height: 909px; background: var(--app); color: var(--body); display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;">
+
+  <div style="height: 32px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--panel);">
+    <span style="font-size: 11.5px; color: var(--dim);">DevDeck</span>
+    <span style="font-size: 11.5px; color: var(--faint);">File</span>
+    <span style="font-size: 11.5px; color: var(--faint);">View</span>
+    <span style="font-size: 11.5px; color: var(--faint);">Build</span>
+    <span style="font-size: 11.5px; color: var(--faint);">Help</span>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; min-height: 0;">
+
+    <div style="width: 160px; flex-shrink: 0; background: var(--app); border-right: 1px solid var(--line); padding: 8px 6px; display: flex; flex-direction: column; gap: 2px;">
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 11 12 4l8.5 7"></path><path d="M5.5 9.8V19h13V9.8"></path></svg><span>Home</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 13.5 6 5.5h12l2.5 8v5h-17z"></path><path d="M3.5 13.5H9l1 2h4l1-2h5.5"></path></svg><span>Inbox</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"></circle><path d="M3.5 19a5.5 5.5 0 0 1 11 0"></path><circle cx="17" cy="9" r="2.6"></circle><path d="M15.5 14.2a4.5 4.5 0 0 1 5 4.3"></path></svg><span>Team</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="12" rx="2"></rect><path d="M9 12h.01M15 12h.01M12 3v4"></path></svg><span>Bots</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"></path><path d="M3.5 7 12 11.6 20.5 7M12 11.6v9.9"></path></svg><span>Spaces</span></div>
+      <div style="height: 1px; background: var(--line); margin: 9px 6px;"></div>
+      <div class="rail rail-on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5.5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="18.5" r="2.5"></circle><path d="M8.3 10.8 15.7 6.7M8.3 13.2l7.4 4.1"></path></svg><span>Community</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9M9.5 19V5M15 19v-6M20.5 19v-9"></path></svg><span>Analytics</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="5" rx="1.5"></rect><path d="M5.5 9.5v9h13v-9"></path><path d="M10 13h4"></path></svg><span>Stash</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="10" rx="2"></rect><path d="M7 19h10M21 9v10h-4"></path></svg><span>Machine</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12H3.5M18 6l-1.6 1.6M7.6 16.4 6 18M18 18l-1.6-1.6M7.6 7.6 6 6"></path></svg><span>Settings</span></div>
+    </div>
+
+    <div style="width: 260px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0;">
+      <div style="padding: 10px 12px; border-bottom: 1px solid var(--line);">
+        <div style="font-size: 12.5px; color: var(--ink); font-weight: 600;">Community</div>
+        <div style="font-size: 10.5px; color: var(--muted); margin-top: 2px;">Open-source AI your bots can use</div>
+      </div>
+
+      <div style="padding: 8px 6px 0;">
+        <div class="head" style="padding: 6px 8px 4px;">Where</div>
+        <div class="filt"><span style="flex: 1;">Browse</span><span style="font-size: 10px; color: var(--muted);">48</span></div>
+        <div class="filt filt-on"><span style="flex: 1;">Trending</span></div>
+        <div class="filt"><span style="flex: 1;">Installed</span><span style="font-size: 10px; color: var(--muted);">9</span></div>
+        <div class="filt"><span style="flex: 1;">Permissions</span></div>
+        <div class="filt"><span style="flex: 1;">Models</span><span style="font-size: 10px; color: var(--muted);">3</span></div>
+        <div class="filt"><span style="flex: 1;">Bundles</span><span style="font-size: 10px; color: var(--muted);">3</span></div>
+
+        <div class="head" style="padding: 12px 8px 4px;">Narrow it to</div>
+        <div class="filt"><span style="width: 22px; height: 12px; border-radius: 999px; background: #4f46e5; position: relative;"><span style="position: absolute; right: 1.5px; top: 1.5px; width: 9px; height: 9px; border-radius: 999px; background: #fff;"></span></span><span>Things a bot could use</span></div>
+        <div class="filt"><span style="width: 22px; height: 12px; border-radius: 999px; background: var(--hover); position: relative;"><span style="position: absolute; left: 1.5px; top: 1.5px; width: 9px; height: 9px; border-radius: 999px; background: var(--faint);"></span></span><span>Hide what I already have</span></div>
+        <div class="filt"><span style="width: 22px; height: 12px; border-radius: 999px; background: var(--hover); position: relative;"><span style="position: absolute; left: 1.5px; top: 1.5px; width: 9px; height: 9px; border-radius: 999px; background: var(--faint);"></span></span><span>Permissive licences only</span></div>
+
+        <div class="head" style="padding: 12px 8px 4px;">Kind</div>
+        <div class="filt filt-on"><span style="flex: 1;">Everything</span></div>
+        <div class="filt"><span style="width: 7px; height: 7px; border-radius: 2px; background: #38bdf8;"></span><span style="flex: 1;">MCP servers</span></div>
+        <div class="filt"><span style="width: 7px; height: 7px; border-radius: 2px; background: #6366f1;"></span><span style="flex: 1;">Agents</span></div>
+        <div class="filt"><span style="width: 7px; height: 7px; border-radius: 2px; background: #f59e0b;"></span><span style="flex: 1;">Runners</span></div>
+      </div>
+
+      <div style="margin-top: auto; border-top: 1px solid var(--line); padding: 10px 12px;">
+        <div class="head" style="margin-bottom: 6px;">Watching</div>
+        <div style="display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--dim); padding: 3px 0;">
+          <span style="width: 7px; height: 7px; border-radius: 999px; background: var(--accent);"></span>
+          <span class="mono" style="flex: 1;">vllm-project/vllm</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--dim); padding: 3px 0;">
+          <span style="width: 7px; height: 7px; border-radius: 999px; background: var(--accent);"></span>
+          <span class="mono" style="flex: 1;">unslothai/unsloth</span>
+        </div>
+        <div style="font-size: 10px; color: var(--faint); margin-top: 7px; line-height: 1.5;">Watching tells you when one lands in your Inbox. It installs nothing.</div>
+      </div>
+    </div>
+
+    <div style="flex-grow: 1; min-width: 0; background: var(--page); padding: 16px 20px; display: flex; flex-direction: column; overflow: hidden;">
+
+      <div style="display: flex; align-items: flex-end; gap: 12px; flex-shrink: 0;">
+        <div>
+          <div style="font-size: 17px; font-weight: 600; color: var(--ink);">Trending</div>
+          <div style="font-size: 11.5px; color: var(--muted); margin-top: 2px;">What the open-source AI world is looking at, and which of it your bots could actually hold.</div>
+        </div>
+        <div style="margin-left: auto; display: flex; gap: 3px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel);">
+          <sc-for list="{{periods}}" as="p" hint-placeholder-count="3">
+            <button class="seg" style="{{p.style}}" onClick="{{p.pick}}">{{p.label}}</button>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="margin-top: 14px; border: 1px solid {{v.noteBorder}}; border-radius: 11px; background: {{v.noteBg}}; padding: 11px 13px; display: flex; align-items: flex-start; gap: 11px; flex-shrink: 0;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="{{v.noteIcon}}" stroke-width="1.9" style="flex-shrink: 0; margin-top: 1px;"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5.5M12 7.8h.01"></path></svg>
+        <div style="min-width: 0; flex: 1;">
+          <div style="font-size: 11.5px; font-weight: 600; color: {{v.noteIcon}};">{{v.noteTitle}}</div>
+          <div style="font-size: 11px; line-height: 1.6; color: var(--body); margin-top: 3px;">{{v.noteBody}}</div>
+        </div>
+        <div style="text-align: right; flex-shrink: 0;">
+          <div style="font-size: 10.5px; color: var(--dim);">{{v.metaTop}}</div>
+          <div style="font-size: 10.5px; color: var(--muted); margin-top: 3px;">{{v.metaBottom}}</div>
+        </div>
+      </div>
+
+      <div style="margin-top: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; min-height: 0;">
+
+        <div style="display: flex; align-items: center; gap: 10px; padding: 7px 12px; background: var(--raise); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted);">
+          <span style="width: 46px;">Rank</span>
+          <span style="width: 26px;"></span>
+          <span style="flex: 1;">Repository</span>
+          <span style="width: 86px; text-align: right;">{{v.deltaHead}}</span>
+          <span style="width: 84px; text-align: center;">{{v.sparkHead}}</span>
+          <span style="width: 92px; text-align: right;">You</span>
+        </div>
+
+        <sc-for list="{{rows}}" as="row" hint-placeholder-count="8">
+          <div class="row" style="{{row.rowStyle}}">
+
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="width: 46px; display: flex; align-items: baseline; gap: 5px;">
+                <span style="font-size: 13px; font-weight: 600; color: var(--ink); width: 15px;">{{row.rank}}</span>
+                <span style="display: inline-flex; align-items: center; gap: 1px; color: {{row.moveColor}};">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="{{row.moveIcon}}"></path></svg>
+                  <span style="font-size: 9.5px; font-weight: 600;">{{row.moveText}}</span>
+                </span>
+              </span>
+
+              <span style="width: 26px; height: 26px; border-radius: 8px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: {{row.kindBg}}; color: {{row.kindColor}};">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{row.kindIcon}}"></path></svg>
+              </span>
+
+              <span style="flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px;">
+                <span style="font-size: 12.5px; font-weight: 600; color: var(--ink);">{{row.name}}</span>
+                <span class="mono" style="font-size: 10px; color: var(--faint);">{{row.owner}}</span>
+                <span class="chip" style="background: {{row.kindBg}}; color: {{row.kindColor}};">{{row.kindLabel}}</span>
+                <span class="chip" style="{{row.licStyle}}">{{row.licence}}</span>
+              </span>
+
+              <span style="width: 86px; text-align: right; font-size: 12.5px; font-weight: 600; color: var(--ink);">{{row.delta}}</span>
+
+              <span style="width: 84px; display: flex; justify-content: center;">
+                <svg width="72" height="20" viewBox="0 0 72 20" style="display: block;">
+                  <polygon points="{{row.sparkFill}}" fill="rgb(129 140 248 / .16)"></polygon>
+                  <polyline points="{{row.sparkLine}}" fill="none" stroke="#818cf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline>
+                </svg>
+              </span>
+
+              <span style="width: 92px; display: flex; justify-content: flex-end;">
+                <span style="{{row.stateStyle}}">{{row.stateText}}</span>
+              </span>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 9px; padding-left: 82px;">
+              <span style="font-size: 11px; color: var(--body); flex: 1; min-width: 0;">{{row.desc}}</span>
+              <span style="display: flex; gap: 4px; flex-shrink: 0;">
+                <sc-for list="{{row.tools}}" as="t" hint-placeholder-count="3">
+                  <span class="tool" style="{{t.style}}">{{t.text}}</span>
+                </sc-for>
+              </span>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="margin-top: auto; padding-top: 12px; font-size: 10.5px; color: var(--faint);">Stars are attention, not fitness. The chips are what a repo would actually add to a bot — and the ones that ship no manifest say so rather than being guessed at. Nothing here is installed or granted until you say so.</div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"},"period":{"editor":"enum","options":["week","month","year"],"default":"week","section":"Data"},"$preview":{"width":1456,"height":909}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { period: props.period || 'week' };
+  }
+
+  kinds() {
+    return {
+      mcp:    { label: 'MCP server', color: '#38bdf8', bg: 'rgb(56 189 248 / .16)',
+                icon: 'M5.5 4h13a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2M5.5 13h13a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2' },
+      skill:  { label: 'Skills', color: '#a78bfa', bg: 'rgb(167 139 250 / .16)',
+                icon: 'M4 5.5A2 2 0 0 1 6 3.5h13v15H6a2 2 0 0 0-2 2zM4 18.5A2 2 0 0 1 6 16.5h13' },
+      agent:  { label: 'Agent', color: '#a5b4fc', bg: 'rgb(99 102 241 / .18)',
+                icon: 'M6 7h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2M12 3.5V7M9.5 12v1M14.5 12v1' },
+      runner: { label: 'Runner', color: '#f59e0b', bg: 'rgb(245 158 11 / .16)',
+                icon: 'M8.5 6.5h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2M10 3v3.5M14 3v3.5M10 17.5V21M14 17.5V21M3 10h3.5M3 14h3.5M17.5 10H21M17.5 14H21' },
+      lib:    { label: 'Library', color: '#22c55e', bg: 'rgb(34 197 94 / .16)',
+                icon: 'M12 3 3.5 7.5 12 12l8.5-4.5zM3.5 12 12 16.5 20.5 12M3.5 16.5 12 21l8.5-4.5' }
+    };
+  }
+
+  // rank, move, moveN, name, owner, kind, licence, licFlag, description, tools, delta, sparkline, your state
+  sets() {
+    return {
+      week: {
+        deltaHead: 'Stars this week',
+        sparkHead: 'Per day',
+        noteKind: 'scrape',
+        noteTitle: "GitHub's own trending list, for this week",
+        noteBody: 'There is no API behind that page, so DevDeck reads the HTML. Last read at 06:12 today. GitHub has never published how it ranks trending — this order is their judgement, not a star count, and it can change without notice.',
+        metaTop: '8 of 25 shown',
+        metaBottom: '3 you have · 2 declare no manifest',
+        rows: [
+          [1, 'up', '4', 'playwright-mcp', 'microsoft', 'mcp', 'Apache-2.0', 0, 'Browser automation over MCP. The week it got a stable release, everyone noticed.', ['browser.navigate', 'browser.click', '+10'], '+2,140', [180, 240, 210, 380, 420, 360, 350], 'installed'],
+          [2, 'new', 'new', 'skills', 'anthropics', 'skill', 'MIT', 0, 'Written procedures an agent follows. Fifteen of them, and the format is the point.', ['skill.list', 'skill.run', '15 skills'], '+1,890', [0, 0, 90, 340, 520, 480, 460], 'install'],
+          [3, 'down', '1', 'ollama', 'ollama', 'runner', 'MIT', 0, 'Runs open-weight models locally. Steady rather than spiking — it is always on this list.', ['a provider', '3 models here'], '+1,410', [220, 210, 200, 190, 210, 190, 190], 'installed'],
+          [4, 'up', '2', 'OpenHands', 'All-Hands-AI', 'agent', 'MIT', 0, 'A software-development agent that plans, edits and runs its own tests.', ['files · write', 'terminal', 'git · write'], '+1,120', [110, 130, 160, 190, 180, 200, 150], 'install'],
+          [5, 'up', '6', 'github-mcp-server', 'github', 'mcp', 'MIT', 0, 'Issues, pull requests and code search. 0.12.0 landed on Tuesday and moved it.', ['github.issues', 'github.pr', '+15'], '+980', [90, 100, 95, 240, 190, 140, 125], 'update'],
+          [6, 'up', '9', 'unsloth', 'unslothai', 'lib', 'Apache-2.0', 0, 'Fine-tuning, faster and in less memory. A library you build on, not a tool a bot holds.', [], '+860', [70, 80, 110, 140, 160, 150, 150], 'unknown'],
+          [7, 'down', '2', 'vllm', 'vllm-project', 'runner', 'Apache-2.0', 0, 'A serving engine for when one model has to answer several agents at once.', ['a provider'], '+740', [130, 120, 110, 100, 105, 90, 85], 'install'],
+          [8, 'down', '3', 'aider', 'Aider-AI', 'agent', 'Apache-2.0', 0, 'A pair programmer in the terminal that writes its own commits.', ['files · write', 'git · write'], '+620', [120, 110, 95, 85, 80, 70, 60], 'install']
+        ]
+      },
+      month: {
+        deltaHead: 'Stars this month',
+        sparkHead: 'Per week',
+        noteKind: 'scrape',
+        noteTitle: "GitHub's own trending list, for this month",
+        noteBody: 'The same scraped page on its monthly window, last read at 06:12 today. One very good week can hold a repo up here for four — the sparkline is the honest version of the rank.',
+        metaTop: '8 of 25 shown',
+        metaBottom: '3 you have · 2 declare no manifest',
+        rows: [
+          [1, 'same', '', 'ollama', 'ollama', 'runner', 'MIT', 0, 'Top of the month for the fourth month running. Nothing spiked; it simply never stops.', ['a provider', '3 models here'], '+6,900', [1600, 1700, 1750, 1850], 'installed'],
+          [2, 'up', '1', 'OpenHands', 'All-Hands-AI', 'agent', 'MIT', 0, 'A software-development agent that plans, edits and runs its own tests.', ['files · write', 'terminal', 'git · write'], '+5,240', [900, 1200, 1500, 1640], 'install'],
+          [3, 'up', '5', 'playwright-mcp', 'microsoft', 'mcp', 'Apache-2.0', 0, 'Flat for three weeks, then the stable release. This is what a one-week spike looks like.', ['browser.navigate', 'browser.click', '+10'], '+4,880', [700, 780, 820, 2580], 'installed'],
+          [4, 'down', '2', 'vllm', 'vllm-project', 'runner', 'Apache-2.0', 0, 'A serving engine for when one model has to answer several agents at once.', ['a provider'], '+4,100', [1200, 1100, 950, 850], 'install'],
+          [5, 'new', 'new', 'skills', 'anthropics', 'skill', 'MIT', 0, 'Written procedures an agent follows. Three weeks old and already fifth.', ['skill.list', 'skill.run', '15 skills'], '+3,760', [0, 600, 1400, 1760], 'install'],
+          [6, 'up', '3', 'qdrant', 'qdrant', 'lib', 'Apache-2.0', 0, 'A vector database. Useful under context assembly, but not a tool a bot calls.', [], '+2,900', [600, 700, 780, 820], 'unknown'],
+          [7, 'down', '1', 'llama.cpp', 'ggml-org', 'runner', 'MIT', 0, 'The inference engine most of the others are standing on.', ['a provider'], '+2,540', [700, 660, 620, 560], 'install'],
+          [8, 'up', '4', 'github-mcp-server', 'github', 'mcp', 'MIT', 0, 'Issues, pull requests and code search. 0.12.0 landed on Tuesday.', ['github.issues', 'github.pr', '+15'], '+2,210', [400, 480, 520, 810], 'update']
+        ]
+      },
+      year: {
+        deltaHead: 'Stars in 12 months',
+        sparkHead: 'Per month',
+        noteKind: 'own',
+        noteTitle: "Not GitHub's ranking — this one is DevDeck's own count",
+        noteBody: 'GitHub Trending offers today, this week and this month. There is no year. So this list is stars gained over twelve months, counted from the search API: a different measurement that favours what is large and steady over what is new. Ranks here are not comparable with the two tabs beside it.',
+        metaTop: 'counted 06:12 today',
+        metaBottom: '4 you have · 3 declare no manifest',
+        rows: [
+          [1, 'same', '', 'ollama', 'ollama', 'runner', 'MIT', 0, 'The year of running models on your own machine, in one repository.', ['a provider', '3 models here'], '+48,200', [2800, 3100, 3400, 3900, 4200, 4100, 4300, 4200, 4000, 4100, 4400, 4700], 'installed'],
+          [2, 'up', '1', 'llama.cpp', 'ggml-org', 'runner', 'MIT', 0, 'The inference engine most of the others are standing on.', ['a provider'], '+31,700', [2200, 2400, 2600, 2700, 2800, 2700, 2600, 2700, 2600, 2500, 2400, 2500], 'install'],
+          [3, 'up', '6', 'OpenHands', 'All-Hands-AI', 'agent', 'MIT', 0, 'The year agents stopped being demos. Steepest curve in this list.', ['files · write', 'terminal', 'git · write'], '+29,400', [900, 1100, 1400, 1800, 2100, 2400, 2700, 2900, 3100, 3300, 3400, 3600], 'install'],
+          [4, 'up', '2', 'vllm', 'vllm-project', 'runner', 'Apache-2.0', 0, 'A serving engine for when one model has to answer several agents at once.', ['a provider'], '+27,900', [1800, 2000, 2200, 2400, 2500, 2600, 2500, 2400, 2300, 2200, 2500, 2500], 'install'],
+          [5, 'down', '3', 'aider', 'Aider-AI', 'agent', 'Apache-2.0', 0, 'Big early, flatter since. A year is long enough to show that; a week is not.', ['files · write', 'git · write'], '+19,600', [2600, 2500, 2300, 2000, 1800, 1600, 1400, 1300, 1200, 1000, 950, 900], 'install'],
+          [6, 'up', '4', 'qdrant', 'qdrant', 'lib', 'Apache-2.0', 0, 'A vector database. Useful under context assembly, but not a tool a bot calls.', [], '+12,300', [800, 850, 900, 950, 1000, 1050, 1100, 1050, 1000, 1100, 1200, 1300], 'unknown'],
+          [7, 'down', '2', 'text-generation-webui', 'oobabooga', 'runner', 'AGPL-3.0', 1, 'Copyleft. Fine on your own machine; a real question the day DevDeck ships anything with it.', ['a provider'], '+8,900', [1100, 1000, 900, 850, 800, 750, 700, 650, 600, 550, 500, 500], 'installed'],
+          [8, 'same', '', 'chroma', 'chroma-core', 'lib', 'Apache-2.0', 0, 'An embedding store. Same shape of usefulness as qdrant, and the same distance from a bot.', [], '+8,100', [650, 680, 700, 720, 700, 680, 660, 650, 670, 690, 700, 710], 'unknown']
+        ]
+      }
+    };
+  }
+
+  spark(vals) {
+    const w = 72, h = 20, p = 2.5;
+    const min = Math.min.apply(null, vals);
+    const max = Math.max.apply(null, vals);
+    const span = (max - min) || 1;
+    const pts = vals.map(function (v, i) {
+      const x = p + (i / (vals.length - 1)) * (w - 2 * p);
+      const y = h - p - ((v - min) / span) * (h - 2 * p);
+      return x.toFixed(1) + ',' + y.toFixed(1);
+    });
+    return {
+      line: pts.join(' '),
+      fill: p + ',' + (h - p) + ' ' + pts.join(' ') + ' ' + (w - p) + ',' + (h - p)
+    };
+  }
+
+  move(kind) {
+    if (kind === 'up') return { icon: 'M12 6v12M6.5 11.5 12 6l5.5 5.5', color: '#4ade80' };
+    if (kind === 'down') return { icon: 'M12 18v-12M6.5 12.5 12 18l5.5-5.5', color: '#f87171' };
+    if (kind === 'new') return { icon: 'M12 6.5v11M6.5 12h11', color: '#818cf8' };
+    return { icon: 'M7 12h10', color: '#475569' };
+  }
+
+  stateOf(kind) {
+    const base = 'display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 600; padding: 3px 9px; border-radius: 6px; ';
+    if (kind === 'installed') return { text: 'Installed', style: base + 'background: rgb(74 222 128 / .14); color: #4ade80;' };
+    if (kind === 'update') return { text: 'Update', style: base + 'background: rgb(251 191 36 / .16); color: #fbbf24;' };
+    if (kind === 'unknown') return { text: 'No manifest', style: base + 'background: transparent; color: #475569; border: 1px dashed #334155;' };
+    return { text: 'Install', style: base + 'background: #4f46e5; color: #fff;' };
+  }
+
+  pick(id) {
+    this.setState({ period: id });
+  }
+
+  renderVals() {
+    const self = this;
+    const dark = this.props.dark !== false;
+    const c = dark
+      ? { app: '#0b0e14', page: '#0d1017', panel: '#11141c', raise: '#151923', menu: '#1a1f2b',
+          hover: '#232b3b', line: '#1e293b', line2: '#334155', ink: '#e2e8f0', body: '#cbd5e1',
+          dim: '#94a3b8', muted: '#64748b', faint: '#475569', accent: '#818cf8', ok: '#4ade80',
+          warn: '#fbbf24', err: '#f87171' }
+      : { app: '#e9ebf0', page: '#f6f7f9', panel: '#fdfdfe', raise: '#f0f2f6', menu: '#ffffff',
+          hover: '#e7eaf1', line: '#d9dee7', line2: '#c3cbd8', ink: '#16181d', body: '#333a45',
+          dim: '#5a6472', muted: '#7d8794', faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d',
+          warn: '#b45309', err: '#dc2626' };
+
+    const cur = this.state.period;
+    const set = this.sets()[cur] || this.sets().week;
+    const kinds = this.kinds();
+
+    const periods = [
+      { id: 'week', label: 'Week' },
+      { id: 'month', label: 'Month' },
+      { id: 'year', label: 'Year' }
+    ].map(function (p) {
+      const on = p.id === cur;
+      return {
+        label: p.label,
+        style: on
+          ? 'background: ' + c.hover + '; color: ' + c.ink + '; font-weight: 600;'
+          : 'color: ' + c.dim + ';',
+        pick: function () { self.pick(p.id); }
+      };
+    });
+
+    const rows = set.rows.map(function (r, i) {
+      const k = kinds[r[5]] || kinds.lib;
+      const mv = self.move(r[1]);
+      const sp = self.spark(r[11]);
+      const st = self.stateOf(r[12]);
+      const tools = (r[9] || []).map(function (t) {
+        return { text: t, style: 'background: ' + c.hover + '; color: ' + c.dim + ';' };
+      });
+      if (!tools.length) {
+        tools.push({
+          text: 'nothing DevDeck can read',
+          style: 'background: transparent; color: ' + c.faint + '; border: 1px dashed ' + c.line2 + ';'
+        });
+      }
+      return {
+        rank: r[0],
+        moveIcon: mv.icon,
+        moveColor: mv.color,
+        moveText: r[2],
+        kindIcon: k.icon,
+        kindColor: k.color,
+        kindBg: k.bg,
+        kindLabel: k.label,
+        name: r[3],
+        owner: r[4],
+        licence: r[6],
+        licStyle: r[7]
+          ? 'background: rgb(251 191 36 / .16); color: ' + c.warn + ';'
+          : 'background: ' + c.hover + '; color: ' + c.dim + ';',
+        desc: r[8],
+        tools: tools,
+        delta: r[10],
+        sparkLine: sp.line,
+        sparkFill: sp.fill,
+        stateText: st.text,
+        stateStyle: st.style,
+        rowStyle: i === 0 ? 'border-top: none;' : ''
+      };
+    });
+
+    const own = set.noteKind === 'own';
+    const v = {
+      deltaHead: set.deltaHead,
+      sparkHead: set.sparkHead,
+      noteTitle: set.noteTitle,
+      noteBody: set.noteBody,
+      noteIcon: own ? c.warn : c.dim,
+      noteBorder: own ? 'rgb(251 191 36 / .35)' : c.line,
+      noteBg: own ? 'rgb(251 191 36 / .05)' : c.panel,
+      metaTop: set.metaTop,
+      metaBottom: set.metaBottom
+    };
+
+    return { c: c, v: v, periods: periods, rows: rows };
+  }
+}
+</script>
+</body>
+</html>

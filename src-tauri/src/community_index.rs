@@ -121,6 +121,29 @@ pub fn parse_registry(body: &Value) -> Vec<Item> {
             if name.is_empty() {
                 return None;
             }
+            // The registry returns every version ever published, so one server
+            // arrives as five rows. Only the latest is a thing to install, and
+            // only an active one is a thing to install at all — a deleted or
+            // deprecated entry is still served, just not as current.
+            let meta = entry.pointer("/_meta/io.modelcontextprotocol.registry~1official");
+            let latest = meta
+                .and_then(|m| m.get("isLatest"))
+                .and_then(Value::as_bool)
+                // Absent means the registry did not say. Treating that as
+                // "latest" keeps a server that predates the field rather than
+                // silently dropping every one of them.
+                .unwrap_or(true);
+            if !latest {
+                return None;
+            }
+            let active = meta
+                .and_then(|m| m.get("status"))
+                .and_then(Value::as_str)
+                .map(|st| st.eq_ignore_ascii_case("active"))
+                .unwrap_or(true);
+            if !active {
+                return None;
+            }
             let pkgs = s.get("packages").and_then(Value::as_array)?;
             // The first package we know how to run wins.
             let (command, _) = pkgs.iter().find_map(|p| {
@@ -275,6 +298,25 @@ pub fn github_query() -> String {
 // Fetching
 // ---------------------------------------------------------------------------
 
+/// Run a blocking HTTP call on a plain OS thread.
+///
+/// `reqwest::blocking` builds its own tokio runtime and drops it when the call
+/// finishes. Dropping a runtime inside another runtime's async context is a
+/// panic — "Cannot drop a runtime in a context where blocking is not allowed"
+/// — and a Tauri command body is exactly that context. It aborted the whole
+/// process at startup and poisoned the database mutex on the way down.
+///
+/// A thread hop is the whole fix: the runtime is created and dropped on a
+/// thread that belongs to nobody else.
+fn off_runtime<T: Send + 'static>(
+    what: &'static str,
+    f: impl FnOnce() -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    std::thread::spawn(f)
+        .join()
+        .map_err(|_| format!("the {what} fetch panicked"))?
+}
+
 fn http() -> Result<reqwest::blocking::Client, String> {
     reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(20))
@@ -311,6 +353,10 @@ fn now_ms() -> i64 {
 
 /// Ask the official registry what servers exist.
 pub fn fetch_registry() -> Result<Vec<Item>, String> {
+    off_runtime("registry", fetch_registry_blocking)
+}
+
+fn fetch_registry_blocking() -> Result<Vec<Item>, String> {
     let res = http()?
         .get(REGISTRY_URL)
         .header("Accept", "application/json")
@@ -332,6 +378,10 @@ pub fn fetch_registry() -> Result<Vec<Item>, String> {
 /// The 403 GitHub answers when that runs out says so in as many words, so it
 /// is passed through rather than reworded into something vaguer.
 pub fn fetch_github() -> Result<Vec<Item>, String> {
+    off_runtime("GitHub", fetch_github_blocking)
+}
+
+fn fetch_github_blocking() -> Result<Vec<Item>, String> {
     let url = format!(
         "https://api.github.com/search/repositories?q={}&sort=stars&order=desc&per_page=30",
         percent(&github_query())
@@ -557,6 +607,11 @@ fn between<'a>(hay: &'a str, start: &str, end: &str) -> Option<&'a str> {
 
 /// Fetch and read one trending page.
 pub fn fetch_trending(period: &str) -> Result<Vec<Item>, String> {
+    let period = period.to_string();
+    off_runtime("trending", move || fetch_trending_blocking(&period))
+}
+
+fn fetch_trending_blocking(period: &str) -> Result<Vec<Item>, String> {
     let res = http()?
         .get(format!("https://github.com/trending?since={period}"))
         .header("Accept", "text/html")
@@ -874,6 +929,37 @@ mod tests {
         assert_eq!(
             i.licence, "missing",
             "the registry publishes no licence, and no licence means no permission"
+        );
+    }
+
+    #[test]
+    fn only_the_latest_active_version_of_a_server_is_listed() {
+        // The registry serves every version ever published. Without this,
+        // "Aether Wealth" arrived as five identical rows differing only in a
+        // version number, which is a list nobody can read.
+        let body: Value = serde_json::from_str(
+            r#"{"servers":[
+              {"server":{"name":"a/b","version":"1.0.0",
+                "packages":[{"registryType":"npm","identifier":"b","transport":{"type":"stdio"}}]},
+               "_meta":{"io.modelcontextprotocol.registry/official":{"isLatest":false,"status":"active"}}},
+              {"server":{"name":"a/b","version":"2.0.0",
+                "packages":[{"registryType":"npm","identifier":"b","transport":{"type":"stdio"}}]},
+               "_meta":{"io.modelcontextprotocol.registry/official":{"isLatest":true,"status":"active"}}},
+              {"server":{"name":"c/d","version":"1.0.0",
+                "packages":[{"registryType":"npm","identifier":"d","transport":{"type":"stdio"}}]},
+               "_meta":{"io.modelcontextprotocol.registry/official":{"isLatest":true,"status":"deleted"}}},
+              {"server":{"name":"e/f","version":"1.0.0",
+                "packages":[{"registryType":"npm","identifier":"f","transport":{"type":"stdio"}}]}}
+            ]}"#,
+        )
+        .unwrap();
+        let items = parse_registry(&body);
+        let names: Vec<_> = items.iter().map(|i| i.version.as_str()).collect();
+        assert_eq!(items.len(), 2, "one row per server: {names:?}");
+        assert_eq!(items[0].version, "2.0.0", "the latest, not the first seen");
+        assert_eq!(
+            items[1].author, "e",
+            "a server whose metadata says nothing is kept, not silently dropped"
         );
     }
 

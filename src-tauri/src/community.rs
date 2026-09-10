@@ -695,9 +695,9 @@ pub fn community_index(db: tauri::State<Db>) -> Vec<crate::community_index::Feed
 /// Go and look. Deliberately a button rather than something that happens on
 /// its own: this is the only outbound call the module makes, and it should be
 /// somebody's decision rather than a surprise in a network log.
-#[tauri::command(async)]
-pub async fn community_refresh_index(
-    db: tauri::State<'_, Db>,
+#[tauri::command]
+pub fn community_refresh_index(
+    db: tauri::State<Db>,
     source: Option<String>,
 ) -> Result<Vec<crate::community_index::Feed>, String> {
     let wanted: Vec<String> = match source {

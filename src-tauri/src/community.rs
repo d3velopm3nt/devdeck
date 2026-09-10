@@ -675,6 +675,41 @@ fn set_skill(ws: &Arc<Workspace>, agent_id: &str, skill: &str, on: bool) -> Resu
     ws.save_agent(&doc)
 }
 
+/// The index, from every source, cache-first.
+///
+/// Never fetches. Opening the page must not spend a rate limit, and a list
+/// that refetched on every visit would be unusable at ten searches a minute.
+#[tauri::command]
+pub fn community_index(db: tauri::State<Db>) -> Vec<crate::community_index::Feed> {
+    let conn = db.0.lock().unwrap();
+    crate::community_index::SOURCES
+    .iter()
+    .map(|s| crate::community_index::cached(&conn, s))
+    .collect()
+}
+
+/// Go and look. Deliberately a button rather than something that happens on
+/// its own: this is the only outbound call the module makes, and it should be
+/// somebody's decision rather than a surprise in a network log.
+#[tauri::command(async)]
+pub async fn community_refresh_index(
+    db: tauri::State<'_, Db>,
+    source: Option<String>,
+) -> Result<Vec<crate::community_index::Feed>, String> {
+    let wanted: Vec<String> = match source {
+        Some(s) => vec![s],
+        None => crate::community_index::SOURCES
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+    };
+    let conn = db.0.lock().unwrap();
+    Ok(wanted
+        .iter()
+        .map(|s| crate::community_index::refresh(&conn, s))
+        .collect())
+}
+
 /// MCP servers running right now.
 ///
 /// An MCP server is a process, and a process nobody can see is a process

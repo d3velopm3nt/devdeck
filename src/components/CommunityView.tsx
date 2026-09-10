@@ -21,7 +21,7 @@ import { Icon, type IconName } from '../lib/icons'
 import { useAiw } from '../lib/aiwStore'
 import { CAPTURE_COMMUNITY } from '../lib/devCapture'
 
-type Tab = 'browse' | 'installed'
+type Tab = 'browse' | 'discover' | 'installed'
 
 /// Screenshot harness guard; see the effect in CommunityView.
 let ran = false
@@ -60,6 +60,8 @@ export function CommunityView() {
   /// The server a trust modal is asking about, or null.
   const [trust, setTrust] = useState<ipc.CommunityListing | null>(null)
   const [servers, setServers] = useState<ipc.McpServerStatus[]>([])
+  const [feeds, setFeeds] = useState<ipc.CommunityFeed[]>([])
+  const [looking, setLooking] = useState(false)
   const agents = useAiw((s) => s.agents)
   const reloadAgents = useAiw((s) => s.reloadAgents)
 
@@ -69,6 +71,7 @@ export function CommunityView() {
       // Best effort and separate: a failure to list processes must not blank
       // the catalogue, which is the thing the page is for.
       setServers(await ipc.communityServers().catch(() => []))
+      setFeeds(await ipc.communityIndex().catch(() => []))
       setErr(null)
     } catch (e) {
       // Never an empty catalogue on failure: "nothing to install" and "we
@@ -95,6 +98,7 @@ export function CommunityView() {
         const [verb, id, who] = line.split(':')
         try {
           if (verb === 'tab') setTab(id as Tab)
+          else if (verb === 'refresh') setFeeds(await ipc.communityRefreshIndex())
           else if (verb === 'install') await ipc.communityInstall(id)
           else if (verb === 'grant') await ipc.communityGrant(id, who, true)
           else if (verb === 'revoke') await ipc.communityGrant(id, who, false)
@@ -136,7 +140,7 @@ export function CommunityView() {
           </p>
         </div>
         <div className="mt-2.5 flex items-center gap-1">
-          {(['browse', 'installed'] as Tab[]).map((t) => (
+          {(['browse', 'discover', 'installed'] as Tab[]).map((t) => (
             <button
               key={t}
               className={`rounded-md px-2.5 py-1 text-[12px] capitalize ${
@@ -182,6 +186,24 @@ export function CommunityView() {
           <div className="flex items-center gap-1.5 text-[12px] text-muted">
             <Icon name="update" size={12} spin /> Reading the index…
           </div>
+        )}
+
+        {tab === 'discover' && (
+          <Discover
+            feeds={feeds}
+            looking={looking}
+            onRefresh={async () => {
+              setLooking(true)
+              setErr(null)
+              try {
+                setFeeds(await ipc.communityRefreshIndex())
+              } catch (e) {
+                setErr(e instanceof Error ? e.message : String(e))
+              } finally {
+                setLooking(false)
+              }
+            }}
+          />
         )}
 
         {rows !== null && tab === 'browse' && (
@@ -260,6 +282,120 @@ export function CommunityView() {
           }}
         />
       )}
+    </div>
+  )
+}
+
+/// The two indexes, kept apart on purpose.
+///
+/// One is the official MCP registry — what a server *is* and how to run it,
+/// with no popularity signal at all. The other is GitHub search — stars, and
+/// no idea how to run anything. Merging them would produce a list whose order
+/// could not be described in a sentence, which is the exact failure the
+/// Trending design warns about.
+function Discover({
+  feeds,
+  looking,
+  onRefresh,
+}: {
+  feeds: ipc.CommunityFeed[]
+  looking: boolean
+  onRefresh: () => void
+}) {
+  const title: Record<string, string> = {
+    registry: 'MCP registry',
+    github: 'Most starred on GitHub',
+    'trending-week': 'Trending this week',
+    'trending-month': 'Trending this month',
+  }
+  const never = feeds.every((f) => f.fetched_at === 0)
+  return (
+    <div>
+      <div className="mb-3 flex items-center gap-2">
+        <p className="text-[11.5px] text-muted">
+          Two sources, kept apart because they answer different questions. Nothing is fetched
+          until you ask — this is the only outbound call the module makes.
+        </p>
+        <span className="flex-1" />
+        <button className="btn-primary shrink-0 text-[12px]" disabled={looking} onClick={onRefresh}>
+          <Icon name="update" size={12} spin={looking} />
+          {looking ? 'Looking…' : never ? 'Fetch the index' : 'Refresh'}
+        </button>
+      </div>
+
+      {feeds.map((f) => (
+        <section key={f.source} className="mb-4">
+          <div className="mb-1.5 flex flex-wrap items-baseline gap-2">
+            <h2 className="text-[12.5px] font-semibold text-ink">
+              {title[f.source] ?? f.source}
+            </h2>
+            <span className="text-[10.5px] tabular-nums text-faint">{f.items.length} listed</span>
+            {/* When the read last *succeeded* — the point of showing it is to
+                say how stale what you are looking at might be. */}
+            <span className="text-[10.5px] text-faint">
+              {f.fetched_at === 0 ? 'never fetched' : `read ${new Date(f.fetched_at).toLocaleString()}`}
+            </span>
+          </div>
+          <p className={`mb-2 text-[11px] leading-[1.5] ${f.ok ? 'text-muted' : 'text-err'}`}>
+            {/* A failure says so here, and the list below is the last good
+                answer rather than a claim that nothing exists. */}
+            {f.ok ? f.note : `Could not look: ${f.note}`}
+          </p>
+
+          {f.items.length === 0 ? (
+            <p className="text-[11.5px] text-muted">
+              {f.fetched_at === 0
+                ? 'Nothing read yet.'
+                : 'This source returned nothing the last time it was read.'}
+            </p>
+          ) : (
+            <div className="overflow-hidden rounded-lg border border-line bg-panel">
+              {f.items.slice(0, 20).map((i) => (
+                <div
+                  key={i.id}
+                  className="flex items-start gap-2.5 border-b border-line px-3 py-2 last:border-0"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline gap-2">
+                      <span className="truncate text-[12px] font-medium text-ink">{i.name}</span>
+                      {i.version && (
+                        <span className="shrink-0 text-[10.5px] tabular-nums text-faint">
+                          {i.version}
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-0.5 line-clamp-2 text-[11px] leading-[1.45] text-body">
+                      {i.summary}
+                    </p>
+                    <div className="mt-0.5 flex items-center gap-2 text-[10px] text-faint">
+                      <span>{i.author}</span>
+                      <span>·</span>
+                      <span
+                        className={
+                          i.licence === 'permissive'
+                            ? 'text-ok'
+                            : i.licence === 'missing' || i.licence === 'restricted'
+                              ? 'text-err'
+                              : 'text-warn'
+                        }
+                      >
+                        {i.licence}
+                      </span>
+                    </div>
+                  </div>
+                  {/* No Install here. A registry entry is installable in a
+                      later slice; a GitHub repository is not installable at
+                      all, because nothing here knows how to run it — which is
+                      the manifest problem, said rather than guessed at. */}
+                  <span className="shrink-0 text-[10px] text-faint">
+                    {i.command ? 'runnable' : 'No manifest'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      ))}
     </div>
   )
 }

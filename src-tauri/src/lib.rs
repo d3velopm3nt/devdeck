@@ -18,6 +18,7 @@ mod botmind;
 mod bots;
 mod calendar;
 mod community;
+mod community_index;
 mod calls;
 mod conn;
 mod creds;
@@ -1041,6 +1042,8 @@ pub fn run() {
             community::community_grant,
             community::community_servers,
             community::community_stop_server,
+            community::community_index,
+            community::community_refresh_index,
             git::git_changes,
             git::git_commit,
             git::git_push,

@@ -579,6 +579,16 @@ fn whoami_with_scopes(token: &str) -> Result<(String, Vec<String>, bool), String
     Ok((login, scopes, scopes_known))
 }
 
+/// The stored token, for code that has to make an authenticated call.
+///
+/// Deliberately not a command: this is reachable from Rust and never from the
+/// frontend, which is only ever told *that* a token exists. The one caller is
+/// the Community index, where unauthenticated GitHub is ten searches a minute
+/// and will not carry an index of any size.
+pub fn stored_token() -> Option<String> {
+    creds::get(CRED_TARGET).filter(|t| !t.trim().is_empty())
+}
+
 /// Do we hold a token of our own? Never *what* it is.
 #[tauri::command]
 pub fn github_token_stored() -> bool {

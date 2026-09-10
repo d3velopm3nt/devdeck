@@ -955,6 +955,25 @@ export const communityInstall = (id: string) =>
 export const communityUninstall = (id: string) =>
   invoke<void>('community_uninstall', { id })
 /** The separate, deliberate act: who may use it, and how. */
+/** One index source's answer, and how much to trust it. */
+export interface CommunityFeed {
+  /** 'registry' | 'github' */
+  source: string
+  items: CommunityItem[]
+  /** False means `items` is the last good answer, or empty because there has
+   *  never been one. Never confuse it with "nothing is published". */
+  ok: boolean
+  /** Millis of the last *successful* read. 0 when there has never been one. */
+  fetched_at: number
+  /** How the list is ordered, or what went wrong. */
+  note: string
+}
+/** Cache only — opening the page never spends a rate limit. */
+export const communityIndex = () => invoke<CommunityFeed[]>('community_index')
+/** Go and look. A button, not something that happens on its own. */
+export const communityRefreshIndex = (source?: string) =>
+  invoke<CommunityFeed[]>('community_refresh_index', { source: source ?? null })
+
 /** An MCP server running right now. */
 export interface McpServerStatus {
   id: string

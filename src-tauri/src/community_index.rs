@@ -376,6 +376,11 @@ pub fn refresh(conn: &Connection, source: &str) -> Feed {
     match attempt {
         Ok(items) => {
             let at = now_ms();
+            // Stars arrive here and nowhere else, so this is where a year of
+            // history gets written — at no extra request.
+            if source == SOURCE_GITHUB {
+                let _ = snapshot(conn, &items, at);
+            }
             let note = match source {
                 SOURCE_REGISTRY => "Published to the official MCP registry, most recent first. \
                                     The registry carries no popularity signal."
@@ -574,6 +579,211 @@ pub fn fetch_trending(period: &str) -> Result<Vec<Item>, String> {
         );
     }
     Ok(items)
+}
+
+// ---------------------------------------------------------------------------
+// The year — DevDeck's own arithmetic, because GitHub has no such page
+// ---------------------------------------------------------------------------
+//
+// GitHub Trending offers today, this week and this month. There is no year,
+// and there is no endpoint for "stars gained in the last twelve months"
+// either. So this is the one list DevDeck computes itself, from snapshots it
+// takes of the star counts it has already fetched.
+//
+// Two consequences, and the page states both rather than letting a reader
+// assume otherwise:
+//
+//  * **It is empty at first, and thin for months.** History starts the day
+//    you install DevDeck. Twelve months of it takes twelve months. The
+//    alternative — walking the stargazers API for timestamps — is paginated,
+//    slow and capped, and would spend an hour of rate limit to answer one
+//    page.
+//  * **Its ranks are not comparable with week and month.** Those are GitHub's
+//    unpublished judgement over recent activity; this is a subtraction over
+//    whatever window we happen to have. A repository that is large and
+//    declining appears here and never there, which is the point of having it
+//    — and exactly why the two orders must not be read as one scale.
+
+pub const SOURCE_YEAR: &str = "year";
+
+pub const SNAPSHOT_SCHEMA: &str = "
+CREATE TABLE IF NOT EXISTS community_stars (
+    repo TEXT NOT NULL,
+    -- Unix millis of the reading.
+    at INTEGER NOT NULL,
+    stars INTEGER NOT NULL,
+    PRIMARY KEY (repo, at)
+);
+";
+
+/// How long a window the year list reports over.
+const YEAR_MS: i64 = 365 * 86_400_000;
+
+/// One repository's growth over whatever history we hold.
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+pub struct Growth {
+    pub repo: String,
+    pub gained: i64,
+    pub latest: i64,
+    /// Millis between the oldest and newest reading used. Reported because a
+    /// gain over eleven days and a gain over eleven months are not the same
+    /// number, and only one of them is what the heading claims.
+    pub span_ms: i64,
+}
+
+/// Record what we just learned about star counts.
+///
+/// Called with whatever the GitHub search returned, because that is the only
+/// place stars arrive from — this takes no extra requests, which is what makes
+/// a year of history affordable at all.
+pub fn snapshot(conn: &Connection, items: &[Item], at: i64) -> Result<usize, String> {
+    let mut n = 0;
+    for i in items {
+        let Some(stars) = stars_of(&i.version) else { continue };
+        let repo = i.source.trim_start_matches("https://github.com/").to_string();
+        if repo.is_empty() {
+            continue;
+        }
+        conn.execute(
+            "INSERT OR REPLACE INTO community_stars (repo, at, stars) VALUES (?1,?2,?3)",
+            params![repo, at, stars],
+        )
+        .map_err(err)?;
+        n += 1;
+    }
+    Ok(n)
+}
+
+/// Read a star count back out of the display string the search put it in.
+///
+/// A little grubby, and the alternative was a field on `Item` that only one of
+/// four sources could ever fill. Returns nothing for anything that is not a
+/// star count, so a trending row's "JavaScript · +1,204 stars" is not mistaken
+/// for a total.
+pub fn stars_of(version: &str) -> Option<i64> {
+    let v = version.trim();
+    let digits = v.strip_suffix('★')?;
+    digits.replace(',', "").parse::<i64>().ok()
+}
+
+/// Growth per repository, newest reading minus oldest, within the window.
+///
+/// Only repositories with two readings appear: one reading is a number, not a
+/// change, and showing it as a gain of zero would put every newly-seen
+/// repository at the bottom of a list it has not earned a place in.
+pub fn growth(conn: &Connection, now: i64) -> Result<Vec<Growth>, String> {
+    let since = now - YEAR_MS;
+    let mut stmt = conn
+        .prepare(
+            "SELECT repo, MIN(at), MAX(at), COUNT(*) FROM community_stars \
+             WHERE at >= ?1 GROUP BY repo HAVING COUNT(*) > 1",
+        )
+        .map_err(err)?;
+    let rows = stmt
+        .query_map(params![since], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, i64>(1)?,
+                r.get::<_, i64>(2)?,
+            ))
+        })
+        .map_err(err)?;
+
+    let mut out = Vec::new();
+    for row in rows {
+        let (repo, first_at, last_at) = row.map_err(err)?;
+        let first: i64 = conn
+            .query_row(
+                "SELECT stars FROM community_stars WHERE repo = ?1 AND at = ?2",
+                params![repo, first_at],
+                |r| r.get(0),
+            )
+            .map_err(err)?;
+        let last: i64 = conn
+            .query_row(
+                "SELECT stars FROM community_stars WHERE repo = ?1 AND at = ?2",
+                params![repo, last_at],
+                |r| r.get(0),
+            )
+            .map_err(err)?;
+        out.push(Growth {
+            repo,
+            gained: last - first,
+            latest: last,
+            span_ms: last_at - first_at,
+        });
+    }
+    out.sort_by(|a, b| b.gained.cmp(&a.gained));
+    Ok(out)
+}
+
+/// The year list, from the history we hold and the names we already know.
+pub fn year_feed(conn: &Connection, now: i64) -> Feed {
+    let rows = match growth(conn, now) {
+        Ok(r) => r,
+        Err(e) => {
+            return Feed {
+                source: SOURCE_YEAR.into(),
+                ok: false,
+                note: e,
+                ..Default::default()
+            }
+        }
+    };
+    // Names and descriptions come from the GitHub feed we already cached, so
+    // this costs no requests at all.
+    let known = cached(conn, SOURCE_GITHUB);
+    let widest = rows.iter().map(|g| g.span_ms).max().unwrap_or(0);
+    let days = widest / 86_400_000;
+
+    let items = rows
+        .iter()
+        .filter(|g| g.gained != 0)
+        .filter_map(|g| {
+            let base = known
+                .items
+                .iter()
+                .find(|i| i.source.ends_with(&g.repo))
+                .cloned()
+                .unwrap_or_else(|| Item {
+                    name: g.repo.rsplit('/').next().unwrap_or(&g.repo).to_string(),
+                    summary: "No description — seen only in a star reading.".into(),
+                    author: g.repo.split('/').next().unwrap_or_default().to_string(),
+                    source: format!("https://github.com/{}", g.repo),
+                    licence: "missing".into(),
+                    ..Default::default()
+                });
+            Some(Item {
+                id: format!("year.{}", g.repo),
+                kind: KIND_TOOL.into(),
+                version: format!("{:+} stars · now {}", g.gained, g.latest),
+                // Never installable: this is an observation about a
+                // repository, not a thing anybody published to be run.
+                command: String::new(),
+                tool_id: String::new(),
+                ..base
+            })
+        })
+        .collect::<Vec<_>>();
+
+    Feed {
+        source: SOURCE_YEAR.into(),
+        ok: true,
+        fetched_at: if items.is_empty() { 0 } else { now },
+        note: if items.is_empty() {
+            "Nothing yet. This list is DevDeck's own arithmetic over star readings it has \
+             taken, and history starts the day you install it — refresh the GitHub list a \
+             few times, on different days, and repositories appear here."
+                .into()
+        } else {
+            format!(
+                "DevDeck's own arithmetic: stars gained over the readings we hold, widest \
+                 span {days} day(s). Not comparable with the trending lists — those are \
+                 GitHub's judgement over recent activity, this is a subtraction."
+            )
+        },
+        items,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -856,6 +1066,108 @@ mod tests {
         // rather than a period that quietly means something else.
         assert_eq!(trending_period("trending-year"), None);
         assert_eq!(trending_period(SOURCE_GITHUB), None);
+    }
+
+
+    fn star_db() -> Connection {
+        let c = Connection::open_in_memory().unwrap();
+        c.execute_batch(SCHEMA).unwrap();
+        c.execute_batch(SNAPSHOT_SCHEMA).unwrap();
+        c
+    }
+
+    fn repo(full: &str, stars: i64) -> Item {
+        Item {
+            id: format!("repo.{full}"),
+            name: full.rsplit('/').next().unwrap().into(),
+            source: format!("https://github.com/{full}"),
+            version: format!("{stars}★"),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_star_count_is_read_back_only_from_a_star_count() {
+        assert_eq!(stars_of("41234★"), Some(41234));
+        assert_eq!(stars_of("1,204★"), Some(1204));
+        // A trending row's gain is not a total, and reading it as one would
+        // put a made-up number into a year of history.
+        assert_eq!(stars_of("JavaScript · +1,204 stars"), None);
+        assert_eq!(stars_of("1.0.0"), None);
+        assert_eq!(stars_of(""), None);
+    }
+
+    #[test]
+    fn one_reading_is_a_number_not_a_change() {
+        // Every repository is new once. Showing it as a gain of zero would
+        // fill the list with rows that have not earned a place in it.
+        let c = star_db();
+        snapshot(&c, &[repo("a/b", 100)], 1_000).unwrap();
+        assert!(growth(&c, 2_000).unwrap().is_empty());
+    }
+
+    #[test]
+    fn growth_is_newest_minus_oldest_and_says_over_how_long() {
+        let c = star_db();
+        let day = 86_400_000i64;
+        snapshot(&c, &[repo("a/b", 100), repo("c/d", 900)], 10 * day).unwrap();
+        snapshot(&c, &[repo("a/b", 150), repo("c/d", 800)], 40 * day).unwrap();
+
+        let g = growth(&c, 50 * day).unwrap();
+        assert_eq!(g.len(), 2);
+        // Sorted by gain, so the one that grew is first and the one that
+        // shrank is last — a decline is a real answer, not a filter.
+        assert_eq!(g[0].repo, "a/b");
+        assert_eq!(g[0].gained, 50);
+        assert_eq!(g[0].latest, 150);
+        assert_eq!(g[0].span_ms, 30 * day, "and over how long it was measured");
+        assert_eq!(g[1].repo, "c/d");
+        assert_eq!(g[1].gained, -100, "a repository can lose stars");
+    }
+
+    #[test]
+    fn readings_older_than_the_window_are_left_out() {
+        let c = star_db();
+        let day = 86_400_000i64;
+        snapshot(&c, &[repo("a/b", 10)], 0).unwrap();
+        snapshot(&c, &[repo("a/b", 20)], 100 * day).unwrap();
+        // Now is two years after the first reading, so only the second is in
+        // the window — and one reading is not a change.
+        assert!(growth(&c, 800 * day).unwrap().is_empty());
+    }
+
+    #[test]
+    fn the_year_says_it_is_empty_and_why_rather_than_pretending() {
+        // The honest first-run state, and the one most likely to be papered
+        // over: an empty list that looks like a failure when it is really
+        // "history starts today".
+        let c = star_db();
+        let f = year_feed(&c, 1_000_000);
+        assert!(f.ok, "empty is not an error");
+        assert!(f.items.is_empty());
+        assert_eq!(f.fetched_at, 0, "nothing was measured, so no time is claimed");
+        assert!(f.note.contains("history starts the day you install"), "{}", f.note);
+    }
+
+    #[test]
+    fn the_year_says_its_ranks_are_not_comparable_with_trending() {
+        // The spec is explicit about this, and it is the whole reason the year
+        // is allowed to exist beside two lists it does not share a scale with.
+        let c = star_db();
+        let day = 86_400_000i64;
+        snapshot(&c, &[repo("a/b", 100)], 1 * day).unwrap();
+        snapshot(&c, &[repo("a/b", 260)], 31 * day).unwrap();
+
+        let f = year_feed(&c, 40 * day);
+        assert!(f.ok);
+        assert_eq!(f.items.len(), 1);
+        assert!(f.items[0].version.contains("+160"), "{}", f.items[0].version);
+        assert!(f.note.contains("Not comparable"), "{}", f.note);
+        assert!(f.note.contains("30 day"), "and over what span: {}", f.note);
+        assert!(
+            f.items[0].command.is_empty(),
+            "an observation about a repository is not something to install"
+        );
     }
 
 }

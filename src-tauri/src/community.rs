@@ -682,10 +682,14 @@ fn set_skill(ws: &Arc<Workspace>, agent_id: &str, skill: &str, on: bool) -> Resu
 #[tauri::command]
 pub fn community_index(db: tauri::State<Db>) -> Vec<crate::community_index::Feed> {
     let conn = db.0.lock().unwrap();
-    crate::community_index::SOURCES
-    .iter()
-    .map(|s| crate::community_index::cached(&conn, s))
-    .collect()
+    let mut feeds: Vec<_> = crate::community_index::SOURCES
+        .iter()
+        .map(|s| crate::community_index::cached(&conn, s))
+        .collect();
+    // The year is computed, not fetched, so it is never cached and never
+    // stale — it is whatever the readings say right now.
+    feeds.push(crate::community_index::year_feed(&conn, now_ms()));
+    feeds
 }
 
 /// Go and look. Deliberately a button rather than something that happens on
@@ -704,10 +708,12 @@ pub async fn community_refresh_index(
             .collect(),
     };
     let conn = db.0.lock().unwrap();
-    Ok(wanted
+    let mut feeds: Vec<_> = wanted
         .iter()
         .map(|s| crate::community_index::refresh(&conn, s))
-        .collect())
+        .collect();
+    feeds.push(crate::community_index::year_feed(&conn, now_ms()));
+    Ok(feeds)
 }
 
 /// MCP servers running right now.

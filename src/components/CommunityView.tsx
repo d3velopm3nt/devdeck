@@ -307,6 +307,7 @@ function Discover({
     github: 'Most starred on GitHub',
     'trending-week': 'Trending this week',
     'trending-month': 'Trending this month',
+    year: 'Over the year (ours)',
   }
   const never = feeds.every((f) => f.fetched_at === 0)
   return (

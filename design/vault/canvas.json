@@ -1,0 +1,78 @@
+{
+  "pages": [
+    { "id": "page-1", "name": "Pages" },
+    { "id": "page-2", "name": "Decisions" }
+  ],
+  "artboards": [
+    { "file": "Main.dc.html", "title": "1 · Vault › Items", "page": "page-1", "x": 0, "y": 0, "w": 1456, "h": 909 },
+    { "file": "Bitwarden.dc.html", "title": "2 · Bitwarden — what is and is not mirrored", "page": "page-1", "x": 1576, "y": 0, "w": 1456, "h": 909 },
+    { "file": "Access.dc.html", "title": "3 · Agent access — the spine", "page": "page-1", "x": 3152, "y": 0, "w": 1456, "h": 909 },
+    { "file": "Item.dc.html", "title": "4 · One item, in full", "page": "page-1", "x": 0, "y": 1060, "w": 1456, "h": 909 },
+    { "file": "InUse.dc.html", "title": "5 · An agent using one — the payoff", "page": "page-1", "x": 1576, "y": 1060, "w": 1456, "h": 909 },
+    { "file": "Audit.dc.html", "title": "6 · Audit — including the night you slept through", "page": "page-1", "x": 3152, "y": 1060, "w": 1456, "h": 909 },
+
+    { "file": "ModalConnect.dc.html", "title": "A · Connect — signing in grants nothing", "page": "page-2", "x": 0, "y": 0, "w": 760, "h": 840 },
+    { "file": "ModalApprove.dc.html", "title": "B · An agent asks, and the clock denies", "page": "page-2", "x": 880, "y": 0, "w": 760, "h": 830 },
+    { "file": "ModalGrant.dc.html", "title": "C · A grant is a sentence with limits in it", "page": "page-2", "x": 1760, "y": 0, "w": 760, "h": 840 },
+    { "file": "ModalReveal.dc.html", "title": "D · Reveal — the one thing no agent can do", "page": "page-2", "x": 2640, "y": 0, "w": 760, "h": 670 }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "page": "page-1",
+      "x": -560,
+      "y": 0,
+      "w": 460,
+      "text": "VAULT — your Bitwarden account, usable by DevDeck and by your agents, without anyone handing a secret to a model.\n\nA new rail entry directly under Stash, and the pairing is deliberate: Stash catches secrets by accident, Vault holds them on purpose.\n\nBuilt on what DevDeck already is — tokens from src/index.css, the 160px rail with its 2.5px indigo bar, the 260px sidebar, 12px card radius, the 10.5/11.5/12.5 type ramp. Dark by default; every artboard has a light switch above it.\n\nStatic mockups, one direction, matching the Community and AI Workspace canvases."
+    },
+    {
+      "id": "the-idea",
+      "page": "page-1",
+      "x": -560,
+      "y": 440,
+      "w": 460,
+      "text": "THE ONE IDEA: THE REFERENCE TRAVELS, THE VALUE DOES NOT.\n\nEverything — a service definition, a command, a thread, a tool call, anything you commit — names vault://github/devdeck-release. The value is fetched from Bitwarden at the moment a process starts and put into its environment.\n\nSo a model never holds a secret, which means no prompt injection can talk one out of it. The most an agent is ever told is \"93 chars, ends 4f2a\" — enough to tell two tokens apart in a thread, useless to anyone reading over your shoulder.\n\nThis is not a new invention: conn.rs already does exactly this for psql, and has a test asserting a password never reaches a command line."
+    },
+    {
+      "id": "levels",
+      "page": "page-1",
+      "x": -560,
+      "y": 940,
+      "w": 460,
+      "text": "THREE LEVELS, AND A MISSING FOURTH (artboard 3)\n\nUse — may inject, never sees.\nAsk — blocks the agent's turn and prompts you; denies if nobody answers.\nNone — refused, and no prompt is raised, so a persistent agent cannot wear you down.\n\nThere is deliberately no Reveal level. Nothing an agent can call returns plaintext. Reveal and Copy are yours, behind Windows Hello, and are not in the tool registry at all.\n\nThe four permissions in the existing runtime are Full / Read / Approval / None. Read has no meaning for a secret, so Vault maps onto three and says so rather than shipping a level that reads as safer than it is."
+    },
+    {
+      "id": "honesty",
+      "page": "page-1",
+      "x": -560,
+      "y": 1500,
+      "w": 460,
+      "text": "WHERE IT REFUSES TO FLATTER YOU\n\n· A failed sync is reported as failed, with the time of the last good read — never as \"up to date\". The update checker made exactly that mistake once.\n\n· 04:12 in the audit is a request that denied itself because you were asleep. That is the behaviour being paid for, not a bug to design away.\n\n· \"Vault controls the door; it does not follow anyone around the room.\" Once a process has a value, nothing here can police what it does with it — which is why Use is per item and per agent, and why grants name a command.\n\n· DevDeck cannot rotate a token for you. Giving it a GitHub token with the right to mint tokens would be a worse problem than the one it solved."
+    },
+    {
+      "id": "payoff",
+      "page": "page-1",
+      "x": 3152,
+      "y": 2020,
+      "w": 460,
+      "text": "ARTBOARD 5 IS THE WHOLE ARGUMENT\n\nA feature thread where ci runs the integration suite: two secrets injected without a prompt, one Ask that stops the agent dead until you answer, one refusal that never reached you because the item is None for ci — and one redaction, where a test printed the key into its own failure output and the line arrived with [vault://supabase/service-role] in place of the value.\n\nThe right-hand panel is what is in play right now. If it is ever empty for a real day of work, the module has not earned its rail slot."
+    },
+    {
+      "id": "open",
+      "page": "page-1",
+      "x": 1576,
+      "y": 2020,
+      "w": 460,
+      "text": "OPEN QUESTIONS FOR YOU\n\n1 · Is Vault its own rail entry, or a tab inside Connections? I gave it the rail because agents are the audience and Connections is about databases — but that is an argument, not a fact.\n\n2 · Should a Vault reference work inside .devdeck service definitions that DO get committed? I have assumed yes, and that this is the main reason to have references at all. It makes a committed file safe to read and useless to steal.\n\n3 · The env-var injection is honest but not airtight: any process that can read /proc-equivalent state on Windows, or a child that inherits the environment, sees the value. stdin would be tighter for the tools that support it. Worth a per-item choice?\n\n4 · Personal-collection exclusion is a toggle. Should it instead be impossible — DevDeck refusing to mirror anything outside collections you named, with no \"mirror everything\" option at all?"
+    },
+    {
+      "id": "modal-note",
+      "page": "page-2",
+      "x": -560,
+      "y": 0,
+      "w": 460,
+      "text": "FOUR DECISIONS THE MODULE CANNOT MAKE FOR YOU\n\nA · Connect. Signing in grants nothing: every item arrives at None for every agent. Same split Community uses between installing a tool and granting it. API key over master password, because revoking an API key does not mean changing the password you use everywhere else.\n\nB · The prompt. Who is asking, the exact command as it will run (not the agent's description of it), what the key can do, what happened before, and a clock that denies. Closing the window is a denial; so is walking away.\n\nC · The grant. Reads as one sentence: who, what, which command, how many times, until when. \"Any command at all\" is greyed out for a write — a standing permission to run anything is Use with extra steps, and the matrix already has an honest word for that.\n\nD · Reveal. Windows Hello every time, 20 seconds on screen, clipboard cleared at 45, a line in the audit. The only screen in the module that shows a secret, and the only one no agent can reach."
+    }
+  ],
+  "launch": { "view": "canvas", "page": "page-1" }
+}

@@ -1,0 +1,254 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: var(--accent); } a:hover { color: var(--ink); }
+    .head { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .chip { display: inline-flex; align-items: center; gap: 4px; font-size: 9px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; padding: 2px 6px; border-radius: 999px; }
+    .btn { font-size: 11px; color: var(--dim); border: 1px solid var(--line2); border-radius: 6px; padding: 3px 9px; background: transparent; }
+    .btn.on { color: #fff; background: #4f46e5; border-color: #4f46e5; }
+    .mono { font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; }
+    .rail { display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 8px; border-radius: 8px; font-size: 12px; color: var(--muted); position: relative; }
+    .rail-on { background: var(--raise); color: var(--ink); }
+    .rail-on::before { content: ""; position: absolute; left: -6px; top: 6px; bottom: 6px; width: 2.5px; border-radius: 2px; background: #6366f1; }
+    .filt { display: flex; align-items: center; gap: 7px; padding: 4px 8px; border-radius: 6px; font-size: 11.5px; color: var(--dim); }
+    .filt-on { background: var(--hover); color: var(--ink); }
+    .card { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 13px 14px; display: flex; flex-direction: column; gap: 10px; }
+    .kv { display: flex; align-items: baseline; gap: 10px; font-size: 11.5px; }
+    .kv > span:first-child { width: 104px; flex-shrink: 0; color: var(--muted); font-size: 10.5px; }
+    .ref { font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; font-size: 10.5px; color: var(--info); background: rgb(56 189 248 / 0.09); border: 1px solid rgb(56 189 248 / 0.22); border-radius: 5px; padding: 1px 5px; }
+    .use { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --page: {{c.page}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --menu: {{c.menu}}; --hover: {{c.hover}}; --line: {{c.line}}; --line2: {{c.line2}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; --info: {{c.info}}; width: 1456px; height: 909px; background: var(--app); color: var(--body); display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;">
+
+  <div style="height: 32px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--panel);">
+    <span style="font-size: 11.5px; color: var(--dim);">DevDeck</span>
+    <span style="font-size: 11.5px; color: var(--faint);">File</span>
+    <span style="font-size: 11.5px; color: var(--faint);">View</span>
+    <span style="font-size: 11.5px; color: var(--faint);">Build</span>
+    <span style="font-size: 11.5px; color: var(--faint);">Help</span>
+    <span style="margin-left: auto; font-size: 10.5px; color: var(--faint);">local only · no telemetry</span>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; min-height: 0;">
+
+    <div style="width: 160px; flex-shrink: 0; background: var(--app); border-right: 1px solid var(--line); padding: 8px 6px; display: flex; flex-direction: column; gap: 2px;">
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 11 12 4l8.5 7"></path><path d="M5.5 9.8V19h13V9.8"></path></svg><span>Home</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 13.5 6 5.5h12l2.5 8v5h-17z"></path><path d="M3.5 13.5H9l1 2h4l1-2h5.5"></path></svg><span>Inbox</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"></circle><path d="M3.5 19a5.5 5.5 0 0 1 11 0"></path><circle cx="17" cy="9" r="2.6"></circle><path d="M15.5 14.2a4.5 4.5 0 0 1 5 4.3"></path></svg><span>Team</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="12" rx="2"></rect><path d="M9 12h.01M15 12h.01M12 3v4"></path></svg><span>Bots</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"></path><path d="M3.5 7 12 11.6 20.5 7M12 11.6v9.9"></path></svg><span>Spaces</span></div>
+
+      <div style="height: 1px; background: var(--line); margin: 9px 6px;"></div>
+
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5.5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="18.5" r="2.5"></circle><path d="M8.3 10.8 15.7 6.7M8.3 13.2l7.4 4.1"></path></svg><span>Community</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="5" rx="1.5"></rect><path d="M5.5 9.5v9h13v-9"></path><path d="M10 13h4"></path></svg><span>Stash</span></div>
+      <div class="rail rail-on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10.5" rx="2.2"></rect><path d="M8 10V7.2a4 4 0 0 1 8 0V10"></path><path d="M12 14v2.6"></path></svg><span>Vault</span><span style="margin-left: auto; font-size: 10px; color: var(--ok);">24</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7.5" ry="3"></ellipse><path d="M4.5 6v12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V6"></path><path d="M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3"></path></svg><span>Connections</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="10" rx="2"></rect><path d="M7 19h10M21 9v10h-4"></path></svg><span>Machine</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12H3.5M18 6l-1.6 1.6M7.6 16.4 6 18M18 18l-1.6-1.6M7.6 7.6 6 6"></path></svg><span>Settings</span></div>
+
+      <div style="margin-top: auto; padding: 8px 8px 2px; font-size: 10px; line-height: 1.5; color: var(--faint);">Stash catches secrets by accident. Vault holds them on purpose.</div>
+    </div>
+
+    <div style="width: 260px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0;">
+      <div style="padding: 10px 12px; border-bottom: 1px solid var(--line);">
+        <div style="font-size: 12.5px; color: var(--ink); font-weight: 600;">Vault</div>
+        <div style="font-size: 10.5px; color: var(--muted); margin-top: 2px;">Secrets your services and agents use by name</div>
+      </div>
+
+      <div style="padding: 10px 12px 8px;">
+        <div style="display: flex; align-items: center; gap: 6px; border: 1px solid var(--line2); border-radius: 6px; background: var(--page); padding: 4px 8px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" style="color: var(--faint);"><circle cx="11" cy="11" r="6.5"></circle><path d="m20 20-4.2-4.2"></path></svg>
+          <span style="font-size: 11.5px; color: var(--faint);">Search 24 items</span>
+        </div>
+      </div>
+
+      <div style="padding: 2px 6px 0;">
+        <div class="head" style="padding: 6px 8px 4px;">Bitwarden · Development</div>
+        <div class="filt filt-on"><span style="width: 6px; height: 6px; border-radius: 999px; background: var(--ok);"></span><span style="flex: 1;">GitHub — release PAT</span></div>
+        <div class="filt"><span style="width: 6px; height: 6px; border-radius: 999px; background: var(--ok);"></span><span style="flex: 1;">Anthropic — API key</span></div>
+        <div class="filt"><span style="width: 6px; height: 6px; border-radius: 999px; background: var(--warn);"></span><span style="flex: 1;">Supabase — service role</span></div>
+        <div class="filt"><span style="width: 6px; height: 6px; border-radius: 999px; background: var(--ok);"></span><span style="flex: 1;">Supabase — anon key</span></div>
+        <div class="filt"><span style="width: 6px; height: 6px; border-radius: 999px; background: var(--warn);"></span><span style="flex: 1;">npm — publish token</span></div>
+        <div class="filt"><span style="width: 6px; height: 6px; border-radius: 999px; background: var(--faint);"></span><span style="flex: 1;">Stripe — test secret key</span></div>
+        <div class="filt"><span style="width: 6px; height: 6px; border-radius: 999px; background: var(--faint);"></span><span style="flex: 1;">Cloudflare — pages token</span></div>
+
+        <div class="head" style="padding: 12px 8px 4px;">DevDeck local</div>
+        <div class="filt"><span style="width: 6px; height: 6px; border-radius: 999px; background: var(--faint);"></span><span style="flex: 1;">devdeck-prod — postgres</span></div>
+        <div class="filt"><span style="width: 6px; height: 6px; border-radius: 999px; background: var(--err);"></span><span style="flex: 1;">Minisign — release signing key</span></div>
+      </div>
+
+      <div style="margin-top: auto; border-top: 1px solid var(--line); padding: 9px 12px; display: flex; align-items: center; gap: 8px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" style="color: var(--ok); flex-shrink: 0;"><rect x="4" y="10" width="16" height="10.5" rx="2.2"></rect><path d="M8 10V7.2a4 4 0 0 1 8 0V10"></path></svg>
+        <div style="min-width: 0; flex: 1;">
+          <div style="font-size: 10.5px; color: var(--dim);">Unlocked · relocks in 12:41</div>
+          <div style="font-size: 10px; color: var(--faint); margin-top: 1px;">Session key in Credential Manager</div>
+        </div>
+        <button class="btn" style="padding: 2px 7px;">Lock</button>
+      </div>
+    </div>
+
+    <div style="flex-grow: 1; min-width: 0; background: var(--page); padding: 16px 20px; display: flex; flex-direction: column; overflow: hidden;">
+
+      <div style="display: flex; align-items: flex-end; gap: 12px; flex-shrink: 0;">
+        <div>
+          <div style="display: flex; align-items: center; gap: 9px;">
+            <span style="font-size: 17px; font-weight: 600; color: var(--ink);">GitHub — DevDeck release PAT</span>
+            <span class="chip" style="background: rgb(23 93 220 / 0.16); color: var(--info);">Bitwarden</span>
+            <span class="chip" style="background: rgb(74 222 128 / 0.12); color: var(--ok);">2 agents may use it</span>
+          </div>
+          <div style="font-size: 11.5px; color: var(--muted); margin-top: 3px;">Development · fine-grained token · created 14 Jul 2026</div>
+        </div>
+        <div style="margin-left: auto; display: flex; gap: 6px;">
+          <button class="btn">Open in Bitwarden</button>
+          <button class="btn">Rotate</button>
+          <button class="btn on">Edit access</button>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 14px; margin-top: 16px; min-height: 0; flex: 1;">
+
+        <div style="width: 620px; flex-shrink: 0; display: flex; flex-direction: column; gap: 12px;">
+
+          <div class="card">
+            <div style="display: flex; align-items: baseline; gap: 8px;">
+              <span class="head">The value</span>
+              <span style="font-size: 10.5px; color: var(--faint); margin-left: auto;">lives in Bitwarden, not here</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; border: 1px solid var(--line2); border-radius: 8px; background: var(--page); padding: 9px 11px;">
+              <span class="mono" style="font-size: 13px; color: var(--dim); letter-spacing: .12em;">••••••••••••••••••••••••••••</span>
+              <span style="font-size: 10.5px; color: var(--faint);">93 characters · ends 4f2a</span>
+              <button class="btn" style="margin-left: auto;">Reveal</button>
+              <button class="btn">Copy</button>
+            </div>
+            <div style="display: flex; align-items: flex-start; gap: 8px; font-size: 10.5px; color: var(--muted); line-height: 1.55;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" style="color: var(--dim); flex-shrink: 0; margin-top: 1px;"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 8h.01"></path></svg>
+              <span>Reveal and Copy ask Windows Hello, put the value on screen for 20 seconds, clear the clipboard after 45, and write a line in the audit. Both are yours alone — no agent can call either, at any permission level.</span>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="head">How it is referred to</div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span class="ref" style="font-size: 12px; padding: 4px 9px;">vault://github/devdeck-release</span>
+              <button class="btn">Copy reference</button>
+            </div>
+            <div style="font-size: 10.5px; color: var(--muted); line-height: 1.55;">This is the only form of the secret that appears in a service definition, a command, a thread, a tool call, or anything you commit. It is safe in a screenshot.</div>
+            <div style="border-top: 1px solid var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+              <div class="kv"><span>Bitwarden id</span><span class="mono" style="font-size: 10.5px; color: var(--dim);">a3f0c7e2-91bd-4c1a-88e5-2d7fbb0419c6</span></div>
+              <div class="kv"><span>Username</span><span style="color: var(--body);">Develtech</span></div>
+              <div class="kv"><span>Scopes</span><span style="color: var(--body);">contents:write · packages:write</span></div>
+              <div class="kv"><span>Expires</span><span style="color: var(--warn);">14 Oct 2026 · in 38 days</span></div>
+              <div class="kv"><span>Last changed</span><span style="color: var(--body);">14 Jul 2026, in Bitwarden</span></div>
+            </div>
+          </div>
+
+          <div class="card" style="gap: 4px;">
+            <div style="display: flex; align-items: baseline; gap: 8px; padding-bottom: 5px;">
+              <span class="head">Where it is used</span>
+              <span style="font-size: 10.5px; color: var(--faint); margin-left: auto;">found by scanning your services, commands and bots</span>
+            </div>
+            <div class="use">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="color: var(--dim); flex-shrink: 0;"><rect x="3.5" y="6" width="17" height="12" rx="2"></rect><path d="M8 12h8"></path></svg>
+              <div style="flex: 1;"><div style="font-size: 11.5px; color: var(--ink);">api <span style="color: var(--faint);">· service in devdeck</span></div><div style="font-size: 10.5px; color: var(--muted);">as <span class="mono" style="font-size: 10px;">GH_TOKEN</span> in the environment</div></div>
+              <span class="chip" style="background: rgb(74 222 128 / 0.12); color: var(--ok);">Running</span>
+            </div>
+            <div class="use">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="color: var(--dim); flex-shrink: 0;"><path d="M6 8l4 4-4 4M13 16h5"></path><rect x="2.5" y="4" width="19" height="16" rx="2"></rect></svg>
+              <div style="flex: 1;"><div style="font-size: 11.5px; color: var(--ink);">Publish release <span style="color: var(--faint);">· command</span></div><div style="font-size: 10.5px; color: var(--muted);">as <span class="mono" style="font-size: 10px;">GH_TOKEN</span> · <span class="mono" style="font-size: 10px;">gh release upload</span></div></div>
+              <span class="chip" style="background: var(--hover); color: var(--muted);">Idle</span>
+            </div>
+            <div class="use">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="color: var(--dim); flex-shrink: 0;"><rect x="4" y="7" width="16" height="12" rx="2"></rect><path d="M9 12h.01M15 12h.01M12 3v4"></path></svg>
+              <div style="flex: 1;"><div style="font-size: 11.5px; color: var(--ink);">release <span style="color: var(--faint);">· bot</span></div><div style="font-size: 10.5px; color: var(--muted);">may inject it into a process it starts</div></div>
+              <span class="chip" style="background: rgb(74 222 128 / 0.12); color: var(--ok);">Use</span>
+            </div>
+            <div class="use" style="border-bottom: none;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="color: var(--dim); flex-shrink: 0;"><rect x="4" y="7" width="16" height="12" rx="2"></rect><path d="M9 12h.01M15 12h.01M12 3v4"></path></svg>
+              <div style="flex: 1;"><div style="font-size: 11.5px; color: var(--ink);">ci <span style="color: var(--faint);">· bot</span></div><div style="font-size: 10.5px; color: var(--muted);">may inject it into a process it starts</div></div>
+              <span class="chip" style="background: rgb(74 222 128 / 0.12); color: var(--ok);">Use</span>
+            </div>
+          </div>
+
+        </div>
+
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px;">
+
+          <div class="card" style="gap: 8px;">
+            <div style="display: flex; align-items: baseline; gap: 8px;">
+              <span class="head">Recent activity</span>
+              <button class="btn" style="margin-left: auto; padding: 2px 8px;">Full audit</button>
+            </div>
+            <div style="display: flex; gap: 9px; align-items: flex-start; padding-bottom: 8px; border-bottom: 1px solid var(--line);">
+              <span style="width: 6px; height: 6px; border-radius: 999px; background: var(--ok); margin-top: 5px; flex-shrink: 0;"></span>
+              <div style="flex: 1;"><div style="font-size: 11.5px; color: var(--body);">ci injected it into <span class="mono" style="font-size: 10.5px;">api</span></div><div style="font-size: 10.5px; color: var(--faint);">12 min ago · allowed by the matrix, no prompt</div></div>
+            </div>
+            <div style="display: flex; gap: 9px; align-items: flex-start; padding-bottom: 8px; border-bottom: 1px solid var(--line);">
+              <span style="width: 6px; height: 6px; border-radius: 999px; background: var(--ok); margin-top: 5px; flex-shrink: 0;"></span>
+              <div style="flex: 1;"><div style="font-size: 11.5px; color: var(--body);">release injected it into <span class="mono" style="font-size: 10.5px;">gh release upload</span></div><div style="font-size: 10.5px; color: var(--faint);">yesterday 19:40 · v0.9.3</div></div>
+            </div>
+            <div style="display: flex; gap: 9px; align-items: flex-start; padding-bottom: 8px; border-bottom: 1px solid var(--line);">
+              <span style="width: 6px; height: 6px; border-radius: 999px; background: var(--info); margin-top: 5px; flex-shrink: 0;"></span>
+              <div style="flex: 1;"><div style="font-size: 11.5px; color: var(--body);">You revealed it</div><div style="font-size: 10.5px; color: var(--faint);">2 Sep, 11:20 · Windows Hello · on screen 20s</div></div>
+            </div>
+            <div style="display: flex; gap: 9px; align-items: flex-start;">
+              <span style="width: 6px; height: 6px; border-radius: 999px; background: var(--warn); margin-top: 5px; flex-shrink: 0;"></span>
+              <div style="flex: 1;"><div style="font-size: 11.5px; color: var(--body);">Value changed in Bitwarden</div><div style="font-size: 10.5px; color: var(--faint);">14 Jul · DevDeck noticed at the next sync and kept the reference</div></div>
+            </div>
+          </div>
+
+          <div class="card" style="gap: 8px;">
+            <div class="head">Rotation</div>
+            <div style="display: flex; align-items: baseline; gap: 8px;"><span style="font-size: 22px; font-weight: 600; color: var(--warn);">38</span><span style="font-size: 11px; color: var(--muted);">days until GitHub expires this token</span></div>
+            <div style="height: 5px; border-radius: 999px; background: var(--hover); overflow: hidden;"><span style="display: block; width: 58%; height: 100%; background: var(--warn);"></span></div>
+            <div style="font-size: 10.5px; color: var(--muted); line-height: 1.55;">Rotate opens GitHub for you to mint the replacement, then updates the Bitwarden item. The reference does not change, so nothing that uses it needs editing — which is the point of having one.</div>
+            <div style="border-top: 1px solid var(--line); padding-top: 9px; font-size: 10.5px; color: var(--faint); line-height: 1.55;">DevDeck cannot rotate this for you. It has no GitHub token of its own with the right to mint tokens, and giving it one would be a worse problem than the one it solved.</div>
+          </div>
+
+          <div class="card" style="gap: 8px; border-color: rgb(248 113 113 / 0.28);">
+            <div class="head" style="color: var(--err);">Seal it</div>
+            <div style="font-size: 11px; color: var(--body); line-height: 1.6;">Take this item out of reach of every agent at once, now and in future, without touching the matrix cell by cell.</div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="width: 22px; height: 12px; border-radius: 999px; background: var(--hover); position: relative; flex-shrink: 0;"><span style="position: absolute; left: 1.5px; top: 1.5px; width: 9px; height: 9px; border-radius: 999px; background: var(--faint);"></span></span>
+              <span style="font-size: 11px; color: var(--dim);">Sealed — only you, at a prompt</span>
+            </div>
+            <div style="font-size: 10.5px; color: var(--faint); line-height: 1.55;">A sealed item shows a dash in every column of the matrix rather than None, so nobody can grant it by mistake later.</div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', page: '#0d1017', panel: '#11141c', raise: '#151923', menu: '#1a1f2b',
+          hover: '#232b3b', line: '#1e293b', line2: '#334155', ink: '#e2e8f0', body: '#cbd5e1',
+          dim: '#94a3b8', muted: '#64748b', faint: '#475569', accent: '#818cf8', ok: '#4ade80',
+          warn: '#fbbf24', err: '#f87171', info: '#38bdf8' }
+      : { app: '#e9ebf0', page: '#f6f7f9', panel: '#fdfdfe', raise: '#f0f2f6', menu: '#ffffff',
+          hover: '#e7eaf1', line: '#d9dee7', line2: '#c3cbd8', ink: '#16181d', body: '#333a45',
+          dim: '#5a6472', muted: '#7d8794', faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d',
+          warn: '#b45309', err: '#dc2626', info: '#0369a1' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

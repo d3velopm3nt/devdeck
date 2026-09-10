@@ -1,0 +1,141 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: var(--accent); } a:hover { color: var(--ink); }
+    .head { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .btn { font-size: 11.5px; color: var(--dim); border: 1px solid var(--line2); border-radius: 6px; padding: 5px 12px; background: transparent; }
+    .btn.on { color: #fff; background: #4f46e5; border-color: #4f46e5; }
+    .mono { font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; }
+    .input { border: 1px solid var(--line2); border-radius: 6px; background: var(--page); padding: 6px 9px; font-size: 11.5px; color: var(--ink); }
+    .opt { border: 1px solid var(--line2); border-radius: 9px; padding: 11px 12px; display: flex; gap: 10px; align-items: flex-start; }
+    .opt-on { border-color: #6366f1; background: rgb(99 102 241 / 0.06); }
+    .dot { width: 14px; height: 14px; border-radius: 999px; border: 1px solid var(--line3); flex-shrink: 0; margin-top: 1px; }
+    .dot-on { border: 4px solid #6366f1; }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --page: {{c.page}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --menu: {{c.menu}}; --hover: {{c.hover}}; --line: {{c.line}}; --line2: {{c.line2}}; --line3: {{c.line3}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; --info: {{c.info}}; width: 760px; height: 840px; background: var(--app); display: flex; align-items: center; justify-content: center; padding: 18px; box-sizing: border-box; overflow: hidden;">
+
+  <div style="width: 100%; height: 100%; background: var(--menu); border: 1px solid var(--line2); border-radius: 14px; box-shadow: 0 18px 50px rgb(0 0 0 / 0.35); display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box;">
+
+    <div style="padding: 15px 18px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px;">
+      <span style="width: 24px; height: 24px; border-radius: 6px; background: #175DDC; display: inline-flex; align-items: center; justify-content: center;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2 19.2 6v7.4c0 3.6-3 6.1-7.2 7.4-4.2-1.3-7.2-3.8-7.2-7.4V6z"></path></svg></span>
+      <div>
+        <div style="font-size: 14px; font-weight: 600; color: var(--ink);">Connect Bitwarden</div>
+        <div style="font-size: 11px; color: var(--muted); margin-top: 1px;">DevDeck reads your vault through the official CLI on this machine</div>
+      </div>
+      <span style="margin-left: auto; font-size: 16px; color: var(--faint);">&times;</span>
+    </div>
+
+    <div style="flex: 1; padding: 16px 18px; display: flex; flex-direction: column; gap: 14px; overflow: hidden;">
+
+      <div>
+        <div class="head" style="margin-bottom: 8px;">How DevDeck signs in</div>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <div class="opt opt-on">
+            <span class="dot dot-on"></span>
+            <div style="flex: 1;">
+              <div style="font-size: 12px; color: var(--ink); font-weight: 600;">API key <span style="font-weight: 400; color: var(--muted);">— recommended</span></div>
+              <div style="font-size: 11px; color: var(--muted); line-height: 1.55; margin-top: 3px;">A client id and secret from your Bitwarden account settings. Revoking it in Bitwarden cuts DevDeck off immediately, without changing your master password.</div>
+            </div>
+          </div>
+          <div class="opt">
+            <span class="dot"></span>
+            <div style="flex: 1;">
+              <div style="font-size: 12px; color: var(--ink); font-weight: 600;">Email and master password</div>
+              <div style="font-size: 11px; color: var(--muted); line-height: 1.55; margin-top: 3px;">Works, but the only way to cut DevDeck off afterwards is to change the password you use everywhere else.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 9px;">
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <span style="font-size: 10.5px; color: var(--muted);">Server</span>
+          <div class="input mono" style="display: flex; align-items: center;">https://vault.bitwarden.com</div>
+          <span style="font-size: 10px; color: var(--faint);">Change this if you self-host.</span>
+        </div>
+        <div style="display: flex; gap: 9px;">
+          <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 10.5px; color: var(--muted);">client_id</span>
+            <div class="input mono" style="color: var(--dim);">user.7c41e0b9-2ad3-48f6</div>
+          </div>
+          <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 10.5px; color: var(--muted);">client_secret</span>
+            <div class="input mono" style="color: var(--dim); letter-spacing: .1em;">••••••••••••••••</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 12px 13px; display: flex; flex-direction: column; gap: 9px;">
+        <div class="head">What this lets DevDeck do</div>
+        <div style="display: flex; align-items: flex-start; gap: 8px; font-size: 11.5px; color: var(--body); line-height: 1.5;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="color: var(--ok); flex-shrink: 0; margin-top: 2px;" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg>
+          <span>List the names, folders and collections of items you choose to mirror</span>
+        </div>
+        <div style="display: flex; align-items: flex-start; gap: 8px; font-size: 11.5px; color: var(--body); line-height: 1.5;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="color: var(--ok); flex-shrink: 0; margin-top: 2px;" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"></path></svg>
+          <span>Read one item&rsquo;s value at the moment something you allowed needs it</span>
+        </div>
+        <div style="display: flex; align-items: flex-start; gap: 8px; font-size: 11.5px; color: var(--dim); line-height: 1.5;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="color: var(--err); flex-shrink: 0; margin-top: 2px;" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+          <span>Write, edit or delete anything in your vault — DevDeck never sends a change back</span>
+        </div>
+        <div style="display: flex; align-items: flex-start; gap: 8px; font-size: 11.5px; color: var(--dim); line-height: 1.5;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="color: var(--err); flex-shrink: 0; margin-top: 2px;" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+          <span>Store a value on this machine, in SQLite or anywhere else</span>
+        </div>
+      </div>
+
+      <div style="border: 1px solid rgb(251 191 36 / 0.32); border-radius: 10px; background: rgb(251 191 36 / 0.05); padding: 11px 13px; display: flex; gap: 9px;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--warn); flex-shrink: 0; margin-top: 1px;"><path d="M12 8.5v5M12 17h.01"></path><circle cx="12" cy="12" r="9"></circle></svg>
+        <div>
+          <div style="font-size: 11.5px; color: var(--ink); font-weight: 600;">Connecting grants nothing to anyone</div>
+          <div style="font-size: 11px; color: var(--muted); line-height: 1.55; margin-top: 3px;">Every item arrives at <span style="color: var(--dim);">None</span> for every agent. Deciding who may use what is a separate, deliberate act on the Agent access page — the same split Community uses between installing a tool and granting it.</div>
+        </div>
+      </div>
+
+      <div style="margin-top: auto; display: flex; align-items: center; gap: 9px;">
+        <span style="width: 22px; height: 12px; border-radius: 999px; background: #4f46e5; position: relative; flex-shrink: 0;"><span style="position: absolute; right: 1.5px; top: 1.5px; width: 9px; height: 9px; border-radius: 999px; background: #fff;"></span></span>
+        <span style="font-size: 11.5px; color: var(--body);">Let me choose which collections are mirrored</span>
+      </div>
+
+    </div>
+
+    <div style="padding: 13px 18px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 9px; background: var(--panel);">
+      <span style="font-size: 10.5px; color: var(--faint);">Bitwarden CLI 2026.8.1 found by Machine</span>
+      <button class="btn" style="margin-left: auto;">Cancel</button>
+      <button class="btn on">Connect</button>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', page: '#0d1017', panel: '#11141c', raise: '#151923', menu: '#1a1f2b',
+          hover: '#232b3b', line: '#1e293b', line2: '#334155', line3: '#64748b', ink: '#e2e8f0', body: '#cbd5e1',
+          dim: '#94a3b8', muted: '#64748b', faint: '#475569', accent: '#818cf8', ok: '#4ade80',
+          warn: '#fbbf24', err: '#f87171', info: '#38bdf8' }
+      : { app: '#e9ebf0', page: '#f6f7f9', panel: '#fdfdfe', raise: '#f0f2f6', menu: '#ffffff',
+          hover: '#e7eaf1', line: '#d9dee7', line2: '#c3cbd8', line3: '#9aa5b5', ink: '#16181d', body: '#333a45',
+          dim: '#5a6472', muted: '#7d8794', faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d',
+          warn: '#b45309', err: '#dc2626', info: '#0369a1' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

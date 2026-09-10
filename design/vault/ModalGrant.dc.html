@@ -1,0 +1,127 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: var(--accent); } a:hover { color: var(--ink); }
+    .head { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .btn { font-size: 11.5px; color: var(--dim); border: 1px solid var(--line2); border-radius: 6px; padding: 5px 12px; background: transparent; }
+    .btn.on { color: #fff; background: #4f46e5; border-color: #4f46e5; }
+    .mono { font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; }
+    .input { border: 1px solid var(--line2); border-radius: 6px; background: var(--page); padding: 6px 9px; font-size: 11.5px; color: var(--ink); }
+    .ref { font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; font-size: 11px; color: var(--info); background: rgb(56 189 248 / 0.09); border: 1px solid rgb(56 189 248 / 0.22); border-radius: 5px; padding: 1.5px 6px; }
+    .pill { font-size: 11px; padding: 4px 11px; border-radius: 999px; border: 1px solid var(--line2); color: var(--dim); }
+    .pill-on { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+    .pill-off { opacity: .45; }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --page: {{c.page}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --menu: {{c.menu}}; --hover: {{c.hover}}; --line: {{c.line}}; --line2: {{c.line2}}; --line3: {{c.line3}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; --info: {{c.info}}; width: 760px; height: 840px; background: var(--app); display: flex; align-items: center; justify-content: center; padding: 18px; box-sizing: border-box; overflow: hidden;">
+
+  <div style="width: 100%; height: 100%; background: var(--menu); border: 1px solid var(--line2); border-radius: 14px; box-shadow: 0 18px 50px rgb(0 0 0 / 0.35); display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box;">
+
+    <div style="padding: 15px 18px; border-bottom: 1px solid var(--line);">
+      <div style="font-size: 14px; font-weight: 600; color: var(--ink);">A standing grant</div>
+      <div style="font-size: 11px; color: var(--muted); margin-top: 2px;">So an overnight run finishes without waking you, and nothing wider than that gets through</div>
+    </div>
+
+    <div style="flex: 1; padding: 16px 18px; display: flex; flex-direction: column; gap: 13px; overflow: hidden;">
+
+      <div style="display: flex; gap: 10px;">
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+          <span style="font-size: 10.5px; color: var(--muted);">Agent</span>
+          <div class="input" style="display: flex; align-items: center; gap: 7px;"><span style="width: 6px; height: 6px; border-radius: 999px; background: var(--ok);"></span>ci</div>
+        </div>
+        <div style="flex: 1.4; display: flex; flex-direction: column; gap: 4px;">
+          <span style="font-size: 10.5px; color: var(--muted);">Item</span>
+          <div class="input mono" style="font-size: 10.5px; color: var(--info); display: flex; align-items: center;">vault://supabase/service-role</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="head" style="margin-bottom: 7px;">What it may be used for</div>
+        <div style="display: flex; gap: 7px; margin-bottom: 9px;">
+          <span class="pill pill-on">This exact command</span>
+          <span class="pill">Anything starting with&hellip;</span>
+          <span class="pill pill-off">Any command at all</span>
+        </div>
+        <div class="input mono" style="font-size: 11px; color: var(--ink);">npm run test:integration -- --project staging</div>
+        <div style="display: flex; align-items: flex-start; gap: 8px; margin-top: 8px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" style="color: var(--faint); flex-shrink: 0; margin-top: 1px;"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 8h.01"></path></svg>
+          <span style="font-size: 10.5px; color: var(--muted); line-height: 1.55;"><span style="color: var(--dim);">Any command at all</span> is greyed out because this grant writes. A standing permission to run anything with a key that bypasses row-level security is not a grant — it is <span style="color: var(--dim);">Use</span> with extra steps, and the matrix already has an honest word for that.</span>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 10px;">
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+          <span style="font-size: 10.5px; color: var(--muted);">Number of uses</span>
+          <div class="input" style="display: flex; align-items: center;">40</div>
+          <span style="font-size: 10px; color: var(--faint);">A loop that has gone wrong stops here.</span>
+        </div>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+          <span style="font-size: 10.5px; color: var(--muted);">Expires</span>
+          <div class="input" style="display: flex; align-items: center;">Wednesday 9 Sep, 06:00</div>
+          <span style="font-size: 10px; color: var(--faint);">There is no &ldquo;never&rdquo; in this field.</span>
+        </div>
+      </div>
+
+      <div style="border: 1px solid rgb(99 102 241 / 0.35); border-radius: 10px; background: rgb(99 102 241 / 0.06); padding: 13px 14px;">
+        <div class="head" style="margin-bottom: 7px;">What you are agreeing to</div>
+        <div style="font-size: 12.5px; color: var(--ink); line-height: 1.65;">ci may use <span class="ref">vault://supabase/service-role</span> when it starts <span class="mono" style="font-size: 11px; color: var(--body);">npm run test:integration -- --project staging</span> in <span style="color: var(--body);">devdeck</span>, up to <span style="color: var(--body);">40 times</span>, until <span style="color: var(--body);">Wednesday at six in the morning</span>.</div>
+        <div style="font-size: 10.5px; color: var(--muted); line-height: 1.55; margin-top: 9px; border-top: 1px solid rgb(99 102 241 / 0.2); padding-top: 9px;">Anything outside that sentence still stops and asks you, and at three in the morning still denies.</div>
+      </div>
+
+      <div style="border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 12px 13px; display: flex; flex-direction: column; gap: 8px;">
+        <div class="head">Two things this grant cannot do</div>
+        <div style="display: flex; gap: 8px; font-size: 11px; color: var(--muted); line-height: 1.55;">
+          <span style="color: var(--dim); flex-shrink: 0;">1</span>
+          <span><span style="color: var(--body);">Widen anything.</span> It refines Ask. Set this item to None on the matrix and the grant is inert without being touched, because the level is read first — so &ldquo;revoke it&rdquo; is a complete answer rather than a partial one.</span>
+        </div>
+        <div style="display: flex; gap: 8px; font-size: 11px; color: var(--muted); line-height: 1.55;">
+          <span style="color: var(--dim); flex-shrink: 0;">2</span>
+          <span><span style="color: var(--body);">Survive a locked vault.</span> While Vault is locked every resolve fails, grants included. Nothing here is a key of its own.</span>
+        </div>
+      </div>
+
+      <div style="margin-top: auto; display: flex; align-items: flex-start; gap: 9px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" style="color: var(--faint); flex-shrink: 0; margin-top: 2px;"><rect x="4" y="4" width="16" height="16" rx="2.5"></rect><path d="M8 9h8M8 13h5"></path></svg>
+        <span style="font-size: 10.5px; color: var(--muted); line-height: 1.55;">Saved to the personal store, never to <span class="mono" style="color: var(--dim);">.devdeck</span>. Committing this would pre-authorise a teammate&rsquo;s machine to run something they never agreed to.</span>
+      </div>
+
+    </div>
+
+    <div style="padding: 13px 18px; border-top: 1px solid var(--line); background: var(--panel); display: flex; align-items: center; gap: 9px;">
+      <span style="font-size: 10.5px; color: var(--faint);">It will be announced in ci&rsquo;s thread</span>
+      <button class="btn" style="margin-left: auto;">Cancel</button>
+      <button class="btn on">Create grant</button>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', page: '#0d1017', panel: '#11141c', raise: '#151923', menu: '#1a1f2b',
+          hover: '#232b3b', line: '#1e293b', line2: '#334155', line3: '#64748b', ink: '#e2e8f0', body: '#cbd5e1',
+          dim: '#94a3b8', muted: '#64748b', faint: '#475569', accent: '#818cf8', ok: '#4ade80',
+          warn: '#fbbf24', err: '#f87171', info: '#38bdf8' }
+      : { app: '#e9ebf0', page: '#f6f7f9', panel: '#fdfdfe', raise: '#f0f2f6', menu: '#ffffff',
+          hover: '#e7eaf1', line: '#d9dee7', line2: '#c3cbd8', line3: '#9aa5b5', ink: '#16181d', body: '#333a45',
+          dim: '#5a6472', muted: '#7d8794', faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d',
+          warn: '#b45309', err: '#dc2626', info: '#0369a1' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

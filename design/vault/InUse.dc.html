@@ -1,0 +1,266 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: var(--accent); } a:hover { color: var(--ink); }
+    .head { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .chip { display: inline-flex; align-items: center; gap: 4px; font-size: 9px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; padding: 2px 6px; border-radius: 999px; }
+    .btn { font-size: 11px; color: var(--dim); border: 1px solid var(--line2); border-radius: 6px; padding: 3px 9px; background: transparent; }
+    .btn.on { color: #fff; background: #4f46e5; border-color: #4f46e5; }
+    .mono { font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; }
+    .rail { display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 8px; border-radius: 8px; font-size: 12px; color: var(--muted); position: relative; }
+    .rail-on { background: var(--raise); color: var(--ink); }
+    .rail-on::before { content: ""; position: absolute; left: -6px; top: 6px; bottom: 6px; width: 2.5px; border-radius: 2px; background: #6366f1; }
+    .filt { display: flex; align-items: center; gap: 7px; padding: 4px 8px; border-radius: 6px; font-size: 11.5px; color: var(--dim); }
+    .filt-on { background: var(--hover); color: var(--ink); }
+    .msg { display: flex; gap: 10px; }
+    .av { width: 22px; height: 22px; border-radius: 6px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: #fff; }
+    .who { font-size: 11.5px; font-weight: 600; color: var(--ink); }
+    .when { font-size: 10px; color: var(--faint); }
+    .body { font-size: 11.5px; line-height: 1.6; color: var(--body); margin-top: 3px; }
+    .ref { font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; font-size: 10.5px; color: var(--info); background: rgb(56 189 248 / 0.09); border: 1px solid rgb(56 189 248 / 0.22); border-radius: 5px; padding: 1px 5px; }
+    .evt { display: flex; align-items: center; gap: 8px; font-size: 10.5px; padding: 5px 10px; border-radius: 7px; border: 1px solid var(--line); background: var(--raise); }
+    .card { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 12px 13px; display: flex; flex-direction: column; gap: 9px; }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --page: {{c.page}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --menu: {{c.menu}}; --hover: {{c.hover}}; --line: {{c.line}}; --line2: {{c.line2}}; --line3: {{c.line3}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; --info: {{c.info}}; width: 1456px; height: 909px; background: var(--app); color: var(--body); display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;">
+
+  <div style="height: 32px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--panel);">
+    <span style="font-size: 11.5px; color: var(--dim);">DevDeck</span>
+    <span style="font-size: 11.5px; color: var(--faint);">File</span>
+    <span style="font-size: 11.5px; color: var(--faint);">View</span>
+    <span style="font-size: 11.5px; color: var(--faint);">Build</span>
+    <span style="font-size: 11.5px; color: var(--faint);">Help</span>
+    <span style="margin-left: auto; font-size: 10.5px; color: var(--faint);">local only · no telemetry</span>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; min-height: 0;">
+
+    <div style="width: 160px; flex-shrink: 0; background: var(--app); border-right: 1px solid var(--line); padding: 8px 6px; display: flex; flex-direction: column; gap: 2px;">
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 11 12 4l8.5 7"></path><path d="M5.5 9.8V19h13V9.8"></path></svg><span>Home</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 13.5 6 5.5h12l2.5 8v5h-17z"></path><path d="M3.5 13.5H9l1 2h4l1-2h5.5"></path></svg><span>Inbox</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"></circle><path d="M3.5 19a5.5 5.5 0 0 1 11 0"></path><circle cx="17" cy="9" r="2.6"></circle><path d="M15.5 14.2a4.5 4.5 0 0 1 5 4.3"></path></svg><span>Team</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="12" rx="2"></rect><path d="M9 12h.01M15 12h.01M12 3v4"></path></svg><span>Bots</span></div>
+      <div class="rail rail-on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"></path><path d="M3.5 7 12 11.6 20.5 7M12 11.6v9.9"></path></svg><span>Spaces</span></div>
+
+      <div style="height: 1px; background: var(--line); margin: 9px 6px;"></div>
+
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5.5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="18.5" r="2.5"></circle><path d="M8.3 10.8 15.7 6.7M8.3 13.2l7.4 4.1"></path></svg><span>Community</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="5" rx="1.5"></rect><path d="M5.5 9.5v9h13v-9"></path><path d="M10 13h4"></path></svg><span>Stash</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10.5" rx="2.2"></rect><path d="M8 10V7.2a4 4 0 0 1 8 0V10"></path><path d="M12 14v2.6"></path></svg><span>Vault</span><span style="margin-left: auto; font-size: 10px; color: var(--ok);">24</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7.5" ry="3"></ellipse><path d="M4.5 6v12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V6"></path><path d="M4.5 12c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3"></path></svg><span>Connections</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="10" rx="2"></rect><path d="M7 19h10M21 9v10h-4"></path></svg><span>Machine</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12H3.5M18 6l-1.6 1.6M7.6 16.4 6 18M18 18l-1.6-1.6M7.6 7.6 6 6"></path></svg><span>Settings</span></div>
+
+      <div style="margin-top: auto; padding: 8px 8px 2px; font-size: 10px; line-height: 1.5; color: var(--faint);">Stash catches secrets by accident. Vault holds them on purpose.</div>
+    </div>
+
+    <div style="width: 260px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0;">
+      <div style="padding: 10px 12px; border-bottom: 1px solid var(--line);">
+        <div style="font-size: 12.5px; color: var(--ink); font-weight: 600;">devdeck</div>
+        <div style="font-size: 10.5px; color: var(--muted); margin-top: 2px;">F:\Work\Develtech\source-code</div>
+      </div>
+
+      <div style="padding: 6px 6px 0;">
+        <div class="head" style="padding: 6px 8px 4px;">Features</div>
+        <div class="filt"><span style="width: 6px; height: 6px; border-radius: 999px; background: var(--ok);"></span><span style="flex: 1;">Vault</span><span style="font-size: 10px; color: var(--muted);">4</span></div>
+        <div class="filt filt-on"><span style="width: 6px; height: 6px; border-radius: 999px; background: var(--info);"></span><span style="flex: 1;">Staging integration run</span><span style="font-size: 10px; color: var(--info);">live</span></div>
+        <div class="filt"><span style="width: 6px; height: 6px; border-radius: 999px; background: var(--faint);"></span><span style="flex: 1;">Release 0.9.4</span><span style="font-size: 10px; color: var(--muted);">2</span></div>
+        <div class="filt"><span style="width: 6px; height: 6px; border-radius: 999px; background: var(--faint);"></span><span style="flex: 1;">Community module</span><span style="font-size: 10px; color: var(--muted);">7</span></div>
+
+        <div class="head" style="padding: 12px 8px 4px;">In this thread</div>
+        <div class="filt"><span style="width: 6px; height: 6px; border-radius: 999px; background: #4ade80;"></span><span style="flex: 1;">ci</span><span style="font-size: 10px; color: var(--ok);">working</span></div>
+        <div class="filt"><span style="width: 6px; height: 6px; border-radius: 999px; background: #38bdf8;"></span><span style="flex: 1;">qa</span><span style="font-size: 10px; color: var(--muted);">watching</span></div>
+        <div class="filt"><span style="width: 6px; height: 6px; border-radius: 999px; background: var(--line3);"></span><span style="flex: 1;">you</span></div>
+      </div>
+
+      <div style="margin-top: auto; border-top: 1px solid var(--line); padding: 9px 12px; display: flex; align-items: center; gap: 8px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" style="color: var(--ok); flex-shrink: 0;"><rect x="4" y="10" width="16" height="10.5" rx="2.2"></rect><path d="M8 10V7.2a4 4 0 0 1 8 0V10"></path></svg>
+        <div style="min-width: 0; flex: 1;">
+          <div style="font-size: 10.5px; color: var(--dim);">Vault unlocked · relocks 14:26</div>
+          <div style="font-size: 10px; color: var(--faint); margin-top: 1px;">3 in play in this thread</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex-grow: 1; min-width: 0; background: var(--page); display: flex; min-height: 0;">
+
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 13px 20px; overflow: hidden;">
+
+        <div style="display: flex; align-items: flex-end; gap: 12px; flex-shrink: 0; padding-bottom: 10px; border-bottom: 1px solid var(--line);">
+          <div>
+            <div style="font-size: 17px; font-weight: 600; color: var(--ink);">Staging integration run</div>
+            <div style="font-size: 11.5px; color: var(--muted); margin-top: 2px;">a feature thread · commit <span class="mono" style="font-size: 10.5px;">b5b42c1</span> · started 14:02</div>
+          </div>
+          <div style="margin-left: auto; display: flex; gap: 6px;">
+            <button class="btn">Vault activity <span style="color: var(--ink); font-weight: 600;">5</span></button>
+            <button class="btn">Stop</button>
+          </div>
+        </div>
+
+        <div style="flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; padding-top: 11px; overflow: hidden;">
+
+          <div class="msg">
+            <span class="av" style="background: var(--faint);">D</span>
+            <div style="min-width: 0;">
+              <div style="display: flex; align-items: baseline; gap: 7px;"><span class="who">you</span><span class="when">14:02</span></div>
+              <div class="body">@ci take &ldquo;run the integration suite against staging and tell me what breaks&rdquo;</div>
+            </div>
+          </div>
+
+          <div class="msg">
+            <span class="av" style="background: #16a34a;">ci</span>
+            <div style="min-width: 0; flex: 1;">
+              <div style="display: flex; align-items: baseline; gap: 7px;"><span class="who">ci</span><span class="when">14:02</span><span class="chip" style="background: var(--hover); color: var(--dim);">session started</span></div>
+              <div class="body">Taking it. I need the staging API and the test database. Starting the api service first.</div>
+              <div style="margin-top: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); overflow: hidden;">
+                <div style="padding: 7px 10px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px;">
+                  <span class="mono" style="font-size: 10.5px; color: var(--dim);">service.start</span>
+                  <span style="font-size: 10.5px; color: var(--faint);">api · devdeck</span>
+                  <span class="chip" style="background: rgb(74 222 128 / 0.12); color: var(--ok); margin-left: auto;">Allowed by matrix</span>
+                </div>
+                <div style="padding: 8px 10px; display: flex; flex-direction: column; gap: 5px;">
+                  <div style="display: flex; align-items: center; gap: 8px; font-size: 10.5px;"><span class="mono" style="color: var(--dim); width: 128px;">GH_TOKEN</span><span class="ref">vault://github/devdeck-release</span><span style="margin-left: auto; color: var(--ok);">injected · 93 chars, ends 4f2a</span></div>
+                  <div style="display: flex; align-items: center; gap: 8px; font-size: 10.5px;"><span class="mono" style="color: var(--dim); width: 128px;">SUPABASE_ANON_KEY</span><span class="ref">vault://supabase/anon</span><span style="margin-left: auto; color: var(--ok);">injected · 208 chars, ends c19b</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="evt">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" style="color: var(--ok); flex-shrink: 0;"><rect x="4" y="10" width="16" height="10.5" rx="2.2"></rect><path d="M8 10V7.2a4 4 0 0 1 8 0V10"></path></svg>
+            <span style="color: var(--dim);">Vault put two values into pid <span class="mono">21884</span> through its environment. Neither reached the model, the thread, or the log bus.</span>
+            <span style="margin-left: auto; color: var(--faint);">14:02</span>
+          </div>
+
+          <div class="msg">
+            <span class="av" style="background: #16a34a;">ci</span>
+            <div style="min-width: 0; flex: 1;">
+              <div style="display: flex; align-items: baseline; gap: 7px;"><span class="who">ci</span><span class="when">14:04</span></div>
+              <div class="body">Nine of the eleven suites pass. The two that fail both write rows, so they need the service role rather than the anon key.</div>
+              <div style="margin-top: 8px; border: 1px solid rgb(251 191 36 / 0.35); border-radius: 8px; background: rgb(251 191 36 / 0.05); overflow: hidden;">
+                <div style="padding: 8px 11px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgb(251 191 36 / 0.2);">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--warn);"><path d="M12 8.5v5M12 17h.01"></path><circle cx="12" cy="12" r="9"></circle></svg>
+                  <span style="font-size: 11.5px; color: var(--ink); font-weight: 600;">ci is waiting on you</span>
+                  <span style="margin-left: auto; font-size: 10.5px; color: var(--warn);">denies in 4:12 if nobody answers</span>
+                </div>
+                <div style="padding: 9px 11px; display: flex; flex-direction: column; gap: 7px;">
+                  <div style="font-size: 11.5px; color: var(--body); line-height: 1.6;">Use <span class="ref">vault://supabase/service-role</span> to start <span class="mono" style="font-size: 10.5px; color: var(--dim);">npm run test:integration</span>, as <span class="mono" style="font-size: 10.5px; color: var(--dim);">SUPABASE_SERVICE_ROLE_KEY</span>.</div>
+                  <div style="font-size: 10.5px; color: var(--muted); line-height: 1.55;">This key ignores row-level security on the staging project. You allowed it once, yesterday at 22:14; a grant covered four runs overnight, but it names no project flag and does not cover this one.</div>
+                  <div style="display: flex; gap: 6px; margin-top: 2px;">
+                    <button class="btn on">Allow once</button>
+                    <button class="btn">Allow until morning</button>
+                    <button class="btn">Deny</button>
+                    <button class="btn" style="margin-left: auto;">Show me the command</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="msg">
+            <span class="av" style="background: var(--faint);">D</span>
+            <div style="min-width: 0;">
+              <div style="display: flex; align-items: baseline; gap: 7px;"><span class="who">you</span><span class="when">14:06</span><span class="chip" style="background: rgb(74 222 128 / 0.12); color: var(--ok);">allowed once</span></div>
+              <div class="body">Go on. Not the prod one though.</div>
+            </div>
+          </div>
+
+          <div class="msg">
+            <span class="av" style="background: #16a34a;">ci</span>
+            <div style="min-width: 0; flex: 1;">
+              <div style="display: flex; align-items: baseline; gap: 7px;"><span class="who">ci</span><span class="when">14:09</span></div>
+              <div class="body">All eleven pass. One thing you should see: a test printed the key into its own failure output, so the line arrived at the log bus with the value taken out.</div>
+              <div style="margin-top: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 8px 10px; font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; font-size: 10.5px; line-height: 1.7; color: var(--dim); white-space: pre-line;">FAIL  rows.spec.ts &gt; writes a row
+  auth failed for key <span style="background: rgb(248 113 113 / 0.14); color: var(--err); padding: 0 4px; border-radius: 3px;">[vault://supabase/service-role]</span>
+  at Object.&lt;anonymous&gt; (rows.spec.ts:41:9)</div>
+              <div style="font-size: 10.5px; color: var(--muted); line-height: 1.55; margin-top: 6px;">Every value Vault hands out is watched for on its way back. It is replaced with the reference it came from, so the line still tells you which key failed.</div>
+            </div>
+          </div>
+
+          <div class="evt" style="border-color: rgb(248 113 113 / 0.3); background: rgb(248 113 113 / 0.05);">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--err); flex-shrink: 0;"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+            <span style="color: var(--dim);">ci asked for <span class="ref" style="color: var(--err); background: rgb(248 113 113 / 0.09); border-color: rgb(248 113 113 / 0.22);">vault://npm/publish</span> to cut a preview release. <span style="color: var(--ink);">Refused — it is None for ci.</span> You were not asked.</span>
+            <span style="margin-left: auto; color: var(--faint);">14:11</span>
+          </div>
+
+          <div style="margin-top: auto; border: 1px solid var(--line2); border-radius: 8px; background: var(--panel); padding: 8px 11px; display: flex; align-items: center; gap: 9px; flex-shrink: 0;">
+            <span style="font-size: 11.5px; color: var(--faint);">Reply to the thread, or @ someone</span>
+            <span style="margin-left: auto; font-size: 10px; color: var(--faint);">Enter to send</span>
+          </div>
+
+        </div>
+      </div>
+
+      <div style="width: 320px; flex-shrink: 0; border-left: 1px solid var(--line); background: var(--panel); padding: 14px 14px; display: flex; flex-direction: column; gap: 12px; overflow: hidden;">
+
+        <div>
+          <div class="head">Vault, in this thread</div>
+          <div style="font-size: 10.5px; color: var(--faint); margin-top: 3px; line-height: 1.5;">What is in play right now, and where it went.</div>
+        </div>
+
+        <div style="border: 1px solid var(--line); border-radius: 9px; padding: 9px 10px; display: flex; flex-direction: column; gap: 5px;">
+          <div style="display: flex; align-items: center; gap: 7px;"><span style="width: 6px; height: 6px; border-radius: 999px; background: var(--ok);"></span><span style="font-size: 11px; color: var(--ink);">github/devdeck-release</span><span class="chip" style="background: rgb(74 222 128 / 0.12); color: var(--ok); margin-left: auto;">Use</span></div>
+          <div style="font-size: 10.5px; color: var(--muted);">in pid 21884 as <span class="mono" style="font-size: 10px;">GH_TOKEN</span> · since 14:02</div>
+        </div>
+
+        <div style="border: 1px solid var(--line); border-radius: 9px; padding: 9px 10px; display: flex; flex-direction: column; gap: 5px;">
+          <div style="display: flex; align-items: center; gap: 7px;"><span style="width: 6px; height: 6px; border-radius: 999px; background: var(--ok);"></span><span style="font-size: 11px; color: var(--ink);">supabase/anon</span><span class="chip" style="background: rgb(74 222 128 / 0.12); color: var(--ok); margin-left: auto;">Use</span></div>
+          <div style="font-size: 10.5px; color: var(--muted);">in pid 21884 · since 14:02</div>
+        </div>
+
+        <div style="border: 1px solid rgb(251 191 36 / 0.35); border-radius: 9px; padding: 9px 10px; display: flex; flex-direction: column; gap: 5px; background: rgb(251 191 36 / 0.04);">
+          <div style="display: flex; align-items: center; gap: 7px;"><span style="width: 6px; height: 6px; border-radius: 999px; background: var(--warn);"></span><span style="font-size: 11px; color: var(--ink);">supabase/service-role</span><span class="chip" style="background: rgb(251 191 36 / 0.14); color: var(--warn); margin-left: auto;">Once</span></div>
+          <div style="font-size: 10.5px; color: var(--muted);">in pid 22301 · you allowed it at 14:06</div>
+          <div style="font-size: 10.5px; color: var(--faint);">gone when that process ends — it is not a standing grant</div>
+        </div>
+
+        <div style="border: 1px solid var(--line); border-radius: 9px; padding: 9px 10px; display: flex; flex-direction: column; gap: 5px; opacity: .75;">
+          <div style="display: flex; align-items: center; gap: 7px;"><span style="width: 6px; height: 6px; border-radius: 999px; background: var(--err);"></span><span style="font-size: 11px; color: var(--dim);">npm/publish</span><span class="chip" style="background: var(--hover); color: var(--faint); margin-left: auto;">Refused</span></div>
+          <div style="font-size: 10.5px; color: var(--muted);">14:11 · None for ci, so no prompt was raised</div>
+        </div>
+
+        <div style="height: 1px; background: var(--line); margin: 2px 0;"></div>
+
+        <div class="card" style="gap: 7px; padding: 11px 12px;">
+          <div class="head">Redactions</div>
+          <div style="display: flex; align-items: baseline; gap: 8px;"><span style="font-size: 18px; font-weight: 600; color: var(--ink);">1</span><span style="font-size: 10.5px; color: var(--muted); line-height: 1.5;">value caught on its way into the logs and replaced with its reference</span></div>
+          <div style="font-size: 10.5px; color: var(--faint); line-height: 1.55; border-top: 1px solid var(--line); padding-top: 8px;">Stash uses the same list. A secret Vault handed out will not be captured as a clip, even if you copy it out of a terminal yourself.</div>
+        </div>
+
+        <div style="margin-top: auto; font-size: 10.5px; color: var(--faint); line-height: 1.6;">If this panel is ever empty for a real day of work, the module has not earned its place on the rail.</div>
+
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', page: '#0d1017', panel: '#11141c', raise: '#151923', menu: '#1a1f2b',
+          hover: '#232b3b', line: '#1e293b', line2: '#334155', line3: '#64748b', ink: '#e2e8f0', body: '#cbd5e1',
+          dim: '#94a3b8', muted: '#64748b', faint: '#475569', accent: '#818cf8', ok: '#4ade80',
+          warn: '#fbbf24', err: '#f87171', info: '#38bdf8' }
+      : { app: '#e9ebf0', page: '#f6f7f9', panel: '#fdfdfe', raise: '#f0f2f6', menu: '#ffffff',
+          hover: '#e7eaf1', line: '#d9dee7', line2: '#c3cbd8', line3: '#9aa5b5', ink: '#16181d', body: '#333a45',
+          dim: '#5a6472', muted: '#7d8794', faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d',
+          warn: '#b45309', err: '#dc2626', info: '#0369a1' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

@@ -2939,3 +2939,113 @@ fn an_mcp_server_is_offered_to_the_model_only_when_it_is_granted_and_up() {
         "and no grant means nothing either way"
     );
 }
+
+/// The payoff, end to end: a real MCP server, granted, and called by an agent
+/// through the same gate everything else goes through.
+///
+/// This is the artboard the design calls the point of the whole module — "if
+/// that panel is ever empty for a real day's work, the module has not earned
+/// its rail slot". The server is a real Node process speaking real JSON-RPC;
+/// only the model is absent, and it is absent on purpose: what is under test
+/// is that a permission and a process meet correctly, not that a language
+/// model can be persuaded to emit a tool call.
+///
+/// Needs `node`. A machine without it cannot run MCP servers at all, so
+/// failing there would report the wrong thing.
+#[test]
+fn an_installed_server_is_refused_until_granted_and_then_really_runs() {
+    let probe = if cfg!(windows) { "where" } else { "which" };
+    let has_node = std::process::Command::new(probe)
+        .arg("node")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    if !has_node {
+        eprintln!("skipping: no node, so no MCP server could run here either");
+        return;
+    }
+
+    // A server written to disk by the test: real process, real stdio, and no
+    // dependency on a network or an npm registry being reachable.
+    let script = {
+        let mut p = std::env::temp_dir();
+        p.push(format!("devdeck-payoff-{}.mjs", std::process::id()));
+        std::fs::write(
+            &p,
+            r#"
+const send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
+let buf = "";
+process.stdin.on("data", (d) => { buf += d; let i;
+  while ((i = buf.indexOf("\n")) >= 0) {
+    const line = buf.slice(0, i); buf = buf.slice(i + 1);
+    if (!line.trim()) continue;
+    let m; try { m = JSON.parse(line); } catch { continue; }
+    if (m.method === "initialize") send({ jsonrpc:"2.0", id:m.id, result:{
+      protocolVersion:"2025-06-18", serverInfo:{ name:"notes", version:"1.0.0" } } });
+    else if (m.method === "tools/list") send({ jsonrpc:"2.0", id:m.id, result:{ tools:[
+      { name:"remember", description:"Store a note", inputSchema:{ type:"object" } } ] } });
+    else if (m.method === "tools/call") send({ jsonrpc:"2.0", id:m.id, result:{
+      content:[{ type:"text", text:"remembered: " + (m.params.arguments.note || "") }] } });
+  }});
+"#,
+        )
+        .unwrap();
+        p
+    };
+
+    let t = Tmp::new("payoff");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    w.register_project("7", "TyreX", tyrex.clone(), tyrex);
+    w.set_mcp_servers(vec![crate::mcp::ServerSpec {
+        id: "notes".into(),
+        name: "Notes".into(),
+        command: format!("node \"{}\"", script.display()),
+    }]);
+
+    let p = w.project("7").unwrap();
+    let scope = super::events::EventScope::feature("7", "offline-synchronisation");
+    let call = ToolCall::new(
+        "mcp.notes",
+        "remember",
+        serde_json::json!({"note": "the sync bug is in the retry loop"}),
+    );
+
+    // 1. Installed, not granted. Refused — and nothing was started.
+    let before = p.tools.execute(&w.bus, "dev-a", &scope, &call, None);
+    assert!(before.denied, "installing is not granting: {:?}", before.error);
+    assert!(
+        w.mcp.statuses().is_empty(),
+        "and a refusal starts no process"
+    );
+
+    // 2. Granted. The separate, deliberate act.
+    w.set_permission("dev-a", "mcp.notes", "full").unwrap();
+    // And the handle has to be taken again: a tool service holds a snapshot of
+    // the matrix, so granting rebuilds them and the old handle keeps the old
+    // answer. That is the same reason `set_permission` rebuilds at all.
+    let p = w.project("7").unwrap();
+
+    // 3. Called for real: a process spawned, a handshake, a tool run, an
+    //    answer that could only have come from the server.
+    let after = p.tools.execute(&w.bus, "dev-a", &scope, &call, None);
+    assert!(after.ok, "granted, so it runs: {:?}", after.error);
+    assert_eq!(
+        after.output.trim(),
+        "remembered: the sync bug is in the retry loop"
+    );
+
+    // The process is real, and DevDeck can say so.
+    let up = w.mcp.statuses();
+    assert_eq!(up.len(), 1, "one server, started on the first call");
+    assert_eq!(up[0].id, "notes");
+    assert!(up[0].pid > 0);
+
+    // 4. And another agent still cannot. A grant is to one agent, not to the
+    //    installation.
+    let qa = p.tools.execute(&w.bus, "qa", &scope, &call, None);
+    assert!(qa.denied, "qa was never granted: {:?}", qa.error);
+
+    w.mcp.stop("notes");
+    let _ = std::fs::remove_file(&script);
+}

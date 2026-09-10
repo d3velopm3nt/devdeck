@@ -230,31 +230,26 @@ pub fn catalog() -> Vec<Item> {
                  finding that out is the maintainer's call to make.",
             )
         },
+        // One MCP server, and it is one that has actually been run against
+        // this client: handshake, tools/list, the lot. The starter pack used
+        // to carry two, and one of them named an npm package that does not
+        // exist — `@modelcontextprotocol/server-fetch` is a 404, and nobody
+        // would have found out until they clicked Install.
+        //
+        // It does not need to be a catalogue of servers any more. Discover
+        // reads the official registry, which is where servers actually
+        // publish themselves.
         Item {
-            tool_id: "mcp.filesystem".into(),
-            command: "npx -y @modelcontextprotocol/server-filesystem".into(),
+            tool_id: "mcp.memory".into(),
+            command: "npx -y @modelcontextprotocol/server-memory".into(),
             licence: "permissive".into(),
             author: "Anthropic".into(),
             source: "https://github.com/modelcontextprotocol/servers".into(),
             ..devdeck(
-                "tool.mcp-filesystem",
+                "tool.mcp-memory",
                 KIND_TOOL,
-                "MCP filesystem",
-                "Reads and writes files over MCP, scoped to directories you name.",
-                "",
-            )
-        },
-        Item {
-            tool_id: "mcp.fetch".into(),
-            command: "npx -y @modelcontextprotocol/server-fetch".into(),
-            licence: "permissive".into(),
-            author: "Anthropic".into(),
-            source: "https://github.com/modelcontextprotocol/servers".into(),
-            ..devdeck(
-                "tool.mcp-fetch",
-                KIND_TOOL,
-                "MCP fetch",
-                "Fetches a URL and returns it as text an agent can read.",
+                "MCP memory",
+                "A knowledge graph an agent can write to and read back later.",
                 "",
             )
         },

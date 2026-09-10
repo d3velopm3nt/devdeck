@@ -20,24 +20,45 @@ export function projectOf(nodes: TreeNode[], node: TreeNode | null): TreeNode | 
   return null
 }
 
-function joinPath(base: string, sub: string): string {
-  const b = base.replace(/[\\/]+$/, '')
-  const s = sub.replace(/^[\\/]+/, '').replace(/\//g, '\\')
-  if (!b) return s
-  if (!s) return b
-  return `${b}\\${s}`
+/// Nearest ancestor workspace of `node` (or itself if it is a workspace).
+///
+/// Walks rather than assuming a depth: a service can hang off a folder, and a
+/// folder's parent is a project, so "the workspace" is however many hops up it
+/// takes to find one.
+export function workspaceOf(nodes: TreeNode[], node: TreeNode | null): TreeNode | null {
+  let cur = node
+  while (cur) {
+    if (cur.kind === 'workspace') return cur
+    cur = findNode(nodes, cur.parent_id)
+  }
+  return null
 }
 
+/// Nearest ancestor solution of `node`, or null when it sits directly under a
+/// workspace. Null is the normal case, not an error: solutions are optional and
+/// every tree that existed before them has none.
+export function solutionOf(nodes: TreeNode[], node: TreeNode | null): TreeNode | null {
+  let cur = node
+  while (cur) {
+    if (cur.kind === 'solution') return cur
+    if (cur.kind === 'workspace') return null
+    cur = findNode(nodes, cur.parent_id)
+  }
+  return null
+}
+
+
 /// Resolved working directory for a node, or '' if none applies.
-export function resolveDir(nodes: TreeNode[], node: TreeNode | null): string {
+export function resolveDir(_nodes: TreeNode[], node: TreeNode | null): string {
   if (!node) return ''
-  if (node.kind === 'workspace') return ''
   if (node.kind === 'project') return node.path ?? ''
-  // folder
-  if (node.path && node.path.trim() !== '') return node.path // absolute override
-  const proj = projectOf(nodes, node)
-  const base = proj?.path ?? ''
-  return joinPath(base, node.rel_path ?? '')
+  // A node works in the repository it names, and otherwise in its own folder.
+  //
+  // The fallback is the point: needing a git repo before you could open a
+  // terminal or run a command made "project" a thing you had to qualify for.
+  // Every node has a folder, so every node can do the work — naming a repo only
+  // changes *where*, and lights up git.
+  return node.path?.trim() ? node.path : (node.dir ?? '')
 }
 
 /// A service's working directory: its explicit `cwd`, else the resolved
@@ -81,6 +102,14 @@ export function nodeLabel(nodes: TreeNode[], node: TreeNode): string {
 
 /// Projects and folders (things a command/service can belong to),
 /// ordered as they appear in the tree.
+/// Everything a command, service or profile can hang off.
+///
+/// A workspace is included: since the vault it is a real folder with a place on
+/// disk, so `npm run something` at the Innotrack level has somewhere to run.
+/// The only nodes left out are ones with no directory at all, which after the
+/// vault means none — but the filter stays honest rather than returning
+/// everything, because a node with no `rel_path` has nowhere to work and would
+/// silently run in whatever the process happened to be in.
 export function ownerNodes(nodes: TreeNode[]): TreeNode[] {
-  return nodes.filter((n) => n.kind === 'project' || n.kind === 'folder')
+  return nodes.filter((n) => resolveDir(nodes, n) !== '')
 }

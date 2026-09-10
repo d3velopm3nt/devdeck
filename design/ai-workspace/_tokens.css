@@ -1,0 +1,17 @@
+/* DevDeck tokens lifted verbatim from src/index.css (dark default).
+   Kept here only as a reference for the AI Workspace artboards; each
+   .dc.html inlines these in its own <helmet> because artboards share
+   nothing at runtime. */
+:root{
+  --app:#0b0e14; --page:#0d1017; --panel:#11141c; --raise:#151923;
+  --menu:#1a1f2b; --hover:#232b3b; --soft:rgba(30,41,59,.4);
+  --line:#1e293b; --line2:#334155; --line3:#64748b;
+  --ink:#e2e8f0; --body:#cbd5e1; --dim:#94a3b8; --muted:#64748b; --faint:#475569;
+  --accent:#818cf8; --ok:#4ade80; --warn:#fbbf24; --err:#f87171;
+  --info:#38bdf8; --viol:#a78bfa;
+}
+/* font: 'Segoe UI', system-ui, sans-serif
+   rail 52px · rail button 40x40 r8 · active bar 2.5px #6366f1 at left -7px
+   topbar padding 6px 8px · sidebar header padding 10px 12px
+   type ramp 10.5 / 11 / 11.5 / 12 / 12.5 / 13 px
+   btn-primary #4f46e5 · status dot 7px */

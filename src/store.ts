@@ -4,6 +4,7 @@
 import { create } from 'zustand'
 import * as ipc from './lib/ipc'
 import type { GitInfo } from './lib/ipc'
+import type { Layer } from './lib/calendarLayers'
 import { findNode, projectOf, resolveDir, serviceDir, subtreeIds } from './lib/tree'
 import type {
   CommandDef,
@@ -36,11 +37,40 @@ import type {
   TreeNode,
 } from './lib/types'
 
+/** Day, week, month, year — the only thing that differs between calendar
+ *  views is the window they ask for. */
+export type CalView = 'day' | 'week' | 'month' | 'year'
+
 const LOG_UI_LIMIT = 5000
 
 export type Theme = 'dark' | 'light'
-export type RailView = 'home' | 'projects' | 'mail' | 'stash' | 'connections' | 'machine' | 'settings'
-export type BottomTab = 'logs' | 'processes'
+export type RailView =
+  | 'home'
+  | 'inbox'
+  /// Team: goals, features and work. Which of the three is open is the
+  /// rail's sub-menu, so it is state here rather than inside the page.
+  | 'team'
+  /// The people: the assistant, the bots, the agents.
+  | 'bots'
+  /// What the AI is costing, across every space.
+  | 'analytics'
+  | 'calendar'
+  /// Email: accounts, threads, contacts. A place you work out of, which is
+  /// why it sits with Calendar rather than with the Inbox — the Inbox is
+  /// what the team needs from you.
+  | 'mail'
+  /// The tree. Called Spaces on the rail; the id stayed to keep saved
+  /// preferences and every existing link working.
+  | 'projects'
+  | 'stash'
+  | 'connections'
+  /// The Assistant's own workspace pages — providers, agents, conflicts.
+  /// Reached from Settings rather than from the rail: it is where you
+  /// configure the team, not where you work with it.
+  | 'aiworkspace'
+  | 'machine'
+  | 'settings'
+export type BottomTab = 'logs' | 'processes' | 'events' | 'calls'
 
 /** What the Stash view is currently showing. `noProject` narrows to clips
  *  captured outside any project (the sidebar's "no project" tag). */
@@ -76,6 +106,9 @@ export interface AppState {
   recents: Recent[]
   /** Git branch info per project node id (only repos appear). */
   gitByNode: Record<number, GitInfo>
+  /** Uncommitted paths per project node. Absent means not asked yet, which
+   *  is not the same as zero — only a project we counted appears here. */
+  changesByNode: Record<number, number>
   /** Background auto-fetch of git status (learns what's to pull). */
   gitMonitorEnabled: boolean
   /** Minutes between background fetches when monitoring is on. */
@@ -94,7 +127,17 @@ export interface AppState {
   /** The workspace the Explorer is currently showing. Workspaces are switched,
    *  not browsed in the tree. */
   activeWorkspaceId: number | null
+  /** Scopes the Explorer to one solution. Null = show the whole workspace. */
+  activeSolutionId: number | null
   hotkey: string
+  /** The words offered when labelling a node. Free text is still allowed —
+   *  this is a shortlist you maintain, not a set of kinds the app enforces. */
+  labels: string[]
+  /** Node ids you have opened, most recent first. A convenience list, so it
+   *  lives in localStorage rather than the vault — losing it costs nothing. */
+  recent: number[]
+  /** How many of them the rail shows. */
+  recentLimit: number
   /** Request the Log viewer to filter its output. `n` bumps so asking for
    *  the same thing twice still refocuses. `search` also drives its text
    *  box — that's how a stacktrace clip jumps you to matching log lines. */
@@ -129,6 +172,8 @@ export interface AppState {
   refreshRecents: () => Promise<void>
   /** Resolve the current git branch for every project node into `gitByNode`. */
   refreshGit: () => Promise<void>
+  /** Count uncommitted paths for every project node into `changesByNode`. */
+  refreshChanges: () => Promise<void>
   /** Fetch remote-tracking refs for the active workspace's repos, then update
    *  ahead/behind. This is the networked monitoring pass. */
   fetchGitStatus: () => Promise<void>
@@ -152,7 +197,15 @@ export interface AppState {
 
   setSelectedNode: (id: number | null) => void
   setActiveWorkspace: (id: number | null) => void
+  setActiveSolution: (id: number | null) => void
+  /** Create a solution in the active workspace. Shared so the rail and the
+   *  Explorer cannot drift into two different creation paths. */
+  createSolution: (name: string) => Promise<TreeNode | null>
   setHotkey: (h: string) => void
+  refreshLabels: () => Promise<void>
+  touchRecent: (id: number) => void
+  setRecentLimit: (n: number) => Promise<void>
+  saveLabels: (list: string[]) => Promise<void>
   focusServiceLogs: (name: string) => void
   /** Reveal the Logs tab filtered to `term` across every source. */
   searchLogs: (term: string) => void
@@ -164,6 +217,28 @@ export interface AppState {
   showBottom: (tab: BottomTab) => void
   setBottomTab: (tab: BottomTab) => void
   setBottomCollapsed: (collapsed: boolean) => void
+
+  /** Which Settings tab to land on, when something else sends you there. */
+  settingsTab: string | null
+  setSettingsTab: (tab: string | null) => void
+  /** "Make a new one-off at this moment" — set by the calendar, consumed by
+   *  the scheduler, which is the only thing that knows how to draw the form. */
+  newScheduleAt: number | null
+  setNewScheduleAt: (at: number | null) => void
+
+  // Calendar — which day you are looking at, how finely, and what you have
+  // switched off. It lives here rather than in the page because the sidebar
+  // shows the same day from outside it: two copies of "which Tuesday" is one
+  // copy too many.
+  calAnchor: number
+  calView: CalView
+  calSlot: number
+  /** Layers you have hidden. Empty means everything shows. */
+  calHidden: Layer[]
+  setCalAnchor: (at: number) => void
+  setCalView: (view: CalView) => void
+  setCalSlot: (min: number) => void
+  toggleCalLayer: (id: Layer) => void
 
   // Stash — the clip vault. The list carries previews only; `stashDetail`
   // holds the one selected row with its full content fetched on demand.
@@ -202,7 +277,39 @@ export interface AppState {
   /** The activity stream — every source writes to it, everything reads it. */
   activity: Activity[]
   refreshActivity: () => Promise<void>
+  /** What has been read, by row id — `activity:12`, `approval:ab`. Absent
+   *  means nobody has said, which is unread. */
+  inboxRead: Record<string, boolean>
+  /** Whether the two reads above have come back. Until they have, nothing
+   *  counts as unread — see `unread` in lib/inbox. */
+  inboxLoaded: boolean
+  /** The moment before which history counts as read. Set once, from the old
+   *  single-timestamp scheme, so upgrading does not resurrect a month of
+   *  failures as unread. */
+  inboxFloor: number
+  refreshInbox: () => Promise<void>
+  /** Mark rows read, or unread again. */
+  markInbox: (items: string[], read: boolean) => Promise<void>
+  /// Which of Team's three views is open. A sub-menu on the rail, not tabs
+  /// on the page — one navigation, not two.
+  teamTab: TeamTab
+  setTeamTab: (t: TeamTab) => void
+  /** The most recent thing worth interrupting for, until it is dismissed. */
+  toast: Activity | null
+  dismissToast: () => void
   pushActivity: (a: Activity) => void
+
+  /** The goal you are on, or null. One at a time, app-wide: the point of
+   *  focusing is that the *other* spaces go quiet. */
+  focus: ipc.Focus | null
+  refreshFocus: () => Promise<void>
+  startFocus: (goal: string, nodeId: number | null) => Promise<void>
+  /** `held` is what the inbox counted — it is the only thing that knows. */
+  endFocus: (held: number) => Promise<void>
+
+  /** Every `_bot.md` in the vault. */
+  bots: ipc.Bot[]
+  refreshBots: () => Promise<void>
 
   // Connections — the SQL layer.
   connections: ConnDef[]
@@ -304,16 +411,87 @@ const adoptingPorts = new Set<number>()
 /** Trailing-edge timer for `ingestStashItem`. */
 let ingestTimer: number | undefined
 
+import { CAPTURE_BOTTOM, CAPTURE_TEAM_TAB, CAPTURE_WORKSPACE, CAPTURE_RAIL } from './lib/devCapture'
+
+/// Seeded, not fixed: the list lives in settings and you edit it there.
+// Business and Personal lead because they are the two that *change behaviour*
+// rather than just reading on a pill: a bot in a Personal space starts quiet and
+// out of work hours. The rest are descriptive.
+const DEFAULT_LABELS = [
+  'Business',
+  'Personal',
+  'Product',
+  'Topic',
+  'Client',
+  'Area',
+  'Service',
+  'Archive',
+]
+const LABELS_KEY = 'node_labels'
+const RECENT_LIMIT_KEY = 'recent_limit'
+const RECENT_KEY = 'devdeck.recent'
+
+const loadRecent = (): number[] => {
+  try {
+    const v = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]')
+    return Array.isArray(v) ? v.filter((n) => typeof n === 'number') : []
+  } catch {
+    return []
+  }
+}
+
+/// Goals, Features and Work are three questions about the same rows; Bots is
+/// who answers them. They are tabs of one page because moving between "what is
+/// being worked on" and "who is working on it" was a trip through the rail.
 const RAIL_KEY = 'devdeck.railView'
+
+export type TeamTab = 'goals' | 'features' | 'work' | 'bots'
+const TEAM_KEY = 'devdeck.team.tab'
+const loadTeamTab = (): TeamTab => {
+  if (CAPTURE_TEAM_TAB) return CAPTURE_TEAM_TAB as TeamTab
+  // Bots had a rail entry of its own until it came back to Team; someone
+  // whose last view was that one lands on the tab it became.
+  if (localStorage.getItem(RAIL_KEY) === 'bots') return 'bots'
+  const v = localStorage.getItem(TEAM_KEY)
+  return v === 'features' || v === 'work' || v === 'bots' ? v : 'goals'
+}
+
+/** When the Inbox was last looked at. Kept locally rather than in the database
+ *  because it is about this screen, not about the work. */
+const SEEN_KEY = 'devdeck.inbox.seen'
+const loadSeen = () => Number(localStorage.getItem(SEEN_KEY) ?? 0) || 0
+/// Every rail view, in one place. The old hand-written comparison chain did not
+/// include new views, so a view added later would be written to localStorage,
+/// fail validation on the next launch, and silently drop the user back to Home.
+const RAIL_VIEWS: readonly RailView[] = [
+  'home',
+  'inbox',
+  'team',
+  'bots',
+  'analytics',
+  'calendar',
+  'projects',
+  'stash',
+  'connections',
+  'aiworkspace',
+  'machine',
+  'settings',
+]
+
 const loadRailView = (): RailView => {
-  const v = localStorage.getItem(RAIL_KEY)
-  return v === 'projects' || v === 'stash' || v === 'connections' || v === 'machine' || v === 'settings'
-    ? v
-    : 'home'
+  if (CAPTURE_RAIL) return CAPTURE_RAIL as RailView
+  const v = localStorage.getItem(RAIL_KEY) as RailView | null
+  // Bots moved back into Team. The old value still means something, so it is
+  // translated rather than failed — failing it would drop you on Home.
+  if (v === 'bots') return 'team'
+  return v && RAIL_VIEWS.includes(v) ? v : 'home'
 }
 
 const AW_KEY = 'devdeck.activeWorkspace'
 const loadActiveWs = (): number | null => {
+  // Screenshot harness: which workspace tab is open decides what the tree can
+  // show, so a capture has to be able to say.
+  if (CAPTURE_WORKSPACE) return Number(CAPTURE_WORKSPACE)
   const v = Number(localStorage.getItem(AW_KEY))
   return Number.isFinite(v) && v > 0 ? v : null
 }
@@ -339,6 +517,36 @@ const errText = (e: unknown) => (e instanceof Error ? e.message : String(e))
 // keeps saying, honestly, that the load has not succeeded yet.
 const TREE_RETRY_MS = [300, 900, 2500]
 let treeRetryTimer: number | undefined
+/// Reject if a call has not answered in `ms`.
+///
+/// A rejected promise reaches the retry ladder; a promise that never settles
+/// does not. The tree hung on "Loading your workspaces…" forever whenever the
+/// scan's *reply* went missing rather than the scan failing — Tauri drops
+/// in-flight callbacks when the IPC transport switches under it, which is a
+/// thing that happens on a reload. Nothing on screen could tell that apart
+/// from a scan still running, because there is nothing to tell it apart with.
+///
+/// Generous on purpose: a first scan of a large vault is slow, and turning a
+/// slow answer into an error would be its own kind of lying.
+function within<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = window.setTimeout(
+      () => reject(new Error(`${what} did not answer within ${Math.round(ms / 1000)}s.`)),
+      ms,
+    )
+    p.then(
+      (v) => {
+        window.clearTimeout(t)
+        resolve(v)
+      },
+      (e) => {
+        window.clearTimeout(t)
+        reject(e)
+      },
+    )
+  })
+}
+
 let treeRetries = 0
 const scheduleTreeRetry = () => {
   const delay = TREE_RETRY_MS[treeRetries]
@@ -361,18 +569,25 @@ export const useApp = create<AppState>((set, get) => ({
   logs: [],
   recents: [],
   gitByNode: {},
+  changesByNode: {},
   gitMonitorEnabled: true,
   gitMonitorIntervalMin: 5,
   treeError: null,
   treeLoading: true,
   selectedNodeId: null,
   activeWorkspaceId: loadActiveWs(),
+  activeSolutionId: null,
+  labels: DEFAULT_LABELS,
+  recent: loadRecent(),
+  recentLimit: 3,
   hotkey: 'ctrl+shift+Space',
   theme: 'dark',
   railView: loadRailView(),
   sheet: null,
-  bottomTab: (localStorage.getItem('devdeck.bottom.tab') as BottomTab) || 'logs',
-  bottomCollapsed: localStorage.getItem('devdeck.bottom.collapsed') === '1',
+  bottomTab: (CAPTURE_BOTTOM as BottomTab) ||
+    (localStorage.getItem('devdeck.bottom.tab') as BottomTab) ||
+    'logs',
+  bottomCollapsed: CAPTURE_BOTTOM ? false : localStorage.getItem('devdeck.bottom.collapsed') === '1',
   logFocus: null,
 
   selectedNode: () => {
@@ -408,7 +623,10 @@ export const useApp = create<AppState>((set, get) => ({
   refreshTree: async () => {
     set({ treeLoading: true })
     try {
-      const nodes = await ipc.treeList()
+      // The folders are the truth; SQLite is the index they are read into.
+      // A scan is what refreshes the tree, so a folder made outside the app
+      // shows up on the next read rather than never.
+      const nodes = await within(ipc.vaultScan(), 30_000, 'Reading the workspace tree')
       const activeWorkspaceId = resolveActiveWs(nodes, get().activeWorkspaceId)
       persistActiveWs(activeWorkspaceId)
       treeRetries = 0
@@ -447,6 +665,31 @@ export const useApp = create<AppState>((set, get) => ({
     const gitByNode: Record<number, GitInfo> = {}
     for (const [id, info] of entries) if (info?.is_repo) gitByNode[id] = info
     set({ gitByNode })
+    void get().refreshChanges()
+  },
+
+  refreshChanges: async () => {
+    const { nodes, gitByNode } = get()
+    // Only repositories, and only ones we already know are repositories:
+    // `git status` on a folder that is not one is a process spawned to be
+    // told nothing, once per folder, on every tree refresh.
+    const projects = nodes.filter((n) => n.kind === 'project' && gitByNode[n.id]?.is_repo)
+    const entries = await Promise.all(
+      projects.map(async (p) => {
+        const dir = resolveDir(nodes, p)
+        if (!dir) return [p.id, null] as const
+        try {
+          return [p.id, (await ipc.gitChanges(dir)).length] as const
+        } catch {
+          // A count we could not take is left out rather than shown as zero:
+          // "nothing to commit" is a claim, and we would be guessing at it.
+          return [p.id, null] as const
+        }
+      }),
+    )
+    const changesByNode: Record<number, number> = {}
+    for (const [id, n] of entries) if (n != null) changesByNode[id] = n
+    set({ changesByNode })
   },
   fetchGitStatus: async () => {
     const { nodes, activeWorkspaceId } = get()
@@ -531,6 +774,8 @@ export const useApp = create<AppState>((set, get) => ({
     document.documentElement.dataset.theme = savedTheme === 'light' ? 'light' : 'dark'
     await tree
     void get().refreshActivity()
+    void get().refreshFocus()
+    void get().refreshBots()
     void get().refreshConnections()
     void get().refreshConnQueries()
     // Mail loads from the local cache, so the inbox is there before any
@@ -573,6 +818,31 @@ export const useApp = create<AppState>((set, get) => ({
   markPtyExited: (id) =>
     set((st) => ({
       terminals: st.terminals.map((t) => (t.id === id ? { ...t, alive: false } : t)),
+    })),
+
+  settingsTab: null,
+  setSettingsTab: (settingsTab) => set({ settingsTab }),
+  newScheduleAt: null,
+  setNewScheduleAt: (newScheduleAt) => set({ newScheduleAt }),
+
+  calAnchor: Date.now(),
+  calView: (localStorage.getItem('devdeck.calendar.view') as CalView) || 'day',
+  calSlot: Number(localStorage.getItem('devdeck.calendar.slot')) || 15,
+  calHidden: [],
+  setCalAnchor: (calAnchor) => set({ calAnchor }),
+  setCalView: (calView) => {
+    localStorage.setItem('devdeck.calendar.view', calView)
+    set({ calView })
+  },
+  setCalSlot: (calSlot) => {
+    localStorage.setItem('devdeck.calendar.slot', String(calSlot))
+    set({ calSlot })
+  },
+  toggleCalLayer: (id) =>
+    set((st) => ({
+      calHidden: st.calHidden.includes(id)
+        ? st.calHidden.filter((x) => x !== id)
+        : [...st.calHidden, id],
     })),
 
   stashItems: [],
@@ -708,7 +978,82 @@ export const useApp = create<AppState>((set, get) => ({
 
   activity: [],
   refreshActivity: async () => set({ activity: await ipc.activityList(60) }),
-  pushActivity: (a) => set((st) => ({ activity: [a, ...st.activity].slice(0, 60) })),
+  teamTab: loadTeamTab(),
+  setTeamTab: (t) => {
+    localStorage.setItem(TEAM_KEY, t)
+    set({ teamTab: t, railView: 'team' })
+  },
+  inboxRead: {},
+  inboxFloor: 0,
+  inboxLoaded: false,
+  refreshInbox: async () => {
+    // The old scheme's timestamp becomes the floor, once, and then the
+    // database owns it. Reading it here rather than at boot keeps the
+    // migration where the feature is.
+    // On a cold start the backend may not be answering yet. A failed read
+    // here used to leave an empty map, which reads as "nothing has ever been
+    // read" — a full inbox of false alarms. So it retries, and says plainly
+    // whether it ever got an answer.
+    for (let go = 0; go < 4; go++) {
+      try {
+        const floor = await ipc.inboxFloorSeed(loadSeen())
+        const marks = await ipc.inboxMarks()
+        const inboxRead: Record<string, boolean> = {}
+        for (const m of marks) inboxRead[m.item] = m.read
+        set({ inboxRead, inboxFloor: floor, inboxLoaded: true })
+        return
+      } catch (e) {
+        if (go === 3) {
+          console.warn('[inbox] could not read what has been read:', e)
+          return
+        }
+        await new Promise((r) => setTimeout(r, 400 * (go + 1)))
+      }
+    }
+  },
+  markInbox: async (items, read) => {
+    if (items.length === 0) return
+    // Optimistic: the click is the decision, and a round trip before the row
+    // changes makes marking a page of them feel broken.
+    set((st) => {
+      const inboxRead = { ...st.inboxRead }
+      for (const i of items) inboxRead[i] = read
+      return { inboxRead }
+    })
+    await ipc.inboxMark(items, read).catch(() => {})
+  },
+  toast: null,
+  dismissToast: () => set({ toast: null }),
+  pushActivity: (a) =>
+    set((st) => ({
+      activity: [a, ...st.activity].slice(0, 60),
+      // Only the clock interrupts. Everything else in the feed happened
+      // because you just did something, and a toast for your own click is
+      // noise you learn to dismiss without reading — which is how the one
+      // that mattered gets dismissed too.
+      // Suppressed only when you are already looking at where it lands:
+      // Home for something that merely happened, the Inbox for a failure.
+      toast:
+        (a.kind === 'schedule' || a.kind === 'bot') &&
+        st.railView !== (a.ok ? 'home' : 'inbox')
+          ? a
+          : st.toast,
+    })),
+
+  focus: null,
+  refreshFocus: async () => set({ focus: await ipc.focusCurrent() }),
+  startFocus: async (goal, nodeId) => {
+    set({ focus: await ipc.focusStart(goal, nodeId) })
+    await get().refreshActivity()
+  },
+  endFocus: async (held) => {
+    await ipc.focusEnd(held)
+    set({ focus: null })
+    await get().refreshActivity()
+  },
+
+  bots: [],
+  refreshBots: async () => set({ bots: await ipc.botsList() }),
 
   connections: [],
   connQueries: [],
@@ -854,7 +1199,59 @@ export const useApp = create<AppState>((set, get) => ({
   setActiveWorkspace: (id) => {
     persistActiveWs(id)
     // Switching workspace clears any selection from the previous one.
-    set({ activeWorkspaceId: id, selectedNodeId: null })
+    // The solution scope belongs to the workspace we are leaving — a solution
+    // id from another workspace would scope the tree to nothing.
+    set({ activeWorkspaceId: id, selectedNodeId: null, activeSolutionId: null })
+    // ...and takes you there. Most rail destinations — the Assistant, Machine,
+    // Stash, Settings — are global, so a workspace tab clicked from one of them
+    // would otherwise change nothing you can see, which reads as a dead click.
+    // Going to Projects makes the tab mean the same thing from everywhere.
+    //
+    // Cheap to undo: the rail remembers where you were, and nothing you were
+    // looking at is lost by leaving it.
+    localStorage.setItem(RAIL_KEY, 'projects')
+    set({ railView: 'projects' })
+  },
+  setActiveSolution: (id) => set({ activeSolutionId: id, selectedNodeId: null }),
+  createSolution: async (name) => {
+    const { activeWorkspaceId, refreshTree } = get()
+    if (activeWorkspaceId == null) return null
+    const created = await ipc.vaultCreate(activeWorkspaceId, name)
+    await refreshTree()
+    return created
+  },
+  touchRecent: (id) => {
+    // Newest first, no duplicates, and a bounded tail — the list is a jump
+    // list, not a history.
+    const next = [id, ...get().recent.filter((x) => x !== id)].slice(0, 20)
+    try {
+      localStorage.setItem(RECENT_KEY, JSON.stringify(next))
+    } catch {
+      // A blocked localStorage is not worth failing a click over.
+    }
+    set({ recent: next })
+  },
+  setRecentLimit: async (n) => {
+    const v = Math.max(0, Math.min(10, Math.round(n)))
+    await ipc.settingSet(RECENT_LIMIT_KEY, String(v))
+    set({ recentLimit: v })
+  },
+  refreshLabels: async () => {
+    const raw = await ipc.settingGet(LABELS_KEY)
+    const list = (raw ?? DEFAULT_LABELS.join('\n'))
+      .split(/[\n,]/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+    // An unset setting reads back null, and Number(null) is 0 — which would
+    // have hidden the Recent list entirely on a machine that never set it.
+    const rawLimit = await ipc.settingGet(RECENT_LIMIT_KEY)
+    const lim = rawLimit === null || rawLimit.trim() === '' ? 3 : Number(rawLimit)
+    set({ labels: list, recentLimit: Number.isFinite(lim) && lim >= 0 ? lim : 3 })
+  },
+  saveLabels: async (list) => {
+    const clean = [...new Set(list.map((s) => s.trim()).filter(Boolean))]
+    await ipc.settingSet(LABELS_KEY, clean.join('\n'))
+    set({ labels: clean })
   },
   setHotkey: (h) => set({ hotkey: h }),
   setTheme: async (t) => {
@@ -865,6 +1262,10 @@ export const useApp = create<AppState>((set, get) => ({
   setRailView: (v) => {
     localStorage.setItem(RAIL_KEY, v)
     set({ railView: v })
+    // Opening the Inbox used to mark everything read, which is why one glance
+    // could bury a failure you had not looked at. Reading is now per row, and
+    // done on purpose; all this does is put the toast away.
+    if (v === 'inbox') set({ toast: null })
   },
   openSheet: (s) => set({ sheet: s }),
   closeSheet: () => set({ sheet: null }),

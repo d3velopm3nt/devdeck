@@ -1,0 +1,226 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: var(--accent); } a:hover { color: var(--ink); }
+    .head { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .chip { display: inline-flex; align-items: center; gap: 4px; font-size: 9px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; padding: 2px 6px; border-radius: 999px; }
+    .btn { font-size: 11px; color: var(--dim); border: 1px solid var(--line2); border-radius: 6px; padding: 3px 9px; background: transparent; }
+    .btn.on { color: #fff; background: #4f46e5; border-color: #4f46e5; }
+    .mono { font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; }
+    .rail { display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 8px; border-radius: 8px; font-size: 12px; color: var(--muted); position: relative; }
+    .rail-on { background: var(--raise); color: var(--ink); }
+    .rail-on::before { content: ""; position: absolute; left: -6px; top: 6px; bottom: 6px; width: 2.5px; border-radius: 2px; background: #6366f1; }
+    .avatar { width: 24px; height: 24px; flex-shrink: 0; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; }
+    .at { color: var(--accent); font-weight: 600; }
+    .msg { font-size: 12px; line-height: 1.65; color: var(--body); }
+    .receipt { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); padding: 5px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --page: {{c.page}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --menu: {{c.menu}}; --hover: {{c.hover}}; --line: {{c.line}}; --line2: {{c.line2}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; width: 1456px; height: 909px; background: var(--app); color: var(--body); display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;">
+
+  <div style="height: 32px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--panel);">
+    <span style="font-size: 11.5px; color: var(--dim);">DevDeck</span>
+    <span style="font-size: 11.5px; color: var(--faint);">File</span>
+    <span style="font-size: 11.5px; color: var(--faint);">View</span>
+    <span style="font-size: 11.5px; color: var(--faint);">Build</span>
+    <span style="font-size: 11.5px; color: var(--faint);">Help</span>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; min-height: 0;">
+
+    <div style="width: 160px; flex-shrink: 0; background: var(--app); border-right: 1px solid var(--line); padding: 8px 6px; display: flex; flex-direction: column; gap: 2px;">
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 11 12 4l8.5 7"></path><path d="M5.5 9.8V19h13V9.8"></path></svg><span>Home</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 13.5 6 5.5h12l2.5 8v5h-17z"></path><path d="M3.5 13.5H9l1 2h4l1-2h5.5"></path></svg><span>Inbox</span></div>
+      <div class="rail rail-on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"></circle><path d="M3.5 19a5.5 5.5 0 0 1 11 0"></path><circle cx="17" cy="9" r="2.6"></circle><path d="M15.5 14.2a4.5 4.5 0 0 1 5 4.3"></path></svg><span>Team</span><span style="margin-left: auto; font-size: 10px; color: var(--ok);">6</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="12" rx="2"></rect><path d="M9 12h.01M15 12h.01M12 3v4"></path></svg><span>Bots</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"></path><path d="M3.5 7 12 11.6 20.5 7M12 11.6v9.9"></path></svg><span>Spaces</span></div>
+      <div style="height: 1px; background: var(--line); margin: 9px 6px;"></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5.5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="18.5" r="2.5"></circle><path d="M8.3 10.8 15.7 6.7M8.3 13.2l7.4 4.1"></path></svg><span>Community</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9M9.5 19V5M15 19v-6M20.5 19v-9"></path></svg><span>Analytics</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="5" rx="1.5"></rect><path d="M5.5 9.5v9h13v-9"></path><path d="M10 13h4"></path></svg><span>Stash</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="10" rx="2"></rect><path d="M7 19h10M21 9v10h-4"></path></svg><span>Machine</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12H3.5M18 6l-1.6 1.6M7.6 16.4 6 18M18 18l-1.6-1.6M7.6 7.6 6 6"></path></svg><span>Settings</span></div>
+    </div>
+
+    <div style="width: 280px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0;">
+      <div style="display: flex; align-items: baseline; gap: 14px; padding: 14px 14px 0; border-bottom: 1px solid var(--line);">
+        <span style="font-size: 12px; color: var(--muted); padding: 0 1px 8px;">Goals</span>
+        <span style="font-size: 12px; color: var(--ink); padding: 0 1px 8px; border-bottom: 2px solid var(--accent);">Features</span>
+        <span style="font-size: 12px; color: var(--muted); padding: 0 1px 8px;">Work</span>
+        <span style="font-size: 12px; color: var(--muted); padding: 0 1px 8px;">Bots</span>
+      </div>
+      <div style="padding: 8px 6px;">
+        <div class="head" style="padding: 6px 10px 4px;">Moving</div>
+        <div style="padding: 9px 10px; border-radius: 8px; background: var(--hover);">
+          <div style="display: flex; align-items: baseline; gap: 6px;"><span style="font-size: 12.5px; color: var(--ink);">Checkout flow</span><span style="margin-left: auto; font-size: 10px; color: var(--ok);">2 on it</span></div>
+          <div style="font-size: 10px; color: var(--muted); margin-top: 2px;">x-platform</div>
+          <div style="font-size: 10.5px; color: var(--dim); margin-top: 5px;">qa: two failures, both on the promo field</div>
+        </div>
+        <div style="padding: 9px 10px; border-radius: 8px;">
+          <div style="display: flex; align-items: baseline; gap: 6px;"><span style="font-size: 12.5px; color: var(--body);">Offline sync</span><span style="margin-left: auto; font-size: 10px; color: var(--ok);">3 on it</span></div>
+          <div style="font-size: 10px; color: var(--muted); margin-top: 2px;">x-platform</div>
+        </div>
+        <div style="padding: 9px 10px; border-radius: 8px;">
+          <div style="display: flex; align-items: baseline; gap: 6px;"><span style="font-size: 12.5px; color: var(--body);">node-as-conversation</span><span style="margin-left: auto; font-size: 10px; color: var(--muted);">14/17</span></div>
+          <div style="font-size: 10px; color: var(--muted); margin-top: 2px;">Devdeck</div>
+        </div>
+        <div class="head" style="padding: 12px 10px 4px;">Waiting on you</div>
+        <div style="padding: 9px 10px; border-radius: 8px; background: rgb(251 191 36 / .07); border: 1px solid rgb(251 191 36 / .25);">
+          <div style="display: flex; align-items: baseline; gap: 6px;"><span style="font-size: 12.5px; color: var(--ink);">Pricing page</span><span style="margin-left: auto; font-size: 10px; color: var(--warn);">approval</span></div>
+          <div style="font-size: 10px; color: var(--muted); margin-top: 2px;">Marketing site</div>
+        </div>
+      </div>
+      <div style="margin-top: auto; border-top: 1px solid var(--line); padding: 10px 14px; font-size: 10px; line-height: 1.55; color: var(--faint);">The feature is the room. Anyone pulled in with @ can speak here; only a claim transfer moves the work.</div>
+    </div>
+
+    <div style="flex-grow: 1; min-width: 0; background: var(--page); display: flex; flex-direction: column; min-height: 0;">
+
+      <div style="flex-shrink: 0; padding: 12px 20px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px;">
+        <div>
+          <div style="font-size: 14px; font-weight: 600; color: var(--ink);">Checkout flow</div>
+          <div style="font-size: 10.5px; color: var(--muted); margin-top: 2px;">x-platform · 4 of 9 items done</div>
+        </div>
+        <div style="margin-left: auto; display: flex; align-items: center; gap: 5px;">
+          <span class="avatar" style="background: rgb(245 158 11 / .18); color: #f59e0b;">XB</span>
+          <span class="avatar" style="background: rgb(56 189 248 / .18); color: #38bdf8;">QA</span>
+          <span class="avatar" style="background: rgb(99 102 241 / .18); color: #a5b4fc;">DA</span>
+        </div>
+      </div>
+
+      <div style="flex: 1; min-height: 0; padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; overflow: hidden;">
+
+        <div style="display: flex; gap: 10px;">
+          <span class="avatar" style="background: rgb(245 158 11 / .18); color: #f59e0b;">XB</span>
+          <div style="min-width: 0;">
+            <div style="display: flex; align-items: baseline; gap: 7px;"><span style="font-size: 12px; color: var(--ink); font-weight: 600;">x-platform bot</span><span style="font-size: 10px; color: var(--faint);">08:00</span></div>
+            <div class="msg" style="margin-top: 3px;">Woke on the weekday rhythm. Three items open on this feature; the promo-code one has been open longest, so I am putting <span class="at">@qa</span> on it.</div>
+          </div>
+        </div>
+
+        <div class="receipt" style="margin-left: 34px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--accent);"><path d="M4 12h16M14 6l6 6-6 6"></path></svg>
+          <span class="mono" style="color: var(--dim);">@qa take "check the promo field on staging checkout"</span>
+          <span style="margin-left: auto; font-size: 10px;">claim moved · session started</span>
+        </div>
+
+        <div style="display: flex; gap: 10px;">
+          <span class="avatar" style="background: rgb(56 189 248 / .18); color: #38bdf8;">QA</span>
+          <div style="min-width: 0;">
+            <div style="display: flex; align-items: baseline; gap: 7px;"><span style="font-size: 12px; color: var(--ink); font-weight: 600;">qa</span><span style="font-size: 10px; color: var(--faint);">09:14</span></div>
+            <div class="msg" style="margin-top: 3px;">This needs a real browser. <span class="mono" style="color: var(--ink);">browser</span> is installed from Community and I have Approval on it, so I am asking.</div>
+          </div>
+        </div>
+
+        <div style="margin-left: 34px; border: 1px solid rgb(251 191 36 / .4); border-radius: 12px; background: rgb(251 191 36 / .05); padding: 12px 14px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" style="color: var(--warn);"><path d="M12 3.5 21 19H3z"></path><path d="M12 10v4M12 16.5h.01"></path></svg>
+            <span style="font-size: 11.5px; color: var(--warn); font-weight: 600;">qa is waiting on you</span>
+            <span class="chip" style="margin-left: auto; background: var(--hover); color: var(--dim);">playwright-mcp</span>
+          </div>
+          <div class="mono" style="font-size: 11px; color: var(--ink); margin-top: 9px; background: var(--app); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; line-height: 1.6;">browser.navigate<br><span style="color: var(--dim);">{ "url": "https://staging.x-platform.dev/cart" }</span></div>
+          <div style="font-size: 10.5px; color: var(--muted); margin-top: 8px;">It will open a Chromium outside DevDeck and reach that host. Nothing else on this feature is blocked while you decide.</div>
+          <div style="display: flex; gap: 6px; margin-top: 10px; align-items: center;">
+            <button class="btn on">Allow once</button>
+            <button class="btn">Allow until this evening</button>
+            <button class="btn">No</button>
+            <span style="margin-left: auto; font-size: 10px; color: var(--err);">denies itself in 4:12</span>
+          </div>
+        </div>
+
+        <div class="receipt" style="margin-left: 34px; border-color: rgb(74 222 128 / .3);">
+          <span style="width: 7px; height: 7px; border-radius: 999px; background: var(--ok);"></span>
+          <span style="color: var(--dim);">You allowed <span class="mono" style="color: var(--ink);">browser.*</span> until 18:00, on x-platform only.</span>
+          <span style="margin-left: auto; font-size: 10px;">09:14 · shown in Permissions</span>
+        </div>
+
+        <div style="display: flex; gap: 10px;">
+          <span class="avatar" style="background: rgb(56 189 248 / .18); color: #38bdf8;">QA</span>
+          <div style="min-width: 0; flex: 1;">
+            <div style="display: flex; align-items: baseline; gap: 7px;"><span style="font-size: 12px; color: var(--ink); font-weight: 600;">qa</span><span style="font-size: 10px; color: var(--faint);">09:21</span></div>
+            <div class="msg" style="margin-top: 3px;">Two failures, both on the promo field, both reproducible.</div>
+            <div class="mono" style="margin-top: 7px; border: 1px solid var(--line); border-radius: 9px; background: var(--app); padding: 9px 11px; font-size: 10.5px; line-height: 1.7; color: var(--dim);">
+              <div><span style="color: var(--err);">FAIL</span> promo code SAVE20 accepted twice — total goes negative</div>
+              <div><span style="color: var(--err);">FAIL</span> expired code shows the generic error, not the expiry one</div>
+              <div style="color: var(--faint);">14 browser calls · 3 snapshots kept</div>
+            </div>
+            <div class="msg" style="margin-top: 7px;">I have added both to the plan. The first is a server-side check, so it is <span class="at">@dev-a</span>'s rather than mine.</div>
+          </div>
+        </div>
+
+        <div class="receipt" style="margin-left: 34px;">
+          <span style="width: 7px; height: 7px; border-radius: 999px; background: var(--err);"></span>
+          <span style="color: var(--dim);">One call refused: <span class="mono">browser.navigate api.stripe.com</span> — outside the host you allowed.</span>
+          <span style="margin-left: auto; font-size: 10px;">09:19 · qa carried on without it</span>
+        </div>
+
+      </div>
+
+      <div style="flex-shrink: 0; border-top: 1px solid var(--line); padding: 10px 20px; display: flex; align-items: center; gap: 10px; background: var(--panel);">
+        <span style="flex: 1; font-size: 11.5px; color: var(--faint);">Reply, or hand it on with @dev-a take "the double-apply check"</span>
+        <button class="btn on">Send</button>
+      </div>
+    </div>
+
+    <div style="width: 300px; flex-shrink: 0; background: var(--panel); border-left: 1px solid var(--line); padding: 14px 14px; display: flex; flex-direction: column; gap: 12px; overflow: hidden;">
+      <div class="head">From Community, in this thread</div>
+
+      <div style="border: 1px solid var(--line); border-radius: 11px; background: var(--raise); padding: 10px 11px;">
+        <div style="display: flex; align-items: center; gap: 7px;">
+          <span style="width: 22px; height: 22px; border-radius: 7px; background: rgb(56 189 248 / .16); color: #38bdf8; display: flex; align-items: center; justify-content: center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3.5" y="4" width="17" height="6.5" rx="2"></rect><rect x="3.5" y="13.5" width="17" height="6.5" rx="2"></rect></svg></span>
+          <span style="font-size: 11.5px; color: var(--ink);">playwright-mcp</span>
+          <span class="chip" style="margin-left: auto; background: rgb(251 191 36 / .16); color: var(--warn);">Approval</span>
+        </div>
+        <div style="font-size: 10.5px; color: var(--muted); margin-top: 7px; line-height: 1.55;">14 calls this morning, 1 refused. Apache-2.0, installed 6 days ago into Personal.</div>
+      </div>
+
+      <div style="border: 1px solid var(--line); border-radius: 11px; background: var(--raise); padding: 10px 11px;">
+        <div style="display: flex; align-items: center; gap: 7px;">
+          <span style="width: 22px; height: 22px; border-radius: 7px; background: rgb(167 139 250 / .16); color: #a78bfa; display: flex; align-items: center; justify-content: center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 5.5A2 2 0 0 1 6 3.5h13v15H6a2 2 0 0 0-2 2z"></path><path d="M4 18.5A2 2 0 0 1 6 16.5h13"></path></svg></span>
+          <span style="font-size: 11.5px; color: var(--ink);">a11y-audit</span>
+          <span class="chip" style="margin-left: auto; background: rgb(74 222 128 / .14); color: var(--ok);">Full</span>
+        </div>
+        <div style="font-size: 10.5px; color: var(--muted); margin-top: 7px; line-height: 1.55;">The procedure qa followed. A skill reaches nothing on its own — it only tells an agent what to do.</div>
+      </div>
+
+      <div style="border: 1px solid var(--line); border-radius: 11px; background: var(--raise); padding: 10px 11px;">
+        <div style="display: flex; align-items: center; gap: 7px;">
+          <span style="width: 22px; height: 22px; border-radius: 7px; background: rgb(34 197 94 / .16); color: #22c55e; display: flex; align-items: center; justify-content: center;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 3 3.5 7.5 12 12l8.5-4.5z"></path><path d="M3.5 12 12 16.5 20.5 12"></path></svg></span>
+          <span class="mono" style="font-size: 11px; color: var(--ink);">qwen3-coder:30b</span>
+        </div>
+        <div style="font-size: 10.5px; color: var(--muted); margin-top: 7px; line-height: 1.55;">qa ran on this, locally. No API key was used and nothing left the machine except the staging request you allowed.</div>
+      </div>
+
+      <div style="margin-top: auto; border-top: 1px solid var(--line); padding-top: 10px; font-size: 10px; line-height: 1.6; color: var(--faint);">This panel is the whole argument for the module. Community is where you choose what your bots can reach; this is the only place it actually runs, and every call left a receipt you can revoke.</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', page: '#0d1017', panel: '#11141c', raise: '#151923', menu: '#1a1f2b',
+          hover: '#232b3b', line: '#1e293b', line2: '#334155', ink: '#e2e8f0', body: '#cbd5e1',
+          dim: '#94a3b8', muted: '#64748b', faint: '#475569', accent: '#818cf8', ok: '#4ade80',
+          warn: '#fbbf24', err: '#f87171' }
+      : { app: '#e9ebf0', page: '#f6f7f9', panel: '#fdfdfe', raise: '#f0f2f6', menu: '#ffffff',
+          hover: '#e7eaf1', line: '#d9dee7', line2: '#c3cbd8', ink: '#16181d', body: '#333a45',
+          dim: '#5a6472', muted: '#7d8794', faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d',
+          warn: '#b45309', err: '#dc2626' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,125 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background: #0d1017; }
+    a { color: #818cf8; } a:hover { color: #a5b4fc; }
+    .lbl { font-size: 9.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #475569; }
+    .card { border: 1px solid #1e293b; border-radius: 8px; background: #11141c; }
+    .row { display: flex; align-items: center; gap: 9px; padding: 7px 12px; border-top: 1px solid #1e293b; font-size: 11.5px; }
+    .src { flex: none; border-radius: 4px; padding: 0 5px; font-size: 9px; font-weight: 600; line-height: 1.7; }
+    .btn { border-radius: 5px; padding: 3px 10px; font-size: 11px; font-weight: 500; }
+    .bar { height: 6px; border-radius: 3px; background: #1e293b; overflow: hidden; display: flex }
+  </style>
+</helmet>
+
+<div style="width: 720px; height: 700px; background: #0d1017; padding: 18px 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; overflow: hidden">
+
+  <div>
+    <div style="font-size: 15px; font-weight: 600; color: #e2e8f0">Its memory, and how it gets better</div>
+    <div style="margin-top: 3px; font-size: 11.5px; color: #94a3b8">
+      Context is a list with a size. When it fills, you see what it wants to drop &mdash; it doesn&rsquo;t
+      quietly forget.
+    </div>
+  </div>
+
+  <!-- Budget: the honest version. A bar, not a vague "managing memory" spinner. -->
+  <div class="card" style="padding: 12px 13px; display: flex; flex-direction: column; gap: 8px">
+    <div style="display: flex; align-items: center; gap: 8px">
+      <span class="lbl" style="flex: 1">What it carries into every turn</span>
+      <span style="font-size: 10.5px; color: #94a3b8">14.2k of 20k</span>
+    </div>
+    <div class="bar">
+      <span style="width: 26%; background: #34d399"></span>
+      <span style="width: 22%; background: #818cf8"></span>
+      <span style="width: 15%; background: #38bdf8"></span>
+      <span style="width: 8%; background: #fbbf24"></span>
+    </div>
+    <div style="display: flex; gap: 14px; font-size: 10.5px; color: #64748b">
+      <span><span style="color: #34d399">&#9679;</span> What you told it</span>
+      <span><span style="color: #818cf8">&#9679;</span> What it worked out</span>
+      <span><span style="color: #38bdf8">&#9679;</span> Recent activity</span>
+      <span><span style="color: #fbbf24">&#9679;</span> Open threads</span>
+    </div>
+  </div>
+
+  <!-- Every line has a source and an age. Nothing is anonymous. -->
+  <div class="card" style="flex: none">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 9px 12px">
+      <span class="lbl" style="flex: 1">Ageing out next</span>
+      <span class="btn" style="border: 1px solid #1e293b; color: #94a3b8; font-size: 10.5px">Review all 34</span>
+    </div>
+    <div class="row">
+      <span class="src" style="background: rgb(52 211 153 / 0.16); color: #34d399">you</span>
+      <span style="min-width: 0; flex: 1; color: #cbd5e1">The demo is on 12 September</span>
+      <span style="flex: none; font-size: 10px; color: #475569">used 9&times; &middot; last week</span>
+      <span class="btn" style="border: 1px solid #1e293b; color: #64748b; font-size: 10px">Pin</span>
+    </div>
+    <div class="row" style="opacity: 0.6">
+      <span class="src" style="background: rgb(56 189 248 / 0.16); color: #38bdf8">watched</span>
+      <span style="min-width: 0; flex: 1; color: #cbd5e1">Build 412 failed on a lockfile mismatch</span>
+      <span style="flex: none; font-size: 10px; color: #475569">used 0&times; &middot; 6 weeks</span>
+      <span class="btn" style="border: 1px solid rgb(248 113 113 / 0.3); color: #f87171; font-size: 10px">Drop</span>
+    </div>
+    <div class="row" style="opacity: 0.6">
+      <span class="src" style="background: rgb(56 189 248 / 0.16); color: #38bdf8">watched</span>
+      <span style="min-width: 0; flex: 1; color: #cbd5e1">You renamed <span style="font-family: ui-monospace, Consolas, monospace; color: #94a3b8">api</span> to <span style="font-family: ui-monospace, Consolas, monospace; color: #94a3b8">tyrex-api</span></span>
+      <span style="flex: none; font-size: 10px; color: #475569">used 1&times; &middot; 8 weeks</span>
+      <span class="btn" style="border: 1px solid rgb(248 113 113 / 0.3); color: #f87171; font-size: 10px">Drop</span>
+    </div>
+    <div style="padding: 7px 12px; border-top: 1px solid #1e293b; font-size: 10.5px; color: #475569">
+      Nothing you told it is ever dropped automatically &mdash; only things it worked out or watched.
+    </div>
+  </div>
+
+  <!-- Improving: corrections are the mechanism, not a settings screen -->
+  <div class="card" style="flex: none">
+    <div style="padding: 9px 12px 4px"><span class="lbl">How it improves</span></div>
+    <div class="row" style="align-items: flex-start">
+      <span class="src" style="background: rgb(248 113 113 / 0.16); color: #f87171; margin-top: 1px">corrected</span>
+      <div style="min-width: 0; flex: 1">
+        <div style="color: #cbd5e1">You told it &ldquo;don&rsquo;t ping me about coverage outside a release&rdquo;</div>
+        <div style="margin-top: 3px; font-size: 10.5px; color: #64748b">
+          It rewrote the belief, and the Test runner stopped raising it. Three fewer inbox items that week.
+        </div>
+      </div>
+    </div>
+    <div class="row" style="align-items: flex-start">
+      <span class="src" style="background: rgb(100 116 139 / 0.2); color: #94a3b8; margin-top: 1px">declined</span>
+      <div style="min-width: 0; flex: 1">
+        <div style="color: #cbd5e1">You said &ldquo;not now&rdquo; to a Thursday check twice</div>
+        <div style="margin-top: 3px; font-size: 10.5px; color: #64748b">
+          It stopped proposing it. A suggestion turned down twice is not asked a third time.
+        </div>
+      </div>
+    </div>
+    <div class="row" style="align-items: flex-start">
+      <span class="src" style="background: rgb(129 140 248 / 0.16); color: #818cf8; margin-top: 1px">kept</span>
+      <div style="min-width: 0; flex: 1">
+        <div style="color: #cbd5e1">The release check has run clean 6 weeks running</div>
+        <div style="margin-top: 3px; font-size: 10.5px; color: #64748b">
+          It asked to stop reporting the clean runs and only speak when one fails. You agreed.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="flex: none; padding: 11px 13px">
+    <div class="lbl">The rule</div>
+    <div style="margin-top: 6px; font-size: 11.5px; line-height: 1.6; color: #cbd5e1">
+      A bot that silently accumulates becomes a bot no one trusts, because no one can say what it
+      believes or why it said that. So: every line has a source, a last-used date and a Drop button;
+      corrections are first-class and visible; and the only thing that grows without limit is what
+      you told it yourself.
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

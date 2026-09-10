@@ -45,6 +45,25 @@ fn now_millis() -> i64 {
 /// Record one event. Deliberately infallible: activity is a side effect of
 /// doing something useful, and failing to log it must never break the thing
 /// that happened.
+/// Take the database lock, but give up rather than hanging forever.
+fn lock_briefly(db: &Db) -> Option<std::sync::MutexGuard<'_, rusqlite::Connection>> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    loop {
+        match db.0.try_lock() {
+            Ok(g) => return Some(g),
+            // A poisoned mutex means some other thread panicked mid-write.
+            // Nothing here can fix that, and waiting will not help.
+            Err(std::sync::TryLockError::Poisoned(_)) => return None,
+            Err(std::sync::TryLockError::WouldBlock) => {
+                if std::time::Instant::now() >= deadline {
+                    return None;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+        }
+    }
+}
+
 pub fn record(
     app: &tauri::AppHandle,
     kind: &str,
@@ -53,16 +72,54 @@ pub fn record(
     ok: bool,
     ref_id: Option<i64>,
 ) {
+    record_in(app, kind, title, detail, ok, ref_id, None)
+}
+
+/// The same, for something that knows which space it belongs to.
+///
+/// The default is the space you are *looking at*, which is right for a thing
+/// you just did and wrong for a thing that happened on its own: an agent
+/// failing in one space while you read another would be filed under the one
+/// you were reading, and the row would name the wrong project in the one place
+/// you go to find out what broke.
+pub fn record_in(
+    app: &tauri::AppHandle,
+    kind: &str,
+    title: impl Into<String>,
+    detail: impl Into<String>,
+    ok: bool,
+    ref_id: Option<i64>,
+    project: Option<String>,
+) {
     let title = title.into();
     let detail = detail.into();
     let ts = now_millis();
-    let project_name = crate::stash::current_context(app).project_name;
+    let project_name =
+        project.unwrap_or_else(|| crate::stash::current_context(app).project_name);
 
     let Some(db) = app.try_state::<Db>() else {
         return;
     };
+    // Never block waiting for the database.
+    //
+    // A caller that still holds the lock when it calls this deadlocks the
+    // thread it is on — and when that is the main thread the whole window
+    // freezes with no error anywhere. That has happened three times now (the
+    // scheduler's first tick, `schedule_run_now`, and a bot learning a skill),
+    // and each time it looked like the app had simply stopped rather than like a
+    // bug in logging.
+    //
+    // Real contention clears in microseconds, so a bounded wait costs correct
+    // callers nothing and turns the broken case into one missing line and a
+    // warning. This module already promises that failing to log must never break
+    // the thing that happened; freezing the app was the one way it could.
+    let Some(conn) = lock_briefly(&db) else {
+        eprintln!(
+            "[activity] gave up waiting for the database to log {kind:?} {title:?} — something is holding the lock across this call"
+        );
+        return;
+    };
     let id = {
-        let Ok(conn) = db.0.lock() else { return };
         if conn
             .execute(
                 "INSERT INTO activity (kind, title, detail, ok, ref_id, project_name, ts)
@@ -83,6 +140,7 @@ pub fn record(
         }
         id
     };
+    drop(conn);
 
     let _ = app.emit(
         "activity:new",
@@ -97,6 +155,52 @@ pub fn record(
             ts,
         },
     );
+}
+
+/// Everything one schedule, bot or service has done, newest first.
+///
+/// Not a new store: `record` already stamps `ref_id` with the id of the thing
+/// that acted, so the history has been written all along and nothing read it
+/// back. A schedule's page asking "what happened the last few times?" is a
+/// query, not a feature.
+///
+/// It is a rolling history — `record` trims to the most recent rows overall —
+/// so an answer here means "as far back as is kept", never "this is all that
+/// ever happened".
+#[tauri::command]
+pub fn activity_for(
+    db: tauri::State<Db>,
+    ref_id: i64,
+    kinds: Vec<String>,
+    limit: i64,
+) -> Result<Vec<Activity>, String> {
+    let conn = db.0.lock().unwrap();
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, kind, title, detail, ok, ref_id, project_name, ts
+               FROM activity WHERE ref_id = ?1 ORDER BY ts DESC, id DESC LIMIT ?2",
+        )
+        .map_err(err)?;
+    let rows = stmt
+        .query_map(params![ref_id, if limit > 0 { limit } else { 10 }], |r| {
+            Ok(Activity {
+                id: r.get(0)?,
+                kind: r.get(1)?,
+                title: r.get(2)?,
+                detail: r.get(3)?,
+                ok: r.get::<_, i64>(4)? == 1,
+                ref_id: r.get(5)?,
+                project_name: r.get(6)?,
+                ts: r.get(7)?,
+            })
+        })
+        .map_err(err)?;
+    // `ref_id` is only unique within a kind — schedule 3 and service 3 are
+    // different things — so the caller says which kinds it means.
+    Ok(rows
+        .filter_map(Result::ok)
+        .filter(|a| kinds.is_empty() || kinds.iter().any(|k| k == &a.kind))
+        .collect())
 }
 
 #[tauri::command]

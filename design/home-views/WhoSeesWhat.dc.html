@@ -1,0 +1,120 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+    .cap { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+    .rail { border-radius: 16px; background: var(--card); padding: 14px 10px; width: 178px;
+            display: flex; flex-direction: column; gap: 3px; }
+    .item { display: flex; align-items: center; gap: 9px; padding: 6px 9px; border-radius: 9px;
+            font-size: 12.5px; color: var(--dim); }
+    .item.on { background: rgb(99 102 241 / .12); color: var(--accent); font-weight: 600; }
+    .item.off { color: var(--faint); text-decoration: line-through; text-decoration-thickness: 1px; }
+    .why { font-size: 12px; line-height: 1.6; color: var(--muted); }
+    .sq { width: 15px; height: 15px; border-radius: 5px; background: currentColor; opacity: .22; flex: none; }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --card: {{c.card}}; --line: {{c.line}}; --ink: {{c.ink}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --err: {{c.err}}; background: var(--app); width: 1120px; height: 620px; padding: 34px 38px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px; overflow: hidden;">
+
+  <div>
+    <div style="font-size: 21px; font-weight: 600; letter-spacing: -.015em; color: var(--ink);">
+      Two people, one app
+    </div>
+    <div style="margin-top: 6px; font-size: 13.5px; color: var(--muted); max-width: 780px;">
+      Not a mode you flip &mdash; a different person. Which home you get is decided once, when you
+      set the app up, and everything else follows from it. A clean page with a twelve-item rail
+      beside it is not a clean page.
+    </div>
+  </div>
+
+  <div style="flex: 1; display: flex; gap: 26px; min-height: 0;">
+
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <span class="cap">Someone using it</span>
+      <div class="rail">
+        <span class="item on"><span class="sq"></span>Home</span>
+        <span class="item"><span class="sq"></span>Today</span>
+        <span class="item"><span class="sq"></span>Team</span>
+        <span style="height: 8px;"></span>
+        <span class="item"><span class="sq"></span>Settings</span>
+      </div>
+      <div class="why" style="width: 178px;">
+        Four things. Everything else is reachable by asking, or from inside these.
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <span class="cap">Someone building it</span>
+      <div class="rail" style="gap: 1px;">
+        <span class="item on"><span class="sq"></span>Home</span>
+        <span class="item"><span class="sq"></span>Team</span>
+        <span class="item"><span class="sq"></span>Inbox</span>
+        <span class="item"><span class="sq"></span>Explorer</span>
+        <span class="item"><span class="sq"></span>Calendar</span>
+        <span class="item"><span class="sq"></span>Connections</span>
+        <span class="item"><span class="sq"></span>Analytics</span>
+        <span class="item"><span class="sq"></span>Stash</span>
+        <span class="item"><span class="sq"></span>Machine</span>
+        <span class="item"><span class="sq"></span>Settings</span>
+      </div>
+      <div class="why" style="width: 178px;">
+        Unchanged. The dashboard, the logs, the terminals, the vault.
+      </div>
+    </div>
+
+    <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px;">
+
+      <div style="background: var(--card); border-radius: 16px; padding: 18px 20px;">
+        <div class="cap" style="margin-bottom: 8px;">What the clean home never shows</div>
+        <div class="why">
+          Services, terminals, logs, git, CPU, memory, sessions, token counts, model names, the
+          vault tree. Not because they are secret &mdash; because none of them are a thing that
+          person came to do. Every one of them is still there for the other person.
+        </div>
+      </div>
+
+      <div style="background: var(--card); border-radius: 16px; padding: 18px 20px;">
+        <div class="cap" style="margin-bottom: 8px;">What it says instead of a number</div>
+        <div class="why">
+          &ldquo;One item is stuck&rdquo;, not &ldquo;1 blocked&rdquo;. &ldquo;Eight to pick
+          up&rdquo;, not &ldquo;0/10&rdquo;. &ldquo;Nobody to do the work yet&rdquo;, not
+          &ldquo;no agent named&rdquo;. The counts are the same counts; the words are the
+          difference between a dashboard and a page.
+        </div>
+      </div>
+
+      <div style="background: var(--card); border-radius: 16px; padding: 18px 20px; flex: 1;">
+        <div class="cap" style="margin-bottom: 8px;">The rule that keeps it clean</div>
+        <div class="why">
+          One thing may want you at a time. If two managers are stuck, the page says one sentence
+          and the second waits &mdash; a clean page that grows a list is just a dashboard with more
+          white space. Everything queued is in Team, which is one tap away.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":false,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? false;
+    const c = dark
+      ? { app: '#0f1115', card: '#171a21', line: '#232833', ink: '#f2f4f8', dim: '#a8afbc',
+          muted: '#7d8697', faint: '#5b6474', accent: '#7c8cff', ok: '#4ade80', err: '#f87171' }
+      : { app: '#f5f5f7', card: '#ffffff', line: '#e6e6ea', ink: '#1d1d1f', dim: '#4b4b50',
+          muted: '#7a7a80', faint: '#a5a5ac', accent: '#4f46e5', ok: '#15803d', err: '#dc2626' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

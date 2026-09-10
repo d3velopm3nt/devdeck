@@ -1,0 +1,27 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 280, "h": 680, "title": "Explorer — scoped to a solution" },
+    { "file": "Shell.dc.html", "x": 400, "y": 0, "w": 760, "h": 680, "title": "Where you pick the solution" },
+    { "file": "Scope.dc.html", "x": 1280, "y": 0, "w": 700, "h": 680, "title": "Build this much, and stop" },
+    { "file": "Repo.dc.html", "x": 0, "y": 800, "w": 600, "h": 680, "title": "The config repo" },
+    { "file": "Feature.dc.html", "x": 720, "y": 800, "w": 560, "h": 680, "title": "One kind of feature" },
+    { "file": "Tradeoffs.dc.html", "x": 1400, "y": 800, "w": 1000, "h": 470, "title": "What going central costs" }
+  ],
+  "annotations": [
+    {
+      "id": "hierarchy",
+      "x": 0,
+      "y": 1600,
+      "w": 420,
+      "text": "workspace -> solution -> projects\n                     \\-> features -> name projects\n\nThe last hop is a reference, not a parent. A repo is\nworked on by many features over time, so it cannot\nbe the child of one."
+    },
+    {
+      "id": "open-question",
+      "x": 1400,
+      "y": 1350,
+      "w": 420,
+      "text": "OPEN: access control.\n\nDrawn as one config repo per workspace, so one\nclient's config is a separate repo from another's.\nIf you want a single repo for everything, row 3 of\nthis board is wrong and contractors get worse."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

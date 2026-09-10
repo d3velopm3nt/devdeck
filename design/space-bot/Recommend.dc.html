@@ -1,0 +1,131 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background: #0d1017; }
+    a { color: #818cf8; } a:hover { color: #a5b4fc; }
+    .lbl { font-size: 9.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #475569; }
+    .card { border: 1px solid #1e293b; border-radius: 8px; background: #11141c; padding: 12px 13px;
+            display: flex; flex-direction: column; gap: 7px; }
+    .kind { flex: none; border-radius: 999px; padding: 1px 7px; font-size: 9px; font-weight: 600;
+            letter-spacing: 0.04em; text-transform: uppercase; line-height: 1.6; }
+    .desc { font-size: 11px; line-height: 1.5; color: #94a3b8; }
+    .want { display: flex; align-items: center; gap: 5px; font-size: 10px; color: #64748b; }
+    .btn { border-radius: 5px; padding: 3px 11px; font-size: 11px; font-weight: 600; }
+    .meta { display: flex; align-items: center; gap: 7px; font-size: 10px; color: #475569; }
+  </style>
+</helmet>
+
+<div style="width: 720px; height: 680px; background: #0d1017; padding: 18px 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; overflow: hidden">
+
+  <div>
+    <div style="font-size: 15px; font-weight: 600; color: #e2e8f0">What the bot thinks it needs</div>
+    <div style="margin-top: 3px; font-size: 11.5px; color: #94a3b8">
+      Four kinds of thing, one rule: it names what it needs and why. You decide.
+    </div>
+  </div>
+
+  <!-- The ask, in the bot's words, with the reason it arose -->
+  <div class="card" style="border-color: rgb(129 140 248 / 0.3); gap: 5px">
+    <div style="font-size: 12.5px; color: #e2e8f0">
+      &ldquo;You asked me to catch visual regressions before the demo. I can&rsquo;t see a page &mdash;
+      I&rsquo;d need something that opens a browser.&rdquo;
+    </div>
+    <div class="desc">Raised because three of the last five bugs you logged were layout, not logic.</div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+
+    <!-- 1. A skill: text, no install, lowest risk -->
+    <div class="card">
+      <div style="display: flex; align-items: center; gap: 8px">
+        <span style="width: 24px; height: 24px; border-radius: 6px; background: rgb(52 211 153 / 0.18); color: #34d399; display: flex; align-items: center; justify-content: center; flex: none">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>
+        </span>
+        <span style="font-size: 12.5px; font-weight: 600; color: #e2e8f0">Visual review</span>
+        <span class="kind" style="background: rgb(52 211 153 / 0.16); color: #34d399">Skill</span>
+      </div>
+      <div class="desc">A procedure it follows when reading a screenshot. Text only &mdash; nothing installs, nothing runs.</div>
+      <div class="want">Wants: nothing</div>
+      <div style="display: flex; align-items: center; gap: 8px">
+        <span class="btn" style="background: #6366f1; color: #fff">Add</span>
+        <span class="meta">Reviewed &middot; in the catalog</span>
+      </div>
+    </div>
+
+    <!-- 2. An agent -->
+    <div class="card">
+      <div style="display: flex; align-items: center; gap: 8px">
+        <span style="width: 24px; height: 24px; border-radius: 6px; background: rgb(129 140 248 / 0.18); color: #818cf8; display: flex; align-items: center; justify-content: center; flex: none">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="m8 7 4-4 4 4"/><path d="M3 12h18"/></svg>
+        </span>
+        <span style="font-size: 12.5px; font-weight: 600; color: #e2e8f0">Page checker</span>
+        <span class="kind" style="background: rgb(129 140 248 / 0.16); color: #818cf8">Agent</span>
+      </div>
+      <div class="desc">Becomes a sub-agent of this bot, with its own state in the list.</div>
+      <div class="want">Wants: read your repo &middot; run a browser</div>
+      <div style="display: flex; align-items: center; gap: 8px">
+        <span class="btn" style="background: #6366f1; color: #fff">Add</span>
+        <span class="meta">Reviewed &middot; 340 installs</span>
+      </div>
+    </div>
+
+    <!-- 3. Software: a real install on the machine -->
+    <div class="card" style="border-color: rgb(251 191 36 / 0.28)">
+      <div style="display: flex; align-items: center; gap: 8px">
+        <span style="width: 24px; height: 24px; border-radius: 6px; background: rgb(56 189 248 / 0.18); color: #38bdf8; display: flex; align-items: center; justify-content: center; flex: none">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m8 11 4 4 4-4"/><path d="M8 21h8"/></svg>
+        </span>
+        <span style="font-size: 12.5px; font-weight: 600; color: #e2e8f0">Playwright</span>
+        <span class="kind" style="background: rgb(56 189 248 / 0.16); color: #38bdf8">Software</span>
+      </div>
+      <div class="desc">A real install on this machine, through the package manager you already use.</div>
+      <div class="want" style="color: #fbbf24">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0"/></svg>
+        <span style="font-family: ui-monospace, Consolas, monospace">winget install</span> &middot; ~180 MB
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px">
+        <span class="btn" style="border: 1px solid rgb(251 191 36 / 0.4); color: #fbbf24">Install&hellip;</span>
+        <span class="meta">Goes through Machine</span>
+      </div>
+    </div>
+
+    <!-- 4. Self-hosted: a service you run -->
+    <div class="card" style="border-color: rgb(251 191 36 / 0.28)">
+      <div style="display: flex; align-items: center; gap: 8px">
+        <span style="width: 24px; height: 24px; border-radius: 6px; background: rgb(167 139 250 / 0.18); color: #a78bfa; display: flex; align-items: center; justify-content: center; flex: none">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 6h.01"/><path d="M6 18h.01"/></svg>
+        </span>
+        <span style="font-size: 12.5px; font-weight: 600; color: #e2e8f0">Screenshot store</span>
+        <span class="kind" style="background: rgb(167 139 250 / 0.16); color: #a78bfa">Self&#8209;hosted</span>
+      </div>
+      <div class="desc">Runs as a service in this space, so baselines stay on your machine.</div>
+      <div class="want" style="color: #fbbf24">Wants: a port &middot; disk &middot; keeps running</div>
+      <div style="display: flex; align-items: center; gap: 8px">
+        <span class="btn" style="border: 1px solid rgb(251 191 36 / 0.4); color: #fbbf24">Set up&hellip;</span>
+        <span class="meta">Becomes a service you can stop</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="flex: none; gap: 5px">
+    <div class="lbl">The ladder</div>
+    <div style="font-size: 11.5px; line-height: 1.6; color: #cbd5e1">
+      A skill is words. An agent is words plus permissions. Software is a real install. Self-hosted
+      is something that keeps running. The bot always proposes the cheapest rung that would work,
+      and every rung above the first says out loud what it costs you.
+    </div>
+    <div style="font-size: 11.5px; line-height: 1.6; color: #94a3b8">
+      It recommends from the catalog. It never goes and finds one.
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -48,10 +48,675 @@ export const nodeCreate = (
   path?: string | null,
   relPath?: string | null,
 ) => invoke<TreeNode>('node_create', { parentId, kind, name, path: path ?? null, relPath: relPath ?? null })
+// ---- schedules ----
+
+/** One thing that happens on a clock. */
+export interface Schedule {
+  id: number
+  name: string
+  /** reminder | command | agent */
+  kind: string
+  node_id: number | null
+  /** daily | weekdays | weekly | hourly | once */
+  every: string
+  /** Minutes past midnight, local. Ignored by 'once' and 'hourly'. */
+  at_min: number
+  /** For 'once': the moment, unix ms. */
+  at_ms?: number
+  /** Minutes it lasts. 0 is an instant; more is a block on the calendar. */
+  duration_min?: number
+  /** For 'weekly': comma-separated 0-6, Sunday first. */
+  days: string
+  payload: string
+  enabled: boolean
+  /** Whether a missed run should happen late. A reminder never should. */
+  catch_up: boolean
+  last_run: number | null
+  last_ok: boolean
+  last_note: string
+  /** Minutes of warning before it starts. 0 says nothing early. */
+  remind_min?: number
+  /** The occurrence already warned about, unix ms. */
+  last_remind?: number | null
+  /** The feature in the space's deck this serves, and one item on it. The
+   *  link lives in the database, not the vault: a reminder to look at
+   *  something is not part of the project's record of that thing. */
+  feature?: string
+  work_item?: string
+  next_run: number | null
+}
+
+export const schedulesList = () => invoke<Schedule[]>('schedules_list')
+export const scheduleSave = (s: {
+  id?: number | null
+  name: string
+  kind: string
+  nodeId: number | null
+  /** daily | weekdays | weekly | hourly | once */
+  every: string
+  atMin: number
+  /** For `once`: the moment, unix ms. Ignored by every rhythm. */
+  atMs?: number | null
+  /** Minutes it lasts. 0 is an instant; more is a block on the calendar. */
+  durationMin?: number | null
+  days: string
+  payload: string
+  catchUp: boolean
+  /** Minutes of warning before it starts. */
+  remindMin?: number | null
+  feature?: string | null
+  workItem?: string | null
+}) =>
+  invoke<number>('schedule_save', {
+    ...s,
+    id: s.id ?? null,
+    atMs: s.atMs ?? null,
+    durationMin: s.durationMin ?? null,
+    remindMin: s.remindMin ?? null,
+    feature: s.feature ?? null,
+    workItem: s.workItem ?? null,
+  })
+export const scheduleEnable = (id: number, on: boolean) =>
+  invoke<void>('schedule_enable', { id, on })
+export const scheduleDelete = (id: number) => invoke<void>('schedule_delete', { id })
+export interface RunOutcome {
+  ok: boolean
+  /** Empty when a reminder simply told you — which is the whole job. */
+  note: string
+  ran_at: number
+}
+export const scheduleRunNow = (id: number) =>
+  invoke<RunOutcome>('schedule_run_now', { id })
+
+// ---- focus: a goal, a clock, and permission to ignore everything else ----
+
+export interface Focus {
+  id: number
+  goal: string
+  /** The space the goal is about. Null means it spans everything, and then
+   *  nothing is held. */
+  node_id: number | null
+  started_at: number
+  ended_at: number | null
+  /** What never reached you, counted by the inbox when the session ended. */
+  held: number
+}
+
+export const focusCurrent = () => invoke<Focus | null>('focus_current')
+export const focusStart = (goal: string, nodeId: number | null) =>
+  invoke<Focus>('focus_start', { goal, nodeId })
+/** `held` is the inbox's count — the backend cannot work it out, because
+ *  holding is a rendering rule over three live streams. */
+export const focusEnd = (held: number) => invoke<void>('focus_end', { held })
+export const focusRecent = (limit = 8) => invoke<Focus[]>('focus_recent', { limit })
+
+
+// ---- inbox: what has been read, and what has not ----
+
+/** One decision about one row. Absent means nobody has said, which is unread. */
+export interface InboxMark {
+  item: string
+  read: boolean
+  at: number
+}
+
+export const inboxMarks = () => invoke<InboxMark[]>('inbox_marks')
+/** Mark rows read, or unread again. */
+export const inboxMark = (items: string[], read: boolean) =>
+  invoke<void>('inbox_mark', { items, read })
+/** The moment before which history counts as read. */
+export const inboxFloor = () => invoke<number>('inbox_floor')
+/** Seed that moment from the old localStorage timestamp, once. */
+export const inboxFloorSeed = (at: number) => invoke<number>('inbox_floor_seed', { at })
+
+
+// ---- spaces: making a workspace with a first cut already drafted ----
+
+export interface FolderDraft {
+  name: string
+  why: string
+}
+
+export interface RoutineDraft {
+  name: string
+  /** daily | weekdays | weekly | hourly */
+  every: string
+  at_min: number
+  /** For 'weekly': comma-separated 0-6, Sunday first. */
+  days: string
+}
+
+export interface Starter {
+  id: string
+  name: string
+  what: string
+  /** One line naming what it actually brings. */
+  brings: string
+  /** The tag it suggests — only a suggestion. */
+  label: string
+  folders: FolderDraft[]
+  routines: RoutineDraft[]
+  bot: boolean
+}
+
+export interface SpaceCreated {
+  node_id: number
+  name: string
+  folders: string[]
+  routines: string[]
+  bot: boolean
+  /** Empty on a clean run. Anything here happened after the space existed. */
+  problems: string[]
+}
+
+export const spaceStarters = () => invoke<Starter[]>('space_starters')
+export const spaceCreate = (s: {
+  name: string
+  label: string
+  folders: FolderDraft[]
+  routines: RoutineDraft[]
+  botName: string
+  botGoal: string
+}) => invoke<SpaceCreated>('space_create', s)
+
+// ---- bots: a file in a folder, not a new entity ----
+
+export interface Bot {
+  /** What people type after the `@`, and the identity: a manager is a file at
+   *  the vault root, so this — not a node — is what names it. */
+  handle: string
+  /** Where its memory is filed. Not what it owns: ownership is on the
+   *  feature. 0 for a manager with no home. */
+  node_id: number
+  node_name: string
+  dir: string
+  name: string
+  goal: string
+  /** daily | weekdays | weekly | hourly, or empty for no heartbeat. */
+  every: string
+  at_min: number
+  days: string
+  body: string
+  /** Skills appended to its instructions. Words, no permissions. */
+  skills: string[]
+  /** Which starter it came from, empty when made by hand. */
+  template: string
+  /** The `.devdeck` feature holding its work items. Empty until it has a plan. */
+  feature: string
+  /** The agent its heartbeat wakes. Empty means it only reads and reports. */
+  agent: string
+  team: string[]
+  /** What to ask that agent on waking. Empty means the goal. */
+  wake_intent: string
+  /** Review points in words — "before any push". Not a permission: the runtime
+   *  stops such a call and says which rule stopped it. Edited in the file. */
+  stop_at: string[]
+  schedule_id: number | null
+  last_woke: number | null
+}
+
+export const botsList = () => invoke<Bot[]>('bots_list')
+
+/** Where one bot's plan stands. Counts only — what a number means (amber, red,
+ *  quiet) is the interface's decision, not the backend's. */
+export interface BotStanding {
+  node_id: number
+  done: number
+  total: number
+  blocked: number
+  unclaimed: number
+  feature: string
+}
+
+export const botsStanding = () => invoke<BotStanding[]>('bots_standing')
+export const botGet = (handle: string) => invoke<Bot | null>('bot_get', { handle })
+/** The manager whose memory lives on a node — how a bot page opened from a
+ *  space still finds it. */
+export const botForNode = (nodeId: number) => invoke<Bot | null>('bot_for_node', { nodeId })
+export const botSave = (b: {
+  nodeId: number
+  name: string
+  goal: string
+  every: string
+  atMin: number
+  days: string
+  body: string
+  skills: string[]
+  agent: string
+  /** Every agent it may put work on, its lead included. */
+  team: string[]
+  wakeIntent: string
+}) => invoke<Bot>('bot_save', b)
+export const botDelete = (nodeId: number) => invoke<void>('bot_delete', { nodeId })
+
+// The bot's own thread. Same record and same loop as a conversation with the
+// assistant, run in the bot's voice with the bot's permissions — so the shapes
+// are the assistant's, not a second set.
+/** One entry under a node, on disk. `item` is the feature whose work items
+ *  name this path — derived, never a label anyone maintains. */
+export interface FileRow {
+  name: string
+  rel: string
+  dir: boolean
+  item?: string
+}
+
+/** What is in one folder of a node. `rel` empty means the node's own root. */
+/** One directory of a node. `root` picks which of its two directories: `work`
+ *  is where things run (the repository, when the node names one), `vault` is
+ *  where what we know lives — `.devdeck`, `_bot.md`, the features. */
+export const nodeFiles = (nodeId: number, rel = '', root: 'work' | 'vault' = 'work') =>
+  invoke<FileRow[]>('node_files', { nodeId, rel, root })
+
+/** One file's text, plus what to say when it is not text at all. */
+export interface FileText {
+  rel: string
+  path: string
+  text: string
+  bytes: number
+  readable: boolean
+  why: string
+  truncated: boolean
+}
+
+/** The vault from the top: the workspaces as folders, and `.devdeck/team`,
+ *  which belongs to no node and so cannot be reached through `nodeFiles`. */
+export const vaultFiles = (rel: string) => invoke<FileRow[]>('vault_files', { rel })
+/** One file anywhere in the vault, by path from its root. */
+export const vaultFileText = (rel: string) => invoke<FileText>('vault_file_text', { rel })
+
+export const fileText = (nodeId: number, rel: string, root: 'work' | 'vault' = 'work') =>
+  invoke<FileText>('file_text', { nodeId, rel, root })
+
+/** One model call: what went in, what came back, whose it was, what it cost.
+ *  Token fields are null when the provider did not report — never zero. */
+export interface LlmCall {
+  id: number
+  at: number
+  speaker: string
+  speaker_name: string
+  kind: 'agent' | 'bot' | 'assistant'
+  runs_as: string
+  provider: string
+  model: string
+  project_id: string
+  project_name: string
+  feature: string
+  conversation: string
+  session: string
+  turn: number
+  ms: number
+  ok: boolean
+  error: string
+  prompt: string
+  prompt_len: number
+  reply: string
+  reply_len: number
+  tools: number
+  input_tokens: number | null
+  output_tokens: number | null
+  cache_read_tokens: number | null
+  cache_write_tokens: number | null
+}
+
+export interface UsageRow {
+  key: string
+  label: string
+  calls: number
+  /** Calls whose provider reported nothing. Shown rather than hidden. */
+  unreported: number
+  input: number
+  output: number
+  cache_read: number
+  cache_write: number
+  provider: string
+}
+
+export interface UsageReport {
+  since: number
+  calls: number
+  unreported: number
+  input: number
+  output: number
+  cache_read: number
+  cache_write: number
+  by_space: UsageRow[]
+  by_speaker: UsageRow[]
+  by_model: UsageRow[]
+  by_day: UsageRow[]
+}
+
+export const callsList = (limit = 200) => invoke<LlmCall[]>('calls_list', { limit })
+export const callsUsage = (days = 30) => invoke<UsageReport>('calls_usage', { days })
+export const callsClear = () => invoke<void>('calls_clear')
+
+/** The Team board: every goal in every space, with everyone on it. */
+export const teamBoard = () => invoke<import('./aiw').GoalRow[]>('team_board')
+
+// A feature's thread — the room bots and agents collaborate in. The feature
+// already exists in the deck; this is the same conversation record marked with
+// its slug, so nothing new is created on disk.
+export const featureThread = (nodeId: number, featureId: string) =>
+  invoke<import('./aiw').ConversationMeta>('feature_thread', { nodeId, featureId })
+export const featureThreadSend = (nodeId: number, featureId: string, text: string) =>
+  invoke<import('./aiw').AssistantReply>('feature_thread_send', { nodeId, featureId, text })
+
+// A node's thread, at any level of the tree. A parent has no repository, and
+// says so rather than answering as though it had read code up there.
+export const nodeThread = (nodeId: number) =>
+  invoke<import('./aiw').ConversationMeta>('node_thread', { nodeId })
+/** One piece of what a turn will be told, named and measured. */
+export interface ContextPart {
+  key: string
+  title: string
+  source: string
+  /** personal | deck | yours — which side of the store split it came from. */
+  origin: string
+  tokens: number
+  on: boolean
+  edited: boolean
+  body: string
+}
+
+/** One tool as a turn sees it: what it may do, and what offering it costs. */
+export interface ToolLine {
+  id: string
+  title: string
+  description: string
+  permission: string
+  actions: number
+  tokens: number
+  on: boolean
+}
+
+/** Everything a turn will carry, itemised. Assembled by the same code the
+ *  turn uses, so the panel and the request cannot describe different things. */
+export interface ContextView {
+  parts: ContextPart[]
+  tools: ToolLine[]
+  system_tokens: number
+  context_tokens: number
+  tool_tokens: number
+  history_turns: number
+  history_tokens: number
+  total_tokens: number
+}
+
+export const threadContext = (conversationId: string) =>
+  invoke<ContextView>('thread_context', { conversationId })
+
+export const threadContextSet = (
+  conversationId: string,
+  kind: 'context' | 'tool',
+  key: string,
+  on: boolean,
+) => invoke<ContextView>('thread_context_set', { conversationId, kind, key, on })
+
+export const threadContextEdit = (conversationId: string, key: string, body: string) =>
+  invoke<ContextView>('thread_context_edit', { conversationId, key, body })
+
+/** One thing at one time, from whichever source had a time in it. */
+export interface CalendarItem {
+  id: string
+  /** schedule | deadline */
+  kind: string
+  /** reminder | command | bot | agent | work */
+  sort: string
+  /** once | daily | weekdays | weekly | hourly — empty when it is not a
+   *  schedule. A one-off and a daily routine look different on a day. */
+  every: string
+  title: string
+  at: number
+  end: number
+  node_id?: number | null
+  space: string
+  feature: string
+  work_item: string
+  status: string
+  past: boolean
+  schedule_id?: number | null
+}
+
+/** What came of one occurrence. Lives as a file per date in the personal
+ *  store — `done` is three-valued, because a day you never answered is not a
+ *  day you skipped. */
+export interface EventEntry {
+  schedule_id: number
+  day: string
+  done?: boolean | null
+  notes: string
+  updated_at: string
+}
+
+export const eventEntry = (scheduleId: number, at: number) =>
+  invoke<EventEntry>('event_entry', { scheduleId, at })
+
+export const eventEntrySave = (
+  scheduleId: number,
+  at: number,
+  done: boolean | null,
+  notes: string,
+) => invoke<EventEntry>('event_entry_save', { scheduleId, at, done, notes })
+
+export const eventHistory = (scheduleId: number, limit?: number) =>
+  invoke<EventEntry[]>('event_history', { scheduleId, limit: limit ?? null })
+
+/** Everything between two moments, across every space. One query for every
+ *  view, so a day and the month containing it cannot disagree. */
+export const calendarRange = (from: number, to: number) =>
+  invoke<CalendarItem[]>('calendar_range', { from, to })
+
+export const nodeThreadSend = (nodeId: number, text: string) =>
+  invoke<import('./aiw').AssistantReply>('node_thread_send', { nodeId, text })
+
+/** Wake an agent from a thread: a session in a feature's room, an answer
+ *  anywhere else. Returns one line saying which happened. */
+export const threadWake = (convId: string, agentId: string) =>
+  invoke<string>('thread_wake', { convId, agentId })
+
+export const botThread = (nodeId: number) =>
+  invoke<import('./aiw').ConversationMeta>('bot_thread', { nodeId })
+export const botThreadSend = (nodeId: number, text: string) =>
+  invoke<import('./aiw').AssistantReply>('bot_thread_send', { nodeId, text })
+
+export interface BotWork {
+  id: string
+  title: string
+  /** unclaimed | claimed | in-progress | blocked | done */
+  status: string
+  assignee: string | null
+  feature: string
+}
+
+export const WORK_STATUSES = ['unclaimed', 'claimed', 'in-progress', 'blocked', 'done'] as const
+
+export interface ToolOffer {
+  id: string
+  name: string
+  /** skill | agent | software | self-hosted */
+  kind: string
+  what: string
+  /** What saying yes costs. Empty for a skill, which costs nothing. */
+  wants: string
+  because: string
+  /** added | declined | '' when you have not said. */
+  decided: string
+}
+
+export interface BotTemplate {
+  id: string
+  name: string
+  what: string
+  goal_hint: string
+  every: string
+  at_min: number
+  steps: string[]
+  standards: string[]
+  skills: string[]
+  tools: Omit<ToolOffer, 'decided'>[]
+}
+
+export interface BotAnswer {
+  step: number
+  question: string
+  answer: string
+  at: string
+  skipped: boolean
+}
+
+export interface Interview {
+  script: string[]
+  answers: BotAnswer[]
+  step: number
+  done: boolean
+}
+
+export interface Belief {
+  id: string
+  text: string
+  /** you | watched | corrected */
+  source: string
+  was: string
+  created_at: string
+  last_used: string
+  uses: number
+  pinned: boolean
+  /** Whether ageing would offer to drop it. */
+  stale: boolean
+}
+
+export interface BotSuggestion {
+  id: string
+  title: string
+  /** Why this is on screen. Never empty. */
+  evidence: string
+  /** interview | heartbeat | work | tool | goal */
+  kind: string
+  tool_id: string
+}
+
+export const botCatalog = () => invoke<BotTemplate[]>('bot_catalog')
+export const botCreate = (b: {
+  nodeId: number
+  templateId: string
+  name: string
+  goal: string
+  every: string
+  atMin: number
+  days: string
+  withPlan: boolean
+}) => invoke<Bot>('bot_create', b)
+
+export const botWork = (nodeId: number) => invoke<BotWork[]>('bot_work', { nodeId })
+export const botPlan = (nodeId: number, steps: string[]) =>
+  invoke<string>('bot_plan', { nodeId, steps })
+export const botWorkSave = (w: {
+  nodeId: number
+  id: string
+  title: string
+  status: string
+  assignee: string | null
+}) => invoke<void>('bot_work_save', w)
+export const botWorkDelete = (nodeId: number, id: string) =>
+  invoke<void>('bot_work_delete', { nodeId, id })
+
+export const botInterview = (nodeId: number) => invoke<Interview>('bot_interview', { nodeId })
+export const botAnswer = (nodeId: number, step: number, answer: string, skipped: boolean) =>
+  invoke<Interview>('bot_answer', { nodeId, step, answer, skipped })
+export const botInterviewReset = (nodeId: number) =>
+  invoke<Interview>('bot_interview_reset', { nodeId })
+
+export const botBeliefs = (nodeId: number) => invoke<Belief[]>('bot_beliefs', { nodeId })
+export const botBeliefAdd = (nodeId: number, text: string) =>
+  invoke<void>('bot_belief_add', { nodeId, text })
+export const botBeliefCorrect = (nodeId: number, id: string, text: string) =>
+  invoke<void>('bot_belief_correct', { nodeId, id, text })
+export const botBeliefPin = (nodeId: number, id: string, pinned: boolean) =>
+  invoke<void>('bot_belief_pin', { nodeId, id, pinned })
+export const botBeliefDrop = (nodeId: number, id: string) =>
+  invoke<void>('bot_belief_drop', { nodeId, id })
+export const botBeliefDropStale = (nodeId: number) =>
+  invoke<number>('bot_belief_drop_stale', { nodeId })
+
+export const botTools = (nodeId: number) => invoke<ToolOffer[]>('bot_tools', { nodeId })
+/** Returns a sentence when saying yes needs a step DevDeck will not take for
+ *  you — an install, a service, a permission. Empty when it is done. */
+export const botToolDecide = (nodeId: number, toolId: string, response: string) =>
+  invoke<string>('bot_tool_decide', { nodeId, toolId, response })
+
+export const botSuggestions = (nodeId: number) => invoke<BotSuggestion[]>('bot_suggestions', { nodeId })
+export const botSuggestionAnswer = (nodeId: number, id: string, response: string, why = '') =>
+  invoke<void>('bot_suggestion_answer', { nodeId, id, response, why })
+
+
+// ---- the vault: the folder tree that is the Explorer ----
+
+/** What a node's `_devdeck.md` says about it. */
+export interface VaultMeta {
+  label: string
+  /** Absolute path to the code this node is about. Its presence is what makes
+   *  the node a project; the vault folder and the repo are unrelated dirs. */
+  repo: string
+  color: string
+  body: string
+}
+
+/** Where the vault lives, or null until the user has chosen. */
+export const vaultRoot = () => invoke<string | null>('vault_root')
+
+/** What the pre-vault tree still holds, so setup can say what clearing costs. */
+export interface VaultLegacy {
+  nodes: number
+  commands: number
+  services: number
+}
+export const vaultLegacy = () => invoke<VaultLegacy>('vault_legacy')
+/** The folder setup suggests, so the screen opens with an answer in it. */
+export const vaultDefaultRoot = () => invoke<string>('vault_default_root')
+export const vaultSetRoot = (path: string, gitInit: boolean, adoptExistingTree: boolean) =>
+  invoke<string>('vault_set_root', { path, gitInit, adoptExistingTree })
+/** Re-read the folders and hand back the tree they describe. */
+export const vaultScan = () => invoke<TreeNode[]>('vault_scan')
+export const vaultCreate = (parentId: number | null, name: string) =>
+  invoke<TreeNode>('vault_create', { parentId, name })
+export const vaultRename = (id: number, name: string) =>
+  invoke<void>('vault_rename', { id, name })
+export const vaultMeta = (id: number) => invoke<VaultMeta>('vault_meta', { id })
+export const vaultSetMeta = (
+  id: number,
+  fields: { label?: string; repo?: string; color?: string; body?: string },
+) =>
+  invoke<void>('vault_set_meta', {
+    id,
+    label: fields.label ?? null,
+    repo: fields.repo ?? null,
+    color: fields.color ?? null,
+    body: fields.body ?? null,
+  })
+export const vaultDelete = (id: number) => invoke<void>('vault_delete', { id })
+/** What switching to another vault folder would cost, before anything moves. */
+export interface VaultSwitchCost {
+  keeps: number
+  drops: number
+  losing_commands: number
+  losing_services: number
+}
+/** Move the vault and everything in it. Ids survive, so nothing loses its
+ *  commands or services. */
+export const vaultMove = (newPath: string) => invoke<string>('vault_move', { newPath })
+/** Adopt a folder that already holds a vault — a clone on another machine. */
+export const vaultSwitch = (path: string) => invoke<string>('vault_switch', { path })
+export const vaultSwitchCost = (path: string) => invoke<VaultSwitchCost>('vault_switch_cost', { path })
+
+/** A node's own folder on disk — for revealing it, or writing context into it. */
+export const vaultDir = (id: number) => invoke<string>('vault_dir', { id })
+
+export const nodeSetLabel = (id: number, label: string) =>
+  invoke<void>('node_set_label', { id, label })
 export const nodeRename = (id: number, name: string) => invoke<void>('node_rename', { id, name })
 export const nodeUpdate = (
   id: number,
-  fields: { name?: string; path?: string; relPath?: string; color?: string },
+  fields: { name?: string; path?: string; relPath?: string; color?: string; kind?: string },
 ) =>
   invoke<void>('node_update', {
     id,
@@ -59,6 +724,7 @@ export const nodeUpdate = (
     path: fields.path ?? null,
     relPath: fields.relPath ?? null,
     color: fields.color ?? null,
+    kind: fields.kind ?? null,
   })
 export const nodeDelete = (id: number) => invoke<void>('node_delete', { id })
 
@@ -179,6 +845,64 @@ export function onSetupDone(cb: (ok: boolean) => void): Promise<UnlistenFn> {
 }
 export const cloneRepo = (url: string, parent: string) => invoke<string>('clone_repo', { url, parent })
 
+/** Who is signed in to GitHub — `gh` first, our own OAuth token second. */
+export interface GithubUser {
+  /** Empty when nobody is signed in, or gh is not installed. */
+  login: string
+  name: string
+  avatar_url: string
+  /** Why there is no login, in words worth showing. */
+  reason: string
+}
+
+export const githubUser = () => invoke<GithubUser>('github_user')
+
+// ---- GitHub sign-in (OAuth device flow) ----
+
+/** The codes GitHub hands back when a sign-in starts. */
+export interface DeviceStart {
+  /** The short code the user types into GitHub, e.g. `WDJB-MJHT`. */
+  user_code: string
+  /** Ours, not theirs — the handle we poll with. Never shown. */
+  device_code: string
+  verification_uri: string
+  /** Seconds GitHub asks us to wait between polls. */
+  interval: number
+  /** Seconds until the code dies. */
+  expires_in: number
+}
+
+/** One poll's answer. `pending` is the normal case, not a failure. */
+export type DevicePoll =
+  | { kind: 'pending'; interval: number }
+  /** Signed in. `gh` says whether the CLI took the token too. */
+  | { kind: 'done'; login: string; gh: boolean }
+  | { kind: 'failed'; message: string; retryable: boolean }
+
+/** Whether this build has an OAuth app to sign in against at all. */
+export const githubOauthConfigured = () => invoke<boolean>('github_oauth_configured')
+export const githubDeviceStart = () => invoke<DeviceStart>('github_device_start')
+export const githubDevicePoll = (deviceCode: string, interval: number) =>
+  invoke<DevicePoll>('github_device_poll', { deviceCode, interval })
+/** Do we hold a token? Never *what* it is. */
+export const githubTokenStored = () => invoke<boolean>('github_token_stored')
+export const githubSignOut = (alsoGh = true) => invoke<void>('github_sign_out', { alsoGh })
+
+/** What a hand-pasted token turned out to be. Never the token itself. */
+export interface TokenPasted {
+  login: string
+  /** Whether the `gh` CLI took the same token — false means git push is still logged out. */
+  gh: boolean
+  scopes: string[]
+  /** Scopes we want that this token lacks. Empty when GitHub did not say. */
+  missing: string[]
+  /** A fine-grained token reports no scopes at all; that is not the same as none. */
+  scopes_known: boolean
+}
+/** Store a personal access token, after proving GitHub accepts it. */
+export const githubTokenPaste = (token: string) =>
+  invoke<TokenPasted>('github_token_paste', { token })
+
 // ---- git ----
 export interface GitInfo {
   is_repo: boolean
@@ -194,6 +918,27 @@ export const gitInfo = (dir: string) => invoke<GitInfo>('git_info', { dir })
 export const gitFetch = (dir: string) => invoke<GitInfo>('git_fetch', { dir })
 /** Fast-forward pull, streaming to Logs; emits git:done when finished. */
 export const gitPull = (dir: string) => invoke<void>('git_pull', { dir })
+/** One path git has something to say about. */
+export interface GitChange {
+  path: string
+  /** Status letter for the staged column, ' ' when clean. */
+  index: string
+  /** Status letter for the working-tree column, ' ' when clean. */
+  work: string
+  from: string | null
+  untracked: boolean
+  conflict: boolean
+  /** One word for the status letters — decided in Rust, so there is one copy. */
+  label: string
+}
+/** Everything the working tree has to say, untracked files included. */
+export const gitChanges = (dir: string) => invoke<GitChange[]>('git_changes', { dir })
+/** Stage exactly these paths, commit them, and optionally push. Streams to Logs. */
+export const gitCommit = (dir: string, message: string, paths: string[], push: boolean) =>
+  invoke<void>('git_commit', { dir, message, paths, push })
+/** Push the current branch, setting an upstream if it has none. */
+export const gitPush = (dir: string) => invoke<void>('git_push', { dir })
+
 export function onGitDone(cb: (ok: boolean) => void): Promise<UnlistenFn> {
   return listen<boolean>('git:done', (e) => cb(e.payload))
 }
@@ -224,6 +969,13 @@ export const widgetResize = (width: number, height: number) =>
   invoke<void>('widget_resize', { width, height })
 
 export const focusMain = () => invoke<void>('focus_main')
+
+/// Tell the shell the UI has painted, so it can show the window.
+///
+/// The window starts hidden so nobody watches it assemble itself. If this
+/// never arrives the backend shows it anyway after a few seconds — a slow
+/// reveal beats an app with no window at all.
+export const appReady = () => invoke<void>('app_ready')
 /** Bring the widget into view without taking the keyboard. `sticky` keeps it
  *  up (a crash); otherwise it collapses itself after a few seconds. */
 export const widgetPeek = (sticky = false) => invoke<void>('widget_peek_cmd', { sticky })
@@ -249,6 +1001,10 @@ export const recentsList = () => invoke<Recent[]>('recents_list')
 
 // ---- activity ----
 export const activityList = (limit = 60) => invoke<Activity[]>('activity_list', { limit })
+/** What one schedule, bot or service has done, newest first. A rolling
+ *  history: the feed is trimmed, so this means "as far back as is kept". */
+export const activityFor = (refId: number, kinds: string[], limit = 8) =>
+  invoke<Activity[]>('activity_for', { refId, kinds, limit })
 export const activityClear = () => invoke<void>('activity_clear')
 /** Durable run history for one service: start, stop, duration, exit code. */
 export const serviceRuns = (serviceId: number, limit = 25) =>

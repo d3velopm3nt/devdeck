@@ -1,0 +1,136 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background: #0d1017; }
+    a { color: #818cf8; } a:hover { color: #a5b4fc; }
+    .lbl { font-size: 9.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #475569; }
+    .card { border: 1px solid #1e293b; border-radius: 8px; background: #11141c; }
+    .pill { flex: none; border-radius: 999px; padding: 1px 7px; font-size: 9px; font-weight: 600;
+            letter-spacing: 0.04em; text-transform: uppercase; line-height: 1.6; }
+    .st { flex: none; border-radius: 4px; padding: 1px 6px; font-size: 9px; font-weight: 600; }
+    .sub { display: flex; align-items: center; gap: 9px; padding: 8px 12px; border-top: 1px solid #1e293b; }
+    .know { display: flex; gap: 8px; padding: 7px 12px; border-top: 1px solid #1e293b; font-size: 11.5px; color: #cbd5e1; }
+    .src { margin-left: auto; flex: none; font-size: 9.5px; color: #475569; }
+    .btn { border-radius: 5px; padding: 3px 10px; font-size: 11px; font-weight: 500; }
+  </style>
+</helmet>
+
+<div style="width: 720px; height: 760px; background: #0d1017; padding: 18px 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; overflow: hidden">
+
+  <!-- The bot -->
+  <div style="display: flex; align-items: center; gap: 11px">
+    <span style="width: 36px; height: 36px; border-radius: 9px; background: #f472b6; color: #0b0e14; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none">TY</span>
+    <div style="min-width: 0; flex: 1">
+      <div style="display: flex; align-items: center; gap: 8px">
+        <span style="font-size: 15px; font-weight: 600; color: #e2e8f0">TyreX bot</span>
+        <span class="pill" style="background: rgb(244 114 182 / 0.16); color: #f472b6">Product</span>
+      </div>
+      <div style="margin-top: 2px; font-size: 11.5px; color: #64748b">
+        Runs this space. Knows 11 things about it, three of which you corrected.
+      </div>
+    </div>
+    <span class="btn" style="border: 1px solid #1e293b; color: #94a3b8">Talk to it</span>
+  </div>
+
+  <!-- The heartbeat. Without this the bot is only ever a chat window. -->
+  <div class="card" style="display: flex; align-items: center; gap: 11px; padding: 11px 13px">
+    <span style="width: 26px; height: 26px; border-radius: 7px; background: rgb(74 222 128 / 0.16); color: #4ade80; display: flex; align-items: center; justify-content: center; flex: none">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.22 12H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27"/></svg>
+    </span>
+    <div style="min-width: 0; flex: 1">
+      <div style="font-size: 12.5px; color: #e2e8f0">Wakes weekdays at 07:00</div>
+      <div style="margin-top: 2px; font-size: 11px; color: #64748b">
+        Last woke 07:02 &mdash; looked at the repos, wrote one thing to your inbox.
+      </div>
+    </div>
+    <span class="btn" style="border: 1px solid #1e293b; color: #94a3b8">Change</span>
+  </div>
+
+  <!-- What it knows. Context is a list you can argue with, not a black box. -->
+  <div class="card" style="flex: none">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 9px 12px">
+      <span class="lbl" style="flex: 1">What it knows about this space</span>
+      <span style="font-size: 10px; color: #475569">11 &middot; 3 corrected</span>
+    </div>
+    <div class="know">
+      <span style="min-width: 0; flex: 1">The demo is on 12 September and it is the thing that matters this month.</span>
+      <span class="src">you said</span>
+    </div>
+    <div class="know">
+      <span style="min-width: 0; flex: 1">Three repos ship together; <span style="font-family: ui-monospace, Consolas, monospace; color: #94a3b8">tyrex-web</span> owns the tokens.</span>
+      <span class="src">you said</span>
+    </div>
+    <div class="know">
+      <span style="min-width: 0; flex: 1">You review on Fridays, so nothing wants your attention on a Thursday night.</span>
+      <span class="src">watched</span>
+    </div>
+    <div class="know" style="color: #64748b">
+      <span style="min-width: 0; flex: 1">You care about test coverage <span style="text-decoration: line-through">above all else</span> &mdash; corrected to &ldquo;only before a release&rdquo;.</span>
+      <span class="src">corrected</span>
+    </div>
+  </div>
+
+  <!-- Sub-agents, in the eight states the runtime already has -->
+  <div class="card" style="flex: none">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 9px 12px">
+      <span class="lbl" style="flex: 1">Its agents</span>
+      <span class="btn" style="border: 1px solid #1e293b; color: #94a3b8; font-size: 10.5px">Add</span>
+    </div>
+
+    <div class="sub">
+      <span style="width: 22px; height: 22px; border-radius: 6px; background: #38bdf8; color: #0b0e14; font-size: 8px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none">RE</span>
+      <span style="min-width: 0; flex: 1; font-size: 12px; color: #e2e8f0">Release checker</span>
+      <span style="font-size: 10.5px; color: #64748b">version files</span>
+      <span class="st" style="background: rgb(74 222 128 / 0.14); color: #4ade80">Working</span>
+    </div>
+    <div class="sub">
+      <span style="width: 22px; height: 22px; border-radius: 6px; background: #fbbf24; color: #0b0e14; font-size: 8px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none">QA</span>
+      <span style="min-width: 0; flex: 1; font-size: 12px; color: #e2e8f0">Test runner</span>
+      <span style="font-size: 10.5px; color: #fbbf24">wants to start the app</span>
+      <span class="st" style="background: rgb(251 191 36 / 0.16); color: #fbbf24">Waiting</span>
+    </div>
+    <div class="sub">
+      <span style="width: 22px; height: 22px; border-radius: 6px; background: #a78bfa; color: #0b0e14; font-size: 8px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none">DO</span>
+      <span style="min-width: 0; flex: 1; font-size: 12px; color: #e2e8f0">Doc writer</span>
+      <span style="font-size: 10.5px; color: #64748b">release notes</span>
+      <span class="st" style="background: rgb(129 140 248 / 0.16); color: #818cf8">Reviewing</span>
+    </div>
+    <div class="sub" style="opacity: 0.65">
+      <span style="width: 22px; height: 22px; border-radius: 6px; background: rgb(100 116 139 / 0.22); color: #94a3b8; font-size: 8px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none">MI</span>
+      <span style="min-width: 0; flex: 1; font-size: 12px; color: #cbd5e1">Migration helper</span>
+      <span style="font-size: 10.5px; color: #64748b">nothing to do</span>
+      <span class="st" style="background: rgb(100 116 139 / 0.18); color: #94a3b8">Idle</span>
+    </div>
+    <div style="padding: 7px 12px; border-top: 1px solid #1e293b; font-size: 10.5px; color: #475569">
+      Planning &middot; Working &middot; Waiting &middot; Reviewing &middot; Blocked &middot; Completed &middot; Failed &middot; Idle
+      &mdash; the states the runtime already reports.
+    </div>
+  </div>
+
+  <!-- What it suggests. Always a proposal, never a fait accompli. -->
+  <div class="card" style="flex: none; border-color: rgb(129 140 248 / 0.3)">
+    <div style="padding: 9px 12px 4px"><span class="lbl" style="color: #818cf8">It suggests</span></div>
+    <div style="padding: 0 12px 11px">
+      <div style="font-size: 12.5px; color: #e2e8f0">Run the release check the night before, not the morning of</div>
+      <div style="margin-top: 3px; font-size: 11px; line-height: 1.55; color: #94a3b8">
+        Three of the last four Fridays you fixed version drift at 09:00 and shipped late. Moving it
+        to Thursday 18:00 gives you the evening.
+      </div>
+      <div style="display: flex; gap: 6px; margin-top: 9px">
+        <span class="btn" style="background: #6366f1; color: #fff">Do that</span>
+        <span class="btn" style="border: 1px solid #1e293b; color: #94a3b8">Not now</span>
+        <span class="btn" style="border: 1px solid #1e293b; color: #64748b">Wrong &mdash; here&rsquo;s why</span>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

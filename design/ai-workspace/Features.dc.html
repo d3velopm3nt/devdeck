@@ -1,0 +1,295 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root{
+      --app:#0b0e14; --page:#0d1017; --panel:#11141c; --raise:#151923; --menu:#1a1f2b; --hover:#232b3b;
+      --soft:rgba(30,41,59,.4);
+      --line:#1e293b; --line2:#334155; --line3:#64748b;
+      --ink:#e2e8f0; --body:#cbd5e1; --dim:#94a3b8; --muted:#64748b; --faint:#475569;
+      --accent:#818cf8; --ok:#4ade80; --warn:#fbbf24; --err:#f87171; --info:#38bdf8; --viol:#a78bfa;
+      --mono:ui-monospace,Consolas,'Cascadia Mono',monospace;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--app);color:var(--body);}
+    a{color:var(--accent);text-decoration:none;} a:hover{color:#a5b4fc;}
+    .railb{position:relative;display:flex;height:40px;width:40px;align-items:center;justify-content:center;border-radius:8px;color:var(--muted);cursor:pointer;}
+    .railb:hover{background:rgba(35,43,59,.5);color:var(--dim);}
+    .railon{background:var(--raise);color:var(--ink);}
+    .railon::before{content:'';position:absolute;left:-7px;top:8px;bottom:8px;width:2.5px;border-radius:2px;background:#6366f1;}
+    .nav{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;color:var(--dim);cursor:pointer;font-size:12.5px;}
+    .nav:hover{background:var(--hover);color:var(--ink);}
+    .navon{background:var(--raise);color:var(--ink);font-weight:600;}
+    .card{background:var(--raise);border:1px solid var(--line);border-radius:6px;}
+    .chip{display:inline-flex;align-items:center;gap:5px;border-radius:4px;padding:2px 7px;font-size:10.5px;font-weight:600;}
+    .gh{border:1px solid var(--line2);background:var(--soft);color:var(--body);border-radius:4px;padding:4px 10px;font-size:11.5px;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px;}
+    .gh:hover{border-color:var(--line3);color:var(--ink);}
+    .scroll{overflow-y:auto;scrollbar-width:thin;scrollbar-color:#334155 transparent;}
+    .trow:hover{background:var(--hover);}
+    .fcard:hover{border-color:var(--line2);}
+    .seg{padding:3px 10px;border-radius:4px;font-size:11.5px;cursor:pointer;color:var(--muted);border:none;background:none;font-family:inherit;}
+    .seg:hover{color:var(--ink);}
+    .th{padding:8px 12px;font-size:10.5px;font-weight:600;color:var(--muted);}
+  </style>
+</helmet>
+
+<div style="width:1440px;height:900px;display:flex;flex-direction:column;background:var(--app);font-size:12px;">
+
+  <div style="display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);background:var(--panel);padding:6px 8px;flex-shrink:0;">
+    <span style="font-size:13px;font-weight:600;color:var(--ink);margin-right:4px;">DevDeck</span>
+    <button class="gh">Terminal</button>
+    <button class="gh">Services</button>
+    <div style="flex:1"></div>
+    <span class="chip" style="background:rgba(16,185,129,.1);color:var(--ok);">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+      main
+    </span>
+    <button class="gh">Check for updates</button>
+  </div>
+
+  <div style="flex:1;display:flex;min-height:0;">
+
+    <div style="width:52px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:4px;border-right:1px solid var(--line);background:var(--app);padding:8px 0;">
+      <div class="railb"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 10v10h14V10"/></svg></div>
+      <div class="railb"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
+      <div class="railb"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M9 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3"/></svg></div>
+      <div class="railb"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg></div>
+      <div class="railb"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg></div>
+      <div class="railb railon">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/><path d="M18.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></svg>
+        <span style="position:absolute;right:3px;top:3px;height:7px;width:7px;border-radius:50%;border:2px solid var(--app);background:#34d399;"></span>
+      </div>
+      <div style="flex:1"></div>
+      <div class="railb"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M18.9 14.3a1.5 1.5 0 0 0 .3 1.7l.1.1a1.9 1.9 0 1 1-2.7 2.7l-.1-.1a1.5 1.5 0 0 0-2.6 1.1v.2a1.9 1.9 0 1 1-3.8 0v-.1a1.5 1.5 0 0 0-2.6-1.1l-.1.1a1.9 1.9 0 1 1-2.7-2.7l.1-.1a1.5 1.5 0 0 0-1.1-2.6h-.2a1.9 1.9 0 1 1 0-3.8h.1a1.5 1.5 0 0 0 1.1-2.6l-.1-.1a1.9 1.9 0 1 1 2.7-2.7l.1.1a1.5 1.5 0 0 0 2.6-1.1v-.2a1.9 1.9 0 1 1 3.8 0v.1a1.5 1.5 0 0 0 2.6 1.1l.1-.1a1.9 1.9 0 1 1 2.7 2.7l-.1.1a1.5 1.5 0 0 0 1.1 2.6h.2a1.9 1.9 0 1 1 0 3.8h-.1a1.5 1.5 0 0 0-1.4.9z"/></svg></div>
+    </div>
+
+    <div style="width:224px;flex-shrink:0;display:flex;flex-direction:column;border-right:1px solid var(--line);background:var(--app);">
+      <div style="display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);padding:10px 12px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/></svg>
+        <span style="font-size:12.5px;font-weight:600;color:var(--ink);">AI Workspace</span>
+      </div>
+      <div style="padding:6px;display:flex;flex-direction:column;gap:1px;">
+        <div class="nav"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>Overview</div>
+        <div class="nav"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Projects<span style="margin-left:auto;font-size:10.5px;color:var(--faint);">3</span></div>
+        <div class="nav navon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Features<span style="margin-left:auto;font-size:10.5px;color:var(--faint);">7</span></div>
+        <div class="nav"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V4M9 14h.01M15 14h.01"/></svg>Agents<span style="margin-left:auto;display:inline-flex;align-items:center;gap:4px;font-size:10.5px;color:var(--ok);"><span style="height:6px;width:6px;border-radius:50%;background:#34d399;"></span>4</span></div>
+        <div class="nav"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Activity</div>
+        <div class="nav"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>Conflicts<span style="margin-left:auto;font-size:10.5px;font-weight:700;color:var(--warn);">2</span></div>
+        <div class="nav"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 1 5 5l-9.3 9.3-5-5z"/><path d="m9 11 4 4"/></svg>Tools</div>
+      </div>
+
+      <div style="margin-top:8px;border-top:1px solid var(--line);padding:11px 12px;">
+        <div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin-bottom:9px;">Context health</div>
+        <div style="display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:11.5px;color:var(--dim);"><span style="height:6px;width:6px;border-radius:50%;background:#4ade80;"></span><span style="flex:1;">Fresh</span><span style="font-size:10.5px;color:var(--faint);">4</span></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:11.5px;color:var(--dim);"><span style="height:6px;width:6px;border-radius:50%;background:#38bdf8;"></span><span style="flex:1;">Changed</span><span style="font-size:10.5px;color:var(--faint);">1</span></div>
+        <div style="display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:11.5px;color:var(--dim);"><span style="height:6px;width:6px;border-radius:50%;background:#fbbf24;"></span><span style="flex:1;">Stale</span><span style="font-size:10.5px;color:var(--faint);">2</span></div>
+      </div>
+    </div>
+
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:var(--page);">
+
+      <div style="padding:15px 20px 12px;border-bottom:1px solid var(--line);flex-shrink:0;">
+        <div style="display:flex;align-items:flex-end;gap:12px;margin-bottom:13px;">
+          <div>
+            <div style="font-size:18px;font-weight:600;color:var(--ink);letter-spacing:-.01em;">Features</div>
+            <div style="font-size:12px;color:var(--dim);margin-top:3px;">TyreX · the collaboration boundary between humans and agents.</div>
+          </div>
+          <div style="flex:1"></div>
+          <button style="border:none;background:#4f46e5;color:#fff;border-radius:4px;padding:5px 11px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px;">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>New feature
+          </button>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:7px;">
+          <div style="display:flex;align-items:center;gap:6px;border:1px solid var(--line2);background:var(--soft);border-radius:4px;padding:4px 9px;width:220px;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <span style="font-size:11.5px;color:var(--faint);">Search features…</span>
+          </div>
+          <div style="display:flex;gap:1px;background:var(--soft);border:1px solid var(--line);border-radius:5px;padding:2px;">
+            <sc-for list="{{filters}}" as="f" hint-placeholder-count="6">
+              <button class="seg" style="{{f.style}}" onClick="{{f.pick}}">{{f.label}}<span style="{{f.countStyle}}">{{f.count}}</span></button>
+            </sc-for>
+          </div>
+          <div style="flex:1"></div>
+          <div style="display:flex;gap:1px;background:var(--soft);border:1px solid var(--line);border-radius:5px;padding:2px;">
+            <sc-for list="{{views}}" as="v" hint-placeholder-count="2">
+              <button class="seg" style="padding:3px 7px;{{v.style}}" onClick="{{v.pick}}">{{v.icon}}</button>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div class="scroll" style="flex:1;padding:14px 20px;">
+
+        <sc-if value="{{isTable}}" hint-placeholder-val="{{true}}">
+          <div class="card" style="overflow:hidden;">
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) 108px 128px 106px 96px 92px;border-bottom:1px solid var(--line);background:var(--soft);">
+              <div class="th">Feature</div>
+              <div class="th">Status</div>
+              <div class="th">Agents</div>
+              <div class="th">Context</div>
+              <div class="th">Conflicts</div>
+              <div class="th" style="text-align:right;">Last activity</div>
+            </div>
+            <sc-for list="{{rows}}" as="r" hint-placeholder-count="7">
+              <div class="trow" style="display:grid;grid-template-columns:minmax(0,1fr) 108px 128px 106px 96px 92px;border-bottom:1px solid var(--line);align-items:center;cursor:pointer;">
+                <div style="padding:9px 12px;min-width:0;">
+                  <div style="font-size:12.5px;color:var(--ink);">{{r.name}}</div>
+                  <div style="font-size:10.5px;color:var(--muted);margin-top:2px;font-family:var(--mono);">{{r.areas}}</div>
+                </div>
+                <div style="padding:9px 12px;"><span class="chip" style="{{r.statusStyle}}">{{r.status}}</span></div>
+                <div style="padding:9px 12px;display:flex;align-items:center;">
+                  <sc-for list="{{r.agents}}" as="a" hint-placeholder-count="3">
+                    <span style="height:19px;width:19px;border-radius:5px;font-size:8.5px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-right:-4px;border:1.5px solid var(--raise);{{a.style}}">{{a.initials}}</span>
+                  </sc-for>
+                  <span style="font-size:10.5px;color:var(--faint);margin-left:9px;">{{r.agentNote}}</span>
+                </div>
+                <div style="padding:9px 12px;"><span class="chip" style="{{r.ctxStyle}}"><span style="height:5px;width:5px;border-radius:50%;{{r.ctxDot}}"></span>{{r.ctx}}</span></div>
+                <div style="padding:9px 12px;"><span style="{{r.conflictStyle}}">{{r.conflicts}}</span></div>
+                <div style="padding:9px 12px;text-align:right;font-size:10.5px;color:var(--faint);">{{r.when}}</div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{isCards}}" hint-placeholder-val="{{false}}">
+          <div style="display:grid;grid-template-columns:repeat(3, minmax(0,1fr));gap:11px;">
+            <sc-for list="{{rows}}" as="r" hint-placeholder-count="7">
+              <div class="card fcard" style="padding:12px 13px;cursor:pointer;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;">
+                  <span style="font-size:12.5px;font-weight:600;color:var(--ink);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{r.name}}</span>
+                  <span class="chip" style="{{r.statusStyle}}">{{r.status}}</span>
+                </div>
+                <div style="font-size:10.5px;color:var(--muted);font-family:var(--mono);margin-bottom:11px;">{{r.areas}}</div>
+                <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px;">
+                  <sc-for list="{{r.agents}}" as="a" hint-placeholder-count="3">
+                    <span style="height:20px;width:20px;border-radius:5px;font-size:8.5px;font-weight:700;display:flex;align-items:center;justify-content:center;{{a.style}}">{{a.initials}}</span>
+                  </sc-for>
+                  <span style="font-size:10.5px;color:var(--faint);">{{r.agentNote}}</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <span class="chip" style="{{r.ctxStyle}}"><span style="height:5px;width:5px;border-radius:50%;{{r.ctxDot}}"></span>{{r.ctx}}</span>
+                  <div style="flex:1"></div>
+                  <span style="font-size:10.5px;color:var(--faint);">{{r.when}}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{isEmpty}}" hint-placeholder-val="{{false}}">
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:90px 20px;text-align:center;">
+            <div style="height:44px;width:44px;border-radius:11px;background:var(--soft);display:flex;align-items:center;justify-content:center;margin-bottom:14px;">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+            </div>
+            <div style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:5px;">Nothing in this state</div>
+            <div style="font-size:12px;color:var(--dim);max-width:330px;line-height:1.55;">No features are currently blocked. That is the state you want.</div>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:16px;border-top:1px solid var(--line);background:var(--panel);padding:4px 12px;font-size:11px;color:var(--muted);flex-shrink:0;">
+    <span>Logs</span><span>Processes</span>
+    <div style="flex:1"></div>
+    <span style="display:inline-flex;align-items:center;gap:5px;"><span style="height:6px;width:6px;border-radius:50%;background:#34d399;"></span>4 agents working</span>
+    <span>TyreX · main</span>
+    <span style="color:var(--warn);">2 conflicts</span>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { filter: 'All', view: 'table' };
+  }
+  renderVals() {
+    const self = this;
+    const A = {
+      CL: 'background:rgba(167,139,250,.18);color:#c4b5fd;',
+      CU: 'background:rgba(56,189,248,.18);color:#7dd3fc;',
+      QA: 'background:rgba(148,163,184,.18);color:#94a3b8;',
+      CX: 'background:rgba(251,191,36,.18);color:#fcd34d;',
+    };
+    const S = {
+      'In Progress': 'background:rgba(99,102,241,.16);color:#a5b4fc;',
+      'Review':      'background:rgba(167,139,250,.16);color:#c4b5fd;',
+      'Planned':     'background:rgba(148,163,184,.14);color:#94a3b8;',
+      'Blocked':     'background:rgba(248,113,113,.16);color:#fca5a5;',
+      'Completed':   'background:rgba(74,222,128,.12);color:#4ade80;',
+    };
+    const CTX = {
+      Fresh:   { style: 'background:rgba(74,222,128,.12);color:#4ade80;', dot: 'background:#4ade80;' },
+      Changed: { style: 'background:rgba(56,189,248,.12);color:#7dd3fc;', dot: 'background:#38bdf8;' },
+      Stale:   { style: 'background:rgba(251,191,36,.14);color:#fbbf24;', dot: 'background:#fbbf24;' },
+    };
+
+    const data = [
+      { name: 'Offline Synchronisation', areas: 'packages/sync · api/sync', status: 'In Progress', agents: ['CL','CU','QA'], ctx: 'Fresh',   conflicts: 1, when: '4 min ago' },
+      { name: 'Gate Tracking',           areas: 'services/gates',          status: 'Review',      agents: ['CX'],           ctx: 'Stale',   conflicts: 1, when: '51 min ago' },
+      { name: 'Tyre Lifecycle',          areas: 'packages/lifecycle',      status: 'In Progress', agents: [],               ctx: 'Fresh',   conflicts: 0, when: '2 h ago' },
+      { name: 'Depot Handover',          areas: 'apps/depot',              status: 'Planned',     agents: [],               ctx: 'Changed', conflicts: 0, when: '1 d ago' },
+      { name: 'Audit Trail',             areas: 'db/audit',                status: 'Planned',     agents: [],               ctx: 'Stale',   conflicts: 0, when: '4 d ago' },
+      { name: 'Stock Take',              areas: 'apps/mobile',             status: 'Completed',   agents: [],               ctx: 'Fresh',   conflicts: 0, when: '6 d ago' },
+      { name: 'Driver Login',            areas: 'api/auth',                status: 'Completed',   agents: [],               ctx: 'Fresh',   conflicts: 0, when: '9 d ago' },
+    ];
+
+    const cur = this.state.filter;
+    const shown = data.filter(function (d) { return cur === 'All' || d.status === cur; });
+
+    const rows = shown.map(function (d) {
+      const c = CTX[d.ctx];
+      return {
+        name: d.name, areas: d.areas, status: d.status, statusStyle: S[d.status],
+        agents: d.agents.map(function (i) { return { initials: i, style: A[i] }; }),
+        agentNote: d.agents.length ? '' : 'none',
+        ctx: d.ctx, ctxStyle: c.style, ctxDot: c.dot,
+        conflicts: d.conflicts ? d.conflicts + ' warning' : '—',
+        conflictStyle: d.conflicts ? 'font-size:11px;color:#fbbf24;font-weight:600;' : 'font-size:11px;color:#475569;',
+        when: d.when,
+      };
+    });
+
+    const counts = { All: 7, Planned: 2, 'In Progress': 2, Review: 1, Blocked: 0, Completed: 2 };
+    const filters = ['All', 'Planned', 'In Progress', 'Review', 'Blocked', 'Completed'].map(function (label) {
+      const on = label === cur;
+      return {
+        label: label,
+        count: ' ' + counts[label],
+        countStyle: on ? 'color:#94a3b8;font-size:10px;' : 'color:#475569;font-size:10px;',
+        style: on ? 'background:#151923;color:#e2e8f0;font-weight:600;' : '',
+        pick: function () { self.setState({ filter: label }); },
+      };
+    });
+
+    const views = [
+      { id: 'table', icon: '☰' },
+      { id: 'cards', icon: '▦' },
+    ].map(function (v) {
+      return {
+        icon: v.icon,
+        style: v.id === self.state.view ? 'background:#151923;color:#e2e8f0;' : '',
+        pick: function () { self.setState({ view: v.id }); },
+      };
+    });
+
+    return {
+      rows: rows, filters: filters, views: views,
+      isTable: this.state.view === 'table' && rows.length > 0,
+      isCards: this.state.view === 'cards' && rows.length > 0,
+      isEmpty: rows.length === 0,
+    };
+  }
+}
+</script>
+</body>
+</html>

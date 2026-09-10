@@ -5,10 +5,13 @@
 import { useEffect, useRef } from 'react'
 import { LogViewer } from './LogViewer'
 import { ProcessDashboard } from './ProcessDashboard'
+import { EventStream } from './EventStream'
+import { LlmCalls } from './LlmCalls'
+import { useAiw } from '../lib/aiwStore'
 import { useApp } from '../store'
 import { Icon } from '../lib/icons'
 
-export type BottomTab = 'logs' | 'processes'
+export type BottomTab = 'logs' | 'processes' | 'events' | 'calls'
 
 const MIN_H = 140
 const bottomChrome = 220 // leave room for the top bar + a slice of the dock
@@ -29,6 +32,7 @@ export function BottomBar({
   onHeight: (h: number) => void
 }) {
   const { logs, svcStates } = useApp()
+  const events = useAiw((s) => s.events)
   const drag = useRef<{ startY: number; startH: number } | null>(null)
 
   // Drag the top edge to resize (dragging up grows the panel).
@@ -89,6 +93,12 @@ export function BottomBar({
       <div className="flex items-center gap-1 px-1">
         <TabBtn id="logs" label="Logs" badge={logs.length} />
         <TabBtn id="processes" label="Processes" badge={runningCount} />
+        {/* The AI Workspace's bus, in the order it happened. Beside the log
+            rather than inside the Assistant: when an agent does something
+            surprising you want the events without leaving the page you were
+            on. */}
+        <TabBtn id="events" label="Events" badge={events.length} />
+        <TabBtn id="calls" label="Models" />
         <div className="flex-1" />
         <button
           className="flex items-center rounded px-2 py-1 text-dim hover:bg-hover hover:text-ink"
@@ -102,7 +112,28 @@ export function BottomBar({
       {/* body */}
       {!collapsed && (
         <div style={{ height }} className="min-h-0 border-t border-line">
-          {tab === 'logs' ? <LogViewer /> : <ProcessDashboard />}
+          {tab === 'logs' ? (
+            <LogViewer />
+          ) : tab === 'calls' ? (
+            <LlmCalls />
+          ) : tab === 'events' ? (
+            <div className="flex h-full min-h-0 flex-col">
+              {/* Say what this is. "What happened" lives in three places now —
+                  the thread that did it, the Inbox for anything addressed to
+                  you, and Logs for raw process output. This is none of those:
+                  it is the bus itself, kept for when something surprising
+                  happened and the narrated version is the wrong tool. */}
+              <div className="shrink-0 border-b border-line px-3 py-1 text-[10.5px] text-faint">
+                The raw event bus, in order, for debugging. What agents and bots
+                actually said is in their threads.
+              </div>
+              <div className="min-h-0 flex-1">
+                <EventStream />
+              </div>
+            </div>
+          ) : (
+            <ProcessDashboard />
+          )}
         </div>
       )}
     </div>

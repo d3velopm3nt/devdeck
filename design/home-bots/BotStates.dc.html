@@ -1,0 +1,145 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: var(--accent); } a:hover { color: var(--ink); }
+    .tile { width: 118px; display: flex; flex-direction: column; align-items: center; gap: 8px;
+            padding: 13px 6px; border-radius: 12px; border: 1px solid var(--line); }
+    .glyph { position: relative; width: 54px; height: 54px; border-radius: 16px; display: flex;
+             align-items: center; justify-content: center; }
+    .name { font-size: 11px; font-weight: 600; text-align: center; line-height: 1.25; }
+    .sub { font-size: 9.5px; }
+    .cap { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .why { font-size: 10.5px; line-height: 1.55; color: var(--muted); text-align: center; }
+    @keyframes ring { 0%, 100% { opacity: .30; transform: scale(1); } 50% { opacity: .85; transform: scale(1.07); } }
+    .alive { animation: ring 2.4s ease-in-out infinite; position: absolute; width: 62px; height: 62px; border-radius: 18px; }
+    .badge { position: absolute; top: -4px; right: -6px; min-width: 17px; height: 17px; padding: 0 4px;
+             border-radius: 999px; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --hover: {{c.hover}}; --line: {{c.line}}; --line2: {{c.line2}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; background: var(--app); width: 1080px; height: 430px; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px; overflow: hidden;">
+
+  <div>
+    <div style="font-size: 14px; font-weight: 600; color: var(--ink);">What the icon does</div>
+    <div style="font-size: 11.5px; color: var(--muted); margin-top: 3px;">Quiet by default. It only lights up for something you can act on — a bot that lights up for its own routine work is a bot you learn to ignore.</div>
+  </div>
+
+  <div style="display: flex; gap: 14px; align-items: flex-start;">
+
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; width: 118px;">
+      <div class="tile">
+        <span class="glyph" style="background: #22c55e; color: #04220f;">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="7" width="16" height="12" rx="2"/><path d="M9 12h.01M15 12h.01M12 3v4"/></svg>
+        </span>
+        <span class="name" style="color: var(--dim);">Fitness<br>bot</span>
+        <span class="sub" style="color: var(--faint);">08:00</span>
+      </div>
+      <div class="cap">Quiet</div>
+      <div class="why">Nothing to say. Its next wake, and no ring at all.</div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; width: 118px;">
+      <div class="tile">
+        <span class="glyph" style="background: #6366f1; color: #fff;">
+          <span class="alive" style="background: var(--ok);"></span>
+          <span style="position: relative; display: flex;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="7" width="16" height="12" rx="2"/><path d="M9 12h.01M15 12h.01M12 3v4"/></svg></span>
+        </span>
+        <span class="name" style="color: var(--ink);">DevDeck<br>bot</span>
+        <span class="sub" style="color: var(--ok);">working</span>
+      </div>
+      <div class="cap">Awake</div>
+      <div class="why">A green ring, breathing. It is running now; you are not needed.</div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; width: 118px;">
+      <div class="tile" style="border-color: rgb(251 191 36 / .32); background: rgb(251 191 36 / .06);">
+        <span class="glyph" style="background: #f59e0b; color: #1a1206;">
+          <span class="alive" style="background: var(--warn);"></span>
+          <span style="position: relative; display: flex;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="7" width="16" height="12" rx="2"/><path d="M9 12h.01M15 12h.01M12 3v4"/></svg></span>
+          <span class="badge" style="background: var(--warn); color: #2a1c02;">8</span>
+        </span>
+        <span class="name" style="color: var(--ink);">x-platform<br>bot</span>
+        <span class="sub" style="color: var(--warn);">waiting</span>
+      </div>
+      <div class="cap">Wants you</div>
+      <div class="why">Amber, with a count. Work is sitting there and nobody has picked it up.</div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; width: 118px;">
+      <div class="tile" style="border-color: rgb(248 113 113 / .35); background: rgb(248 113 113 / .07);">
+        <span class="glyph" style="background: #6366f1; color: #fff;">
+          <span class="alive" style="background: var(--err);"></span>
+          <span style="position: relative; display: flex;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="7" width="16" height="12" rx="2"/><path d="M9 12h.01M15 12h.01M12 3v4"/></svg></span>
+          <span class="badge" style="background: var(--err); color: #2a0808;">1</span>
+        </span>
+        <span class="name" style="color: var(--ink);">DevDeck<br>bot</span>
+        <span class="sub" style="color: var(--err);">blocked</span>
+      </div>
+      <div class="cap">Stuck</div>
+      <div class="why">Red. Work has stopped and only a person can start it again.</div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; width: 118px;">
+      <div class="tile" style="border-style: dashed; border-color: var(--line2);">
+        <span class="glyph" style="background: rgb(56 189 248 / .16); color: #38bdf8; border: 1px dashed rgb(56 189 248 / .5);">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="7" width="16" height="12" rx="2"/><path d="M9 12h.01M15 12h.01M12 3v4"/></svg>
+        </span>
+        <span class="name" style="color: var(--dim);">My First<br>Bot</span>
+        <span class="sub" style="color: var(--faint);">no agent</span>
+      </div>
+      <div class="cap">Hands off</div>
+      <div class="why">Dashed. It can keep a plan and talk, but it cannot do the work itself.</div>
+    </div>
+
+    <div style="flex: 1; min-width: 0; border-left: 1px solid var(--line); padding-left: 16px; display: flex; flex-direction: column; gap: 10px;">
+      <div class="cap">The rule</div>
+      <div style="font-size: 12px; line-height: 1.6; color: var(--body);">
+        One step per reason, and the reason is always something you could do next.
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 7px;">
+        <div style="display: flex; align-items: center; gap: 9px;">
+          <span style="width: 9px; height: 9px; border-radius: 999px; background: var(--faint);"></span>
+          <span style="font-size: 11.5px; color: var(--dim);">asleep, or working — no attention</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 9px;">
+          <span style="width: 9px; height: 9px; border-radius: 999px; background: var(--warn);"></span>
+          <span style="font-size: 11.5px; color: var(--dim);">work waiting, an approval, a deadline today</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 9px;">
+          <span style="width: 9px; height: 9px; border-radius: 999px; background: var(--err);"></span>
+          <span style="font-size: 11.5px; color: var(--dim);">blocked, overdue, or a session that failed</span>
+        </div>
+      </div>
+      <div style="margin-top: auto; font-size: 10.5px; line-height: 1.55; color: var(--muted);">
+        A lit bot always has a matching card under <span style="color: var(--warn);">Needs you</span>, so the icon is a pointer and never the only place a thing is said. Clearing it there puts the light out.
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', panel: '#11141c', raise: '#151923', hover: '#232b3b', line: '#1e293b',
+          line2: '#334155', ink: '#e2e8f0', body: '#cbd5e1', dim: '#94a3b8', muted: '#64748b',
+          faint: '#475569', accent: '#818cf8', ok: '#4ade80', warn: '#fbbf24', err: '#f87171' }
+      : { app: '#e9ebf0', panel: '#fdfdfe', raise: '#f0f2f6', hover: '#e7eaf1', line: '#d9dee7',
+          line2: '#c3cbd8', ink: '#16181d', body: '#333a45', dim: '#5a6472', muted: '#7d8794',
+          faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d', warn: '#b45309', err: '#dc2626' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

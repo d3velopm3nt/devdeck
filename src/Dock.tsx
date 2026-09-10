@@ -9,8 +9,12 @@ import {
   type DockviewReadyEvent,
   type IDockviewPanelProps,
 } from 'dockview-react'
+import { NodeConfigPage } from './components/editors/NodeConfigPage'
 import { NodeSetupPage } from './components/editors/NodeSetupPage'
 import { SpaceDetailPage } from './components/SpaceDetailPage'
+import { BotPage } from './components/bot/BotPage'
+import { CAPTURE_BOT } from './lib/devCapture'
+import { openBot } from './lib/dock'
 import { ServiceDetailPage } from './components/ServiceDetailPage'
 import { TerminalView } from './components/TerminalView'
 import { TerminalTab } from './components/TerminalTab'
@@ -99,14 +103,44 @@ function Welcome() {
   )
 }
 
+import { NodePage } from './components/node/NodePage'
+import { AssistantThread } from './components/thread/AssistantThread'
+import {
+  AssistantPanel,
+  ContextPanel,
+  GitPanel,
+  FeaturesPanel,
+} from './components/aiw/ProjectPanels'
+import { FileViewer } from './components/FileViewer'
+
 const components = {
   'node-setup': (props: IDockviewPanelProps<{ id: number }>) => <NodeSetupPage {...props} />,
+  'node-config': (props: IDockviewPanelProps<{ id: number }>) => <NodeConfigPage {...props} />,
+  'node-thread': (props: IDockviewPanelProps<{ id: number }>) => <NodePage {...props} />,
+  'assistant-thread': () => <AssistantThread />,
   'space-detail': (props: IDockviewPanelProps<{ id: number }>) => <SpaceDetailPage {...props} />,
+  'bot-detail': (props: IDockviewPanelProps<{ id: number; ask?: boolean }>) => <BotPage {...props} />,
   'service-detail': (props: IDockviewPanelProps<{ id: number }>) => <ServiceDetailPage {...props} />,
+  file: (
+    props: IDockviewPanelProps<{
+      nodeId: number
+      rel: string
+      /// `whole` reads from the vault root and ignores the node.
+      root: 'work' | 'vault' | 'whole'
+    }>,
+  ) => (
+    <FileViewer nodeId={props.params.nodeId} rel={props.params.rel} root={props.params.root} />
+  ),
   welcome: () => <Welcome />,
   terminal: (props: IDockviewPanelProps<{ ptyId: number }>) => (
     <TerminalView ptyId={props.params.ptyId} />
   ),
+  // A project's AI views are documents like any other. Nothing swaps the
+  // surface out any more; everything opens as a tab you can split and drag.
+  'aiw-assistant': AssistantPanel,
+  'aiw-context': ContextPanel,
+  'aiw-git': GitPanel,
+  'aiw-features': FeaturesPanel,
 }
 
 // Custom tab headers. Only terminals use one (to confirm ending the
@@ -139,6 +173,10 @@ export function Dock() {
       restored = false
     }
     if (!restored) buildDefaultLayout(event.api)
+
+    // Dev-only: open one bot page straight away, so a screenshot can be taken
+    // of a screen this session cannot click its way to. Inert when unset.
+    if (CAPTURE_BOT) openBot(Number(CAPTURE_BOT), 'Bot')
 
     // Autosave layout (debounced) so the workspace reopens as you left it.
     let timer: ReturnType<typeof setTimeout> | undefined

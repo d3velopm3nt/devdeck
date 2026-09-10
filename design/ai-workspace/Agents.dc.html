@@ -1,0 +1,293 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root{
+      --app:#0b0e14; --page:#0d1017; --panel:#11141c; --raise:#151923; --menu:#1a1f2b; --hover:#232b3b;
+      --soft:rgba(30,41,59,.4);
+      --line:#1e293b; --line2:#334155; --line3:#64748b;
+      --ink:#e2e8f0; --body:#cbd5e1; --dim:#94a3b8; --muted:#64748b; --faint:#475569;
+      --accent:#818cf8; --ok:#4ade80; --warn:#fbbf24; --err:#f87171; --info:#38bdf8; --viol:#a78bfa;
+      --mono:ui-monospace,Consolas,'Cascadia Mono',monospace;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--app);color:var(--body);}
+    a{color:var(--accent);text-decoration:none;} a:hover{color:#a5b4fc;}
+    .railb{position:relative;display:flex;height:40px;width:40px;align-items:center;justify-content:center;border-radius:8px;color:var(--muted);cursor:pointer;}
+    .railb:hover{background:rgba(35,43,59,.5);color:var(--dim);}
+    .railon{background:var(--raise);color:var(--ink);}
+    .railon::before{content:'';position:absolute;left:-7px;top:8px;bottom:8px;width:2.5px;border-radius:2px;background:#6366f1;}
+    .nav{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;color:var(--dim);cursor:pointer;font-size:12.5px;}
+    .nav:hover{background:var(--hover);color:var(--ink);}
+    .navon{background:var(--raise);color:var(--ink);font-weight:600;}
+    .card{background:var(--raise);border:1px solid var(--line);border-radius:6px;}
+    .chip{display:inline-flex;align-items:center;gap:5px;border-radius:4px;padding:2px 7px;font-size:10.5px;font-weight:600;}
+    .gh{border:1px solid var(--line2);background:var(--soft);color:var(--body);border-radius:4px;padding:4px 10px;font-size:11.5px;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px;}
+    .gh:hover{border-color:var(--line3);color:var(--ink);}
+    .scroll{overflow-y:auto;scrollbar-width:thin;scrollbar-color:#334155 transparent;}
+    h4{margin:0 0 9px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);}
+    .kv{display:flex;justify-content:space-between;gap:10px;padding:3px 0;font-size:11px;}
+    .agentcard:hover{border-color:var(--line2);}
+  </style>
+</helmet>
+
+<div style="width:1440px;height:900px;display:flex;flex-direction:column;background:var(--app);font-size:12px;">
+
+  <div style="display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);background:var(--panel);padding:6px 8px;flex-shrink:0;">
+    <span style="font-size:13px;font-weight:600;color:var(--ink);margin-right:4px;">DevDeck</span>
+    <button class="gh">Terminal</button>
+    <button class="gh">Services</button>
+    <div style="flex:1"></div>
+    <span class="chip" style="background:rgba(16,185,129,.1);color:var(--ok);">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+      main
+    </span>
+    <button class="gh">Check for updates</button>
+  </div>
+
+  <div style="flex:1;display:flex;min-height:0;">
+
+    <div style="width:52px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:4px;border-right:1px solid var(--line);background:var(--app);padding:8px 0;">
+      <div class="railb"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 10v10h14V10"/></svg></div>
+      <div class="railb"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
+      <div class="railb"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M9 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3"/></svg></div>
+      <div class="railb"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg></div>
+      <div class="railb"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg></div>
+      <div class="railb railon">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/><path d="M18.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></svg>
+        <span style="position:absolute;right:3px;top:3px;height:7px;width:7px;border-radius:50%;border:2px solid var(--app);background:#34d399;"></span>
+      </div>
+      <div style="flex:1"></div>
+      <div class="railb"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M18.9 14.3a1.5 1.5 0 0 0 .3 1.7l.1.1a1.9 1.9 0 1 1-2.7 2.7l-.1-.1a1.5 1.5 0 0 0-2.6 1.1v.2a1.9 1.9 0 1 1-3.8 0v-.1a1.5 1.5 0 0 0-2.6-1.1l-.1.1a1.9 1.9 0 1 1-2.7-2.7l.1-.1a1.5 1.5 0 0 0-1.1-2.6h-.2a1.9 1.9 0 1 1 0-3.8h.1a1.5 1.5 0 0 0 1.1-2.6l-.1-.1a1.9 1.9 0 1 1 2.7-2.7l.1.1a1.5 1.5 0 0 0 2.6-1.1v-.2a1.9 1.9 0 1 1 3.8 0v.1a1.5 1.5 0 0 0 2.6 1.1l.1-.1a1.9 1.9 0 1 1 2.7 2.7l-.1.1a1.5 1.5 0 0 0 1.1 2.6h.2a1.9 1.9 0 1 1 0 3.8h-.1a1.5 1.5 0 0 0-1.4.9z"/></svg></div>
+    </div>
+
+    <div style="width:224px;flex-shrink:0;display:flex;flex-direction:column;border-right:1px solid var(--line);background:var(--app);">
+      <div style="display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);padding:10px 12px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/></svg>
+        <span style="font-size:12.5px;font-weight:600;color:var(--ink);">AI Workspace</span>
+      </div>
+      <div style="padding:6px;display:flex;flex-direction:column;gap:1px;">
+        <div class="nav"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>Overview</div>
+        <div class="nav"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Projects<span style="margin-left:auto;font-size:10.5px;color:var(--faint);">3</span></div>
+        <div class="nav"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Features<span style="margin-left:auto;font-size:10.5px;color:var(--faint);">7</span></div>
+        <div class="nav navon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V4M9 14h.01M15 14h.01"/></svg>Agents<span style="margin-left:auto;display:inline-flex;align-items:center;gap:4px;font-size:10.5px;color:var(--ok);"><span style="height:6px;width:6px;border-radius:50%;background:#34d399;"></span>4</span></div>
+        <div class="nav"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Activity</div>
+        <div class="nav"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>Conflicts<span style="margin-left:auto;font-size:10.5px;font-weight:700;color:var(--warn);">2</span></div>
+        <div class="nav"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 1 5 5l-9.3 9.3-5-5z"/><path d="m9 11 4 4"/></svg>Tools</div>
+      </div>
+
+      <div style="margin-top:8px;border-top:1px solid var(--line);padding:11px 12px;">
+        <div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin-bottom:9px;">Status</div>
+        <sc-for list="{{statuses}}" as="s" hint-placeholder-count="6">
+          <div style="display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:11.5px;color:var(--dim);">
+            <span style="height:6px;width:6px;border-radius:50%;{{s.swatch}}"></span>
+            <span style="flex:1;">{{s.label}}</span>
+            <span style="font-size:10.5px;color:var(--faint);">{{s.count}}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:var(--page);">
+
+      <div style="padding:15px 20px 13px;border-bottom:1px solid var(--line);flex-shrink:0;display:flex;align-items:flex-end;gap:12px;">
+        <div>
+          <div style="font-size:18px;font-weight:600;color:var(--ink);letter-spacing:-.01em;">Agents</div>
+          <div style="font-size:12px;color:var(--dim);margin-top:3px;">Who is working right now, on what, and with which context.</div>
+        </div>
+        <div style="flex:1"></div>
+        <button class="gh">Permissions</button>
+        <button style="border:none;background:#4f46e5;color:#fff;border-radius:4px;padding:5px 11px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>Start agent
+        </button>
+      </div>
+
+      <div class="scroll" style="flex:1;padding:15px 20px;">
+        <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:12px;margin-bottom:16px;">
+          <sc-for list="{{agents}}" as="a" hint-placeholder-count="4">
+            <div class="card agentcard" style="padding:13px 15px;{{a.cardStyle}}">
+              <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px;">
+                <span style="height:29px;width:29px;flex-shrink:0;border-radius:7px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;{{a.avatar}}">{{a.initials}}</span>
+                <div style="min-width:0;">
+                  <div style="font-size:13px;font-weight:600;color:var(--ink);">{{a.name}}</div>
+                  <div style="font-size:10.5px;color:var(--muted);margin-top:1px;">{{a.role}}</div>
+                </div>
+                <div style="flex:1"></div>
+                <span class="chip" style="{{a.statusStyle}}"><span style="height:5px;width:5px;border-radius:50%;{{a.dot}}"></span>{{a.status}}</span>
+              </div>
+
+              <div style="background:var(--page);border:1px solid var(--line);border-radius:5px;padding:9px 11px;margin-bottom:10px;">
+                <div style="font-size:10.5px;color:var(--muted);margin-bottom:3px;">{{a.featureLabel}}</div>
+                <div style="font-size:12px;color:var(--body);line-height:1.45;">{{a.task}}</div>
+              </div>
+
+              <div style="margin-bottom:11px;">
+                <div class="kv"><span style="color:var(--muted);">Started</span><span style="color:var(--dim);">{{a.started}}</span></div>
+                <div class="kv"><span style="color:var(--muted);">Last checkpoint</span><span style="color:var(--dim);">{{a.checkpoint}}</span></div>
+                <div class="kv"><span style="color:var(--muted);">Context</span><span style="{{a.ctxStyle}}">{{a.ctx}}</span></div>
+                <div class="kv"><span style="color:var(--muted);">Files touched</span><span style="color:var(--dim);">{{a.files}}</span></div>
+              </div>
+
+              <div style="display:flex;gap:5px;align-items:center;">
+                <button class="gh" style="font-size:11px;padding:3px 9px;">View work</button>
+                <button class="gh" style="font-size:11px;padding:3px 9px;">Message</button>
+                <button class="gh" style="font-size:11px;padding:3px 9px;">Session</button>
+                <div style="flex:1"></div>
+                <button class="gh" style="font-size:11px;padding:3px 8px;" title="Pause">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+                </button>
+                <button class="gh" style="font-size:11px;padding:3px 8px;" title="Stop">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                </button>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <h4>Available, not currently working</h4>
+        <div class="card" style="padding:4px 0;margin-bottom:16px;">
+          <div style="display:flex;align-items:center;gap:10px;padding:9px 13px;border-bottom:1px solid var(--line);">
+            <span style="height:22px;width:22px;flex-shrink:0;border-radius:5px;background:rgba(74,222,128,.14);color:#86efac;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;">RS</span>
+            <span style="font-size:12px;color:var(--ink);width:110px;">Research Agent</span>
+            <span style="font-size:11.5px;color:var(--muted);flex:1;">Read-only · knowledge search and API docs</span>
+            <span class="chip" style="background:rgba(148,163,184,.12);color:var(--muted);"><span style="height:5px;width:5px;border-radius:50%;background:var(--faint);"></span>Idle</span>
+            <button class="gh" style="font-size:11px;padding:3px 9px;">Assign</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;padding:9px 13px;">
+            <span style="height:22px;width:22px;flex-shrink:0;border-radius:5px;background:rgba(148,163,184,.14);color:var(--dim);font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;">LO</span>
+            <span style="font-size:12px;color:var(--ink);width:110px;">Local Agent</span>
+            <span style="font-size:11.5px;color:var(--muted);flex:1;">Runs on this machine · full terminal access</span>
+            <span class="chip" style="background:rgba(148,163,184,.12);color:var(--muted);"><span style="height:5px;width:5px;border-radius:50%;background:var(--faint);"></span>Idle</span>
+            <button class="gh" style="font-size:11px;padding:3px 9px;">Assign</button>
+          </div>
+        </div>
+
+        <h4>Tool permissions</h4>
+        <div class="card" style="overflow:hidden;">
+          <div style="display:grid;grid-template-columns:132px repeat(4, minmax(0,1fr));border-bottom:1px solid var(--line);background:var(--soft);">
+            <div style="padding:8px 12px;font-size:10.5px;color:var(--muted);"></div>
+            <div style="padding:8px 10px;font-size:10.5px;color:var(--dim);font-weight:600;">Claude</div>
+            <div style="padding:8px 10px;font-size:10.5px;color:var(--dim);font-weight:600;">Cursor</div>
+            <div style="padding:8px 10px;font-size:10.5px;color:var(--dim);font-weight:600;">QA</div>
+            <div style="padding:8px 10px;font-size:10.5px;color:var(--dim);font-weight:600;">Research</div>
+          </div>
+          <sc-for list="{{matrix}}" as="m" hint-placeholder-count="6">
+            <div style="display:grid;grid-template-columns:132px repeat(4, minmax(0,1fr));border-bottom:1px solid var(--line);">
+              <div style="padding:7px 12px;font-size:11.5px;color:var(--body);">{{m.tool}}</div>
+              <div style="padding:7px 10px;"><span class="chip" style="{{m.s0}}">{{m.p0}}</span></div>
+              <div style="padding:7px 10px;"><span class="chip" style="{{m.s1}}">{{m.p1}}</span></div>
+              <div style="padding:7px 10px;"><span class="chip" style="{{m.s2}}">{{m.p2}}</span></div>
+              <div style="padding:7px 10px;"><span class="chip" style="{{m.s3}}">{{m.p3}}</span></div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:16px;border-top:1px solid var(--line);background:var(--panel);padding:4px 12px;font-size:11px;color:var(--muted);flex-shrink:0;">
+    <span>Logs</span><span>Processes</span>
+    <div style="flex:1"></div>
+    <span style="display:inline-flex;align-items:center;gap:5px;"><span style="height:6px;width:6px;border-radius:50%;background:#34d399;"></span>4 agents working</span>
+    <span>TyreX · main</span>
+    <span style="color:var(--warn);">2 conflicts</span>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const working = 'background:rgba(74,222,128,.1);color:#4ade80;';
+    const waiting = 'background:rgba(148,163,184,.14);color:#94a3b8;';
+    const review  = 'background:rgba(167,139,250,.16);color:#c4b5fd;';
+
+    const agents = [
+      {
+        initials: 'CL', name: 'Claude', role: 'Developer · claude-opus-5',
+        avatar: 'background:rgba(167,139,250,.18);color:#c4b5fd;',
+        status: 'Working', statusStyle: working, dot: 'background:#34d399;',
+        featureLabel: 'TyreX · Offline Synchronisation',
+        task: 'Implement conflict resolution',
+        started: '24 min ago', checkpoint: '2 min ago',
+        ctx: 'Up to date', ctxStyle: 'color:#4ade80;', files: '3',
+        cardStyle: '',
+      },
+      {
+        initials: 'CU', name: 'Cursor', role: 'Developer · local editor',
+        avatar: 'background:rgba(56,189,248,.18);color:#7dd3fc;',
+        status: 'Working', statusStyle: working, dot: 'background:#34d399;',
+        featureLabel: 'TyreX · Offline Synchronisation',
+        task: 'Build sync status UI',
+        started: '11 min ago', checkpoint: '4 min ago',
+        ctx: '2 commits behind', ctxStyle: 'color:#fbbf24;', files: '2',
+        cardStyle: 'border-color:rgba(251,191,36,.28);',
+      },
+      {
+        initials: 'QA', name: 'QA Agent', role: 'Tester · sandboxed',
+        avatar: 'background:rgba(148,163,184,.16);color:#94a3b8;',
+        status: 'Waiting', statusStyle: waiting, dot: 'background:#64748b;',
+        featureLabel: 'TyreX · Offline Synchronisation',
+        task: 'Integration testing — blocked until pull sync lands',
+        started: '38 min ago', checkpoint: '9 min ago',
+        ctx: 'Up to date', ctxStyle: 'color:#4ade80;', files: '0',
+        cardStyle: '',
+      },
+      {
+        initials: 'CX', name: 'Codex', role: 'Developer · gpt-class',
+        avatar: 'background:rgba(251,191,36,.16);color:#fcd34d;',
+        status: 'Reviewing', statusStyle: review, dot: 'background:#a78bfa;',
+        featureLabel: 'TyreX · Gate Tracking',
+        task: 'Awaiting review of the RFID read handler',
+        started: '1 h 12 min ago', checkpoint: '51 min ago',
+        ctx: 'Stale — 6 days', ctxStyle: 'color:#fbbf24;', files: '5',
+        cardStyle: '',
+      },
+    ];
+
+    const statuses = [
+      { label: 'Working',   count: 2, swatch: 'background:#34d399;' },
+      { label: 'Reviewing', count: 1, swatch: 'background:#a78bfa;' },
+      { label: 'Waiting',   count: 1, swatch: 'background:#64748b;' },
+      { label: 'Planning',  count: 0, swatch: 'background:#38bdf8;' },
+      { label: 'Blocked',   count: 0, swatch: 'background:#f87171;' },
+      { label: 'Idle',      count: 2, swatch: 'background:#475569;' },
+    ];
+
+    const P = {
+      Full:     'background:rgba(74,222,128,.12);color:#4ade80;',
+      Execute:  'background:rgba(56,189,248,.12);color:#7dd3fc;',
+      Read:     'background:rgba(148,163,184,.14);color:#94a3b8;',
+      Approval: 'background:rgba(251,191,36,.14);color:#fbbf24;',
+      None:     'background:rgba(148,163,184,.08);color:#475569;',
+    };
+    const rows = [
+      ['Terminal', 'Full', 'Full', 'Execute', 'None'],
+      ['Git', 'Full', 'Full', 'Read', 'Read'],
+      ['Files', 'Full', 'Full', 'Read', 'Read'],
+      ['Database', 'Approval', 'None', 'Read', 'None'],
+      ['Browser', 'Read', 'None', 'Execute', 'Full'],
+      ['Knowledge', 'Full', 'Full', 'Full', 'Full'],
+    ];
+    const matrix = rows.map(function (r) {
+      return {
+        tool: r[0],
+        p0: r[1], s0: P[r[1]],
+        p1: r[2], s1: P[r[2]],
+        p2: r[3], s2: P[r[3]],
+        p3: r[4], s3: P[r[4]],
+      };
+    });
+
+    return { agents: agents, statuses: statuses, matrix: matrix };
+  }
+}
+</script>
+</body>
+</html>

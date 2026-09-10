@@ -39,7 +39,7 @@ export function SpaceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
   const color = project ? nodeColor(project) : '#7C8CF8'
 
   const setColor = async (hex: string) => {
-    await ipc.nodeUpdate(projectId, { color: hex })
+    await ipc.vaultSetMeta(projectId, { color: hex })
     await refreshTree()
   }
   const scope = useMemo(() => new Set(subtreeIds(nodes, projectId)), [nodes, projectId])

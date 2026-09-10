@@ -1,0 +1,102 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background: #0d1017; }
+    a { color: #818cf8; } a:hover { color: #a5b4fc; }
+    .th {
+      font-size: 10px; font-weight: 600; letter-spacing: 0.06em;
+      color: #64748b; padding: 0 0 8px;
+    }
+    .td { font-size: 11.5px; line-height: 1.5; color: #cbd5e1; padding: 11px 0; vertical-align: top; }
+    .cost { color: #e2e8f0; font-weight: 600; }
+    .left { color: #94a3b8; }
+    table { width: 100%; border-collapse: collapse; }
+    tr + tr td { border-top: 1px solid #1e293b; }
+    td:not(:last-child) { padding-right: 22px; }
+    .mono { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 11px; }
+  </style>
+</helmet>
+
+<div style="width: 1000px; height: 470px; background: #0d1017; padding: 24px 28px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px">
+
+  <div style="display: flex; align-items: baseline; gap: 12px">
+    <div style="font-size: 15px; font-weight: 600; color: #e2e8f0">What going central costs</div>
+    <div style="font-size: 11.5px; color: #64748b">
+      Decided, not undecided — this is the bill, and what we do about it.
+    </div>
+  </div>
+
+  <table>
+    <tr>
+      <td class="th" style="width: 22%">WHAT WE GIVE UP</td>
+      <td class="th" style="width: 42%">WHAT WE DO ABOUT IT</td>
+      <td class="th" style="width: 36%">WHAT IS STILL TRUE</td>
+    </tr>
+    <tr>
+      <td class="td cost">Atomic review</td>
+      <td class="td">
+        Link each feature to the PRs that implement it, so the trail exists
+        even though the merge does not.
+      </td>
+      <td class="td left">
+        A context change and the code change it describes land in two
+        repos, at two times. Nothing makes them one commit.
+      </td>
+    </tr>
+    <tr>
+      <td class="td cost">Branch-aware context</td>
+      <td class="td">
+        The feature records <span class="mono">branch</span> per project;
+        DevDeck warns when a repo has moved off the branch its feature names.
+      </td>
+      <td class="td left">
+        Two people on different branches of one repo still share a single
+        context file.
+      </td>
+    </tr>
+    <tr>
+      <td class="td cost">Free access control</td>
+      <td class="td">
+        Keep the split at the workspace boundary: one config repo per client
+        rather than one for everything.
+      </td>
+      <td class="td left">
+        Within a workspace it is all-or-nothing. A contractor on one
+        solution reads every solution in it.
+      </td>
+    </tr>
+    <tr>
+      <td class="td cost">Self-describing repos</td>
+      <td class="td">
+        <span class="mono">project.md</span> carries the repo URL, so setup
+        can clone the code from the config, or the config from the code.
+      </td>
+      <td class="td left">
+        Clone a code repo on its own and it tells you nothing about the work
+        in flight.
+      </td>
+    </tr>
+    <tr>
+      <td class="td cost">One list of projects</td>
+      <td class="td">
+        The config repo is the source of truth; SQLite stays derived and is
+        rebuilt from it — the rule <span class="mono">.devdeck</span>
+        already follows.
+      </td>
+      <td class="td left">
+        Safe, as long as nothing writes project identity to SQLite first.
+      </td>
+    </tr>
+  </table>
+
+</div>
+</x-dc>
+</body>
+</html>

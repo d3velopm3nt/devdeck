@@ -1,0 +1,226 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background: #0b0e14; }
+    a { color: #818cf8; } a:hover { color: #a5b4fc; }
+    .mi { padding: 0 9px; font-size: 12px; color: #cbd5e1; display: flex; align-items: center; }
+    .r { position: relative; display: flex; align-items: center; gap: 8px; height: 32px;
+         padding: 0 8px; border-radius: 8px; color: #64748b; font-size: 12px; }
+    .r.on { background: #151923; color: #e2e8f0; }
+    .bar { position: absolute; left: -5px; top: 6px; bottom: 6px; width: 2.5px; border-radius: 2px; background: #6366f1; }
+    .av { width: 19px; height: 19px; border-radius: 4px; flex: none; display: flex; align-items: center;
+          justify-content: center; font-size: 8px; font-weight: 700; color: #fff; }
+    .sect { font-size: 9px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase;
+            color: #475569; padding: 6px 8px 2px; }
+    .pill { flex: none; border-radius: 999px; padding: 1px 7px; font-size: 9px; font-weight: 600;
+            letter-spacing: 0.04em; text-transform: uppercase; line-height: 1.6; }
+    /* One item in the inbox. */
+    .item { display: flex; gap: 11px; padding: 12px 14px; border-bottom: 1px solid #1e293b; }
+    .dot { width: 26px; height: 26px; border-radius: 7px; flex: none; display: flex;
+           align-items: center; justify-content: center; }
+    .ttl { font-size: 12.5px; color: #e2e8f0; }
+    /* The evidence line. Every item says why it is here — the rule conflict.rs
+       already follows, so the inbox cannot cry wolf without showing its work. */
+    .ev { margin-top: 2px; font-size: 11px; line-height: 1.5; color: #64748b; }
+    .act { display: flex; gap: 6px; margin-top: 8px; }
+    .btn { border-radius: 5px; padding: 3px 10px; font-size: 11px; font-weight: 500; }
+    .primary { background: #6366f1; color: #fff; }
+    .ghost { border: 1px solid #1e293b; color: #94a3b8; }
+    .when { margin-left: auto; flex: none; font-size: 10px; color: #475569; }
+  </style>
+</helmet>
+
+<div style="width: 900px; height: 680px; background: #0b0e14; display: flex; flex-direction: column; overflow: hidden">
+
+  <div style="display: flex; align-items: stretch; height: 30px; flex: none; background: #11141c; border-bottom: 1px solid #1e293b">
+    <div style="display: flex; align-items: center; gap: 6px; padding: 0 11px; font-size: 12.5px; color: #e2e8f0; font-weight: 500">
+      <span style="color: #818cf8; font-weight: 600">&#10095;_</span> DevDeck
+    </div>
+    <div style="width: 1px; margin: 8px 0; background: #1e293b"></div>
+    <div style="display: flex; align-items: center; padding: 0 8px">
+      <span class="mi">File</span><span class="mi">View</span><span class="mi">Build</span><span class="mi">Help</span>
+    </div>
+    <div style="flex: 1"></div>
+    <div style="display: flex; align-items: center; gap: 8px; padding: 0 10px">
+      <span style="display: inline-flex; align-items: center; gap: 4px; border-radius: 4px; background: rgb(74 222 128 / 0.14); padding: 2px 7px; font-size: 11px; color: #4ade80">v0.3.1</span>
+      <span style="width: 21px; height: 21px; border-radius: 50%; background: #6366f1; color: #fff; font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center">DT</span>
+    </div>
+  </div>
+
+  <div style="display: flex; align-items: stretch; flex: none; background: #11141c; border-bottom: 1px solid #1e293b">
+    <div style="display: flex; align-items: center; gap: 9px; padding: 6px 14px 6px 12px; background: #0d1017; box-shadow: inset 0 2px 0 #6366f1; border-right: 1px solid #1e293b">
+      <span style="width: 26px; height: 26px; border-radius: 7px; background: #6366f1; color: #fff; font-size: 9.5px; font-weight: 700; display: flex; align-items: center; justify-content: center">PE</span>
+      <span style="display: flex; flex-direction: column; line-height: 1.25">
+        <span style="font-size: 12.5px; font-weight: 600; color: #e2e8f0">Personal</span>
+        <span style="font-size: 10px; color: #64748b">Idle</span>
+      </span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 9px; padding: 6px 14px 6px 12px; border-right: 1px solid #1e293b">
+      <span style="width: 26px; height: 26px; border-radius: 7px; background: rgb(100 116 139 / 0.22); color: #94a3b8; font-size: 9.5px; font-weight: 700; display: flex; align-items: center; justify-content: center">IN</span>
+      <span style="display: flex; flex-direction: column; line-height: 1.25">
+        <span style="font-size: 12.5px; color: #94a3b8">Innotrack</span>
+        <span style="display: flex; align-items: center; gap: 4px; font-size: 10px; color: #4ade80">
+          <span style="width: 5px; height: 5px; border-radius: 50%; background: #4ade80"></span>2 running
+        </span>
+      </span>
+    </div>
+    <div style="flex: 1"></div>
+  </div>
+
+  <div style="flex: 1; display: flex; min-height: 0">
+
+    <!-- RAIL — Scheduler joins as a pillar -->
+    <nav style="width: 160px; flex: none; display: flex; flex-direction: column; gap: 1px; padding: 6px 5px; background: #0b0e14; border-right: 1px solid #1e293b">
+      <div class="r on"><span class="bar"></span>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>
+        Home
+        <span style="margin-left: auto; border-radius: 999px; background: #6366f1; color: #fff; padding: 0 6px; font-size: 9px; font-weight: 700">5</span>
+      </div>
+      <div style="height: 1px; background: #1e293b; margin: 4px 0"></div>
+      <div class="r">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+        All spaces
+      </div>
+      <div class="sect">Recent</div>
+      <div class="r"><span class="av" style="background: #f472b6">TY</span>TyreX</div>
+      <div class="r"><span class="av" style="background: rgb(100 116 139 / 0.22); color: #94a3b8">HE</span>Health</div>
+      <div class="r"><span class="av" style="background: rgb(100 116 139 / 0.22); color: #94a3b8">FI</span>Finance</div>
+      <div style="height: 1px; background: #1e293b; margin: 4px 0"></div>
+      <div class="r">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none"><path d="M12 3v18"/><path d="m8 7 4-4 4 4"/><path d="M3 12h18"/></svg>
+        Assistant
+      </div>
+      <div class="r">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></svg>
+        Scheduler
+        <span style="margin-left: auto; font-size: 9.5px; color: #475569">3</span>
+      </div>
+      <div class="r">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/></svg>
+        Connections
+      </div>
+      <div style="flex: 1"></div>
+      <div class="r">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none"><circle cx="12" cy="12" r="3"/><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/></svg>
+        Settings
+      </div>
+    </nav>
+
+    <!-- THE INBOX -->
+    <div style="flex: 1; display: flex; flex-direction: column; background: #0d1017; min-width: 0">
+      <div style="display: flex; align-items: center; gap: 10px; flex: none; padding: 14px 18px 10px">
+        <span style="font-size: 15px; font-weight: 600; color: #e2e8f0">What happened</span>
+        <span style="font-size: 11.5px; color: #64748b">across every space</span>
+        <span style="flex: 1"></span>
+        <span style="border-radius: 5px; background: #151923; padding: 3px 9px; font-size: 11px; color: #cbd5e1">All</span>
+        <span style="padding: 3px 9px; font-size: 11px; color: #64748b">Needs you</span>
+      </div>
+
+      <div style="flex: 1; overflow: hidden; border-top: 1px solid #1e293b">
+
+        <div class="item" style="background: rgb(251 191 36 / 0.04)">
+          <span class="dot" style="background: rgb(251 191 36 / 0.16); color: #fbbf24">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0"/></svg>
+          </span>
+          <div style="min-width: 0; flex: 1">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="ttl">QA Agent is waiting on you</span>
+              <span class="pill" style="background: rgb(244 114 182 / 0.16); color: #f472b6">TyreX</span>
+              <span class="when">4m ago</span>
+            </div>
+            <div class="ev">Wants to run <span style="font-family: ui-monospace, Consolas, monospace; color: #94a3b8">process.start</span> on the demo build. Denies itself in 56 minutes.</div>
+            <div class="act">
+              <span class="btn primary">Allow</span>
+              <span class="btn ghost">Deny</span>
+              <span class="btn ghost">Open</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="item">
+          <span class="dot" style="background: rgb(129 140 248 / 0.16); color: #818cf8">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="m8 7 4-4 4 4"/><path d="M3 12h18"/></svg>
+          </span>
+          <div style="min-width: 0; flex: 1">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="ttl">Release check finished — 2 things to look at</span>
+              <span class="pill" style="background: rgb(56 189 248 / 0.16); color: #38bdf8">x&#8209;platform</span>
+              <span class="when">07:02</span>
+            </div>
+            <div class="ev">Version files disagree: <span style="font-family: ui-monospace, Consolas, monospace; color: #94a3b8">Cargo.toml</span> says 0.3.1, <span style="font-family: ui-monospace, Consolas, monospace; color: #94a3b8">tauri.conf.json</span> says 0.3.0.</div>
+            <div class="act">
+              <span class="btn ghost">Read the run</span>
+              <span class="btn ghost">Fix it</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="item">
+          <span class="dot" style="background: rgb(74 222 128 / 0.16); color: #4ade80">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72"/><path d="m14 7 3 3"/></svg>
+          </span>
+          <div style="min-width: 0; flex: 1">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="ttl">You said three mornings — this is week two at one</span>
+              <span class="pill" style="background: rgb(52 211 153 / 0.16); color: #34d399">Health</span>
+              <span class="when">today</span>
+            </div>
+            <div class="ev">Noticed because nothing was logged, not because a rule fired. Say the word and I will stop watching this.</div>
+            <div class="act">
+              <span class="btn ghost">Log one</span>
+              <span class="btn ghost">Not now</span>
+              <span class="btn ghost">Stop tracking</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="item">
+          <span class="dot" style="background: rgb(167 139 250 / 0.16); color: #a78bfa">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg>
+          </span>
+          <div style="min-width: 0; flex: 1">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="ttl">Two papers on passive RFID range this week</span>
+              <span class="pill" style="background: rgb(167 139 250 / 0.16); color: #a78bfa">Learning</span>
+              <span class="when">Tue</span>
+            </div>
+            <div class="ev">You asked to be kept on RFID. Both cite the reader-sensitivity work you saved in March.</div>
+          </div>
+        </div>
+
+        <div class="item">
+          <span class="dot" style="background: rgb(100 116 139 / 0.18); color: #94a3b8">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          </span>
+          <div style="min-width: 0; flex: 1">
+            <div style="display: flex; align-items: center; gap: 7px">
+              <span class="ttl">Demo is in 6 days and three work items are open</span>
+              <span class="pill" style="background: rgb(244 114 182 / 0.16); color: #f472b6">TyreX</span>
+              <span class="when">Mon</span>
+            </div>
+            <div class="ev">From the date you gave me when you said you needed TyreX ready.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- The reply box: the inbox is a conversation, not a notification list -->
+      <div style="flex: none; border-top: 1px solid #1e293b; background: #11141c; padding: 10px 14px">
+        <div style="display: flex; align-items: center; gap: 9px; border: 1px solid #1e293b; border-radius: 7px; background: #0d1017; padding: 8px 11px">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none"><path d="M12 3v18"/><path d="m8 7 4-4 4 4"/><path d="M3 12h18"/></svg>
+          <span style="flex: 1; font-size: 12px; color: #475569">Ask, or just tell me something &mdash; &ldquo;I&rsquo;m starting a new company&rdquo;</span>
+          <span style="border-radius: 5px; background: #6366f1; padding: 3px 11px; font-size: 11px; font-weight: 600; color: #fff">Send</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

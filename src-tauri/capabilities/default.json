@@ -2,7 +2,11 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "DevDeck default window capabilities",
-  "windows": ["main", "widget", "toast"],
+  "windows": [
+    "main",
+    "widget",
+    "toast"
+  ],
   "permissions": [
     "core:default",
     "core:window:allow-show",
@@ -16,6 +20,10 @@
     "core:window:allow-unminimize",
     "core:window:allow-set-always-on-top",
     "core:window:allow-start-dragging",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-maximize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-is-maximized",
     "core:window:allow-start-resize-dragging",
     "core:window:allow-inner-size",
     "core:window:allow-outer-position",

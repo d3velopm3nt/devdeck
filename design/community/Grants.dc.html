@@ -1,0 +1,280 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: var(--accent); } a:hover { color: var(--ink); }
+    .head { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .chip { display: inline-flex; align-items: center; gap: 4px; font-size: 9px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; padding: 2px 6px; border-radius: 999px; }
+    .btn { font-size: 11px; color: var(--dim); border: 1px solid var(--line2); border-radius: 6px; padding: 3px 9px; background: transparent; }
+    .btn.on { color: #fff; background: #4f46e5; border-color: #4f46e5; }
+    .mono { font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; }
+    .rail { display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 8px; border-radius: 8px; font-size: 12px; color: var(--muted); position: relative; }
+    .rail-on { background: var(--raise); color: var(--ink); }
+    .rail-on::before { content: ""; position: absolute; left: -6px; top: 6px; bottom: 6px; width: 2.5px; border-radius: 2px; background: #6366f1; }
+    .filt { display: flex; align-items: center; gap: 7px; padding: 5px 8px; border-radius: 6px; font-size: 11.5px; color: var(--dim); }
+    .filt-on { background: var(--hover); color: var(--ink); }
+    .cell { height: 34px; display: flex; align-items: center; justify-content: center; border-left: 1px solid var(--line); }
+    .g { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 5px; }
+    .g-full { background: rgb(248 113 113 / .16); color: var(--err); }
+    .g-appr { background: rgb(251 191 36 / .16); color: var(--warn); }
+    .g-read { background: rgb(74 222 128 / .14); color: var(--ok); }
+    .g-none { color: var(--faint); }
+    .who { width: 22px; height: 22px; border-radius: 6px; font-size: 8.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --page: {{c.page}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --menu: {{c.menu}}; --hover: {{c.hover}}; --line: {{c.line}}; --line2: {{c.line2}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; width: 1456px; height: 909px; background: var(--app); color: var(--body); display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;">
+
+  <div style="height: 32px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--panel);">
+    <span style="font-size: 11.5px; color: var(--dim);">DevDeck</span>
+    <span style="font-size: 11.5px; color: var(--faint);">File</span>
+    <span style="font-size: 11.5px; color: var(--faint);">View</span>
+    <span style="font-size: 11.5px; color: var(--faint);">Build</span>
+    <span style="font-size: 11.5px; color: var(--faint);">Help</span>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; min-height: 0;">
+
+    <div style="width: 160px; flex-shrink: 0; background: var(--app); border-right: 1px solid var(--line); padding: 8px 6px; display: flex; flex-direction: column; gap: 2px;">
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 11 12 4l8.5 7"></path><path d="M5.5 9.8V19h13V9.8"></path></svg><span>Home</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 13.5 6 5.5h12l2.5 8v5h-17z"></path><path d="M3.5 13.5H9l1 2h4l1-2h5.5"></path></svg><span>Inbox</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"></circle><path d="M3.5 19a5.5 5.5 0 0 1 11 0"></path><circle cx="17" cy="9" r="2.6"></circle><path d="M15.5 14.2a4.5 4.5 0 0 1 5 4.3"></path></svg><span>Team</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="12" rx="2"></rect><path d="M9 12h.01M15 12h.01M12 3v4"></path></svg><span>Bots</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"></path><path d="M3.5 7 12 11.6 20.5 7M12 11.6v9.9"></path></svg><span>Spaces</span></div>
+      <div style="height: 1px; background: var(--line); margin: 9px 6px;"></div>
+      <div class="rail rail-on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5.5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="18.5" r="2.5"></circle><path d="M8.3 10.8 15.7 6.7M8.3 13.2l7.4 4.1"></path></svg><span>Community</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9M9.5 19V5M15 19v-6M20.5 19v-9"></path></svg><span>Analytics</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="5" rx="1.5"></rect><path d="M5.5 9.5v9h13v-9"></path><path d="M10 13h4"></path></svg><span>Stash</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="14" height="10" rx="2"></rect><path d="M7 19h10M21 9v10h-4"></path></svg><span>Machine</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12H3.5M18 6l-1.6 1.6M7.6 16.4 6 18M18 18l-1.6-1.6M7.6 7.6 6 6"></path></svg><span>Settings</span></div>
+    </div>
+
+    <div style="width: 260px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0;">
+      <div style="padding: 10px 12px; border-bottom: 1px solid var(--line);">
+        <div style="font-size: 12.5px; color: var(--ink); font-weight: 600;">Community</div>
+        <div style="font-size: 10.5px; color: var(--muted); margin-top: 2px;">Open-source AI your bots can use</div>
+      </div>
+
+      <div style="padding: 8px 6px 0;">
+        <div class="head" style="padding: 6px 8px 4px;">Where</div>
+        <div class="filt"><span style="flex: 1;">Browse</span><span style="font-size: 10px; color: var(--muted);">48</span></div>
+        <div class="filt"><span style="flex: 1;">Installed</span><span style="font-size: 10px; color: var(--muted);">9</span></div>
+        <div class="filt filt-on"><span style="flex: 1;">Permissions</span></div>
+        <div class="filt"><span style="flex: 1;">Models</span><span style="font-size: 10px; color: var(--muted);">3</span></div>
+        <div class="filt"><span style="flex: 1;">Bundles</span><span style="font-size: 10px; color: var(--muted);">3</span></div>
+
+        <div class="head" style="padding: 12px 8px 4px;">Agents · what each reaches</div>
+        <div class="filt"><span class="who" style="background: var(--hover); color: var(--dim);">AS</span><span style="flex: 1;">Assistant</span><span style="font-size: 10px; color: var(--muted);">4</span></div>
+        <div class="filt"><span class="who" style="background: rgb(99 102 241 / .18); color: #a5b4fc;">DA</span><span style="flex: 1;">dev-a</span><span style="font-size: 10px; color: var(--muted);">6</span></div>
+        <div class="filt"><span class="who" style="background: rgb(99 102 241 / .18); color: #a5b4fc;">DB</span><span style="flex: 1;">dev-b</span><span style="font-size: 10px; color: var(--muted);">6</span></div>
+        <div class="filt filt-on"><span class="who" style="background: rgb(56 189 248 / .18); color: #38bdf8;">QA</span><span style="flex: 1;">qa</span><span style="font-size: 10px; color: var(--muted);">5</span></div>
+        <div class="filt"><span class="who" style="background: var(--hover); color: var(--dim);">AR</span><span style="flex: 1;">architect</span><span style="font-size: 10px; color: var(--muted);">2</span></div>
+        <div class="filt"><span class="who" style="background: var(--hover); color: var(--dim);">RE</span><span style="flex: 1;">reviewer</span><span style="font-size: 10px; color: var(--muted);">3</span></div>
+        <div class="filt"><span class="who" style="background: rgb(245 158 11 / .18); color: #f59e0b;">XB</span><span style="flex: 1;">x-platform bot</span><span style="font-size: 10px; color: var(--muted);">7</span></div>
+      </div>
+
+      <div style="margin-top: auto; border-top: 1px solid var(--line); padding: 10px 12px; font-size: 10px; line-height: 1.6; color: var(--faint);">An agent that is not in this table has None. There is no implicit allow, and an agent DevDeck has never seen gets nothing at all.</div>
+    </div>
+
+    <div style="flex-grow: 1; min-width: 0; background: var(--page); padding: 16px 20px; display: flex; flex-direction: column; overflow: hidden;">
+
+      <div style="display: flex; align-items: flex-end; gap: 12px; flex-shrink: 0;">
+        <div>
+          <div style="font-size: 17px; font-weight: 600; color: var(--ink);">Permissions</div>
+          <div style="font-size: 11.5px; color: var(--muted); margin-top: 2px;">Every agent reaches this machine through one gate. This is the gate.</div>
+        </div>
+        <div style="margin-left: auto; display: flex; gap: 6px;">
+          <button class="btn">Revoke everything</button>
+          <button class="btn">History</button>
+        </div>
+      </div>
+
+      <div style="margin-top: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; flex-shrink: 0;">
+        <div style="display: flex; background: var(--raise); border-bottom: 1px solid var(--line);">
+          <div style="width: 250px; flex-shrink: 0; padding: 8px 12px; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted);">Tool</div>
+          <div style="flex: 1; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));">
+            <div style="border-left: 1px solid var(--line); padding: 6px 0; display: flex; flex-direction: column; align-items: center; gap: 3px;"><span class="who" style="background: var(--hover); color: var(--dim);">AS</span><span style="font-size: 9.5px; color: var(--muted);">Assistant</span></div>
+            <div style="border-left: 1px solid var(--line); padding: 6px 0; display: flex; flex-direction: column; align-items: center; gap: 3px;"><span class="who" style="background: rgb(99 102 241 / .18); color: #a5b4fc;">DA</span><span style="font-size: 9.5px; color: var(--muted);">dev-a</span></div>
+            <div style="border-left: 1px solid var(--line); padding: 6px 0; display: flex; flex-direction: column; align-items: center; gap: 3px;"><span class="who" style="background: rgb(99 102 241 / .18); color: #a5b4fc;">DB</span><span style="font-size: 9.5px; color: var(--muted);">dev-b</span></div>
+            <div style="border-left: 1px solid var(--line); padding: 6px 0; display: flex; flex-direction: column; align-items: center; gap: 3px; background: rgb(56 189 248 / .06);"><span class="who" style="background: rgb(56 189 248 / .18); color: #38bdf8;">QA</span><span style="font-size: 9.5px; color: var(--ink);">qa</span></div>
+            <div style="border-left: 1px solid var(--line); padding: 6px 0; display: flex; flex-direction: column; align-items: center; gap: 3px;"><span class="who" style="background: var(--hover); color: var(--dim);">AR</span><span style="font-size: 9.5px; color: var(--muted);">architect</span></div>
+            <div style="border-left: 1px solid var(--line); padding: 6px 0; display: flex; flex-direction: column; align-items: center; gap: 3px;"><span class="who" style="background: var(--hover); color: var(--dim);">RE</span><span style="font-size: 9.5px; color: var(--muted);">reviewer</span></div>
+            <div style="border-left: 1px solid var(--line); padding: 6px 0; display: flex; flex-direction: column; align-items: center; gap: 3px;"><span class="who" style="background: rgb(245 158 11 / .18); color: #f59e0b;">XB</span><span style="font-size: 9.5px; color: var(--muted);">x-plat bot</span></div>
+          </div>
+        </div>
+
+        <div style="padding: 6px 12px 4px; background: var(--panel);"><span class="head">From Community</span></div>
+
+        <div style="display: flex; border-top: 1px solid var(--line);">
+          <div style="width: 250px; flex-shrink: 0; padding: 0 12px; height: 34px; display: flex; align-items: center; gap: 8px;"><span style="width: 7px; height: 7px; border-radius: 2px; background: #38bdf8;"></span><span class="mono" style="font-size: 11.5px; color: var(--ink);">browser</span><span style="font-size: 10px; color: var(--faint);">playwright-mcp</span></div>
+          <div style="flex: 1; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));">
+            <div class="cell"><span class="g g-none">—</span></div>
+            <div class="cell"><span class="g g-read">Read</span></div>
+            <div class="cell"><span class="g g-none">—</span></div>
+            <div class="cell" style="background: rgb(129 140 248 / .12); box-shadow: inset 0 0 0 1.5px #6366f1;"><span class="g g-appr">Approval</span></div>
+            <div class="cell"><span class="g g-none">—</span></div>
+            <div class="cell"><span class="g g-none">—</span></div>
+            <div class="cell"><span class="g g-read">Read</span></div>
+          </div>
+        </div>
+
+        <div style="display: flex; border-top: 1px solid var(--line);">
+          <div style="width: 250px; flex-shrink: 0; padding: 0 12px; height: 34px; display: flex; align-items: center; gap: 8px;"><span style="width: 7px; height: 7px; border-radius: 2px; background: #38bdf8;"></span><span class="mono" style="font-size: 11.5px; color: var(--ink);">github</span><span style="font-size: 10px; color: var(--faint);">github-mcp-server</span></div>
+          <div style="flex: 1; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));">
+            <div class="cell"><span class="g g-read">Read</span></div>
+            <div class="cell"><span class="g g-appr">Approval</span></div>
+            <div class="cell"><span class="g g-appr">Approval</span></div>
+            <div class="cell" style="background: rgb(56 189 248 / .06);"><span class="g g-none">—</span></div>
+            <div class="cell"><span class="g g-read">Read</span></div>
+            <div class="cell"><span class="g g-read">Read</span></div>
+            <div class="cell"><span class="g g-appr">Approval</span></div>
+          </div>
+        </div>
+
+        <div style="display: flex; border-top: 1px solid var(--line); background: rgb(248 113 113 / .05);">
+          <div style="width: 250px; flex-shrink: 0; padding: 0 12px; height: 34px; display: flex; align-items: center; gap: 8px;"><span style="width: 7px; height: 7px; border-radius: 2px; background: #38bdf8;"></span><span class="mono" style="font-size: 11.5px; color: var(--ink);">supabase</span><span style="font-size: 10px; color: var(--err);">nobody can call it</span></div>
+          <div style="flex: 1; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));">
+            <div class="cell"><span class="g g-none">—</span></div>
+            <div class="cell"><span class="g g-none">—</span></div>
+            <div class="cell"><span class="g g-none">—</span></div>
+            <div class="cell" style="background: rgb(56 189 248 / .06);"><span class="g g-none">—</span></div>
+            <div class="cell"><span class="g g-none">—</span></div>
+            <div class="cell"><span class="g g-none">—</span></div>
+            <div class="cell"><span class="g g-none">—</span></div>
+          </div>
+        </div>
+
+        <div style="display: flex; border-top: 1px solid var(--line);">
+          <div style="width: 250px; flex-shrink: 0; padding: 0 12px; height: 34px; display: flex; align-items: center; gap: 8px;"><span style="width: 7px; height: 7px; border-radius: 2px; background: #a78bfa;"></span><span class="mono" style="font-size: 11.5px; color: var(--ink);">skill</span><span style="font-size: 10px; color: var(--faint);">anthropics + a11y-audit</span></div>
+          <div style="flex: 1; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));">
+            <div class="cell"><span class="g g-full">Full</span></div>
+            <div class="cell"><span class="g g-full">Full</span></div>
+            <div class="cell"><span class="g g-full">Full</span></div>
+            <div class="cell" style="background: rgb(56 189 248 / .06);"><span class="g g-full">Full</span></div>
+            <div class="cell"><span class="g g-full">Full</span></div>
+            <div class="cell"><span class="g g-full">Full</span></div>
+            <div class="cell"><span class="g g-full">Full</span></div>
+          </div>
+        </div>
+
+        <div style="padding: 8px 12px 4px; background: var(--panel); border-top: 1px solid var(--line);"><span class="head">Built in</span> <span style="font-size: 10px; color: var(--faint);">— shown because a community tool is judged against the same table</span></div>
+
+        <div style="display: flex; border-top: 1px solid var(--line);">
+          <div style="width: 250px; flex-shrink: 0; padding: 0 12px; height: 34px; display: flex; align-items: center; gap: 8px;"><span style="width: 7px; height: 7px; border-radius: 2px; background: var(--line3, #64748b);"></span><span class="mono" style="font-size: 11.5px; color: var(--dim);">files</span></div>
+          <div style="flex: 1; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));">
+            <div class="cell"><span class="g g-read">Read</span></div>
+            <div class="cell"><span class="g g-full">Full</span></div>
+            <div class="cell"><span class="g g-full">Full</span></div>
+            <div class="cell" style="background: rgb(56 189 248 / .06);"><span class="g g-read">Read</span></div>
+            <div class="cell"><span class="g g-read">Read</span></div>
+            <div class="cell"><span class="g g-read">Read</span></div>
+            <div class="cell"><span class="g g-full">Full</span></div>
+          </div>
+        </div>
+
+        <div style="display: flex; border-top: 1px solid var(--line);">
+          <div style="width: 250px; flex-shrink: 0; padding: 0 12px; height: 34px; display: flex; align-items: center; gap: 8px;"><span style="width: 7px; height: 7px; border-radius: 2px; background: var(--line3, #64748b);"></span><span class="mono" style="font-size: 11.5px; color: var(--dim);">terminal</span></div>
+          <div style="flex: 1; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));">
+            <div class="cell"><span class="g g-none">—</span></div>
+            <div class="cell"><span class="g g-appr">Approval</span></div>
+            <div class="cell"><span class="g g-appr">Approval</span></div>
+            <div class="cell" style="background: rgb(56 189 248 / .06);"><span class="g g-appr">Approval</span></div>
+            <div class="cell"><span class="g g-none">—</span></div>
+            <div class="cell"><span class="g g-none">—</span></div>
+            <div class="cell"><span class="g g-appr">Approval</span></div>
+          </div>
+        </div>
+
+        <div style="display: flex; border-top: 1px solid var(--line);">
+          <div style="width: 250px; flex-shrink: 0; padding: 0 12px; height: 34px; display: flex; align-items: center; gap: 8px;"><span style="width: 7px; height: 7px; border-radius: 2px; background: var(--line3, #64748b);"></span><span class="mono" style="font-size: 11.5px; color: var(--dim);">git</span></div>
+          <div style="flex: 1; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));">
+            <div class="cell"><span class="g g-read">Read</span></div>
+            <div class="cell"><span class="g g-full">Full</span></div>
+            <div class="cell"><span class="g g-full">Full</span></div>
+            <div class="cell" style="background: rgb(56 189 248 / .06);"><span class="g g-read">Read</span></div>
+            <div class="cell"><span class="g g-read">Read</span></div>
+            <div class="cell"><span class="g g-read">Read</span></div>
+            <div class="cell"><span class="g g-appr">Approval</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 14px; margin-top: 14px; min-height: 0;">
+
+        <div style="flex: 1; border: 1px solid #6366f1; border-radius: 12px; background: var(--panel); padding: 12px 14px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="who" style="background: rgb(56 189 248 / .18); color: #38bdf8;">QA</span>
+            <span style="font-size: 13px; color: var(--ink); font-weight: 600;">qa</span>
+            <span style="font-size: 12px; color: var(--faint);">×</span>
+            <span class="mono" style="font-size: 12.5px; color: var(--ink);">browser</span>
+            <span class="chip" style="margin-left: auto; background: rgb(251 191 36 / .16); color: var(--warn);">Approval</span>
+          </div>
+          <div style="font-size: 11.5px; line-height: 1.6; color: var(--body); margin-top: 9px;">Every call stops the agent's turn and asks you. If you do not answer within five minutes it is <span style="color: var(--err);">denied</span> — not queued, not allowed. That is the whole point of the setting.</div>
+          <div class="head" style="margin-top: 12px;">Last three decisions</div>
+          <div style="margin-top: 6px;">
+            <div style="display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 11px; border-top: 1px solid var(--line);"><span style="width: 7px; height: 7px; border-radius: 999px; background: var(--ok);"></span><span class="mono" style="color: var(--dim); flex: 1;">browser.navigate staging.x-platform.dev</span><span style="color: var(--muted);">you allowed · 09:14</span></div>
+            <div style="display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 11px; border-top: 1px solid var(--line);"><span style="width: 7px; height: 7px; border-radius: 999px; background: var(--ok);"></span><span class="mono" style="color: var(--dim); flex: 1;">browser.click ref=e41</span><span style="color: var(--muted);">standing grant · 09:14</span></div>
+            <div style="display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 11px; border-top: 1px solid var(--line);"><span style="width: 7px; height: 7px; border-radius: 999px; background: var(--err);"></span><span class="mono" style="color: var(--dim); flex: 1;">browser.navigate api.stripe.com</span><span style="color: var(--err);">timed out · 03:02</span></div>
+          </div>
+          <div style="display: flex; gap: 6px; margin-top: 11px;">
+            <button class="btn on">Change it</button>
+            <button class="btn">Revoke</button>
+          </div>
+        </div>
+
+        <div style="width: 380px; flex-shrink: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 12px 14px;">
+          <div style="display: flex; align-items: baseline; gap: 8px;">
+            <span class="head">Standing grants</span>
+            <span style="margin-left: auto; font-size: 10px; color: var(--faint);">2 open</span>
+          </div>
+          <div style="margin-top: 8px; border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px;">
+            <div style="display: flex; align-items: baseline; gap: 6px;">
+              <span class="mono" style="font-size: 11px; color: var(--ink);">qa · browser.*</span>
+              <span style="margin-left: auto; font-size: 10px; color: var(--warn);">until 18:00 today</span>
+            </div>
+            <div style="font-size: 10.5px; color: var(--muted); margin-top: 3px;">You said "allow until this evening" at 09:14. It is on x-platform only.</div>
+          </div>
+          <div style="margin-top: 8px; border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px;">
+            <div style="display: flex; align-items: baseline; gap: 6px;">
+              <span class="mono" style="font-size: 11px; color: var(--ink);">dev-b · terminal npm test</span>
+              <span style="margin-left: auto; font-size: 10px; color: var(--muted);">no end</span>
+            </div>
+            <div style="font-size: 10.5px; color: var(--muted); margin-top: 3px;">One exact command, granted Tuesday. Anything else still asks.</div>
+          </div>
+          <div style="font-size: 10px; color: var(--faint); margin-top: 10px; line-height: 1.55;">A standing grant is the only thing that can answer an Approval without you. It has to be narrow, it has to say when it ends, and revoking it takes effect on the next call.</div>
+        </div>
+      </div>
+
+      <div style="margin-top: auto; padding-top: 12px; font-size: 10.5px; color: var(--faint);">The orchestrator is an agent like any other — it has a row here and you can revoke it.</div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', page: '#0d1017', panel: '#11141c', raise: '#151923', menu: '#1a1f2b',
+          hover: '#232b3b', line: '#1e293b', line2: '#334155', ink: '#e2e8f0', body: '#cbd5e1',
+          dim: '#94a3b8', muted: '#64748b', faint: '#475569', accent: '#818cf8', ok: '#4ade80',
+          warn: '#fbbf24', err: '#f87171' }
+      : { app: '#e9ebf0', page: '#f6f7f9', panel: '#fdfdfe', raise: '#f0f2f6', menu: '#ffffff',
+          hover: '#e7eaf1', line: '#d9dee7', line2: '#c3cbd8', ink: '#16181d', body: '#333a45',
+          dim: '#5a6472', muted: '#7d8794', faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d',
+          warn: '#b45309', err: '#dc2626' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

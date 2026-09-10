@@ -30,6 +30,16 @@ pub struct Node {
     /// Optional user-picked accent color (hex, e.g. "#7C8CF8"). When null
     /// the UI derives a stable color from the node id.
     pub color: Option<String>,
+    /// A word for what this node *is* — Product, Topic, Client, Area. Display
+    /// only: it changes the label shown and nothing else. Deliberately free
+    /// text rather than an enum, so adding a new one never means adding a
+    /// kind, an icon rule or a decision at creation time.
+    pub label: Option<String>,
+    /// The node's own folder, absolute. Derived from the vault root and
+    /// `rel_path` rather than stored, and filled in by the scan — a node has
+    /// exactly one place on disk, and two columns for it could disagree.
+    #[serde(default)]
+    pub dir: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -111,6 +121,18 @@ pub fn open() -> Connection {
         .expect("create mail schema");
     conn.execute_batch(ACTIVITY_SCHEMA)
         .expect("create activity schema");
+    conn.execute_batch(crate::schedule::SCHEMA)
+        .expect("create schedule schema");
+    conn.execute_batch(crate::focus::SCHEMA)
+        .expect("create focus schema");
+    conn.execute_batch(crate::calendar::PINGS_SCHEMA)
+        .expect("create deadline-ping schema");
+    conn.execute_batch(crate::calls::CHECKS_SCHEMA)
+        .expect("create model-check schema");
+    conn.execute_batch(crate::inbox::SCHEMA)
+        .expect("inbox schema");
+    conn.execute_batch(crate::calls::SCHEMA)
+        .expect("create model-call log schema");
     // A run that was "running" when the app was killed did not survive.
     crate::activity::close_orphan_runs(&conn);
 
@@ -459,7 +481,49 @@ pub fn checkpoint_state(app: &tauri::AppHandle) {
 }
 
 /// Schema/data migrations that run on every open (each is idempotent).
-fn migrate(conn: &Connection) {
+/// Bring an older database up to the current model.
+///
+/// Public so tests can build a database the same way boot does — `CORE_SCHEMA`
+/// alone is the *original* shape, and a test that skips this is testing a
+/// schema no running copy of DevDeck has.
+pub fn migrate(conn: &Connection) {
+    // A schedule can be a moment as well as a rhythm: a calendar needs the
+    // 2pm on the 11th that a recurrence cannot say.
+    if conn.prepare("SELECT at_ms FROM schedules LIMIT 1").is_err() {
+        let _ = conn.execute("ALTER TABLE schedules ADD COLUMN at_ms INTEGER", []);
+        let _ = conn.execute(
+            "ALTER TABLE schedules ADD COLUMN duration_min INTEGER NOT NULL DEFAULT 0",
+            [],
+        );
+    }
+
+    // A bot's heartbeat belongs to a manager, not to a folder: a manager is a
+    // file at the vault root now and can be responsible for several spaces or
+    // none.
+    if conn.prepare("SELECT manager FROM schedules LIMIT 1").is_err() {
+        let _ = conn.execute(
+            "ALTER TABLE schedules ADD COLUMN manager TEXT NOT NULL DEFAULT ''",
+            [],
+        );
+    }
+
+    // A schedule can warn you before it starts, and can say what it is for.
+    if conn.prepare("SELECT remind_min FROM schedules LIMIT 1").is_err() {
+        let _ = conn.execute(
+            "ALTER TABLE schedules ADD COLUMN remind_min INTEGER NOT NULL DEFAULT 0",
+            [],
+        );
+        let _ = conn.execute("ALTER TABLE schedules ADD COLUMN last_remind INTEGER", []);
+        let _ = conn.execute(
+            "ALTER TABLE schedules ADD COLUMN feature TEXT NOT NULL DEFAULT ''",
+            [],
+        );
+        let _ = conn.execute(
+            "ALTER TABLE schedules ADD COLUMN work_item TEXT NOT NULL DEFAULT ''",
+            [],
+        );
+    }
+
     // v2 model: add folder rel_path, and collapse the old
     // workspace→space→folder→project tree into workspace→project→folder.
     let has_rel_path = conn.prepare("SELECT rel_path FROM nodes LIMIT 1").is_ok();
@@ -473,6 +537,11 @@ fn migrate(conn: &Connection) {
     let has_color = conn.prepare("SELECT color FROM nodes LIMIT 1").is_ok();
     if !has_color {
         let _ = conn.execute("ALTER TABLE nodes ADD COLUMN color TEXT", []);
+    }
+    // Free-text label on a node (Product / Topic / Client / …).
+    let has_label = conn.prepare("SELECT label FROM nodes LIMIT 1").is_ok();
+    if !has_label {
+        let _ = conn.execute("ALTER TABLE nodes ADD COLUMN label TEXT", []);
     }
     // Per-service shell/interpreter.
     let has_svc_shell = conn.prepare("SELECT shell FROM services LIMIT 1").is_ok();
@@ -570,16 +639,84 @@ fn row_to_node(row: &rusqlite::Row) -> rusqlite::Result<Node> {
         rel_path: row.get(5)?,
         sort: row.get(6)?,
         color: row.get(7)?,
+        label: row.get(8)?,
+        dir: String::new(),
     })
 }
 
 // ---------- tree ----------
 
-#[tauri::command]
-pub fn tree_list(db: tauri::State<Db>) -> Result<Vec<Node>, String> {
-    let conn = db.0.lock().unwrap();
+/// The workspace the demo puts its projects in, created once and reused.
+///
+/// Its own workspace rather than whichever you happen to be looking at: the
+/// demo deletes and re-seeds its folders on every run, and doing that inside
+/// your real workspace would put throwaway projects next to yours.
+pub fn demo_workspace(conn: &Connection) -> Result<i64, String> {
+    if let Ok(id) = conn.query_row(
+        "SELECT id FROM nodes WHERE parent_id IS NULL AND kind = 'workspace' AND name = ?1",
+        params!["Demo"],
+        |r| r.get::<_, i64>(0),
+    ) {
+        return Ok(id);
+    }
+    conn.execute(
+        "INSERT INTO nodes (parent_id, kind, name, path) VALUES (NULL, 'workspace', 'Demo', NULL)",
+        [],
+    )
+    .map_err(err)?;
+    Ok(conn.last_insert_rowid())
+}
+
+/// A project node at `path` under `parent`, matched on the path rather than the
+/// name: the path is what makes two records the same project, and re-running
+/// the demo must reuse the node rather than pile up duplicates beside it.
+pub fn upsert_project(
+    conn: &Connection,
+    parent: i64,
+    name: &str,
+    path: &std::path::Path,
+) -> Result<i64, String> {
+    let p = path.to_string_lossy().to_string();
+    if let Ok(id) = conn.query_row(
+        "SELECT id FROM nodes WHERE kind = 'project' AND path = ?1",
+        params![p],
+        |r| r.get::<_, i64>(0),
+    ) {
+        conn.execute(
+            "UPDATE nodes SET name = ?1 WHERE id = ?2",
+            params![name, id],
+        )
+        .map_err(err)?;
+        return Ok(id);
+    }
+    conn.execute(
+        "INSERT INTO nodes (parent_id, kind, name, path) VALUES (?1, 'project', ?2, ?3)",
+        params![parent, name, p],
+    )
+    .map_err(err)?;
+    Ok(conn.last_insert_rowid())
+}
+
+/// Every node, straight from a connection.
+///
+/// The command below is the same query behind Tauri's `State`. This exists
+/// because the AI Workspace has to read the tree during startup, before there
+/// is a command to call — and because a project list assembled from anywhere
+/// but this table is a second source of truth, which is exactly what the
+/// merge removed.
+/// One node by id, straight from the index.
+pub fn node_by_id(conn: &Connection, id: i64) -> Result<Node, String> {
+    conn.query_row(
+        "SELECT id, parent_id, kind, name, path, rel_path, sort, color, label FROM nodes WHERE id = ?1",
+        params![id],
+        row_to_node,
+    )
+    .map_err(err)
+}
+
+pub fn nodes_on(conn: &Connection) -> Result<Vec<Node>, String> {
     let mut stmt = conn
-        .prepare("SELECT id, parent_id, kind, name, path, rel_path, sort, color FROM nodes ORDER BY sort, id")
+        .prepare("SELECT id, parent_id, kind, name, path, rel_path, sort, color, label FROM nodes ORDER BY sort, id")
         .map_err(err)?;
     let nodes = stmt
         .query_map([], row_to_node)
@@ -587,6 +724,12 @@ pub fn tree_list(db: tauri::State<Db>) -> Result<Vec<Node>, String> {
         .collect::<Result<Vec<_>, _>>()
         .map_err(err)?;
     Ok(nodes)
+}
+
+#[tauri::command]
+pub fn tree_list(db: tauri::State<Db>) -> Result<Vec<Node>, String> {
+    let conn = db.0.lock().unwrap();
+    nodes_on(&conn)
 }
 
 #[tauri::command]
@@ -620,7 +763,22 @@ pub fn node_create(
         rel_path: rel_path.unwrap_or_default(),
         sort: 0,
         color: None,
+        label: None,
+        dir: String::new(),
     })
+}
+
+/// Set (or clear, with an empty string) a node's display label.
+#[tauri::command]
+pub fn node_set_label(db: tauri::State<Db>, id: i64, label: String) -> Result<(), String> {
+    let conn = db.0.lock().unwrap();
+    let v = label.trim();
+    conn.execute(
+        "UPDATE nodes SET label = ?1 WHERE id = ?2",
+        params![if v.is_empty() { None } else { Some(v) }, id],
+    )
+    .map_err(err)?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -643,8 +801,16 @@ pub fn node_update(
     path: Option<String>,
     rel_path: Option<String>,
     color: Option<String>,
+    kind: Option<String>,
 ) -> Result<(), String> {
     let conn = db.0.lock().unwrap();
+    // Kind follows the folder: a node with a path is a project, one without is
+    // a container. The UI never asks for a kind directly, so this is only ever
+    // set alongside the path that justified it.
+    if let Some(kind) = kind {
+        conn.execute("UPDATE nodes SET kind = ?1 WHERE id = ?2", params![kind, id])
+            .map_err(err)?;
+    }
     if let Some(name) = name {
         conn.execute(
             "UPDATE nodes SET name = ?1 WHERE id = ?2",
@@ -795,54 +961,67 @@ pub fn services_list(db: tauri::State<Db>) -> Result<Vec<ServiceDef>, String> {
 /// Resolve a node's working directory (mirrors the frontend rule):
 /// project → base path; folder → absolute override, else project base +
 /// rel_path. Returns "" if it can't be resolved.
-pub fn resolve_node_dir(conn: &Connection, node_id: i64) -> String {
-    let node = conn.query_row(
-        "SELECT id, parent_id, kind, name, path, rel_path, sort, color FROM nodes WHERE id = ?1",
-        params![node_id],
-        row_to_node,
-    );
-    let Ok(node) = node else { return String::new() };
-    match node.kind.as_str() {
-        "project" => node.path.unwrap_or_default(),
-        "folder" => {
-            if let Some(p) = &node.path {
-                if !p.trim().is_empty() {
-                    return p.clone();
-                }
-            }
-            // Walk up to the owning project for the base path.
-            let mut cur = node.parent_id;
-            let mut base = String::new();
-            while let Some(pid) = cur {
-                if let Ok(parent) = conn.query_row(
-                    "SELECT id, parent_id, kind, name, path, rel_path, sort, color FROM nodes WHERE id = ?1",
-                    params![pid],
-                    row_to_node,
-                ) {
-                    if parent.kind == "project" {
-                        base = parent.path.unwrap_or_default();
-                        break;
-                    }
-                    cur = parent.parent_id;
-                } else {
-                    break;
-                }
-            }
-            let base = base.trim_end_matches(['\\', '/']);
-            let sub = node
-                .rel_path
-                .trim_start_matches(['\\', '/'])
-                .replace('/', "\\");
-            if base.is_empty() {
-                sub
-            } else if sub.is_empty() {
-                base.to_string()
-            } else {
-                format!("{base}\\{sub}")
-            }
-        }
-        _ => String::new(),
+/// The folder a node works in: the repository it names, or its own place in
+/// the vault.
+///
+/// This is the rule, and it lives here because it had drifted into four copies
+/// — the scheduler, bots, the frontend, and this one. This was the oldest and
+/// had gone quietly wrong: it walked up to the owning *project* and joined its
+/// path with `rel_path`, which used to mean "subpath inside that project" and
+/// has meant "path from the vault root" since folders became real. So a service
+/// on a folder with no cwd of its own resolved to a directory that has never
+/// existed, and did it silently.
+///
+/// A workspace resolves like anything else. It is a folder in the vault with a
+/// place on disk, so it can own a command or a service.
+/// Where what we *know* about a node lives: its `.devdeck`, its plan, its
+/// features, its `_bot.md`.
+///
+/// Always the vault folder, never the repository — even for a node that names
+/// one. Two reasons, and they are the same reason twice: nothing of ours
+/// should ever turn up in somebody's pull request, and a folder with no
+/// repository needs the answer to be the same shape as one that has a
+/// repository, or half the app works on topics and the other half does not.
+///
+/// This is the pair to [`node_dir`], which answers the *other* question —
+/// where work runs. Keeping one function for both is what let a bot write its
+/// plan into a repository while the runtime looked for it in the vault, so the
+/// bot woke an agent into a feature that did not exist there.
+pub fn node_deck_dir(conn: &Connection, node: &Node) -> Option<PathBuf> {
+    let root = setting_get_conn(conn, crate::vault::ROOT_KEY).ok()??;
+    if node.rel_path.trim().is_empty() {
+        return None;
     }
+    Some(std::path::Path::new(&root).join(node.rel_path.replace('/', std::path::MAIN_SEPARATOR_STR)))
+}
+
+pub fn node_deck_dir_by_id(conn: &Connection, node_id: i64) -> Option<PathBuf> {
+    node_deck_dir(conn, &node_by_id(conn, node_id).ok()?)
+}
+
+/// Where work *runs*: the repository if the node names one, else its vault
+/// folder. Commands, services and terminals want this — `npm run dev` belongs
+/// in the repository, not beside it.
+pub fn node_dir(conn: &Connection, node: &Node) -> Option<PathBuf> {
+    if let Some(p) = node.path.as_ref().filter(|p| !p.trim().is_empty()) {
+        return Some(PathBuf::from(p));
+    }
+    let root = setting_get_conn(conn, crate::vault::ROOT_KEY).ok()??;
+    if node.rel_path.trim().is_empty() {
+        return None;
+    }
+    Some(std::path::Path::new(&root).join(node.rel_path.replace('/', std::path::MAIN_SEPARATOR_STR)))
+}
+
+pub fn node_dir_by_id(conn: &Connection, node_id: i64) -> Option<PathBuf> {
+    node_dir(conn, &node_by_id(conn, node_id).ok()?)
+}
+
+/// The same answer as a string, empty when there is none.
+pub fn resolve_node_dir(conn: &Connection, node_id: i64) -> String {
+    node_dir_by_id(conn, node_id)
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_default()
 }
 
 pub fn service_get(conn: &Connection, id: i64) -> Result<ServiceDef, String> {
@@ -1033,6 +1212,17 @@ pub fn setting_set_conn(conn: &Connection, key: &str, value: &str) -> Result<(),
     Ok(())
 }
 
+/// Forget a setting entirely.
+///
+/// Different from writing an empty value: a key that is gone is a key nothing
+/// will read back and re-apply, which is the point when a row has been folded
+/// into a better record and must not speak again.
+pub fn setting_delete_conn(conn: &Connection, key: &str) -> Result<(), String> {
+    conn.execute("DELETE FROM settings WHERE key = ?1", params![key])
+        .map_err(err)?;
+    Ok(())
+}
+
 // ---------- recents (for the widget's Recent view + search ranking) ----------
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -1111,7 +1301,7 @@ mod tests {
     fn read_tree(conn: &Connection) -> Vec<Node> {
         let mut stmt = conn
             .prepare(
-                "SELECT id, parent_id, kind, name, path, rel_path, sort, color
+                "SELECT id, parent_id, kind, name, path, rel_path, sort, color, label
                  FROM nodes ORDER BY sort, id",
             )
             .expect("tree_list prepares");
@@ -1191,5 +1381,117 @@ mod tests {
             assert_eq!(a.kind, b.kind, "kinds must survive a repeated migration");
             assert_eq!(a.name, b.name);
         }
+    }
+}
+
+#[cfg(test)]
+mod node_dir_tests {
+    use super::*;
+
+    fn world() -> (Connection, std::path::PathBuf) {
+        let root = std::env::temp_dir().join(format!("devdeck-nodedir-{}", std::process::id()));
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(CORE_SCHEMA).unwrap();
+        migrate(&conn);
+        setting_set_conn(&conn, crate::vault::ROOT_KEY, &root.to_string_lossy()).unwrap();
+        (conn, root)
+    }
+
+    fn node(conn: &Connection, id: i64, parent: Option<i64>, kind: &str, name: &str, rel: &str, path: &str) {
+        conn.execute(
+            "INSERT INTO nodes (id, parent_id, kind, name, path, rel_path, sort) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0)",
+            params![id, parent, kind, name, path, rel],
+        )
+        .unwrap();
+    }
+
+    /// The two directories are different questions, and for a node that names
+    /// a repository they are different answers.
+    ///
+    /// One function used to answer both. That put a bot's `_bot.md` and its
+    /// `.devdeck/features` inside the repository, while the agent runtime read
+    /// features from the vault folder — so on any project with a repository a
+    /// bot woke an agent into a feature that did not exist there, and our
+    /// files turned up in somebody's pull request on the way.
+    #[test]
+    fn a_repo_backed_node_runs_in_the_repo_and_keeps_its_deck_in_the_vault() {
+        let (conn, root) = world();
+        node(&conn, 1, None, "workspace", "Innotrack", "Innotrack", "");
+        node(
+            &conn,
+            2,
+            Some(1),
+            "project",
+            "x-platform",
+            "Innotrack/x-platform",
+            r"C:\repos\x-platform",
+        );
+
+        // Work runs where the code is.
+        assert_eq!(
+            node_dir_by_id(&conn, 2),
+            Some(std::path::PathBuf::from(r"C:\repos\x-platform"))
+        );
+        // What we know about it stays in the vault.
+        assert_eq!(
+            node_deck_dir_by_id(&conn, 2),
+            Some(root.join("Innotrack").join("x-platform"))
+        );
+        assert_ne!(node_dir_by_id(&conn, 2), node_deck_dir_by_id(&conn, 2));
+    }
+
+    /// With no repository the two agree, which is why nothing noticed: every
+    /// bot built so far has been on a plain vault folder.
+    #[test]
+    fn without_a_repository_both_answers_are_the_same_folder() {
+        let (conn, _root) = world();
+        node(&conn, 1, None, "workspace", "Fitness", "Fitness", "");
+        assert_eq!(node_dir_by_id(&conn, 1), node_deck_dir_by_id(&conn, 1));
+    }
+
+    /// A workspace is a folder in the vault with a place on disk, so it can own
+    /// a command or a service. It used to resolve to nothing at all.
+    #[test]
+    fn a_workspace_has_a_working_directory() {
+        let (conn, root) = world();
+        node(&conn, 1, None, "workspace", "Innotrack", "Innotrack", "");
+        assert_eq!(node_dir_by_id(&conn, 1), Some(root.join("Innotrack")));
+    }
+
+    /// The bug this replaced: a folder's directory was built by walking up to
+    /// the owning project and joining its path with `rel_path` — which has
+    /// meant "from the vault root" since folders became real. So a service on a
+    /// folder resolved into a directory that never existed, silently.
+    #[test]
+    fn a_folder_sits_under_the_vault_root_not_under_its_project() {
+        let (conn, root) = world();
+        node(&conn, 1, None, "workspace", "Innotrack", "Innotrack", "");
+        node(&conn, 2, Some(1), "project", "x-platform", "Innotrack/x-platform", r"C:\repos\x-platform");
+        node(&conn, 3, Some(2), "folder", "notes", "Innotrack/x-platform/notes", "");
+
+        // The project works in the repository it names.
+        assert_eq!(node_dir_by_id(&conn, 2), Some(std::path::PathBuf::from(r"C:\repos\x-platform")));
+
+        // The folder works in its own place in the vault — *not* inside the
+        // repository, which is what the old rule produced.
+        let dir = node_dir_by_id(&conn, 3).unwrap();
+        assert_eq!(dir, root.join("Innotrack").join("x-platform").join("notes"));
+        assert!(
+            !dir.to_string_lossy().contains(r"C:\repos"),
+            "it must not be joined onto the repository: {}",
+            dir.display()
+        );
+    }
+
+    /// A node with nowhere to work says so, rather than resolving to the empty
+    /// string and running wherever the process happened to be.
+    #[test]
+    fn a_node_with_no_place_on_disk_has_no_directory() {
+        let (conn, _root) = world();
+        node(&conn, 1, None, "workspace", "Nowhere", "", "");
+        assert_eq!(node_dir_by_id(&conn, 1), None);
+        assert_eq!(resolve_node_dir(&conn, 1), "");
+        assert_eq!(resolve_node_dir(&conn, 404), "", "and so does a node that is not there");
     }
 }

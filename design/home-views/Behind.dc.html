@@ -1,0 +1,87 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+    .cap { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+    .col { flex: 1; min-width: 0; background: var(--card); border-radius: 16px; overflow: hidden; }
+    .ch { padding: 13px 16px 11px; }
+    .it { padding: 11px 16px; border-top: 1px solid var(--line); }
+    .n { font-size: 13px; font-weight: 600; color: var(--ink); }
+    .d { font-size: 11.5px; line-height: 1.5; color: var(--muted); margin-top: 3px; }
+    .f { font-size: 10.5px; color: var(--faint); font-family: ui-monospace, Consolas, monospace; margin-top: 4px; }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --card: {{c.card}}; --line: {{c.line}}; --ink: {{c.ink}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; background: var(--app); width: 1180px; height: 700px; padding: 32px 36px; box-sizing: border-box; display: flex; flex-direction: column; gap: 18px; overflow: hidden;">
+
+  <div>
+    <div style="font-size: 20px; font-weight: 600; letter-spacing: -.015em; color: var(--ink);">
+      What is behind these two pages
+    </div>
+    <div style="margin-top: 5px; font-size: 13px; color: var(--muted);">
+      Almost all of it exists. The clean home is a composition, not a new set of panels &mdash;
+      which is the only reason a third home is affordable at all.
+    </div>
+  </div>
+
+  <div style="flex: 1; display: flex; gap: 14px; min-height: 0;">
+
+    <div class="col">
+      <div class="ch" style="background: rgb(74 222 128 / .1);">
+        <div class="cap" style="color: var(--ok);">Already there</div>
+        <div style="font-size: 11.5px; color: var(--muted); margin-top: 2px;">Reads today, unchanged.</div>
+      </div>
+      <div class="it"><div class="n">The managers, and their state</div><div class="d">Name, goal, blocked, waiting, working, and &ldquo;names no agent&rdquo;. The tiles are the band from the developer home, said in words.</div><div class="f">bots_list · bots_standing</div></div>
+      <div class="it"><div class="n">What needs you</div><div class="d">Approvals, disagreements, failed turns, and now read state — so the one sentence can be the *unread* one.</div><div class="f">aiw + activity + inbox_state</div></div>
+      <div class="it"><div class="n">Today, and what is next</div><div class="d">One window query over schedules and deadlines. The productivity day is the calendar's own day, not a second one.</div><div class="f">calendar_range</div></div>
+      <div class="it"><div class="n">Due, and blocked</div><div class="d">Work items with a `due:`, straight out of each feature.</div><div class="f">calendar_range · kind=deadline</div></div>
+      <div class="it"><div class="n">Focus</div><div class="d">A goal, a clock, and holding everything that is not the goal.</div><div class="f">focus.rs</div></div>
+    </div>
+
+    <div class="col">
+      <div class="ch" style="background: rgb(251 191 36 / .1);">
+        <div class="cap" style="color: var(--warn);">Small work</div>
+        <div style="font-size: 11.5px; color: var(--muted); margin-top: 2px;">A field or a rule, not a feature.</div>
+      </div>
+      <div class="it"><div class="n">Which person you are</div><div class="d">One setting, chosen at setup: it picks the home and the rail. Not a toggle on the page — a mode you flip is a mode you flip by accident.</div><div class="f">new setting · onboarding</div></div>
+      <div class="it"><div class="n">A rail that can be short</div><div class="d">The rail is a fixed list today. It needs to render four entries instead of ten without becoming a second component.</div><div class="f">Rail.tsx</div></div>
+      <div class="it"><div class="n">One sentence, not a list</div><div class="d">Picking *the* thing that needs you, and holding the rest back. The ranking already exists in the Inbox; this is choosing the first row and saying it in English.</div><div class="f">front-end only</div></div>
+      <div class="it"><div class="n">&ldquo;In three hours&rdquo;</div><div class="d">Relative time on the next thing. Arithmetic, no storage.</div><div class="f">front-end only</div></div>
+    </div>
+
+    <div class="col">
+      <div class="ch" style="background: rgb(248 113 113 / .1);">
+        <div class="cap" style="color: var(--err);">Not there at all</div>
+        <div style="font-size: 11.5px; color: var(--muted); margin-top: 2px;">Drawn here, absent in the build.</div>
+      </div>
+      <div class="it"><div class="n">Habits, and the free slot</div><div class="d">The dashed offer on the day, and the ticks beside it. Two tables and a finder — step 3 on the calendar board, already written down.</div><div class="f">new · habits.rs</div></div>
+      <div class="it"><div class="n">The greeting knows your name</div><div class="d">Nothing stores it. Either ask once at setup, or drop the name and say &ldquo;Good morning&rdquo;.</div><div class="f">new setting, or cut it</div></div>
+      <div class="it"><div class="n">&ldquo;Blocked since Wednesday&rdquo;</div><div class="d">A work item records a status, not when it changed. Saying how long it has been stuck needs that, and it is the sort of thing a person will notice is wrong.</div><div class="f">deck: work item history</div></div>
+      <div class="it" style="background: rgb(248 113 113 / .05);"><div class="n">The Ask bar</div><div class="d">The assistant exists and answers. What is missing is that it can *act* from one line — &ldquo;push the release&rdquo; has to reach a manager, not a chat window. Draw it last, or it promises more than it does.</div><div class="f">assistant.rs · scope to decide</div></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":false,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? false;
+    const c = dark
+      ? { app: '#0f1115', card: '#171a21', line: '#232833', ink: '#f2f4f8', dim: '#a8afbc',
+          muted: '#7d8697', faint: '#5b6474', accent: '#7c8cff', ok: '#4ade80', warn: '#fbbf24', err: '#f87171' }
+      : { app: '#f5f5f7', card: '#ffffff', line: '#e6e6ea', ink: '#1d1d1f', dim: '#4b4b50',
+          muted: '#7a7a80', faint: '#a5a5ac', accent: '#4f46e5', ok: '#15803d', warn: '#b45309', err: '#dc2626' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

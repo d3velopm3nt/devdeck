@@ -1,0 +1,220 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background: #0b0e14; }
+    a { color: #818cf8; } a:hover { color: #a5b4fc; }
+    .item {
+      position: relative; display: flex; align-items: center;
+      border-radius: 8px; border: 0; background: none; cursor: pointer;
+      font-family: inherit; font-size: 12.5px; text-align: left; padding: 0;
+    }
+    .bar { position: absolute; left: -5px; top: {{barInset}}; bottom: {{barInset}}; width: 2.5px; border-radius: 2px; background: #6366f1; }
+    .lbl { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sect {
+      font-size: 9px; font-weight: 600; letter-spacing: 0.07em;
+      text-transform: uppercase; color: #475569; padding: 4px 8px 1px;
+    }
+    .av {
+      display: flex; align-items: center; justify-content: center;
+      flex: none; border-radius: 5px;
+      font-weight: 700; letter-spacing: 0.02em;
+    }
+    .row { display: flex; align-items: center; gap: 6px; padding: 2px 6px; border-radius: 4px;
+           font-size: 12.5px; color: #cbd5e1; white-space: nowrap; }
+  </style>
+</helmet>
+
+<div style="display: flex; width: 620px; height: 680px; background: #0b0e14; overflow: hidden">
+
+  <!-- THE RAIL — now the solution picker -->
+  <nav style="display: flex; flex-direction: column; gap: {{railGap}}; flex: none; border-right: 1px solid #1e293b; background: #0b0e14; padding: {{railPadY}} 0; width: {{railW}}; align-items: {{railAlign}}; padding-left: {{railPad}}; padding-right: {{railPad}}">
+
+    <button class="item" style="width: {{itemW}}; height: {{itemH}}; gap: {{itemGap}}; padding-left: {{itemPad}}; padding-right: {{itemPad}}; justify-content: {{itemJust}}; color: #64748b; font-size: {{labelSize}}">
+      <svg width="{{icoSize}}" height="{{icoSize}}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>
+      <sc-if value="{{expanded}}" hint-placeholder-val="{{ true }}"><span class="lbl">Home</span></sc-if>
+    </button>
+
+    <div style="height: 1px; background: #1e293b; margin: {{ruleM}} 0; align-self: center; width: {{ruleW}}"></div>
+
+    <sc-if value="{{expanded}}" hint-placeholder-val="{{ true }}">
+      <div class="sect">Solutions</div>
+    </sc-if>
+
+    <sc-for list="{{sols}}" as="s" hint-placeholder-count="3">
+      <button
+        class="item"
+        style="width: {{itemW}}; height: {{itemH}}; gap: {{itemGap}}; padding-left: {{itemPad}}; padding-right: {{itemPad}}; justify-content: {{itemJust}}; background: {{s.bg}}; color: {{s.fg}}; font-size: {{labelSize}}"
+        title="{{s.name}}"
+        onClick="{{s.pick}}"
+      >
+        <sc-if value="{{s.active}}" hint-placeholder-val="{{ true }}"><span class="bar"></span></sc-if>
+        <span class="av" style="width: {{avSize}}; height: {{avSize}}; font-size: {{avFont}}; background: {{s.avBg}}; color: {{s.avFg}}">{{s.initials}}</span>
+        <sc-if value="{{expanded}}" hint-placeholder-val="{{ true }}"><span class="lbl">{{s.name}}</span></sc-if>
+      </button>
+    </sc-for>
+
+    <button class="item" style="width: {{itemW}}; height: {{miniH}}; gap: {{itemGap}}; padding-left: {{itemPad}}; padding-right: {{itemPad}}; justify-content: {{itemJust}}; color: #475569; font-size: {{labelSize}}">
+      <svg width="{{icoSize}}" height="{{icoSize}}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+      <sc-if value="{{expanded}}" hint-placeholder-val="{{ true }}"><span class="lbl" style="font-size: 12px">New solution</span></sc-if>
+    </button>
+
+    <div style="height: 1px; background: #1e293b; margin: {{ruleM}} 0; align-self: center; width: {{ruleW}}"></div>
+
+    <sc-for list="{{nav}}" as="n" hint-placeholder-count="2">
+      <button class="item" style="width: {{itemW}}; height: {{itemH}}; gap: {{itemGap}}; padding-left: {{itemPad}}; padding-right: {{itemPad}}; justify-content: {{itemJust}}; color: #64748b; font-size: {{labelSize}}" title="{{n.name}}">
+        <span style="display: flex; flex: none" data-icon="{{n.icon}}">
+          <sc-if value="{{n.isAi}}" hint-placeholder-val="{{ true }}">
+            <svg width="{{icoSize}}" height="{{icoSize}}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="m8 7 4-4 4 4"/><path d="M3 12h18"/><path d="m7 8-4 4 4 4"/></svg>
+          </sc-if>
+          <sc-if value="{{n.isDb}}" hint-placeholder-val="{{ true }}">
+            <svg width="{{icoSize}}" height="{{icoSize}}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>
+          </sc-if>
+        </span>
+        <sc-if value="{{expanded}}" hint-placeholder-val="{{ true }}"><span class="lbl">{{n.name}}</span></sc-if>
+      </button>
+    </sc-for>
+
+    <div style="flex: 1"></div>
+
+    <div style="height: 1px; background: #1e293b; margin: {{ruleM}} 0; align-self: center; width: {{ruleW}}"></div>
+
+    <button class="item" style="width: {{itemW}}; height: {{itemH}}; gap: {{itemGap}}; padding-left: {{itemPad}}; padding-right: {{itemPad}}; justify-content: {{itemJust}}; color: #64748b; font-size: {{labelSize}}" title="Settings">
+      <svg width="{{icoSize}}" height="{{icoSize}}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+      <sc-if value="{{expanded}}" hint-placeholder-val="{{ true }}"><span class="lbl">Settings</span></sc-if>
+    </button>
+
+    <button class="item" style="width: {{itemW}}; height: {{miniH}}; gap: {{itemGap}}; padding-left: {{itemPad}}; padding-right: {{itemPad}}; justify-content: {{itemJust}}; color: #64748b; font-size: {{labelSize}}" onClick="{{toggle}}" title="{{toggleTitle}}">
+      <span style="display: flex; flex: none">
+        <sc-if value="{{expanded}}" hint-placeholder-val="{{ true }}">
+          <svg width="{{icoSize}}" height="{{icoSize}}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+        </sc-if>
+        <sc-if value="{{collapsed}}" hint-placeholder-val="{{ true }}">
+          <svg width="{{icoSize}}" height="{{icoSize}}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </sc-if>
+      </span>
+      <sc-if value="{{expanded}}" hint-placeholder-val="{{ true }}"><span class="lbl" style="font-size: 12px">Collapse</span></sc-if>
+    </button>
+  </nav>
+
+  <!-- THE EXPLORER — no switcher any more -->
+  <aside style="width: 280px; flex: none; background: #11141c; border-right: 1px solid #1e293b; display: flex; flex-direction: column">
+    <div style="display: flex; align-items: center; gap: 6px; flex: none; padding: 6px 8px; border-bottom: 1px solid #1e293b">
+      <span style="min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #64748b">{{scopeLabel}}</span>
+      <span style="display: flex; align-items: center; gap: 4px; border-radius: 4px; background: rgb(30 41 59 / 0.4); padding: 3px 7px; font-size: 11px; color: #e2e8f0">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+        Project
+      </span>
+    </div>
+
+    <div style="padding: 5px 4px; display: flex; flex-direction: column; gap: 1px">
+      <sc-for list="{{projects}}" as="p" hint-placeholder-count="3">
+        <div class="row" style="padding-left: 6px">
+          <span style="display: flex; width: 20px; flex: none; align-items: center; justify-content: center; color: #94a3b8">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+          </span>
+          <span style="display: flex; width: 20px; flex: none; align-items: center; justify-content: center; color: #4ade80">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+          </span>
+          <span class="lbl">{{p.name}}</span>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="margin-top: auto; border-top: 1px solid #1e293b; padding: 8px 10px; font-size: 10.5px; line-height: 1.5; color: #475569">
+      The switcher is gone — the rail says which solution you are in,
+      so the tree never names it twice.
+    </div>
+  </aside>
+
+  <!-- a sliver of the surface, so the rail's width change reads -->
+  <div style="flex: 1; background: #0d1017"></div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview":{"width":620,"height":680}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props)
+    this.state = { expanded: true, sol: 'tyrex' }
+  }
+
+  renderVals() {
+    const expanded = this.state.expanded
+    const pick = (id) => () => this.setState({ sol: id })
+
+    const defs = [
+      { id: 'all', name: 'All projects', initials: 'AL', tint: '#64748b',
+        projects: ['tyrex-api', 'tyrex-web', 'tyrex-mobile', 'portal-web', 'portal-api', 'scratch-scripts'] },
+      { id: 'tyrex', name: 'TyreX Platform', initials: 'TP', tint: '#a78bfa',
+        projects: ['tyrex-api', 'tyrex-web', 'tyrex-mobile'] },
+      { id: 'portal', name: 'Innotrack Portal', initials: 'IP', tint: '#38bdf8',
+        projects: ['portal-web', 'portal-api'] },
+    ]
+
+    const sols = defs.map((d) => {
+      const active = d.id === this.state.sol
+      return {
+        id: d.id,
+        name: d.name,
+        initials: d.initials,
+        active,
+        pick: pick(d.id),
+        bg: active ? '#151923' : 'transparent',
+        fg: active ? '#e2e8f0' : '#94a3b8',
+        // The avatar carries the identity when the labels are gone, so it
+        // keeps its colour in both states rather than greying out.
+        avBg: active ? d.tint : 'rgb(100 116 139 / 0.18)',
+        avFg: active ? '#0b0e14' : '#94a3b8',
+      }
+    })
+
+    const current = defs.find((d) => d.id === this.state.sol) || defs[0]
+
+    return {
+      expanded,
+      collapsed: !expanded,
+      toggle: () => this.setState({ expanded: !this.state.expanded }),
+      toggleTitle: expanded ? 'Collapse to icons' : 'Expand the menu',
+      sols,
+      nav: [
+        { name: 'Assistant', isAi: true, isDb: false },
+        { name: 'Connections', isAi: false, isDb: true },
+      ],
+      projects: current.projects.map((name) => ({ name })),
+      scopeLabel: current.id === 'all' ? 'All projects' : current.name,
+
+      // Two geometries, tuned separately. Collapsed keeps the 52px rail and
+      // 40px targets it already had; expanded is tightened — 160px, 32px rows —
+      // because a labelled menu at icon-rail spacing reads as padding, not
+      // hierarchy.
+      railW: expanded ? '160px' : '52px',
+      railAlign: expanded ? 'stretch' : 'center',
+      railPad: expanded ? '5px' : '0px',
+      railPadY: expanded ? '6px' : '8px',
+      railGap: expanded ? '1px' : '4px',
+      ruleW: expanded ? '100%' : '26px',
+      ruleM: expanded ? '4px' : '4px',
+      itemW: expanded ? '100%' : '40px',
+      itemH: expanded ? '32px' : '40px',
+      miniH: expanded ? '28px' : '32px',
+      itemGap: expanded ? '8px' : '0px',
+      itemPad: expanded ? '8px' : '0px',
+      itemJust: expanded ? 'flex-start' : 'center',
+      labelSize: expanded ? '12px' : '12.5px',
+      icoSize: expanded ? '15' : '17',
+      avSize: expanded ? '19px' : '22px',
+      avFont: expanded ? '8px' : '8.5px',
+      barInset: expanded ? '7px' : '8px',
+    }
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,135 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background: #0d1017; }
+    a { color: #818cf8; } a:hover { color: #a5b4fc; }
+    .lbl { font-size: 9.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #475569; }
+    .card { border: 1px solid #1e293b; border-radius: 8px; background: #11141c; }
+    .bot { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-top: 1px solid #1e293b; }
+    .av { width: 28px; height: 28px; border-radius: 8px; color: #0b0e14; font-size: 9px; font-weight: 700;
+          display: flex; align-items: center; justify-content: center; flex: none; }
+    .space { flex: none; border-radius: 999px; padding: 0 6px; font-size: 8.5px; font-weight: 600;
+             letter-spacing: 0.04em; text-transform: uppercase; line-height: 1.8; }
+    .beat { flex: none; font-size: 10.5px; color: #64748b; width: 118px; text-align: right; }
+    .need { flex: none; border-radius: 4px; padding: 1px 7px; font-size: 10px; font-weight: 600; }
+    .btn { border-radius: 5px; padding: 4px 11px; font-size: 11.5px; font-weight: 500; }
+  </style>
+</helmet>
+
+<div style="width: 780px; height: 660px; background: #0d1017; padding: 18px 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 11px; overflow: hidden">
+
+  <div style="display: flex; align-items: center; gap: 10px">
+    <div style="min-width: 0; flex: 1">
+      <div style="font-size: 15px; font-weight: 600; color: #e2e8f0">Bots</div>
+      <div style="margin-top: 2px; font-size: 11.5px; color: #94a3b8">
+        One per space that needs one. Not every folder does.
+      </div>
+    </div>
+    <span class="btn" style="background: #6366f1; color: #fff">New bot</span>
+  </div>
+
+  <!-- A focus session, if one is running, sits above everything -->
+  <div class="card" style="flex: none; display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-color: rgb(129 140 248 / 0.35)">
+    <span style="width: 22px; height: 22px; border-radius: 6px; background: rgb(129 140 248 / 0.2); color: #818cf8; display: flex; align-items: center; justify-content: center; flex: none">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+    </span>
+    <div style="min-width: 0; flex: 1; font-size: 11.5px; color: #cbd5e1">
+      Focused on <span style="color: #e2e8f0">Get the demo build green</span>
+      <span style="color: #64748b"> &middot; 46 min &middot; 7 held</span>
+    </div>
+    <span class="btn" style="border: 1px solid #1e293b; color: #94a3b8; font-size: 11px">End</span>
+  </div>
+
+  <div class="card" style="flex: none">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 9px 12px">
+      <span class="lbl" style="flex: 1">Running</span>
+      <span style="font-size: 10px; color: #475569">4 bots &middot; 11 agents</span>
+    </div>
+
+    <div class="bot" style="background: rgb(129 140 248 / 0.05)">
+      <span class="av" style="background: #f472b6">TY</span>
+      <div style="min-width: 0; flex: 1">
+        <div style="display: flex; align-items: center; gap: 7px">
+          <span style="font-size: 12.5px; font-weight: 600; color: #e2e8f0">TyreX bot</span>
+          <span class="space" style="background: rgb(56 189 248 / 0.16); color: #38bdf8">Business</span>
+        </div>
+        <div style="margin-top: 2px; font-size: 10.5px; color: #64748b">4 agents &middot; 1 Waiting, 1 Working</div>
+      </div>
+      <span class="beat">woke 07:02</span>
+      <span class="need" style="background: rgb(251 191 36 / 0.16); color: #fbbf24">1 needs you</span>
+    </div>
+
+    <div class="bot">
+      <span class="av" style="background: #34d399">HE</span>
+      <div style="min-width: 0; flex: 1">
+        <div style="display: flex; align-items: center; gap: 7px">
+          <span style="font-size: 12.5px; font-weight: 600; color: #e2e8f0">Health bot</span>
+          <span class="space" style="background: rgb(52 211 153 / 0.16); color: #34d399">Personal</span>
+        </div>
+        <div style="margin-top: 2px; font-size: 10.5px; color: #64748b">1 agent &middot; Idle until Monday</div>
+      </div>
+      <span class="beat">Mon / Wed / Fri</span>
+      <span style="flex: none; font-size: 10px; color: #475569">quiet</span>
+    </div>
+
+    <div class="bot">
+      <span class="av" style="background: #a78bfa">MO</span>
+      <div style="min-width: 0; flex: 1">
+        <div style="display: flex; align-items: center; gap: 7px">
+          <span style="font-size: 12.5px; font-weight: 600; color: #e2e8f0">Money bot</span>
+          <span class="space" style="background: rgb(52 211 153 / 0.16); color: #34d399">Personal</span>
+        </div>
+        <div style="margin-top: 2px; font-size: 10.5px; color: #64748b">2 agents &middot; 1 Blocked &mdash; no access to the bank export</div>
+      </div>
+      <span class="beat">1st of the month</span>
+      <span class="need" style="background: rgb(248 113 113 / 0.16); color: #f87171">blocked</span>
+    </div>
+
+    <div class="bot">
+      <span class="av" style="background: #38bdf8">DE</span>
+      <div style="min-width: 0; flex: 1">
+        <div style="display: flex; align-items: center; gap: 7px">
+          <span style="font-size: 12.5px; font-weight: 600; color: #e2e8f0">DevDeck bot</span>
+          <span class="space" style="background: rgb(56 189 248 / 0.16); color: #38bdf8">Business</span>
+        </div>
+        <div style="margin-top: 2px; font-size: 10.5px; color: #64748b">4 agents &middot; held by your focus session</div>
+      </div>
+      <span class="beat">weekdays 08:00</span>
+      <span style="flex: none; font-size: 10px; color: #475569">held</span>
+    </div>
+  </div>
+
+  <!-- The bot the Assistant thinks should exist. It proposes, it does not create. -->
+  <div class="card" style="flex: none; border-color: rgb(52 211 153 / 0.28)">
+    <div style="padding: 9px 12px 4px"><span class="lbl" style="color: #34d399">The Assistant suggests one</span></div>
+    <div style="display: flex; align-items: flex-start; gap: 11px; padding: 0 12px 11px">
+      <span class="av" style="background: rgb(100 116 139 / 0.25); color: #94a3b8">FA</span>
+      <div style="min-width: 0; flex: 1">
+        <div style="font-size: 12.5px; color: #e2e8f0">A bot for Family</div>
+        <div style="margin-top: 3px; font-size: 11px; line-height: 1.5; color: #94a3b8">
+          Five things landed in that folder this month and nothing watches it. It would start
+          Personal, quiet, with no access beyond the folder itself.
+        </div>
+        <div style="display: flex; gap: 6px; margin-top: 9px">
+          <span class="btn" style="background: #6366f1; color: #fff; font-size: 11px">Draft it</span>
+          <span class="btn" style="border: 1px solid #1e293b; color: #94a3b8; font-size: 11px">No thanks</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="font-size: 10.5px; line-height: 1.6; color: #475569">
+    A bot without a heartbeat is a chat window. A bot with a heartbeat and no goal is a nuisance.
+    Every row above has both, or it is not here.
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

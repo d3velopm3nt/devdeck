@@ -1,0 +1,79 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background: #0d1017; }
+    a { color: #818cf8; } a:hover { color: #a5b4fc; }
+    .code { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 11.5px; line-height: 1.75; }
+    .k { color: #38bdf8; }
+    .v { color: #cbd5e1; }
+    .s { color: #4ade80; }
+    .c { color: #475569; }
+    .d { color: #64748b; }
+    .later { color: #4a5568; opacity: 0.8; }
+    .card { border: 1px solid #1e293b; border-radius: 6px; background: #151923; padding: 11px 13px; }
+    .card h4 { margin: 0; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; color: #64748b; }
+    .card p { margin: 5px 0 0; font-size: 11px; line-height: 1.55; color: #cbd5e1; }
+    .mono { font-family: ui-monospace, Consolas, monospace; }
+  </style>
+</helmet>
+
+<div style="width: 560px; height: 680px; background: #0d1017; padding: 24px 26px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px">
+
+  <div>
+    <div style="font-size: 15px; font-weight: 600; color: #e2e8f0">One kind of feature</div>
+    <div style="margin-top: 3px; font-family: ui-monospace, Consolas, monospace; font-size: 11px; color: #64748b">
+      solutions/tyrex/features/dark-mode/feature.md
+    </div>
+  </div>
+
+  <div class="code" style="border: 1px solid #1e293b; border-radius: 6px; background: #11141c; padding: 15px 17px">
+<span class="d">---</span>
+<span class="k">id</span>: <span class="v">dark-mode</span>
+<span class="k">name</span>: <span class="v">Dark mode</span>
+<span class="k">status</span>: <span class="s">in-progress</span>
+<span class="k">projects</span>: [<span class="v">tyrex-web</span>, <span class="v">tyrex-mobile</span>, <span class="v">tyrex-desktop</span>]
+<span class="d">---</span>
+
+<span class="c"># Dark mode</span>
+
+<span class="v">One theme switch, three shells. The token set is</span>
+<span class="v">owned by tyrex-web and mirrored by the others.</span>
+  </div>
+
+  <div class="code" style="border: 1px dashed #334155; border-radius: 6px; background: rgb(17 20 28 / 0.5); padding: 13px 17px">
+<span class="later">--- token-refresh/feature.md ---</span>
+<span class="later">projects: [tyrex-api]</span>
+
+<span class="later"># A single-repo feature is just one that</span>
+<span class="later"># names a single repo. No second concept.</span>
+  </div>
+
+  <div class="card">
+    <h4>WHY <span class="mono" style="text-transform: none; letter-spacing: 0">id</span>, NOT A NUMBER</h4>
+    <p>
+      A project's id today is its SQLite row id — different on every machine.
+      This file is committed and pulled by your team, so projects declare a
+      slug of their own. Node ids stay local, for lookup only.
+    </p>
+  </div>
+
+  <div style="border: 1px solid rgb(251 191 36 / 0.28); border-radius: 6px; background: rgb(251 191 36 / 0.06); padding: 11px 13px">
+    <h4 style="margin: 0; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; color: #fbbf24">WHAT IS NOT HERE YET</h4>
+    <p style="margin: 5px 0 0; font-size: 11px; line-height: 1.55; color: #cbd5e1">
+      No branch, no per-project state. Central storage means git no longer
+      answers "which branch is this context for" — but add that field the day
+      a stale context actually bites, not before.
+    </p>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

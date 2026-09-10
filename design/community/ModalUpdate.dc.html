@@ -1,0 +1,119 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: var(--accent); } a:hover { color: var(--ink); }
+    .head { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .chip { display: inline-flex; align-items: center; gap: 4px; font-size: 9px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; padding: 2px 6px; border-radius: 999px; }
+    .btn { font-size: 11.5px; color: var(--dim); border: 1px solid var(--line2); border-radius: 6px; padding: 5px 12px; background: transparent; }
+    .btn.on { color: #fff; background: #4f46e5; border-color: #4f46e5; }
+    .mono { font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; }
+    .new { display: flex; align-items: center; gap: 9px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 11.5px; }
+    .sel { display: flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 600; padding: 3px 8px; border-radius: 6px; }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --scrim: {{c.scrim}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --menu: {{c.menu}}; --hover: {{c.hover}}; --line: {{c.line}}; --line2: {{c.line2}}; --line3: {{c.line3}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; width: 760px; height: 750px; background: var(--scrim); box-sizing: border-box; padding: 24px 80px; display: flex; align-items: center;">
+
+  <div style="width: 600px; border: 1px solid rgb(251 191 36 / .4); border-radius: 12px; background: var(--menu); box-shadow: 0 18px 50px rgb(0 0 0 / .45); overflow: hidden;">
+
+    <div style="padding: 14px 18px; border-bottom: 1px solid var(--line); background: rgb(251 191 36 / .06); display: flex; align-items: center; gap: 11px;">
+      <span style="width: 34px; height: 34px; border-radius: 10px; background: rgb(251 191 36 / .16); color: var(--warn); display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 4.5v10M7.5 10 12 14.5 16.5 10M5 19h14"></path></svg></span>
+      <div style="min-width: 0;">
+        <div style="font-size: 14px; font-weight: 600; color: var(--ink);">github-mcp-server wants more than it had</div>
+        <div class="mono" style="font-size: 10.5px; color: var(--muted); margin-top: 2px;">0.9.2 installed · 0.12.0 available · MIT</div>
+      </div>
+      <span style="margin-left: auto; color: var(--muted);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M6 6l12 12M18 6 6 18"></path></svg></span>
+    </div>
+
+    <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 15px;">
+
+      <div style="font-size: 12px; line-height: 1.65; color: var(--body);">The new version adds four actions, and all four are writes. Your existing grants were given against thirteen actions that did not include these, so they do not carry over on their own.</div>
+
+      <div>
+        <div style="display: flex; align-items: baseline; gap: 8px;">
+          <span class="head">New in 0.12.0</span>
+          <span style="margin-left: auto; font-size: 10.5px; color: var(--muted);">13 actions before, 17 after</span>
+        </div>
+        <div style="margin-top: 4px;">
+          <div class="new" style="border-top: none;"><span class="mono" style="width: 170px; color: var(--ink);">github.merge_pr</span><span class="chip" style="background: rgb(248 113 113 / .16); color: var(--err);">write</span><span style="flex: 1; color: var(--body);">Merges a pull request into its base branch</span></div>
+          <div class="new"><span class="mono" style="width: 170px; color: var(--ink);">github.create_release</span><span class="chip" style="background: rgb(248 113 113 / .16); color: var(--err);">write</span><span style="flex: 1; color: var(--body);">Publishes a release and its tag</span></div>
+          <div class="new"><span class="mono" style="width: 170px; color: var(--ink);">github.delete_branch</span><span class="chip" style="background: rgb(248 113 113 / .16); color: var(--err);">write</span><span style="flex: 1; color: var(--body);">Deletes a remote branch</span></div>
+          <div class="new"><span class="mono" style="width: 170px; color: var(--ink);">github.set_secret</span><span class="chip" style="background: rgb(248 113 113 / .16); color: var(--err);">write</span><span style="flex: 1; color: var(--body);">Writes an Actions secret</span></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="head">What happens to the grants you already gave</div>
+        <div style="margin-top: 7px; border: 1px solid var(--line); border-radius: 9px; overflow: hidden;">
+          <div style="display: flex; align-items: center; gap: 9px; padding: 8px 11px; background: var(--raise);">
+            <span style="width: 20px; height: 20px; border-radius: 6px; background: rgb(99 102 241 / .18); color: #a5b4fc; font-size: 8px; font-weight: 700; display: flex; align-items: center; justify-content: center;">DA</span>
+            <span style="font-size: 11.5px; color: var(--ink); width: 76px;">dev-a</span>
+            <span class="sel" style="background: rgb(251 191 36 / .16); color: var(--warn);">Approval</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--faint);"><path d="M4 12h16M14 6l6 6-6 6"></path></svg>
+            <span class="sel" style="background: rgb(251 191 36 / .16); color: var(--warn);">Approval</span>
+            <span style="margin-left: auto; font-size: 10.5px; color: var(--muted);">unchanged — it already asks</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 9px; padding: 8px 11px; border-top: 1px solid var(--line);">
+            <span style="width: 20px; height: 20px; border-radius: 6px; background: rgb(99 102 241 / .18); color: #a5b4fc; font-size: 8px; font-weight: 700; display: flex; align-items: center; justify-content: center;">DB</span>
+            <span style="font-size: 11.5px; color: var(--ink); width: 76px;">dev-b</span>
+            <span class="sel" style="background: rgb(248 113 113 / .16); color: var(--err);">Full</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--faint);"><path d="M4 12h16M14 6l6 6-6 6"></path></svg>
+            <span class="sel" style="background: rgb(251 191 36 / .16); color: var(--warn);">Approval</span>
+            <span style="margin-left: auto; font-size: 10.5px; color: var(--warn);">dropped — Full would now merge PRs</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 9px; padding: 8px 11px; border-top: 1px solid var(--line);">
+            <span style="width: 20px; height: 20px; border-radius: 6px; background: var(--hover); color: var(--dim); font-size: 8px; font-weight: 700; display: flex; align-items: center; justify-content: center;">AS</span>
+            <span style="font-size: 11.5px; color: var(--ink); width: 76px;">Assistant</span>
+            <span class="sel" style="background: rgb(74 222 128 / .14); color: var(--ok);">Read</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--faint);"><path d="M4 12h16M14 6l6 6-6 6"></path></svg>
+            <span class="sel" style="background: rgb(74 222 128 / .14); color: var(--ok);">Read</span>
+            <span style="margin-left: auto; font-size: 10.5px; color: var(--muted);">unchanged — writes were never included</span>
+          </div>
+        </div>
+        <div style="font-size: 10.5px; color: var(--faint); margin-top: 7px; line-height: 1.55;">Only Full is narrowed, and only where the new actions widen what it means. You can put it back after reading them — this screen is the reading.</div>
+      </div>
+
+      <div style="border: 1px solid var(--line); border-radius: 9px; background: var(--raise); padding: 10px 12px;">
+        <div class="head">Also in this release</div>
+        <div style="font-size: 11.5px; line-height: 1.6; color: var(--body); margin-top: 5px;">Rate-limit handling, a fix for search paging, and Go 1.24. Full notes on the release page — DevDeck did not read them for you, it read the manifest.</div>
+      </div>
+    </div>
+
+    <div style="padding: 12px 18px; border-top: 1px solid var(--line); background: var(--panel); display: flex; align-items: center; gap: 8px;">
+      <button class="btn">Stay on 0.9.2</button>
+      <span style="margin-left: auto; display: flex; gap: 8px;">
+        <button class="btn">Update, revoke everything</button>
+        <button class="btn on">Update with these grants</button>
+      </span>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', scrim: '#07090d', panel: '#11141c', raise: '#151923', menu: '#1a1f2b',
+          hover: '#232b3b', line: '#1e293b', line2: '#334155', line3: '#64748b', ink: '#e2e8f0',
+          body: '#cbd5e1', dim: '#94a3b8', muted: '#64748b', faint: '#475569', accent: '#818cf8',
+          ok: '#4ade80', warn: '#fbbf24', err: '#f87171' }
+      : { app: '#e9ebf0', scrim: '#97999c', panel: '#f6f7f9', raise: '#f0f2f6', menu: '#ffffff',
+          hover: '#e7eaf1', line: '#d9dee7', line2: '#c3cbd8', line3: '#9aa5b5', ink: '#16181d',
+          body: '#333a45', dim: '#5a6472', muted: '#7d8794', faint: '#a5aebb', accent: '#4f46e5',
+          ok: '#15803d', warn: '#b45309', err: '#dc2626' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

@@ -20,7 +20,9 @@
         "minHeight": 640,
         "resizable": true,
         "fullscreen": false,
-        "center": true
+        "center": true,
+        "decorations": false,
+        "visible": false
       },
       {
         "label": "widget",

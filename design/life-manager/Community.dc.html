@@ -1,0 +1,151 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background: #0d1017; }
+    a { color: #818cf8; } a:hover { color: #a5b4fc; }
+    .pill { flex: none; border-radius: 999px; padding: 1px 7px; font-size: 9px; font-weight: 600;
+            letter-spacing: 0.04em; text-transform: uppercase; line-height: 1.6; }
+    .card { border: 1px solid #1e293b; border-radius: 8px; background: #11141c; padding: 12px 13px;
+            display: flex; flex-direction: column; gap: 7px; }
+    .name { font-size: 12.5px; font-weight: 600; color: #e2e8f0; }
+    .desc { font-size: 11px; line-height: 1.5; color: #94a3b8; }
+    .meta { display: flex; align-items: center; gap: 8px; font-size: 10px; color: #475569; }
+    .want { display: flex; align-items: center; gap: 5px; font-size: 10px; color: #64748b; }
+    .btn { border-radius: 5px; padding: 3px 11px; font-size: 11px; font-weight: 600; }
+    .tab { padding: 4px 10px; border-radius: 5px; font-size: 11.5px; color: #64748b; }
+    .tab.on { background: #151923; color: #e2e8f0; }
+  </style>
+</helmet>
+
+<div style="width: 860px; height: 680px; background: #0d1017; display: flex; flex-direction: column; overflow: hidden">
+
+  <div style="flex: none; padding: 16px 18px 12px">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <div>
+        <div style="font-size: 15px; font-weight: 600; color: #e2e8f0">Agents &amp; skills</div>
+        <div style="margin-top: 2px; font-size: 11.5px; color: #94a3b8">
+          A reviewed list, not a search of the internet. You install; nothing installs itself.
+        </div>
+      </div>
+      <span style="flex: 1"></span>
+      <span style="display: flex; align-items: center; gap: 6px; border: 1px solid #1e293b; border-radius: 6px; background: #11141c; padding: 5px 10px; min-width: 190px">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <span style="font-size: 11.5px; color: #475569">browser testing</span>
+      </span>
+    </div>
+    <div style="margin-top: 11px; display: flex; gap: 3px">
+      <span class="tab on">All</span>
+      <span class="tab">Agents</span>
+      <span class="tab">Skills</span>
+      <span class="tab">Tools</span>
+      <span class="tab">Installed <span style="color: #475569">4</span></span>
+    </div>
+  </div>
+
+  <div style="flex: 1; overflow: hidden; padding: 0 18px 16px">
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px">
+
+      <div class="card">
+        <div style="display: flex; align-items: center; gap: 8px">
+          <span style="width: 26px; height: 26px; border-radius: 7px; background: #a78bfa; color: #0b0e14; font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none">PW</span>
+          <span class="name">Playwright runner</span>
+          <span class="pill" style="background: rgb(56 189 248 / 0.16); color: #38bdf8">Tool</span>
+        </div>
+        <div class="desc">Drives a real browser to check pages render and flows still work. Wraps the upstream project rather than reimplementing it.</div>
+        <div class="want">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Wants: run a local browser &middot; read your repo
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; margin-top: 1px">
+          <span class="btn" style="background: #6366f1; color: #fff">Install</span>
+          <span class="meta">
+            <span style="display: flex; align-items: center; gap: 3px; color: #4ade80">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Reviewed
+            </span>
+            <span>&middot;</span><span>microsoft/playwright</span>
+          </span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="display: flex; align-items: center; gap: 8px">
+          <span style="width: 26px; height: 26px; border-radius: 7px; background: #34d399; color: #0b0e14; font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none">RE</span>
+          <span class="name">Release checker</span>
+          <span class="pill" style="background: rgb(129 140 248 / 0.16); color: #818cf8">Agent</span>
+        </div>
+        <div class="desc">Reads the four files a version lives in and says when they disagree. Written for Tauri apps.</div>
+        <div class="want">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Wants: read your repo
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; margin-top: 1px">
+          <span class="btn" style="border: 1px solid #1e293b; color: #94a3b8">Installed</span>
+          <span class="meta"><span>by you</span><span>&middot;</span><span>runs in 2 spaces</span></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="display: flex; align-items: center; gap: 8px">
+          <span style="width: 26px; height: 26px; border-radius: 7px; background: #fbbf24; color: #0b0e14; font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none">IN</span>
+          <span class="name">Inbox triage</span>
+          <span class="pill" style="background: rgb(129 140 248 / 0.16); color: #818cf8">Agent</span>
+        </div>
+        <div class="desc">Sorts the morning&rsquo;s mail into what needs you, what can wait, and what it has already drafted a reply to.</div>
+        <div class="want" style="color: #fbbf24">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0"/></svg>
+          Wants: read your mail &middot; draft replies
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; margin-top: 1px">
+          <span class="btn" style="background: #6366f1; color: #fff">Install</span>
+          <span class="meta">
+            <span style="display: flex; align-items: center; gap: 3px; color: #4ade80">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Reviewed
+            </span>
+            <span>&middot;</span><span>1.2k installs</span>
+          </span>
+        </div>
+      </div>
+
+      <div class="card" style="border-color: rgb(251 191 36 / 0.3)">
+        <div style="display: flex; align-items: center; gap: 8px">
+          <span style="width: 26px; height: 26px; border-radius: 7px; background: rgb(100 116 139 / 0.22); color: #94a3b8; font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none">SM</span>
+          <span class="name">Social scheduler</span>
+          <span class="pill" style="background: rgb(129 140 248 / 0.16); color: #818cf8">Agent</span>
+        </div>
+        <div class="desc">Queues and posts to your accounts on a schedule.</div>
+        <div class="want" style="color: #fbbf24">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0"/></svg>
+          Wants: post publicly as you
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; margin-top: 1px">
+          <span class="btn" style="border: 1px solid rgb(251 191 36 / 0.4); color: #fbbf24">Install &mdash; read this first</span>
+          <span class="meta"><span style="color: #94a3b8">Community</span><span>&middot;</span><span>not reviewed</span></span>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top: 13px; border: 1px solid #1e293b; border-radius: 8px; background: #11141c; padding: 11px 13px">
+      <div style="font-size: 9.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #475569">Why a list and not a search</div>
+      <div style="margin-top: 6px; font-size: 11.5px; line-height: 1.6; color: #cbd5e1">
+        &ldquo;Find me something that does X&rdquo; sounds better than it is: it ends with a model choosing
+        whose code runs on your machine. This is a catalog anyone can add to by pull request, so a
+        human decided each entry, and every card says what it will be allowed to do before you
+        install rather than after.
+      </div>
+      <div style="margin-top: 6px; font-size: 11.5px; line-height: 1.6; color: #94a3b8">
+        The assistant may <span style="color: #cbd5e1">suggest from this list</span> when it notices
+        you need a capability. It cannot install one.
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

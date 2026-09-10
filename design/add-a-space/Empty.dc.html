@@ -1,0 +1,127 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: var(--accent); } a:hover { color: var(--ink); }
+    .cap { font-size: 10px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); }
+    .note { font-size: 11px; line-height: 1.6; color: var(--muted); }
+    .row { display: flex; align-items: center; gap: 6px; border-radius: 4px; padding: 4px 6px;
+           font-size: 13px; color: var(--body); }
+    .ico { display: flex; width: 16px; flex: none; align-items: center; justify-content: center; color: var(--dim); }
+    .pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 4px; padding: 5px 11px;
+            font-size: 12px; }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --page: {{c.page}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --menu: {{c.menu}}; --hover: {{c.hover}}; --line: {{c.line}}; --line2: {{c.line2}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; background: var(--app); width: 1100px; height: 620px; padding: 26px 30px; box-sizing: border-box; display: flex; gap: 24px; overflow: hidden;">
+
+  <div style="flex: none; width: 320px; display: flex; flex-direction: column; gap: 10px;">
+    <div class="cap">A workspace with nothing in it</div>
+    <div style="border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 8px;">
+      <div class="row" style="font-weight: 600; color: var(--ink);">
+        <span class="ico" style="color: var(--dim);">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="m6 9 6-6 6 6"/></svg>
+        </span>
+        <span class="ico" style="color: var(--accent);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><circle cx="5" cy="18" r="2.5"/><circle cx="19" cy="18" r="2.5"/><path d="M12 15v1M9.5 13.5 7 16M14.5 13.5 17 16"/></svg>
+        </span>
+        Develtech
+      </div>
+
+      <div style="margin: 6px 4px 4px; border: 1px dashed var(--line2); border-radius: 8px; padding: 14px 14px 15px;">
+        <div style="font-size: 12.5px; color: var(--body); line-height: 1.55;">
+          Nothing in here yet.
+        </div>
+        <div class="note" style="margin-top: 4px;">
+          A workspace holds code projects and areas like Marketing or Money.
+        </div>
+        <div style="margin-top: 11px; display: flex; flex-wrap: wrap; gap: 6px;">
+          <span class="pill" style="background: #4f46e5; color: #fff;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+            Add a code project
+          </span>
+          <span class="pill" style="border: 1px solid var(--line2); background: rgb(30 41 59 / .4); color: var(--body);">
+            An area with no code
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="note">
+      The same picker, with the two most likely answers already on the surface. The empty state
+      is where a person is most stuck, so it is the one place the choice is worth spelling out.
+    </div>
+  </div>
+
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px;">
+    <div>
+      <div style="font-size: 16px; font-weight: 600; color: var(--ink);">Where &ldquo;add&rdquo; can be reached from, after this</div>
+      <div class="note" style="margin-top: 5px;">Four ways in, all opening the same thing. None of them removed anything.</div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+      <div style="border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 14px 16px;">
+        <div style="font-size: 12.5px; font-weight: 600; color: var(--ink);">The Add button</div>
+        <div class="note" style="margin-top: 5px;">In the Explorer header, where the bare + is now. Asks which workspace.</div>
+      </div>
+      <div style="border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 14px 16px;">
+        <div style="font-size: 12.5px; font-weight: 600; color: var(--ink);">A workspace&rsquo;s +</div>
+        <div class="note" style="margin-top: 5px;">On hover, on the row itself. Already knows which workspace, so one fewer question.</div>
+      </div>
+      <div style="border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 14px 16px;">
+        <div style="font-size: 12.5px; font-weight: 600; color: var(--ink);">Right-click, as now</div>
+        <div class="note" style="margin-top: 5px;">Every existing item stays. <b>Add project…</b> stops being solution-only and appears on a workspace too.</div>
+      </div>
+      <div style="border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 14px 16px;">
+        <div style="font-size: 12.5px; font-weight: 600; color: var(--ink);">The empty state</div>
+        <div class="note" style="margin-top: 5px;">Only when a workspace has nothing. It disappears the moment there is something in it.</div>
+      </div>
+    </div>
+
+    <div style="border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 15px 16px;">
+      <div class="cap" style="margin-bottom: 7px;">What this costs</div>
+      <div class="note">
+        A picker component, an <b>Add project…</b> line on two more node kinds, a hover <b>+</b> on
+        the workspace row, and an empty state. The four things it can make all exist already:
+        <span style="font-family: ui-monospace, Consolas, monospace; font-size: 11px; color: var(--dim);">addProjectTo</span>,
+        the GitHub import modal,
+        <span style="font-family: ui-monospace, Consolas, monospace; font-size: 11px; color: var(--dim);">vaultCreate</span>,
+        and the folder path. Nothing new in Rust.
+      </div>
+    </div>
+
+    <div style="margin-top: auto; border-left: 2px solid var(--accent); padding: 2px 0 2px 12px;">
+      <div class="note" style="color: var(--dim);">
+        Not touched: the sidebar you called complex. Making adding obvious is a different job
+        from simplifying the tree, and doing both at once would leave you unable to tell which
+        change helped.
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', page: '#0d1017', panel: '#11141c', raise: '#151923', menu: '#1a1f2b',
+          hover: '#232b3b', line: '#1e293b', line2: '#334155', ink: '#e2e8f0', body: '#cbd5e1',
+          dim: '#94a3b8', muted: '#64748b', faint: '#475569', accent: '#818cf8' }
+      : { app: '#e9ebf0', page: '#f6f7f9', panel: '#fdfdfe', raise: '#f0f2f6', menu: '#ffffff',
+          hover: '#e7eaf1', line: '#d9dee7', line2: '#c3cbd8', ink: '#16181d', body: '#333a45',
+          dim: '#5a6472', muted: '#7d8794', faint: '#a5aebb', accent: '#4f46e5' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

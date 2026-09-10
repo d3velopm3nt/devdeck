@@ -1,0 +1,237 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    .cap { font-size: 9px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+    .sheet { width: 262px; flex: none; border: 1px solid var(--line); border-radius: 11px; background: var(--panel);
+             display: flex; flex-direction: column; overflow: hidden; }
+    .tabs { display: flex; gap: 2px; padding: 7px; border-bottom: 1px solid var(--line); }
+    .tab { font-size: 10px; padding: 3px 6px; border-radius: 5px; color: var(--muted); }
+    .tab.on { background: var(--hover); color: var(--ink); font-weight: 600; }
+    .body { padding: 10px 11px 12px; display: flex; flex-direction: column; gap: 9px; }
+    .in { border: 1px solid var(--line2); border-radius: 6px; background: var(--raise); padding: 5px 8px;
+          font-size: 11px; color: var(--ink); }
+    .ph { color: var(--faint); }
+    .pills { display: flex; gap: 4px; }
+    .pill { flex: 1; text-align: center; font-size: 10px; padding: 4px 0; border: 1px solid var(--line); border-radius: 6px; color: var(--dim); }
+    .pill.on { border-color: var(--accent); color: var(--ink); background: rgb(129 140 248 / .12); }
+    .tog { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 7px; padding: 7px 8px; }
+    .knob { width: 26px; height: 15px; border-radius: 999px; background: var(--line2); flex: none; position: relative; }
+    .knob i { position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; border-radius: 999px; background: var(--panel); }
+    .knob.on { background: var(--ok); } .knob.on i { left: 13px; }
+    .cta { text-align: center; font-size: 11.5px; font-weight: 600; color: #fff; background: var(--accent);
+           border-radius: 7px; padding: 6px 0; }
+    .miss { font-size: 8.5px; vertical-align: super; color: var(--muted); }
+    .note { font-size: 9.5px; line-height: 1.5; color: var(--muted); }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --hover: {{c.hover}}; --line: {{c.line}}; --line2: {{c.line2}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; --hb: {{c.hb}}; background: var(--app); width: 1400px; height: 820px; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; overflow: hidden;">
+
+  <div>
+    <div style="font-size: 14px; font-weight: 600; color: var(--ink);">One sheet, five kinds</div>
+    <div style="font-size: 11.5px; color: var(--muted); margin-top: 3px; max-width: 900px;">
+      The tab decides what the thing <i>is</i>, not how it looks &mdash; because each one is a different row with different rules. Event and Routine are the same schedule with a different <span style="font-family: ui-monospace, Consolas, monospace;">every</span>; Focus is a session, not a schedule; Habit is a target, not a time; and the last one asks a <b>bot</b>, never a bare agent.
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 12px; align-items: flex-start;">
+
+    <!-- EVENT -->
+    <div class="sheet">
+      <div class="tabs">
+        <span class="tab on">Event</span><span class="tab">Routine</span><span class="tab">Focus</span><span class="tab">Habit</span><span class="tab">Ask a bot</span>
+      </div>
+      <div class="body">
+        <div><div class="cap">Title</div><div class="in ph" style="margin-top: 4px;">What is this?</div></div>
+        <div style="display: flex; gap: 6px;">
+          <div style="flex: 1.2;"><div class="cap">Day</div><div class="in" style="margin-top: 4px;">Fri 25</div></div>
+          <div style="flex: 1;"><div class="cap">Start</div><div class="in" style="margin-top: 4px; font-family: ui-monospace, Consolas, monospace;">09:00</div></div>
+          <div style="flex: 1;"><div class="cap">Length</div><div class="in" style="margin-top: 4px;">1h</div></div>
+        </div>
+        <div><div class="cap">Repeat</div>
+          <div class="pills" style="margin-top: 4px;"><span class="pill on">Never</span><span class="pill">Daily</span><span class="pill">Weekdays</span><span class="pill">Weekly</span></div>
+        </div>
+        <div><div class="cap">Space</div><div class="in" style="margin-top: 4px;">DevDeck</div>
+          <div class="note" style="margin-top: 3px;">None keeps it personal &mdash; out of the vault, out of the repo.</div>
+        </div>
+        <div><div class="cap">Link to <span class="miss">&#9702;</span></div><div class="in" style="margin-top: 4px;">Ship DevDeck v0.4 &middot; w13</div></div>
+        <div><div class="cap">Remind me <span class="miss">&#9702;</span></div>
+          <div class="pills" style="margin-top: 4px;"><span class="pill">none</span><span class="pill on">10m</span><span class="pill">1h</span><span class="pill">1d</span></div>
+        </div>
+        <div><div class="cap">Notes</div><div class="in ph" style="margin-top: 4px; height: 46px;">Context for you and the agents&hellip;</div></div>
+        <div class="cta">Add event</div>
+      </div>
+    </div>
+
+    <!-- ROUTINE -->
+    <div class="sheet">
+      <div class="tabs">
+        <span class="tab">Event</span><span class="tab on">Routine</span><span class="tab">Focus</span><span class="tab">Habit</span><span class="tab">Ask a bot</span>
+      </div>
+      <div class="body">
+        <div><div class="cap">Title</div><div class="in" style="margin-top: 4px;">Morning routine</div></div>
+        <div style="display: flex; gap: 6px;">
+          <div style="flex: 1;"><div class="cap">Start</div><div class="in" style="margin-top: 4px; font-family: ui-monospace, Consolas, monospace;">07:00</div></div>
+          <div style="flex: 1;"><div class="cap">Length</div><div class="in" style="margin-top: 4px;">30m</div></div>
+        </div>
+        <div><div class="cap">Repeat</div>
+          <div class="pills" style="margin-top: 4px;"><span class="pill">Never</span><span class="pill on">Daily</span><span class="pill">Weekdays</span><span class="pill">Weekly</span></div>
+          <div style="display: flex; gap: 3px; margin-top: 5px;">
+            <span class="pill on" style="padding: 3px 0;">M</span><span class="pill on" style="padding: 3px 0;">T</span><span class="pill on" style="padding: 3px 0;">W</span><span class="pill on" style="padding: 3px 0;">T</span><span class="pill on" style="padding: 3px 0;">F</span><span class="pill" style="padding: 3px 0;">S</span><span class="pill" style="padding: 3px 0;">S</span>
+          </div>
+        </div>
+        <div class="tog"><span class="knob on"><i></i></span>
+          <span style="font-size: 11px; color: var(--ink);">Protect this time <span class="miss">&#9702;</span><div class="note">the free-slot finder will not offer it</div></span>
+        </div>
+        <div class="tog"><span class="knob"><i></i></span>
+          <span style="font-size: 11px; color: var(--ink);">Nag me if missed<div class="note">off &mdash; a missed routine is recorded, not fired late</div></span>
+        </div>
+        <div><div class="cap">Notes</div><div class="in ph" style="margin-top: 4px; height: 46px;">What this is for&hellip;</div></div>
+        <div class="cta">Add routine</div>
+        <div class="note">Same row as an event. Only <span style="font-family: ui-monospace, Consolas, monospace;">every</span> differs.</div>
+      </div>
+    </div>
+
+    <!-- FOCUS -->
+    <div class="sheet">
+      <div class="tabs">
+        <span class="tab">Event</span><span class="tab">Routine</span><span class="tab on">Focus</span><span class="tab">Habit</span><span class="tab">Ask a bot</span>
+      </div>
+      <div class="body">
+        <div><div class="cap">Focusing on</div><div class="in" style="margin-top: 4px;">v0.4 polish</div></div>
+        <div><div class="cap">Length</div>
+          <div class="pills" style="margin-top: 4px;"><span class="pill">25m</span><span class="pill">50m</span><span class="pill">90m</span><span class="pill on">2h</span></div>
+        </div>
+        <div><div class="cap">Start</div>
+          <div class="pills" style="margin-top: 4px;"><span class="pill on">Now</span><span class="pill">At&hellip; <span class="miss">&#9702;</span></span></div>
+          <div class="note" style="margin-top: 3px;">Focus starts when you say so today. Booking one for 14:00 is the new part.</div>
+        </div>
+        <div class="tog"><span class="knob on"><i></i></span>
+          <span style="font-size: 11px; color: var(--ink);">Hold notifications<div class="note">held, never dropped &mdash; they arrive when it ends</div></span>
+        </div>
+        <div class="tog"><span class="knob on"><i></i></span>
+          <span style="font-size: 11px; color: var(--ink);">Hold approvals<div class="note">agents needing you will wait, and say so</div></span>
+        </div>
+        <div style="border: 1px solid var(--line); border-radius: 7px; padding: 8px;">
+          <div class="cap">While it runs</div>
+          <div style="font-size: 11px; color: var(--dim); margin-top: 4px;">The block fills as it goes, and shows what it is holding for you.</div>
+          <div style="height: 3px; border-radius: 999px; background: var(--line); margin-top: 7px; overflow: hidden;"><i style="display: block; height: 100%; width: 30%; background: var(--warn);"></i></div>
+        </div>
+        <div class="cta">Start focus</div>
+      </div>
+    </div>
+
+    <!-- HABIT -->
+    <div class="sheet">
+      <div class="tabs">
+        <span class="tab">Event</span><span class="tab">Routine</span><span class="tab">Focus</span><span class="tab on">Habit</span><span class="tab">Ask a bot</span>
+      </div>
+      <div class="body">
+        <div style="border: 1px solid rgb(34 211 238 / .35); background: rgb(34 211 238 / .07); border-radius: 7px; padding: 7px 8px;">
+          <div style="font-size: 10.5px; color: var(--hb); font-weight: 600;">Nothing behind this yet <span class="miss" style="vertical-align: baseline;">&#9702;</span></div>
+          <div class="note" style="margin-top: 2px;">A habit is the one kind that is not a time. It needs its own table.</div>
+        </div>
+        <div><div class="cap">Habit</div><div class="in" style="margin-top: 4px;">Walk outside</div></div>
+        <div style="display: flex; gap: 6px;">
+          <div style="flex: 1;"><div class="cap">Takes</div><div class="in" style="margin-top: 4px;">15m</div></div>
+          <div style="flex: 1.3;"><div class="cap">Target</div><div class="in" style="margin-top: 4px;">5 &times; per week</div></div>
+        </div>
+        <div><div class="cap">When it fits</div>
+          <div class="pills" style="margin-top: 4px;"><span class="pill on">Any gap</span><span class="pill">Mornings</span><span class="pill">Evenings</span></div>
+          <div class="note" style="margin-top: 3px;">No fixed time. It is offered in a gap you already have, and banked when you do it.</div>
+        </div>
+        <div class="tog"><span class="knob on"><i></i></span>
+          <span style="font-size: 11px; color: var(--ink);">Offer it in free slots<div class="note">once a day at most, the smallest one that fits</div></span>
+        </div>
+        <div style="border: 1px solid var(--line); border-radius: 7px; padding: 8px;">
+          <div class="cap">This week</div>
+          <div style="display: flex; gap: 3px; align-items: center; margin-top: 6px;">
+            <span style="width: 6px; height: 6px; border-radius: 999px; background: var(--hb);"></span>
+            <span style="width: 6px; height: 6px; border-radius: 999px; background: var(--line2);"></span>
+            <span style="width: 6px; height: 6px; border-radius: 999px; background: var(--line2);"></span>
+            <span style="width: 6px; height: 6px; border-radius: 999px; background: var(--line2);"></span>
+            <span style="width: 6px; height: 6px; border-radius: 999px; background: var(--line2);"></span>
+            <span style="flex: 1;"></span>
+            <span style="font-size: 9.5px; color: var(--muted); font-family: ui-monospace, Consolas, monospace;">1/5</span>
+          </div>
+        </div>
+        <div class="cta">Add habit</div>
+      </div>
+    </div>
+
+    <!-- ASK A BOT -->
+    <div class="sheet">
+      <div class="tabs">
+        <span class="tab">Event</span><span class="tab">Routine</span><span class="tab">Focus</span><span class="tab">Habit</span><span class="tab on">Ask a bot</span>
+      </div>
+      <div class="body">
+        <div><div class="cap">Who</div><div class="in" style="margin-top: 4px; display: flex; align-items: center; gap: 6px;">
+          <span style="width: 7px; height: 7px; border-radius: 999px; background: var(--ok);"></span>DevDeck bot</div>
+          <div class="note" style="margin-top: 3px;">A bot, never a bare agent &mdash; a bot is what gives an unattended run a goal, a place and a record.</div>
+        </div>
+        <div><div class="cap">Do what</div><div class="in" style="margin-top: 4px; height: 44px;">Draft the release notes for v0.4 from the closed items</div></div>
+        <div><div class="cap">By</div>
+          <div style="display: flex; gap: 6px; margin-top: 4px;">
+            <div class="in" style="flex: 1.2;">Fri 25</div>
+            <div class="in" style="flex: 1; font-family: ui-monospace, Consolas, monospace;">16:00</div>
+          </div>
+        </div>
+        <div><div class="cap">Lands as</div>
+          <div style="border: 1px solid var(--line); border-radius: 7px; padding: 8px; margin-top: 4px;">
+            <div style="font-size: 11px; color: var(--ink); font-weight: 600;">A work item on Ship v0.4</div>
+            <div class="note" style="margin-top: 3px;">due 16:00, claimed by the bot. It shows on this calendar as agent time, and in the feature thread as a claim.</div>
+          </div>
+        </div>
+        <div class="tog"><span class="knob on"><i></i></span>
+          <span style="font-size: 11px; color: var(--ink);">Report back here<div class="note">a line in the thread when it is done or stuck</div></span>
+        </div>
+        <div class="tog"><span class="knob"><i></i></span>
+          <span style="font-size: 11px; color: var(--ink);">May act unattended<div class="note">off &mdash; anything needing approval waits for you</div></span>
+        </div>
+        <div class="cta">Hand it over</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 16px; align-items: flex-start; border-top: 1px solid var(--line); padding-top: 11px;">
+    <div style="flex: 1;">
+      <div class="cap">Why not one form with a kind dropdown</div>
+      <div class="note" style="margin-top: 4px; line-height: 1.6;">Because the fields are not the same fields. A focus session has no repeat, a habit has no start time, and a handover has an owner. A single form would show you eight fields to fill in three.</div>
+    </div>
+    <div style="flex: 1;">
+      <div class="cap">What the tabs cost us</div>
+      <div class="note" style="margin-top: 4px; line-height: 1.6;">Event and Routine ship as they are &mdash; both are <span style="font-family: ui-monospace, Consolas, monospace;">schedules</span> rows today. Focus needs a start time it does not have. Habit needs a table. Ask a bot needs the delegate path wired to a due date.</div>
+    </div>
+    <div style="flex: 1;">
+      <div class="cap">The one refusal</div>
+      <div class="note" style="margin-top: 4px; line-height: 1.6;">There is no &ldquo;wake agent X at 9am&rdquo;. It was left out on purpose and stays out: a naked agent on a timer has no goal, no place to write and nobody to ask. The bot tab is the supported shape of that wish.</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', panel: '#11141c', raise: '#151923', hover: '#232b3b', line: '#1e293b',
+          line2: '#334155', ink: '#e2e8f0', body: '#cbd5e1', dim: '#94a3b8', muted: '#64748b',
+          faint: '#475569', accent: '#818cf8', ok: '#4ade80', warn: '#fbbf24', err: '#f87171', hb: '#22d3ee' }
+      : { app: '#e9ebf0', panel: '#fdfdfe', raise: '#f0f2f6', hover: '#e7eaf1', line: '#d9dee7',
+          line2: '#c3cbd8', ink: '#16181d', body: '#333a45', dim: '#5a6472', muted: '#7d8794',
+          faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d', warn: '#b45309', err: '#dc2626', hb: '#0e7490' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

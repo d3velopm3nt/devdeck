@@ -1,0 +1,111 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: var(--accent); } a:hover { color: var(--ink); }
+    .head { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .chip { display: inline-flex; align-items: center; gap: 4px; font-size: 9px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; padding: 2px 6px; border-radius: 999px; }
+    .btn { font-size: 11.5px; color: var(--dim); border: 1px solid var(--line2); border-radius: 6px; padding: 5px 12px; background: transparent; }
+    .btn.on { color: #fff; background: #4f46e5; border-color: #4f46e5; }
+    .btn.danger { color: #fff; background: rgb(220 38 38 / .8); border-color: rgb(220 38 38 / .8); }
+    .mono { font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; }
+    .reach { display: flex; align-items: flex-start; gap: 9px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 11.5px; line-height: 1.5; }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --scrim: {{c.scrim}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --menu: {{c.menu}}; --hover: {{c.hover}}; --line: {{c.line}}; --line2: {{c.line2}}; --line3: {{c.line3}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; width: 760px; height: 730px; background: var(--scrim); box-sizing: border-box; padding: 24px 80px; display: flex; align-items: center;">
+
+  <div style="width: 600px; border: 1px solid rgb(248 113 113 / .45); border-radius: 12px; background: var(--menu); box-shadow: 0 18px 50px rgb(0 0 0 / .45); overflow: hidden;">
+
+    <div style="padding: 14px 18px; border-bottom: 1px solid var(--line); background: rgb(248 113 113 / .07); display: flex; align-items: center; gap: 11px;">
+      <span style="width: 34px; height: 34px; border-radius: 10px; background: rgb(248 113 113 / .16); color: var(--err); display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3.5 21 19H3z"></path><path d="M12 10v4M12 16.5h.01"></path></svg></span>
+      <div style="min-width: 0;">
+        <div style="font-size: 14px; font-weight: 600; color: var(--ink);">Read this before installing</div>
+        <div class="mono" style="font-size: 10.5px; color: var(--muted); margin-top: 2px;">jmk-dev/agent-swarm-mcp · v0.0.3</div>
+      </div>
+      <span style="margin-left: auto; color: var(--muted);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M6 6l12 12M18 6 6 18"></path></svg></span>
+    </div>
+
+    <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 16px;">
+
+      <div style="font-size: 12px; line-height: 1.65; color: var(--body);">This one is new, it has one maintainer, and it has no licence file at all. Without a licence you have no right to use it — not commercially, and strictly speaking not at all.</div>
+
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;">
+        <div style="border: 1px solid var(--line); border-radius: 9px; background: var(--raise); padding: 9px 11px;">
+          <div style="font-size: 15px; color: var(--ink); font-weight: 600;">41</div>
+          <div style="font-size: 10px; color: var(--muted); margin-top: 2px;">stars</div>
+        </div>
+        <div style="border: 1px solid var(--line); border-radius: 9px; background: var(--raise); padding: 9px 11px;">
+          <div style="font-size: 15px; color: var(--ink); font-weight: 600;">1</div>
+          <div style="font-size: 10px; color: var(--muted); margin-top: 2px;">contributor</div>
+        </div>
+        <div style="border: 1px solid rgb(248 113 113 / .35); border-radius: 9px; background: rgb(248 113 113 / .06); padding: 9px 11px;">
+          <div style="font-size: 15px; color: var(--err); font-weight: 600;">none</div>
+          <div style="font-size: 10px; color: var(--muted); margin-top: 2px;">licence file</div>
+        </div>
+      </div>
+
+      <div>
+        <div style="display: flex; align-items: baseline; gap: 8px;">
+          <span class="head" style="color: var(--err);">What it says it can reach</span>
+          <span style="margin-left: auto; font-size: 10.5px; color: var(--muted);">from its own manifest</span>
+        </div>
+        <div style="margin-top: 4px;">
+          <div class="reach" style="border-top: none;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" style="color: var(--err); flex-shrink: 0; margin-top: 1px;"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v5M12 16h.01"></path></svg>
+            <div><span style="color: var(--ink);">Spawns any process</span><div style="color: var(--muted); font-size: 10.5px; margin-top: 2px;">It launches sub-agents as child processes, outside DevDeck's supervision. They will not appear in Processes.</div></div>
+          </div>
+          <div class="reach">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" style="color: var(--err); flex-shrink: 0; margin-top: 1px;"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v5M12 16h.01"></path></svg>
+            <div><span style="color: var(--ink);">Any host on the network</span><div style="color: var(--muted); font-size: 10.5px; margin-top: 2px;">No host list. Your API keys are reachable to whatever it runs.</div></div>
+          </div>
+          <div class="reach">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" style="color: var(--warn); flex-shrink: 0; margin-top: 1px;"><path d="M12 3.5 21 19H3z"></path><path d="M12 10v4M12 16.5h.01"></path></svg>
+            <div><span style="color: var(--ink);">Reads outside the project</span><div style="color: var(--muted); font-size: 10.5px; margin-top: 2px;">It asks for your home directory, not the repository.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="border: 1px solid var(--line); border-radius: 9px; background: var(--raise); padding: 10px 12px;">
+        <div class="head">What DevDeck checked</div>
+        <div style="font-size: 11.5px; line-height: 1.6; color: var(--body); margin-top: 5px;">Nothing. There is no review, no scanner and no reputation score behind this screen. It read the repo's manifest and put what it claims in front of you — a repo that lies in its manifest will look clean here.</div>
+      </div>
+    </div>
+
+    <div style="padding: 12px 18px; border-top: 1px solid var(--line); background: var(--panel); display: flex; align-items: center; gap: 8px;">
+      <button class="btn">Cancel</button>
+      <span style="margin-left: auto; display: flex; gap: 8px;">
+        <button class="btn">Install, grant nothing</button>
+        <button class="btn danger">Install anyway</button>
+      </span>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', scrim: '#07090d', panel: '#11141c', raise: '#151923', menu: '#1a1f2b',
+          hover: '#232b3b', line: '#1e293b', line2: '#334155', line3: '#64748b', ink: '#e2e8f0',
+          body: '#cbd5e1', dim: '#94a3b8', muted: '#64748b', faint: '#475569', accent: '#818cf8',
+          ok: '#4ade80', warn: '#fbbf24', err: '#f87171' }
+      : { app: '#e9ebf0', scrim: '#97999c', panel: '#f6f7f9', raise: '#f0f2f6', menu: '#ffffff',
+          hover: '#e7eaf1', line: '#d9dee7', line2: '#c3cbd8', line3: '#9aa5b5', ink: '#16181d',
+          body: '#333a45', dim: '#5a6472', muted: '#7d8794', faint: '#a5aebb', accent: '#4f46e5',
+          ok: '#15803d', warn: '#b45309', err: '#dc2626' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

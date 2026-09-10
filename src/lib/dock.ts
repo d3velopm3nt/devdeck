@@ -5,6 +5,7 @@
 import type { DockviewApi } from 'dockview-react'
 import * as ipc from './ipc'
 import { useApp } from '../store'
+import { useAiw } from './aiwStore'
 
 let api: DockviewApi | null = null
 
@@ -81,6 +82,45 @@ export function openEditor(kind: EditorKind, id: number, _title?: string, projec
   useApp.getState().openSheet({ kind, id, projectId: projectId ?? null })
 }
 
+/// Open an agent's own page — provider, model, instructions, permissions.
+///
+/// From a pill in a thread, mostly: "dev-a is on the mock provider" is only
+/// useful if changing that is one click away.
+export function openAgentSettings(id: string) {
+  useApp.getState().setRailView('aiworkspace')
+  useAiw.getState().openAgent(id)
+}
+
+/// Open (or focus) the Assistant's own conversation as a document.
+export function openAssistant() {
+  if (!api) return
+  useApp.getState().setRailView('projects')
+  const id = 'assistant-thread'
+  const existing = api.getPanel(id)
+  if (existing) {
+    existing.api.setActive()
+    return
+  }
+  addToMain({ id, component: 'assistant-thread', title: 'Assistant' })
+  api.getPanel(id)?.api.setActive()
+}
+
+/// Open (or focus) a node's thread — the first thing a click on the tree
+/// does now. Every level has one, which is the whole model: you talk to a
+/// workspace, a folder or a project, and what differs is what it can say.
+export function openNodeThread(nodeId: number, title: string) {
+  if (!api) return
+  useApp.getState().setRailView('projects')
+  const id = `node-thread-${nodeId}`
+  const existing = api.getPanel(id)
+  if (existing) {
+    existing.api.setActive()
+    return
+  }
+  addToMain({ id, component: 'node-thread', title, params: { id: nodeId } })
+  api.getPanel(id)?.api.setActive()
+}
+
 /// Open (or focus) the personalized detail page for a space (project) as
 /// a main-area tab.
 export function openSpace(projectId: number, title: string) {
@@ -98,6 +138,24 @@ export function openSpace(projectId: number, title: string) {
 
 /// Open (or focus) the service page — live status, config, run history and
 /// log tail for one service — as a document tab.
+/// Open (or focus) a bot as a document tab. A bot is a file in a folder, and
+/// everything a folder offers opens as a document here — the Bots page is the
+/// index, this is the thing.
+export function openBot(nodeId: number, title: string, ask = false) {
+  if (!api) return
+  useApp.getState().setRailView('projects')
+  const id = `bot-${nodeId}`
+  const existing = api.getPanel(id)
+  if (existing) {
+    existing.api.setActive()
+    return
+  }
+  // `ask` opens the interview straight away, and only ever on a bot that was
+  // just made — a page that re-asks every time you visit is a page you close.
+  addToMain({ id, component: 'bot-detail', title, params: { id: nodeId, ask } })
+  api.getPanel(id)?.api.setActive()
+}
+
 export function openService(serviceId: number, title: string) {
   if (!api) return
   useApp.getState().setRailView('projects')
@@ -112,6 +170,20 @@ export function openService(serviceId: number, title: string) {
 }
 
 /// Open (or focus) the setup page for a project or folder as a main tab.
+/// The page for a node the app has no dedicated page for — a Topic, an Area,
+/// a Client. Projects have the dashboard; this is everything else.
+export function openNodeConfig(nodeId: number, title: string) {
+  if (!api) return
+  useApp.getState().setRailView('projects')
+  const id = `node-config-${nodeId}`
+  const existing = api.getPanel(id)
+  if (existing) {
+    existing.api.setActive()
+    return
+  }
+  addToMain({ id, component: 'node-config', title, params: { id: nodeId } })
+}
+
 export function openNodeSetup(nodeId: number, title: string) {
   if (!api) return
   useApp.getState().setRailView('projects')
@@ -124,6 +196,73 @@ export function openNodeSetup(nodeId: number, title: string) {
   // "· settings" keeps this tab distinguishable from the project's dashboard
   // tab, which carries the bare project name.
   addToMain({ id, component: 'node-setup', title: `${title} · settings`, params: { id: nodeId } })
+}
+
+/// One of a project's AI views, as a document.
+///
+/// Keyed by project as well as kind, so `tyrex`'s Git and `assetx`'s Assistant
+/// are two tabs rather than one that keeps changing what it points at — which
+/// is the thing the old section row could not do.
+export type AiwDoc = 'assistant' | 'context' | 'git' | 'features'
+
+const AIW_TITLES: Record<AiwDoc, string> = {
+  assistant: 'Assistant',
+  context: 'Context',
+  git: 'Git',
+  features: 'Features',
+}
+
+export function openAiwDoc(kind: AiwDoc, projectId: string, projectName: string) {
+  const api = dockApi()
+  if (!api) return
+  const id = `aiw-${kind}-${projectId}`
+  const existing = api.getPanel(id)
+  if (existing) {
+    existing.api.setActive()
+    return
+  }
+  api.addPanel({
+    id,
+    component: `aiw-${kind}`,
+    // The project is in the title because a tab row spanning projects is
+    // unreadable without it.
+    title: `${AIW_TITLES[kind]} · ${projectName}`,
+    params: { projectId },
+  })
+}
+
+/// Open (or focus) a file as a document.
+///
+/// In the dock rather than in the sidebar: the surface is for real documents,
+/// and a file is one — which is also how it lands beside the terminal you are
+/// running it in, with tabs and splits, without any of that being written
+/// here.
+///
+/// Keyed by node, root and path, so the same file from the vault and from the
+/// repository are two tabs. They are two files.
+export function openFile(
+  nodeId: number,
+  rel: string,
+  /// `whole` is the vault read from its root rather than through a node —
+  /// the only way to reach `.devdeck/team`, which belongs to no node.
+  root: 'work' | 'vault' | 'whole',
+  title?: string,
+) {
+  if (!api) return
+  useApp.getState().setRailView('projects')
+  const id = `file-${nodeId}-${root}-${rel}`
+  const existing = api.getPanel(id)
+  if (existing) {
+    existing.api.setActive()
+    return
+  }
+  addToMain({
+    id,
+    component: 'file',
+    title: title ?? rel.split('/').pop() ?? rel,
+    params: { nodeId, rel, root },
+  })
+  api.getPanel(id)?.api.setActive()
 }
 
 export function openTerminalPanel(ptyId: number, title: string) {

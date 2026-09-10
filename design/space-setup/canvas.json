@@ -1,0 +1,46 @@
+{
+  "artboards": [
+    { "file": "Start.dc.html", "title": "1 · What is it for", "x": 0, "y": 0, "w": 1120, "h": 800 },
+    { "file": "Main.dc.html", "title": "2 · The draft — Fitness, Personal", "x": 1240, "y": 0, "w": 1120, "h": 860 },
+    { "file": "Review.dc.html", "title": "3 · Exactly what it makes", "x": 2480, "y": 0, "w": 1120, "h": 760 },
+    { "file": "Business.dc.html", "title": "2b · The same step — Innotrack, Business", "x": 1240, "y": 980, "w": 1120, "h": 860 }
+  ],
+  "annotations": [
+    {
+      "id": "premise",
+      "x": 0,
+      "y": -210,
+      "w": 460,
+      "text": "Today a new workspace is a window.prompt for a name.\n\nThis drafts the space instead: pick what it is for, get a first cut you can edit, then see exactly what lands on disk and on the clock before anything is written."
+    },
+    {
+      "id": "kind-is-a-starter",
+      "x": 520,
+      "y": -210,
+      "w": 420,
+      "text": "Five kinds — two lean Business, two lean Personal, one neutral.\n\nThe kind only chooses what gets drafted. It is not a new kind of node to live with: afterwards Fitness is a folder like any other, and the vault still derives kind from depth.\n\nAnd the tag is not tied to the kind. It suggests; you decide."
+    },
+    {
+      "id": "assistant-not-chat",
+      "x": 1240,
+      "y": -210,
+      "w": 420,
+      "text": "The assistant drafts and explains, it does not interview. One line at the bottom redrafts what is above.\n\nSame pattern as the bot: a blank form is a worse question than a wrong answer."
+    },
+    {
+      "id": "not-created",
+      "x": 2480,
+      "y": -210,
+      "w": 420,
+      "text": "\"Not created\" is the half nobody states. Saying what will NOT happen is what makes the list above trustworthy — the same discipline as the bot page saying it will refuse every call."
+    },
+    {
+      "id": "two-drafts",
+      "x": 0,
+      "y": 980,
+      "w": 460,
+      "text": "The same screen, the other kind — the test for whether two kinds are really two.\n\nBusiness gets Clients / Money / Marketing and a Monday-to-Friday rhythm on work hours. Personal gets areas and evenings. No repositories are assumed in either: a product goes in later as a folder, and becomes a project when you give it a repository.\n\nThe extra panel is the one thing a business space reaches for that a personal one usually will not — a command across every repository. Named, not drafted: a wrong command is worse than none."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

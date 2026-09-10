@@ -1,0 +1,176 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background: #0b0e14; }
+    a { color: #818cf8; } a:hover { color: #a5b4fc; }
+    .brand { display: flex; align-items: center; gap: 6px; padding: 0 11px; font-size: 12.5px; color: #e2e8f0; font-weight: 500; }
+    .mi { padding: 0 9px; font-size: 12px; color: #cbd5e1; display: flex; align-items: center; border-radius: 4px; }
+    .tab { display: flex; align-items: center; padding: 0 12px; font-size: 12.5px; color: #94a3b8; border-right: 1px solid #1e293b; }
+    .tab.on { background: #0d1017; color: #e2e8f0; font-weight: 600; box-shadow: inset 0 2px 0 #6366f1; }
+    /* A stripe button: icon over a short label, so the edge is readable
+       without a tooltip and without rotating type. */
+    .stripe {
+      width: 100%; display: flex; flex-direction: column; align-items: center; gap: 2px;
+      padding: 6px 0 5px; border-radius: 5px; color: #64748b; position: relative;
+    }
+    .stripe.on { background: #151923; color: #e2e8f0; }
+    .stripe .lb { font-size: 8.5px; letter-spacing: 0.02em; }
+    .bar { position: absolute; left: 0; top: 6px; bottom: 6px; width: 2.5px; border-radius: 2px; background: #6366f1; }
+    .ib { width: 21px; height: 21px; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #94a3b8; }
+    .row { display: flex; align-items: center; gap: 6px; padding: 3px 6px; border-radius: 4px; font-size: 12.5px; color: #cbd5e1; white-space: nowrap; }
+    .ind { display: flex; width: 18px; flex: none; align-items: center; justify-content: center; }
+    .bstripe { display: flex; align-items: center; gap: 5px; padding: 0 9px; height: 100%; font-size: 11px; color: #64748b; }
+    .bstripe.on { background: #151923; color: #e2e8f0; box-shadow: inset 0 -2px 0 #6366f1; }
+  </style>
+</helmet>
+
+<div style="width: 900px; height: 672px; background: #0b0e14; display: flex; flex-direction: column; overflow: hidden">
+
+  <!-- TITLE BAR — menus come with the IDE convention, so B includes A's bar -->
+  <div style="display: flex; align-items: stretch; height: 30px; flex: none; background: #11141c; border-bottom: 1px solid #1e293b">
+    <div class="brand"><span style="color: #818cf8; font-weight: 600">&#10095;_</span> DevDeck</div>
+    <div style="width: 1px; margin: 8px 0; background: #1e293b"></div>
+    <div style="display: flex; align-items: center; gap: 1px; padding: 0 8px">
+      <span class="mi">File</span><span class="mi">View</span><span class="mi">Build</span><span class="mi">Help</span>
+    </div>
+    <div style="flex: 1"></div>
+    <div style="display: flex; align-items: center; gap: 8px; padding: 0 10px">
+      <span style="display: inline-flex; align-items: center; gap: 4px; border-radius: 4px; background: rgb(74 222 128 / 0.14); padding: 2px 7px; font-size: 11px; color: #4ade80">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>v0.3.1
+      </span>
+      <span style="width: 21px; height: 21px; border-radius: 50%; background: #6366f1; color: #fff; font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center">DT</span>
+    </div>
+  </div>
+
+
+  <!-- WORKSPACES — their own row, so the menus are not sharing a line with them -->
+  <div style="display: flex; align-items: stretch; height: 28px; flex: none; background: #11141c; border-bottom: 1px solid #1e293b">
+    <div class="tab">Innotrack</div>
+    <div class="tab on">Demo</div>
+    <div class="tab" style="color: #475569; border-right: 0">+</div>
+    <div style="flex: 1"></div>
+  </div>
+
+  <!-- RUN BAR — the IDE's other habit: what you are about to run, always in reach -->
+  <div style="display: flex; align-items: center; gap: 8px; height: 30px; flex: none; padding: 0 10px; background: #0d1017; border-bottom: 1px solid #1e293b">
+    <span style="display: flex; align-items: center; gap: 6px; border: 1px solid #1e293b; border-radius: 5px; background: #11141c; padding: 3px 8px; font-size: 11.5px; color: #cbd5e1">
+      <span class="av" style="width: 15px; height: 15px; border-radius: 4px; background: #f472b6; color: #fff; font-size: 7px; font-weight: 700; display: flex; align-items: center; justify-content: center">TP</span>
+      TyreX Platform
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+    </span>
+    <span style="display: flex; align-items: center; gap: 6px; border: 1px solid #1e293b; border-radius: 5px; background: #11141c; padding: 3px 8px; font-size: 11.5px; color: #cbd5e1">
+      dev
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+    </span>
+    <span style="display: flex; align-items: center; justify-content: center; width: 24px; height: 22px; border-radius: 5px; background: rgb(74 222 128 / 0.16); color: #4ade80">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5v14l11-7z"/></svg>
+    </span>
+    <span style="display: flex; align-items: center; justify-content: center; width: 24px; height: 22px; border-radius: 5px; color: #64748b">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="5" y="5" rx="2"/></svg>
+    </span>
+    <div style="flex: 1"></div>
+    <span style="font-size: 10.5px; color: #475569">feat/tyre-dashboard-views</span>
+  </div>
+
+  <div style="flex: 1; display: flex; min-height: 0">
+
+    <!-- LEFT STRIPE — tool windows, named -->
+    <div style="width: 58px; flex: none; display: flex; flex-direction: column; gap: 2px; padding: 6px 4px; background: #0b0e14; border-right: 1px solid #1e293b">
+      <div class="stripe on"><span class="bar"></span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+        <span class="lb">Project</span>
+      </div>
+      <div class="stripe">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+        <span class="lb">Git</span>
+      </div>
+      <div class="stripe">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="m8 7 4-4 4 4"/><path d="M3 12h18"/></svg>
+        <span class="lb">Agents</span>
+      </div>
+      <div class="stripe">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>
+        <span class="lb">Data</span>
+      </div>
+      <div style="flex: 1"></div>
+      <div class="stripe">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="7" rx="2"/><path d="M16 21H8"/></svg>
+        <span class="lb">Machine</span>
+      </div>
+    </div>
+
+    <!-- TOOL WINDOW — its own header, its own toolbar, its own close -->
+    <div style="width: 288px; flex: none; background: #11141c; border-right: 1px solid #1e293b; display: flex; flex-direction: column; min-height: 0">
+      <div style="display: flex; align-items: center; gap: 3px; flex: none; height: 28px; padding: 0 4px 0 10px; background: #0d1017; border-bottom: 1px solid #1e293b">
+        <span style="min-width: 0; flex: 1; font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #94a3b8">Project</span>
+        <span class="ib"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>
+        <span class="ib"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 15 5-5 5 5"/><path d="m7 9 5-5 5 5"/></svg></span>
+        <span class="ib"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></span>
+        <span class="ib"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span>
+      </div>
+
+      <!-- breadcrumb, the IDE's answer to "where am I" -->
+      <div style="display: flex; align-items: center; gap: 5px; flex: none; padding: 5px 10px; border-bottom: 1px solid #1e293b; font-size: 10.5px; color: #64748b">
+        <span>Demo</span>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#334155" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        <span style="color: #cbd5e1">TyreX Platform</span>
+      </div>
+
+      <div style="padding: 4px 5px; display: flex; flex-direction: column; gap: 1px; min-height: 0; overflow: hidden">
+        <div class="row" style="color: #e2e8f0">
+          <span class="ind" style="color: #94a3b8"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+          <span class="ind" style="color: #4ade80"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
+          <span>TyreX</span>
+        </div>
+        <div class="row" style="padding-left: 26px; color: #94a3b8; font-size: 12px">
+          <span class="ind"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
+          <span>Commands</span><span style="margin-left: auto; font-size: 10px; color: #475569">12</span>
+        </div>
+        <div class="row" style="padding-left: 26px; color: #94a3b8; font-size: 12px">
+          <span class="ind"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+          <span>Services</span><span style="margin-left: auto; font-size: 10px; color: #475569">10</span>
+        </div>
+        <div class="row" style="padding-left: 52px; font-size: 12px">
+          <span style="width: 6px; height: 6px; border-radius: 50%; background: #4ade80; flex: none"></span> dev
+          <span style="margin-left: auto; font-size: 10px; color: #475569">:5173</span>
+        </div>
+        <div class="row" style="padding-left: 52px; font-size: 12px">
+          <span style="width: 6px; height: 6px; border-radius: 50%; background: #334155; flex: none"></span><span style="color: #94a3b8">dev:admin</span>
+        </div>
+        <div class="row" style="color: #e2e8f0; margin-top: 2px">
+          <span class="ind" style="color: #94a3b8"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
+          <span class="ind" style="color: #4ade80"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
+          <span>AssetX</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex: 1; background: #0d1017"></div>
+  </div>
+
+  <!-- BOTTOM STRIPE — the same idea on the other edge -->
+  <div style="display: flex; align-items: stretch; height: 26px; flex: none; background: #0b0e14; border-top: 1px solid #1e293b">
+    <div class="bstripe on">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M3 8h18"/><path d="M3 16h18"/></svg>Logs
+    </div>
+    <div class="bstripe">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 9 3 3-3 3"/></svg>Terminal
+    </div>
+    <div class="bstripe">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 14 4-4 4 4 5-5"/></svg>Processes
+    </div>
+    <div style="flex: 1"></div>
+    <div class="bstripe" style="color: #4ade80">1 running</div>
+    <div class="bstripe">local-first · SQLite</div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

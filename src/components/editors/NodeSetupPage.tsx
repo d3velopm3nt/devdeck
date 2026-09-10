@@ -241,7 +241,8 @@ export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
 
   const save = async () => {
     if (!name.trim()) return
-    await ipc.nodeUpdate(id, { name: name.trim(), path, relPath })
+    await ipc.vaultRename(id, name.trim())
+    await ipc.vaultSetMeta(id, { repo: path })
     await refreshTree()
     props.api.close()
   }

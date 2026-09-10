@@ -1,0 +1,134 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background: #0d1017; }
+    a { color: #818cf8; } a:hover { color: #a5b4fc; }
+    .lbl { font-size: 9.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #475569; }
+    .card { border: 1px solid #1e293b; border-radius: 8px; background: #11141c; }
+    .row { display: flex; align-items: center; gap: 9px; padding: 7px 12px; border-top: 1px solid #1e293b; font-size: 11.5px; }
+    .btn { border-radius: 5px; padding: 3px 10px; font-size: 11px; font-weight: 500; }
+    .st { flex: none; border-radius: 4px; padding: 1px 6px; font-size: 9px; font-weight: 600; }
+  </style>
+</helmet>
+
+<div style="width: 720px; height: 740px; background: #0d1017; padding: 18px 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 11px; overflow: hidden">
+
+  <!-- The goal is the whole session. It stays on screen. -->
+  <div class="card" style="border-color: rgb(129 140 248 / 0.35); background: linear-gradient(180deg, rgb(129 140 248 / 0.07), transparent 70%)">
+    <div style="display: flex; align-items: center; gap: 11px; padding: 12px 13px">
+      <span style="width: 30px; height: 30px; border-radius: 8px; background: rgb(129 140 248 / 0.2); color: #818cf8; display: flex; align-items: center; justify-content: center; flex: none">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+      </span>
+      <div style="min-width: 0; flex: 1">
+        <div style="font-size: 9.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #818cf8">Focus &mdash; 46 min in</div>
+        <div style="margin-top: 2px; font-size: 14px; font-weight: 600; color: #e2e8f0">Get the demo build green</div>
+      </div>
+      <span class="btn" style="border: 1px solid #1e293b; color: #94a3b8">End</span>
+    </div>
+    <div style="height: 3px; background: #1e293b; margin: 0 13px 12px; border-radius: 2px; overflow: hidden">
+      <span style="display: block; width: 52%; height: 100%; background: #818cf8"></span>
+    </div>
+  </div>
+
+  <!-- The one interruption the session allows: something that blocks the goal itself. -->
+  <div class="card" style="flex: none; border-color: rgb(251 191 36 / 0.4)">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 9px 12px 5px">
+      <span class="lbl" style="color: #fbbf24; flex: 1">This one blocks the goal</span>
+      <span style="font-size: 10px; color: #475569">the only thing let through</span>
+    </div>
+    <div style="padding: 0 12px 11px">
+      <div style="font-size: 12.5px; color: #e2e8f0">Release checker needs to run the installer to finish the check</div>
+      <div style="margin-top: 3px; font-size: 11px; line-height: 1.5; color: #94a3b8">
+        It has been Waiting 4 minutes. Nothing else in the goal moves until you answer.
+      </div>
+      <div style="display: flex; gap: 6px; margin-top: 9px">
+        <span class="btn" style="background: #6366f1; color: #fff">Allow it</span>
+        <span class="btn" style="border: 1px solid #1e293b; color: #94a3b8">No &mdash; work around it</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Everything else. A number, not a stream. -->
+  <div class="card" style="flex: none">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 9px 12px">
+      <span class="lbl" style="flex: 1">Held until you finish</span>
+      <span style="font-size: 10px; color: #475569">7</span>
+    </div>
+    <div class="row" style="color: #64748b">
+      <span class="st" style="background: rgb(100 116 139 / 0.18); color: #94a3b8">4</span>
+      <span style="flex: 1">Inbox items from other spaces</span>
+    </div>
+    <div class="row" style="color: #64748b">
+      <span class="st" style="background: rgb(100 116 139 / 0.18); color: #94a3b8">2</span>
+      <span style="flex: 1">Suggestions from the TyreX bot</span>
+    </div>
+    <div class="row" style="color: #64748b">
+      <span class="st" style="background: rgb(100 116 139 / 0.18); color: #94a3b8">1</span>
+      <span style="flex: 1">Doc writer wants a review</span>
+      <span style="font-size: 10px; color: #475569">not in the goal</span>
+    </div>
+    <div style="padding: 7px 12px; border-top: 1px solid #1e293b; font-size: 10.5px; color: #475569">
+      Nothing is dropped. It all arrives the moment you end the session.
+    </div>
+  </div>
+
+  <!-- Drift. Said once, gently, with an out. -->
+  <div class="card" style="flex: none; border-color: rgb(56 189 248 / 0.3)">
+    <div style="display: flex; gap: 10px; padding: 11px 13px">
+      <span style="width: 24px; height: 24px; border-radius: 6px; background: rgb(56 189 248 / 0.16); color: #38bdf8; display: flex; align-items: center; justify-content: center; flex: none">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>
+      </span>
+      <div style="min-width: 0; flex: 1">
+        <div style="font-size: 12.5px; color: #e2e8f0">You have been in <span style="font-family: ui-monospace, Consolas, monospace; color: #cbd5e1">Settings.tsx</span> for 18 minutes</div>
+        <div style="margin-top: 3px; font-size: 11px; line-height: 1.5; color: #94a3b8">
+          That file is not in the goal. Three tabs you opened since 09:40 are not either.
+        </div>
+        <div style="display: flex; gap: 6px; margin-top: 9px">
+          <span class="btn" style="border: 1px solid #1e293b; color: #cbd5e1">Take me back</span>
+          <span class="btn" style="border: 1px solid #1e293b; color: #94a3b8">This is part of it</span>
+          <span class="btn" style="color: #64748b">Change the goal</span>
+        </div>
+        <div style="margin-top: 8px; font-size: 10.5px; color: #475569">
+          It says this once per session. A thing that nags every ten minutes gets turned off in a week.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Agents, scoped to the goal -->
+  <div class="card" style="flex: none">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 9px 12px">
+      <span class="lbl" style="flex: 1">Working on this with you</span>
+      <span style="font-size: 10px; color: #475569">2 of 4 agents &middot; the rest paused</span>
+    </div>
+    <div class="row">
+      <span style="width: 20px; height: 20px; border-radius: 5px; background: #38bdf8; color: #0b0e14; font-size: 7.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none">RE</span>
+      <span style="min-width: 0; flex: 1; color: #e2e8f0">Release checker</span>
+      <span class="st" style="background: rgb(251 191 36 / 0.16); color: #fbbf24">Waiting</span>
+    </div>
+    <div class="row">
+      <span style="width: 20px; height: 20px; border-radius: 5px; background: #fbbf24; color: #0b0e14; font-size: 7.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none">QA</span>
+      <span style="min-width: 0; flex: 1; color: #e2e8f0">Test runner</span>
+      <span class="st" style="background: rgb(74 222 128 / 0.14); color: #4ade80">Working</span>
+    </div>
+  </div>
+
+  <div class="card" style="flex: none; padding: 11px 13px">
+    <div class="lbl">What a focus session is</div>
+    <div style="margin-top: 6px; font-size: 11.5px; line-height: 1.6; color: #cbd5e1">
+      A goal, a clock, and one rule: only something that blocks the goal is allowed to reach you.
+      Everything else &mdash; every space, every bot, every agent that is not on this &mdash; is held and
+      counted. The bots keep working; they just stop talking.
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

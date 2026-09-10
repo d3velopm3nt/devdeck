@@ -1,0 +1,166 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: var(--accent); } a:hover { color: var(--ink); }
+    .opt { display: flex; gap: 11px; border-radius: 6px; padding: 9px 10px; align-items: flex-start; }
+    .opt .ic { width: 26px; height: 26px; flex: none; border-radius: 7px; display: flex;
+               align-items: center; justify-content: center; }
+    .opt b { display: block; font-size: 12.5px; font-weight: 600; color: var(--ink); }
+    .opt span { display: block; font-size: 11px; line-height: 1.5; color: var(--muted); margin-top: 2px; }
+    .cap { font-size: 10px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); }
+    .note { font-size: 11px; line-height: 1.6; color: var(--muted); }
+    .field { border: 1px solid var(--line2); border-radius: 4px; background: var(--raise);
+             padding: 6px 9px; font-size: 12px; color: var(--ink); }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --page: {{c.page}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --menu: {{c.menu}}; --hover: {{c.hover}}; --line: {{c.line}}; --line2: {{c.line2}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; background: var(--app); width: 1180px; height: 720px; padding: 26px 30px; box-sizing: border-box; display: flex; gap: 26px; overflow: hidden;">
+
+  <!-- the picker itself -->
+  <div style="flex: none; width: 380px;">
+    <div class="cap" style="margin-bottom: 9px;">What Add opens</div>
+
+    <div style="border: 1px solid var(--line2); border-radius: 6px; background: var(--menu); padding: 5px; box-shadow: 0 18px 40px rgb(0 0 0 / .35);">
+      <div style="padding: 8px 10px 7px;">
+        <div style="font-size: 12.5px; font-weight: 600; color: var(--ink);">Add to Develtech</div>
+        <div class="note" style="margin-top: 2px;">Four things, and it says which is which.</div>
+      </div>
+
+      <div class="opt" style="background: var(--hover);">
+        <span class="ic" style="background: rgb(129 140 248 / .16); color: var(--accent);">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7h6l2 2h10v10H3z"/><path d="M9 14h6"/></svg>
+        </span>
+        <span style="min-width: 0;">
+          <b>A code project on this machine</b>
+          <span>Choose the repository folder. It records the path and opens setup.</span>
+        </span>
+      </div>
+
+      <div class="opt">
+        <span class="ic" style="background: rgb(148 163 184 / .16); color: var(--dim);">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3v12M6 21v-3M18 9v6M6 15a6 6 0 0 0 6-6h6"/><circle cx="6" cy="18" r="2.6"/><circle cx="6" cy="4" r="1.6"/><circle cx="18" cy="7.5" r="2.6"/></svg>
+        </span>
+        <span style="min-width: 0;">
+          <b>A code project from GitHub</b>
+          <span>Clone it into the workspace, then set it up. Signed in as <i>Develtech</i>.</span>
+        </span>
+      </div>
+
+      <div class="opt">
+        <span class="ic" style="background: rgb(148 163 184 / .16); color: var(--dim);">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7h6l2 2h10v10H3z"/></svg>
+        </span>
+        <span style="min-width: 0;">
+          <b>An area with no code</b>
+          <span>Clients, Marketing, Money. Holds notes, routines and a manager &mdash; no repository.</span>
+        </span>
+      </div>
+
+      <div class="opt">
+        <span class="ic" style="background: rgb(148 163 184 / .16); color: var(--dim);">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h7l2 2h7v10H4z"/><path d="M9 12h6M12 9v6"/></svg>
+        </span>
+        <span style="min-width: 0;">
+          <b>A folder inside a project</b>
+          <span>A subpath of a repository you already have. Pick the project next.</span>
+        </span>
+      </div>
+    </div>
+
+    <div class="note" style="margin-top: 12px;">
+      Opened from the header it asks which workspace first; opened from a workspace row it
+      already knows.
+    </div>
+  </div>
+
+  <!-- step two, for the two that need one -->
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 16px;">
+    <div class="cap">And what each one asks for</div>
+
+    <div style="border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 16px 18px;">
+      <div style="font-size: 12.5px; font-weight: 600; color: var(--ink); margin-bottom: 10px;">A code project on this machine</div>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <span class="field" style="flex: 1; color: var(--muted);">C:\Work\Develtech\source-code\pricing-api</span>
+        <span style="border: 1px solid var(--line2); border-radius: 4px; background: rgb(30 41 59 / .4); padding: 6px 12px; font-size: 12px; color: var(--body);">Choose…</span>
+      </div>
+      <div style="display: flex; gap: 8px; align-items: center; margin-top: 9px;">
+        <span style="font-size: 11.5px; color: var(--muted); width: 44px;">Called</span>
+        <span class="field" style="flex: 1;">pricing-api</span>
+      </div>
+      <div class="note" style="margin-top: 10px;">
+        The name comes from the folder, and you can change it. Nothing is copied or moved &mdash;
+        the project points at where it already lives.
+      </div>
+    </div>
+
+    <div style="border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 16px 18px;">
+      <div style="font-size: 12.5px; font-weight: 600; color: var(--ink); margin-bottom: 10px;">A code project from GitHub</div>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <span class="field" style="flex: 1; color: var(--muted);">Search your repositories…</span>
+      </div>
+      <div style="margin-top: 9px; display: flex; flex-direction: column; gap: 1px;">
+        <div style="display: flex; align-items: center; gap: 8px; border-radius: 4px; padding: 5px 8px; background: var(--hover);">
+          <span style="font-size: 12px; color: var(--ink);">develtech/pricing-api</span>
+          <span style="font-size: 10.5px; color: var(--muted);">TypeScript</span>
+          <span style="flex: 1;"></span>
+          <span style="font-size: 10.5px; color: var(--faint);">updated 2d ago</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; border-radius: 4px; padding: 5px 8px;">
+          <span style="font-size: 12px; color: var(--body);">develtech/trackx-web</span>
+          <span style="font-size: 10.5px; color: var(--muted);">Vue</span>
+          <span style="flex: 1;"></span>
+          <span style="font-size: 10.5px; color: var(--faint);">updated 3w ago</span>
+        </div>
+      </div>
+      <div class="note" style="margin-top: 10px;">
+        Clones into the workspace folder, then the same setup as above. This modal already
+        exists &mdash; it is reachable from the workspace menu today and joins the picker.
+      </div>
+    </div>
+
+    <div style="border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 16px 18px;">
+      <div style="font-size: 12.5px; font-weight: 600; color: var(--ink); margin-bottom: 8px;">The other two ask for a name, and that is all</div>
+      <div class="note">
+        An area with no code is a folder in the vault with a name &mdash; it takes routines, notes
+        and a manager, and never a repository. A folder inside a project asks which project, then
+        the subpath. Both are one field and Enter.
+      </div>
+    </div>
+
+    <div style="margin-top: auto; border-left: 2px solid var(--accent); padding: 2px 0 2px 12px;">
+      <div class="note" style="color: var(--dim);">
+        Deliberately not here: a &ldquo;new empty repository&rdquo; option. Creating a git repo is
+        a thing a person does in their own tools, and an app that quietly runs
+        <span style="font-family: ui-monospace, Consolas, monospace;">git init</span> somewhere is
+        one you stop trusting with your folders. Say if you want it and it goes in.
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', page: '#0d1017', panel: '#11141c', raise: '#151923', menu: '#1a1f2b',
+          hover: '#232b3b', line: '#1e293b', line2: '#334155', ink: '#e2e8f0', body: '#cbd5e1',
+          dim: '#94a3b8', muted: '#64748b', faint: '#475569', accent: '#818cf8', ok: '#4ade80' }
+      : { app: '#e9ebf0', page: '#f6f7f9', panel: '#fdfdfe', raise: '#f0f2f6', menu: '#ffffff',
+          hover: '#e7eaf1', line: '#d9dee7', line2: '#c3cbd8', ink: '#16181d', body: '#333a45',
+          dim: '#5a6472', muted: '#7d8794', faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

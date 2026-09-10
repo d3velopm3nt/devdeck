@@ -1,0 +1,30 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 900, "h": 672, "title": "A · Menu bar + panel header" },
+    { "file": "ToolWindows.dc.html", "x": 1020, "y": 0, "w": 900, "h": 672, "title": "B · IDE tool windows" }
+  ],
+  "annotations": [
+    {
+      "id": "option-a",
+      "x": 0,
+      "y": 752,
+      "w": 420,
+      "text": "A — MENU BAR + PANEL HEADER\n\nReal File / Edit / View / Build / Help menus replace the one\nDevDeck dropdown. The panel's two filled buttons become quiet\nicon actions, and a filter appears — the tree has outgrown\nscrolling.\n\nKeeps the shell model exactly as it is.\nLower risk, smaller change, less distinctive."
+    },
+    {
+      "id": "option-b",
+      "x": 1020,
+      "y": 752,
+      "w": 420,
+      "text": "B — IDE TOOL WINDOWS\n\nThe left edge becomes named tool windows (Project, Git, Agents,\nData). The panel gets a header, its own toolbar and a close.\nAdds a run bar and a bottom stripe for Logs / Terminal /\nProcesses.\n\nMore capable and more familiar to anyone who lives in an IDE —\nbut it moves the shell toward the dockable-panel model your\nnotes say was removed on purpose."
+    },
+    {
+      "id": "caveat",
+      "x": 1480,
+      "y": 752,
+      "w": 380,
+      "text": "Both are drawn in DevDeck's own tokens and icons.\nB uses the IDE conventions every editor shares —\nnot any one product's chrome."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

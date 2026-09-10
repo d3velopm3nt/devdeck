@@ -1,0 +1,180 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    .cap { font-size: 9.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+    .day { flex: 1; min-width: 0; border-left: 1px solid var(--line); position: relative; }
+    .dh { height: 30px; display: flex; align-items: center; justify-content: center; gap: 5px; border-bottom: 1px solid var(--line); }
+    .dh b { font-size: 12px; color: var(--ink); font-weight: 600; }
+    .dh span { font-size: 10px; color: var(--faint); }
+    .blk { position: absolute; left: 8px; right: 3px; border-radius: 4px; padding: 1px 5px; box-sizing: border-box;
+           font-size: 9.5px; overflow: hidden; border-left-width: 2px; border-left-style: solid; white-space: nowrap;
+           text-overflow: ellipsis; color: var(--ink); }
+    .gut { position: absolute; left: 2px; width: 3px; border-radius: 999px; background: var(--ag); opacity: .55; }
+    .hr { position: absolute; left: 0; right: 0; border-top: 1px solid var(--line); }
+    .lbl { position: absolute; left: 0; width: 38px; text-align: right; font-size: 9px; color: var(--faint);
+           font-family: ui-monospace, Consolas, monospace; margin-top: -5px; }
+    .tick { width: 5px; height: 5px; border-radius: 999px; }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --hover: {{c.hover}}; --line: {{c.line}}; --line2: {{c.line2}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; --ev: {{c.ev}}; --ag: {{c.ag}}; --rt: {{c.rt}}; --fc: {{c.fc}}; --hb: {{c.hb}}; background: var(--app); width: 1180px; height: 640px; padding: 18px; box-sizing: border-box; display: flex; flex-direction: column; gap: 11px; overflow: hidden;">
+
+  <div style="display: flex; align-items: baseline; gap: 10px;">
+    <span style="font-size: 14px; font-weight: 600; color: var(--ink);">Week &mdash; the same day view, thinner</span>
+    <span style="font-size: 11.5px; color: var(--muted);">Two lanes will not fit seven times over, so agent time becomes the green gutter down each day. Same query, same colours, less room.</span>
+  </div>
+
+  <div style="flex: 1; min-height: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); overflow: hidden; display: flex; flex-direction: column;">
+
+    <!-- day heads -->
+    <div style="display: flex; flex: none;">
+      <div style="width: 42px; flex: none; border-bottom: 1px solid var(--line);"></div>
+      <div class="day" style="border-left: 0;"><div class="dh"><b>Mon</b><span>22</span></div></div>
+      <div class="day"><div class="dh"><b>Tue</b><span>23</span></div></div>
+      <div class="day"><div class="dh"><b>Wed</b><span>24</span></div></div>
+      <div class="day" style="background: rgb(129 140 248 / .05);"><div class="dh"><b style="color: var(--accent);">Thu</b><span>25</span></div></div>
+      <div class="day"><div class="dh"><b>Fri</b><span>26</span></div></div>
+      <div class="day"><div class="dh"><b style="color: var(--dim);">Sat</b><span>27</span></div></div>
+      <div class="day"><div class="dh"><b style="color: var(--dim);">Sun</b><span>28</span></div></div>
+    </div>
+
+    <!-- deadlines row -->
+    <div style="display: flex; flex: none; height: 24px; border-bottom: 1px solid var(--line);">
+      <div style="width: 42px; flex: none; display: flex; align-items: center; justify-content: flex-end; padding-right: 6px;"><span class="cap" style="font-size: 8px;">Due</span></div>
+      <div class="day" style="border-left: 0;"></div>
+      <div class="day"></div>
+      <div class="day" style="display: flex; align-items: center; padding: 0 5px;">
+        <span style="font-size: 9px; color: var(--err); border: 1px solid rgb(248 113 113 / .4); border-radius: 4px; padding: 1px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">TrackX auth &middot; overdue</span>
+      </div>
+      <div class="day" style="display: flex; align-items: center; padding: 0 5px; background: rgb(129 140 248 / .05);">
+        <span style="font-size: 9px; color: var(--warn); border: 1px solid rgb(251 191 36 / .4); border-radius: 4px; padding: 1px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Ship v0.4 &middot; 17:00</span>
+      </div>
+      <div class="day"></div><div class="day"></div><div class="day"></div>
+    </div>
+
+    <!-- habit row -->
+    <div style="display: flex; flex: none; height: 22px; border-bottom: 1px solid var(--line);">
+      <div style="width: 42px; flex: none; display: flex; align-items: center; justify-content: flex-end; padding-right: 6px;"><span class="cap" style="font-size: 8px;">Habits</span></div>
+      <div class="day" style="border-left: 0; display: flex; align-items: center; justify-content: center; gap: 3px;"><span class="tick" style="background: var(--hb);"></span><span class="tick" style="background: var(--hb);"></span><span class="tick" style="background: var(--line2);"></span><span class="tick" style="background: var(--line2);"></span></div>
+      <div class="day" style="display: flex; align-items: center; justify-content: center; gap: 3px;"><span class="tick" style="background: var(--hb);"></span><span class="tick" style="background: var(--line2);"></span><span class="tick" style="background: var(--line2);"></span><span class="tick" style="background: var(--line2);"></span></div>
+      <div class="day" style="display: flex; align-items: center; justify-content: center; gap: 3px;"><span class="tick" style="background: var(--hb);"></span><span class="tick" style="background: var(--hb);"></span><span class="tick" style="background: var(--hb);"></span><span class="tick" style="background: var(--line2);"></span></div>
+      <div class="day" style="display: flex; align-items: center; justify-content: center; gap: 3px; background: rgb(129 140 248 / .05);"><span class="tick" style="background: var(--hb);"></span><span class="tick" style="background: var(--hb);"></span><span class="tick" style="background: var(--line2);"></span><span class="tick" style="background: var(--line2);"></span></div>
+      <div class="day" style="display: flex; align-items: center; justify-content: center; gap: 3px;"><span class="tick" style="background: var(--line2);"></span><span class="tick" style="background: var(--line2);"></span><span class="tick" style="background: var(--line2);"></span><span class="tick" style="background: var(--line2);"></span></div>
+      <div class="day" style="display: flex; align-items: center; justify-content: center; gap: 3px;"><span class="tick" style="background: var(--line2);"></span><span class="tick" style="background: var(--line2);"></span><span class="tick" style="background: var(--line2);"></span><span class="tick" style="background: var(--line2);"></span></div>
+      <div class="day" style="display: flex; align-items: center; justify-content: center; gap: 3px;"><span class="tick" style="background: var(--line2);"></span><span class="tick" style="background: var(--line2);"></span><span class="tick" style="background: var(--line2);"></span><span class="tick" style="background: var(--line2);"></span></div>
+    </div>
+
+    <!-- grid -->
+    <div style="flex: 1; position: relative; overflow: hidden; display: flex;">
+      <div style="position: absolute; inset: 0 0 0 42px;">
+        <div class="hr" style="top: 0;"></div><div class="hr" style="top: 34px;"></div><div class="hr" style="top: 68px;"></div>
+        <div class="hr" style="top: 102px;"></div><div class="hr" style="top: 136px;"></div><div class="hr" style="top: 170px;"></div>
+        <div class="hr" style="top: 204px;"></div><div class="hr" style="top: 238px;"></div><div class="hr" style="top: 272px;"></div>
+        <div class="hr" style="top: 306px;"></div><div class="hr" style="top: 340px;"></div><div class="hr" style="top: 374px;"></div>
+      </div>
+      <div style="position: absolute; inset: 0;">
+        <div class="lbl" style="top: 0;">07:00</div><div class="lbl" style="top: 68px;">09:00</div>
+        <div class="lbl" style="top: 136px;">11:00</div><div class="lbl" style="top: 204px;">13:00</div>
+        <div class="lbl" style="top: 272px;">15:00</div><div class="lbl" style="top: 340px;">17:00</div>
+      </div>
+
+      <div style="width: 42px; flex: none;"></div>
+
+      <!-- Mon -->
+      <div class="day" style="border-left: 0;">
+        <div class="gut" style="top: 34px; height: 68px;"></div>
+        <div class="blk" style="top: 0; height: 16px; border-color: var(--rt); background: var(--raise); color: var(--dim);">Morning routine</div>
+        <div class="blk" style="top: 68px; height: 17px; border-color: var(--ev); background: rgb(99 102 241 / .12);">Standup</div>
+        <div class="blk" style="top: 238px; height: 68px; border-color: var(--fc); background: rgb(245 158 11 / .13);">Deep work &middot; 2h</div>
+        <div class="blk" style="top: 374px; height: 34px; border-color: var(--rt); background: var(--raise); color: var(--dim);">Gym</div>
+      </div>
+
+      <!-- Tue -->
+      <div class="day">
+        <div class="gut" style="top: 102px; height: 40px;"></div>
+        <div class="blk" style="top: 0; height: 16px; border-color: var(--rt); background: var(--raise); color: var(--dim);">Morning routine</div>
+        <div class="blk" style="top: 68px; height: 17px; border-color: var(--ev); background: rgb(99 102 241 / .12);">Standup</div>
+        <div class="blk" style="top: 170px; height: 25px; border-color: var(--rt); background: var(--raise); color: var(--dim);">Lunch</div>
+        <div class="blk" style="top: 238px; height: 51px; border-color: var(--fc); background: rgb(245 158 11 / .13);">Deep work &middot; 90m</div>
+      </div>
+
+      <!-- Wed -->
+      <div class="day">
+        <div class="gut" style="top: 45px; height: 90px;"></div>
+        <div class="blk" style="top: 0; height: 16px; border-color: var(--rt); background: var(--raise); color: var(--dim);">Morning routine</div>
+        <div class="blk" style="top: 68px; height: 17px; border-color: var(--ev); background: rgb(99 102 241 / .12);">Standup</div>
+        <div class="blk" style="top: 136px; height: 17px; border-color: var(--hb); background: rgb(34 211 238 / .10);">Walk &middot; 15m</div>
+        <div class="blk" style="top: 204px; height: 34px; border-color: var(--err); background: rgb(248 113 113 / .09);">Auth decision</div>
+      </div>
+
+      <!-- Thu (today) -->
+      <div class="day" style="background: rgb(129 140 248 / .05);">
+        <div class="gut" style="top: 34px; height: 124px;"></div>
+        <div class="gut" style="top: 204px; height: 66px; background: var(--err); opacity: .6;"></div>
+        <div class="blk" style="top: 0; height: 16px; border-color: var(--rt); background: var(--raise); color: var(--dim);">Morning routine</div>
+        <div class="blk" style="top: 34px; height: 16px; border-color: var(--hb); background: rgb(34 211 238 / .10);">Mobility &middot; 10m</div>
+        <div class="blk" style="top: 68px; height: 17px; border-color: var(--ev); background: rgb(99 102 241 / .12);">Standup</div>
+        <div class="blk" style="top: 136px; height: 16px; border-color: var(--ev); background: rgb(99 102 241 / .12);">Ship checklist</div>
+        <div class="blk" style="top: 238px; height: 68px; border-color: var(--fc); background: rgb(245 158 11 / .13);">Deep work &middot; 2h</div>
+        <div class="blk" style="top: 374px; height: 34px; border-color: var(--rt); background: var(--raise); color: var(--dim);">Gym</div>
+        <div style="position: absolute; left: 0; right: 0; top: 258px; display: flex; align-items: center;">
+          <span style="font-size: 8px; color: #fff; background: var(--err); border-radius: 3px; padding: 0 3px; font-family: ui-monospace, Consolas, monospace;">14:36</span>
+          <span style="flex: 1; height: 1px; background: var(--err);"></span>
+        </div>
+      </div>
+
+      <!-- Fri -->
+      <div class="day">
+        <div class="gut" style="top: 34px; height: 30px; opacity: .35;"></div>
+        <div class="blk" style="top: 0; height: 16px; border-color: var(--rt); background: transparent; color: var(--dim); border-left-style: dashed;">Morning routine</div>
+        <div class="blk" style="top: 68px; height: 17px; border-color: var(--ev); background: transparent; border-left-style: dashed; color: var(--dim);">Standup</div>
+        <div class="blk" style="top: 204px; height: 34px; border-color: var(--ev); background: transparent; border-left-style: dashed; color: var(--dim);">Retro &middot; 1h</div>
+      </div>
+
+      <!-- Sat -->
+      <div class="day">
+        <div class="blk" style="top: 102px; height: 51px; border-color: var(--hb); background: transparent; border-left-style: dashed; color: var(--dim);">Long walk</div>
+      </div>
+
+      <!-- Sun -->
+      <div class="day">
+        <div class="blk" style="top: 272px; height: 34px; border-color: var(--rt); background: transparent; border-left-style: dashed; color: var(--dim);">Week plan</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 18px;">
+    <div style="flex: 1; font-size: 10px; line-height: 1.55; color: var(--muted);"><b style="color: var(--dim);">The gutter</b> is agent working time &mdash; one green stripe per run, red when it failed. You can see the machine's week without it competing with yours.</div>
+    <div style="flex: 1; font-size: 10px; line-height: 1.55; color: var(--muted);"><b style="color: var(--dim);">Ahead of now</b> everything is hollow and dashed: it is intent, not history. Nothing in the future is ever drawn solid.</div>
+    <div style="flex: 1; font-size: 10px; line-height: 1.55; color: var(--muted);"><b style="color: var(--dim);">Two rows above the grid</b> hold what has no duration &mdash; deadlines and habit ticks. Neither belongs on the clock, and both belong on the week.</div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', panel: '#11141c', raise: '#151923', hover: '#232b3b', line: '#1e293b',
+          line2: '#334155', ink: '#e2e8f0', body: '#cbd5e1', dim: '#94a3b8', muted: '#64748b',
+          faint: '#475569', accent: '#818cf8', ok: '#4ade80', warn: '#fbbf24', err: '#f87171',
+          ev: '#818cf8', ag: '#4ade80', rt: '#64748b', fc: '#fbbf24', hb: '#22d3ee' }
+      : { app: '#e9ebf0', panel: '#fdfdfe', raise: '#f0f2f6', hover: '#e7eaf1', line: '#d9dee7',
+          line2: '#c3cbd8', ink: '#16181d', body: '#333a45', dim: '#5a6472', muted: '#7d8794',
+          faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d', warn: '#b45309', err: '#dc2626',
+          ev: '#4f46e5', ag: '#15803d', rt: '#7d8794', fc: '#b45309', hb: '#0e7490' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

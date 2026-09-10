@@ -5,6 +5,7 @@ import './index.css'
 import App from './App.tsx'
 import { CommandWidget } from './widget/CommandWidget'
 import { CaptureToast } from './widget/CaptureToast'
+import { ErrorBoundary } from './ErrorBoundary'
 
 // The same bundle serves every window; the window label selects the UI.
 let label = 'main'
@@ -21,4 +22,8 @@ if (label === 'toast') document.documentElement.dataset.window = 'toast'
 const ui =
   label === 'widget' ? <CommandWidget /> : label === 'toast' ? <CaptureToast /> : <App />
 
-createRoot(document.getElementById('root')!).render(<StrictMode>{ui}</StrictMode>)
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <ErrorBoundary>{ui}</ErrorBoundary>
+  </StrictMode>,
+)

@@ -77,6 +77,45 @@ manager** question. Everything else remaining is business and distribution —
 decisions that are the owner's to make rather than things to be implemented
 past. See *Business / distribution*.
 
+### AI Workspace ✅ built (this cycle, on `feat/ai-workspace`)
+
+Agents and an orchestrator working on your projects, with `.devdeck` as the
+durable, committed source of truth. Built end to end and working against the
+mock provider with no API key; the OpenAI-compatible transport is live, so
+OpenRouter, OpenCode, a local Meridian and anything else speaking that shape
+all work.
+
+- [x] Event bus, `.devdeck` schema, context assembly, checkpoints, staleness
+- [x] Conflict detection driven by events, not polling
+- [x] Tool registry + permission matrix, failing closed
+- [x] Provider seam: Mock, OpenAI-compatible and Anthropic native, all live
+- [x] Credentials via Windows Credential Manager, never SQLite
+- [x] Provider setup UI, agent→provider assignment, Settings page
+- [x] Context export to `CLAUDE.md` / `AGENTS.md`
+- [x] **Approvals** — `approval` blocks the agent and prompts a human, denying
+      on timeout. Advertised to the model, because it is genuinely callable.
+- [x] **The orchestrator** — one assistant you talk to, which delegates to the
+      specialists. Chat surface, durable conversations, memory.
+- [x] **The store split** — personal state lives outside every repo, enforced
+      by refusing to create the store inside one.
+- [x] **Anthropic native transport** — Messages API, x-api-key, reconstructed
+      tool_use/tool_result turns, and its own SSE accumulator (indexed blocks,
+      not OpenAI's delta shape). Test does a real round trip.
+- [x] **Blocking commands moved off the main thread** — a plain
+      `#[tauri::command] fn` runs on the main thread in Tauri v2, so the
+      approval wait froze the window and could never be answered.
+- [x] **Streaming** — SSE on the OpenAI-compatible path, deltas and tool
+      steps to the UI on their own channel. Providers that cannot stream fall
+      back to one late chunk and nothing downstream can tell.
+
+What is left, in the order it matters:
+
+1. **Delegated sessions are fire-and-forget** — started on a thread, visible in
+   Activity, but the chat does not learn when one finishes.
+2. **The life half** — calendar, mail, notes. Needs no new store; needs new
+   tools pointed at the personal one. Deliberately not started: the work half
+   had to be real first.
+
 ### Stash Phase 1 — capture + vault ✅ built
 - [x] `stash_items` table + FTS5 virtual table, migration in `db.rs`
 - [x] `stash.rs`: message-only window + `AddClipboardFormatListener`, handle
@@ -221,7 +260,356 @@ How it works:
 
 ## Designed, not built
 
-Mocks live in `design/`. Open them in a browser; they're clickable.
+### Time — a calendar, a day, and a bot that keeps you to it
+
+Brainstormed 3 September 2026. **The calendar is built** (4 September) — see
+`test-results/calendar/REPORT.md`. The day-plan and the life bot are not.
+
+**Built.** Moments as well as rhythms (`every = "once"` with `at_ms` and
+`duration_min`); `due:` on a work item, in the vault beside the item;
+deadlines that remind themselves on the clock, once per item per day, inside a
+48-hour lead; and a Calendar page with day, week, month and year views over a
+single `calendar_range` query, across every space.
+
+**Redrawn** (5 September, `design/calendar-day/`, canvas at
+https://claude.ai/code/artifact/1999014a-7d04-4eff-9ac2-acb797ff5dde). The day
+was a list with times beside it: every item was a chip inside a slot row, so an
+hour and ten minutes were the same size, and a bot's two-hour run sat on top of
+your lunch. Now a block is as tall as it is long, in one of two lanes — your
+day, and the agents' — which also answers the open question below: the primary
+lane is *both*, side by side, because the point is seeing them at once.
+
+Colour became the **layer** (events, routine, focus, agent time, commands,
+deadlines) and status moved to the left edge: dashed for planned, a live dot
+for running, struck through for done, red with the reason for failed, faded for
+missed. Two rules fell out of placing things — a block never shrinks below
+18px, and keeps a full-strength tick showing its true length when floored; and
+a deadline is a *line*, not a block, because drawing it as a box claims it
+takes an hour. The sidebar holds what has no duration: the month, the layers
+and their counts, the deadlines ahead, today's reminders. Focus sessions are
+drawn for the first time — `focus_sessions` always had a start and an end, and
+nothing was reading them.
+
+**Step 2 is built** (5 September): `remind_min` on a schedule, so a thing can
+warn you ten minutes, an hour or a day before it starts — said once per
+occurrence, which `last_remind` is for, because the clock ticks every thirty
+seconds; and `feature` / `work_item`, so a schedule can say what it is for and
+the calendar can carry that through to the day and the event page. Both columns
+live in the database rather than the vault: the teammates here are bots and
+agents, not people cloning the repository, and a reminder to look at something
+is not part of the project's record of that thing.
+
+**Still to do.** Micro-habits and the free-slot offer — now its own entry
+below, because it is a feature rather than a column. Persisting agent sessions,
+which has moved to the bots and agents work, since the calendar is only one of
+the places that suffers from runs living in memory. Typing your own routine
+into the day grid — personal store, never a repository. Editing from the
+calendar rather than jumping to the page that owns the thing. And the bot whose
+space is you. Deliberately cut: a "meetings" counter, which counted nothing,
+since there are no people, invitations or attendance behind it.
+
+**Known rough edge**: the goal link can dangle. Rename or delete a feature in
+the vault and the schedule still names the old slug; it shows a name that no
+longer resolves rather than saying the feature is gone.
+
+The rest of this entry is the original brainstorm, kept because the reasoning
+still applies to what is left.
+
+**What it is.** A calendar in the sidebar with day, week, month and year views,
+across every space at once: bot schedules and the wakes that actually
+happened, features and work items, and deadlines that remind you before they
+land. Under it, a day view on a time grid — 15 minutes by default, settable
+down to 5 — for running the day rather than watching it. And a bot whose space
+is *you*: it wakes through the day, keeps you to the routine, and asks for the
+notes you would not otherwise write down.
+
+**What already exists.** `schedule.rs` runs reminders, commands and bot wakes,
+with per-schedule catch-up — a missed reminder is recorded rather than fired
+late, on purpose. Bots carry the same rhythm in `_bot.md`. Sessions and wakes
+are already in the activity feed, so the past half of a calendar has data
+today.
+
+**What has to be built before any view is worth drawing.** Three gaps, in this
+order:
+
+1. **The scheduler knows rhythms, not moments.** `every` is
+   daily/weekdays/weekly/hourly plus a minute of the day. There is no one-off,
+   no date, no duration, no end — a 2pm meeting on the 11th cannot be said at
+   all. A calendar needs moments as a first-class kind alongside rhythms.
+2. **Work items have no dates.** `id, title, status, assignee, areas` and
+   nothing else, so a calendar of work has nothing to plot. A `due:` on a work
+   item is a change to the vault format — committed, durable, shared truth —
+   and should be decided as one.
+3. **Nothing turns a deadline into a reminder.** Reminders exist; "two days
+   before" is a rule nobody holds.
+
+**The store split applies, and decides the shape.** Your routine, your day
+grid and your notes are *yours*: personal store, never a repository. A work
+item's deadline is the project's: `.devdeck`, in the vault, beside the item.
+The calendar reads both and shows them together — which is the whole point of
+it being one surface.
+
+**Open, and worth deciding before building:** whether the primary lane is your
+time or the system's; and whether "add a calendar" ever means syncing a real
+one (Google, Outlook, ICS) rather than DevDeck keeping its own. The second
+changes the foundation, so it is a decision rather than a detail.
+
+### Managers, roles and the one-to-one — designed, not built
+
+Brainstormed 6 September 2026. This replaces the shape bots have had since
+they were built, and the reason is one sentence: **a bot was pinned to a
+folder, and a manager is not.**
+
+**The inversion.** A marketing manager covers a DevDeck feature *and* the
+TrackX site. That cannot be expressed while a bot is `_bot.md` inside one
+node, and it breaks the thing that made the old model tidy — reporting lines
+were the directory layout. So:
+
+> The tree is the work. The org is the people. They were only ever conflated
+> because a bot lived in a folder.
+
+**A manager owns features, never spaces.** Owning a folder was the trap. One
+owner per feature, because "who is accountable for this" must have an answer;
+any number of managers pulled in beside them. A space is covered by whoever
+owns the features in it, and a space with no owned features shows up as
+unmanaged — which is a fact worth seeing rather than a state to hide.
+
+**What a manager is:** a name, a handle, a role, a goal, a rhythm, a team of
+agents it may put to work, and a portfolio of features across any number of
+spaces. It lives at the vault root — `DevDeck/.devdeck/team/<handle>.md`, one
+file per manager. Not in a space, since it belongs to none of them; not in the
+personal store, which is for things about *you* and your team is not a
+preference. Files stay the truth, the team travels with the vault, and nothing
+lands inside a repository.
+
+**No reporting lines yet.** Everyone reports to you. `reports_to` can arrive
+when there is a manager who should answer to another manager rather than to
+you; the escalation ladder works either way.
+
+**A role carries its skills and its agents.** `botcatalog.rs` already has this
+and reasons about it well — a template holds a goal, a rhythm, steps that
+become work items, standards, skills, and tool offers on a deliberate ladder
+("a skill is words, an agent is words plus permissions, software is a real
+install, self-hosted is something that keeps running"). What changes is what
+applying one *produces*: a manager with a portfolio, not a bot dropped on a
+folder. Hiring a marketing manager brings the marketing skills and its default
+agents with it.
+
+**Skills start implying tools**, the way they do for Claude Code: a skill is a
+folder with a manifest — name, one-line "when to use", a body, and what it
+needs. Two rules keep it honest. *Listing is not loading*: prompts carry names
+and one-liners, bodies load on use, or five skills cost context on every wake.
+*Installing is not granting*: a skill declares `needs: [files:read, terminal]`
+and installing shows you that, but the permission matrix stays the only thing
+that grants. This overlaps the Community module by design — they must be one
+system, not two.
+
+#### Managers working together
+
+`@` reaches **any** manager, not only those below you in a tree — the tree is
+no longer the org, so the old subtree rule in `colleagues()` goes. Pulling
+someone in is free; `@name take "item"` moves the claim through the delegate
+gate, as it already does.
+
+A manager pulled onto an item **lends its own agents** to it. The item stays
+on the owning manager's plan; receipts name both, so accountability does not
+blur. And **a manager always hands off to its team** — managers are strictly
+hands-off, which makes the org legible and has one sharp consequence: a
+manager with no agents can keep a plan and ask questions, and nothing else.
+That is a vacancy, and it should read as one.
+
+**Permissions follow the work, not the worker.** Grants are keyed by agent and
+tool and know nothing about spaces, so lending an agent across spaces would
+quietly carry its powers into another repository. The rule: an agent runs
+under the grants of *the item's space*. One rule, no per-space matrix to
+maintain, and lending can never widen what an agent may touch.
+
+#### The one-to-one
+
+**One shared page, owned by you**, not one per manager: three managers wanting
+fifteen minutes is one meeting.
+
+A question is anchored to a goal, a feature or a work item, and is one of
+three things: unblock me, approve this plan change, or a suggestion. It is not
+a new object — it is a message in the feature's thread, marked as awaiting an
+answer, and the page is an index over those marks. Answering in the thread
+answers it. Two inboxes is one too many.
+
+The rules, which are the difference between a manager and a nuisance:
+
+- **No guessing.** If you do not answer, it asks again — it does not start
+  work it is unsure about. It re-raises on a backoff, never more than once per
+  wake, and meanwhile **carries on with the rest of its plan**. One question
+  must not freeze a space.
+- **Questions never expire.** They stay until answered, or until the manager
+  withdraws one because the work moved on — and withdrawing says so.
+- **Three open per manager.** Past that it prioritises or bundles. A manager
+  with twelve open questions is not managing.
+- **It books a free slot inside your working times**, and if there is none it
+  says *"no free time found this week"* and leaves the question untimed rather
+  than booking you at ten at night.
+- **The event only protects the time.** The page is where you answer; there is
+  no live meeting mode.
+- **An answer that is a decision becomes a decision** in the deck, so the next
+  manager to look does not re-ask. An answer that changes the plan produces a
+  receipt saying what changed.
+
+**Working times live in Settings**: seven days, a start and an end for each,
+one default applied to the weekdays, weekends set separately. They decide
+which gaps are free and when anything may be booked. Managers still wake on
+their own rhythm — a machine working at three in the morning is fine — but
+nothing is ever *booked* outside your hours.
+
+**The ladder**: question → the one-to-one → blocking and going stale → Needs
+you → a deadline at risk → interrupt. And a split that the org model forces:
+**safety approvals still come straight to you**, because a permission is not a
+decision, while **work blockers go to the manager**, who decides whether it
+becomes a question or something they can solve by lending an agent. An agent's
+blocker reaching you directly is a manager being skipped.
+
+#### What it costs, honestly
+
+`bots.rs` keys everything off `node_id` — `colleagues()`, the wake report, the
+permission personas — and all of it moves to a bot id plus a portfolio lookup.
+A manager spanning spaces has no single repository, so context anchors per
+item worked on rather than per bot; the precedent exists, since a parent node
+already says outright that it has no repository. Migration is mechanical: each
+existing bot becomes a manager whose portfolio is that node's features. Copy
+changes too — Home currently says "one per space, awake on a rhythm", which
+stops being true.
+
+**Open**: whether a manager may create work in a space it covers nothing in
+(assumption: no — it asks the owner, or you); what an idle manager does when
+its plan is empty; and whether the organogram page is the first thing built or
+the last.
+
+### Micro-habits and the free slot — designed, not built · `design/calendar-day/`
+
+Step 3 of the calendar board, and the piece that makes the day view something
+you *use* rather than read. The canvas is at
+https://claude.ai/code/artifact/1999014a-7d04-4eff-9ac2-acb797ff5dde — the day
+artboard's habit strip, and the Habit tab on the "one sheet, five kinds"
+composer.
+
+**A habit is the one thing on that board that is not a time.** Everything else
+the calendar knows starts at a moment: a reminder, a routine, a focus session,
+a bot's wake. A habit has a name, a length, and a target for the week —
+"mobility flow, ten minutes, five times" — and no opinion about when. That is
+why it needs its own table rather than another `kind` on `schedules`, and why
+it cannot be half-built: a habit tracker with a fixed time is a routine, and a
+routine you keep missing is a to-do list that nags.
+
+**What it needs.**
+
+1. `habits` — name, minutes, target per week, an optional window (any gap /
+   mornings / evenings), enabled. Personal store: your habits are yours, so
+   SQLite, never the vault.
+2. `habit_ticks` — one row per time you did it, with the day it counted for.
+   Banked, not scheduled: the tick is the record, and the streak is derived
+   from it rather than stored.
+3. **The free-slot finder** — pure arithmetic over items the calendar already
+   returns. Find the gaps after now, take the largest, offer the smallest habit
+   that fits *and* is behind its target. No storage, no new source.
+4. The strip on the day view, the Habit tab in the composer, and the ticks row
+   on the week.
+
+**The rules the design commits to**, and they are the whole difference between
+this and a nagging app:
+
+- **Offered once.** The largest gap after now, one habit, one button. Offer
+  every gap and it is wallpaper by Wednesday.
+- **A missed habit fades, it does not go red.** Red is for something that
+  broke. Not walking today is not a failure of the machine.
+- **Protected time is not free time.** A routine can be marked protected, and
+  the finder never offers it — otherwise lunch is a slot.
+- **Nothing is scheduled behind your back.** Doing it is a click; the calendar
+  never books a habit for you, because a day that fills itself is a day you
+  stop trusting.
+
+**Why it is not built yet**: the two columns before it were one migration
+each, and this is a feature — two tables, a finder, three surfaces. It earns
+its place, but it earns it as a piece of work rather than as a field.
+
+### Bots as teammates — every node is a conversation ✅ built · `design/node-thread/`
+
+Designed 1 September 2026, built 2 September. The canvas is at
+https://claude.ai/code/artifact/536d3183-3086-429a-8645-758ae9d97fcd
+(page 1 is a clickable prototype).
+
+**A bot is a manager, not a worker:** it holds a goal, wakes on a rhythm, and
+puts agents on what it finds. The unit you talk to is a **thread**, and there
+are three kinds on one message model:
+
+- **A node's thread.** Click any level of the tree and talk to it. A project
+  owns a commit, so it answers from real context; a parent owns none, rolls
+  its children up as headlines, and says outright that it has no repository
+  up there.
+- **A feature's thread — the feature is the room.** No new object: the
+  feature already exists in the deck and gains a conversation marked with its
+  slug. Bots and agents collaborate there with `@`.
+- **`@you` is the Inbox.** A message addressed to a person is the only thing
+  that needs attention; everything else is just the thread.
+
+**Being in a thread is free; being handed work is a claim transfer.**
+`@qa look at this` adds a participant and nothing else. `@dev-a take "Fix
+dirty_files"` moves the claim, and goes through the same gate as
+`delegate.start` — refused, with a reason in the thread, when the speaker may
+not delegate. That is how a bot with no agent talks in a room without moving
+anyone's work: its id is one the permission matrix has never heard of.
+
+**Two views.** **Team** is first, opening on **Goals** — every space, grouped
+into Moving / Waiting on you / Quiet — with Features, Work and Bots as tabs of
+the same surface. **Spaces** is the tree, which now goes into the repository:
+real folders and files, with a chip saying which feature a path is part of,
+derived from the work items whose areas name it.
+
+**What this deleted.** The Bots, Work, Events and Scheduler rail entries and
+their pages. Bots and Work are tabs of Team; Events is the bottom bar's raw
+bus and its header says so; the Scheduler is Settings → Routines. The
+Assistant left the rail too: it is the first contact on Team → Bots, and what
+is left of its old surface — providers, agents, permissions, grants — is
+Settings → Assistant.
+
+**Configuration is a sentence, with a receipt.** "Do this every weekday
+morning" goes through the `routine` tool, which asks first and then writes the
+same two things the form writes: a clock row and a line in `_bot.md`.
+Approvals are asked at the natural unit — *Allow once / Allow until morning /
+No* — and "until morning" writes a standing grant for that exact call
+expiring at 06:00 rather than a permission that never ends.
+
+**Review points are not permissions.** `stop_at: [before any push]` in
+`_bot.md` stops the call and says which rule stopped it. Permissions answer
+"may you"; `git` is one tool, so an agent allowed to commit is allowed to
+push. This answers "not without me", which is a different question and lives
+in words rather than in the matrix.
+
+**Routines can be events.** A routine whose trigger is `test.failed`,
+`git.commit.created`, `file.changed` or `conflict.detected` rather than a
+time. The trigger list is deliberately short and there is a one-minute
+cooldown claimed *before* the run: a wake emits events of its own, and a broad
+listener is not a feature, it is a loop with a nice name.
+
+**Decided: the forms stay as the offline path.** Spaces, bots, routines and
+schedules are all creatable with no API key, and the mock provider keeps that
+true. What needs a provider is *talking* — every message in a thread is a
+model call — so every thread says so plainly while the mock is answering
+rather than letting a scripted line pass for a conversation.
+
+**Decided: a team is who is in the room.** `team:` in `_bot.md` is still the
+written-down half, but the effective team is that list plus any agent *you*
+pulled into the bot's thread. Safe in one direction only, and only because
+participants are written when a typed message is sent: a person can widen a
+team by talking, and a bot cannot widen its own.
+
+**Still open:** whether the folder→item mapping should also be pinnable by
+hand rather than only derived from work items.
+
+**Borrowed from Grok bot's docs, on purpose:** the request shape (outcome,
+sources, constraints, deliverable, review point); event-triggered routines;
+"save what we just did as a skill"; and the line worth keeping verbatim —
+*an approval controls the proposed action, it does not reverse work already
+completed* — which for us is free, because every action is a commit or a diff
+we can show.
 
 ### Connections — the SQL layer ✅ built · `design/shell-mock.html#connections`
 Rail item. Connections are first-class entities scoped to a workspace/project.
@@ -432,6 +820,10 @@ the website's download links point at nothing.
   of deploy tools. Adding an ecosystem is a row in `MARKER_DETECTORS` (data) or
   one `detect_*` function (logic), plus a fixture test — but either way it's a
   **rebuild**. See *User-editable scan rules* for the fix.
+- AI Workspace: a delegated session's completion never reaches the conversation
+  (it shows in Activity, but the assistant will not tell you dev-a finished);
+  the Anthropic transport is written against the documented wire format but has
+  not been run against the live API
 - Terminal commands: an old report that commands don't type into the terminal —
   deprioritised, needs reproduction
 - Machine Setup used to re-probe winget/scoop on every remount with no visible

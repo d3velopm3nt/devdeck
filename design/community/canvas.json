@@ -1,0 +1,89 @@
+{
+  "pages": [
+    { "id": "page-1", "name": "Pages" },
+    { "id": "page-2", "name": "Modals" }
+  ],
+  "artboards": [
+    { "file": "Main.dc.html", "title": "1 · Community › Browse", "page": "page-1", "x": 0, "y": 0, "w": 1456, "h": 909 },
+    { "file": "Repo.dc.html", "title": "2 · One repo, in full", "page": "page-1", "x": 1576, "y": 0, "w": 1456, "h": 909 },
+    { "file": "Installed.dc.html", "title": "3 · Installed", "page": "page-1", "x": 3152, "y": 0, "w": 1456, "h": 909 },
+    { "file": "Grants.dc.html", "title": "4 · Permissions — the spine", "page": "page-1", "x": 0, "y": 1060, "w": 1456, "h": 909 },
+    { "file": "Models.dc.html", "title": "5 · Models you run yourself", "page": "page-1", "x": 1576, "y": 1060, "w": 1456, "h": 909 },
+    { "file": "InUse.dc.html", "title": "6 · Where it lands — a bot using it", "page": "page-1", "x": 3152, "y": 1060, "w": 1456, "h": 909 },
+
+    { "file": "ModalInstall.dc.html", "title": "A · Install — the grant, not the download", "page": "page-2", "x": 0, "y": 0, "w": 760, "h": 830 },
+    { "file": "ModalTrust.dc.html", "title": "B · Read this before installing", "page": "page-2", "x": 880, "y": 0, "w": 760, "h": 730 },
+    { "file": "ModalGrant.dc.html", "title": "C · One agent, one tool", "page": "page-2", "x": 1760, "y": 0, "w": 760, "h": 800 },
+    { "file": "ModalUpdate.dc.html", "title": "D · An update that widens what it can do", "page": "page-2", "x": 2640, "y": 0, "w": 760, "h": 750 },
+    { "file": "ModalSources.dc.html", "title": "E · Sources, and a sync that failed", "page": "page-2", "x": 0, "y": 980, "w": 760, "h": 660 },
+    { "file": "ModalGiveToBot.dc.html", "title": "F · Give it to a bot", "page": "page-2", "x": 880, "y": 980, "w": 760, "h": 740 },
+    { "file": "ModalPullModel.dc.html", "title": "G · Pull a model", "page": "page-2", "x": 1760, "y": 980, "w": 760, "h": 740 }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "page": "page-1",
+      "x": -560,
+      "y": 0,
+      "w": 460,
+      "text": "COMMUNITY — open-source AI your bots can use.\n\nA new rail entry sitting directly above Machine, and the pairing is the point: Machine installs tools for you, Community installs them for your bots.\n\nFive kinds of thing come through it — MCP servers (which become tools in the permission matrix), skills (written procedures), agents, models, and the runners that serve them.\n\nBuilt on what DevDeck already is: tokens from src/index.css, the 160px rail with its 2.5px indigo bar, the 260px contextual sidebar, 12px panel radius, the 10.5/11.5/12.5 type ramp. Dark by default; every artboard has a light switch above it.\n\nStatic mockups, one direction."
+    },
+    {
+      "id": "the-claim",
+      "page": "page-1",
+      "x": -560,
+      "y": 380,
+      "w": 460,
+      "text": "THE ONE IDEA\n\nInstalling is not granting, and the module is built around that split.\n\nAn install writes files to disk. It gives no agent the ability to call anything — everyone lands on None. A separate, deliberate act says who may use it and how.\n\nThat is why there is an Installed page AND a Permissions page rather than one list with toggles: the second question is not a detail of the first, and the Installed page can then say the uncomfortable thing — supabase-mcp has been sitting there six days and no bot can reach it."
+    },
+    {
+      "id": "honesty",
+      "page": "page-1",
+      "x": -560,
+      "y": 800,
+      "w": 460,
+      "text": "WHERE IT REFUSES TO FLATTER YOU\n\n· \"DevDeck does not review any of them.\" No stars-as-safety, no trust score. It reads a manifest and shows what the repo claims — and says a lying manifest looks clean.\n\n· A failed source sync is a failure, not \"up to date\". Same bug the update checker once had.\n\n· Licences are shown because they matter to a product that means to be sold: permissive, copyleft, restricted, or missing entirely.\n\n· Model speed is measured on this machine, not lifted from a model card."
+    },
+    {
+      "id": "spine",
+      "page": "page-1",
+      "x": -560,
+      "y": 1240,
+      "w": 460,
+      "text": "PERMISSIONS IS THE SPINE (artboard 4)\n\nOne table: community tools and built-in tools judged the same way, against every agent. Full / Read / Approval / None, exactly the four the runtime already has.\n\nBuilt-in rows are on screen deliberately — a community tool is not a second-class citizen with its own weaker gate, it is a row in the same table.\n\nStanding grants get their own panel because they are the only thing that can answer an Approval without you. Narrow, dated, revocable."
+    },
+    {
+      "id": "payoff",
+      "page": "page-1",
+      "x": 3152,
+      "y": 2020,
+      "w": 460,
+      "text": "ARTBOARD 6 IS NOT A COMMUNITY PAGE\n\nIt is a feature thread — the one from node-thread — showing the module's whole reason to exist: qa asks, you answer, the tool runs, one call is refused for being outside the host you allowed.\n\nThe right-hand panel lists what came from Community and is in play right here. If that panel is ever empty for a real day's work, the module did not earn its rail slot."
+    },
+    {
+      "id": "open",
+      "page": "page-1",
+      "x": 1576,
+      "y": 2020,
+      "w": 460,
+      "text": "OPEN QUESTIONS FOR YOU\n\n1 · Bundles are on Browse as a strip rather than their own page. Machine calls the same idea bundles, which is why the word is reused — but a Community bundle also carries grants, and that may deserve the fifth sidebar entry it currently has.\n\n2 · Is Community its own rail entry, or a tab inside Machine? I put it on the rail because the audience is your bots, not your machine — but that is an argument, not a fact.\n\n3 · Should an MCP server's process show up in Processes? Today it would not, and the Trust modal has to warn about exactly that."
+    },
+    {
+      "id": "modal-note",
+      "page": "page-2",
+      "x": -560,
+      "y": 0,
+      "w": 460,
+      "text": "SEVEN MODALS\n\nEach one is a decision the module cannot make for you, and each answers with a receipt rather than a silent state change.\n\nA · Install. Three questions: what it adds, where it lands (Personal, or the space's vault — never the repository), who may call it. Everyone starts at None.\n\nB · The unvetted repo. No licence file, spawns processes, any host. It says outright that nothing was checked.\n\nC · One cell of the matrix. The four permissions in the runtime's own words, plus the timeout that denies."
+    },
+    {
+      "id": "modal-note-2",
+      "page": "page-2",
+      "x": -560,
+      "y": 480,
+      "w": 460,
+      "text": "D · The update that widens what a tool can do. Four new write actions, so a Full grant is narrowed to Approval and the screen says why. A grant given against thirteen actions should not silently cover seventeen.\n\nE · Sources. One has failed, and it is called failed — you are shown the timestamp of the last good copy instead.\n\nF · Give it to a bot, with the announcement it will post in the bot's thread shown before you commit.\n\nG · Pull a model — quantisation against free disk, what will not fit greyed out, and a reminder that weights are not a tool and have no row in Permissions."
+    }
+  ],
+  "launch": { "view": "canvas", "page": "page-1" }
+}

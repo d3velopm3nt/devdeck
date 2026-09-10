@@ -12,25 +12,43 @@
 //! modules with their own commands/events without touching existing ones.
 
 mod activity;
+mod aiw;
+mod botcatalog;
+mod botmind;
+mod bots;
+mod calendar;
+mod calls;
 mod conn;
 mod creds;
 mod db;
+mod files;
+mod events;
+mod focus;
 mod git;
+mod github;
+mod inbox;
 mod legacy;
 mod machine;
 mod mail;
+mod managers;
 mod monitor;
 mod pty;
 mod scan;
+mod schedule;
 mod seed;
 mod services;
 mod setup;
 mod shots;
+mod spaces;
 mod stash;
+mod team;
+mod threads;
+mod vault;
 
 use std::sync::{Arc, Mutex};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::Emitter;
 use tauri::Manager;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
@@ -113,6 +131,29 @@ fn toggle_widget(app: &tauri::AppHandle) {
             show_widget(app);
         }
     }
+}
+
+/// Show the main window, once.
+///
+/// The window is created hidden (`visible: false` in `tauri.conf.json`) so
+/// nobody watches an empty frame paint itself grey, then white, then finally
+/// the app. The cost of that is a promise: *something* has to show it, and if
+/// nothing does the app is running with no way to reach it. So there are two
+/// somethings — the frontend calls `app_ready` when it has painted, and a
+/// timer shows the window anyway if that call never comes. A slow start is a
+/// worse first impression than a broken one is a mystery.
+fn reveal_main(app: &tauri::AppHandle) {
+    let Some(win) = app.get_webview_window("main") else { return };
+    if win.is_visible().unwrap_or(false) {
+        return;
+    }
+    let _ = win.show();
+    let _ = win.set_focus();
+}
+
+#[tauri::command]
+fn app_ready(app: tauri::AppHandle) {
+    reveal_main(&app);
 }
 
 #[tauri::command]
@@ -554,6 +595,103 @@ pub fn run() {
         stash_state.retention_days.store(stash_retention, Relaxed);
     }
 
+    // One workspace for the process. The bus is attached to the AppHandle in
+    // setup() so events also reach the UI; it works fully without that, which
+    // is what lets the whole thing be tested headless.
+    let aiw_workspace = std::sync::Arc::new(aiw::state::Workspace::new());
+    // Subscribers can only be installed once the workspace is shared.
+    aiw::state::Workspace::install_handlers(&aiw_workspace);
+    // Teach it how to make a bot. `aiw` knows nothing about this database — a
+    // heartbeat is a schedules row — so the app hands it the one operation it
+    // cannot do for itself, and a build that never does this simply cannot
+    // make bots rather than half-making them.
+    {
+        let app = aiw_workspace.clone();
+        let _ = &app;
+        aiw_workspace.set_bot_maker(Box::new(move |d: aiw::state::BotDraft| {
+            let node_id: i64 = d
+                .project_id
+                .parse()
+                .map_err(|_| format!("'{}' is not a space in your vault", d.project_id))?;
+            // Its own connection rather than the shared one: this runs on an
+            // agent's thread, and reaching for a mutex another command may be
+            // holding is exactly the shape that has frozen this app before.
+            let conn = crate::db::open();
+            let bot = bots::create_into(
+                &conn,
+                node_id,
+                "blank",
+                &d.name,
+                &d.goal,
+                &d.every,
+                d.at_min,
+                "",
+                false,
+            )?;
+            Ok(format!(
+                "{} is in {} — it wakes on its own heartbeat and watches. It has no team and                  no agent, so it reports and does nothing else until you give it someone.",
+                bot.name, bot.node_name
+            ))
+        }));
+    }
+    // And how to turn a sentence into a routine, for the same reason: a
+    // routine is a clock row and a line in a file, and neither of those is
+    // something `aiw` can reach.
+    {
+        aiw_workspace.set_routine_maker(Box::new(move |d: aiw::state::RoutineDraft| {
+            let node_id: i64 = d
+                .project_id
+                .parse()
+                .map_err(|_| format!("'{}' is not a space in your vault", d.project_id))?;
+            let conn = crate::db::open();
+            bots::set_routine(&conn, node_id, &d.what, &d.every, d.at_min, &d.on)
+        }));
+    }
+    // Re-register whatever this install was pointed at last time. Without this
+    // the project list is lost on every restart, which looks exactly like the
+    // projects themselves being gone.
+    {
+        // Projects come from the node tree, not from a list of our own. There
+        // is nothing to "restore": the Explorer's projects ARE the AI
+        // Workspace's projects, so every one of them is AI-capable from the
+        // first launch without anything to opt into.
+        let n = aiw::commands::sync_projects_from_tree(&aiw_workspace, &conn);
+        if n > 0 {
+            eprintln!("[aiw] {n} project(s) picked up from the tree");
+        }
+        // Re-register configured providers. Keys are not here -- each provider
+        // looks its own up in Credential Manager when it needs it.
+        for cfg in aiw::commands::saved_provider_configs(&conn) {
+            let kind = cfg.kind.clone();
+            if let Err(e) = aiw_workspace.configure_provider(cfg) {
+                eprintln!("[aiw] could not restore provider '{kind}': {e}");
+            }
+        }
+        // After the agents exist, so saved grants land on the current default
+        // set rather than being applied to nothing.
+        // Agents come from disk now. Before the saved grants, so a
+        // permission you set lands on the team you actually have.
+        match aiw_workspace.load_agents() {
+            Ok(n) if n > 0 => eprintln!("[aiw] {n} agent(s) loaded"),
+            Ok(_) => eprintln!("[aiw] no agents on disk"),
+            Err(e) => eprintln!("[aiw] could not load agents: {e}"),
+        }
+        aiw_workspace.restore_permissions(&aiw::commands::saved_permissions(&conn));
+
+        // Which provider an agent uses lives in the agent's own file. It used
+        // to live in a settings row as well, re-applied at every launch --
+        // which meant a provider chosen on an agent's card was silently put
+        // back at the next start. Fold the row in once, then delete it, so
+        // there is one record and it is the one the interface writes to.
+        let old_row = aiw::commands::saved_agent_providers(&conn);
+        if !old_row.is_empty() {
+            let moved = aiw_workspace.migrate_agent_providers(&old_row);
+            let _ = db::setting_delete_conn(&conn, aiw::commands::AGENT_PROVIDERS_KEY);
+            eprintln!("[aiw] agent providers now live in the agent files ({moved} carried over)");
+        }
+    }
+    let aiw_for_setup = aiw_workspace.clone();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -564,7 +702,104 @@ pub fn run() {
         .manage(Arc::new(pty::PtyManager::default()))
         .manage(Arc::new(services::ServiceManager::default()))
         .manage(stash_state)
+        // The AI Workspace. Registered here with the rest of the state so the
+        // first invoke from a webview cannot arrive before it exists.
+        .manage(aiw_workspace)
         .setup(move |app| {
+            // The clock. One pass at startup, which is what makes catching up
+            // possible at all — while the app runs a schedule fires because its
+            // moment arrived; at launch it fires because its moment passed
+            // while nothing was watching.
+            {
+                let h = app.handle().clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(4));
+                    // Managers move out of their folders. Once, ever, and it
+                    // does its file writing on this thread rather than on the
+                    // path the window is waiting on.
+                    {
+                        let moved = match h.try_state::<db::Db>() {
+                            Some(db) => match db.0.lock() {
+                                Ok(conn) => {
+                                    let moved = managers::migrate_from_bots(&conn);
+                                    // The first migration predated `home`, so
+                                    // give it back to anyone missing it.
+                                    managers::backfill_home(&conn);
+                                    moved
+                                }
+                                Err(_) => Vec::new(),
+                            },
+                            None => Vec::new(),
+                        };
+                        if !moved.is_empty() {
+                            activity::record(
+                                &h,
+                                "setup",
+                                format!("{} manager(s) moved out of their folders", moved.len()),
+                                format!(
+                                    "{} — now in .devdeck/team, and the features they managed say who owns them.",
+                                    moved.join(", ")
+                                ),
+                                true,
+                                None,
+                            );
+                        }
+                    }
+
+                    // Failures that happened while nothing was telling you
+                    // about them. Once, ever, before the first tick can add
+                    // any of its own.
+                    calls::tell_the_missed_failures(&h);
+                    schedule::tick(&h, true);
+                    // A deadline is only worth writing down if it comes and
+                    // finds you. Same clock, same tick: nothing new to run.
+                    calendar::check_deadlines(&h);
+                    loop {
+                        std::thread::sleep(std::time::Duration::from_secs(30));
+                        schedule::tick(&h, false);
+                        calendar::check_deadlines(&h);
+                    }
+                });
+            }
+
+            // The safety net behind `app_ready`. If the frontend throws before
+            // it can call in — a bad import, a bad migration — the window must
+            // still appear, because an app you cannot see is an app you cannot
+            // even close.
+            {
+                let h = app.handle().clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(8));
+                    reveal_main(&h);
+                });
+            }
+
+            // Where every model call is written down. Installed here rather
+            // than above because it needs the app handle, and the handle only
+            // exists once setup runs.
+            {
+                let log = app.handle().clone();
+                aiw_for_setup.set_call_log(Box::new(move |rec| calls::record(&log, rec)));
+            }
+
+            // Give the AI Workspace bus a way out to the UI. The closure lives
+            // here, in the shell, so the bus itself stays free of Tauri — which
+            // is both cleaner layering and what keeps the test binary linkable.
+            let emit_handle = app.handle().clone();
+            aiw_for_setup
+                .bus
+                .attach_sink(move |ev| {
+                    let _ = emit_handle.emit("aiw:event", ev.clone());
+                    // A routine can be a rhythm or a thing that happens.
+                    // Tests failing on master is the example everyone gives,
+                    // and it is not a time of day.
+                    crate::schedule::on_event(
+                        &emit_handle,
+                        &ev.kind,
+                        ev.scope.project_id.as_deref(),
+                    );
+                });
+
             monitor::spawn(app.handle().clone());
             stash::spawn(app.handle().clone());
             shots::spawn(app.handle().clone());
@@ -662,6 +897,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            app_ready,
             hotkey_apply,
             widget_toggle,
             widget_show,
@@ -680,6 +916,57 @@ pub fn run() {
             db::tree_list,
             db::node_create,
             db::node_rename,
+            db::node_set_label,
+            vault::vault_root,
+            vault::vault_default_root,
+            vault::vault_legacy,
+            vault::vault_set_root,
+            vault::vault_scan,
+            vault::vault_create,
+            spaces::space_starters,
+            spaces::space_create,
+            vault::vault_rename,
+            vault::vault_set_meta,
+            vault::vault_meta,
+            vault::vault_delete,
+            vault::vault_dir,
+            schedule::schedules_list,
+            schedule::schedule_save,
+            schedule::schedule_enable,
+            schedule::schedule_delete,
+            schedule::schedule_run_now,
+            focus::focus_current,
+            focus::focus_start,
+            focus::focus_end,
+            focus::focus_recent,
+            bots::bots_list,
+            bots::bots_standing,
+            bots::bot_get,
+            bots::bot_for_node,
+            bots::bot_save,
+            bots::bot_delete,
+            bots::bot_create,
+            bots::bot_plan,
+            bots::bot_work,
+            bots::bot_work_save,
+            bots::bot_work_delete,
+            bots::bot_interview,
+            bots::bot_answer,
+            bots::bot_interview_reset,
+            bots::bot_beliefs,
+            bots::bot_belief_add,
+            bots::bot_belief_correct,
+            bots::bot_belief_pin,
+            bots::bot_belief_drop,
+            bots::bot_belief_drop_stale,
+            bots::bot_tools,
+            bots::bot_tool_decide,
+            bots::bot_suggestions,
+            bots::bot_suggestion_answer,
+            botcatalog::bot_catalog,
+            vault::vault_move,
+            vault::vault_switch,
+            vault::vault_switch_cost,
             db::node_update,
             db::node_delete,
             db::commands_list,
@@ -732,6 +1019,9 @@ pub fn run() {
             git::git_info,
             git::git_fetch,
             git::git_pull,
+            git::git_changes,
+            git::git_commit,
+            git::git_push,
             stash::stash_list,
             stash::stash_get,
             stash::stash_counts,
@@ -790,11 +1080,113 @@ pub fn run() {
             mail::mail_assistant_add,
             mail::mail_assistant_status,
             activity::activity_list,
+            activity::activity_for,
+            calls::calls_list,
+            inbox::inbox_marks,
+            inbox::inbox_mark,
+            inbox::inbox_floor,
+            inbox::inbox_floor_seed,
+            calls::calls_usage,
+            calls::calls_clear,
             activity::activity_clear,
             activity::service_runs,
             toast_show,
             toast_hide,
             toast_focus,
+            aiw::commands::aiw_projects,
+            aiw::commands::aiw_features,
+            aiw::commands::aiw_create_feature,
+            aiw::commands::aiw_work_items,
+            aiw::commands::aiw_all_work,
+            aiw::commands::aiw_context,
+            aiw::commands::aiw_context_raw,
+            aiw::commands::aiw_context_compare,
+            aiw::commands::aiw_agents,
+            aiw::commands::aiw_sessions,
+            aiw::commands::aiw_session,
+            aiw::commands::aiw_claims,
+            aiw::commands::aiw_start_agent,
+            aiw::commands::aiw_conflicts,
+            aiw::commands::aiw_resolve_conflict,
+            aiw::commands::aiw_decisions,
+            aiw::commands::aiw_activity,
+            aiw::commands::aiw_event_chain,
+            aiw::commands::aiw_git_history,
+            aiw::commands::aiw_tools,
+            aiw::commands::aiw_permissions,
+            aiw::commands::aiw_set_permission,
+            aiw::commands::aiw_grants,
+            aiw::commands::aiw_grant_add,
+            aiw::commands::aiw_grant_revoke,
+            aiw::commands::aiw_grant_revoke_all,
+            aiw::commands::aiw_grant_forget,
+            aiw::commands::aiw_providers,
+            aiw::commands::aiw_test_runs,
+            aiw::commands::aiw_export_context,
+            aiw::commands::aiw_agent_files,
+            aiw::commands::aiw_knowledge_tree,
+            aiw::commands::aiw_read_file,
+            aiw::commands::aiw_write_file,
+            aiw::commands::aiw_run_demo,
+            aiw::commands::aiw_models,
+            aiw::commands::aiw_configure_provider,
+            aiw::commands::aiw_provider_setups,
+            aiw::commands::aiw_provider_test,
+            aiw::commands::aiw_model_check,
+            calls::model_checks,
+            calendar::calendar_range,
+            events::event_entry,
+            events::event_entry_save,
+            events::event_history,
+            aiw::commands::aiw_provider_forget_key,
+            aiw::commands::aiw_provider_remove,
+            aiw::commands::aiw_set_agent_provider,
+            aiw::commands::aiw_app_status,
+            aiw::commands::aiw_changed_since,
+            setup::github_user,
+            github::github_oauth_configured,
+            github::github_device_start,
+            github::github_device_poll,
+            github::github_token_stored,
+            github::github_token_paste,
+            github::github_sign_out,
+            aiw::commands::aiw_sync_projects,
+            aiw::commands::aiw_conversations,
+            aiw::commands::aiw_conversation,
+            aiw::commands::aiw_new_conversation,
+            aiw::commands::aiw_delete_conversation,
+            aiw::commands::aiw_focus_conversation,
+            aiw::commands::aiw_send_message,
+            bots::bot_thread,
+            bots::bot_thread_send,
+            files::node_files,
+            files::file_text,
+            files::vault_files,
+            files::vault_file_text,
+            team::team_board,
+            threads::thread_wake,
+            threads::thread_context,
+            threads::thread_context_set,
+            threads::thread_context_edit,
+            threads::feature_thread,
+            threads::feature_thread_send,
+            threads::node_thread,
+            threads::node_thread_send,
+            aiw::commands::aiw_personal_root,
+            aiw::commands::aiw_profile,
+            aiw::commands::aiw_save_profile,
+            aiw::commands::aiw_memories,
+            aiw::commands::aiw_forget_memory,
+            aiw::commands::aiw_assistant_context,
+            aiw::commands::aiw_agent_file,
+            aiw::commands::aiw_save_agent,
+            aiw::commands::aiw_delete_agent,
+            aiw::commands::aiw_skills,
+            aiw::commands::aiw_save_skill,
+            aiw::commands::aiw_delete_skill,
+            aiw::commands::aiw_pending_approvals,
+            aiw::commands::aiw_resolve_approval,
+            aiw::commands::aiw_reset,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DevDeck");

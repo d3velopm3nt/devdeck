@@ -1,0 +1,16 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 900, "h": 680, "title": "The shell, with all three" },
+    { "file": "Anatomy.dc.html", "x": 1020, "y": 0, "w": 620, "h": 680, "title": "What changes, and why" }
+  ],
+  "annotations": [
+    {
+      "id": "regression",
+      "x": 0,
+      "y": 760,
+      "w": 440,
+      "text": "The empty Solutions list is a regression I caused.\n\nThe rail filters for kind === 'solution', but since the\nvault landed kind_of() only returns workspace, project\nor folder. It can never match — which is also why you\nended up adding a Solution label by hand."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

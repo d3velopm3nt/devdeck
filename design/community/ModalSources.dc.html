@@ -1,0 +1,115 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: var(--accent); } a:hover { color: var(--ink); }
+    .head { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .chip { display: inline-flex; align-items: center; gap: 4px; font-size: 9px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; padding: 2px 6px; border-radius: 999px; }
+    .btn { font-size: 11.5px; color: var(--dim); border: 1px solid var(--line2); border-radius: 6px; padding: 5px 12px; background: transparent; }
+    .btn.on { color: #fff; background: #4f46e5; border-color: #4f46e5; }
+    .mono { font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; }
+    .src { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-top: 1px solid var(--line); }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --scrim: {{c.scrim}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --menu: {{c.menu}}; --hover: {{c.hover}}; --line: {{c.line}}; --line2: {{c.line2}}; --line3: {{c.line3}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; width: 760px; height: 660px; background: var(--scrim); box-sizing: border-box; padding: 24px 80px; display: flex; align-items: center;">
+
+  <div style="width: 600px; border: 1px solid var(--line2); border-radius: 12px; background: var(--menu); box-shadow: 0 18px 50px rgb(0 0 0 / .45); overflow: hidden;">
+
+    <div style="padding: 14px 18px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px;">
+      <div style="min-width: 0;">
+        <div style="font-size: 14px; font-weight: 600; color: var(--ink);">Sources</div>
+        <div style="font-size: 10.5px; color: var(--muted); margin-top: 2px;">Where the catalogue comes from. Names and links only — no code is fetched here.</div>
+      </div>
+      <span style="margin-left: auto; color: var(--muted);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M6 6l12 12M18 6 6 18"></path></svg></span>
+    </div>
+
+    <div>
+      <div class="src" style="border-top: none;">
+        <span style="width: 7px; height: 7px; border-radius: 999px; background: var(--ok); flex-shrink: 0;"></span>
+        <div style="min-width: 0; flex: 1;">
+          <div class="mono" style="font-size: 11.5px; color: var(--ink);">modelcontextprotocol/registry</div>
+          <div style="font-size: 10.5px; color: var(--muted); margin-top: 2px;">19 MCP servers · synced 12 minutes ago</div>
+        </div>
+        <span class="chip" style="background: rgb(74 222 128 / .14); color: var(--ok);">ok</span>
+      </div>
+
+      <div class="src">
+        <span style="width: 7px; height: 7px; border-radius: 999px; background: var(--ok); flex-shrink: 0;"></span>
+        <div style="min-width: 0; flex: 1;">
+          <div class="mono" style="font-size: 11.5px; color: var(--ink);">anthropics/skills</div>
+          <div style="font-size: 10.5px; color: var(--muted); margin-top: 2px;">15 skills · synced 12 minutes ago</div>
+        </div>
+        <span class="chip" style="background: rgb(74 222 128 / .14); color: var(--ok);">ok</span>
+      </div>
+
+      <div class="src" style="background: rgb(248 113 113 / .06);">
+        <span style="width: 7px; height: 7px; border-radius: 999px; background: var(--err); flex-shrink: 0;"></span>
+        <div style="min-width: 0; flex: 1;">
+          <div class="mono" style="font-size: 11.5px; color: var(--ink);">github.com · your starred repos</div>
+          <div style="font-size: 10.5px; color: var(--err); margin-top: 2px;">Could not reach github.com at 08:14 — DNS did not resolve.</div>
+        </div>
+        <span class="chip" style="background: rgb(248 113 113 / .16); color: var(--err);">failed</span>
+      </div>
+
+      <div style="padding: 11px 12px 12px 34px; background: rgb(248 113 113 / .06); border-top: 1px solid rgb(248 113 113 / .2);">
+        <div style="font-size: 11.5px; line-height: 1.6; color: var(--body);">You are looking at the last good copy of this source, fetched <span style="color: var(--ink);">Tuesday 17:40</span>. Fourteen entries in the list below it are that old.</div>
+        <div style="font-size: 11.5px; line-height: 1.6; color: var(--warn); margin-top: 5px;">This is not the same as up to date, and it is not being called that.</div>
+        <div style="display: flex; gap: 7px; margin-top: 10px;">
+          <button class="btn on" style="padding: 3px 11px;">Try again</button>
+          <button class="btn" style="padding: 3px 11px;">Hide its entries until it works</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding: 14px 18px; border-top: 1px solid var(--line);">
+      <div class="head">Add a source</div>
+      <div style="display: flex; gap: 7px; margin-top: 7px;">
+        <div style="flex: 1; border: 1px solid var(--line2); border-radius: 6px; background: var(--panel); padding: 5px 10px;">
+          <span class="mono" style="font-size: 11px; color: var(--faint);">a GitHub org, a repo, or a registry URL</span>
+        </div>
+        <button class="btn">Add</button>
+      </div>
+      <div style="font-size: 10.5px; color: var(--faint); margin-top: 7px; line-height: 1.55;">A source is a list. Adding one changes what you can see, and nothing about what your bots can do — every entry still has to be installed and granted one at a time.</div>
+    </div>
+
+    <div style="padding: 12px 18px; border-top: 1px solid var(--line); background: var(--panel); display: flex; align-items: center; gap: 10px;">
+      <div style="display: flex; align-items: center; gap: 7px; font-size: 10.5px; color: var(--muted);">
+        <span style="width: 22px; height: 12px; border-radius: 999px; background: #4f46e5; position: relative;"><span style="position: absolute; right: 1.5px; top: 1.5px; width: 9px; height: 9px; border-radius: 999px; background: #fff;"></span></span>
+        Re-sync hourly and on window focus
+      </div>
+      <span style="margin-left: auto; display: flex; gap: 8px;">
+        <button class="btn">Close</button>
+        <button class="btn on">Sync all now</button>
+      </span>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', scrim: '#07090d', panel: '#11141c', raise: '#151923', menu: '#1a1f2b',
+          hover: '#232b3b', line: '#1e293b', line2: '#334155', line3: '#64748b', ink: '#e2e8f0',
+          body: '#cbd5e1', dim: '#94a3b8', muted: '#64748b', faint: '#475569', accent: '#818cf8',
+          ok: '#4ade80', warn: '#fbbf24', err: '#f87171' }
+      : { app: '#e9ebf0', scrim: '#97999c', panel: '#f6f7f9', raise: '#f0f2f6', menu: '#ffffff',
+          hover: '#e7eaf1', line: '#d9dee7', line2: '#c3cbd8', line3: '#9aa5b5', ink: '#16181d',
+          body: '#333a45', dim: '#5a6472', muted: '#7d8794', faint: '#a5aebb', accent: '#4f46e5',
+          ok: '#15803d', warn: '#b45309', err: '#dc2626' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

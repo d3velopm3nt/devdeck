@@ -1,0 +1,116 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background: #0d1017; }
+    a { color: #818cf8; } a:hover { color: #a5b4fc; }
+    .win { border: 1px solid #1e293b; border-radius: 6px; overflow: hidden; background: #0b0e14; }
+    .bar { display: flex; align-items: stretch; height: 30px; background: #11141c; border-bottom: 1px solid #1e293b; }
+    .tab { display: flex; align-items: center; padding: 0 12px; font-size: 11.5px; color: #94a3b8; border-right: 1px solid #1e293b; }
+    .tab.on { background: #0d1017; color: #e2e8f0; font-weight: 600; box-shadow: inset 0 2px 0 #6366f1; }
+    .rail { width: 34px; background: #11141c; border-right: 1px solid #1e293b; }
+    .side { width: 150px; background: #11141c; border-right: 1px solid #1e293b; padding: 6px; }
+    .body { flex: 1; background: #0d1017; }
+    .lbl { font-size: 8.5px; letter-spacing: 0.06em; color: #475569; text-transform: uppercase; }
+    .r { font-size: 9.5px; color: #cbd5e1; padding: 1.5px 4px; }
+    .pill { display: inline-flex; align-items: center; gap: 4px; border-radius: 4px; padding: 2px 6px;
+            font-size: 10px; font-weight: 600; color: #e2e8f0;
+            background: rgb(167 139 250 / 0.12); box-shadow: inset 0 0 0 1px rgb(167 139 250 / 0.25); }
+    h3 { margin: 0; font-size: 12.5px; font-weight: 600; color: #e2e8f0; }
+    .why { margin: 5px 0 0; font-size: 11px; line-height: 1.5; color: #94a3b8; }
+    .verdict { display: inline-block; border-radius: 3px; padding: 1px 6px; font-size: 9.5px; font-weight: 600; letter-spacing: 0.03em; }
+    .yes { background: rgb(74 222 128 / 0.14); color: #4ade80; }
+    .no  { background: rgb(100 116 139 / 0.18); color: #94a3b8; }
+  </style>
+</helmet>
+
+<div style="width: 760px; height: 680px; background: #0d1017; padding: 22px 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 18px">
+
+  <div>
+    <div style="font-size: 15px; font-weight: 600; color: #e2e8f0">Where you pick the solution</div>
+    <div style="margin-top: 3px; font-size: 11.5px; color: #94a3b8">
+      Two placements. Same scoped Explorer underneath.
+    </div>
+  </div>
+
+  <!-- OPTION A -->
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <div style="display: flex; align-items: baseline; gap: 8px">
+      <h3>A · Switcher in the Explorer</h3>
+      <span class="verdict yes">RECOMMENDED</span>
+    </div>
+    <div class="win" style="height: 190px; display: flex; flex-direction: column">
+      <div class="bar">
+        <div class="tab" style="color: #cbd5e1">DevDeck</div>
+        <div class="tab on">Innotrack</div>
+        <div class="tab">Demo</div>
+      </div>
+      <div style="flex: 1; display: flex">
+        <div class="rail"></div>
+        <div class="side">
+          <div style="margin-bottom: 6px"><span class="pill">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m6.08 9.5-3.5 1.6a1 1 0 0 0 0 1.81l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9a1 1 0 0 0 0-1.83l-3.5-1.59"/></svg>
+            TyreX <span style="color: #64748b">▾</span>
+          </span></div>
+          <div class="lbl" style="margin-top: 6px">Features</div>
+          <div class="r">Dark mode</div>
+          <div class="r">Offline sync</div>
+          <div class="lbl" style="margin-top: 6px">Projects</div>
+          <div class="r">tyrex-api</div>
+          <div class="r">tyrex-web</div>
+        </div>
+        <div class="body"></div>
+      </div>
+    </div>
+    <p class="why">
+      One new control, no new chrome. The workspace stays the outer frame it
+      already is, and the solution scopes only the tree — which is the one
+      thing you said should change.
+    </p>
+  </div>
+
+  <!-- OPTION B -->
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <div style="display: flex; align-items: baseline; gap: 8px">
+      <h3>B · A second tab row</h3>
+      <span class="verdict no">MORE CHROME</span>
+    </div>
+    <div class="win" style="height: 170px; display: flex; flex-direction: column">
+      <div class="bar">
+        <div class="tab" style="color: #cbd5e1">DevDeck</div>
+        <div class="tab on">Innotrack</div>
+        <div class="tab">Demo</div>
+      </div>
+      <div class="bar" style="height: 26px; background: #0d1017">
+        <div class="tab on" style="box-shadow: inset 0 2px 0 #a78bfa; font-size: 11px">TyreX</div>
+        <div class="tab" style="font-size: 11px">Innotrack Portal</div>
+        <div class="tab" style="font-size: 11px; color: #475569">+</div>
+      </div>
+      <div style="flex: 1; display: flex">
+        <div class="rail"></div>
+        <div class="side">
+          <div class="lbl">Features</div>
+          <div class="r">Dark mode</div>
+          <div class="lbl" style="margin-top: 6px">Projects</div>
+          <div class="r">tyrex-api</div>
+        </div>
+        <div class="body"></div>
+      </div>
+    </div>
+    <p class="why">
+      Every solution is visible at once, and switching is one click. But it
+      is a permanent second row for something you change rarely — and two
+      tab strips invite the question of which one you are in.
+    </p>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

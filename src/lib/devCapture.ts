@@ -9,6 +9,14 @@ export const CAPTURE_BOT_MODAL: string = ''
 export const CAPTURE_SETTINGS_TAB: string = ''
 export const CAPTURE_SAY: string[] = [
 ]
+
+/** Community actions to run once on mount, in order:
+ *  `install:<id>` | `grant:<id>:<agentId>` | `revoke:<id>:<agentId>`.
+ *  This session cannot deliver clicks, so a screenshot of the install/grant
+ *  split has to be produced some other way. It goes through the same commands
+ *  the buttons call. Empty in every shipped build. */
+export const CAPTURE_COMMUNITY: string[] = [
+]
 export const CAPTURE_TEAM_TAB: string = ''
 export const CAPTURE_GOAL: string = ''
 export const CAPTURE_NODE: string = ''

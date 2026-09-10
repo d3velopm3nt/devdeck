@@ -17,6 +17,7 @@ mod botcatalog;
 mod botmind;
 mod bots;
 mod calendar;
+mod community;
 mod calls;
 mod conn;
 mod creds;
@@ -1019,6 +1020,11 @@ pub fn run() {
             git::git_info,
             git::git_fetch,
             git::git_pull,
+            community::community_catalog,
+            community::community_installed,
+            community::community_install,
+            community::community_uninstall,
+            community::community_grant,
             git::git_changes,
             git::git_commit,
             git::git_push,

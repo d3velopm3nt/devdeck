@@ -903,6 +903,65 @@ export interface TokenPasted {
 export const githubTokenPaste = (token: string) =>
   invoke<TokenPasted>('github_token_paste', { token })
 
+// ---- community ----
+
+/** One thing you could install for your bots. */
+export interface CommunityItem {
+  id: string
+  /** skill | agent | tool */
+  kind: string
+  name: string
+  summary: string
+  author: string
+  source: string
+  /** permissive | copyleft | restricted | missing */
+  licence: string
+  version: string
+  body: string
+  role: string
+  tool_id: string
+  command: string
+}
+
+/** An install, and the thing the Installed page exists to say. */
+export interface CommunityStanding {
+  id: string
+  kind: string
+  name: string
+  version: string
+  source: string
+  licence: string
+  at: number
+  files: string[]
+  /** Agents that can actually use it. Empty straight after an install. */
+  reach: string[]
+  days: number
+  /** Unreachable long enough to be worth pointing at. */
+  idle: boolean
+  /** Why it cannot be called even when granted, or empty when it can. */
+  blocked: string
+}
+
+export interface CommunityListing extends CommunityItem {
+  installed: boolean
+  standing: CommunityStanding | null
+}
+
+export const communityCatalog = () => invoke<CommunityListing[]>('community_catalog')
+export const communityInstalled = () => invoke<CommunityStanding[]>('community_installed')
+/** Writes files. Grants nothing — every agent stays on `none`. */
+export const communityInstall = (id: string) =>
+  invoke<CommunityStanding>('community_install', { id })
+export const communityUninstall = (id: string) =>
+  invoke<void>('community_uninstall', { id })
+/** The separate, deliberate act: who may use it, and how. */
+export const communityGrant = (
+  id: string,
+  agentId: string,
+  on: boolean,
+  level?: string,
+) => invoke<void>('community_grant', { id, agentId, on, level: level ?? null })
+
 // ---- git ----
 export interface GitInfo {
   is_repo: boolean

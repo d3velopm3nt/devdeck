@@ -64,6 +64,10 @@ export type RailView =
   | 'projects'
   | 'stash'
   | 'connections'
+  /// Open-source skills, agents and tools for your bots. Sits above Machine
+  /// because the pairing is the point: Machine installs for you, this
+  /// installs for them.
+  | 'community'
   /// The Assistant's own workspace pages — providers, agents, conflicts.
   /// Reached from Settings rather than from the rail: it is where you
   /// configure the team, not where you work with it.

@@ -21,6 +21,7 @@ import { AgentCluster, NotificationBell, AccountChip } from './shell/TopBarStatu
 import { Home } from './components/Home'
 import { Explorer } from './components/Explorer'
 import { MachineSetup } from './components/MachineSetup'
+import { CommunityView } from './components/CommunityView'
 import { MailSidebar } from './components/MailSidebar'
 import { MailView } from './components/MailView'
 import { MailCompose } from './components/MailCompose'
@@ -918,6 +919,7 @@ export default function App() {
           {railView === 'stash' && <StashView />}
           {railView === 'connections' && <ConnectionsView />}
           {railView === 'aiworkspace' && <AiWorkspace />}
+          {railView === 'community' && <CommunityView />}
           {railView === 'machine' && <MachineSetup />}
           {railView === 'inbox' && <InboxPage />}
           {railView === 'team' && <TeamPage />}

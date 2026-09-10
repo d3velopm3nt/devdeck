@@ -60,6 +60,9 @@ const WORK: Item[] = [
 const APP: Item[] = [
   { view: 'analytics', icon: 'history', label: 'Analytics' },
   { view: 'stash', icon: 'stash', label: 'Stash' },
+  // Directly above Machine, and the adjacency is the idea: Machine installs
+  // tools for you, Community installs them for your bots.
+  { view: 'community', icon: 'package', label: 'Community' },
   { view: 'machine', icon: 'machine', label: 'Machine' },
   { view: 'settings', icon: 'settings', label: 'Settings' },
 ]

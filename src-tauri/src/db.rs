@@ -131,6 +131,8 @@ pub fn open() -> Connection {
         .expect("create model-check schema");
     conn.execute_batch(crate::inbox::SCHEMA)
         .expect("inbox schema");
+    conn.execute_batch(crate::community::SCHEMA)
+        .expect("community schema");
     conn.execute_batch(crate::calls::SCHEMA)
         .expect("create model-call log schema");
     // A run that was "running" when the app was killed did not survive.

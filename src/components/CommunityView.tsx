@@ -21,7 +21,7 @@ import { Icon, type IconName } from '../lib/icons'
 import { useAiw } from '../lib/aiwStore'
 import { CAPTURE_COMMUNITY } from '../lib/devCapture'
 
-type Tab = 'browse' | 'discover' | 'installed'
+type Tab = 'browse' | 'discover' | 'installed' | 'trending'
 
 /// Screenshot harness guard; see the effect in CommunityView.
 let ran = false
@@ -140,7 +140,7 @@ export function CommunityView() {
           </p>
         </div>
         <div className="mt-2.5 flex items-center gap-1">
-          {(['browse', 'discover', 'installed'] as Tab[]).map((t) => (
+          {(['browse', 'discover', 'installed', 'trending'] as Tab[]).map((t) => (
             <button
               key={t}
               className={`rounded-md px-2.5 py-1 text-[12px] capitalize ${
@@ -188,9 +188,18 @@ export function CommunityView() {
           </div>
         )}
 
-        {tab === 'discover' && (
+        {(tab === 'discover' || tab === 'trending') && (
           <Discover
-            feeds={feeds}
+            feeds={feeds.filter((f) =>
+              tab === 'trending'
+                ? f.source.startsWith('trending-') || f.source === 'year'
+                : !f.source.startsWith('trending-') && f.source !== 'year',
+            )}
+            blurb={
+              tab === 'trending'
+                ? 'What is moving on GitHub, and what has grown over a year. None of it is installable — a trending row declares nothing, so there is nothing to run and nothing to guess.'
+                : 'Two sources, kept apart because they answer different questions. Nothing is fetched until you ask — this is the only outbound call the module makes.'
+            }
             looking={looking}
             onRefresh={async () => {
               setLooking(true)
@@ -295,10 +304,12 @@ export function CommunityView() {
 /// Trending design warns about.
 function Discover({
   feeds,
+  blurb,
   looking,
   onRefresh,
 }: {
   feeds: ipc.CommunityFeed[]
+  blurb: string
   looking: boolean
   onRefresh: () => void
 }) {
@@ -313,10 +324,7 @@ function Discover({
   return (
     <div>
       <div className="mb-3 flex items-center gap-2">
-        <p className="text-[11.5px] text-muted">
-          Two sources, kept apart because they answer different questions. Nothing is fetched
-          until you ask — this is the only outbound call the module makes.
-        </p>
+        <p className="text-[11.5px] text-muted">{blurb}</p>
         <span className="flex-1" />
         <button className="btn-primary shrink-0 text-[12px]" disabled={looking} onClick={onRefresh}>
           <Icon name="update" size={12} spin={looking} />
@@ -352,51 +360,104 @@ function Discover({
           ) : (
             <div className="overflow-hidden rounded-lg border border-line bg-panel">
               {f.items.slice(0, 20).map((i) => (
-                <div
-                  key={i.id}
-                  className="flex items-start gap-2.5 border-b border-line px-3 py-2 last:border-0"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-baseline gap-2">
-                      <span className="truncate text-[12px] font-medium text-ink">{i.name}</span>
-                      {i.version && (
-                        <span className="shrink-0 text-[10.5px] tabular-nums text-faint">
-                          {i.version}
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-0.5 line-clamp-2 text-[11px] leading-[1.45] text-body">
-                      {i.summary}
-                    </p>
-                    <div className="mt-0.5 flex items-center gap-2 text-[10px] text-faint">
-                      <span>{i.author}</span>
-                      <span>·</span>
-                      <span
-                        className={
-                          i.licence === 'permissive'
-                            ? 'text-ok'
-                            : i.licence === 'missing' || i.licence === 'restricted'
-                              ? 'text-err'
-                              : 'text-warn'
-                        }
-                      >
-                        {i.licence}
-                      </span>
-                    </div>
-                  </div>
-                  {/* No Install here. A registry entry is installable in a
-                      later slice; a GitHub repository is not installable at
-                      all, because nothing here knows how to run it — which is
-                      the manifest problem, said rather than guessed at. */}
-                  <span className="shrink-0 text-[10px] text-faint">
-                    {i.command ? 'runnable' : 'No manifest'}
-                  </span>
-                </div>
+                <IndexRow key={i.id} item={i} />
               ))}
             </div>
           )}
         </section>
       ))}
+    </div>
+  )
+}
+
+/// The GitHub owner behind a row, when there is one.
+///
+/// Only a github.com source yields one. A registry entry's author is a
+/// reverse-DNS namespace like `agency.kesey` — not a GitHub login — and asking
+/// github.com for its avatar would return a 404 rendered as a broken image.
+function ownerOf(source: string): string | null {
+  const m = /^https:\/\/github\.com\/([^/]+)\/?/.exec(source.trim())
+  return m ? m[1] : null
+}
+
+/// One row of an index: who made it, what it is, and a way to go and look.
+function IndexRow({ item }: { item: ipc.CommunityItem }) {
+  const owner = ownerOf(item.source)
+  const [broken, setBroken] = useState(false)
+  const repo = item.source.startsWith('https://github.com/')
+  return (
+    <div className="group flex items-start gap-2.5 border-b border-line px-3 py-2 last:border-0 hover:bg-hover/40">
+      {/* An avatar, not a card. GitHub's OpenGraph image is handsomer and
+          forty times the size; twenty of them is two megabytes fetched to
+          decorate a list. The avatar is what people actually recognise. */}
+      {owner && !broken ? (
+        <img
+          src={`https://github.com/${owner}.png?size=80`}
+          alt=""
+          loading="lazy"
+          className="mt-0.5 h-8 w-8 shrink-0 rounded-md border border-line object-cover"
+          onError={() => setBroken(true)}
+        />
+      ) : (
+        // Never a broken image: a row whose owner we cannot resolve gets the
+        // same shape in the same place, so the column stays a column.
+        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line bg-raise text-[11px] font-semibold text-faint">
+          {(item.author || item.name).slice(0, 1).toUpperCase()}
+        </span>
+      )}
+
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2">
+          {repo ? (
+            <button
+              className="truncate text-[12px] font-medium text-ink hover:text-indigo-300 hover:underline"
+              title={`Open ${item.source}`}
+              onClick={() => void ipc.openUrl(item.source)}
+            >
+              {item.name}
+            </button>
+          ) : (
+            <span className="truncate text-[12px] font-medium text-ink">{item.name}</span>
+          )}
+          {item.version && (
+            <span className="shrink-0 text-[10.5px] tabular-nums text-faint">{item.version}</span>
+          )}
+        </div>
+        <p className="mt-0.5 line-clamp-2 text-[11px] leading-[1.45] text-body">{item.summary}</p>
+        <div className="mt-0.5 flex items-center gap-2 text-[10px] text-faint">
+          <span className="truncate">{item.author}</span>
+          <span>·</span>
+          <span
+            className={
+              item.licence === 'permissive'
+                ? 'text-ok'
+                : item.licence === 'missing' || item.licence === 'restricted'
+                  ? 'text-err'
+                  : 'text-warn'
+            }
+          >
+            {item.licence}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-2">
+        {/* No Install here. A registry entry is installable in a later slice;
+            a repository is not installable at all, because nothing here knows
+            how to run it — the manifest problem, said rather than guessed. */}
+        <span className="text-[10px] text-faint">
+          {item.command ? 'runnable' : 'No manifest'}
+        </span>
+        {repo && (
+          <button
+            className="rounded p-1 text-faint opacity-0 hover:bg-hover hover:text-ink group-hover:opacity-100"
+            title={`Open ${item.source} in your browser`}
+            onClick={() => void ipc.openUrl(item.source)}
+          >
+            <Icon name="external" size={12} />
+          </button>
+        )}
+      </div>
     </div>
   )
 }

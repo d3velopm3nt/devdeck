@@ -496,10 +496,76 @@ empty list that looks like a working one.
 
 ---
 
+## The screenshot that could not be taken honestly
+
+The goal asks for screenshots showing an MCP tool "installed, granted, and
+actually called by an agent". Two of the three exist. The third does not, and
+the reason is the finding.
+
+**Installed and granted is real.** `mcp.memory` in use by the assistant, the
+grant made through the same command the button calls:
+
+![Granted](13-granted.png)
+
+**Called by an agent, in the running app, does not work.** This was run against
+a real Anthropic key, `claude-opus-5`, in a real node thread:
+
+![A real turn](14-agent-turn.png)
+
+Read the footer: **12 of 12 tools**, and not one of them is an MCP tool. The
+model's own words:
+
+> `mcp.memory_create_entities` — not run. The tool does not exist in my
+> callable set. … There is no `mcp.memory_*` callable available to me in this
+> session. … So there's nothing for me to return from the server, and I'm not
+> going to invent a plausible-looking graph JSON to fill the gap.
+
+Two things worth separating in that.
+
+**The good half.** Asked to use a tool it did not have, a real model refused to
+fabricate a result and said exactly what it had checked. That is the behaviour
+the `failure-honesty` rule exists to produce, and it came from a real provider
+rather than from a mock arranged to be honest.
+
+**The bad half.** The tool genuinely is not reaching the model. Every part
+checks out on its own:
+
+| Checked | Result |
+|---|---|
+| Grant recorded | `["assistant","mcp.memory","approval"]` in `aiw.permissions` |
+| Install recorded | `tool.mcp-memory` in `community_installed` |
+| `servers()` resolves it | Yes — tested, including the pre-columns fallback |
+| The server runs | Yes — the repo page reads nine tools from it |
+| `npx -y @modelcontextprotocol/server-memory` | Replies to `initialize` in under a second |
+| Assistant folds in `mcp_definitions_for` | Yes, `assistant.rs:986` |
+| `sync_servers` at boot | Runs, logs no error |
+| MCP tools offered to the model | **No** — 12 of 12, none of them MCP |
+| Server process during the turn | **None started** |
+
+So `mcp_definitions_for` is returning nothing for the assistant at runtime,
+despite the grant, the install and a server that starts fine when asked
+directly. Unresolved.
+
+**What this means for the claim.** The Rust test
+`an_agent_turn_calls_an_installed_mcp_tool_only_once_it_is_granted` passes, and
+it is honest about what it covers: a real `AgentRuntime`, a real process, a
+scripted provider. It proves the wiring it exercises. It did **not** catch this,
+because it builds the workspace directly and the app assembles that state by a
+different route — the same shape of gap as the `npx` bug, where every test was
+green and no real catalogue entry could run.
+
+The module is not finished. An MCP tool can be installed, can be granted,
+appears in the permission matrix, and is callable through `ToolService` — and a
+real model is still not offered it. That is the next thing to fix, and it is
+written here rather than left as a screenshot nobody took.
+
+---
+
 ## Still not built
 
-- **A repository is still not installable**, and that is the manifest-detection
-  problem rather than an oversight. The row says so.
+- **A repository is not installable.** The manifest-detection problem, said on
+  the row rather than guessed at.
+- **MCP tools do not reach a real model in the running app.** Above.
 
 ---
 

@@ -223,24 +223,111 @@ assert!(parse_trending("<html>a redesign happened</html>", "week").is_empty());
 
 ---
 
+## Slice 4: the rest of the pages
+
+### Bundles install, and grant nothing
+
+The roadmap flagged the tension: a Community bundle carries grants, and this
+module exists to keep installing and granting apart. The resolution is that
+**a bundle installs its items and grants nothing**, then hands back the grants
+it *proposes* — named, one line each, for a single deliberate accept.
+
+One review instead of six clicks is a different thing from no review.
+
+`plan()` is pure and works the awkward cases out before anything is written:
+
+| Case | Answer |
+|---|---|
+| Item already installed | `already` — left alone, not reinstalled |
+| Item no longer in the index | `missing` — shown, because a broken bundle is the chooser's business |
+| Grant pointing at a missing item | Dropped; it would point at nothing |
+| Grant naming an agent this machine lacks | `unknown_agents` — named, not silently dropped |
+
+![Bundles](8-bundles.png)
+
+### Permissions as its own page
+
+Community servers and built-ins in one table, judged by one rule. `mcp.memory`
+sits in it as an ordinary row: the permission matrix keys off `call.tool`, so
+an MCP tool id needed no special case to appear here.
+
+The columns are the agents **on this machine** — seeded once from the built-in
+roster and files on disk afterwards. Add an agent and a column appears. The
+page now says so, because six columns otherwise read as a hard limit.
+
+![Permissions](9-permissions.png)
+
+### Models, and the runners that serve them
+
+Nothing is downloaded from this page. A model is gigabytes, and pulling one is
+a disk-and-bandwidth decision that belongs to the person, in the runner's own
+words. The page reports what is installed, what is answering, and what to type.
+
+"Installed but not answering" is its own state with its own fix — start it,
+rather than install it — so it is not folded into "not installed".
+
+![Models](10-models.png)
+
+---
+
+## Finding something: search, filter, order
+
+Every list gained a search box, a permissive-only licence filter, and a sort
+dropdown. The interesting part is what is deliberately *not* offered.
+
+**Stars became a number.** They were formatted into `version` as `"41234★"`
+and read back out with a string parse, which worked right up until something
+wanted to sort by them. `Item` now carries `stars: Option<i64>` and
+`gained: Option<i64>` — two fields, never merged.
+
+**`None` is not zero.** A registry entry has no star count at all. Ranking it
+as zero would bury it beneath every repository on the list for a reason that
+has nothing to do with the entry, so a row that cannot answer a sort goes
+**last**, not first.
+
+**A sort is only offered when the rows can answer it**, derived from the rows
+rather than the feed's name:
+
+| Feed | Carries | Offers |
+|---|---|---|
+| MCP registry | a semver | As listed · Name |
+| GitHub topic search | total stars | As listed · **Most starred** · Name |
+| Trending week/month | stars gained | As listed · **Fastest growing** · Name |
+| Over the year | both | As listed · Most starred · Fastest growing · Name |
+
+One global "Most starred" across all four would be ranking three different
+numbers under one label: a lifetime total, a gain over a week, and nothing at
+all. The dropdown carries a note saying which of those you are looking at.
+
+**The source's own order is the default**, because it means something: the
+GitHub search arrives already sorted by stars, and a trending page arrives in
+GitHub's own ranking, which is not simply the star gain. Both are better
+answers than anything computed here.
+
+**A count of matches never reads as a quiet source.** With a filter on, the
+heading shows `3 of 100`, and an empty result says the list itself is fine.
+
+The filtering and ordering run in Rust over the cached list — no network, so
+it costs nothing per keystroke — and Browse routes through the same function,
+so there is one implementation of the rules rather than two that drift. This
+project has no JavaScript test runner, which is the other half of that reason.
+
+![Search and sort](11-search.png)
+
+---
+
 ## Still not built
 
-From slice 4's tail, and named rather than quietly skipped:
+Named rather than quietly skipped:
 
 - **One repo in full** — the single-repository page.
-- **Permissions as its own page.** Community servers *are* in the matrix
-  already, beside the built-ins; what is missing is the dedicated screen.
-- **Models, and the runners that serve them.**
-- **Bundles that carry grants.** The design puts bundles on Browse as a strip;
-  a Community bundle also carries grants, and the roadmap flags that as
-  possibly deserving its own page. It has neither yet.
 - **Installing from Discover.** The registry list is read-only for now:
   `community_install` resolves ids against the starter catalogue. Wiring it to
   registry entries is small, and it is the obvious next thing.
 
 ---
 
-**Evidence.** `cargo test` — 437 passed, 0 failed. `npx tsc -b` and `cargo
+**Evidence.** `cargo test` — 460 passed, 0 failed. `npx tsc -b` and `cargo
 check` clean. Screenshots captured from the running debug build via per-window
 `PrintWindow`. Agent files quoted verbatim from the personal store. The MCP
 handshake and tool call verified against a real spawned Node process, and

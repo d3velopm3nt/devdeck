@@ -921,6 +921,13 @@ export interface CommunityItem {
   role: string
   tool_id: string
   command: string
+  /** Total stars, when the source reports one. `null` is not zero — a registry
+   *  entry has no star count at all, and ranking it as zero would bury it for
+   *  a reason that is nothing to do with the entry. */
+  stars: number | null
+  /** Stars gained over this list's window. Never mixed with `stars`: a gain
+   *  over a week and a lifetime total are not the same number. */
+  gained: number | null
 }
 
 /** An install, and the thing the Installed page exists to say. */
@@ -955,6 +962,51 @@ export const communityInstall = (id: string) =>
 export const communityUninstall = (id: string) =>
   invoke<void>('community_uninstall', { id })
 /** The separate, deliberate act: who may use it, and how. */
+/** A grant a bundle suggests. Never applied by installing. */
+export interface CommunitySuggestion {
+  item: string
+  agent: string
+  /** none | read | approval | full. A skill ignores it; its grant is binary. */
+  level: string
+}
+export interface CommunityBundle {
+  id: string
+  name: string
+  summary: string
+  items: string[]
+  grants: CommunitySuggestion[]
+}
+/** What installing a bundle would do, worked out before anything happens. */
+export interface CommunityPlan {
+  bundle: string
+  to_install: string[]
+  already: string[]
+  /** Named in the bundle and not in the index — a broken bundle, said so. */
+  missing: string[]
+  /** Offered after installing, never applied by it. */
+  grants: CommunitySuggestion[]
+  /** Grants naming an agent this machine does not have. */
+  unknown_agents: string[]
+}
+export const communityBundles = () => invoke<[CommunityBundle, CommunityPlan][]>('community_bundles')
+/** Installs the items and grants nothing; returns the grants it proposes. */
+export const communityInstallBundle = (id: string) =>
+  invoke<CommunityPlan>('community_install_bundle', { id })
+
+/** A thing that can serve an open model on this machine. */
+export interface CommunityRunner {
+  id: string
+  name: string
+  install_hint: string
+  installed: boolean
+  /** Installed and not answering is a different problem with a different fix. */
+  responding: boolean
+  version: string
+  models: { name: string; size: string }[]
+  note: string
+}
+export const communityRunners = () => invoke<CommunityRunner[]>('community_runners')
+
 /** One index source's answer, and how much to trust it. */
 export interface CommunityFeed {
   /** 'registry' | 'github' */
@@ -967,12 +1019,35 @@ export interface CommunityFeed {
   fetched_at: number
   /** How the list is ordered, or what went wrong. */
   note: string
+  /** The orders this feed can honestly be put in, worked out from the rows it
+   *  holds. A feed with no star counts does not offer to sort by stars. */
+  sorts: CommunitySort[]
+}
+
+/** One order a feed can honestly be put in. */
+export interface CommunitySort {
+  /** 'source' | 'stars' | 'growth' | 'name' */
+  id: string
+  label: string
+  /** What the order actually means. The labels are short enough to mislead. */
+  note: string
 }
 /** Cache only — opening the page never spends a rate limit. */
 export const communityIndex = () => invoke<CommunityFeed[]>('community_index')
 /** Go and look. A button, not something that happens on its own. */
 export const communityRefreshIndex = (source?: string) =>
   invoke<CommunityFeed[]>('community_refresh_index', { source: source ?? null })
+
+/** Search, filter and order one list. Cache only, so it costs nothing and can
+ *  run on every keystroke. `source` is a feed name, or 'catalog' for what
+ *  ships with DevDeck. */
+export const communityArrange = (
+  source: string,
+  q: string,
+  kinds: string[],
+  permissive: boolean,
+  sort: string,
+) => invoke<CommunityItem[]>('community_arrange', { source, q, kinds, permissive, sort })
 
 /** An MCP server running right now. */
 export interface McpServerStatus {

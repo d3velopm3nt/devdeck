@@ -37,6 +37,7 @@ mod managers;
 mod monitor;
 mod pty;
 mod scan;
+mod runners;
 mod schedule;
 mod seed;
 mod services;
@@ -1044,6 +1045,10 @@ pub fn run() {
             community::community_stop_server,
             community::community_index,
             community::community_refresh_index,
+            community::community_arrange,
+            community::community_bundles,
+            community::community_install_bundle,
+            runners::community_runners,
             git::git_changes,
             git::git_commit,
             git::git_push,

@@ -16,8 +16,7 @@ export const CAPTURE_SAY: string[] = [
  *  This session cannot deliver clicks, so a screenshot of the install/grant
  *  split has to be produced some other way. It goes through the same commands
  *  the buttons call. Empty in every shipped build. */
-export const CAPTURE_COMMUNITY: string[] = [
-]
+export const CAPTURE_COMMUNITY: string[] = []
 export const CAPTURE_TEAM_TAB: string = ''
 export const CAPTURE_GOAL: string = ''
 export const CAPTURE_NODE: string = ''

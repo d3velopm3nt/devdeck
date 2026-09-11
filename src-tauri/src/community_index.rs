@@ -75,6 +75,18 @@ pub struct Feed {
     pub fetched_at: i64,
     /// What went wrong, or how the list is ordered when nothing did.
     pub note: String,
+    /// The orders this feed can honestly be put in. Derived from the rows it
+    /// actually holds, so a source that stops reporting stars stops offering
+    /// to sort by them.
+    #[serde(default)]
+    pub sorts: Vec<SortOption>,
+}
+
+/// Fill in the sorts a feed can answer. One place, so no caller can return a
+/// feed that offers an order its rows cannot produce.
+pub fn describe(mut f: Feed) -> Feed {
+    f.sorts = sorts_for(&f.items);
+    f
 }
 
 // ---------------------------------------------------------------------------
@@ -255,9 +267,12 @@ pub fn parse_github(body: &Value) -> Vec<Item> {
                     .unwrap_or_default()
                     .to_string(),
                 licence: licence_of(r.pointer("/license/spdx_id").and_then(Value::as_str)),
-                // Stars are the whole reason this list exists, and there is
-                // nowhere else on an Item to put them.
-                version: format!("{stars}★"),
+                // Stars are the whole reason this list exists, and they are a
+                // number, so they live in a number. They used to be formatted
+                // into `version` as "41234★" and read back out with a string
+                // parse, which worked right up until something wanted to sort
+                // by them.
+                stars: Some(stars),
                 // No tool_id and no command: nothing here is installable, and
                 // an Install button that guessed would be the manifest
                 // detection problem pretending to be solved.
@@ -455,6 +470,7 @@ pub fn refresh(conn: &Connection, source: &str) -> Feed {
                 ok: true,
                 fetched_at: at,
                 note,
+                ..Default::default()
             }
         }
         Err(e) => {
@@ -582,13 +598,10 @@ pub fn parse_trending(html: &str, period: &str) -> Vec<Item> {
             licence: "missing".into(),
             // The period is on the feed, not on every row — repeating it
             // twenty times says nothing the heading has not already said.
-            version: if gained.is_empty() {
-                language
-            } else if language.is_empty() {
-                format!("+{gained} stars")
-            } else {
-                format!("{language} · +{gained} stars")
-            },
+            version: language,
+            // A gain, never a total: this page does not say how many stars a
+            // repository has, and inferring one would be inventing it.
+            gained: count_in(&gained),
             // No command and no tool_id: a trending row declares nothing, so
             // there is nothing to install and nothing to guess.
             ..Default::default()
@@ -694,7 +707,7 @@ pub struct Growth {
 pub fn snapshot(conn: &Connection, items: &[Item], at: i64) -> Result<usize, String> {
     let mut n = 0;
     for i in items {
-        let Some(stars) = stars_of(&i.version) else { continue };
+        let Some(stars) = stars_on(i) else { continue };
         let repo = i.source.trim_start_matches("https://github.com/").to_string();
         if repo.is_empty() {
             continue;
@@ -709,16 +722,59 @@ pub fn snapshot(conn: &Connection, items: &[Item], at: i64) -> Result<usize, Str
     Ok(n)
 }
 
-/// Read a star count back out of the display string the search put it in.
+/// A count GitHub wrote for a person to read — "1,234" — as a number.
+pub fn count_in(text: &str) -> Option<i64> {
+    let digits: String = text.chars().filter(|c| c.is_ascii_digit()).collect();
+    if digits.is_empty() {
+        return None;
+    }
+    digits.parse::<i64>().ok()
+}
+
+/// Read a star count back out of the display string the search used to put it
+/// in.
 ///
-/// A little grubby, and the alternative was a field on `Item` that only one of
-/// four sources could ever fill. Returns nothing for anything that is not a
-/// star count, so a trending row's "JavaScript · +1,204 stars" is not mistaken
-/// for a total.
+/// Kept only to read rows cached before stars became a field. Without it, a
+/// year of star history taken under the old shape would read as no history at
+/// all the moment this shipped — silently, and looking exactly like "you have
+/// not refreshed enough yet".
 pub fn stars_of(version: &str) -> Option<i64> {
     let v = version.trim();
     let digits = v.strip_suffix('★')?;
     digits.replace(',', "").parse::<i64>().ok()
+}
+
+/// What this row says its star count is, whichever shape it was stored in.
+pub fn stars_on(i: &Item) -> Option<i64> {
+    i.stars.or_else(|| stars_of(&i.version))
+}
+
+/// Read a gain back out of the display string trending rows used to put it in.
+///
+/// The same reason as `stars_of`, for the other number: rows cached before
+/// gains became a field carry "JavaScript · +1,204 stars". Without this, the
+/// first launch after an upgrade would quietly drop "Fastest growing" from the
+/// trending lists until somebody happened to press Refresh — a feature that
+/// disappears with no explanation is worse than one that was never there.
+pub fn gained_of(version: &str) -> Option<i64> {
+    let plus = version.find('+')?;
+    let after = &version[plus + 1..];
+    // Only a run of digits immediately after the sign, so "v1.2+build" and a
+    // date are not read as a star count.
+    let digits: String = after
+        .chars()
+        .take_while(|c| c.is_ascii_digit() || *c == ',')
+        .filter(char::is_ascii_digit)
+        .collect();
+    if digits.is_empty() {
+        return None;
+    }
+    digits.parse::<i64>().ok()
+}
+
+/// What this row says it gained, whichever shape it was stored in.
+pub fn gained_on(i: &Item) -> Option<i64> {
+    i.gained.or_else(|| gained_of(&i.version))
 }
 
 /// Growth per repository, newest reading minus oldest, within the window.
@@ -811,7 +867,11 @@ pub fn year_feed(conn: &Connection, now: i64) -> Feed {
             Some(Item {
                 id: format!("year.{}", g.repo),
                 kind: KIND_TOOL.into(),
-                version: format!("{:+} stars · now {}", g.gained, g.latest),
+                version: String::new(),
+                // Both, and honestly: the gain is what this list ranks by, the
+                // total is the reading it ended on.
+                gained: Some(g.gained),
+                stars: Some(g.latest),
                 // Never installable: this is an observation about a
                 // repository, not a thing anybody published to be run.
                 command: String::new(),
@@ -838,6 +898,7 @@ pub fn year_feed(conn: &Connection, now: i64) -> Feed {
             )
         },
         items,
+        ..Default::default()
     }
 }
 
@@ -861,6 +922,7 @@ pub fn cached(conn: &Connection, source: &str) -> Feed {
             ok: at > 0,
             fetched_at: at,
             note,
+            ..Default::default()
         },
         Err(_) => Feed {
             source: source.to_string(),
@@ -878,6 +940,127 @@ pub fn store(conn: &Connection, source: &str, items: &[Item], at: i64, note: &st
     .map_err(err)?;
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Finding something: search, filter, order
+// ---------------------------------------------------------------------------
+//
+// All four sources answer a different question, and the ordering each one
+// arrives in *means* something: the registry is newest-first, the GitHub
+// search is already most-starred, a trending page is GitHub's own ranking
+// which is not simply the star gain. So the first rule here is that the
+// source's own order is a real option and the default one.
+//
+// The second rule is that a sort is only offered when the rows can answer it.
+// A single "Most starred" across every tab would be ranking three different
+// numbers under one label: a total (search), a gain over a week (trending),
+// and nothing at all (registry). A registry entry has no star count, and
+// treating that as zero would bury it beneath every repository on the list for
+// a reason that is not about the entry.
+
+pub const SORT_SOURCE: &str = "source";
+pub const SORT_STARS: &str = "stars";
+pub const SORT_GROWTH: &str = "growth";
+pub const SORT_NAME: &str = "name";
+
+/// A sort this list can honestly answer.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct SortOption {
+    pub id: String,
+    pub label: String,
+    /// What the order actually means, for the row under the dropdown. The
+    /// labels are short enough to mislead on their own.
+    pub note: String,
+}
+
+fn opt(id: &str, label: &str, note: &str) -> SortOption {
+    SortOption { id: id.into(), label: label.into(), note: note.into() }
+}
+
+/// Which sorts to offer for a list of rows.
+///
+/// Derived from the rows, not from the feed's name, so a source that stops
+/// reporting stars stops offering the sort rather than offering one that
+/// silently ranks everything equally.
+pub fn sorts_for(items: &[Item]) -> Vec<SortOption> {
+    let mut out = vec![opt(
+        SORT_SOURCE,
+        "As listed",
+        "The order the source itself gave, which is usually the one it ranks by.",
+    )];
+    if items.iter().any(|i| stars_on(i).is_some()) {
+        out.push(opt(
+            SORT_STARS,
+            "Most starred",
+            "Total stars on GitHub. Rows whose source does not report stars go last.",
+        ));
+    }
+    if items.iter().any(|i| gained_on(i).is_some()) {
+        out.push(opt(
+            SORT_GROWTH,
+            "Fastest growing",
+            "Stars gained over this list's window — not a total, and not comparable across windows.",
+        ));
+    }
+    out.push(opt(SORT_NAME, "Name", "A to Z."));
+    out
+}
+
+/// Does this row match every word typed?
+///
+/// Every word, not the whole phrase: somebody typing "memory server" is
+/// describing what they want, not quoting a name. Matched across name,
+/// summary and author, because "the one anthropic publishes" is how people
+/// look for things they half-remember.
+pub fn matches(i: &Item, q: &str) -> bool {
+    let hay = format!("{} {} {} {}", i.name, i.summary, i.author, i.source).to_lowercase();
+    q.split_whitespace().all(|w| hay.contains(&w.to_lowercase()))
+}
+
+/// Filter, then order.
+///
+/// Returns rows rather than indices because the caller is IPC and this is the
+/// only shape that survives the boundary. Stable throughout: rows that tie
+/// keep the order the source gave them, so a sort narrows a list rather than
+/// shuffling it.
+pub fn arrange(
+    items: &[Item],
+    q: &str,
+    kinds: &[String],
+    permissive_only: bool,
+    sort: &str,
+) -> Vec<Item> {
+    let mut out: Vec<Item> = items
+        .iter()
+        .filter(|i| matches(i, q))
+        .filter(|i| kinds.is_empty() || kinds.iter().any(|k| k == &i.kind))
+        .filter(|i| !permissive_only || i.licence == "permissive")
+        .cloned()
+        .collect();
+
+    match sort {
+        // Descending, and a row that cannot answer sorts last rather than
+        // first — `None` is "this source does not count stars", and putting it
+        // at the top of "Most starred" would be the worst reading of it.
+        SORT_STARS => out.sort_by(|a, b| match (stars_on(a), stars_on(b)) {
+            (Some(x), Some(y)) => y.cmp(&x),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => std::cmp::Ordering::Equal,
+        }),
+        SORT_GROWTH => out.sort_by(|a, b| match (gained_on(a), gained_on(b)) {
+            (Some(x), Some(y)) => y.cmp(&x),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => std::cmp::Ordering::Equal,
+        }),
+        SORT_NAME => out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase())),
+        // SORT_SOURCE and anything unrecognised: leave it as the source had it.
+        _ => {}
+    }
+    out
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -993,7 +1176,7 @@ mod tests {
         .unwrap();
         let items = parse_github(&body);
         assert_eq!(items.len(), 1);
-        assert_eq!(items[0].version, "41234★");
+        assert_eq!(items[0].stars, Some(41_234), "a count is a number, not a decorated string");
         assert_eq!(items[0].licence, "permissive");
         assert!(
             items[0].command.is_empty() && items[0].tool_id.is_empty(),
@@ -1104,7 +1287,9 @@ mod tests {
         assert_eq!(a.author, "affaan-m");
         assert_eq!(a.source, "https://github.com/affaan-m/ECC");
         assert!(a.summary.contains("Skills & memory"), "entities decoded: {}", a.summary);
-        assert_eq!(a.version, "JavaScript · +1,204 stars");
+        assert_eq!(a.version, "JavaScript");
+        assert_eq!(a.gained, Some(1204), "a gain over the week, kept apart from a total");
+        assert_eq!(a.stars, None, "the trending page never says how many a repo has");
         assert!(
             a.command.is_empty() && a.tool_id.is_empty(),
             "a trending row declares nothing, so there is nothing to install"
@@ -1116,7 +1301,8 @@ mod tests {
         let b = &items[1];
         assert_eq!(b.name, "quiet-tool");
         assert_eq!(b.summary, "No description.");
-        assert_eq!(b.version, "+98 stars");
+        assert_eq!(b.version, "", "no language on this row, and nothing invented for it");
+        assert_eq!(b.gained, Some(98));
     }
 
     #[test]
@@ -1138,6 +1324,7 @@ mod tests {
             ok: false,
             fetched_at: 1_700_000_000_000,
             note: "markup changed".into(),
+            ..Default::default()
         };
         assert!(!feed.ok);
         assert_eq!(feed.items.len(), 1, "the last good list survives the failure");
@@ -1167,7 +1354,7 @@ mod tests {
             id: format!("repo.{full}"),
             name: full.rsplit('/').next().unwrap().into(),
             source: format!("https://github.com/{full}"),
-            version: format!("{stars}★"),
+            stars: Some(stars),
             ..Default::default()
         }
     }
@@ -1247,13 +1434,232 @@ mod tests {
         let f = year_feed(&c, 40 * day);
         assert!(f.ok);
         assert_eq!(f.items.len(), 1);
-        assert!(f.items[0].version.contains("+160"), "{}", f.items[0].version);
+        assert_eq!(f.items[0].gained, Some(160));
+        assert_eq!(f.items[0].stars, Some(260), "and the reading it ended on");
         assert!(f.note.contains("Not comparable"), "{}", f.note);
         assert!(f.note.contains("30 day"), "and over what span: {}", f.note);
         assert!(
             f.items[0].command.is_empty(),
             "an observation about a repository is not something to install"
         );
+    }
+
+
+    // -- search, filter, order ---------------------------------------------
+
+    fn row(name: &str, licence: &str, kind: &str) -> Item {
+        Item {
+            id: name.into(),
+            name: name.into(),
+            kind: kind.into(),
+            licence: licence.into(),
+            ..Default::default()
+        }
+    }
+
+    fn starred(name: &str, stars: i64) -> Item {
+        Item { stars: Some(stars), ..row(name, "permissive", KIND_TOOL) }
+    }
+
+    fn growing(name: &str, gained: i64) -> Item {
+        Item { gained: Some(gained), ..row(name, "missing", KIND_TOOL) }
+    }
+
+    #[test]
+    fn a_list_that_cannot_answer_a_sort_does_not_offer_it() {
+        // The registry has no star count anywhere in it. Offering "Most
+        // starred" over it would produce an order with no meaning, which is
+        // worse than not offering the option.
+        let registry = vec![row("a", "permissive", KIND_TOOL), row("b", "copyleft", KIND_TOOL)];
+        let ids: Vec<String> = sorts_for(&registry).into_iter().map(|s| s.id).collect();
+        assert_eq!(ids, vec![SORT_SOURCE, SORT_NAME]);
+    }
+
+    #[test]
+    fn a_trending_list_offers_growth_and_not_stars() {
+        // A trending page reports a gain and never a total, so "Most starred"
+        // has nothing to rank by even though the word "stars" is all over it.
+        let trending = vec![growing("a", 1204), growing("b", 90)];
+        let ids: Vec<String> = sorts_for(&trending).into_iter().map(|s| s.id).collect();
+        assert_eq!(ids, vec![SORT_SOURCE, SORT_GROWTH, SORT_NAME]);
+    }
+
+    #[test]
+    fn the_year_list_can_answer_both_because_it_holds_both() {
+        let year = vec![Item { stars: Some(40_000), gained: Some(900), ..row("a", "permissive", KIND_TOOL) }];
+        let ids: Vec<String> = sorts_for(&year).into_iter().map(|s| s.id).collect();
+        assert_eq!(ids, vec![SORT_SOURCE, SORT_STARS, SORT_GROWTH, SORT_NAME]);
+    }
+
+    #[test]
+    fn the_sources_own_order_is_the_first_option_and_leaves_the_list_alone() {
+        // The GitHub search arrives already sorted by stars and a trending page
+        // arrives in GitHub's own ranking, which is not the star gain. Both are
+        // better answers than anything computed here, so the default preserves
+        // them exactly.
+        let items = vec![starred("c", 1), starred("a", 999), starred("b", 50)];
+        let out = arrange(&items, "", &[], false, SORT_SOURCE);
+        let names: Vec<&str> = out.iter().map(|i| i.name.as_str()).collect();
+        assert_eq!(names, vec!["c", "a", "b"]);
+    }
+
+    #[test]
+    fn a_row_with_no_star_count_sorts_last_rather_than_as_zero() {
+        // This is the whole reason stars is an Option. A registry entry mixed
+        // into a starred list has no count; ranking it as zero would bury it
+        // for a reason that is not about the entry, and ranking it as missing
+        // says the true thing.
+        let items = vec![
+            row("no-count", "permissive", KIND_TOOL),
+            starred("small", 3),
+            starred("big", 9000),
+        ];
+        let out = arrange(&items, "", &[], false, SORT_STARS);
+        let names: Vec<&str> = out.iter().map(|i| i.name.as_str()).collect();
+        assert_eq!(names, vec!["big", "small", "no-count"]);
+    }
+
+    #[test]
+    fn growth_and_stars_are_ranked_separately_and_never_against_each_other() {
+        // A row gaining 1,204 this week and a row holding 41,234 in total are
+        // not comparable. Each sort reads only its own field, so the other
+        // row's number cannot leak into the order.
+        let items = vec![
+            Item { gained: Some(1204), ..starred("gainer", 2_000) },
+            Item { gained: Some(5), ..starred("giant", 41_234) },
+        ];
+        let by_stars: Vec<String> =
+            arrange(&items, "", &[], false, SORT_STARS).iter().map(|i| i.name.clone()).collect();
+        assert_eq!(by_stars, vec!["giant", "gainer"]);
+        let by_growth: Vec<String> =
+            arrange(&items, "", &[], false, SORT_GROWTH).iter().map(|i| i.name.clone()).collect();
+        assert_eq!(by_growth, vec!["gainer", "giant"]);
+    }
+
+    #[test]
+    fn search_needs_every_word_and_minds_neither_case_nor_order() {
+        // Somebody typing "memory server" is describing what they want, not
+        // quoting a name — so the words are matched, not the phrase.
+        let i = Item {
+            name: "Memory".into(),
+            summary: "A knowledge graph server an agent can write to.".into(),
+            author: "modelcontextprotocol".into(),
+            ..Default::default()
+        };
+        assert!(matches(&i, "memory server"));
+        assert!(matches(&i, "SERVER memory"));
+        assert!(matches(&i, "graph"));
+        assert!(matches(&i, ""), "an empty box filters nothing");
+        assert!(!matches(&i, "memory postgres"), "every word, not any word");
+    }
+
+    #[test]
+    fn search_reaches_the_author_and_the_repository_behind_a_row() {
+        // "the one anthropic publishes" is how people look for a thing they
+        // half-remember, and the name on the row is often not the word they
+        // have.
+        let i = Item {
+            name: "Memory".into(),
+            author: "modelcontextprotocol".into(),
+            source: "https://github.com/modelcontextprotocol/servers".into(),
+            ..Default::default()
+        };
+        assert!(matches(&i, "modelcontextprotocol"));
+        assert!(matches(&i, "github.com/modelcontextprotocol"));
+    }
+
+    #[test]
+    fn the_licence_filter_is_the_one_a_paid_product_actually_needs() {
+        // Permissive only, because "can I ship this" has exactly one cheap
+        // answer and three expensive ones.
+        let items = vec![
+            row("mit", "permissive", KIND_TOOL),
+            row("gpl", "copyleft", KIND_TOOL),
+            row("agpl", "restricted", KIND_TOOL),
+            row("none", "missing", KIND_TOOL),
+        ];
+        let out = arrange(&items, "", &[], true, SORT_SOURCE);
+        let names: Vec<&str> = out.iter().map(|i| i.name.as_str()).collect();
+        assert_eq!(names, vec!["mit"]);
+    }
+
+    #[test]
+    fn filters_narrow_together_rather_than_one_winning() {
+        let items = vec![
+            row("a", "permissive", KIND_TOOL),
+            row("ab", "copyleft", KIND_TOOL),
+            Item { name: "abc".into(), ..row("abc", "permissive", "skill") },
+        ];
+        // kind AND licence AND query, all at once.
+        let out = arrange(&items, "a", &["skill".to_string()], true, SORT_SOURCE);
+        let names: Vec<&str> = out.iter().map(|i| i.name.as_str()).collect();
+        assert_eq!(names, vec!["abc"]);
+        // No kinds named means every kind, not no kinds.
+        assert_eq!(arrange(&items, "", &[], false, SORT_SOURCE).len(), 3);
+    }
+
+    #[test]
+    fn sorting_a_tie_leaves_it_in_the_order_the_source_gave() {
+        // A sort should narrow a list, not shuffle it — two rows the sort
+        // cannot separate must not swap places between renders.
+        let items = vec![starred("second", 100), starred("first", 100), starred("third", 100)];
+        let names: Vec<String> =
+            arrange(&items, "", &[], false, SORT_STARS).iter().map(|i| i.name.clone()).collect();
+        assert_eq!(names, vec!["second", "first", "third"]);
+    }
+
+    #[test]
+    fn a_star_count_cached_before_stars_were_a_field_is_still_read() {
+        // Rows cached under the old shape carry "41234★" in `version` and no
+        // `stars`. Without the fallback, a year of star history would read as
+        // no history at all the moment this shipped — and would look exactly
+        // like "you have not refreshed enough times yet".
+        let old = Item { version: "41234★".into(), ..Default::default() };
+        assert_eq!(stars_on(&old), Some(41_234));
+        let new = Item { stars: Some(7), version: String::new(), ..Default::default() };
+        assert_eq!(stars_on(&new), Some(7));
+        // And a row that genuinely has none stays none.
+        assert_eq!(stars_on(&Item { version: "1.0.0".into(), ..Default::default() }), None);
+    }
+
+    #[test]
+    fn a_star_count_survives_the_round_trip_through_the_cache() {
+        // The cache is JSON, and a field that serialises but does not
+        // deserialise would show stars until the first restart.
+        let items = vec![starred("a", 41_234)];
+        let json = serde_json::to_string(&items).unwrap();
+        let back: Vec<Item> = serde_json::from_str(&json).unwrap();
+        assert_eq!(back[0].stars, Some(41_234));
+    }
+
+    #[test]
+    fn a_gain_cached_before_gains_were_a_field_is_still_read() {
+        // The other half of the upgrade. Without it, the first launch after
+        // this shipped would quietly drop "Fastest growing" from the trending
+        // lists until somebody happened to press Refresh.
+        let old = Item { version: "JavaScript · +1,204 stars".into(), ..Default::default() };
+        assert_eq!(gained_on(&old), Some(1204));
+        assert_eq!(gained_on(&Item { version: "+98 stars".into(), ..Default::default() }), Some(98));
+        // And the option is offered off the back of it, which is the point.
+        let ids: Vec<String> = sorts_for(&[old]).into_iter().map(|s| s.id).collect();
+        assert!(ids.contains(&SORT_GROWTH.to_string()), "{ids:?}");
+    }
+
+    #[test]
+    fn a_version_that_merely_contains_a_plus_is_not_a_gain() {
+        // Semver build metadata is "1.2.0+build.7", and reading 7 out of it
+        // would invent a star gain for a registry entry.
+        assert_eq!(gained_of("1.2.0+build.7"), None);
+        assert_eq!(gained_of("JavaScript"), None);
+        assert_eq!(gained_of(""), None);
+    }
+
+    #[test]
+    fn a_readable_count_becomes_a_number_and_a_word_does_not() {
+        assert_eq!(count_in("1,204"), Some(1204));
+        assert_eq!(count_in("90"), Some(90));
+        assert_eq!(count_in(""), None);
+        assert_eq!(count_in("some"), None);
     }
 
 }

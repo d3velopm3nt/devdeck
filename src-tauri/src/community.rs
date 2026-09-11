@@ -87,6 +87,22 @@ pub struct Item {
     /// so the trust modal has something concrete to show.
     #[serde(default)]
     pub command: String,
+    /// Total stars, when the source reports one.
+    ///
+    /// `None` is not zero. A registry entry has no star count at all, and a
+    /// repository with no stars has one that happens to be nothing — ranking
+    /// the first as if it were the second puts every registry entry at the
+    /// bottom of a list it was never in.
+    #[serde(default)]
+    pub stars: Option<i64>,
+    /// Stars gained over whatever window this row belongs to.
+    ///
+    /// Deliberately a different field from `stars`, because they answer
+    /// different questions: a trending row's "+1,204 this week" and a search
+    /// row's "41,234 in total" are not comparable, and one sort offering both
+    /// under "Most starred" would be a lie with a tidy label.
+    #[serde(default)]
+    pub gained: Option<i64>,
 }
 
 /// A row of `community_installed`, as stored.
@@ -259,6 +275,150 @@ pub fn catalog() -> Vec<Item> {
 /// One catalogue entry by id.
 pub fn item(id: &str) -> Option<Item> {
     catalog().into_iter().find(|i| i.id == id)
+}
+
+// ---------------------------------------------------------------------------
+// Bundles — a kit, and the grants it suggests
+// ---------------------------------------------------------------------------
+//
+// A bundle is several things installed together. The roadmap flags the tension
+// it creates: a Community bundle *also carries grants*, and this module exists
+// to keep installing and granting apart.
+//
+// So a bundle does not grant. It installs its items, and then hands back the
+// grants it *proposes* — named, one line each, for a person to accept in a
+// single deliberate step or not at all. The split survives, and the
+// convenience survives with it: one review instead of six clicks, which is a
+// different thing from no review.
+
+/// One grant a bundle suggests. Never applied by installing.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct Suggestion {
+    /// Catalogue id of the installed thing.
+    pub item: String,
+    pub agent: String,
+    /// none | read | approval | full. A skill ignores it; its grant is binary.
+    pub level: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct Bundle {
+    pub id: String,
+    pub name: String,
+    pub summary: String,
+    /// Catalogue ids.
+    pub items: Vec<String>,
+    pub grants: Vec<Suggestion>,
+}
+
+/// What installing a bundle would do, worked out before anything happens.
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+pub struct Plan {
+    pub bundle: String,
+    /// Not installed yet; these would be written.
+    pub to_install: Vec<String>,
+    /// Already installed; left alone rather than reinstalled.
+    pub already: Vec<String>,
+    /// Named in the bundle and not in the index. Shown rather than skipped
+    /// silently — a bundle pointing at something that does not exist is a
+    /// broken bundle, and the person choosing it should be told.
+    pub missing: Vec<String>,
+    /// The grants it would then offer. Still not applied.
+    pub grants: Vec<Suggestion>,
+    /// Grants naming an agent this machine does not have. Kept out of `grants`
+    /// so nothing is offered that cannot be granted.
+    pub unknown_agents: Vec<String>,
+}
+
+pub fn bundles() -> Vec<Bundle> {
+    vec![
+        Bundle {
+            id: "bundle.careful-dev".into(),
+            name: "A careful developer".into(),
+            summary: "The three habits worth having before an agent touches a repository: \
+                      small diffs, honest failures, and commit messages someone can read."
+                .into(),
+            items: vec![
+                "skill.small-diffs".into(),
+                "skill.failure-honesty".into(),
+                "skill.conventional-commits".into(),
+            ],
+            grants: vec![
+                Suggestion { item: "skill.small-diffs".into(), agent: "dev-a".into(), level: String::new() },
+                Suggestion { item: "skill.failure-honesty".into(), agent: "dev-a".into(), level: String::new() },
+                Suggestion { item: "skill.conventional-commits".into(), agent: "dev-a".into(), level: String::new() },
+            ],
+        },
+        Bundle {
+            id: "bundle.reviewer".into(),
+            name: "A second opinion".into(),
+            summary: "Two agents that read rather than write: one documents what landed, \
+                      one reports what the dependencies cost."
+                .into(),
+            items: vec!["agent.docs-writer".into(), "agent.dependency-auditor".into()],
+            grants: Vec::new(),
+        },
+        Bundle {
+            id: "bundle.memory".into(),
+            name: "Something to remember with".into(),
+            summary: "A knowledge graph an agent can write to and read back later, and the \
+                      habit of being honest about what it could not find."
+                .into(),
+            items: vec!["tool.mcp-memory".into(), "skill.failure-honesty".into()],
+            grants: vec![
+                // A server's first grant asks rather than deciding: nobody has
+                // watched this one run yet.
+                Suggestion { item: "tool.mcp-memory".into(), agent: "dev-a".into(), level: "approval".into() },
+                Suggestion { item: "skill.failure-honesty".into(), agent: "dev-a".into(), level: String::new() },
+            ],
+        },
+    ]
+}
+
+/// Work out what a bundle would do, given what is installed and who exists.
+///
+/// Pure, so the awkward cases are checkable: a bundle naming something that
+/// has left the index, and one naming an agent this machine does not have.
+pub fn plan(b: &Bundle, installed: &[Installed], agents: &[String]) -> Plan {
+    let have = |id: &str| installed.iter().any(|i| i.id == id);
+    let known = |a: &str| agents.iter().any(|x| x.eq_ignore_ascii_case(a));
+
+    let mut to_install = Vec::new();
+    let mut already = Vec::new();
+    let mut missing = Vec::new();
+    for id in &b.items {
+        if item(id).is_none() {
+            missing.push(id.clone());
+        } else if have(id) {
+            already.push(id.clone());
+        } else {
+            to_install.push(id.clone());
+        }
+    }
+
+    let mut grants = Vec::new();
+    let mut unknown_agents = Vec::new();
+    for g in &b.grants {
+        // A grant for an item the bundle cannot install is not offered: it
+        // would point at nothing.
+        if missing.contains(&g.item) {
+            continue;
+        }
+        if known(&g.agent) {
+            grants.push(g.clone());
+        } else if !unknown_agents.contains(&g.agent) {
+            unknown_agents.push(g.agent.clone());
+        }
+    }
+
+    Plan {
+        bundle: b.id.clone(),
+        to_install,
+        already,
+        missing,
+        grants,
+        unknown_agents,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -679,11 +839,13 @@ pub fn community_index(db: tauri::State<Db>) -> Vec<crate::community_index::Feed
     let conn = db.0.lock().unwrap();
     let mut feeds: Vec<_> = crate::community_index::SOURCES
         .iter()
-        .map(|s| crate::community_index::cached(&conn, s))
+        .map(|s| crate::community_index::describe(crate::community_index::cached(&conn, s)))
         .collect();
     // The year is computed, not fetched, so it is never cached and never
     // stale — it is whatever the readings say right now.
-    feeds.push(crate::community_index::year_feed(&conn, now_ms()));
+    feeds.push(crate::community_index::describe(
+        crate::community_index::year_feed(&conn, now_ms()),
+    ));
     feeds
 }
 
@@ -705,10 +867,85 @@ pub fn community_refresh_index(
     let conn = db.0.lock().unwrap();
     let mut feeds: Vec<_> = wanted
         .iter()
-        .map(|s| crate::community_index::refresh(&conn, s))
+        .map(|s| crate::community_index::describe(crate::community_index::refresh(&conn, s)))
         .collect();
-    feeds.push(crate::community_index::year_feed(&conn, now_ms()));
+    feeds.push(crate::community_index::describe(
+        crate::community_index::year_feed(&conn, now_ms()),
+    ));
     Ok(feeds)
+}
+
+/// The starter catalogue and every index, searched and ordered as one call.
+///
+/// Cache-only and therefore free: this never goes near the network, which is
+/// what lets it run on every keystroke. `source` names one feed, or `catalog`
+/// for the things that ship with DevDeck.
+#[tauri::command]
+pub fn community_arrange(
+    db: tauri::State<Db>,
+    source: String,
+    q: String,
+    kinds: Vec<String>,
+    permissive: bool,
+    sort: String,
+) -> Vec<Item> {
+    let conn = db.0.lock().unwrap();
+    let items = if source == "catalog" {
+        catalog()
+    } else if source == crate::community_index::SOURCE_YEAR {
+        crate::community_index::year_feed(&conn, now_ms()).items
+    } else {
+        crate::community_index::cached(&conn, &source).items
+    };
+    crate::community_index::arrange(&items, &q, &kinds, permissive, &sort)
+}
+
+/// Every bundle, with what installing it would do right now.
+#[tauri::command]
+pub fn community_bundles(db: tauri::State<Db>, ws: Ws) -> Result<Vec<(Bundle, Plan)>, String> {
+    let rows = {
+        let conn = db.0.lock().unwrap();
+        all(&conn)?
+    };
+    let agents: Vec<String> = ws.agents().into_iter().map(|a| a.id).collect();
+    Ok(bundles()
+        .into_iter()
+        .map(|b| {
+            let p = plan(&b, &rows, &agents);
+            (b, p)
+        })
+        .collect())
+}
+
+/// Install a bundle's items — and grant nothing.
+///
+/// Returns the grants it proposes, for a person to accept in one deliberate
+/// step through `community_grant`. A bundle that applied them here would be
+/// the one thing this module exists to prevent, dressed up as convenience.
+#[tauri::command]
+pub fn community_install_bundle(
+    db: tauri::State<Db>,
+    ws: Ws,
+    id: String,
+) -> Result<Plan, String> {
+    let b = bundles()
+        .into_iter()
+        .find(|b| b.id == id)
+        .ok_or_else(|| format!("no bundle called '{id}'"))?;
+
+    for item_id in &b.items {
+        if item(item_id).is_none() {
+            continue;
+        }
+        community_install(db.clone(), ws.clone(), item_id.clone())?;
+    }
+
+    let rows = {
+        let conn = db.0.lock().unwrap();
+        all(&conn)?
+    };
+    let agents: Vec<String> = ws.agents().into_iter().map(|a| a.id).collect();
+    Ok(plan(&b, &rows, &agents))
 }
 
 /// MCP servers running right now.
@@ -929,4 +1166,101 @@ mod tests {
         forget(&conn, &i.id).unwrap();
         assert!(all(&conn).unwrap().is_empty());
     }
+
+    fn have(id: &str) -> Installed {
+        Installed { id: id.into(), ..Default::default() }
+    }
+
+    fn who(names: &[&str]) -> Vec<String> {
+        names.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn a_bundle_plan_separates_what_it_would_write_from_what_it_would_offer() {
+        // The whole reason a bundle is allowed to exist here: it installs, and
+        // it *proposes* grants. Nothing in a plan is applied.
+        let b = bundles().iter().find(|b| b.id == "bundle.memory").unwrap().clone();
+        let p = plan(&b, &[], &who(&["dev-a", "qa"]));
+
+        assert_eq!(p.to_install.len(), 2, "{:?}", p.to_install);
+        assert!(p.already.is_empty());
+        assert!(p.missing.is_empty(), "the starter bundles point at real entries");
+        assert_eq!(p.grants.len(), 2);
+        // A server's first grant asks rather than deciding — nobody has
+        // watched this one run yet.
+        let tool = p.grants.iter().find(|g| g.item == "tool.mcp-memory").unwrap();
+        assert_eq!(tool.level, "approval");
+        // A skill's grant is binary, so it carries no level to misread.
+        let skill = p.grants.iter().find(|g| g.item == "skill.failure-honesty").unwrap();
+        assert!(skill.level.is_empty());
+    }
+
+    #[test]
+    fn what_is_already_installed_is_left_alone_rather_than_reinstalled() {
+        let b = bundles().iter().find(|b| b.id == "bundle.memory").unwrap().clone();
+        let p = plan(&b, &[have("skill.failure-honesty")], &who(&["dev-a"]));
+        assert_eq!(p.already, vec!["skill.failure-honesty"]);
+        assert_eq!(p.to_install, vec!["tool.mcp-memory"]);
+        assert_eq!(p.grants.len(), 2, "and both grants are still offered");
+    }
+
+    #[test]
+    fn a_bundle_naming_something_that_left_the_index_says_so() {
+        // A broken bundle is the person choosing it's business, not something
+        // to skip quietly — and the grant that pointed at it is dropped,
+        // because it would point at nothing.
+        let b = Bundle {
+            id: "b".into(),
+            name: "B".into(),
+            summary: String::new(),
+            items: vec!["skill.small-diffs".into(), "skill.gone-away".into()],
+            grants: vec![
+                Suggestion { item: "skill.gone-away".into(), agent: "dev-a".into(), level: String::new() },
+                Suggestion { item: "skill.small-diffs".into(), agent: "dev-a".into(), level: String::new() },
+            ],
+        };
+        let p = plan(&b, &[], &who(&["dev-a"]));
+        assert_eq!(p.missing, vec!["skill.gone-away"]);
+        assert_eq!(p.to_install, vec!["skill.small-diffs"]);
+        assert_eq!(p.grants.len(), 1, "no grant for a thing that cannot be installed");
+        assert_eq!(p.grants[0].item, "skill.small-diffs");
+    }
+
+    #[test]
+    fn a_grant_naming_an_agent_this_machine_does_not_have_is_named_not_offered() {
+        // Offering it would produce a button that fails, and dropping it
+        // silently would lose the fact that the bundle expected somebody.
+        let b = Bundle {
+            id: "b".into(),
+            name: "B".into(),
+            summary: String::new(),
+            items: vec!["skill.small-diffs".into()],
+            grants: vec![
+                Suggestion { item: "skill.small-diffs".into(), agent: "nobody".into(), level: String::new() },
+                Suggestion { item: "skill.small-diffs".into(), agent: "dev-a".into(), level: String::new() },
+            ],
+        };
+        let p = plan(&b, &[], &who(&["dev-a"]));
+        assert_eq!(p.unknown_agents, vec!["nobody"]);
+        assert_eq!(p.grants.len(), 1);
+        assert_eq!(p.grants[0].agent, "dev-a");
+    }
+
+    #[test]
+    fn every_starter_bundle_points_only_at_entries_that_exist() {
+        // The bundles ship with the app, so a typo in one is a broken product
+        // rather than a broken import.
+        for b in bundles() {
+            assert!(!b.items.is_empty(), "{} has nothing in it", b.id);
+            let p = plan(&b, &[], &who(&["dev-a", "dev-b", "qa", "architect", "reviewer"]));
+            assert!(p.missing.is_empty(), "{} names {:?}", b.id, p.missing);
+            assert!(
+                p.unknown_agents.is_empty(),
+                "{} suggests granting to {:?}, who do not ship",
+                b.id,
+                p.unknown_agents
+            );
+        }
+    }
+
 }

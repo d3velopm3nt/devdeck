@@ -711,7 +711,13 @@ pub fn mcp_definitions_for(
         // Granted, so it may run — and it has to run to be asked.
         let tools = match hub.ensure(spec) {
             Ok(t) => t,
-            Err(_) => continue,
+            Err(e) => {
+                // Said, not swallowed. A granted server that will not start is
+                // the difference between "you have no such tool" and "your
+                // tool is broken", and the model can only report the first.
+                eprintln!("[mcp] {} is granted to {agent} but would not start: {e}", spec.id);
+                continue;
+            }
         };
         for t in tools {
             // A read-only tool is offered to a read-only grant; anything else

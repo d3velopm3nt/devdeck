@@ -714,13 +714,20 @@ pub fn run() {
             // agent asks. Without this an installed server would only wake up
             // after somebody happened to open the Community page, which is a
             // strange thing for a grant to depend on.
-            if let (Some(db), Some(ws)) = (
+            match (
                 app.try_state::<db::Db>(),
                 app.try_state::<Arc<aiw::state::Workspace>>(),
             ) {
-                if let Err(e) = community::sync_servers(&db, &ws) {
-                    eprintln!("[community] could not read installed servers: {e}");
-                }
+                (Some(db), Some(ws)) => match community::sync_servers(&db, &ws) {
+                    // Say how many, because zero is the interesting number and
+                    // it used to be indistinguishable from not having looked.
+                    Ok(()) => eprintln!("[community] {} MCP server(s) registered", ws.mcp_servers().len()),
+                    Err(e) => eprintln!("[community] could not read installed servers: {e}"),
+                },
+                // The silent no-op that was here is exactly the failure this
+                // project has a rule about: if the state is missing, nothing
+                // happened and nothing said so.
+                _ => eprintln!("[community] MCP servers not registered: app state missing at setup"),
             }
 
             // The clock. One pass at startup, which is what makes catching up

@@ -67,6 +67,55 @@ fn no_window(cmd: &mut Command) {
 #[cfg(not(windows))]
 fn no_window(_cmd: &mut Command) {}
 
+/// What Windows will actually run for a bare program name.
+///
+/// `Command::new("npx")` fails on Windows. npx on disk is `npx.cmd`, and
+/// process creation does not consult `PATHEXT` the way a shell does — so the
+/// bare name resolves to nothing and the spawn returns "program not found"
+/// while node is plainly installed.
+///
+/// That mattered more than it looks: every npm-published MCP server is
+/// launched with `npx -y …`, so without this the entire registry is
+/// unstartable on the one platform DevDeck ships on. The live tests missed it
+/// because they spawn `node` with a script path, which needs no extension —
+/// the bug was only visible once a page asked a real catalogue entry for its
+/// tools.
+///
+/// Returns the name unchanged when nothing matches, so a genuinely missing
+/// program still fails naming what was asked for rather than a guess.
+pub fn resolve_program(program: &str) -> String {
+    if !cfg!(windows) {
+        return program.to_string();
+    }
+    let p = std::path::Path::new(program);
+    // Already spelled out, or a path rather than a name to look up.
+    if p.extension().is_some() || program.contains('/') || program.contains('\\') {
+        return program.to_string();
+    }
+    let exts = std::env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".into());
+    let Ok(path) = std::env::var("PATH") else {
+        return program.to_string();
+    };
+    for dir in path.split(';').filter(|d| !d.is_empty()) {
+        for ext in exts.split(';').filter(|e| !e.is_empty()) {
+            let candidate = std::path::Path::new(dir).join(format!("{program}{ext}"));
+            if candidate.is_file() {
+                return candidate.to_string_lossy().into_owned();
+            }
+        }
+    }
+    program.to_string()
+}
+
+/// Would a spawn find this program? Asked exactly the way the spawn asks.
+///
+/// Sharing the resolution is the point: a requirements row that probed
+/// something else could say "on PATH" beside a spawn that said "program not
+/// found", which is what it did.
+pub fn program_present(program: &str) -> bool {
+    resolve_program(program) != program || crate::runners::on_path(program)
+}
+
 impl StdioTransport {
     /// Spawn a server.
     ///
@@ -74,7 +123,7 @@ impl StdioTransport {
     /// startup should be findable in the dev console, and piping it without
     /// draining it fills the pipe and deadlocks the child.
     pub fn spawn(command: &str, args: &[String], dir: Option<&std::path::Path>) -> Result<Self, String> {
-        let mut cmd = Command::new(command);
+        let mut cmd = Command::new(resolve_program(command));
         cmd.args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -820,4 +869,61 @@ process.stdin.on("data", (d) => {
         assert!(e.contains("could not start"), "{e}");
         assert!(hub.statuses().is_empty(), "and nothing is left half-running");
     }
+
+    // -- finding the program ------------------------------------------------
+
+    #[test]
+    fn a_program_already_spelled_out_is_left_exactly_as_written() {
+        // A path is what the person meant; second-guessing it would run a
+        // different file from the one they named.
+        assert_eq!(resolve_program("node"), resolve_program("node"));
+        assert_eq!(resolve_program("server.exe"), "server.exe");
+        assert_eq!(resolve_program("C:/tools/thing.cmd"), "C:/tools/thing.cmd");
+        assert_eq!(resolve_program(r"C:\tools\thing.cmd"), r"C:\tools\thing.cmd");
+        assert_eq!(resolve_program("/usr/local/bin/node"), "/usr/local/bin/node");
+    }
+
+    #[test]
+    fn a_program_that_is_nowhere_comes_back_unchanged() {
+        // So the spawn fails naming what was asked for. Returning a guess
+        // would produce an error about a file nobody mentioned.
+        let missing = "devdeck-no-such-program-anywhere";
+        assert_eq!(resolve_program(missing), missing);
+        assert!(!program_present(missing));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn npx_resolves_to_the_cmd_that_windows_will_actually_run() {
+        // The bug this exists for. `Command::new("npx")` fails on Windows —
+        // npx on disk is npx.cmd and process creation does not consult
+        // PATHEXT — so every npm-published MCP server was unstartable, which
+        // is most of the registry. The live tests missed it because they spawn
+        // `node` with a script path, needing no extension.
+        //
+        // Skipped where Node is not installed: this asserts about the machine.
+        if !crate::runners::on_path("node") {
+            return;
+        }
+        let resolved = resolve_program("npx");
+        assert_ne!(resolved, "npx", "npx must resolve to a real file on Windows");
+        assert!(
+            std::path::Path::new(&resolved).is_file(),
+            "and to one that exists: {resolved}"
+        );
+        assert!(program_present("npx"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn the_resolved_npx_can_actually_be_spawned() {
+        // Resolving to a path is only the claim; this is the check. Spawning
+        // is what the requirements row on the repo page promises.
+        if !crate::runners::on_path("node") {
+            return;
+        }
+        let out = Command::new(resolve_program("npx")).arg("--version").output();
+        assert!(out.is_ok(), "spawning the resolved npx: {:?}", out.err());
+    }
+
 }

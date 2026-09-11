@@ -50,7 +50,7 @@ fn no_window(cmd: &mut Command) {
 #[cfg(not(windows))]
 fn no_window(_cmd: &mut Command) {}
 
-fn on_path(binary: &str) -> bool {
+pub fn on_path(binary: &str) -> bool {
     let probe = if cfg!(windows) { "where" } else { "which" };
     let mut cmd = Command::new(probe);
     cmd.arg(binary)

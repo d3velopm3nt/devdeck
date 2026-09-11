@@ -1049,6 +1049,42 @@ export const communityArrange = (
   sort: string,
 ) => invoke<CommunityItem[]>('community_arrange', { source, q, kinds, permissive, sort })
 
+/** A tool an MCP server declares, read from the running server. */
+export interface McpToolDef {
+  name: string
+  description: string
+  input_schema: unknown
+  /** The server's own hint that the tool changes nothing. A hint: an unhinted
+   *  tool counts as a write, so a lying server can only narrow itself. */
+  read_only: boolean
+}
+
+/** Something the command needs, checked against this machine. */
+export interface CommunityNeed {
+  what: string
+  present: boolean
+  hint: string
+}
+
+/** One entry, with everything this machine can honestly say about it. */
+export interface CommunityRepo {
+  item: CommunityItem
+  /** 'catalog', or the index source it was found in. */
+  found_in: string
+  installed: CommunityStanding | null
+  tools: McpToolDef[]
+  /** Why `tools` is empty. Empty string when it is not — "no tools" and "we
+   *  could not ask" are different facts. */
+  tools_note: string
+  /** [agentId, level] for every agent, including the ones on none. */
+  grants: [string, string][]
+  needs: CommunityNeed[]
+}
+
+/** Everything known about one entry. Starts an installed server to read its
+ *  real tool list, so it is a page you opened, not a row in a list. */
+export const communityRepo = (id: string) => invoke<CommunityRepo>('community_repo', { id })
+
 /** An MCP server running right now. */
 export interface McpServerStatus {
   id: string

@@ -1046,6 +1046,7 @@ pub fn run() {
             community::community_index,
             community::community_refresh_index,
             community::community_arrange,
+            community::community_repo,
             community::community_bundles,
             community::community_install_bundle,
             runners::community_runners,

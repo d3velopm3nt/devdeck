@@ -64,9 +64,12 @@ export function CommunityView() {
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   /// The server a trust modal is asking about, or null.
-  const [trust, setTrust] = useState<ipc.CommunityListing | null>(null)
+  const [trust, setTrust] = useState<ipc.CommunityItem | null>(null)
   const [servers, setServers] = useState<ipc.McpServerStatus[]>([])
   const [feeds, setFeeds] = useState<ipc.CommunityFeed[]>([])
+  /// The entry whose own page is open, or null for the list. Not a tab: you
+  /// arrive from a row and Back puts you where you were.
+  const [openId, setOpenId] = useState<string | null>(null)
   const [looking, setLooking] = useState(false)
   const agents = useAiw((s) => s.agents)
   const reloadAgents = useAiw((s) => s.reloadAgents)
@@ -114,6 +117,7 @@ export function CommunityView() {
         const [verb, id, who] = line.split(':')
         try {
           if (verb === 'tab') setTab(id as Tab)
+          else if (verb === 'open') setOpenId(id)
           else if (verb === 'refresh') setFeeds(await ipc.communityRefreshIndex())
           else if (verb === 'install') await ipc.communityInstall(id)
           else if (verb === 'grant') await ipc.communityGrant(id, who, true)
@@ -200,21 +204,33 @@ export function CommunityView() {
       )}
 
       <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
-        {rows === null && !err && (
+        {openId !== null && (
+          <RepoPage
+            id={openId}
+            busy={busy}
+            onBack={() => setOpenId(null)}
+            onInstall={(r) =>
+              r.kind === 'tool' ? setTrust(r) : void act(r.id, () => ipc.communityInstall(r.id))
+            }
+            onRemove={(id) => void act(id, () => ipc.communityUninstall(id))}
+          />
+        )}
+
+        {openId === null && rows === null && !err && (
           <div className="flex items-center gap-1.5 text-[12px] text-muted">
             <Icon name="update" size={12} spin /> Reading the index…
           </div>
         )}
 
-        {tab === 'bundles' && (
+        {openId === null && tab === 'bundles' && (
           <Bundles busy={busy} onDone={() => void load()} onGrant={onGrant} />
         )}
 
-        {tab === 'permissions' && <Permissions />}
+        {openId === null && tab === 'permissions' && <Permissions />}
 
-        {tab === 'models' && <Models />}
+        {openId === null && tab === 'models' && <Models />}
 
-        {(tab === 'discover' || tab === 'trending') && (
+        {openId === null && (tab === 'discover' || tab === 'trending') && (
           <Discover
             feeds={feeds.filter((f) =>
               tab === 'trending'
@@ -227,6 +243,7 @@ export function CommunityView() {
                 : 'Two sources, kept apart because they answer different questions. Nothing is fetched until you ask — this is the only outbound call the module makes.'
             }
             looking={looking}
+            onOpen={setOpenId}
             onRefresh={async () => {
               setLooking(true)
               setErr(null)
@@ -241,7 +258,7 @@ export function CommunityView() {
           />
         )}
 
-        {rows !== null && tab === 'browse' && (
+        {openId === null && rows !== null && tab === 'browse' && (
           <Browse
             rows={rows}
             busy={busy}
@@ -257,7 +274,7 @@ export function CommunityView() {
           />
         )}
 
-        {rows !== null && tab === 'installed' && servers.length > 0 && (
+        {openId === null && rows !== null && tab === 'installed' && servers.length > 0 && (
           <div className="mb-3 rounded-lg border border-line bg-panel p-3">
             <div className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-faint">
               Running now
@@ -287,7 +304,7 @@ export function CommunityView() {
           </div>
         )}
 
-        {rows !== null && tab === 'installed' && (
+        {openId === null && rows !== null && tab === 'installed' && (
           <InstalledList
             rows={installed}
             agents={agents.map((a) => ({ id: a.id, name: a.name }))}
@@ -321,6 +338,277 @@ export function CommunityView() {
 /// no idea how to run anything. Merging them would produce a list whose order
 /// could not be described in a sentence, which is the exact failure the
 /// Trending design warns about.
+/// One entry, in full.
+///
+/// The design's version of this page carries contributors, a readme, a version
+/// history and a verified requirements list. Most of that is data DevDeck does
+/// not have, and the page that ships is the one built from what it does — with
+/// the one section the design got exactly right kept and made real: **what it
+/// actually gives your bots**, read from the running server rather than
+/// guessed from a manifest nobody verifies.
+function RepoPage({
+  id,
+  busy,
+  onBack,
+  onInstall,
+  onRemove,
+}: {
+  id: string
+  busy: string | null
+  onBack: () => void
+  onInstall: (r: ipc.CommunityItem) => void
+  onRemove: (id: string) => void
+}) {
+  const [repo, setRepo] = useState<ipc.CommunityRepo | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    try {
+      setRepo(await ipc.communityRepo(id))
+      setErr(null)
+    } catch (e) {
+      setRepo(null)
+      setErr(e instanceof Error ? e.message : String(e))
+    }
+  }, [id])
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const back = (
+    <button className="btn-ghost mb-3 text-[11.5px]" onClick={onBack}>
+      <Icon name="chevron-left" size={12} /> Back
+    </button>
+  )
+
+  if (err)
+    return (
+      <div>
+        {back}
+        <Problem text={err} onRetry={() => void load()} />
+      </div>
+    )
+  if (repo === null)
+    return (
+      <div>
+        {back}
+        <Loading what="what we know about it" />
+      </div>
+    )
+
+  const i = repo.item
+  const lic = LICENCE[i.licence] ?? LICENCE.missing
+  const owner = ownerOf(i.source)
+  const granted = repo.grants.filter(([, l]) => l !== 'none')
+  const ungranted = repo.grants.filter(([, l]) => l === 'none')
+
+  return (
+    <div className="mx-auto max-w-[980px]">
+      {back}
+
+      {/* -- who and what -------------------------------------------------- */}
+      <div className="mb-4 flex items-start gap-3">
+        {owner ? (
+          <img
+            src={`https://github.com/${owner}.png?size=120`}
+            alt=""
+            className="h-12 w-12 shrink-0 rounded-lg border border-line object-cover"
+          />
+        ) : (
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-line bg-raise text-[16px] font-semibold text-faint">
+            {(i.author || i.name).slice(0, 1).toUpperCase()}
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-baseline gap-2">
+            <h1 className="text-[16px] font-semibold text-ink">{i.name}</h1>
+            <span className="text-[11.5px] text-muted">{i.author}</span>
+            <span className={`text-[11px] ${lic.tone}`} title={lic.why}>
+              {lic.label}
+            </span>
+            <Counts item={i} />
+            {repo.installed ? (
+              <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10.5px] text-ok">
+                Installed
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-1 text-[12px] leading-[1.55] text-body">{i.summary}</p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10.5px] text-faint">
+            {/* Where the row came from is part of what the page has to say: a
+                registry entry and a trending row are trusted differently. */}
+            <span>
+              found in <span className="text-dim">{repo.found_in}</span>
+            </span>
+            {i.version && (
+              <>
+                <span>·</span>
+                <span className="tabular-nums">{i.version}</span>
+              </>
+            )}
+            {i.source.startsWith('https://github.com/') && (
+              <>
+                <span>·</span>
+                <button
+                  className="inline-flex items-center gap-1 text-dim hover:text-indigo-300 hover:underline"
+                  onClick={() => void ipc.openUrl(i.source)}
+                >
+                  {i.source.replace('https://', '')} <Icon name="external" size={10} />
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="shrink-0">
+          {repo.installed ? (
+            <button
+              className="btn-ghost text-[12px]"
+              disabled={busy === i.id}
+              onClick={() => onRemove(i.id)}
+            >
+              Uninstall
+            </button>
+          ) : i.command || i.body ? (
+            <button
+              className="btn-primary text-[12px]"
+              disabled={busy === i.id}
+              onClick={() => onInstall(i)}
+            >
+              Install
+            </button>
+          ) : (
+            // The manifest problem, said rather than papered over with a
+            // button that would fail.
+            <span className="text-[11px] text-faint">Nothing here says how to run it</span>
+          )}
+        </div>
+      </div>
+
+      {/* -- what it gives your bots ---------------------------------------- */}
+      <Section title="What it gives your bots">
+        {repo.tools.length > 0 ? (
+          <>
+            <p className="mb-2 text-[11px] text-muted">
+              Read from the server itself, not from a manifest. A tool the server marks read-only
+              is reachable at <span className="text-info">Read</span>; everything else counts as a
+              write.
+            </p>
+            <div className="overflow-hidden rounded-lg border border-line bg-panel">
+              {repo.tools.map((t) => (
+                <div
+                  key={t.name}
+                  className="flex items-start gap-3 border-b border-line px-3 py-2 last:border-0"
+                >
+                  <span className="w-[180px] shrink-0 truncate font-mono text-[11px] text-ink">
+                    {t.name}
+                  </span>
+                  <span
+                    className={`w-[48px] shrink-0 text-[10.5px] ${
+                      t.read_only ? 'text-info' : 'text-warn'
+                    }`}
+                  >
+                    {t.read_only ? 'read' : 'write'}
+                  </span>
+                  <span className="min-w-0 flex-1 text-[11px] leading-[1.45] text-body">
+                    {t.description || 'No description from the server.'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <p className="text-[11.5px] leading-[1.55] text-muted">{repo.tools_note}</p>
+        )}
+      </Section>
+
+      {/* -- who can use it -------------------------------------------------- */}
+      {repo.grants.length > 0 && (
+        <Section title="Who can use it">
+          {granted.length === 0 ? (
+            <p className="text-[11.5px] text-warn">
+              Nobody. Installing wrote the files and granted nothing — that is the default, and it
+              is deliberate.
+            </p>
+          ) : (
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {granted.map(([agent, level]) => (
+                <span
+                  key={agent}
+                  className="rounded-md border border-line bg-raise px-2 py-0.5 text-[11px]"
+                >
+                  <span className="text-ink">{agent}</span>{' '}
+                  <span
+                    className={
+                      level === 'full' ? 'text-ok' : level === 'read' ? 'text-info' : 'text-warn'
+                    }
+                  >
+                    {level}
+                  </span>
+                </span>
+              ))}
+            </div>
+          )}
+          {ungranted.length > 0 && (
+            // The sentence the design wanted this page to be able to say.
+            <p className="text-[11px] text-faint">
+              {ungranted.length} other {ungranted.length === 1 ? 'agent has' : 'agents have'} None
+              — {ungranted.map(([a]) => a).join(', ')}. Change a grant on the Installed tab.
+            </p>
+          )}
+        </Section>
+      )}
+
+      {/* -- what it needs --------------------------------------------------- */}
+      {(i.command || repo.needs.length > 0) && (
+        <Section title="What it runs, and what that needs">
+          {i.command && (
+            <pre className="mb-2 overflow-x-auto rounded-lg border border-line bg-panel px-3 py-2 font-mono text-[11px] text-ink">
+              {i.command}
+            </pre>
+          )}
+          {repo.needs.map((n) => (
+            <div key={n.what} className="flex items-center gap-2 py-0.5 text-[11.5px]">
+              <span
+                className={`h-[6px] w-[6px] shrink-0 rounded-full ${
+                  n.present ? 'bg-emerald-400' : 'bg-amber-400'
+                }`}
+              />
+              <span className="text-body">{n.what}</span>
+              <span className={n.present ? 'text-ok' : 'text-warn'}>
+                {n.present ? 'on PATH' : 'not found'}
+              </span>
+              {!n.present && (
+                <span className="font-mono text-[10.5px] text-faint">{n.hint}</span>
+              )}
+            </div>
+          ))}
+          {/* Checked here, so it can be said plainly. The design's page listed
+              what a server "can reach" from its own manifest; that is the
+              publisher's claim, and printing it under DevDeck's heading would
+              lend it authority nobody earned. The tool list above is the
+              honest version of the same question. */}
+          <p className="mt-2 text-[11px] text-faint">
+            Checked against this machine just now. What the server then does with the network or
+            the disk is not something DevDeck audits — the permission matrix is what limits it.
+          </p>
+        </Section>
+      )}
+    </div>
+  )
+}
+
+/// A titled block on the repo page.
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="mb-4">
+      <h2 className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-faint">
+        {title}
+      </h2>
+      {children}
+    </section>
+  )
+}
+
 /// The starter catalogue, searchable by the same rules as every other list.
 ///
 /// The order and the filtering are done in Rust, over `catalog`, and the
@@ -411,11 +699,13 @@ function Discover({
   blurb,
   looking,
   onRefresh,
+  onOpen,
 }: {
   feeds: ipc.CommunityFeed[]
   blurb: string
   looking: boolean
   onRefresh: () => void
+  onOpen: (id: string) => void
 }) {
   const title: Record<string, string> = {
     registry: 'MCP registry',
@@ -455,6 +745,7 @@ function Discover({
           title={title[f.source] ?? f.source}
           q={typed}
           permissive={permissive}
+          onOpen={onOpen}
         />
       ))}
     </div>
@@ -565,11 +856,13 @@ function FeedSection({
   title,
   q,
   permissive,
+  onOpen,
 }: {
   feed: ipc.CommunityFeed
   title: string
   q: string
   permissive: boolean
+  onOpen: (id: string) => void
 }) {
   const [sort, setSort] = useState('source')
   const [rows, setRows] = useState<ipc.CommunityItem[]>(feed.items)
@@ -657,7 +950,7 @@ function FeedSection({
       ) : (
         <div className="overflow-hidden rounded-lg border border-line bg-panel">
           {rows.slice(0, 20).map((i) => (
-            <IndexRow key={i.id} item={i} />
+            <IndexRow key={i.id} item={i} onOpen={onOpen} />
           ))}
         </div>
       )}
@@ -1035,7 +1328,7 @@ function ownerOf(source: string): string | null {
 }
 
 /// One row of an index: who made it, what it is, and a way to go and look.
-function IndexRow({ item }: { item: ipc.CommunityItem }) {
+function IndexRow({ item, onOpen }: { item: ipc.CommunityItem; onOpen: (id: string) => void }) {
   const owner = ownerOf(item.source)
   const [broken, setBroken] = useState(false)
   const repo = item.source.startsWith('https://github.com/')
@@ -1062,17 +1355,16 @@ function IndexRow({ item }: { item: ipc.CommunityItem }) {
 
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
-          {repo ? (
-            <button
-              className="truncate text-[12px] font-medium text-ink hover:text-indigo-300 hover:underline"
-              title={`Open ${item.source}`}
-              onClick={() => void ipc.openUrl(item.source)}
-            >
-              {item.name}
-            </button>
-          ) : (
-            <span className="truncate text-[12px] font-medium text-ink">{item.name}</span>
-          )}
+          {/* The name opens DevDeck's own page for it. Going to github.com is
+              the icon on the right — a different act, and leaving the app
+              should never be the thing a name does by default. */}
+          <button
+            className="truncate text-[12px] font-medium text-ink hover:text-indigo-300 hover:underline"
+            title="What DevDeck knows about it"
+            onClick={() => onOpen(item.id)}
+          >
+            {item.name}
+          </button>
           {item.version && (
             <span className="shrink-0 text-[10.5px] tabular-nums text-faint">{item.version}</span>
           )}
@@ -1160,7 +1452,10 @@ function Trust({
   onCancel,
   onConfirm,
 }: {
-  row: ipc.CommunityListing
+  // The entry, not the listing: a trust decision is about what will run, and
+  // whether it happens to be installed is a different question. Taking the
+  // narrower type is what lets an index row reach this modal at all.
+  row: ipc.CommunityItem
   onCancel: () => void
   onConfirm: () => void
 }) {

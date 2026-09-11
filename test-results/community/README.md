@@ -316,18 +316,91 @@ project has no JavaScript test runner, which is the other half of that reason.
 
 ---
 
+## One repo, in full
+
+The last page in the design, and the one that found a bug.
+
+The design's version carries contributors, a readme, a version history and a
+verified requirements list. Most of that is data DevDeck does not have. What
+ships is built from what it does have — with the one section the design got
+exactly right kept and made real:
+
+**What it gives your bots is read from the running server.** Not parsed from a
+manifest, not guessed from a name: `community_repo` starts the server and asks
+it, so the nine tools below are `@modelcontextprotocol/server-memory`'s own
+answer, and `read`/`write` comes from each tool's `readOnlyHint`.
+
+![One repo, in full](12-repo.png)
+
+An empty tool list always says **which kind of empty**. Four states, because
+only one of them is a problem to fix:
+
+| State | What the page says |
+|---|---|
+| Not a server | "A skill is instructions, not a server — it has no tools of its own" |
+| Not installed | "A server declares its tools when it starts… Nothing here is guessed from a manifest" |
+| Would not start | "Installed, but it would not start… — *the real error*" |
+| Started, declares none | "It started and declared no tools at all. That is the server's answer, not a failure to ask" |
+
+The page deliberately does **not** carry the design's "What it can reach" list.
+That comes from a manifest nobody verifies, and printing it under DevDeck's own
+heading would lend authority to a claim it had not checked. The tool list is
+the honest version of the same question.
+
+### The bug it found
+
+The first render of this page said two things at once:
+
+> What it gives your bots — *Installed, but it would not start, so its tools
+> could not be read — could not start 'npx': program not found*
+>
+> What it runs, and what that needs — *Node.js · **on PATH***
+
+Both were produced by working code, and they could not both be true.
+
+**`Command::new("npx")` fails on Windows.** npx on disk is `npx.cmd`, and
+process creation does not consult `PATHEXT` the way a shell does. Every
+npm-published MCP server launches with `npx -y …`, so **the entire registry was
+unstartable on the one platform DevDeck ships on** — slice 1 worked in its
+tests and could not have worked for a single real catalogue entry.
+
+The tests missed it the same way the startup-abort bug was missed: the live MCP
+tests spawn `node` with a script path, which needs no extension. Nothing
+exercised the path every shipped entry actually uses.
+
+Two fixes, and the second is the one that matters longer:
+
+1. `resolve_program` walks `PATH` × `PATHEXT` and returns what Windows will
+   really run, leaving a genuinely missing program's name unchanged so the
+   error still names what was asked for.
+2. The requirements row and the spawn now **share that resolution**
+   (`program_present`). They were disagreeing because the row probed `node`
+   while the command ran `npx` — a green tick standing in for the thing it was
+   not asking about. A row that cannot disagree with the spawn is a promise the
+   spawn can keep.
+
+| Test | Why it exists |
+|---|---|
+| `npx_resolves_to_the_cmd_that_windows_will_actually_run` | The bug itself, pinned |
+| `the_resolved_npx_can_actually_be_spawned` | Resolving to a path is the claim; spawning is the check |
+| `a_program_that_is_nowhere_comes_back_unchanged` | A guess would fail naming a file nobody mentioned |
+| `the_requirements_row_agrees_with_what_a_spawn_would_do` | The two screens that contradicted each other |
+| `an_empty_tool_list_always_says_which_kind_of_empty_it_is` | Four states; a single blank would hide the one worth fixing |
+| `the_catalogue_wins_over_an_index_row_with_the_same_id` | An index row carries no body or tool id — preferring it loses what makes it installable |
+
+---
+
 ## Still not built
 
 Named rather than quietly skipped:
 
-- **One repo in full** — the single-repository page.
-- **Installing from Discover.** The registry list is read-only for now:
-  `community_install` resolves ids against the starter catalogue. Wiring it to
-  registry entries is small, and it is the obvious next thing.
+- **Installing from Discover.** `community_install` resolves ids against the
+  starter catalogue, so a registry entry opens its page and reads as not
+  installable. The page is ready for it; the resolver is the missing piece.
 
 ---
 
-**Evidence.** `cargo test` — 460 passed, 0 failed. `npx tsc -b` and `cargo
+**Evidence.** `cargo test` — 474 passed, 0 failed. `npx tsc -b` and `cargo
 check` clean. Screenshots captured from the running debug build via per-window
 `PrintWindow`. Agent files quoted verbatim from the personal store. The MCP
 handshake and tool call verified against a real spawned Node process, and

@@ -278,6 +278,128 @@ pub fn item(id: &str) -> Option<Item> {
 }
 
 // ---------------------------------------------------------------------------
+// One repo, in full
+// ---------------------------------------------------------------------------
+//
+// The design's page shows contributors, a readme, a version history and a
+// verified requirements list. Most of that is data DevDeck does not have, and
+// the honest page is the one built from what it does:
+//
+//  * What the row says about itself — name, licence, stars, where it came from.
+//  * **What it actually gives your bots.** Not guessed from a manifest: an MCP
+//    server declares its tools when it starts, so this is the real list, read
+//    over the protocol, or an explicit reason why it could not be read.
+//  * Who can use it, from the permission matrix rather than from the install.
+//  * What it needs to run, checked against this machine.
+//
+// The thing it deliberately does not have is the design's "What it can reach"
+// list. That comes from a manifest nobody verifies, and a page that printed it
+// under DevDeck's own heading would be lending authority to a claim it had not
+// checked. The tool list below is the honest version of the same question.
+
+/// Something the command needs before it can run.
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+pub struct Need {
+    pub what: String,
+    /// Checked against this machine, not read from a manifest.
+    pub present: bool,
+    /// How to get it, when it is missing.
+    pub hint: String,
+}
+
+/// Everything known about one entry, gathered in one call.
+#[derive(Serialize, Clone, Debug, Default)]
+pub struct Repo {
+    pub item: Item,
+    /// Which list it was found in: `catalog`, or an index source.
+    pub found_in: String,
+    pub installed: Option<Installed>,
+    /// The tools the server declares, read from the running server.
+    pub tools: Vec<crate::mcp::McpTool>,
+    /// Why `tools` is empty. Empty string when it is not — "no tools" and "we
+    /// could not ask" are different facts and the page shows which one it has.
+    pub tools_note: String,
+    /// Agent id to level, for this item's tool id. Empty for a skill or an
+    /// agent, which are not rows in the matrix.
+    pub grants: Vec<(String, String)>,
+    /// What the command needs, checked against this machine.
+    pub needs: Vec<Need>,
+}
+
+/// Find one entry by id, across the catalogue and every cached index.
+///
+/// The catalogue wins when both have it: a starter entry carries a body and a
+/// tool id, and an index row with the same id carries neither, so preferring
+/// the index would lose the half that makes it installable.
+pub fn find_item(id: &str, catalog: &[Item], feeds: &[(String, Vec<Item>)]) -> Option<(Item, String)> {
+    if let Some(i) = catalog.iter().find(|i| i.id == id) {
+        return Some((i.clone(), "catalog".to_string()));
+    }
+    for (source, items) in feeds {
+        if let Some(i) = items.iter().find(|i| i.id == id) {
+            return Some((i.clone(), source.clone()));
+        }
+    }
+    None
+}
+
+/// The program a command needs, and how somebody would get it.
+///
+/// Pure, so the mapping is checkable without a PATH to look at. Returns
+/// nothing for a command whose runner we do not recognise — better an absent
+/// row than a confident "not installed" about a thing we cannot name.
+/// The probe is the command's **own** program, not a stand-in for it.
+///
+/// It used to answer "node" for an `npx` command, which read as a green tick
+/// beside "could not start 'npx'" — two checks disagreeing on one screen,
+/// because only one of them was asking about the thing that actually runs.
+pub fn runner_of(command: &str) -> Option<(String, &'static str, &'static str)> {
+    // The same quote-aware split the runner itself uses, so what is named here
+    // is what would actually be executed. Splitting on whitespace read a
+    // quoted path under Program Files as a program called `C:\Program`.
+    let (first, _) = crate::mcp::split_command(command)?;
+    // `npx.cmd` on Windows, `npx` elsewhere.
+    let bare = first.rsplit(['/', '\\']).next().unwrap_or(&first);
+    let bare = bare.split('.').next().unwrap_or(bare);
+    let probe = bare.to_string();
+    match bare.to_ascii_lowercase().as_str() {
+        "npx" | "npm" | "node" => Some((probe, "Node.js", "winget install OpenJS.NodeJS.LTS")),
+        "uvx" | "uv" => Some((probe, "uv", "winget install astral-sh.uv")),
+        "python" | "python3" => Some((probe, "Python", "winget install Python.Python.3.12")),
+        "docker" => Some((probe, "Docker", "winget install Docker.DockerDesktop")),
+        _ => None,
+    }
+}
+
+/// Why the tool list is empty, in the words of somebody deciding what to do.
+///
+/// Four states, not two. "It is not a server", "it is not installed",
+/// "we could not start it" and "it started and declares nothing" are different
+/// facts, and only one of them is a problem to fix.
+pub fn tools_note(kind: &str, installed: bool, err: Option<&str>, found: usize) -> String {
+    if kind != KIND_TOOL {
+        return format!(
+            "A {kind} is instructions, not a server — it has no tools of its own. Granting it \
+             puts its text in front of an agent."
+        );
+    }
+    if !installed {
+        return "A server declares its tools when it starts, so this list is only knowable \
+                once it is installed. Nothing here is guessed from a manifest."
+            .into();
+    }
+    if let Some(e) = err {
+        return format!("Installed, but it would not start, so its tools could not be read — {e}");
+    }
+    if found == 0 {
+        return "It started and declared no tools at all. That is the server's answer, not a \
+                failure to ask."
+            .into();
+    }
+    String::new()
+}
+
+// ---------------------------------------------------------------------------
 // Bundles — a kit, and the grants it suggests
 // ---------------------------------------------------------------------------
 //
@@ -900,6 +1022,88 @@ pub fn community_arrange(
     crate::community_index::arrange(&items, &q, &kinds, permissive, &sort)
 }
 
+/// One entry, with everything this machine can honestly say about it.
+///
+/// The expensive part is the tool list, and it is only reached for an
+/// installed server: `Hub::ensure` starts the process if it is not already
+/// running, which is a thing to do when somebody opened the page for that
+/// server and not a thing to do while rendering a list.
+#[tauri::command]
+pub fn community_repo(db: tauri::State<Db>, ws: Ws, id: String) -> Result<Repo, String> {
+    let (rows, feeds) = {
+        let conn = db.0.lock().unwrap();
+        let rows = all(&conn)?;
+        let feeds: Vec<(String, Vec<Item>)> = crate::community_index::SOURCES
+            .iter()
+            .map(|src| {
+                let f = crate::community_index::cached(&conn, src);
+                (f.source, f.items)
+            })
+            .collect();
+        (rows, feeds)
+    };
+
+    let (item, found_in) = find_item(&id, &catalog(), &feeds)
+        .ok_or_else(|| format!("nothing in the catalogue or any cached index called '{id}'"))?;
+    let installed = rows.iter().find(|r| r.id == id).cloned();
+
+    // Who can use it, straight from the matrix rather than from the install —
+    // every agent, including the ones on `none`, because "four other agents
+    // have None" is the sentence this page exists to be able to say.
+    let grants: Vec<(String, String)> = if item.tool_id.is_empty() {
+        Vec::new()
+    } else {
+        ws.agents()
+            .into_iter()
+            .map(|a| {
+                let level = a
+                    .permissions
+                    .get(&item.tool_id)
+                    .cloned()
+                    .unwrap_or_else(|| "none".into());
+                (a.id, if level.is_empty() { "none".into() } else { level })
+            })
+            .collect()
+    };
+
+    // What it needs, checked here rather than read from a manifest.
+    let needs = match runner_of(&item.command) {
+        Some((probe, label, hint)) => vec![Need {
+            what: label.into(),
+            // Asked the way the spawn asks, so the two cannot disagree.
+            present: crate::mcp::program_present(&probe),
+            hint: hint.into(),
+        }],
+        None => Vec::new(),
+    };
+
+    // And the real answer to "what does it give your bots".
+    let mut tools = Vec::new();
+    let mut err = None;
+    if item.kind == KIND_TOOL && installed.is_some() && !item.command.is_empty() {
+        let spec = crate::mcp::ServerSpec {
+            id: item.tool_id.trim_start_matches(crate::mcp::PREFIX).to_string(),
+            name: item.name.clone(),
+            command: item.command.clone(),
+        };
+        match ws.mcp.ensure(&spec) {
+            Ok(t) => tools = t,
+            Err(e) => err = Some(e),
+        }
+    }
+    let tools_note = tools_note(&item.kind, installed.is_some(), err.as_deref(), tools.len());
+
+    Ok(Repo {
+        item,
+        found_in,
+        installed,
+        tools,
+        tools_note,
+        grants,
+        needs,
+    })
+}
+
 /// Every bundle, with what installing it would do right now.
 #[tauri::command]
 pub fn community_bundles(db: tauri::State<Db>, ws: Ws) -> Result<Vec<(Bundle, Plan)>, String> {
@@ -1261,6 +1465,129 @@ mod tests {
                 p.unknown_agents
             );
         }
+    }
+
+
+    // -- one repo, in full -------------------------------------------------
+
+    fn idx(id: &str) -> Item {
+        Item { id: id.into(), name: "from an index".into(), ..Default::default() }
+    }
+
+    #[test]
+    fn the_catalogue_wins_over_an_index_row_with_the_same_id() {
+        // A starter entry carries a body and a tool id; an index row with the
+        // same id carries neither. Preferring the index would lose the half
+        // that makes it installable, and the page would offer to install
+        // something with nothing to write.
+        let cat = catalog();
+        let real = cat.first().unwrap().clone();
+        let feeds = vec![("github".to_string(), vec![idx(&real.id)])];
+        let (found, source) = find_item(&real.id, &cat, &feeds).unwrap();
+        assert_eq!(source, "catalog");
+        assert_eq!(found.name, real.name);
+        assert!(!found.body.is_empty() || !found.tool_id.is_empty());
+    }
+
+    #[test]
+    fn an_index_row_is_found_and_says_which_index_it_came_from() {
+        // Where a row was found is part of what the page has to say — a
+        // registry entry and a trending row are trusted differently.
+        let feeds = vec![
+            ("registry".to_string(), vec![idx("tool.registry.x")]),
+            ("trending-week".to_string(), vec![idx("trend.week.a/b")]),
+        ];
+        let (_, source) = find_item("trend.week.a/b", &catalog(), &feeds).unwrap();
+        assert_eq!(source, "trending-week");
+        assert!(find_item("nope", &catalog(), &feeds).is_none());
+    }
+
+    #[test]
+    fn the_first_index_holding_a_row_is_the_one_reported() {
+        // A repository can be in the search list and in trending at once under
+        // different ids, but the same id in two feeds must resolve to one
+        // answer rather than depending on iteration order.
+        let feeds = vec![
+            ("github".to_string(), vec![idx("repo.a/b")]),
+            ("trending-week".to_string(), vec![idx("repo.a/b")]),
+        ];
+        assert_eq!(find_item("repo.a/b", &[], &feeds).unwrap().1, "github");
+    }
+
+    #[test]
+    fn a_command_names_the_thing_that_has_to_be_on_the_machine() {
+        // The probe is the command's *own* program, not a stand-in. Answering
+        // "node" for an `npx` command put a green "on PATH" beside a spawn
+        // that said "could not start 'npx'" — two checks disagreeing on one
+        // screen because only one was asking about what actually runs.
+        let npx = runner_of("npx -y @modelcontextprotocol/server-memory").unwrap();
+        assert_eq!(npx.0, "npx", "probe the program that runs");
+        assert_eq!(npx.1, "Node.js", "named for a person in the label");
+
+        assert_eq!(runner_of("uvx mcp-server-git").unwrap().0, "uvx");
+        assert_eq!(runner_of("python -m server").unwrap().0, "python");
+        // Windows spells it npx.cmd; the extension is not part of the name to
+        // look up, because resolving one is the spawn's job.
+        assert_eq!(runner_of("npx.cmd -y thing").unwrap().0, "npx");
+        // Quoted, because that is how a path with a space is actually written
+        // and how the runner itself parses one.
+        assert_eq!(
+            runner_of(r#""C:\Program Files\nodejs\npx.cmd" -y thing"#).unwrap().0,
+            "npx"
+        );
+    }
+
+    #[test]
+    fn the_requirements_row_agrees_with_what_a_spawn_would_do() {
+        // The two used to be able to disagree, and did: "Node.js on PATH"
+        // printed directly under "could not start 'npx': program not found".
+        // They share one resolution now, so the row is a promise the spawn
+        // can keep.
+        let (probe, _, _) = runner_of("npx -y @modelcontextprotocol/server-memory").unwrap();
+        assert_eq!(
+            crate::mcp::program_present(&probe),
+            crate::mcp::resolve_program(&probe) != probe || crate::runners::on_path(&probe),
+        );
+    }
+
+    #[test]
+    fn a_runner_we_cannot_name_produces_no_row_rather_than_a_wrong_one() {
+        // An absent requirement beats a confident "not installed" about a
+        // thing we could not identify — the second would send somebody to
+        // install software they already have under another name.
+        assert!(runner_of("some-bespoke-binary --serve").is_none());
+        assert!(runner_of("").is_none());
+    }
+
+    #[test]
+    fn an_empty_tool_list_always_says_which_kind_of_empty_it_is() {
+        // Four states, not two. Only one of them is a problem to fix, and a
+        // page that showed the same blank for all four would hide the one
+        // that is.
+        let not_a_server = tools_note(KIND_SKILL, true, None, 0);
+        assert!(not_a_server.contains("instructions"), "{not_a_server}");
+
+        let not_installed = tools_note(KIND_TOOL, false, None, 0);
+        assert!(not_installed.contains("once it is installed"), "{not_installed}");
+        assert!(
+            not_installed.contains("guessed from a manifest"),
+            "and says it is not guessing: {not_installed}"
+        );
+
+        let broken = tools_note(KIND_TOOL, true, Some("spawn failed: ENOENT"), 0);
+        assert!(broken.contains("would not start"), "{broken}");
+        assert!(broken.contains("ENOENT"), "carrying the real reason: {broken}");
+
+        let genuinely_none = tools_note(KIND_TOOL, true, None, 0);
+        assert!(genuinely_none.contains("declared no tools"), "{genuinely_none}");
+        assert_ne!(genuinely_none, broken, "a server with none is not a server that failed");
+    }
+
+    #[test]
+    fn a_tool_list_that_was_read_carries_no_note_at_all() {
+        // The note is the explanation for an absence. Text beside a real list
+        // would read as a caveat about the list.
+        assert_eq!(tools_note(KIND_TOOL, true, None, 3), "");
     }
 
 }

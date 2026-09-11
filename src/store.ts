@@ -45,6 +45,12 @@ const LOG_UI_LIMIT = 5000
 
 export type Theme = 'dark' | 'light'
 export type RailView =
+  /// The front door: the day, and what wants you in it. Merges the channels
+  /// that used to speak separately — approvals, bots, mail, reminders.
+  | 'today'
+  /// The old front door, now a dev dashboard under Tools. Kept whole rather
+  /// than deleted: services, terminals and the master log are still worth a
+  /// page, just not the first one.
   | 'home'
   | 'inbox'
   /// Team: goals, features and work. Which of the three is open is the
@@ -298,6 +304,14 @@ export interface AppState {
   /// on the page — one navigation, not two.
   teamTab: TeamTab
   setTeamTab: (t: TeamTab) => void
+  /// Which area Today is narrowed to, or null for all of them.
+  ///
+  /// On the view, not above it. The workspace tabs tried to be one frame every
+  /// view sat inside, and only four of thirteen honoured it — so picking
+  /// *Life* still showed you everyone's calendar. A filter that belongs to one
+  /// page can be honest about what it narrows; a global one cannot.
+  todayArea: number | null
+  setTodayArea: (id: number | null) => void
   /** The most recent thing worth interrupting for, until it is dismissed. */
   toast: Activity | null
   dismissToast: () => void
@@ -468,19 +482,36 @@ const loadSeen = () => Number(localStorage.getItem(SEEN_KEY) ?? 0) || 0
 /// include new views, so a view added later would be written to localStorage,
 /// fail validation on the next launch, and silently drop the user back to Home.
 const RAIL_VIEWS: readonly RailView[] = [
+  'today',
   'home',
   'inbox',
   'team',
   'bots',
   'analytics',
   'calendar',
+  // Mail and Community were missing, which is exactly the failure the note
+  // above describes: both were written to localStorage, both failed
+  // validation on the next launch, and both dropped you back on Home.
+  'mail',
   'projects',
   'stash',
   'connections',
+  'community',
   'aiworkspace',
   'machine',
   'settings',
 ]
+
+/// Set once, when a copy that predates Today first opens.
+const TODAY_KEY = 'devdeck.rail.movedToToday'
+
+/// Today's area chip. Absent means all of them, which is the default: you
+/// open the day and see the whole day, and narrowing is a visible act.
+const TODAY_AREA_KEY = 'devdeck.today.area'
+const loadTodayArea = (): number | null => {
+  const v = Number(localStorage.getItem(TODAY_AREA_KEY))
+  return Number.isFinite(v) && v > 0 ? v : null
+}
 
 const loadRailView = (): RailView => {
   if (CAPTURE_RAIL) return CAPTURE_RAIL as RailView
@@ -488,7 +519,13 @@ const loadRailView = (): RailView => {
   // Bots moved back into Team. The old value still means something, so it is
   // translated rather than failed — failing it would drop you on Home.
   if (v === 'bots') return 'team'
-  return v && RAIL_VIEWS.includes(v) ? v : 'home'
+  // Home became Today. Moved once, not every launch: after this, landing on
+  // the dashboard is a choice somebody made and it is kept.
+  if (v === 'home' && !localStorage.getItem(TODAY_KEY)) {
+    localStorage.setItem(TODAY_KEY, '1')
+    return 'today'
+  }
+  return v && RAIL_VIEWS.includes(v) ? v : 'today'
 }
 
 const AW_KEY = 'devdeck.activeWorkspace'
@@ -986,6 +1023,12 @@ export const useApp = create<AppState>((set, get) => ({
   setTeamTab: (t) => {
     localStorage.setItem(TEAM_KEY, t)
     set({ teamTab: t, railView: 'team' })
+  },
+  todayArea: loadTodayArea(),
+  setTodayArea: (id) => {
+    if (id == null) localStorage.removeItem(TODAY_AREA_KEY)
+    else localStorage.setItem(TODAY_AREA_KEY, String(id))
+    set({ todayArea: id })
   },
   inboxRead: {},
   inboxFloor: 0,

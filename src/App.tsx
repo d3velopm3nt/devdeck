@@ -19,6 +19,7 @@ import { WorkspaceTabs } from './shell/WorkspaceTabs'
 import { WindowControls } from './shell/WindowControls'
 import { AgentCluster, NotificationBell, AccountChip } from './shell/TopBarStatus'
 import { Home } from './components/Home'
+import { Today } from './components/Today'
 import { Explorer } from './components/Explorer'
 import { MachineSetup } from './components/MachineSetup'
 import { CommunityView } from './components/CommunityView'
@@ -909,6 +910,7 @@ export default function App() {
           </aside>
         )}
         <main className="min-w-0 flex-1">
+          {railView === 'today' && <Today />}
           {railView === 'home' && <Home />}
           {/* The Dock stays mounted (terminals live in it) — just hidden when
               another rail view is showing. */}

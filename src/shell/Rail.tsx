@@ -40,34 +40,41 @@ const TEAM: { id: TeamTab; icon: IconName; label: string }[] = [
   { id: 'bots', icon: 'bot', label: 'Bots' },
 ]
 
-/// Destinations that are neither the team nor the tree.
-///
-/// The Assistant is not here: it is the first contact on Bots, because it is
-/// one of the things you talk to rather than a place you go. What is left of
-/// its old surface is configuration, under Settings.
+/// The places you live in. Ordered by how often a day touches them.
 const WORK: Item[] = [
   // Time sits with the places you go rather than with the app's own settings:
   // a calendar is a thing you work out of, not a thing you configure.
   { view: 'calendar', icon: 'schedule', label: 'Calendar' },
-  // Mail is the same kind of thing, and it is deliberately not next to Inbox:
-  // the Inbox is what the team needs from you, and mixing other people's
-  // email into that count is how the badge stops meaning anything.
+  // Mail is deliberately not next to Inbox: the Inbox is what the team needs
+  // from you, and mixing other people's email into that count is how the
+  // badge stops meaning anything.
   { view: 'mail', icon: 'mail', label: 'Mail' },
-  { view: 'connections', icon: 'database', label: 'Connections' },
 ]
 
-/// The app itself, anchored to the bottom.
-const APP: Item[] = [
+/// Tools: the surfaces you visit on purpose rather than live in.
+///
+/// These were five separate doors on a rail of twelve, which is how a rail
+/// stops being navigation and becomes a list. They are one door now, opening
+/// on a sub-menu — the same shape Team uses, for the same reason.
+const TOOLS: Item[] = [
+  // The old Home. Kept whole: services, terminals and the master log are
+  // still worth a page, just not the first one you see.
+  { view: 'home', icon: 'home', label: 'Dashboard' },
+  { view: 'connections', icon: 'database', label: 'Connections' },
   { view: 'analytics', icon: 'history', label: 'Analytics' },
   { view: 'stash', icon: 'stash', label: 'Stash' },
   // Directly above Machine, and the adjacency is the idea: Machine installs
   // tools for you, Community installs them for your bots.
   { view: 'community', icon: 'package', label: 'Community' },
   { view: 'machine', icon: 'machine', label: 'Machine' },
-  { view: 'settings', icon: 'settings', label: 'Settings' },
 ]
 
 const KEY = 'devdeck.rail.expanded'
+/// Whether the Tools sub-menu is open. Closed by default — the point of the
+/// group is that those five are not in front of you all day.
+const TOOLS_OPEN_KEY = 'devdeck.rail.toolsOpen'
+/// Which tool the collapsed icon opens.
+const LAST_TOOL_KEY = 'devdeck.rail.lastTool'
 /// Whether Team's sub-menu is open. Remembered, because a menu that springs
 /// open on every launch is one you learn to close before reading.
 const TEAM_OPEN_KEY = 'devdeck.rail.teamOpen'
@@ -225,6 +232,12 @@ export function Rail() {
   const [expanded, setExpanded] = useState(() => localStorage.getItem(KEY) === '1')
   useEffect(() => localStorage.setItem(KEY, expanded ? '1' : '0'), [expanded])
   const [teamOpen, setTeamOpen] = useState(() => localStorage.getItem(TEAM_OPEN_KEY) !== '0')
+  const [toolsOpen, setToolsOpen] = useState(() => localStorage.getItem(TOOLS_OPEN_KEY) === '1')
+  useEffect(() => localStorage.setItem(TOOLS_OPEN_KEY, toolsOpen ? '1' : '0'), [toolsOpen])
+  const [lastTool, setLastTool] = useState<RailView>(() => {
+    const v = localStorage.getItem(LAST_TOOL_KEY) as RailView | null
+    return v && TOOLS.some((t) => t.view === v) ? v : 'home'
+  })
   useEffect(() => localStorage.setItem(TEAM_OPEN_KEY, teamOpen ? '1' : '0'), [teamOpen])
 
   // The folders you opened most recently, in this workspace.
@@ -261,12 +274,76 @@ export function Rail() {
       }`}
     >
       <RailButton
-        label="Home"
-        icon="home"
-        active={railView === 'home'}
+        label="Today"
+        icon="schedule"
+        active={railView === 'today'}
         expanded={expanded}
-        onClick={() => setRailView('home')}
+        onClick={() => setRailView('today')}
       />
+
+      <RailButton
+        label="Inbox"
+        icon="inbox"
+        active={railView === 'inbox'}
+        expanded={expanded}
+        count={unreadCount}
+        alarm={broken > 0}
+        onClick={() => setRailView('inbox')}
+      />
+
+      {WORK.map((it) => (
+        <RailButton
+          key={it.view}
+          label={it.label}
+          icon={it.icon}
+          active={railView === it.view}
+          expanded={expanded}
+          // A dot rather than a count: unread mail is worth noticing and is
+          // not something the team is waiting on you for, which is what the
+          // numbered badge above means.
+          dot={it.view === 'mail' && (mailCounts?.unread ?? 0) > 0}
+          onClick={() => setRailView(it.view)}
+        />
+      ))}
+
+      {/* The tree of everything: areas, folders, clients and projects. Called
+          Spaces again now the workspace tabs are gone — the word meant two
+          things while they existed, and it means one now. */}
+      <RailButton
+        label="Spaces"
+        icon="workspace"
+        active={onProjects && activeSolutionId == null}
+        expanded={expanded}
+        dot={anyRunning}
+        onClick={() => go(null)}
+      />
+
+      {expanded && recentNodes.length > 0 && (
+        <div className="px-2 pb-px pt-1 text-[9px] font-semibold uppercase tracking-[0.07em] text-faint">
+          Recent
+        </div>
+      )}
+
+      {/* A recent folder opens its bot's page when it has one — the bot is
+          how you talk to a space that is being managed — and its thread when
+          it does not, which is where "New bot here" lives. */}
+      {recentNodes.map((n) => {
+        const bot = bots.find((b) => b.node_id === n.id)
+        return (
+          <RailButton
+            key={n.id}
+            label={n.name}
+            avatar={{ text: avatarLabel(n.name), color: nodeColor(n) }}
+            active={false}
+            expanded={expanded}
+            onClick={() => {
+              touchRecent(n.id)
+              if (bot) openBot(bot.node_id, bot.name)
+              else openNodeThread(n.id, n.name)
+            }}
+          />
+        )
+      })}
 
       {/* Team, with what it holds as a sub-menu rather than as tabs on the
           page — one navigation, not two. Collapsed to icons there is no room
@@ -319,91 +396,71 @@ export function Rail() {
           </button>
         ))}
 
-      <RailButton
-        label="Inbox"
-        icon="inbox"
-        active={railView === 'inbox'}
-        expanded={expanded}
-        count={unreadCount}
-        alarm={broken > 0}
-        onClick={() => setRailView('inbox')}
-      />
-
-      <Rule expanded={expanded} />
-
-      {/* The tree of everything inside the current workspace. Called Explorer
-          because that is what it is; the workspaces themselves are the tabs
-          across the top, and "Spaces" here made one word mean both. */}
-      <RailButton
-        label="Explorer"
-        icon="workspace"
-        active={onProjects && activeSolutionId == null}
-        expanded={expanded}
-        dot={anyRunning}
-        onClick={() => go(null)}
-      />
-
-      {expanded && recentNodes.length > 0 && (
-        <div className="px-2 pb-px pt-1 text-[9px] font-semibold uppercase tracking-[0.07em] text-faint">
-          Recent
-        </div>
-      )}
-
-      {/* A recent folder opens its bot's page when it has one — the bot is
-          how you talk to a space that is being managed — and its thread when
-          it does not, which is where "New bot here" lives. */}
-      {recentNodes.map((n) => {
-        const bot = bots.find((b) => b.node_id === n.id)
-        return (
-          <RailButton
-            key={n.id}
-            label={n.name}
-            avatar={{ text: avatarLabel(n.name), color: nodeColor(n) }}
-            active={false}
-            expanded={expanded}
-            onClick={() => {
-              touchRecent(n.id)
-              if (bot) openBot(bot.node_id, bot.name)
-              else openNodeThread(n.id, n.name)
-            }}
-          />
-        )
-      })}
-
-      <Rule expanded={expanded} />
-
-      {WORK.map((it) => (
-        <RailButton
-          key={it.view}
-          label={it.label}
-          icon={it.icon}
-          active={railView === it.view}
-          expanded={expanded}
-          // A dot rather than a count: unread mail is worth noticing and is
-          // not something the team is waiting on you for, which is what the
-          // numbered badge above means.
-          dot={it.view === 'mail' && (mailCounts?.unread ?? 0) > 0}
-          onClick={() => setRailView(it.view)}
-        />
-      ))}
-
       <div className="flex-1" />
 
       {/* A hairline rather than a gap: the two groups are different kinds of
-          destination, and with only whitespace between them the bottom three
+          destination, and with only whitespace between them the bottom rows
           read as the ones that happened to overflow. */}
       <Rule expanded={expanded} />
 
-      {APP.map((it) => (
+      {/* Tools, as a sub-menu. Collapsed to icons there is no room for one, so
+          the icon opens whichever tool was last used — the same fallback Team
+          makes, and for the same reason: an icon that does nothing is worse
+          than an icon that guesses well. */}
+      <div className="relative">
         <RailButton
-          key={it.view}
-          label={it.label}
-          icon={it.icon}
-          active={railView === it.view}
+          label="Tools"
+          icon="tool"
+          active={TOOLS.some((t) => t.view === railView)}
           expanded={expanded}
-          onClick={() => setRailView(it.view)}
+          onClick={() => {
+            if (expanded) setToolsOpen((o) => !o)
+            else setRailView(lastTool)
+          }}
         />
-      ))}
+        {expanded && (
+          <button
+            className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-0.5 text-faint hover:bg-hover hover:text-dim"
+            title={toolsOpen ? 'Hide the tools' : 'Show the tools'}
+            aria-label={toolsOpen ? 'Collapse Tools' : 'Expand Tools'}
+            onClick={(e) => {
+              e.stopPropagation()
+              setToolsOpen((o) => !o)
+            }}
+          >
+            <Icon name={toolsOpen ? 'chevron-down' : 'chevron-right'} size={13} />
+          </button>
+        )}
+      </div>
+      {expanded &&
+        toolsOpen &&
+        TOOLS.map((t) => (
+          <button
+            key={t.view}
+            className={`flex h-7 w-full items-center gap-2 rounded-lg pl-8 pr-2 text-[11.5px] ${
+              railView === t.view ? 'text-ink' : 'text-muted hover:bg-hover/50 hover:text-dim'
+            }`}
+            onClick={() => {
+              localStorage.setItem(LAST_TOOL_KEY, t.view)
+              setLastTool(t.view)
+              setRailView(t.view)
+            }}
+          >
+            <Icon name={t.icon} size={12} className="shrink-0" />
+            <span className="min-w-0 flex-1 truncate text-left">{t.label}</span>
+            {t.view === 'home' && anyRunning && (
+              <span className="h-[6px] w-[6px] shrink-0 rounded-full bg-emerald-400" />
+            )}
+          </button>
+        ))}
+
+      <RailButton
+        label="Settings"
+        icon="settings"
+        active={railView === 'settings'}
+        expanded={expanded}
+        onClick={() => setRailView('settings')}
+      />
 
       {/* The toggle is chrome, not a destination, so it sits below the
           hairline that separates destinations from the app itself. */}

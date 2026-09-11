@@ -1005,8 +1005,10 @@ impl Assistant {
         // it, and every tool offered is prompt spent whether it is used or not.
         if !conv.tools_off.is_empty() {
             tools.retain(|t| {
-                let tool = t.name.split('_').next().unwrap_or("");
-                !conv.tools_off.iter().any(|off| off == tool)
+                // Decoded, so switching off `mcp.memory` matches a wire name
+                // of `mcp-memory_…` rather than silently matching nothing.
+                let tool = super::tools::unwire_tool(t.name.split('_').next().unwrap_or(""));
+                !conv.tools_off.iter().any(|off| off == &tool)
             });
         }
 

@@ -622,7 +622,34 @@ pub fn registry() -> Vec<ToolInfo> {
 
 /// The wire name for a tool action: `files` + `read` -> `files_read`.
 pub fn wire_name(tool: &str, action: &str) -> String {
-    format!("{tool}_{action}")
+    format!("{}_{action}", wire_tool(tool))
+}
+
+/// A tool id as it may appear inside a wire name.
+///
+/// Every provider constrains a tool name to `[a-zA-Z0-9_-]` — Anthropic says so
+/// in a 400, OpenAI in its schema. Built-in ids already comply. An MCP id does
+/// not: it is `mcp.<server>`, and the dot made Anthropic reject the *whole
+/// request* the first time a granted server's tools were actually offered —
+/// so a model saw "invalid_request_error" instead of a knowledge graph, and
+/// every earlier turn had only looked fine because no MCP tool was in the list.
+///
+/// The dot becomes a hyphen. A server id never contains one of its own (`slug`
+/// maps every non-alphanumeric to `-` and the catalogue ids are plain words),
+/// so `unwire_tool` can reverse it without guessing.
+pub fn wire_tool(tool: &str) -> String {
+    match tool.strip_prefix(crate::mcp::PREFIX) {
+        Some(server) => format!("mcp-{server}"),
+        None => tool.to_string(),
+    }
+}
+
+/// The inverse of [`wire_tool`].
+pub fn unwire_tool(wired: &str) -> String {
+    match wired.strip_prefix("mcp-") {
+        Some(server) => format!("{}{server}", crate::mcp::PREFIX),
+        None => wired.to_string(),
+    }
 }
 
 /// The callables one agent may actually use.
@@ -774,6 +801,26 @@ pub fn definitions_of(tool_id: &str) -> Vec<ToolDefinition> {
 /// failure from deep inside a tool.
 #[allow(dead_code)] // called by the wire translation and its tests
 pub fn parse_tool_call(name: &str, input: &serde_json::Value) -> Result<ToolCall, String> {
+    // An MCP call first. It is not in the registry — its actions are whatever
+    // the server declared at start-up — so it cannot be matched the way a
+    // built-in is, and without this branch a model's call to a tool it had
+    // just been offered came back "unknown tool". The action is everything
+    // after the first underscore: a server id carries none, an action may.
+    if let Some(rest) = name.strip_prefix("mcp-") {
+        let Some((server, action)) = rest.split_once('_') else {
+            return Err(format!("'{name}' names an MCP server but no tool on it"));
+        };
+        if server.is_empty() || action.is_empty() {
+            return Err(format!("'{name}' is not a complete MCP tool name"));
+        }
+        if !input.is_object() {
+            return Err(format!("'{name}' expects an object of arguments"));
+        }
+        // No argument check here: the schema lives on the server, and the
+        // server is the one that will say what is missing.
+        return Ok(ToolCall::new(&unwire_tool(&format!("mcp-{server}")), action, input.clone()));
+    }
+
     let reg = registry();
     let Some((tool, action)) = reg.iter().find_map(|t| {
         name.strip_prefix(&format!("{}_", t.id))
@@ -1927,4 +1974,55 @@ mod schema_tests {
         let e = parse_tool_call("files_read", &serde_json::json!("just a string")).unwrap_err();
         assert!(e.contains("expects an object"), "got: {e}");
     }
+
+    // -- MCP names on the wire ------------------------------------------------
+
+    #[test]
+    fn an_mcp_wire_name_is_legal_for_every_provider() {
+        // Anthropic: ^[a-zA-Z0-9_-]{1,128}$. OpenAI is the same set at 64. The
+        // dot in `mcp.memory` failed the first and would have failed the
+        // second, and it failed the *whole request*, not the one tool.
+        let n = wire_name("mcp.memory", "create_entities");
+        assert_eq!(n, "mcp-memory_create_entities");
+        assert!(
+            n.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'),
+            "{n}"
+        );
+        assert!(n.len() <= 64, "{n}");
+        assert!(!n.contains('.'));
+    }
+
+    #[test]
+    fn an_mcp_wire_name_round_trips_through_parse_tool_call() {
+        // The inverse must recover the dotted id the permission matrix uses,
+        // and an action with underscores of its own must survive the split.
+        let call = parse_tool_call(
+            &wire_name("mcp.memory", "create_entities"),
+            &serde_json::json!({"entities": []}),
+        )
+        .unwrap();
+        assert_eq!(call.tool, "mcp.memory");
+        assert_eq!(call.action, "create_entities");
+
+        let call = parse_tool_call("mcp-notes_remember", &serde_json::json!({})).unwrap();
+        assert_eq!(call.tool, "mcp.notes");
+        assert_eq!(call.action, "remember");
+    }
+
+    #[test]
+    fn a_built_in_wire_name_is_untouched_by_the_mcp_encoding() {
+        assert_eq!(wire_name("files", "read"), "files_read");
+        assert_eq!(wire_tool("files"), "files");
+        assert_eq!(unwire_tool("files"), "files");
+        let call = parse_tool_call("files_read", &serde_json::json!({"path": "x"})).unwrap();
+        assert_eq!((call.tool.as_str(), call.action.as_str()), ("files", "read"));
+    }
+
+    #[test]
+    fn a_malformed_mcp_name_is_refused_with_a_reason_the_model_can_use() {
+        assert!(parse_tool_call("mcp-memory", &serde_json::json!({})).is_err());
+        assert!(parse_tool_call("mcp-_x", &serde_json::json!({})).is_err());
+        assert!(parse_tool_call("mcp-memory_x", &serde_json::json!("s")).is_err());
+    }
+
 }

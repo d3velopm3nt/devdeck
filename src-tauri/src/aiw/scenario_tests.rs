@@ -2235,6 +2235,36 @@ fn a_saved_grant_for_an_unknown_tool_is_ignored() {
     assert!(!defs.iter().any(|d| d.name.starts_with("telepathy")));
 }
 
+/// An MCP grant survives a restart.
+///
+/// It did not. `restore_permissions` skipped anything outside the built-in
+/// registry, so every `mcp.*` grant was dropped at boot: the Installed page
+/// said "in use by assistant" in the process that made the grant, and after a
+/// restart a real model had no such tool — with nothing saying why, because the
+/// `None` check runs before anything that could have logged. The whole payoff
+/// of the Community module rode on this line.
+#[test]
+fn a_saved_mcp_grant_is_restored_at_boot_like_any_other() {
+    use super::tools::Permission;
+    let w = ws();
+    w.restore_permissions(&[("assistant".into(), "mcp.memory".into(), "approval".into())]);
+    assert!(
+        matches!(w.permission_matrix().get("assistant", "mcp.memory"), Permission::Approval),
+        "the grant is back after a restart, not silently dropped"
+    );
+
+    // And the "do not resurrect" rule still holds where it matters: a grant
+    // for a server that is not registered offers the model nothing, because
+    // the offer is gated on the server list rather than on the grant.
+    let defs = super::tools::mcp_definitions_for(
+        "assistant",
+        &w.permission_matrix(),
+        &w.mcp,
+        &w.mcp_servers(),
+    );
+    assert!(defs.is_empty(), "no registered server, so nothing is offered: {defs:?}");
+}
+
 /// Restoring must actually reach the live tool services, not just the agent
 /// list — a permission change that stops at the model is one that appears to
 /// work and changes nothing.

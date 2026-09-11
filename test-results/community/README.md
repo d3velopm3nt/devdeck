@@ -496,68 +496,95 @@ empty list that looks like a working one.
 
 ---
 
-## The screenshot that could not be taken honestly
+## Called by an agent — for real, after two more bugs
 
-The goal asks for screenshots showing an MCP tool "installed, granted, and
-actually called by an agent". Two of the three exist. The third does not, and
-the reason is the finding.
+The goal asks for screenshots of an MCP tool "installed, granted, and actually
+called by an agent". Getting the third one took three real turns on a real
+Anthropic key, and each turn found a bug the tests had not.
 
-**Installed and granted is real.** `mcp.memory` in use by the assistant, the
-grant made through the same command the button calls:
+**Turn one** (`claude-opus-5`, node thread): 12 of 12 tools offered, none MCP.
+The model said so and refused to invent a graph — the product behaving well,
+the feature not working. Every piece checked out alone; the grant was in
+`aiw.permissions`, the server registered at boot, and nothing was offered.
 
-![Granted](13-granted.png)
+### Bug 1 — every MCP grant was dropped at boot
 
-**Called by an agent, in the running app, does not work.** This was run against
-a real Anthropic key, `claude-opus-5`, in a real node thread:
+`restore_permissions` re-applies saved grants over the defaults and skips any
+tool not in `tools::registry()`, so that a grant for something removed does
+not resurrect it. Right rule, wrong definition of *exists*: the registry is the
+built-ins, and `mcp.memory` is not one. So the Installed page said "in use by
+assistant" in the process that made the grant, and the next boot silently
+forgot it. Nothing logged, because the `Permission::None` check runs before
+anything that could have.
 
-![A real turn](14-agent-turn.png)
+An `mcp.*` grant is restored now. The "do not resurrect" rule still holds for
+MCP, downstream: `mcp_definitions_for` offers only registered servers and the
+tool service refuses an uninstalled one. A stale MCP grant is inert.
 
-Read the footer: **12 of 12 tools**, and not one of them is an MCP tool. The
-model's own words:
+### Bug 2 — the wire name had a dot in it, and no way back
 
-> `mcp.memory_create_entities` — not run. The tool does not exist in my
-> callable set. … There is no `mcp.memory_*` callable available to me in this
-> session. … So there's nothing for me to return from the server, and I'm not
-> going to invent a plausible-looking graph JSON to fill the gap.
+With the grant restored, the server started and its tools were offered — and
+Anthropic rejected the **whole request**: `tools.25.custom.name` must match
+`^[a-zA-Z0-9_-]{1,128}$`. Tool 25 was `mcp.memory_create_entities`. Every
+earlier turn had only looked fine because no MCP tool was in the list.
 
-Two things worth separating in that.
+And behind that, a second half: `parse_tool_call` — the inverse both real
+providers use — matched only the built-in registry, so even an accepted MCP
+call could never have been parsed back. The runtime test had missed both
+because its scripted provider handed over a `ToolCall` and never touched the
+wire.
 
-**The good half.** Asked to use a tool it did not have, a real model refused to
-fabricate a result and said exactly what it had checked. That is the behaviour
-the `failure-honesty` rule exists to produce, and it came from a real provider
-rather than from a mock arranged to be honest.
+`wire_tool` encodes `mcp.memory` as `mcp-memory`; `unwire_tool` reverses it;
+`parse_tool_call` grew an MCP branch. A server id never contains an underscore
+(`slug` maps every non-alphanumeric to `-`), so the split is unambiguous.
 
-**The bad half.** The tool genuinely is not reaching the model. Every part
-checks out on its own:
+**Turn two**, wire fix in, grant at `approval`:
 
-| Checked | Result |
+![Called, and gated](15-called-and-gated.png)
+
+The model called `mcp-memory_create_entities`. It parsed back to
+`mcp.memory` / `create_entities`, went through `ToolService`, and **the approval
+gate held it** — nobody answered, it timed out, it was denied. The transcript
+reads `## mcp.memory.create_entities (failed)`, and the model reported exactly
+that. This is the whole design visible in one turn: install, grant, offer,
+call, gate, deny-on-timeout, honest report.
+
+**Turn three**, grant raised to `full` — the deliberate act:
+
+![Called, and answered](16-agent-called-mcp.png)
+
+```
+## mcp.memory.create_entities
+[ { "name": "offline-sync", "entityType": "bug",
+    "observations": [ "The bug is in the retry loop." ] } ]
+
+## mcp.memory.read_graph
+{ "entities": [ { "name": "offline-sync", "entityType": "bug",
+    "observations": [ "The bug is in the retry loop." ] } ], "relations": [] }
+```
+
+The server's own words, in the agent's transcript, from a real model. No
+`[mcp]` errors; one server process, started on demand.
+
+One thing to say rather than crop out: the model then re-issued `create_entities`
+twice (getting `[]` — already exists) and re-read the graph each time, spending
+its six-turn budget and closing with "used 6 turns without reaching an answer".
+Every call succeeded; the model was poor at noticing it had finished. That is
+model behaviour under a blunt prompt, not module behaviour, and it is visible
+in the screenshot.
+
+| Test | Why it exists |
 |---|---|
-| Grant recorded | `["assistant","mcp.memory","approval"]` in `aiw.permissions` |
-| Install recorded | `tool.mcp-memory` in `community_installed` |
-| `servers()` resolves it | Yes — tested, including the pre-columns fallback |
-| The server runs | Yes — the repo page reads nine tools from it |
-| `npx -y @modelcontextprotocol/server-memory` | Replies to `initialize` in under a second |
-| Assistant folds in `mcp_definitions_for` | Yes, `assistant.rs:986` |
-| `sync_servers` at boot | Runs, logs no error |
-| MCP tools offered to the model | **No** — 12 of 12, none of them MCP |
-| Server process during the turn | **None started** |
+| `a_saved_mcp_grant_is_restored_at_boot_like_any_other` | Bug 1, pinned — and the do-not-resurrect rule still checked downstream |
+| `an_mcp_wire_name_is_legal_for_every_provider` | Bug 2, outbound: no dot, within both providers' character set and length |
+| `an_mcp_wire_name_round_trips_through_parse_tool_call` | Bug 2, inbound: the dotted id the matrix uses comes back, underscores in the action survive |
+| `a_built_in_wire_name_is_untouched_by_the_mcp_encoding` | `files_read` still parses to (files, read) |
+| `a_malformed_mcp_name_is_refused_with_a_reason_the_model_can_use` | The error is fed back to the model, so it has to be specific |
 
-So `mcp_definitions_for` is returning nothing for the assistant at runtime,
-despite the grant, the install and a server that starts fine when asked
-directly. Unresolved.
-
-**What this means for the claim.** The Rust test
-`an_agent_turn_calls_an_installed_mcp_tool_only_once_it_is_granted` passes, and
-it is honest about what it covers: a real `AgentRuntime`, a real process, a
-scripted provider. It proves the wiring it exercises. It did **not** catch this,
-because it builds the workspace directly and the app assembles that state by a
-different route — the same shape of gap as the `npx` bug, where every test was
-green and no real catalogue entry could run.
-
-The module is not finished. An MCP tool can be installed, can be granted,
-appears in the permission matrix, and is callable through `ToolService` — and a
-real model is still not offered it. That is the next thing to fix, and it is
-written here rather than left as a screenshot nobody took.
+Two tests earlier in this report proved the runtime path with a scripted
+provider and missed both of these bugs, for the same reason each time: the
+script stood in for the model at exactly the seam where the bugs lived. Both
+are now covered at that seam, and the real-model turns are the evidence.
 
 ---
 
@@ -565,11 +592,10 @@ written here rather than left as a screenshot nobody took.
 
 - **A repository is not installable.** The manifest-detection problem, said on
   the row rather than guessed at.
-- **MCP tools do not reach a real model in the running app.** Above.
 
 ---
 
-**Evidence.** `cargo test` — 484 passed, 0 failed. `npx tsc -b` and `cargo
+**Evidence.** `cargo test` — 489 passed, 0 failed. `npx tsc -b` and `cargo
 check` clean. Screenshots captured from the running debug build via per-window
 `PrintWindow`. Agent files quoted verbatim from the personal store. The MCP
 handshake and tool call verified against a real spawned Node process, and

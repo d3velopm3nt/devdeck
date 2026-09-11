@@ -830,12 +830,22 @@ impl Workspace {
     /// version arrives with its intended default instead of nothing — and a
     /// grant for something that no longer exists is skipped rather than
     /// resurrecting it.
+    ///
+    /// **An `mcp.*` grant is restored even though it is not in the built-in
+    /// registry.** It used to be skipped as unknown, which dropped every MCP
+    /// grant at boot: a server showed "in use by assistant" on the Installed
+    /// page, and after a restart a real model had no such tool — with nothing
+    /// saying why, because the `None` check runs before anything that could
+    /// have logged. The "do not resurrect" rule still holds for MCP, just
+    /// downstream: `mcp_definitions_for` offers only registered servers, and
+    /// the tool service refuses an uninstalled one with "not installed". A
+    /// stale MCP grant is inert, not dangerous, so it is kept.
     pub fn restore_permissions(&self, saved: &[(String, String, String)]) {
         let known: std::collections::HashSet<String> =
             super::tools::registry().into_iter().map(|t| t.id).collect();
         let mut agents = self.agents.lock().unwrap();
         for (agent_id, tool, perm) in saved {
-            if !known.contains(tool) {
+            if !known.contains(tool) && !crate::mcp::is_mcp(tool) {
                 continue;
             }
             if let Some(a) = agents.iter_mut().find(|a| &a.id == agent_id) {

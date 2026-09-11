@@ -677,10 +677,24 @@ pub fn definitions_for(agent: &str, permissions: &PermissionMatrix) -> Vec<ToolD
 /// need a running hub would make every one of those tests carry a process
 /// manager it has no use for.
 ///
-/// Only servers that are already up contribute. A server is started lazily, on
-/// the first call, so before that DevDeck genuinely does not know what it
-/// offers — and inventing a plausible tool list would hand the model callables
-/// that may not exist.
+/// **A granted server is started here, to be asked what it offers.** It used to
+/// contribute only if something else had already started it, and nothing ever
+/// did: a model cannot call a tool it was never offered, so a granted server
+/// sat unused for ever and the whole module only worked when a test reached
+/// past the model and called the tool directly.
+///
+/// Starting it is the honest way round, because the alternative is inventing a
+/// plausible tool list and handing the model callables that may not exist. A
+/// server declares its tools when it runs; there is no other source.
+///
+/// **An ungranted server is still never started.** The grant is the deliberate
+/// act that says this program may run on your machine, and that property is
+/// what the whole module is built on — so the permission is checked before the
+/// spawn, not after.
+///
+/// A server that will not start contributes nothing and does not break the
+/// turn: the agent proceeds with the tools that do work, and the failure is
+/// visible on the server's own page rather than as a dead turn.
 pub fn mcp_definitions_for(
     agent: &str,
     permissions: &PermissionMatrix,
@@ -694,7 +708,12 @@ pub fn mcp_definitions_for(
         if matches!(permission, Permission::None) {
             continue;
         }
-        for t in hub.tools(&spec.id) {
+        // Granted, so it may run — and it has to run to be asked.
+        let tools = match hub.ensure(spec) {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+        for t in tools {
             // A read-only tool is offered to a read-only grant; anything else
             // needs more than read. Same rule the built-ins follow.
             if matches!(permission, Permission::Read) && !t.read_only {

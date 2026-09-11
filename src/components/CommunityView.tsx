@@ -244,6 +244,12 @@ export function CommunityView() {
             }
             looking={looking}
             onOpen={setOpenId}
+            busy={busy}
+            onInstall={(i) =>
+              // A server is a program that will run on this machine, so it is
+              // shown before it is agreed to — the same gate Browse uses.
+              i.kind === 'tool' ? setTrust(i) : void act(i.id, () => ipc.communityInstall(i.id))
+            }
             onRefresh={async () => {
               setLooking(true)
               setErr(null)
@@ -700,12 +706,16 @@ function Discover({
   looking,
   onRefresh,
   onOpen,
+  onInstall,
+  busy,
 }: {
   feeds: ipc.CommunityFeed[]
   blurb: string
   looking: boolean
   onRefresh: () => void
   onOpen: (id: string) => void
+  onInstall: (i: ipc.CommunityItem) => void
+  busy: string | null
 }) {
   const title: Record<string, string> = {
     registry: 'MCP registry',
@@ -746,6 +756,8 @@ function Discover({
           q={typed}
           permissive={permissive}
           onOpen={onOpen}
+          onInstall={onInstall}
+          busy={busy}
         />
       ))}
     </div>
@@ -857,12 +869,16 @@ function FeedSection({
   q,
   permissive,
   onOpen,
+  onInstall,
+  busy,
 }: {
   feed: ipc.CommunityFeed
   title: string
   q: string
   permissive: boolean
   onOpen: (id: string) => void
+  onInstall: (i: ipc.CommunityItem) => void
+  busy: string | null
 }) {
   const [sort, setSort] = useState('source')
   const [rows, setRows] = useState<ipc.CommunityItem[]>(feed.items)
@@ -950,7 +966,7 @@ function FeedSection({
       ) : (
         <div className="overflow-hidden rounded-lg border border-line bg-panel">
           {rows.slice(0, 20).map((i) => (
-            <IndexRow key={i.id} item={i} onOpen={onOpen} />
+            <IndexRow key={i.id} item={i} onOpen={onOpen} onInstall={onInstall} busy={busy} />
           ))}
         </div>
       )}
@@ -1328,7 +1344,17 @@ function ownerOf(source: string): string | null {
 }
 
 /// One row of an index: who made it, what it is, and a way to go and look.
-function IndexRow({ item, onOpen }: { item: ipc.CommunityItem; onOpen: (id: string) => void }) {
+function IndexRow({
+  item,
+  onOpen,
+  onInstall,
+  busy,
+}: {
+  item: ipc.CommunityItem
+  onOpen: (id: string) => void
+  onInstall: (i: ipc.CommunityItem) => void
+  busy: string | null
+}) {
   const owner = ownerOf(item.source)
   const [broken, setBroken] = useState(false)
   const repo = item.source.startsWith('https://github.com/')
@@ -1389,12 +1415,23 @@ function IndexRow({ item, onOpen }: { item: ipc.CommunityItem; onOpen: (id: stri
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        {/* No Install here. A registry entry is installable in a later slice;
-            a repository is not installable at all, because nothing here knows
-            how to run it — the manifest problem, said rather than guessed. */}
-        <span className="text-[10px] text-faint">
-          {item.command ? 'runnable' : 'No manifest'}
-        </span>
+        {/* A registry entry declares how to run it, so it installs. A
+            repository declares nothing, and gets the reason rather than a
+            button that would have to guess a command. */}
+        {item.command ? (
+          <button
+            className="btn-ghost text-[11px]"
+            disabled={busy === item.id}
+            title={item.command}
+            onClick={() => onInstall(item)}
+          >
+            {busy === item.id ? 'Installing…' : 'Install'}
+          </button>
+        ) : (
+          <span className="text-[10px] text-faint" title="Nothing here says how to run it">
+            No manifest
+          </span>
+        )}
         {repo && (
           <button
             className="rounded p-1 text-faint opacity-0 hover:bg-hover hover:text-ink group-hover:opacity-100"

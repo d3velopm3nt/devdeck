@@ -2912,11 +2912,16 @@ fn an_mcp_tool_that_is_not_installed_says_so_rather_than_unknown_tool() {
 }
 
 #[test]
-fn an_mcp_server_is_offered_to_the_model_only_when_it_is_granted_and_up() {
-    // Two separate reasons a tool is not advertised, and both are honest: a
-    // server nobody granted, and a server nothing has started yet — before the
-    // first call DevDeck genuinely does not know what it offers, and inventing
-    // a plausible list would hand the model callables that may not exist.
+fn an_ungranted_mcp_server_is_never_started_let_alone_offered() {
+    // The grant is what says this program may run on your machine, so the
+    // permission is checked before the spawn.
+    //
+    // A granted server IS started here now, to be asked what it offers — it
+    // used to contribute only if something else had already started it, and
+    // nothing ever did, so a model was never offered the tool and a granted
+    // server sat unused for ever. A server that will not start (this one's
+    // command is nonsense) still contributes nothing rather than breaking the
+    // turn.
     use crate::aiw::tools::{mcp_definitions_for, Permission, PermissionMatrix};
 
     let hub = crate::mcp::Hub::new();
@@ -2930,13 +2935,17 @@ fn an_mcp_server_is_offered_to_the_model_only_when_it_is_granted_and_up() {
     granted.set("dev-a", "mcp.fetch", Permission::Full);
     assert!(
         mcp_definitions_for("dev-a", &granted, &hub, &servers).is_empty(),
-        "granted but never started: nothing to offer yet"
+        "a server that cannot start offers nothing, and does not break the turn"
     );
 
     let ungranted = PermissionMatrix::default();
     assert!(
         mcp_definitions_for("dev-a", &ungranted, &hub, &servers).is_empty(),
         "and no grant means nothing either way"
+    );
+    assert!(
+        hub.statuses().is_empty(),
+        "neither attempt left a process behind, and the ungranted one was never tried"
     );
 }
 
@@ -3045,6 +3054,224 @@ process.stdin.on("data", (d) => { buf += d; let i;
     //    installation.
     let qa = p.tools.execute(&w.bus, "qa", &scope, &call, None);
     assert!(qa.denied, "qa was never granted: {:?}", qa.error);
+
+    w.mcp.stop("notes");
+    let _ = std::fs::remove_file(&script);
+}
+
+/// A provider that asks for one MCP tool, then stops.
+///
+/// Not a bypass and not a mock of the thing under test: it is a real
+/// `LLMProvider`, registered in the real registry, and everything downstream of
+/// it — the runtime, the tool service, the permission matrix, the approval
+/// gate, the process — is the shipping code. Standing in for the model is the
+/// point: what a language model emits is the one part of this path DevDeck does
+/// not own, and scripting it is how the parts DevDeck *does* own get tested.
+struct AsksForNotes {
+    /// What turn 1 was handed back. The transcript records that a tool ran;
+    /// this records what it *answered*, which is the half that proves the
+    /// agent received the server's words rather than merely reaching it.
+    seen: Arc<std::sync::Mutex<Vec<String>>>,
+    /// Whether `mcp.notes.remember` was among the callables the agent was
+    /// offered — filtered by permission before the model ever sees it.
+    offered: Arc<std::sync::Mutex<Vec<bool>>>,
+}
+
+impl crate::aiw::provider::LLMProvider for AsksForNotes {
+    fn id(&self) -> &str {
+        "scripted"
+    }
+    fn name(&self) -> &str {
+        "Scripted"
+    }
+    fn list_models(&self) -> Vec<crate::aiw::provider::ModelInfo> {
+        vec![crate::aiw::provider::ModelInfo {
+            id: "scripted-1".into(),
+            name: "Scripted".into(),
+            ..Default::default()
+        }]
+    }
+    fn run(
+        &self,
+        request: &crate::aiw::provider::AgentRequest,
+    ) -> Result<crate::aiw::provider::AgentResponse, String> {
+        use crate::aiw::provider::{AgentAction, AgentResponse};
+        self.offered
+            .lock()
+            .unwrap()
+            // The wire name the model actually sees: tool id, underscore,
+            // action. Asserting a dotted name would have quietly matched
+            // nothing and turned this check into a tautology.
+            .push(request.tools.iter().any(|t| t.name == crate::aiw::tools::wire_name("mcp.notes", "remember")));
+        for o in &request.observations {
+            self.seen.lock().unwrap().push(format!("{o:?}"));
+        }
+        // Turn 0 asks for the tool; turn 1 sees the result and finishes. That
+        // is the shape of a real turn, and it means the assertion below is
+        // about a transcript the runtime built rather than one we wrote.
+        if request.turn == 0 {
+            return Ok(AgentResponse {
+                message: "I will write that down.".into(),
+                actions: vec![AgentAction::Tool(ToolCall::new(
+                    "mcp.notes",
+                    "remember",
+                    serde_json::json!({"note": "the sync bug is in the retry loop"}),
+                ))],
+                complete: false,
+                usage: None,
+            });
+        }
+        Ok(AgentResponse {
+            message: "Noted.".into(),
+            actions: vec![AgentAction::Done {
+                summary: "wrote one note".into(),
+            }],
+            complete: true,
+            usage: None,
+        })
+    }
+    fn health(&self) -> crate::aiw::provider::ProviderHealth {
+        crate::aiw::provider::ProviderHealth {
+            ok: true,
+            detail: "scripted".into(),
+            configured: true,
+        }
+    }
+}
+
+/// The payoff the goal actually asks for: **called by an agent**.
+///
+/// The test above proves a permission and a process meet correctly at the tool
+/// service. This one goes through `AgentRuntime` — a session, turns, the tool
+/// definitions the agent was offered, the transcript — so the claim "an agent
+/// called an installed MCP tool" is about the runtime rather than about a
+/// direct call written by the test.
+///
+/// Two runs of the same session, either side of one grant, because the
+/// interesting assertion is not that it works but that it does not work first.
+#[test]
+fn an_agent_turn_calls_an_installed_mcp_tool_only_once_it_is_granted() {
+    let probe = if cfg!(windows) { "where" } else { "which" };
+    let has_node = std::process::Command::new(probe)
+        .arg("node")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    if !has_node {
+        eprintln!("skipping: no node, so no MCP server could run here either");
+        return;
+    }
+
+    let script = {
+        let mut p = std::env::temp_dir();
+        p.push(format!("devdeck-agentcall-{}.mjs", std::process::id()));
+        std::fs::write(
+            &p,
+            r#"
+const send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
+let buf = "";
+process.stdin.on("data", (d) => { buf += d; let i;
+  while ((i = buf.indexOf("\n")) >= 0) {
+    const line = buf.slice(0, i); buf = buf.slice(i + 1);
+    if (!line.trim()) continue;
+    let m; try { m = JSON.parse(line); } catch { continue; }
+    if (m.method === "initialize") send({ jsonrpc:"2.0", id:m.id, result:{
+      protocolVersion:"2025-06-18", serverInfo:{ name:"notes", version:"1.0.0" } } });
+    else if (m.method === "tools/list") send({ jsonrpc:"2.0", id:m.id, result:{ tools:[
+      { name:"remember", description:"Store a note", inputSchema:{ type:"object" } } ] } });
+    else if (m.method === "tools/call") send({ jsonrpc:"2.0", id:m.id, result:{
+      content:[{ type:"text", text:"remembered: " + (m.params.arguments.note || "") }] } });
+  }});
+"#,
+        )
+        .unwrap();
+        p
+    };
+
+    let t = Tmp::new("agentcall");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    w.register_project("7", "TyreX", tyrex.clone(), tyrex);
+    w.set_mcp_servers(vec![crate::mcp::ServerSpec {
+        id: "notes".into(),
+        name: "Notes".into(),
+        command: format!("node \"{}\"", script.display()),
+    }]);
+
+    let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let offered = Arc::new(std::sync::Mutex::new(Vec::new()));
+    w.providers.lock().unwrap().register(Box::new(AsksForNotes {
+        seen: seen.clone(),
+        offered: offered.clone(),
+    }));
+    w.set_agent_provider("dev-a", "scripted", "scripted-1").unwrap();
+
+    let cmd = crate::aiw::runtime::StartAgentCommand {
+        project_id: "7".into(),
+        feature_id: "offline-synchronisation".into(),
+        agent_id: "dev-a".into(),
+        intent: Some("write down what we learned".into()),
+        work_item_id: None,
+        areas: Vec::new(),
+        depends_on: Vec::new(),
+        unattended: false,
+        stop_at: Vec::new(),
+    };
+
+    // 1. Ungranted. The agent asks; the matrix refuses; the turn still ends
+    //    honestly rather than pretending the tool answered.
+    let refused = crate::aiw::runtime::AgentRuntime::run(&w, &cmd).unwrap();
+    assert_eq!(refused.refused, 1, "the agent asked and was refused");
+    assert!(
+        w.mcp.statuses().is_empty(),
+        "and a refusal starts no process"
+    );
+    assert!(
+        !format!("{:?}", seen.lock().unwrap()).contains("remembered: the sync bug"),
+        "nothing from the server can come back from a call it never reached"
+    );
+    // And the tool was never even offered: the matrix filters the callables
+    // before the model sees them, so an ungranted agent is not told it exists.
+    assert_eq!(
+        offered.lock().unwrap().first(),
+        Some(&false),
+        "an ungranted tool is not advertised to the model"
+    );
+    seen.lock().unwrap().clear();
+    offered.lock().unwrap().clear();
+
+    // 2. The separate, deliberate act.
+    w.set_permission("dev-a", "mcp.notes", "full").unwrap();
+
+    // 3. The same agent, the same session shape, and this time it runs.
+    let done = crate::aiw::runtime::AgentRuntime::run(&w, &cmd).unwrap();
+    assert_eq!(done.refused, 0, "granted, so nothing is refused now");
+    // The transcript records that a tool ran, by name.
+    let session = w.session(&done.session_id).unwrap();
+    let text = format!("{:?}", session.transcript);
+    assert!(text.contains("mcp.notes.remember"), "the agent called it: {text}");
+
+    // And the agent was handed the server's own words back on the next turn,
+    // which is what "called by an agent" has to mean to be worth anything.
+    let back = format!("{:?}", seen.lock().unwrap());
+    assert!(
+        back.contains("remembered: the sync bug is in the retry loop"),
+        "the server's answer reached the agent: {back}"
+    );
+    // The fix this test found: once granted, the model is offered the tool on
+    // its *first* turn. Before, nothing started the server, so nothing was
+    // ever advertised and a real model would never have called it at all.
+    assert_eq!(
+        offered.lock().unwrap().first(),
+        Some(&true),
+        "a granted server is started and advertised before the first turn"
+    );
+
+    // The process is real, and it was started by the agent's call.
+    let up = w.mcp.statuses();
+    assert_eq!(up.len(), 1, "one server, started on demand");
+    assert_eq!(up[0].id, "notes");
+    assert!(up[0].pid > 0);
 
     w.mcp.stop("notes");
     let _ = std::fs::remove_file(&script);

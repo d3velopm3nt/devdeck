@@ -390,17 +390,120 @@ Two fixes, and the second is the one that matters longer:
 
 ---
 
-## Still not built
+## Installing from Discover
 
-Named rather than quietly skipped:
+The index was read-only: `community_install` resolved ids against the starter
+catalogue, so a registry entry could be browsed and never installed. It
+resolves against the catalogue **and** every cached index now.
 
-- **Installing from Discover.** `community_install` resolves ids against the
-  starter catalogue, so a registry entry opens its page and reads as not
-  installable. The page is ready for it; the resolver is the missing piece.
+Making that work turned up something worse. `servers()` — the function that
+turns installed rows into things the permission matrix can see — looked the
+command up in the catalogue by id. A registry install would therefore record a
+row, appear on the Installed page, and **never become a callable tool**, with
+nothing anywhere saying why.
+
+So an install now records what it agreed to run:
+
+```rust
+pub struct Installed {
+    …
+    /// What this install agreed to run, recorded at install time.
+    ///
+    /// Not re-derived from the index later. The index is a cache that changes
+    /// under you — a registry entry can be republished or withdrawn — and the
+    /// thing somebody read in the trust modal is the thing that should still
+    /// run tomorrow.
+    pub command: String,
+    pub tool_id: String,
+}
+```
+
+Two refusals rather than a row that could never work:
+
+- **A repository declares nothing.** A GitHub search or trending row has no
+  command, and DevDeck will not invent one — *"a guess is how you end up
+  running something nobody chose"*. The row says **No manifest**; only rows
+  that declare a command get an Install button.
+- **Two servers can slug to one permission id.** `Notes` and `notes!` both
+  become `mcp.notes`, and a grant meant for one would silently apply to the
+  other. The second install is refused, naming the one already there.
+
+Older installs keep working: a row with no command falls back to the catalogue,
+so upgrading does not quietly unregister somebody's granted server. There is a
+test that builds the *original* schema, migrates it, and reads back through the
+real query — the shape a running copy of DevDeck actually has.
 
 ---
 
-**Evidence.** `cargo test` — 474 passed, 0 failed. `npx tsc -b` and `cargo
+## The payoff: called by an agent
+
+The goal asks for an MCP tool "installed, granted, and actually called by an
+agent". The earlier test proved a permission and a process meet correctly at
+the tool service — a direct call, reaching past the model.
+
+`an_agent_turn_calls_an_installed_mcp_tool_only_once_it_is_granted` goes
+through `AgentRuntime`: a real session, real turns, the tool definitions the
+agent was offered, the observations handed back. The provider is scripted —
+that is the one part of the path DevDeck does not own, and scripting it is how
+the parts it *does* own get tested. Everything downstream is shipping code, and
+the server is a real Node process speaking real JSON-RPC.
+
+It asserts four things, and the third is the one that matters:
+
+1. Ungranted, the agent asks and is refused — and **no process starts**.
+2. Ungranted, the tool is not even advertised: the matrix filters the callables
+   before the model sees them.
+3. Granted, the server's own words come back **in the agent's observations** —
+   not a transcript line saying a tool ran, but the answer reaching the agent.
+4. One process, started on demand, with a real pid.
+
+### The hole it found
+
+Writing it exposed a gap that made the whole module inert with a real model.
+
+`mcp_definitions_for` listed tools only from servers that were **already
+running**, and a server started lazily on its first call. Nothing ever made
+that first call, because a model cannot call a tool it was never offered. A
+granted MCP server would have sat there unused for ever, and slice 1 only
+looked finished because every test reached past the model and called the tool
+directly.
+
+A granted server is started to be asked what it offers now. The alternative was
+inventing a plausible tool list and handing the model callables that may not
+exist — a server declares its tools when it runs, and there is no other source.
+
+The security property is untouched, because the permission is checked **before**
+the spawn: an ungranted server is still never started, and there is a test
+asserting no process was left behind by either attempt. The grant is the
+deliberate act that says this program may run on your machine; starting it to
+ask what it does is downstream of that, not a way around it.
+
+| Test | Why it exists |
+|---|---|
+| `an_agent_turn_calls_an_installed_mcp_tool_only_once_it_is_granted` | "Called by an agent" through the runtime, not past it |
+| `an_ungranted_mcp_server_is_never_started_let_alone_offered` | The property the module is built on, kept while servers start eagerly |
+| `what_a_server_runs_is_recorded_not_looked_up_again` | A registry install that recorded a row and never became a tool |
+| `two_servers_that_slug_to_one_permission_id_do_not_shadow_each_other` | A grant silently applying to the wrong server |
+| `a_repository_row_is_refused_with_the_reason_rather_than_a_button` | The manifest problem, said rather than guessed |
+| `the_migration_adds_the_columns_to_a_database_that_predates_them` | Built on the original schema, which is what people have |
+| `an_install_written_before_the_columns_existed_still_registers` | Upgrading must not unregister a granted server |
+
+One assertion in that test was wrong in a way worth recording: it checked for a
+callable named `mcp.notes.remember`, but the wire name is
+`mcp.notes_remember`. It matched nothing and passed as a tautology on the
+ungranted run. Asserting a name that cannot exist is the same failure as an
+empty list that looks like a working one.
+
+---
+
+## Still not built
+
+- **A repository is still not installable**, and that is the manifest-detection
+  problem rather than an oversight. The row says so.
+
+---
+
+**Evidence.** `cargo test` — 484 passed, 0 failed. `npx tsc -b` and `cargo
 check` clean. Screenshots captured from the running debug build via per-window
 `PrintWindow`. Agent files quoted verbatim from the personal store. The MCP
 handshake and tool call verified against a real spawned Node process, and

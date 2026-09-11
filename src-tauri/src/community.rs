@@ -43,6 +43,10 @@ CREATE TABLE IF NOT EXISTS community_installed (
     source TEXT NOT NULL DEFAULT '',
     licence TEXT NOT NULL DEFAULT '',
     at INTEGER NOT NULL,
+    -- What this install agreed to run. Recorded rather than looked up, so a
+    -- cache that changes cannot change what a granted server executes.
+    command TEXT NOT NULL DEFAULT '',
+    tool_id TEXT NOT NULL DEFAULT '',
     -- Newline-separated paths this install wrote, so uninstall removes
     -- exactly what was added and nothing a person edited afterwards by hand.
     files TEXT NOT NULL DEFAULT ''
@@ -117,6 +121,19 @@ pub struct Installed {
     /// Unix millis.
     pub at: i64,
     pub files: Vec<String>,
+    /// What this install agreed to run, recorded at install time.
+    ///
+    /// Not re-derived from the index later. The index is a cache that changes
+    /// under you — a registry entry can be republished or withdrawn — and the
+    /// thing somebody read in the trust modal is the thing that should still
+    /// run tomorrow. It also used to be derivable only for the starter
+    /// catalogue, which is why a registry entry could install and then never
+    /// become a callable tool.
+    #[serde(default)]
+    pub command: String,
+    /// Its id in the permission matrix.
+    #[serde(default)]
+    pub tool_id: String,
 }
 
 /// An installed item, plus the thing the Installed page exists to say.
@@ -275,6 +292,63 @@ pub fn catalog() -> Vec<Item> {
 /// One catalogue entry by id.
 pub fn item(id: &str) -> Option<Item> {
     catalog().into_iter().find(|i| i.id == id)
+}
+
+/// Can this entry be installed at all, and if not, why not?
+///
+/// A registry entry declares how to run it, so it can. A GitHub search or
+/// trending row declares nothing — that is the manifest problem, and the
+/// honest answer is a sentence rather than an Install button that writes a row
+/// nothing can ever use.
+pub fn installable(i: &Item) -> Result<(), String> {
+    match i.kind.as_str() {
+        KIND_SKILL | KIND_AGENT => {
+            if i.body.trim().is_empty() {
+                Err("this entry carries no instructions, so installing it would write an empty \
+                     file. That is the manifest problem, not something to guess at."
+                    .into())
+            } else {
+                Ok(())
+            }
+        }
+        KIND_TOOL => {
+            if i.command.trim().is_empty() {
+                Err("nothing here says how to run it. A repository is not a server declaration \
+                     — DevDeck would have to guess a command, and a guess is how you end up \
+                     running something nobody chose."
+                    .into())
+            } else if i.tool_id.trim().is_empty() {
+                Err("this entry has no tool id, so it could not appear in the permission matrix \
+                     and nothing could ever be granted it."
+                    .into())
+            } else {
+                Ok(())
+            }
+        }
+        other => Err(format!("unknown kind '{other}'")),
+    }
+}
+
+/// Would installing this collide with something already installed?
+///
+/// Two servers can slug to the same tool id — `Notes` and `notes!` both become
+/// `mcp.notes`. Left alone, a grant meant for one would silently apply to the
+/// other, which is the permission matrix quietly meaning something other than
+/// what it says.
+pub fn collision(entry: &Item, installed: &[Installed]) -> Option<String> {
+    if entry.tool_id.trim().is_empty() {
+        return None;
+    }
+    installed
+        .iter()
+        .find(|i| i.id != entry.id && !i.tool_id.is_empty() && i.tool_id == entry.tool_id)
+        .map(|clash| {
+            format!(
+                "'{}' is already installed and uses the same permission id ({}). Granting one \
+                 would grant the other, so this one is refused rather than shadowing it.",
+                clash.name, entry.tool_id
+            )
+        })
 }
 
 // ---------------------------------------------------------------------------
@@ -638,15 +712,23 @@ pub fn servers(installed: &[Installed]) -> Vec<crate::mcp::ServerSpec> {
         .iter()
         .filter(|i| i.kind == KIND_TOOL)
         .filter_map(|i| {
-            let entry = item(&i.id)?;
-            let id = crate::mcp::server_of(&entry.tool_id)?.to_string();
-            if entry.command.trim().is_empty() {
+            // The row first. Falling back to the catalogue keeps rows written
+            // before the columns existed working, rather than making an
+            // upgrade quietly unregister somebody's granted server.
+            let (tool_id, command) = if i.tool_id.is_empty() && i.command.is_empty() {
+                let entry = item(&i.id)?;
+                (entry.tool_id, entry.command)
+            } else {
+                (i.tool_id.clone(), i.command.clone())
+            };
+            if command.trim().is_empty() {
                 return None;
             }
+            let id = crate::mcp::server_of(&tool_id)?.to_string();
             Some(crate::mcp::ServerSpec {
                 id,
-                name: entry.name,
-                command: entry.command,
+                name: i.name.clone(),
+                command,
             })
         })
         .collect()
@@ -658,7 +740,10 @@ pub fn servers(installed: &[Installed]) -> Vec<crate::mcp::ServerSpec> {
 
 pub fn all(conn: &Connection) -> Result<Vec<Installed>, String> {
     let mut stmt = conn
-        .prepare("SELECT id, kind, name, version, source, licence, at, files FROM community_installed ORDER BY at DESC")
+        .prepare(
+            "SELECT id, kind, name, version, source, licence, at, files, command, tool_id \
+             FROM community_installed ORDER BY at DESC",
+        )
         .map_err(err)?;
     let rows = stmt
         .query_map([], |r| {
@@ -672,6 +757,8 @@ pub fn all(conn: &Connection) -> Result<Vec<Installed>, String> {
                 licence: r.get(5)?,
                 at: r.get(6)?,
                 files: files.lines().filter(|l| !l.is_empty()).map(String::from).collect(),
+                command: r.get(8)?,
+                tool_id: r.get(9)?,
             })
         })
         .map_err(err)?;
@@ -684,8 +771,9 @@ pub fn all(conn: &Connection) -> Result<Vec<Installed>, String> {
 
 pub fn record(conn: &Connection, i: &Installed) -> Result<(), String> {
     conn.execute(
-        "INSERT OR REPLACE INTO community_installed (id, kind, name, version, source, licence, at, files) \
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+        "INSERT OR REPLACE INTO community_installed \
+         (id, kind, name, version, source, licence, at, files, command, tool_id) \
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
         params![
             i.id,
             i.kind,
@@ -694,7 +782,9 @@ pub fn record(conn: &Connection, i: &Installed) -> Result<(), String> {
             i.source,
             i.licence,
             i.at,
-            i.files.join("\n")
+            i.files.join("\n"),
+            i.command,
+            i.tool_id
         ],
     )
     .map_err(err)?;
@@ -804,7 +894,31 @@ pub fn community_installed(db: tauri::State<Db>, ws: Ws) -> Result<Vec<Standing>
 /// is the whole design.
 #[tauri::command]
 pub fn community_install(db: tauri::State<Db>, ws: Ws, id: String) -> Result<Standing, String> {
-    let entry = item(&id).ok_or_else(|| format!("nothing in the index called '{id}'"))?;
+    // Resolved against the catalogue *and* every cached index, so a registry
+    // entry can be installed from Discover. It used to look only in the
+    // starter catalogue, which made the whole index read-only.
+    let (entry, rows) = {
+        let conn = db.0.lock().unwrap();
+        let rows = all(&conn)?;
+        let feeds: Vec<(String, Vec<Item>)> = crate::community_index::SOURCES
+            .iter()
+            .map(|src| {
+                let f = crate::community_index::cached(&conn, src);
+                (f.source, f.items)
+            })
+            .collect();
+        let (entry, _) = find_item(&id, &catalog(), &feeds).ok_or_else(|| {
+            format!("nothing in the catalogue or any cached index called '{id}'")
+        })?;
+        (entry, rows)
+    };
+
+    // Two refusals rather than a row that could never work: an entry with no
+    // way to run it, and one whose permission id is already somebody else's.
+    installable(&entry)?;
+    if let Some(clash) = collision(&entry, &rows) {
+        return Err(clash);
+    }
 
     let mut files = Vec::new();
     match entry.kind.as_str() {
@@ -849,6 +963,10 @@ pub fn community_install(db: tauri::State<Db>, ws: Ws, id: String) -> Result<Sta
         licence: entry.licence.clone(),
         at: now_ms(),
         files,
+        // Recorded, not looked up later: the command somebody read in the
+        // trust modal is the one that should still run tomorrow.
+        command: entry.command.clone(),
+        tool_id: entry.tool_id.clone(),
     };
     {
         let conn = db.0.lock().unwrap();
@@ -1359,6 +1477,8 @@ mod tests {
             licence: "permissive".into(),
             at: 1_700_000_000_000,
             files: vec!["skills/small-diffs.md".into()],
+            command: String::new(),
+            tool_id: String::new(),
         };
         record(&conn, &i).unwrap();
         assert_eq!(all(&conn).unwrap(), vec![i.clone()]);
@@ -1588,6 +1708,162 @@ mod tests {
         // The note is the explanation for an absence. Text beside a real list
         // would read as a caveat about the list.
         assert_eq!(tools_note(KIND_TOOL, true, None, 3), "");
+    }
+
+
+    // -- installing from an index -------------------------------------------
+
+    fn server(id: &str, tool_id: &str, command: &str) -> Item {
+        Item {
+            id: id.into(),
+            kind: KIND_TOOL.into(),
+            name: id.into(),
+            tool_id: tool_id.into(),
+            command: command.into(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_registry_entry_declares_enough_to_install() {
+        // The point of the whole slice: a registry row carries a command and a
+        // tool id, so it is installable in a way a repository is not.
+        let e = server("tool.registry.x", "mcp.x", "npx -y @scope/server-x");
+        assert!(installable(&e).is_ok());
+    }
+
+    #[test]
+    fn a_repository_row_is_refused_with_the_reason_rather_than_a_button() {
+        // A GitHub search or trending row declares nothing. Installing it
+        // would write a row nothing could ever use, and inventing a command
+        // would mean running something nobody chose.
+        let repo = Item { kind: KIND_TOOL.into(), name: "cool-thing".into(), ..Default::default() };
+        let why = installable(&repo).unwrap_err();
+        assert!(why.contains("how to run it"), "{why}");
+        assert!(why.contains("guess"), "and says why guessing is not the answer: {why}");
+    }
+
+    #[test]
+    fn a_server_with_no_tool_id_could_never_be_granted_so_is_refused() {
+        let e = server("tool.x", "", "npx -y thing");
+        let why = installable(&e).unwrap_err();
+        assert!(why.contains("permission matrix"), "{why}");
+    }
+
+    #[test]
+    fn a_skill_with_no_instructions_would_write_an_empty_file() {
+        let empty = Item { kind: KIND_SKILL.into(), name: "hollow".into(), ..Default::default() };
+        assert!(installable(&empty).is_err());
+        // And every starter entry passes, or the catalogue ships broken.
+        for i in catalog() {
+            assert!(installable(&i).is_ok(), "{} is not installable: {:?}", i.id, installable(&i));
+        }
+    }
+
+    #[test]
+    fn two_servers_that_slug_to_one_permission_id_do_not_shadow_each_other() {
+        // `Notes` and `notes!` both become `mcp.notes`. Left alone, a grant
+        // meant for one would silently apply to the other — the permission
+        // matrix quietly meaning something other than what it says.
+        let already = Installed {
+            id: "tool.registry.a/notes".into(),
+            name: "Notes".into(),
+            tool_id: "mcp.notes".into(),
+            ..Default::default()
+        };
+        let incoming = server("tool.registry.b/notes", "mcp.notes", "npx -y other");
+        let why = collision(&incoming, &[already.clone()]).expect("a collision");
+        assert!(why.contains("Notes"), "names the one already there: {why}");
+        assert!(why.contains("mcp.notes"), "and the id they share: {why}");
+
+        // Re-installing the same id is an upgrade, not a collision.
+        let same = server("tool.registry.a/notes", "mcp.notes", "npx -y newer");
+        assert!(collision(&same, &[already]).is_none());
+    }
+
+    #[test]
+    fn a_skill_never_collides_because_it_holds_no_permission_id() {
+        let skill = Item { id: "skill.a".into(), kind: KIND_SKILL.into(), ..Default::default() };
+        let held = Installed { id: "other".into(), tool_id: "mcp.x".into(), ..Default::default() };
+        assert!(collision(&skill, &[held]).is_none());
+    }
+
+    #[test]
+    fn what_a_server_runs_is_recorded_not_looked_up_again() {
+        // The index is a cache that changes under you: a registry entry can be
+        // republished with a different command, or withdrawn entirely. What
+        // somebody read in the trust modal is what should still run tomorrow.
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        let row = Installed {
+            id: "tool.registry.a/notes".into(),
+            kind: KIND_TOOL.into(),
+            name: "Notes".into(),
+            at: 1,
+            command: "npx -y @a/notes@1.2.3".into(),
+            tool_id: "mcp.notes".into(),
+            ..Default::default()
+        };
+        record(&conn, &row).unwrap();
+
+        let back = all(&conn).unwrap();
+        assert_eq!(back[0].command, "npx -y @a/notes@1.2.3");
+
+        // And it becomes a real server spec without the catalogue knowing it,
+        // which is what a registry install could never do before.
+        let specs = servers(&back);
+        assert_eq!(specs.len(), 1, "{specs:?}");
+        assert_eq!(specs[0].id, "notes");
+        assert_eq!(specs[0].command, "npx -y @a/notes@1.2.3");
+    }
+
+    #[test]
+    fn an_install_written_before_the_columns_existed_still_registers() {
+        // Upgrading must not quietly unregister somebody's granted server.
+        // A row with no command falls back to the catalogue, as it always did.
+        let from_catalog = catalog().into_iter().find(|i| i.kind == KIND_TOOL).unwrap();
+        let old_row = Installed {
+            id: from_catalog.id.clone(),
+            kind: KIND_TOOL.into(),
+            name: from_catalog.name.clone(),
+            at: 1,
+            command: String::new(),
+            tool_id: String::new(),
+            ..Default::default()
+        };
+        let specs = servers(&[old_row]);
+        assert_eq!(specs.len(), 1, "an older install still becomes a server");
+        assert_eq!(specs[0].command, from_catalog.command);
+    }
+
+    #[test]
+    fn the_migration_adds_the_columns_to_a_database_that_predates_them() {
+        // The original shape, exactly as a running copy of DevDeck would have
+        // it, then migrate — a test that builds the current schema instead
+        // would be testing a database nobody has.
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE community_installed (
+                id TEXT PRIMARY KEY, kind TEXT NOT NULL, name TEXT NOT NULL,
+                version TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT '',
+                licence TEXT NOT NULL DEFAULT '', at INTEGER NOT NULL,
+                files TEXT NOT NULL DEFAULT ''
+            );",
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO community_installed (id, kind, name, at) VALUES ('skill.x','skill','x',1)",
+            [],
+        )
+        .unwrap();
+
+        crate::db::migrate(&conn);
+
+        // Reads back through the real query, which is what would have broken.
+        let rows = all(&conn).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, "skill.x");
+        assert_eq!(rows[0].command, "");
     }
 
 }

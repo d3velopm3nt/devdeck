@@ -493,6 +493,21 @@ pub fn checkpoint_state(app: &tauri::AppHandle) {
 /// alone is the *original* shape, and a test that skips this is testing a
 /// schema no running copy of DevDeck has.
 pub fn migrate(conn: &Connection) {
+    // An install records what it agreed to run, rather than looking it up in
+    // an index afterwards. Without these, only starter-catalogue entries could
+    // become callable servers — anything installed from the registry recorded
+    // a row and then silently never appeared in the permission matrix.
+    if conn.prepare("SELECT command FROM community_installed LIMIT 1").is_err() {
+        let _ = conn.execute(
+            "ALTER TABLE community_installed ADD COLUMN command TEXT NOT NULL DEFAULT ''",
+            [],
+        );
+        let _ = conn.execute(
+            "ALTER TABLE community_installed ADD COLUMN tool_id TEXT NOT NULL DEFAULT ''",
+            [],
+        );
+    }
+
     // A schedule can be a moment as well as a rhythm: a calendar needs the
     // 2pm on the 11th that a recurrence cannot say.
     if conn.prepare("SELECT at_ms FROM schedules LIMIT 1").is_err() {

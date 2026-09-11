@@ -140,6 +140,21 @@ export function Today() {
 
   // -- needs you ------------------------------------------------------------
 
+  const [deciding, setDeciding] = useState<string | null>(null)
+  /// Answer an approval from the row it is on.
+  ///
+  /// The list refreshes itself from the event tail, but not instantly — and a
+  /// button that stays put after you press it reads as one that did nothing.
+  /// So the row is held disabled until the store has caught up.
+  const decide = async (id: string, decision: 'allow' | 'deny') => {
+    setDeciding(id)
+    try {
+      await a.resolveApproval(id, decision)
+    } finally {
+      setDeciding(null)
+    }
+  }
+
   const approvals = a.approvals.filter((r) => inArea(nodeIdOf(r.project_id)))
   const blockers = a.conflicts.filter((c) => !c.resolved && inArea(nodeIdOf(c.project_id)))
   const unreadMail = app.mailCounts?.unread ?? 0
@@ -247,24 +262,43 @@ export function Today() {
             ) : (
               <Card>
                 {approvals.map((r) => (
-                  <Row
-                    key={r.id}
-                    tint="bg-amber-500/[0.06]"
-                    onClick={() => app.setRailView('inbox')}
-                  >
+                  <Row key={r.id} tint="bg-amber-500/[0.06]">
                     <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-amber-500/15 text-[8.5px] font-bold text-warn">
                       {r.agent_id.slice(0, 2).toUpperCase()}
                     </span>
-                    <span className="min-w-0 flex-1">
+                    <button
+                      className="min-w-0 flex-1 text-left"
+                      title={r.summary || 'Open it in the Inbox'}
+                      onClick={() => app.setRailView('inbox')}
+                    >
                       <span className="block truncate text-[12.5px] text-ink">
-                        {r.agent_id} wants to run {r.tool}
-                        {r.action ? `.${r.action}` : ''}
+                        {r.summary || `${r.agent_id} wants to run ${r.tool}${r.action ? `.${r.action}` : ''}`}
                       </span>
                       <span className="mt-0.5 block truncate text-[11px] text-muted">
-                        {nameOf(nodeIdOf(r.project_id)) || 'no space'} · {ago(r.requested_at)}
+                        {r.agent_id} · {nameOf(nodeIdOf(r.project_id)) || 'no space'} ·{' '}
+                        {ago(r.requested_at)}
                       </span>
+                    </button>
+                    {/* Answerable here. An agent is stopped on a clock, and
+                        sending you somewhere else to say yes spends the part
+                        of the wait that matters — the whole reason this row
+                        is on the first screen rather than only in the Inbox. */}
+                    <span className="flex shrink-0 items-center gap-1.5">
+                      <button
+                        className="btn-primary text-[11px]"
+                        disabled={deciding === r.id}
+                        onClick={() => void decide(r.id, 'allow')}
+                      >
+                        {deciding === r.id ? '…' : 'Approve'}
+                      </button>
+                      <button
+                        className="btn-ghost text-[11px]"
+                        disabled={deciding === r.id}
+                        onClick={() => void decide(r.id, 'deny')}
+                      >
+                        Deny
+                      </button>
                     </span>
-                    <span className="shrink-0 text-[10.5px] text-warn">waiting</span>
                   </Row>
                 ))}
                 {blockers.map((c) => (

@@ -27,6 +27,8 @@ import { openAiwDoc, openBot, openNodeConfig, openNodeSetup, openSpace } from '.
 import { Thread } from '../thread/Thread'
 import { NodeFiles } from './NodeFiles'
 import { NodeReminders } from './NodeReminders'
+import { NodeAside } from './NodeAside'
+import { NodeRuns } from './NodeRuns'
 import { Git } from '../aiw/AiWorkspace'
 
 /// What a node's page can show about it.
@@ -35,7 +37,7 @@ import { Git } from '../aiw/AiWorkspace'
 /// some of them greyed out: a folder with no repository has no Git tab at all,
 /// rather than a Git tab that apologises. That is the whole point of the shape
 /// — a client is not a deficient project.
-type Tab = 'thread' | 'files' | 'git' | 'reminders'
+type Tab = 'thread' | 'files' | 'git' | 'services' | 'commands' | 'reminders'
 
 /// Git, pointed at this node first.
 ///
@@ -114,6 +116,10 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
     // Only where there is a repository to be behind. A vault folder has no
     // branch, and a Git tab over it would be a question with no answer.
     { id: 'git', label: 'Git', when: isProject && !!git?.branch, count: git?.behind || undefined },
+    // Only where there are any. A tab that opens on "none configured" is a
+    // door to an empty room, and the node's settings is where you add one.
+    { id: 'services', label: 'Services', when: counts.svcs > 0, count: counts.svcs },
+    { id: 'commands', label: 'Commands', when: counts.cmds > 0, count: counts.cmds },
     { id: 'reminders', label: 'Reminders', when: true, count: reminders || undefined },
   ]
   const chips: { text: string; tone?: string; dashed?: boolean }[] = [
@@ -232,6 +238,12 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
         </div>
       )}
 
+      {(tab === 'services' || tab === 'commands') && (
+        <div className="min-h-0 flex-1 overflow-auto px-5 py-3">
+          <NodeRuns node={node} only={tab} />
+        </div>
+      )}
+
       {tab === 'reminders' && (
         <div className="min-h-0 flex-1 overflow-auto px-5 py-3">
           <NodeReminders nodeId={nodeId} />
@@ -243,7 +255,8 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
           it becomes active, for the same reason. */}
       {tab === 'git' && <GitTab nodeId={nodeId} />}
 
-      <div className={tab === 'thread' ? 'min-h-0 flex-1 px-5 py-3' : 'hidden'}>
+      <div className={tab === 'thread' ? 'flex min-h-0 flex-1 gap-4 px-5 py-3' : 'hidden'}>
+        <div className="flex min-w-0 flex-1 flex-col">
         <Thread
           reloadKey={nodeId}
           // Where a code block's Run opens its terminal: the space's own
@@ -270,6 +283,8 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
             </>
           }
         />
+        </div>
+        <NodeAside node={node} isProject={isProject} />
       </div>
     </div>
   )

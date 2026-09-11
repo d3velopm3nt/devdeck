@@ -25,15 +25,54 @@ import { avatarLabel, nodeColor } from '../../lib/spaces'
 import { findNode, resolveDir, subtreeIds, workspaceOf } from '../../lib/tree'
 import { openAiwDoc, openBot, openNodeConfig, openNodeSetup, openSpace } from '../../lib/dock'
 import { Thread } from '../thread/Thread'
+import { NodeFiles } from './NodeFiles'
+import { NodeReminders } from './NodeReminders'
+import { Git } from '../aiw/AiWorkspace'
+
+/// What a node's page can show about it.
+///
+/// Which of these exist depends on what the node *is*, not on a fixed set with
+/// some of them greyed out: a folder with no repository has no Git tab at all,
+/// rather than a Git tab that apologises. That is the whole point of the shape
+/// — a client is not a deficient project.
+type Tab = 'thread' | 'files' | 'git' | 'reminders'
+
+/// Git, pointed at this node first.
+///
+/// The Assistant keeps one selected project and `Git` reads it, so opening
+/// this tab has to claim it — exactly what the dock panel does when it becomes
+/// active. Without the claim the tab would quietly draw another project's
+/// branches, which is the worst possible way to be wrong about a repository.
+function GitTab({ nodeId }: { nodeId: number }) {
+  const selectProject = useAiw((s) => s.selectProject)
+  const current = useAiw((s) => s.projectId)
+  useEffect(() => {
+    if (current !== String(nodeId)) void selectProject(String(nodeId))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodeId])
+  return (
+    <div className="min-h-0 flex-1 overflow-auto">
+      <Git />
+    </div>
+  )
+}
 
 export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
   const nodeId = params.id
   const { nodes, commands, services, gitByNode, bots, refreshBots } = useApp()
   const a = useAiw()
   const [dir, setDir] = useState('')
+  const [tab, setTab] = useState<Tab>('thread')
+  const [reminders, setReminders] = useState(0)
 
   useEffect(() => {
     void ipc.vaultDir(nodeId).then(setDir).catch(() => setDir(''))
+    // Only for the badge. A tab that says how many is worth a list read; a
+    // tab that says nothing until you open it is one you never open.
+    void ipc
+      .schedulesList()
+      .then((all) => setReminders(all.filter((x) => x.node_id === nodeId && x.kind === 'reminder').length))
+      .catch(() => setReminders(0))
     void refreshBots()
     void a.loadAllWork()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -69,6 +108,14 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
   }
 
   const isProject = node.kind === 'project'
+  const TABS: { id: Tab; label: string; when: boolean; count?: number }[] = [
+    { id: 'thread', label: 'Thread', when: true },
+    { id: 'files', label: 'Files', when: true },
+    // Only where there is a repository to be behind. A vault folder has no
+    // branch, and a Git tab over it would be a question with no answer.
+    { id: 'git', label: 'Git', when: isProject && !!git?.branch, count: git?.behind || undefined },
+    { id: 'reminders', label: 'Reminders', when: true, count: reminders || undefined },
+  ]
   const chips: { text: string; tone?: string; dashed?: boolean }[] = [
     ...(git?.branch ? [{ text: git.branch }] : []),
     ...(counts.kids ? [{ text: `${counts.kids} folder${counts.kids === 1 ? '' : 's'}` }] : []),
@@ -154,7 +201,49 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 px-5 py-3">
+      <div className="flex shrink-0 items-center gap-1 border-b border-line px-5 pb-2 pt-2">
+        {TABS.filter((t) => t.when).map((t) => (
+          <button
+            key={t.id}
+            className={`rounded-md px-2.5 py-1 text-[12px] ${
+              tab === t.id ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
+            }`}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+            {t.count ? (
+              <span className="ml-1.5 text-[10px] tabular-nums text-faint">{t.count}</span>
+            ) : null}
+          </button>
+        ))}
+        <span className="flex-1" />
+        {/* Said once, here, rather than as a banner over an empty Git panel.
+            A folder without a repository is finished, not broken. */}
+        {!isProject && (
+          <span className="text-[10.5px] text-faint">
+            A folder in your vault &mdash; no code here
+          </span>
+        )}
+      </div>
+
+      {tab === 'files' && (
+        <div className="min-h-0 flex-1 px-5 py-3">
+          <NodeFiles nodeId={nodeId} hasRepo={isProject} />
+        </div>
+      )}
+
+      {tab === 'reminders' && (
+        <div className="min-h-0 flex-1 overflow-auto px-5 py-3">
+          <NodeReminders nodeId={nodeId} />
+        </div>
+      )}
+
+      {/* The Assistant keeps one selected project, so this page points it at
+          its own before drawing Git — the same claim the dock panel makes when
+          it becomes active, for the same reason. */}
+      {tab === 'git' && <GitTab nodeId={nodeId} />}
+
+      <div className={tab === 'thread' ? 'min-h-0 flex-1 px-5 py-3' : 'hidden'}>
         <Thread
           reloadKey={nodeId}
           // Where a code block's Run opens its terminal: the space's own

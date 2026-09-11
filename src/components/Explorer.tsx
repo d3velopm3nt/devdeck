@@ -21,7 +21,7 @@ import {
   openSpace,
 } from '../lib/dock'
 import { focusCommandSession, launchProfile, openTerminal, runCommandInNewTerminal } from '../lib/runner'
-import { findNode, resolveDir } from '../lib/tree'
+import { findNode, resolveDir, subtreeIds, workspaceOf } from '../lib/tree'
 import { SPACE_TAGS, labelColor, nodeColor } from '../lib/spaces'
 import { loadExampleWorkspace } from '../lib/example'
 import { PopMenu, type MenuItem } from './PopMenu'
@@ -147,12 +147,17 @@ export function Explorer() {
   // is a real folder in the vault with its own `_devdeck.md`. Scoping to a
   // solution still starts at that solution, because then the solution is what
   // you picked.
+  //
+  // Every workspace, not just the active one. They were tabs across the top
+  // until the tabs came out: that strip promised to be the frame every view
+  // sat inside, and only four of thirteen views honoured it — so picking one
+  // still showed you everyone's calendar. The tree was already the other half
+  // of that navigation, so it became the whole of it. Collapse the areas you
+  // are not in; their rows still report (see `summary`).
   const roots = useMemo(() => {
-    if (activeWorkspaceId == null) return []
     if (activeSolution) return nodes.filter((n) => n.parent_id === activeSolution.id)
-    const ws = nodes.find((n) => n.id === activeWorkspaceId)
-    return ws ? [ws] : []
-  }, [nodes, activeWorkspaceId, activeSolution])
+    return nodes.filter((n) => n.kind === 'workspace')
+  }, [nodes, activeSolution])
   const ws = activeWorkspace()
   const [expanded, setExpanded] = useState<Set<number>>(() => {
     const saved = loadSet<number>(EXPANDED_KEY)
@@ -1155,6 +1160,23 @@ export function Explorer() {
     )
   }
 
+  /// What is going on inside a row you cannot see into.
+  ///
+  /// Only ever drawn on a COLLAPSED area, because that is the only time it
+  /// tells you something the rows below would not. This is the one thing the
+  /// workspace tabs did that a tree could not, and it is the reason they were
+  /// worth replacing rather than simply deleting.
+  const summary = (node: TreeNode) => {
+    const ids = subtreeIds(nodes, node.id)
+    const inside = new Set(ids)
+    const running = services.filter(
+      // A service with no node belongs to no area, so it is nobody's summary.
+      (sv) => sv.project_id != null && inside.has(sv.project_id) && svcStates[sv.id]?.status === 'running',
+    ).length
+    const behind = ids.reduce((n, id) => n + (gitByNode[id]?.behind ?? 0), 0)
+    return { running, behind }
+  }
+
   const renderNode = (node: TreeNode, depth: number) => {
     if (visible && !visible.has(node.id)) return null
     const children = nodes.filter((n) => n.parent_id === node.id)
@@ -1194,6 +1216,12 @@ export function Explorer() {
             // Opening a folder is what makes it recent. A workspace is not one
             // of them — it is the frame, and it already has a tab.
             if (node.kind !== 'workspace') touchRecent(node.id)
+            // With the tabs gone, this is what says which area you are in —
+            // and it is what "New bot here" and the GitHub import default to.
+            // Derived from where you clicked rather than set from a switcher,
+            // which is the whole difference between a context and a mode.
+            const area = workspaceOf(nodes, node)
+            if (area && area.id !== activeWorkspaceId) setActiveWorkspace(area.id)
             // A project's click opens its dashboard (the space page); settings
             // stay on double-click / context menu. A workspace opens the same
             // page a folder does — it is one, and it has context of its own.
@@ -1261,6 +1289,29 @@ export function Explorer() {
               )}
             </span>
           )}
+          {node.kind === 'workspace' && !isOpen && (() => {
+            const { running, behind } = summary(node)
+            if (!running && !behind) return null
+            return (
+              <span className="flex shrink-0 items-center gap-1.5 text-[10px]">
+                {behind > 0 && (
+                  <span
+                    className="flex items-center gap-0.5 rounded bg-amber-500/15 px-1 text-warn"
+                    title={`${behind} commit${behind === 1 ? '' : 's'} to pull inside ${node.name}`}
+                  >
+                    <Icon name="arrow-down" size={9} />
+                    {behind}
+                  </span>
+                )}
+                {running > 0 && (
+                  <span
+                    className="h-[7px] w-[7px] rounded-full bg-emerald-400"
+                    title={`${running} service${running === 1 ? '' : 's'} running inside ${node.name}`}
+                  />
+                )}
+              </span>
+            )
+          })()}
           {node.kind === 'project' && gitByNode[node.id]?.branch && (() => {
             const g = gitByNode[node.id]!
             return (
@@ -1445,7 +1496,7 @@ export function Explorer() {
           className="min-w-0 flex-1 truncate text-[11.5px] font-semibold text-ink"
           title={activeSolution ? `Showing ${activeSolution.name}` : undefined}
         >
-          {activeSolution ? activeSolution.name : 'Explorer'}
+          {activeSolution ? activeSolution.name : 'Spaces'}
         </span>
 
         {/* Quiet icon actions. The two filled buttons that lived here were the

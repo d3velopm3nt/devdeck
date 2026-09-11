@@ -15,7 +15,6 @@ import { Sheet } from './components/Sheet'
 import { UpdateBar, VersionPill, type UpState } from './components/UpdateBar'
 import { ClockToast } from './components/ClockToast'
 import { Rail } from './shell/Rail'
-import { WorkspaceTabs } from './shell/WorkspaceTabs'
 import { WindowControls } from './shell/WindowControls'
 import { AgentCluster, NotificationBell, AccountChip } from './shell/TopBarStatus'
 import { Home } from './components/Home'
@@ -845,7 +844,6 @@ export default function App() {
           menus meant two different kinds of thing — commands and places —
           competing for the same strip. */}
       <div className="flex items-stretch border-b border-line bg-panel" data-tauri-drag-region>
-        <WorkspaceTabs />
       </div>
 
 

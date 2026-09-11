@@ -1,0 +1,287 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: var(--accent); } a:hover { color: var(--ink); }
+    .head { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .rail { display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 8px; border-radius: 8px; font-size: 12px; color: var(--muted); position: relative; }
+    .rail-on { background: var(--raise); color: var(--ink); }
+    .rail-on::before { content: ""; position: absolute; left: -6px; top: 6px; bottom: 6px; width: 2.5px; border-radius: 2px; background: #6366f1; }
+    .btn { font-size: 11px; color: var(--dim); border: 1px solid var(--line2); border-radius: 6px; padding: 3px 9px; background: transparent; }
+    .btn.on { color: #fff; background: #4f46e5; border-color: #4f46e5; }
+    .tab { font-size: 12px; color: var(--dim); padding: 5px 10px; border-radius: 6px; }
+    .tab-on { background: var(--raise); color: var(--ink); }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+    .row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-top: 1px solid var(--line); }
+    .row:first-of-type { border-top: 0; }
+    .dot { width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; }
+    .tree { display: flex; align-items: center; gap: 7px; padding: 4px 8px; border-radius: 6px; font-size: 11.5px; color: var(--dim); }
+    .tree-on { background: var(--hover); color: var(--ink); }
+    .msg { display: flex; gap: 10px; }
+    .av { width: 22px; height: 22px; border-radius: 7px; font-size: 8.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --page: {{c.page}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --hover: {{c.hover}}; --line: {{c.line}}; --line2: {{c.line2}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; width: 1456px; height: 909px; background: var(--app); color: var(--body); display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;">
+
+  <div style="height: 32px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--panel);">
+    <span style="font-size: 11.5px; color: var(--dim);">DevDeck</span>
+    <span style="font-size: 11.5px; color: var(--faint);">File</span>
+    <span style="font-size: 11.5px; color: var(--faint);">View</span>
+    <span style="font-size: 11.5px; color: var(--faint);">Build</span>
+    <span style="font-size: 11.5px; color: var(--faint);">Help</span>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; min-height: 0;">
+
+    <div style="width: 160px; flex-shrink: 0; background: var(--app); border-right: 1px solid var(--line); padding: 8px 6px; display: flex; flex-direction: column; gap: 2px;">
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 1.8"></path></svg><span>Today</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 13.5 6 5.5h12l2.5 8v5h-17z"></path><path d="M3.5 13.5H9l1 2h4l1-2h5.5"></path></svg><span>Inbox</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="2"></rect><path d="M3.5 10h17M8 3.5v3M16 3.5v3"></path></svg><span>Calendar</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5.5" width="18" height="13" rx="2"></rect><path d="m3.5 7 8.5 6 8.5-6"></path></svg><span>Mail</span></div>
+      <div class="rail rail-on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"></path><path d="M3.5 7 12 11.6 20.5 7M12 11.6v9.9"></path></svg><span>Spaces</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"></circle><path d="M3.5 19a5.5 5.5 0 0 1 11 0"></path><circle cx="17" cy="9" r="2.6"></circle><path d="M15.5 14.2a4.5 4.5 0 0 1 5 4.3"></path></svg><span>Team</span></div>
+      <div style="flex-grow: 1;"></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m14.5 5.5 4 4-9 9h-4v-4z"></path><path d="M12.5 7.5 16.5 11.5"></path></svg><span>Tools</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12H3.5M18 6l-1.6 1.6M7.6 16.4 6 18M18 18l-1.6-1.6M7.6 7.6 6 6"></path></svg><span>Settings</span></div>
+    </div>
+
+    <div style="width: 260px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0;">
+      <div style="padding: 10px 12px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 12.5px; color: var(--ink); font-weight: 600; flex-grow: 1;">Spaces</span>
+        <button class="btn on" style="padding: 2px 8px;">+ Add</button>
+      </div>
+      <div style="padding: 8px 6px; display: flex; flex-direction: column; gap: 1px;">
+        <div class="tree" style="color: var(--ink); font-weight: 600;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 9 5 5 5-5"></path></svg>
+          <span>Develtech</span>
+          <span style="font-size: 8.5px; font-weight: 700; letter-spacing: .04em; color: #a78bfa; background: rgb(167 139 250 / 0.14); padding: 1px 5px; border-radius: 4px;">BUSINESS</span>
+          <span class="dot" style="margin-left: auto; background: var(--warn);"></span>
+        </div>
+        <div class="tree" style="padding-left: 20px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 9 5 5 5-5"></path></svg>
+          <span>Clients</span>
+        </div>
+        <div class="tree tree-on" style="padding-left: 38px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5h6l2 2.5h9v9h-17z"></path></svg>
+          <span>Harbour &amp; Vine</span>
+          <span class="dot" style="margin-left: auto; background: var(--accent);"></span>
+        </div>
+        <div class="tree" style="padding-left: 38px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5h6l2 2.5h9v9h-17z"></path></svg>
+          <span>Kestrel Fabrication</span>
+        </div>
+        <div class="tree" style="padding-left: 20px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5h6l2 2.5h9v9h-17z"></path></svg>
+          <span>Money</span>
+          <span style="margin-left: auto; font-size: 9.5px; color: var(--warn);">3</span>
+        </div>
+        <div class="tree" style="padding-left: 20px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5h6l2 2.5h9v9h-17z"></path></svg>
+          <span>Marketing</span>
+        </div>
+        <div class="tree" style="padding-left: 20px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"></path></svg>
+          <span>MoneyTracker</span>
+          <span style="margin-left: auto; font-size: 9.5px; color: var(--warn); font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace;">main &#8679;13</span>
+        </div>
+        <div style="height: 6px;"></div>
+        <div class="tree">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 7 5 5-5 5"></path></svg>
+          <span>Life</span>
+          <span style="font-size: 8.5px; font-weight: 700; letter-spacing: .04em; color: var(--ok); background: rgb(74 222 128 / 0.12); padding: 1px 5px; border-radius: 4px;">PERSONAL</span>
+          <span class="dot" style="margin-left: auto; background: #a78bfa;"></span>
+        </div>
+        <div class="tree">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 7 5 5-5 5"></path></svg>
+          <span>Innotrack</span>
+          <span style="font-size: 8.5px; font-weight: 700; letter-spacing: .04em; color: #a78bfa; background: rgb(167 139 250 / 0.14); padding: 1px 5px; border-radius: 4px;">BUSINESS</span>
+        </div>
+      </div>
+      <div style="flex-grow: 1;"></div>
+      <div style="padding: 10px 12px; border-top: 1px solid var(--line); font-size: 10px; color: var(--faint); line-height: 1.5;">A dot on a root row is the only thing the old workspace tabs did that this cannot. It moved here.</div>
+    </div>
+
+    <div style="flex-grow: 1; min-width: 0; background: var(--page); display: flex; flex-direction: column;">
+
+      <div style="padding: 16px 24px 0;">
+        <div style="font-size: 11px; color: var(--muted);">Develtech / Clients</div>
+        <div style="display: flex; align-items: center; gap: 12px; margin-top: 6px;">
+          <span style="width: 30px; height: 30px; border-radius: 9px; background: rgb(129 140 248 / 0.16); color: var(--accent); font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center;">HV</span>
+          <span style="font-size: 17px; font-weight: 600; color: var(--ink);">Harbour &amp; Vine</span>
+          <span style="font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--dim); border: 1px solid var(--line2); padding: 2px 7px; border-radius: 999px;">Client</span>
+          <span style="flex-grow: 1;"></span>
+          <button class="btn">Settings</button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 4px; margin-top: 14px; border-bottom: 1px solid var(--line); padding-bottom: 8px;">
+          <span class="tab tab-on">Thread</span>
+          <span class="tab">Files</span>
+          <span class="tab">Money</span>
+          <span class="tab">Reminders</span>
+          <span style="flex-grow: 1;"></span>
+          <span style="font-size: 10.5px; color: var(--faint);">Folder in your vault &mdash; no code here</span>
+        </div>
+      </div>
+
+      <div style="flex-grow: 1; min-height: 0; display: flex; gap: 20px; padding: 16px 24px 20px;">
+
+        <div style="flex-grow: 1; flex-basis: 0; min-width: 0; display: flex; flex-direction: column; gap: 14px;">
+
+          <div class="msg">
+            <span class="av" style="background: var(--raise); color: var(--dim);">YOU</span>
+            <div style="flex-grow: 1; min-width: 0;">
+              <div style="font-size: 10.5px; color: var(--muted); margin-bottom: 3px;">You · yesterday, 16:20</div>
+              <div style="font-size: 12.5px; color: var(--body); line-height: 1.55;">They want the proposal by Friday. Pull together what we quoted last time and what has changed since.</div>
+            </div>
+          </div>
+
+          <div class="msg">
+            <span class="av" style="background: rgb(129 140 248 / 0.16); color: var(--accent);">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 13.8 9l5.7 1.8-5.7 1.8L12 18.5l-1.8-5.9L4.5 10.8 10.2 9z"></path></svg>
+            </span>
+            <div style="flex-grow: 1; min-width: 0;">
+              <div style="font-size: 10.5px; color: var(--muted); margin-bottom: 3px;">Assistant · yesterday, 16:21</div>
+              <div style="font-size: 12.5px; color: var(--body); line-height: 1.55;">Last quote was <span style="color: var(--ink);">March</span>, in <span style="font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; font-size: 11.5px; color: var(--ink);">quote-2026-03.md</span>. Two things moved since: the hosting line went up, and you dropped the retainer discount in June. I have put both in a draft beside it.</div>
+              <div style="display: flex; gap: 8px; margin-top: 8px;">
+                <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--dim); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px;">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l4.5 4.5v12h-12.5z"></path><path d="M14 3.5V8h4.5"></path></svg>
+                  proposal-draft.md
+                </span>
+                <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted);">written to this folder</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="msg">
+            <span class="av" style="background: var(--raise); color: var(--dim);">YOU</span>
+            <div style="flex-grow: 1; min-width: 0;">
+              <div style="font-size: 10.5px; color: var(--muted); margin-bottom: 3px;">You · today, 09:05</div>
+              <div style="font-size: 12.5px; color: var(--body); line-height: 1.55;">Remind me Thursday afternoon if they have not replied.</div>
+            </div>
+          </div>
+
+          <div class="msg">
+            <span class="av" style="background: rgb(129 140 248 / 0.16); color: var(--accent);">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 13.8 9l5.7 1.8-5.7 1.8L12 18.5l-1.8-5.9L4.5 10.8 10.2 9z"></path></svg>
+            </span>
+            <div style="flex-grow: 1; min-width: 0;">
+              <div style="font-size: 10.5px; color: var(--muted); margin-bottom: 3px;">Assistant · today, 09:05</div>
+              <div style="font-size: 12.5px; color: var(--body); line-height: 1.55;">Set for Thursday 14:00. It will check the mail thread first and stay quiet if they have replied.</div>
+            </div>
+          </div>
+
+          <div style="flex-grow: 1;"></div>
+
+          <div class="card" style="padding: 9px 12px; display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 11.5px; color: var(--muted); flex-grow: 1;">Say something about Harbour &amp; Vine&hellip;</span>
+            <button class="btn on">Send</button>
+          </div>
+        </div>
+
+        <div style="width: 300px; flex-shrink: 0; display: flex; flex-direction: column; gap: 16px;">
+
+          <div>
+            <div style="margin-bottom: 8px;"><span class="head">Next</span></div>
+            <div class="card">
+              <div class="row">
+                <span class="dot" style="background: var(--warn);"></span>
+                <div style="flex-grow: 1; min-width: 0;">
+                  <div style="font-size: 12px; color: var(--ink);">Proposal due</div>
+                  <div style="font-size: 10.5px; color: var(--muted); margin-top: 2px;">Friday</div>
+                </div>
+              </div>
+              <div class="row">
+                <span class="dot" style="background: var(--line2);"></span>
+                <div style="flex-grow: 1; min-width: 0;">
+                  <div style="font-size: 12px; color: var(--body);">Chase if no reply</div>
+                  <div style="font-size: 10.5px; color: var(--muted); margin-top: 2px;">Thursday, 14:00</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div style="margin-bottom: 8px;"><span class="head">Files</span></div>
+            <div class="card">
+              <div class="row">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l4.5 4.5v12h-12.5z"></path><path d="M14 3.5V8h4.5"></path></svg>
+                <span style="font-size: 11.5px; color: var(--body); flex-grow: 1;">proposal-draft.md</span>
+                <span style="font-size: 10px; color: var(--faint);">1d</span>
+              </div>
+              <div class="row">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l4.5 4.5v12h-12.5z"></path><path d="M14 3.5V8h4.5"></path></svg>
+                <span style="font-size: 11.5px; color: var(--body); flex-grow: 1;">quote-2026-03.md</span>
+                <span style="font-size: 10px; color: var(--faint);">Mar</span>
+              </div>
+              <div class="row">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8l4.5 4.5v12h-12.5z"></path><path d="M14 3.5V8h4.5"></path></svg>
+                <span style="font-size: 11.5px; color: var(--body); flex-grow: 1;">brand-notes.md</span>
+                <span style="font-size: 10px; color: var(--faint);">Feb</span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div style="margin-bottom: 8px;"><span class="head">Money</span></div>
+            <div class="card" style="padding: 12px;">
+              <div style="display: flex; align-items: baseline; gap: 8px;">
+                <span style="font-size: 20px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums;">[AMOUNT]</span>
+                <span style="font-size: 11px; color: var(--warn);">31 days overdue</span>
+              </div>
+              <div style="font-size: 10.5px; color: var(--muted); margin-top: 6px;">Invoice 0042 &middot; from Money</div>
+            </div>
+          </div>
+
+          <div>
+            <div style="margin-bottom: 8px;"><span class="head">Mail</span></div>
+            <div class="card">
+              <div class="row">
+                <span class="dot" style="background: var(--accent);"></span>
+                <div style="flex-grow: 1; min-width: 0;">
+                  <div style="font-size: 11.5px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Re: invoice 0042</div>
+                  <div style="font-size: 10.5px; color: var(--muted); margin-top: 2px;">Tuesday &middot; needs a reply</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="height: 26px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 12px; border-top: 1px solid var(--line); background: var(--panel); font-size: 10.5px; color: var(--muted);">
+    <span>Today</span>
+    <span>Inbox</span>
+    <span style="flex-grow: 1;"></span>
+    <span>local-first · SQLite</span>
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', page: '#0d1017', panel: '#11141c', raise: '#151923', hover: '#232b3b',
+          line: '#1e293b', line2: '#334155', ink: '#e2e8f0', body: '#cbd5e1', dim: '#94a3b8',
+          muted: '#64748b', faint: '#475569', accent: '#818cf8', ok: '#4ade80', warn: '#fbbf24',
+          err: '#f87171' }
+      : { app: '#e9ebf0', page: '#f6f7f9', panel: '#fdfdfe', raise: '#f0f2f6', hover: '#e7eaf1',
+          line: '#d9dee7', line2: '#c3cbd8', ink: '#16181d', body: '#333a45', dim: '#5a6472',
+          muted: '#7d8794', faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d', warn: '#b45309',
+          err: '#dc2626' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

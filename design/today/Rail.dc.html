@@ -1,0 +1,118 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: var(--accent); } a:hover { color: var(--ink); }
+    .head { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .rail { display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 8px; border-radius: 8px; font-size: 12px; color: var(--muted); position: relative; }
+    .rail-on { background: var(--raise); color: var(--ink); }
+    .rail-on::before { content: ""; position: absolute; left: -6px; top: 6px; bottom: 6px; width: 2.5px; border-radius: 2px; background: #6366f1; }
+    .sub { font-size: 11px; color: var(--faint); padding-left: 32px; height: 22px; display: flex; align-items: center; }
+    .col { width: 190px; flex-shrink: 0; }
+    .frame { background: var(--app); border: 1px solid var(--line); border-radius: 10px; padding: 8px 6px; display: flex; flex-direction: column; gap: 2px; }
+    .note { font-size: 11px; color: var(--dim); line-height: 1.5; }
+    .cut { color: var(--faint); text-decoration: line-through; }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --page: {{c.page}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --hover: {{c.hover}}; --line: {{c.line}}; --line2: {{c.line2}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; width: 620px; height: 760px; background: var(--page); color: var(--body); padding: 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 18px; overflow: hidden;">
+
+  <div>
+    <div style="font-size: 15px; font-weight: 600; color: var(--ink);">Twelve doors down to seven</div>
+    <div class="note" style="margin-top: 5px;">The five that leave are not deleted &mdash; they move under <span style="color: var(--body);">Tools</span>, because you visit them on purpose rather than live in them.</div>
+  </div>
+
+  <div style="display: flex; gap: 28px; align-items: flex-start;">
+
+    <div class="col">
+      <div class="head" style="margin-bottom: 8px;">Now &mdash; 12</div>
+      <div class="frame">
+        <div class="rail"><span>Home</span></div>
+        <div class="rail"><span>Inbox</span></div>
+        <div class="rail"><span>Team</span></div>
+        <div class="sub">Goals</div>
+        <div class="sub">Features</div>
+        <div class="sub">Work</div>
+        <div class="sub">Bots</div>
+        <div class="rail"><span>Explorer</span></div>
+        <div class="rail"><span>Calendar</span></div>
+        <div class="rail"><span>Mail</span></div>
+        <div class="rail"><span>Connections</span></div>
+        <div class="rail"><span>Analytics</span></div>
+        <div class="rail"><span>Stash</span></div>
+        <div class="rail"><span>Community</span></div>
+        <div class="rail"><span>Machine</span></div>
+        <div class="rail"><span>Settings</span></div>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; height: 420px;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--line2)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15M13.5 6.5 20 12l-6.5 5.5"></path></svg>
+    </div>
+
+    <div class="col">
+      <div class="head" style="margin-bottom: 8px;">Proposed &mdash; 7</div>
+      <div class="frame">
+        <div class="rail rail-on"><span>Today</span></div>
+        <div class="rail"><span>Inbox</span></div>
+        <div class="rail"><span>Calendar</span></div>
+        <div class="rail"><span>Mail</span></div>
+        <div class="rail"><span>Spaces</span></div>
+        <div class="rail"><span>Team</span></div>
+        <div style="height: 1px; background: var(--line); margin: 9px 6px;"></div>
+        <div class="rail"><span>Tools</span></div>
+        <div class="sub">Connections</div>
+        <div class="sub">Analytics</div>
+        <div class="sub">Stash</div>
+        <div class="sub">Community</div>
+        <div class="sub">Machine</div>
+        <div style="height: 1px; background: var(--line); margin: 9px 6px;"></div>
+        <div class="rail"><span>Settings</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div style="background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;">
+    <div style="display: flex; gap: 10px;">
+      <span style="font-size: 11px; font-weight: 600; color: var(--ink); width: 70px; flex-shrink: 0;">Today</span>
+      <span class="note" style="flex-grow: 1;">Replaces Home. Home counts services, repos and crashes &mdash; none of which is what a Thursday looks like.</span>
+    </div>
+    <div style="display: flex; gap: 10px;">
+      <span style="font-size: 11px; font-weight: 600; color: var(--ink); width: 70px; flex-shrink: 0;">Spaces</span>
+      <span class="note" style="flex-grow: 1;">Explorer, renamed for what it holds &mdash; clients and folders as much as repositories.</span>
+    </div>
+    <div style="display: flex; gap: 10px;">
+      <span style="font-size: 11px; font-weight: 600; color: var(--ink); width: 70px; flex-shrink: 0;">Team</span>
+      <span class="note" style="flex-grow: 1;">Keeps its four tabs. They are one question about one team and belong together.</span>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', page: '#0d1017', panel: '#11141c', raise: '#151923', hover: '#232b3b',
+          line: '#1e293b', line2: '#334155', ink: '#e2e8f0', body: '#cbd5e1', dim: '#94a3b8',
+          muted: '#64748b', faint: '#475569', accent: '#818cf8', ok: '#4ade80', warn: '#fbbf24',
+          err: '#f87171' }
+      : { app: '#e9ebf0', page: '#f6f7f9', panel: '#fdfdfe', raise: '#f0f2f6', hover: '#e7eaf1',
+          line: '#d9dee7', line2: '#c3cbd8', ink: '#16181d', body: '#333a45', dim: '#5a6472',
+          muted: '#7d8794', faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d', warn: '#b45309',
+          err: '#dc2626' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

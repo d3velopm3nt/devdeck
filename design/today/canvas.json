@@ -1,0 +1,53 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "title": "1 · Today", "x": 0, "y": 0, "w": 1456, "h": 909 },
+    { "file": "Client.dc.html", "title": "2 · A client, with no repository", "x": 1576, "y": 0, "w": 1456, "h": 909 },
+    { "file": "Project.dc.html", "title": "3 · A project — same shape, different tabs", "x": 3152, "y": 0, "w": 1456, "h": 909 },
+    { "file": "Rail.dc.html", "title": "4 · The rail, cut", "x": 3152, "y": 1100, "w": 620, "h": 760 }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": -520,
+      "y": 0,
+      "w": 420,
+      "text": "THE PROBLEM\n\nDevDeck is two products sharing one shell: a dev command centre, and an operating system for a life and some businesses. They share a rail, a tree, a Home and a vocabulary — and the vocabulary belongs to the first one.\n\nSo pointing it at your life leaves every container empty. Life/ has three folders holding nothing but _devdeck.md. Its label field says \"Business\". The Fitness bot wakes every weekday at 08:00 with a goal about Koda and the gym, and has no hands, because a bot puts agents on work items in a repository and there is no repository.\n\nMeanwhile Home opens on \"Services running · Repos behind · Crashed\"."
+    },
+    {
+      "id": "direction",
+      "x": -520,
+      "y": 400,
+      "w": 420,
+      "text": "THE DIRECTION\n\nSplit the front door, not the codebase. Same vault, same bots, same permission model.\n\n1. Home becomes Today — the merge point for the five channels that currently talk to you separately.\n\n2. A folder without a repository is finished, not broken. No git section, no \"no repository\" banner — just the tabs that mean something.\n\n3. The rail goes from twelve doors to seven.\n\nWhat not to do: don't touch the permission matrix or the agent runtime. That is the rare, good part."
+    },
+    {
+      "id": "strip",
+      "x": -520,
+      "y": 760,
+      "w": 420,
+      "text": "THE WORKSPACE TABS ARE GONE\n\nThe strip promised to be \"the frame everything sits in\" and only four of thirteen views honoured it. Click Life, then Calendar, and you got everyone's calendar.\n\nTwo replacements, neither global:\n\n• Signals move onto the tree's root rows — the one thing the strip did that the tree couldn't.\n\n• Filters live on the view, as chips, only where a consolidated list mixes areas: Today, Calendar, Inbox, Team. Each remembers its own choice. Consolidated is the default; narrowing is one visible click."
+    },
+    {
+      "id": "sidebar",
+      "x": 1576,
+      "y": 960,
+      "w": 460,
+      "text": "THE SIDEBAR IS THE TREE, AND ONLY THE TREE\n\nIt was doing three jobs: navigation, a file browser for one repository, and a per-project dashboard. Only the first is the sidebar's. Expanding MoneyTracker used to push the rest of Develtech off the screen with thirteen file rows.\n\nNow: the tree shows areas, folders, clients and projects — seventeen rows, always fits. A node's contents live on its page, as tabs. The row keeps its signals (main ⇡13, a running-services dot), so you still see drift without expanding anything.\n\nOne page shape for every node. Only the tabs change:\n  client   → Thread · Files · Money · Reminders\n  project  → Thread · Files · Git · Services · Commands\n  folder   → Thread · Files"
+    },
+    {
+      "id": "bots",
+      "x": 3152,
+      "y": 960,
+      "w": 420,
+      "text": "STILL OPEN — life bots need different hands\n\nThe Fitness bot cannot put dev-a on \"go to the gym\". What it can do: ask at 08:00, record the answer, notice three missed days and say so on Today. Same bot machinery, a check-in template instead of blank. Not drawn here."
+    },
+    {
+      "id": "data",
+      "x": 0,
+      "y": 960,
+      "w": 420,
+      "text": "The content on these boards is your real data: the Fitness bot, Invoices and follow-ups, What did I learn, Stand-up, Design review: the calendar, Ship v0.3.2, MoneyTracker 13 behind on main, and the note \"origin/main is the source of truth\" the assistant actually wrote.\n\nStand-ins: the two client names, the invoice amount, and the api/web services."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

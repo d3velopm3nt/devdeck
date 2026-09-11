@@ -35,6 +35,9 @@ export const CAPTURE_NEW_SCHEDULE: boolean = false
 export const CAPTURE_EVENT_OPEN: string = ''
 export const CAPTURE_ENTRY: string = ''
 export const CAPTURE_FILE_ROOT: string = ''
+/** Which project's file browser is open, as a node id. One at a time, so a
+ *  screenshot of the browser has to say which. Empty in every shipped build. */
+export const CAPTURE_BROWSE: string = ''
 /** Open the whole-vault section, and these folder paths inside it. */
 export const CAPTURE_VAULT: string = ''
 /** Open the Add sheet on the active workspace. */

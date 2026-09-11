@@ -25,7 +25,7 @@ import { findNode, resolveDir, subtreeIds, workspaceOf } from '../lib/tree'
 import { SPACE_TAGS, labelColor, nodeColor } from '../lib/spaces'
 import { loadExampleWorkspace } from '../lib/example'
 import { PopMenu, type MenuItem } from './PopMenu'
-import { CAPTURE_ADD, CAPTURE_EXPAND, CAPTURE_FILE_ROOT, CAPTURE_GIT, CAPTURE_VAULT } from '../lib/devCapture'
+import { CAPTURE_ADD, CAPTURE_BROWSE, CAPTURE_EXPAND, CAPTURE_FILE_ROOT, CAPTURE_GIT, CAPTURE_VAULT } from '../lib/devCapture'
 import { BotCreate } from './bot/BotCreate'
 import { AddToWorkspace } from './AddToWorkspace'
 import { GitHubImportModal } from './GitHubImportModal'
@@ -192,6 +192,15 @@ export function Explorer() {
   /// questions and the tree used to answer only the first, which made the
   /// vault invisible in an app built around keeping one.
   const [fileRoot, setFileRoot] = useState<Record<number, 'work' | 'vault'>>({})
+  /// Which project is being browsed, or null.
+  ///
+  /// One at a time. Files used to render inline under every expanded project
+  /// at once, and two open repositories filled the sidebar — with four areas
+  /// in the tree, opening MoneyTracker and x-platform pushed Life off the
+  /// bottom entirely. Browsing is a thing you do to one repository, so the
+  /// browser goes where you are looking and the other projects keep a single
+  /// row that brings it back.
+  const [browsing, setBrowsing] = useState<number | null>(Number(CAPTURE_BROWSE) || null)
   /// The vault read from its own root, rather than through a node.
   ///
   /// The tree above is the *registered* vault: workspaces, projects, folders
@@ -978,8 +987,23 @@ export function Explorer() {
         style={pad}
       >
         <span className="flex w-5 shrink-0" />
+        <span className="mr-1 text-[10px] font-semibold uppercase tracking-[0.06em] text-faint">
+          Files
+        </span>
         {tab('work', 'Repo', 'The repository — where commands and terminals run')}
         {tab('vault', 'Vault', 'The vault folder — .devdeck, _bot.md and the features')}
+        <span className="flex-1" />
+        <button
+          className="rounded p-0.5 text-faint hover:bg-hover hover:text-dim"
+          title="Close the file browser"
+          aria-label="Close the file browser"
+          onClick={(e) => {
+            e.stopPropagation()
+            setBrowsing(null)
+          }}
+        >
+          <Icon name="chevron-down" size={12} />
+        </button>
       </div>
     )
   }
@@ -1247,7 +1271,12 @@ export function Explorer() {
             className={`flex w-5 shrink-0 items-center justify-center text-dim hover:text-ink ${hasKids ? 'cursor-pointer' : 'opacity-0'}`}
             onClick={(e) => {
               e.stopPropagation()
-              if (node.kind === 'project' && !expanded.has(node.id)) loadDir(node.id, '')
+              if (node.kind === 'project' && !expanded.has(node.id)) {
+                loadDir(node.id, '')
+                // Opening a project is asking to look inside it, so the
+                // browser follows — and leaves whichever project had it.
+                setBrowsing(node.id)
+              }
               toggle(node.id)
             }}
           >
@@ -1446,13 +1475,38 @@ export function Explorer() {
                 Repo/Vault is the first thing under the project. */}
             {node.kind === 'project' && renderLive(node, depth + 1)}
             {children.map((c) => renderNode(c, depth + 1))}
-            {node.kind === 'project' && renderRootSwitch(node, depth + 1)}
-            {node.kind === 'project' && renderFiles(node, '', depth + 1)}
-            {node.kind === 'project' &&
-              !files[dirKey(node.id, '')] &&
-              !fileErr[dirKey(node.id, '')] && (
-                <FetchOnce load={() => loadDir(node.id, '')} />
-              )}
+            {node.kind === 'project' && browsing === node.id && (
+              <>
+                {renderRootSwitch(node, depth + 1)}
+                {/* Capped and scrolling in its own right. A repository can
+                    hold hundreds of entries, and one of them must not be able
+                    to bury the areas underneath it — the tree is navigation
+                    first, and navigation you have to scroll past is not. */}
+                <div className="max-h-[46vh] overflow-y-auto overscroll-contain rounded border border-line bg-app/40 py-0.5">
+                  {renderFiles(node, '', depth + 1)}
+                </div>
+                {!files[dirKey(node.id, '')] && !fileErr[dirKey(node.id, '')] && (
+                  <FetchOnce load={() => loadDir(node.id, '')} />
+                )}
+              </>
+            )}
+            {node.kind === 'project' && browsing !== node.id && (
+              <button
+                className="flex w-full items-center gap-1.5 rounded py-1 text-[12px] text-muted hover:bg-hover hover:text-dim"
+                style={{ paddingLeft: `${(depth + 1) * 14 + 6}px` }}
+                title={`Browse ${node.name}'s files here`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setBrowsing(node.id)
+                  loadDir(node.id, '')
+                }}
+              >
+                <span className="flex w-5 shrink-0 items-center justify-center">
+                  <Icon name="chevron-right" size={13} />
+                </span>
+                <span>Files</span>
+              </button>
+            )}
             {node.kind === 'project' && renderFeatures(node, depth + 1)}
             {node.kind === 'project' && renderGit(node, depth + 1)}
             {showCommands &&

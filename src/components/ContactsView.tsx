@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from 'react'
 import { useApp } from '../store'
+import * as ipc from '../lib/ipc'
 import { Icon } from '../lib/icons'
 import { fmtAgo } from '../lib/time'
 import type { MailContact } from '../lib/types'
@@ -26,10 +27,13 @@ const BLANK: MailContact = {
   last_ts: 0,
 }
 
-type Group = 'all' | 'linked' | 'unlinked' | 'people' | 'bots'
+type Group = 'all' | 'reciprocal' | 'linked' | 'unlinked' | 'people' | 'bots'
 
 const GROUPS: Array<{ key: Group; label: string; icon: Parameters<typeof Icon>[0]['name'] }> = [
   { key: 'all', label: 'All contacts', icon: 'contacts' },
+  // The one group that is not a filter over what is already on screen: it is
+  // ranked, and the ranking is the point.
+  { key: 'reciprocal', label: 'People you reply to', icon: 'send' },
   { key: 'linked', label: 'Linked to a client', icon: 'client' },
   { key: 'unlinked', label: 'Not linked yet', icon: 'alert' },
   { key: 'people', label: 'People', icon: 'contacts' },
@@ -71,13 +75,44 @@ export function ContactsView() {
 
   const [group, setGroup] = useState<Group>('all')
   const [search, setSearch] = useState('')
+  // Who you actually correspond with, computed locally.
+  //
+  // A mailbox is mostly noise: a retailer that has sent four hundred messages
+  // you never once answered is a subscription, not a person. Having written
+  // back is the one signal a sender cannot manufacture, and it is a query over
+  // folders already synced — nothing leaves this machine to produce it.
+  const [ranked, setRanked] = useState<ipc.Correspondent[]>([])
+  const [rankErr, setRankErr] = useState('')
+  useEffect(() => {
+    if (group !== 'reciprocal') return
+    void ipc
+      .mailCorrespondents(200)
+      .then((r) => {
+        setRanked(r)
+        setRankErr('')
+      })
+      // Reported, not swallowed: an empty list and a failed query look
+      // identical, and one of them means "you correspond with nobody".
+      .catch((e) => setRankErr(String(e)))
+  }, [group, mailContacts.length])
   const [editing, setEditing] = useState<MailContact | null>(null)
   const [error, setError] = useState('')
 
   const term = search.trim().toLowerCase()
-  const visible = mailContacts.filter(
+  // The ranked view keeps its order, so it filters the ranking rather than the
+  // address book. Sorting it by name afterwards would throw away the only
+  // thing it knows that the list above does not.
+  const rankedIds = new Set(ranked.map((r) => r.contact_id))
+  const byRank = new Map(ranked.map((r, i) => [r.contact_id, i]))
+  const visible = (
+    group === 'reciprocal'
+      ? mailContacts
+          .filter((c) => rankedIds.has(c.id))
+          .sort((a, b) => (byRank.get(a.id) ?? 0) - (byRank.get(b.id) ?? 0))
+      : mailContacts
+  ).filter(
     (c) =>
-      matches(c, group) &&
+      (group === 'reciprocal' || matches(c, group)) &&
       (!term ||
         c.name.toLowerCase().includes(term) ||
         c.email.toLowerCase().includes(term) ||
@@ -149,9 +184,23 @@ export function ContactsView() {
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto p-1.5">
-          {visible.length === 0 && (
+          {group === 'reciprocal' && (
+            <div className="mb-1.5 rounded-lg border border-line bg-panel px-3 py-2 text-[11px] leading-relaxed text-muted">
+              Ranked by how often <span className="text-body">you wrote back</span>, not by how much
+              they sent. A retailer with four hundred messages you never answered is a
+              subscription, not a person. Counted here on this machine.
+            </div>
+          )}
+          {rankErr && (
+            <div className="mb-1.5 rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 text-[11.5px] text-err">
+              Could not work out who you correspond with: {rankErr}
+            </div>
+          )}
+          {visible.length === 0 && !rankErr && (
             <div className="px-3 py-8 text-center text-[12px] leading-5 text-muted">
-              No contacts here yet. They appear on their own as mail arrives.
+              {group === 'reciprocal'
+                ? 'Nobody yet. This fills in once your Sent folder has synced.'
+                : 'No contacts here yet. They appear on their own as mail arrives.'}
             </div>
           )}
           {visible.map((c) => (

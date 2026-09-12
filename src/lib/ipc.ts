@@ -1419,6 +1419,29 @@ export const mailGoogleSignIn = (id: number, address: string) =>
   invoke<void>('mail_google_sign_in', { id, address })
 export const mailGoogleSignOut = (id: number) => invoke<void>('mail_google_sign_out', { id })
 /** Sign in and build the account from whichever address consented. */
+/** Somebody worth learning about, and the evidence for saying so. */
+export interface Correspondent {
+  contact_id: number
+  name: string
+  email: string
+  /** The company part of the address, which is most of "who is this". */
+  domain: string
+  received: number
+  /** How many times *you* wrote to them. The whole signal. */
+  sent: number
+  threads: number
+  last_ts: number
+  account_id: number
+  /** Which space a fact about them would be filed under by default. */
+  space: string
+}
+
+/** Who you actually correspond with, most-reciprocal first. Local query. */
+export const mailCorrespondents = (limit = 200) =>
+  invoke<Correspondent[]>('mail_correspondents', { limit })
+
+/** Where attachments go when nothing is configured. */
+export const mailAttachmentsDefault = () => invoke<string>('mail_attachments_default')
 export const mailGoogleConnect = () => invoke<MailAccount>('mail_google_connect')
 /** Every label on an account. `0` for all accounts. */
 export const mailLabels = (accountId = 0) =>

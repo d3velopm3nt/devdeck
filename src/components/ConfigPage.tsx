@@ -45,6 +45,16 @@ export function ConfigPage() {
   const [gitIv, setGitIv] = useState(String(gitMonitorIntervalMin))
   const [vault, setVault] = useState('')
   const [vaultMsg, setVaultMsg] = useState('')
+  // Empty means the default, which is shown greyed rather than hidden — a
+  // blank box does not tell you where your files already went.
+  const [attDir, setAttDir] = useState('')
+  const [attDefault, setAttDefault] = useState('')
+  const [attMsg, setAttMsg] = useState('')
+
+  useEffect(() => {
+    void ipc.settingGet('mail.attachments_dir').then((v) => setAttDir(v ?? ''))
+    void ipc.mailAttachmentsDefault().then(setAttDefault).catch(() => setAttDefault(''))
+  }, [])
   const [vaultBusy, setVaultBusy] = useState(false)
   const [labelDraft, setLabelDraft] = useState('')
   const [labelMsg, setLabelMsg] = useState('')
@@ -449,6 +459,82 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
         </section>
           </>
         )}
+
+        <section className="mt-7">
+          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
+            Mail attachments
+          </h3>
+          <p className="mb-2 text-[12px] leading-relaxed text-muted">
+            Where files that arrive by mail are written, one folder per message. Point this at a
+            synced folder and they sync; that is the whole of &ldquo;keep my attachments in
+            Drive&rdquo;, and deliberately not a Drive integration &mdash; Drive&rsquo;s API needs
+            the same Google verification Gmail does, and a path works for Dropbox, OneDrive and a
+            plain local folder too.
+          </p>
+          <div className="flex items-center gap-2 rounded-lg border border-line bg-raise px-3 py-2">
+            <Icon name="folder" size={15} className="shrink-0 text-info" />
+            <span
+              className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-body"
+              title={attDir || attDefault}
+            >
+              {attDir || `${attDefault}  (default)`}
+            </span>
+            <button
+              className="btn-ghost text-[11.5px]"
+              onClick={() =>
+                void ipc
+                  .revealInExplorer(attDir || attDefault)
+                  .catch((e) => setAttMsg(String(e)))
+              }
+            >
+              <Icon name="reveal" size={12} /> Reveal
+            </button>
+          </div>
+
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              className="btn-ghost text-[11.5px]"
+              onClick={() => {
+                void (async () => {
+                  const dir = await openDialog({
+                    directory: true,
+                    title: 'Where should mail attachments be written?',
+                  })
+                  if (typeof dir !== 'string') return
+                  await ipc.settingSet('mail.attachments_dir', dir)
+                  setAttDir(dir)
+                  // Files already written stay where they are. Moving them
+                  // would break every path recorded against a message, and
+                  // saying nothing about that would be worse than saying it.
+                  setAttMsg('Saved. Attachments already downloaded stay where they are.')
+                })()
+              }}
+            >
+              Choose a folder…
+            </button>
+            {attDir && (
+              <button
+                className="btn-ghost text-[11.5px]"
+                onClick={() => {
+                  void (async () => {
+                    await ipc.settingSet('mail.attachments_dir', '')
+                    setAttDir('')
+                    setAttMsg('Back to the default folder.')
+                  })()
+                }}
+              >
+                Use the default
+              </button>
+            )}
+            {attMsg && <span className="text-[11.5px] text-muted">{attMsg}</span>}
+          </div>
+
+          <p className="mt-2 text-[11px] leading-relaxed text-faint">
+            Google Drive for Desktop streams files by default, so one can be an online-only
+            placeholder that stalls a read, or fails with the network down. Point this at a mirrored
+            folder if you use it.
+          </p>
+        </section>
 
         {tab === 'dev' && (
           <>

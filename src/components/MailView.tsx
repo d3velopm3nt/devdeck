@@ -287,6 +287,7 @@ export function MailView() {
     mailNotes,
     mailSyncing,
     mailError,
+    clearMailError,
     mailAccounts,
     setMailQuery,
     selectMailMessage,
@@ -355,7 +356,20 @@ export function MailView() {
           {/* A failed sync must never look like an empty inbox. */}
           {mailError && (
             <div className="mb-2 rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 text-[11.5px] leading-[1.55] text-err">
-              <div>{mailError}</div>
+              <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">{mailError}</div>
+                {/* A failure you have read and cannot put down stops being a
+                    warning and becomes furniture. Dismissing forgets this
+                    message, not the fault: the account row keeps its own red
+                    dot and its own reason. */}
+                <button
+                  className="-mr-1 -mt-0.5 shrink-0 rounded p-1 text-err/70 hover:bg-red-500/10 hover:text-err"
+                  title="Dismiss"
+                  onClick={() => clearMailError()}
+                >
+                  <Icon name="close" size={12} />
+                </button>
+              </div>
               {failing && (
                 <button
                   className="mt-1.5 inline-flex items-center gap-1 rounded border border-red-500/40 px-2 py-0.5 text-[11px] hover:bg-red-500/10"

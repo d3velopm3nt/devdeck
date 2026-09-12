@@ -370,6 +370,8 @@ export interface AppState {
   refreshMailAccounts: () => Promise<void>
   refreshMailContacts: () => Promise<void>
   setMailQuery: (patch: Partial<MailQuery>) => Promise<void>
+  /** Put down a failure you have read. Forgets the message, not the fault. */
+  clearMailError: () => void
   selectMailMessage: (id: number | null) => Promise<void>
   syncMail: (accountId?: number) => Promise<void>
   toggleMailFlag: (id: number) => Promise<void>
@@ -1449,6 +1451,8 @@ export const useApp = create<AppState>((set, get) => ({
       }
     }
   },
+
+  clearMailError: () => set({ mailError: '' }),
 
   syncMail: async (accountId = 0) => {
     set({ mailSyncing: true, mailError: '' })

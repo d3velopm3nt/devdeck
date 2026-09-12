@@ -186,6 +186,11 @@ export function MailAccountEditor() {
    * anyone makes, and leaving empty boxes there implies the connection is
    * incomplete when it is finished.
    */
+  // Spaces are the workspaces in the tree. Read straight from the store
+  // rather than fetched: the tree is already loaded by the time a mail
+  // account sheet can be opened.
+  const spaces = useApp((s) => s.nodes).filter((n) => n.kind === 'workspace')
+
   const googlePath = def.kind === 'gmail' && googleReady
   const showFields = def.auth !== 'oauth' && (!googlePath || manual)
 
@@ -491,6 +496,29 @@ export function MailAccountEditor() {
           )}
 
           </>
+          )}
+
+          {/* Board 5 of the design: which business a mailbox belongs to.
+              A suggestion, not a rule -- it becomes the default destination on
+              each fact learned from this account, correctable in one click on
+              the one card that is wrong. A business inbox is full of ordinary
+              life, so a rule would file two facts in the wrong company where
+              nobody would notice. */}
+          {field(
+            'Belongs to',
+            <select
+              className="input w-full"
+              value={def.space}
+              onChange={(e) => setDef((d) => ({ ...d, space: e.target.value }))}
+            >
+              <option value="">Nothing in particular</option>
+              {spaces.map((s) => (
+                <option key={s.id} value={s.name}>
+                  {s.name}
+                </option>
+              ))}
+            </select>,
+            'Where a fact learned from this mailbox is filed by default. Never hides mail — every mailbox is still one inbox.',
           )}
 
           <label className="flex items-center gap-2 text-[12px] text-body">

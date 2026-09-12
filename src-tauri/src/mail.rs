@@ -791,6 +791,20 @@ fn sync_label_now(app: &tauri::AppHandle, db: &Db, label_id: i64) -> Result<i64,
         .unwrap_or(0)
     };
 
+    // An empty label asks for "1:0", which is not a range, and the server
+    // answers "Could not parse command" -- an error that sounds like a bug in
+    // the client rather than a folder with nothing in it.
+    if mailbox.exists == 0 && seen == 0 {
+        let _ = session.logout();
+        let conn = db.0.lock().unwrap();
+        let _ = conn.execute(
+            "UPDATE mail_labels SET synced_at=?1 WHERE id=?2",
+            params![now_millis(), label_id],
+        );
+        say(format!("{remote}: empty."));
+        return Ok(0);
+    }
+
     let fetches = if seen > 0 {
         session.uid_fetch(format!("{}:*", seen + 1), "(UID FLAGS INTERNALDATE RFC822)")
     } else {
@@ -841,6 +855,15 @@ fn sync_label_now(app: &tauri::AppHandle, db: &Db, label_id: i64) -> Result<i64,
         Some(acct.id),
     );
     Ok(stored)
+}
+
+/// Where attachments go when nothing is configured.
+///
+/// Shown in Settings rather than left blank: an empty box does not tell you
+/// where your files already went.
+#[tauri::command]
+pub fn mail_attachments_default() -> String {
+    crate::mailfiles::default_root().display().to_string()
 }
 
 #[tauri::command]
@@ -1582,6 +1605,36 @@ fn sync_accounts(app: &tauri::AppHandle, db: &Db, id: i64) -> Result<i64, String
     }
     if !failures.is_empty() && total == 0 {
         return Err(failures.join("; "));
+    }
+
+    // Read whatever arrived, on its own thread.
+    //
+    // Not inline: OCR on a scan is seconds, and a sync that waits for it is a
+    // sync that feels broken. Not left to the UI to ask for either -- it was,
+    // and the answer is that nothing ever asked, so every attachment sat on
+    // disk unread with a perfectly good reader already built and tested.
+    if total > 0 {
+        let app2 = app.clone();
+        std::thread::spawn(move || {
+            let db = <tauri::AppHandle as tauri::Manager<tauri::Wry>>::state::<Db>(&app2);
+            match extract_pending(&app2, &db, 200) {
+                Ok(0) => {}
+                Ok(n) => push_log(
+                    &app2,
+                    MAIL_LOG_ID,
+                    "mail",
+                    "system",
+                    format!("read {n} attachment{}", if n == 1 { "" } else { "s" }),
+                ),
+                Err(e) => push_log(
+                    &app2,
+                    MAIL_LOG_ID,
+                    "mail",
+                    "stderr",
+                    format!("could not read attachments: {e}"),
+                ),
+            }
+        });
     }
     Ok(total)
 }

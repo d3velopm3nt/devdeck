@@ -182,7 +182,7 @@ export function Meet({ onDone }: { onDone: () => void }) {
           )}
 
           <div className="flex gap-2.5 border-t border-line pt-4">
-            <Icon name="ai" size={15} className="mt-0.5 flex-shrink-0 text-muted" />
+            <Icon name="secret" size={15} className="mt-0.5 flex-shrink-0 text-muted" />
             <p className="m-0 text-[11.5px] leading-relaxed text-muted">
               Everything I learn about <span className="text-body">you</span> is kept on this
               machine, outside any repository, and never leaves it. Everything I learn about a{' '}

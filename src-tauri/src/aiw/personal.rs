@@ -504,4 +504,59 @@ mod tests {
         assert_eq!(back.meta.preferences, vec!["Terse answers".to_string()]);
         assert!(back.body.contains("PowerShell"));
     }
+
+    /// Every field the first run writes is `skip_serializing_if` + `default`,
+    /// which is the combination that drops a value silently when the two sides
+    /// disagree. If this ever fails, the symptom in the app is being asked who
+    /// you are every single launch.
+    #[test]
+    fn who_you_are_survives_a_round_trip_through_the_file() {
+        let t = Tmp::new("profile-meet");
+        let s = PersonalStore::at(&t.0);
+        s.ensure().unwrap();
+
+        assert!(
+            s.profile().meta.met_at.is_empty(),
+            "a store nobody has met must say so"
+        );
+
+        let mut doc = s.profile();
+        doc.meta.name = "Sam".into();
+        doc.meta.assistant_name = "Hermes".into();
+        doc.meta.voice = "blunt".into();
+        doc.meta.met_at = "2026-09-12T09:00:00Z".into();
+        s.save_profile(&doc).unwrap();
+
+        let back = PersonalStore::at(&t.0).profile();
+        assert_eq!(back.meta.name, "Sam");
+        assert_eq!(back.meta.assistant_name, "Hermes");
+        assert_eq!(back.meta.voice, "blunt");
+        assert_eq!(back.meta.met_at, "2026-09-12T09:00:00Z");
+    }
+
+    /// The bug this guards is the one I wrote and then fixed: `aiw_save_profile`
+    /// used to build a fresh `ProfileMeta` from its two arguments, so editing a
+    /// preference erased your name and the fact you had been introduced. The
+    /// command now reads first; this proves the file half of that contract.
+    #[test]
+    fn editing_a_preference_does_not_erase_your_name() {
+        let t = Tmp::new("profile-keep");
+        let s = PersonalStore::at(&t.0);
+        s.ensure().unwrap();
+
+        let mut doc = s.profile();
+        doc.meta.name = "Sam".into();
+        doc.meta.met_at = "2026-09-12T09:00:00Z".into();
+        s.save_profile(&doc).unwrap();
+
+        // What the command does now: read, change only what it is about, write.
+        let mut again = s.profile();
+        again.meta.preferences = vec!["No meetings before 10".into()];
+        s.save_profile(&again).unwrap();
+
+        let back = PersonalStore::at(&t.0).profile();
+        assert_eq!(back.meta.name, "Sam", "the name is still there");
+        assert!(!back.meta.met_at.is_empty(), "we have still met");
+        assert_eq!(back.meta.preferences.len(), 1);
+    }
 }

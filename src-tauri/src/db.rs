@@ -508,6 +508,21 @@ pub fn migrate(conn: &Connection) {
         );
     }
 
+    // Mail cached before the folder mapping was fixed is wrong and a re-sync
+    // cannot correct it: rows are keyed by (account, mailbox, uid), so messages
+    // filed under the wrong mailbox are never revisited, only added to. Until
+    // this, every folder a server offered that we did not recognise -- Spam,
+    // Trash, Starred, and every label anyone had ever made -- was stored as
+    // INBOX.
+    //
+    // Messages are a cache and a sync rebuilds them, so clearing is the cheap
+    // correct answer. Done once, marked by a setting, because doing it on every
+    // launch would throw away a perfectly good mailbox every time.
+    if setting_get_conn(conn, "mail.refiled_v1").ok().flatten().is_none() {
+        let _ = conn.execute("DELETE FROM mail_messages", []);
+        let _ = setting_set_conn(conn, "mail.refiled_v1", "done");
+    }
+
     // What reading an attachment produced. Empty means nobody has tried yet,
     // which is different from having tried and found nothing -- and that
     // difference is the whole reason there is a state rather than a nullable

@@ -1033,16 +1033,42 @@ fn load_account(conn: &Connection, id: i64) -> Result<MailAccount, String> {
 /// Which local mailbox name we file a server folder under. Servers disagree
 /// wildly ("Sent Items", "[Gmail]/Sent Mail", "INBOX.Sent"), so match loosely
 /// and default to leaving it alone.
-fn local_mailbox(remote: &str) -> &'static str {
-    let l = remote.to_ascii_lowercase();
-    if l.contains("sent") {
-        "Sent"
-    } else if l.contains("draft") {
-        "Drafts"
-    } else if l.contains("archive") || l.contains("all mail") {
-        "Archive"
-    } else {
-        "INBOX"
+fn local_mailbox(name: &str, attrs: &[String]) -> Option<&'static str> {
+    // SPECIAL-USE attributes first (RFC 6154). Gmail, Outlook and Fastmail all
+    // advertise them, and they are unambiguous where a name never is: a folder
+    // called "Sent to accountant" is not the Sent folder.
+    for a in attrs {
+        match a.to_ascii_lowercase().as_str() {
+            r"\sent" => return Some("Sent"),
+            r"\drafts" => return Some("Drafts"),
+            r"\archive" => return Some("Archive"),
+            // Deliberately never synced. `\All` is Gmail's All Mail, which is
+            // a superset of the entire account — syncing it fetches everything
+            // a second time, and it is what put thirty-four thousand messages
+            // in front of a sync that should have taken seconds.
+            r"\all" | r"\junk" | r"\trash" | r"\flagged" | r"\important" => return None,
+            _ => {}
+        }
+    }
+
+    let l = name.to_ascii_lowercase();
+    if l == "inbox" {
+        return Some("INBOX");
+    }
+    // Exact names, for servers that do not advertise SPECIAL-USE. Matching on
+    // "contains" is what filed Spam, Trash, Starred and every user label as
+    // INBOX: anything unrecognised fell through to it.
+    let bare = l
+        .trim_start_matches("[gmail]/")
+        .trim_start_matches("inbox.")
+        .trim_start_matches("inbox/");
+    match bare {
+        "sent" | "sent mail" | "sent items" | "sent messages" => Some("Sent"),
+        "drafts" | "draft" => Some("Drafts"),
+        "archive" | "archives" => Some("Archive"),
+        // Anything else is a label, a folder of someone's own, or a server
+        // special we do not want. Skipped, not guessed at.
+        _ => None,
     }
 }
 
@@ -1420,13 +1446,23 @@ fn sync_one(app: &tauri::AppHandle, db: &Db, acct: &MailAccount) -> Result<i64, 
     // Only the folders the UI has groups for. A mail client that syncs every
     // label on a Gmail account spends its life syncing.
     let wanted = ["INBOX", "Sent", "Drafts", "Archive"];
-    let names: Vec<String> = match session.list(Some(""), Some("*")) {
-        Ok(boxes) => boxes.iter().map(|b| b.name().to_string()).collect(),
-        Err(_) => vec!["INBOX".to_string()],
+    let folders: Vec<(String, Vec<String>)> = match session.list(Some(""), Some("*")) {
+        Ok(boxes) => boxes
+            .iter()
+            .map(|b| {
+                (
+                    b.name().to_string(),
+                    b.attributes().iter().map(|a| format!("{a:?}")).collect(),
+                )
+            })
+            .collect(),
+        Err(_) => vec![("INBOX".to_string(), Vec::new())],
     };
 
-    for remote in names {
-        let local = local_mailbox(&remote);
+    for (remote, attrs) in folders {
+        let Some(local) = local_mailbox(&remote, &attrs) else {
+            continue;
+        };
         if !wanted.contains(&local) {
             continue;
         }
@@ -2224,11 +2260,56 @@ mod tests {
 
     #[test]
     fn mailbox_names_map_to_local_folders() {
-        assert_eq!(local_mailbox("[Gmail]/Sent Mail"), "Sent");
-        assert_eq!(local_mailbox("INBOX.Drafts"), "Drafts");
-        assert_eq!(local_mailbox("Archive"), "Archive");
-        assert_eq!(local_mailbox("INBOX"), "INBOX");
-        assert_eq!(local_mailbox("Some Client Folder"), "INBOX");
+        let none: &[String] = &[];
+        assert_eq!(local_mailbox("[Gmail]/Sent Mail", none), Some("Sent"));
+        assert_eq!(local_mailbox("INBOX.Drafts", none), Some("Drafts"));
+        assert_eq!(local_mailbox("Archive", none), Some("Archive"));
+        assert_eq!(local_mailbox("INBOX", none), Some("INBOX"));
+    }
+
+    /// The bug this replaces was written down as intended behaviour: the old
+    /// test asserted that an unrecognised folder becomes INBOX. On Gmail every
+    /// label is a folder, so Spam, Trash, Starred and every label anyone has
+    /// ever made were all being filed as Inbox -- which is how a 321-message
+    /// inbox became 523 with mail from fourteen years ago in it.
+    #[test]
+    fn a_folder_we_do_not_recognise_is_skipped_not_called_inbox() {
+        let none: &[String] = &[];
+        for name in [
+            "Some Client Folder",
+            "[Gmail]/Spam",
+            "[Gmail]/Trash",
+            "[Gmail]/Starred",
+            "[Gmail]/Important",
+            "Receipts 2019",
+        ] {
+            assert_eq!(local_mailbox(name, none), None, "{name}");
+        }
+    }
+
+    /// Gmail's All Mail is every message in the account a second time. Syncing
+    /// it put 34,840 messages in front of a sync that should take seconds.
+    #[test]
+    fn gmail_all_mail_is_never_synced() {
+        assert_eq!(local_mailbox("[Gmail]/All Mail", &[r"\All".to_string()]), None);
+        assert_eq!(local_mailbox("[Gmail]/Spam", &[r"\Junk".to_string()]), None);
+        assert_eq!(local_mailbox("[Gmail]/Bin", &[r"\Trash".to_string()]), None);
+    }
+
+    /// A server that advertises SPECIAL-USE is believed over its own names,
+    /// because a folder called "Sent to accountant" is not the Sent folder.
+    #[test]
+    fn special_use_attributes_beat_the_name() {
+        assert_eq!(
+            local_mailbox("Sent to accountant", &[]),
+            None,
+            "a name that merely contains 'sent' is not the Sent folder"
+        );
+        assert_eq!(
+            local_mailbox("Postvak UIT", &[r"\Sent".to_string()]),
+            Some("Sent"),
+            "a localised name is still Sent when the server says so"
+        );
     }
 
     #[test]

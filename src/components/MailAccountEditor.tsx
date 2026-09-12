@@ -11,6 +11,7 @@ import * as ipc from '../lib/ipc'
 import { Icon } from '../lib/icons'
 import type { MailAccount, MailKind, MailTestResult } from '../lib/types'
 import { CAPTURE_MAIL_ACCOUNT } from '../lib/devCapture'
+import { GoogleButton } from './GoogleMark'
 
 /** Gmail is IMAP + SMTP with Google's hosts filled in — the transport is
  *  identical, so it is a preset rather than a separate code path. */
@@ -77,6 +78,10 @@ export function MailAccountEditor() {
   const [test, setTest] = useState<MailTestResult | null>(null)
   const [googleReady, setGoogleReady] = useState(false)
   const [googleWhy, setGoogleWhy] = useState('')
+  // Hosts, ports and a password are Google's business once you sign in with
+  // it. They stay available for anyone who would rather use an app password,
+  // behind a link, rather than sitting there implying a decision to make.
+  const [manual, setManual] = useState(false)
 
   // Asked once, not guessed: a build with no client configured must not show
   // a button whose only possible answer is an apology.
@@ -103,14 +108,28 @@ export function MailAccountEditor() {
     }
   }, [])
 
-  /** Saves the account first: there is no id to hang a token on until it exists. */
+  /**
+   * Connect with Google.
+   *
+   * A new account asks Google nothing about itself first: the token reply
+   * names whoever consented, and everything else about Gmail is already known.
+   * Making someone type an address they are about to pick from a chooser is
+   * both redundant and a way to end up with an account whose row says one
+   * mailbox and whose token opens another.
+   *
+   * An existing account keeps its own identity and only swaps how it logs in.
+   */
   const signInWithGoogle = async () => {
     setError('')
     setBusy(true)
     try {
-      const id = await persist()
-      await ipc.mailGoogleSignIn(id, def.address.trim())
-      setDef((d) => ({ ...d, id, auth: 'oauth', has_password: false }))
+      if (def.id === 0) {
+        const account = await ipc.mailGoogleConnect()
+        setDef({ ...account })
+      } else {
+        await ipc.mailGoogleSignIn(def.id, def.address.trim())
+        setDef((d) => ({ ...d, auth: 'oauth', has_password: false }))
+      }
       setTest(null)
       await refreshMailAccounts()
     } catch (e) {
@@ -160,6 +179,16 @@ export function MailAccountEditor() {
 
   /** Saves, then stores the password. Order matters: a new account has no id
    *  to hang a credential on until it exists. */
+  /**
+   * Whether to draw hosts, ports and a password at all.
+   *
+   * A connected Google account never does: Gmail's settings are not a choice
+   * anyone makes, and leaving empty boxes there implies the connection is
+   * incomplete when it is finished.
+   */
+  const googlePath = def.kind === 'gmail' && googleReady
+  const showFields = def.auth !== 'oauth' && (!googlePath || manual)
+
   const persist = async (): Promise<number> => {
     if (!def.address.trim()) throw new Error('An account needs an email address.')
     const id = await ipc.mailAccountSave({ ...def, address: def.address.trim() })
@@ -279,18 +308,19 @@ export function MailAccountEditor() {
                     Google will say it has not verified this app. That is expected for a build
                     signing in with its own client — click Advanced, then continue.
                   </p>
+                  <div className="mt-2.5">
+                    <GoogleButton
+                      onClick={() => void signInWithGoogle()}
+                      disabled={busy}
+                      label={busy ? 'Waiting for your browser...' : 'Continue with Google'}
+                    />
+                  </div>
                   <button
-                    className="mt-2 rounded border border-indigo-500/50 bg-indigo-500/10 px-2.5 py-1.5 text-[11.5px] text-ink hover:border-indigo-500 disabled:opacity-40"
-                    disabled={busy || !def.address.trim()}
-                    onClick={() => void signInWithGoogle()}
+                    className="mt-2 text-[11px] text-muted underline decoration-dotted hover:text-ink"
+                    onClick={() => setManual((m) => !m)}
                   >
-                    {busy ? 'Waiting for your browser...' : 'Continue with Google'}
+                    {manual ? 'Hide the manual settings' : 'Set it up by hand instead'}
                   </button>
-                  {!def.address.trim() && (
-                    <div className="mt-1.5 text-[10.5px] text-faint">
-                      Fill in the email address first, so Google offers the right account.
-                    </div>
-                  )}
                 </>
               )}
             </div>
@@ -359,6 +389,12 @@ export function MailAccountEditor() {
             </div>,
           )}
 
+          {/* Hosts, ports, username and password are Google's business once you
+              sign in with it, so they are not shown at all on that path. An
+              account already connected never shows them; a new Gmail account
+              shows them only if you ask for the manual route. */}
+          {showFields && (
+          <>
           <div className="flex gap-2.5">
             {field(
               'Display name',
@@ -452,6 +488,9 @@ export function MailAccountEditor() {
               value={def.signature}
               onChange={(e) => setDef((d) => ({ ...d, signature: e.target.value }))}
             />,
+          )}
+
+          </>
           )}
 
           <label className="flex items-center gap-2 text-[12px] text-body">

@@ -508,6 +508,28 @@ pub fn migrate(conn: &Connection) {
         );
     }
 
+    // The folders a server offers that are not one of the four we file into.
+    // On Gmail these are your labels; on other hosts they are folders you made.
+    // Recorded rather than synced: seeing that a label exists costs one row,
+    // and fetching its mail costs minutes, so the fetch waits until you open
+    // it.
+    //
+    // `remote` is the name on the wire, which is what SELECT needs -- Gmail's
+    // is "[Gmail]/Something" or "Work/Clients" and the display name is not.
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS mail_labels (
+             id INTEGER PRIMARY KEY,
+             account_id INTEGER NOT NULL REFERENCES mail_accounts(id) ON DELETE CASCADE,
+             remote TEXT NOT NULL,
+             name TEXT NOT NULL DEFAULT '',
+             seen_at INTEGER NOT NULL DEFAULT 0,
+             synced_at INTEGER NOT NULL DEFAULT 0
+         );
+         CREATE UNIQUE INDEX IF NOT EXISTS mail_labels_one
+             ON mail_labels(account_id, remote);",
+    )
+    .ok();
+
     // Mail cached before the folder mapping was fixed is wrong and a re-sync
     // cannot correct it: rows are keyed by (account, mailbox, uid), so messages
     // filed under the wrong mailbox are never revisited, only added to. Until

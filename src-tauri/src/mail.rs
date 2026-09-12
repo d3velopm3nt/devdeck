@@ -224,6 +224,11 @@ pub struct MailQuery {
     pub search: String,
     #[serde(default)]
     pub account_id: Option<i64>,
+    /// A label's wire name. When set it replaces the group's mailbox filter
+    /// entirely, because a label is not one of the four folders — it is its
+    /// own mailbox, and a message wearing three labels is filed under each.
+    #[serde(default)]
+    pub label: Option<String>,
     #[serde(default)]
     pub limit: Option<i64>,
 }
@@ -675,6 +680,167 @@ fn rank_correspondents(conn: &Connection, limit: i64) -> Result<Vec<Corresponden
     });
     all.truncate(limit as usize);
     Ok(all)
+}
+
+/// A label on the server, and whether we have ever fetched its mail.
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct MailLabel {
+    pub id: i64,
+    pub account_id: i64,
+    /// The name on the wire, which is what SELECT needs.
+    pub remote: String,
+    /// What to show: the last segment, so "Work/Clients" reads as "Clients".
+    pub name: String,
+    /// How many of its messages we hold. Zero until you open it.
+    pub messages: i64,
+    pub synced_at: i64,
+}
+
+/// Turn a server folder name into something worth reading.
+///
+/// Gmail hands back `[Gmail]/Something` for its own and `Work/Clients` for a
+/// nested label. Showing the raw string puts the plumbing in front of the name,
+/// and the plumbing is never the interesting half.
+fn label_name(remote: &str) -> String {
+    let s = remote.trim_start_matches("[Gmail]/").trim_start_matches("INBOX.");
+    let last = s.rsplit(['/', '.']).next().unwrap_or(s);
+    if last.trim().is_empty() {
+        remote.to_string()
+    } else {
+        last.trim().to_string()
+    }
+}
+
+/// Every label on an account, with what we hold for each.
+#[tauri::command]
+pub fn mail_labels(db: tauri::State<Db>, account_id: i64) -> Result<Vec<MailLabel>, String> {
+    let conn = db.0.lock().unwrap();
+    let mut st = conn
+        .prepare(
+            "SELECT l.id, l.account_id, l.remote, l.name, l.synced_at,
+                    (SELECT COUNT(*) FROM mail_messages m
+                      WHERE m.account_id = l.account_id AND m.mailbox = l.remote)
+               FROM mail_labels l
+              WHERE (?1 = 0 OR l.account_id = ?1)
+              ORDER BY l.name COLLATE NOCASE",
+        )
+        .map_err(err)?;
+    let rows = st
+        .query_map(params![account_id], |r| {
+            Ok(MailLabel {
+                id: r.get(0)?,
+                account_id: r.get(1)?,
+                remote: r.get(2)?,
+                name: r.get(3)?,
+                synced_at: r.get(4)?,
+                messages: r.get(5)?,
+            })
+        })
+        .map_err(err)?;
+    rows.collect::<rusqlite::Result<Vec<_>>>().map_err(err)
+}
+
+/// Fetch one label's mail, on demand.
+///
+/// Separate from `mail_sync` on purpose. Syncing every label on a Gmail account
+/// means syncing the whole mailbox several times over, since a message wears as
+/// many labels as you gave it. So a label costs nothing until you open it, and
+/// then costs one folder.
+#[tauri::command]
+pub async fn mail_sync_label(app: tauri::AppHandle, label_id: i64) -> Result<i64, String> {
+    off_thread(app, move |app, db| sync_label_now(app, db, label_id)).await
+}
+
+fn sync_label_now(app: &tauri::AppHandle, db: &Db, label_id: i64) -> Result<i64, String> {
+    let (acct, remote) = {
+        let conn = db.0.lock().unwrap();
+        let (account_id, remote): (i64, String) = conn
+            .query_row(
+                "SELECT account_id, remote FROM mail_labels WHERE id=?1",
+                params![label_id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .map_err(|_| "That label is no longer there.".to_string())?;
+        (load_account(&conn, account_id)?, remote)
+    };
+
+    let say = |line: String| push_log(app, MAIL_LOG_ID, "mail", "system", line);
+    say(format!("opening {remote}…"));
+
+    let password = password_for(&acct)?;
+    let root = {
+        let conn = db.0.lock().unwrap();
+        crate::mailfiles::root(&conn)
+    };
+    let mut session = imap_login(&acct, &password)?;
+
+    let mailbox = session
+        .select(&remote)
+        .map_err(|e| format!("could not open {remote}: {e}"))?;
+
+    // The label's own name is the mailbox these are filed under, so a message
+    // carrying three labels is stored under each. That is what a label is:
+    // Gmail's own model, not a folder tree pretending to be one.
+    let seen: i64 = {
+        let conn = db.0.lock().unwrap();
+        conn.query_row(
+            "SELECT COALESCE(MAX(uid), 0) FROM mail_messages WHERE account_id=?1 AND mailbox=?2",
+            params![acct.id, remote],
+            |r| r.get(0),
+        )
+        .unwrap_or(0)
+    };
+
+    let fetches = if seen > 0 {
+        session.uid_fetch(format!("{}:*", seen + 1), "(UID FLAGS INTERNALDATE RFC822)")
+    } else {
+        let hi = mailbox.exists;
+        let lo = hi.saturating_sub(SYNC_LIMIT).max(1);
+        say(format!("{remote}: {hi} on the server, taking the newest {}", hi.min(SYNC_LIMIT)));
+        session.fetch(format!("{lo}:{hi}"), "(UID FLAGS INTERNALDATE RFC822)")
+    };
+    let fetches = fetches.map_err(|e| format!("could not read {remote}: {e}"))?;
+
+    let mut stored = 0i64;
+    for f in fetches.iter() {
+        let Some(raw) = f.body().or_else(|| f.header()) else {
+            continue;
+        };
+        let internal = f
+            .internal_date()
+            .map(|d| d.timestamp_millis())
+            .unwrap_or_else(now_millis);
+        let Ok(parsed) = parse_message(raw, internal) else {
+            continue;
+        };
+        let unread = !f.flags().iter().any(|fl| *fl == imap::types::Flag::Seen);
+        let flagged = f.flags().iter().any(|fl| *fl == imap::types::Flag::Flagged);
+        let uid = f.uid.unwrap_or(0) as i64;
+
+        let conn = db.0.lock().unwrap();
+        if store_message(&conn, &root, &acct, &remote, uid, &parsed, unread, flagged)? {
+            stored += 1;
+        }
+    }
+    let _ = session.logout();
+
+    {
+        let conn = db.0.lock().unwrap();
+        let _ = conn.execute(
+            "UPDATE mail_labels SET synced_at=?1 WHERE id=?2",
+            params![now_millis(), label_id],
+        );
+    }
+    say(format!("{remote}: {stored} new."));
+    crate::activity::record(
+        app,
+        "mail",
+        format!("Opened {}", label_name(&remote)),
+        format!("{stored} new message{}", if stored == 1 { "" } else { "s" }),
+        true,
+        Some(acct.id),
+    );
+    Ok(stored)
 }
 
 #[tauri::command]
@@ -1471,6 +1637,24 @@ fn sync_one(app: &tauri::AppHandle, db: &Db, acct: &MailAccount) -> Result<i64, 
 
     for (remote, attrs) in folders {
         let Some(local) = local_mailbox(&remote, &attrs) else {
+            // Not one of the four we file into, and not a server special we
+            // refuse — so it is a label, or a folder someone made. Remember
+            // that it exists; fetching its mail waits until it is opened.
+            if !attrs.iter().any(|a| {
+                matches!(
+                    a.to_ascii_lowercase().as_str(),
+                    r"ll" | r"\junk" | r"	rash" | r"
+oselect" | r"lagged" | r"\important"
+                )
+            }) {
+                let conn = db.0.lock().unwrap();
+                let _ = conn.execute(
+                    "INSERT INTO mail_labels (account_id, remote, name, seen_at)
+                     VALUES (?1,?2,?3,?4)
+                     ON CONFLICT(account_id, remote) DO UPDATE SET name=excluded.name",
+                    params![acct.id, remote, label_name(&remote), now_millis()],
+                );
+            }
             continue;
         };
         if !wanted.contains(&local) {
@@ -1548,9 +1732,36 @@ fn sync_one(app: &tauri::AppHandle, db: &Db, acct: &MailAccount) -> Result<i64, 
             let flagged = f.flags().iter().any(|fl| *fl == imap::types::Flag::Flagged);
             let uid = f.uid.unwrap_or(0) as i64;
 
-            let conn = db.0.lock().unwrap();
-            store_message(&conn, &root, acct, local, uid, &parsed, !seen, flagged)?;
-            stored += 1;
+            let fresh = {
+                let conn = db.0.lock().unwrap();
+                store_message(&conn, &root, acct, local, uid, &parsed, !seen, flagged)?
+            };
+            if fresh {
+                stored += 1;
+            }
+            // `UID FETCH n:*` always returns at least the newest message even
+            // when nothing is new -- that is the protocol, not a bug -- so one
+            // message per folder comes back every time. Counting those as
+            // "new" made every no-op sync report four, which is a number that
+            // is never true and teaches you to stop reading it.
+            //
+            // Debug, because on a first sync this is hundreds of lines. The
+            // level filter in Logs is what makes it affordable to have at all.
+            push_log(
+                app,
+                MAIL_LOG_ID,
+                "mail",
+                if fresh { "system" } else { "debug" },
+                format!(
+                    "{local} #{uid} {} {}",
+                    if fresh { "new:" } else { "already had:" },
+                    if parsed.subject.trim().is_empty() {
+                        "(no subject)"
+                    } else {
+                        parsed.subject.trim()
+                    }
+                ),
+            );
         }
     }
     let _ = session.logout();
@@ -1582,7 +1793,7 @@ fn store_message(
     p: &Parsed,
     unread: bool,
     flagged: bool,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     let existing: Option<i64> = conn
         .query_row(
             "SELECT id FROM mail_messages WHERE account_id=?1 AND mailbox=?2 AND uid=?3",
@@ -1655,6 +1866,7 @@ fn store_message(
     )
     .map_err(err)?;
 
+    let is_new = existing.is_none();
     for (name, mime, idx, bytes) in &p.attachments {
         // The file is written before the row, so a row never claims a path
         // that is not there. A write that fails costs the file, not the
@@ -1671,7 +1883,7 @@ fn store_message(
         )
         .map_err(err)?;
     }
-    Ok(())
+    Ok(is_new)
 }
 
 /// Everyone who mails you becomes a contact, unlinked, so the address book
@@ -1721,6 +1933,11 @@ pub fn mail_list(db: tauri::State<Db>, query: MailQuery) -> Result<Vec<MailMessa
     let mut where_sql = String::from("1=1");
     let mut args: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
 
+    let label = query.label.as_deref().unwrap_or("").trim().to_string();
+    if !label.is_empty() {
+        where_sql.push_str(" AND m.mailbox=?");
+        args.push(Box::new(label));
+    } else {
     match query.group.as_str() {
         "unread" => where_sql.push_str(" AND m.mailbox='INBOX' AND m.unread=1"),
         "flagged" => where_sql.push_str(" AND m.flagged=1"),
@@ -1732,6 +1949,7 @@ pub fn mail_list(db: tauri::State<Db>, query: MailQuery) -> Result<Vec<MailMessa
         "drafts" => where_sql.push_str(" AND m.mailbox='Drafts'"),
         "archive" => where_sql.push_str(" AND m.mailbox='Archive'"),
         _ => where_sql.push_str(" AND m.mailbox='INBOX'"),
+    }
     }
     match query.chip.as_str() {
         "unread" => where_sql.push_str(" AND m.unread=1"),

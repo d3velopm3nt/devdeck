@@ -20,6 +20,7 @@ import type {
   AssistantNote,
   ComposeDraft,
   MailAccount,
+  MailLabel,
   MailBody,
   MailContact,
   MailCounts,
@@ -346,6 +347,11 @@ export interface AppState {
   mailMessages: MailMessage[]
   mailCounts: MailCounts | null
   mailQuery: MailQuery
+  /** Labels on the server. Listed cheaply; their mail is fetched on demand. */
+  mailLabels: MailLabel[]
+  refreshMailLabels: () => Promise<void>
+  /** Open a label: fetch its mail if we have never done so, then filter to it. */
+  openMailLabel: (label: MailLabel | null) => Promise<void>
   mailSelectedId: number | null
   mailBody: MailBody | null
   mailNotes: AssistantNote[]
@@ -1133,7 +1139,8 @@ export const useApp = create<AppState>((set, get) => ({
   mailAccounts: [],
   mailMessages: [],
   mailCounts: null,
-  mailQuery: { group: 'inbox', chip: 'all', search: '', account_id: null },
+  mailQuery: { group: 'inbox', chip: 'all', search: '', account_id: null, label: null },
+  mailLabels: [],
   mailSelectedId: null,
   mailBody: null,
   mailNotes: [],
@@ -1411,6 +1418,38 @@ export const useApp = create<AppState>((set, get) => ({
     set({ mailBody: body, mailNotes: notes })
   },
 
+  refreshMailLabels: async () => {
+    try {
+      set({ mailLabels: await ipc.mailLabels(0) })
+    } catch {
+      // A label list that cannot be read is a sidebar section that stays
+      // empty. Not worth an error banner over the mail itself.
+      set({ mailLabels: [] })
+    }
+  },
+
+  openMailLabel: async (label) => {
+    if (!label) {
+      await get().setMailQuery({ label: null, group: 'inbox' })
+      return
+    }
+    // Filter first so the click feels instant, then fetch. Opening a label we
+    // have never opened is a network round trip; opening one we have is free.
+    await get().setMailQuery({ label: label.remote })
+    if (label.synced_at === 0) {
+      set({ mailSyncing: true })
+      try {
+        await ipc.mailSyncLabel(label.id)
+      } catch (e) {
+        set({ mailError: e instanceof Error ? e.message : String(e) })
+      } finally {
+        set({ mailSyncing: false })
+        await get().refreshMail()
+        await get().refreshMailLabels()
+      }
+    }
+  },
+
   syncMail: async (accountId = 0) => {
     set({ mailSyncing: true, mailError: '' })
     try {
@@ -1418,6 +1457,7 @@ export const useApp = create<AppState>((set, get) => ({
       await get().refreshMail()
       await get().refreshMailAccounts()
       await get().refreshMailContacts()
+      await get().refreshMailLabels()
     } catch (e) {
       // Failure honesty: never let a failed sync look like an empty inbox.
       set({ mailError: e instanceof Error ? e.message : String(e) })

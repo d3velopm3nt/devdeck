@@ -1125,6 +1125,8 @@ pub fn run() {
             mail::mail_extract,
             mail::mail_attachment_text,
             mail::mail_correspondents,
+            mail::mail_labels,
+            mail::mail_sync_label,
             mail::mail_google_available,
             mail::mail_google_sign_in,
             mail::mail_google_connect,

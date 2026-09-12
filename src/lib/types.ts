@@ -443,7 +443,22 @@ export interface MailQuery {
   chip: MailChip
   search: string
   account_id: number | null
+  /** A label's wire name. When set it replaces the group's folder entirely. */
+  label: string | null
   limit?: number
+}
+
+/** A label on the server: a Gmail label, or a folder someone made. */
+export interface MailLabel {
+  id: number
+  account_id: number
+  /** The name on the wire, which is what the server needs. */
+  remote: string
+  /** The last segment, so "Work/Clients" reads as "Clients". */
+  name: string
+  /** How many of its messages we hold. Zero until you open it. */
+  messages: number
+  synced_at: number
 }
 
 export interface MailCounts {

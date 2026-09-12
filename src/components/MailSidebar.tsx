@@ -2,6 +2,7 @@
 // and the switch between mail and the address book. Fixed chrome like the
 // Explorer and the Stash sidebar — no tab chrome, no dock panel.
 
+import { useEffect, useState } from 'react'
 import { useApp } from '../store'
 import { Icon, type IconName } from '../lib/icons'
 import { fmtAgo } from '../lib/time'
@@ -63,7 +64,18 @@ export function MailSidebar() {
     openMailAccountEditor,
     openCompose,
     syncMail,
+    mailLabels,
+    refreshMailLabels,
+    openMailLabel,
   } = useApp()
+
+  // Collapsed by default. A Gmail account can carry dozens of labels, and a
+  // sidebar that opens on a wall of them buries the nine groups above it.
+  const [labelsOpen, setLabelsOpen] = useState(false)
+
+  useEffect(() => {
+    void refreshMailLabels()
+  }, [refreshMailLabels])
 
   const now = Date.now()
 
@@ -210,10 +222,43 @@ export function MailSidebar() {
             label={g.label}
             tint={g.tint}
             n={countFor(mailCounts, g.key)}
-            active={mailQuery.group === g.key}
-            onClick={() => void setMailQuery({ group: g.key })}
+            active={!mailQuery.label && mailQuery.group === g.key}
+            onClick={() => void openMailLabel(null).then(() => setMailQuery({ group: g.key }))}
           />
         ))}
+
+        {/* Labels, which are not folders.
+            A Gmail label is a tag: a message can wear three and is filed under
+            each, which is why they sit apart from the groups above rather than
+            among them. They are listed from what the server offered during
+            sync and cost nothing until opened -- fetching every label's mail
+            would mean fetching the whole mailbox several times over. */}
+        {mailLabels.length > 0 && (
+          <>
+            <button
+              onClick={() => setLabelsOpen((v) => !v)}
+              className="flex w-full items-center gap-1.5 px-2 pb-1 pt-3 font-mono text-[9.5px] uppercase tracking-[0.08em] text-muted hover:text-dim"
+            >
+              <Icon name={labelsOpen ? 'chevron-down' : 'chevron-right'} size={11} />
+              Labels
+              <span className="ml-auto font-sans text-[10px] normal-case tracking-normal text-faint">
+                {mailLabels.length}
+              </span>
+            </button>
+            {labelsOpen &&
+              mailLabels.map((l) => (
+                <Row
+                  key={l.id}
+                  icon="tag"
+                  label={l.name}
+                  tint="text-dim"
+                  n={l.messages}
+                  active={mailQuery.label === l.remote}
+                  onClick={() => void openMailLabel(l)}
+                />
+              ))}
+          </>
+        )}
       </div>
     </div>
   )

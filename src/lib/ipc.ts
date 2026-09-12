@@ -17,6 +17,7 @@ import type {
   Activity,
   ConnDef,
   MailAccount,
+  MailLabel,
   MailBody,
   MailContact,
   MailCounts,
@@ -1419,6 +1420,12 @@ export const mailGoogleSignIn = (id: number, address: string) =>
 export const mailGoogleSignOut = (id: number) => invoke<void>('mail_google_sign_out', { id })
 /** Sign in and build the account from whichever address consented. */
 export const mailGoogleConnect = () => invoke<MailAccount>('mail_google_connect')
+/** Every label on an account. `0` for all accounts. */
+export const mailLabels = (accountId = 0) =>
+  invoke<MailLabel[]>('mail_labels', { accountId })
+/** Fetch one label's mail. Labels cost nothing until you open one. */
+export const mailSyncLabel = (labelId: number) =>
+  invoke<number>('mail_sync_label', { labelId })
 /** Log in over IMAP and SMTP and report each separately. */
 export const mailAccountTest = (id: number) => invoke<MailTestResult>('mail_account_test', { id })
 /** Fetch new mail. `id` 0 syncs every account. Returns messages stored. */

@@ -1,0 +1,225 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: var(--accent); } a:hover { color: var(--ink); }
+    .head { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .btn { font-size: 11px; color: var(--dim); border: 1px solid var(--line2); border-radius: 6px; padding: 3px 10px; background: transparent; }
+    .btn.on { color: #fff; background: #4f46e5; border-color: #4f46e5; }
+    .btn.ok { color: var(--ok); border-color: rgb(74 222 128 / 0.4); background: rgb(74 222 128 / 0.1); }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+    .r { display: flex; align-items: center; gap: 11px; padding: 9px 13px; border-top: 1px solid var(--line); }
+    .r:first-of-type { border-top: 0; }
+    .av { width: 26px; height: 26px; border-radius: 8px; font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .why { font-size: 10.5px; color: var(--muted); }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --page: {{c.page}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --line: {{c.line}}; --line2: {{c.line2}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; width: 1456px; height: 909px; background: var(--page); color: var(--body); display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;">
+
+  <div style="height: 32px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--panel);">
+    <span style="font-size: 11.5px; color: var(--dim);">DevDeck</span>
+    <span style="font-size: 11.5px; color: var(--faint);">File</span>
+    <span style="font-size: 11.5px; color: var(--faint);">View</span>
+  </div>
+
+  <div style="flex-grow: 1; min-height: 0; display: flex; justify-content: center; padding: 26px 0;">
+    <div style="width: 1080px; display: flex; flex-direction: column; gap: 18px; min-height: 0;">
+
+      <div style="display: flex; align-items: flex-start; gap: 14px;">
+        <span style="width: 34px; height: 34px; border-radius: 11px; background: rgb(129 140 248 / 0.16); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 13.8 9l5.7 1.8-5.7 1.8L12 18.5l-1.8-5.9L4.5 10.8 10.2 9z"></path></svg>
+        </span>
+        <div style="flex-grow: 1;">
+          <div style="font-size: 19px; font-weight: 600; color: var(--ink); letter-spacing: -0.01em;">
+            I read your mail. Here is what I think I found.
+          </div>
+          <p style="margin: 6px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--dim);">
+            2,847 messages, four years, from <span style="color: var(--body);">d3velopm3nt@gmail.com</span>.
+            <span style="color: var(--body);">None of this is kept until you say so</span> &mdash; and what you
+            decline, I will not ask about again.
+          </p>
+        </div>
+        <button class="btn" style="flex-shrink: 0;">Change what I can read</button>
+      </div>
+
+      <div style="display: flex; gap: 18px; min-height: 0; flex-grow: 1;">
+
+        <div style="flex-grow: 1; flex-basis: 0; min-width: 0; display: flex; flex-direction: column; gap: 16px; overflow: auto;">
+
+          <div>
+            <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 7px;">
+              <span class="head">People who matter</span>
+              <span style="font-size: 10px; color: var(--faint);">ranked by how much you actually talk</span>
+            </div>
+            <div class="card">
+              <div class="r">
+                <span class="av" style="background: rgb(167 139 250 / 0.16); color: #a78bfa;">SW</span>
+                <span style="min-width: 0; flex-grow: 1;">
+                  <span style="display: block; font-size: 12.5px; color: var(--ink);">Sarah Whitfield</span>
+                  <span class="why">412 threads over 4 years &middot; same surname &middot; &ldquo;Mum&rsquo;s birthday&rdquo;, &ldquo;Christmas&rdquo;</span>
+                </span>
+                <span style="font-size: 11px; color: var(--dim); border: 1px solid var(--line2); border-radius: 999px; padding: 2px 9px; flex-shrink: 0;">Family</span>
+                <button class="btn ok" style="flex-shrink: 0;">Keep</button>
+                <button class="btn" style="flex-shrink: 0;">Skip</button>
+              </div>
+              <div class="r">
+                <span class="av" style="background: rgb(56 189 248 / 0.16); color: var(--accent);">MO</span>
+                <span style="min-width: 0; flex-grow: 1;">
+                  <span style="display: block; font-size: 12.5px; color: var(--ink);">Marcus Obi</span>
+                  <span class="why">88 threads &middot; invoices, quotes, a signed contract &middot; @harbourandvine.co</span>
+                </span>
+                <span style="font-size: 11px; color: var(--dim); border: 1px solid var(--line2); border-radius: 999px; padding: 2px 9px; flex-shrink: 0;">Client</span>
+                <button class="btn ok" style="flex-shrink: 0;">Keep</button>
+                <button class="btn" style="flex-shrink: 0;">Skip</button>
+              </div>
+              <div class="r">
+                <span class="av" style="background: var(--raise); color: var(--dim);">DL</span>
+                <span style="min-width: 0; flex-grow: 1;">
+                  <span style="display: block; font-size: 12.5px; color: var(--ink);">Danny Lowe</span>
+                  <span class="why">31 threads &middot; golf, five-a-side, one shared holiday booking</span>
+                </span>
+                <span style="font-size: 11px; color: var(--dim); border: 1px solid var(--line2); border-radius: 999px; padding: 2px 9px; flex-shrink: 0;">Friend</span>
+                <button class="btn ok" style="flex-shrink: 0;">Keep</button>
+                <button class="btn" style="flex-shrink: 0;">Skip</button>
+              </div>
+              <div class="r" style="opacity: 0.55;">
+                <span class="av" style="background: var(--raise); color: var(--faint);">AZ</span>
+                <span style="min-width: 0; flex-grow: 1;">
+                  <span style="display: block; font-size: 12.5px; color: var(--dim);">Amazon</span>
+                  <span class="why">1,204 messages &middot; all one-way &middot; you have never replied</span>
+                </span>
+                <span style="font-size: 11px; color: var(--faint); flex-shrink: 0;">not a person &mdash; left out</span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 7px;">
+              <span class="head">Things you run</span>
+              <span style="font-size: 10px; color: var(--faint);">these would become spaces</span>
+            </div>
+            <div class="card">
+              <div class="r">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.7" style="flex-shrink: 0;"><path d="M3.5 7.5h6l2 2.5h9v9h-17z"></path></svg>
+                <span style="min-width: 0; flex-grow: 1;">
+                  <span style="display: block; font-size: 12.5px; color: var(--ink);">Harbour &amp; Vine</span>
+                  <span class="why">47 threads &middot; 9 invoices &middot; 3 unpaid &middot; last reply 6 days ago</span>
+                </span>
+                <span style="font-size: 11px; color: var(--muted); flex-shrink: 0;">under Develtech / Clients</span>
+                <button class="btn ok" style="flex-shrink: 0;">Keep</button>
+                <button class="btn" style="flex-shrink: 0;">Skip</button>
+              </div>
+              <div class="r">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.7" style="flex-shrink: 0;"><path d="M3.5 7.5h6l2 2.5h9v9h-17z"></path></svg>
+                <span style="min-width: 0; flex-grow: 1;">
+                  <span style="display: block; font-size: 12.5px; color: var(--ink);">Kestrel Fabrication</span>
+                  <span class="why">22 threads &middot; 4 invoices, all paid &middot; quiet since June</span>
+                </span>
+                <span style="font-size: 11px; color: var(--muted); flex-shrink: 0;">under Develtech / Clients</span>
+                <button class="btn ok" style="flex-shrink: 0;">Keep</button>
+                <button class="btn" style="flex-shrink: 0;">Skip</button>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 7px;">
+              <span class="head">Things that come round</span>
+              <span style="font-size: 10px; color: var(--faint);">these would become reminders</span>
+            </div>
+            <div class="card">
+              <div class="r">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" stroke-width="1.7" style="flex-shrink: 0;"><rect x="3.5" y="5" width="17" height="15" rx="2"></rect><path d="M3.5 10h17M8 3.5v3M16 3.5v3"></path></svg>
+                <span style="min-width: 0; flex-grow: 1;">
+                  <span style="display: block; font-size: 12.5px; color: var(--ink);">Send receipts to the accountant</span>
+                  <span class="why">she has asked in January, April, July and October, four years running</span>
+                </span>
+                <span style="font-size: 11px; color: var(--muted); flex-shrink: 0;">quarterly</span>
+                <button class="btn ok" style="flex-shrink: 0;">Keep</button>
+                <button class="btn" style="flex-shrink: 0;">Skip</button>
+              </div>
+              <div class="r">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" stroke-width="1.7" style="flex-shrink: 0;"><rect x="3.5" y="5" width="17" height="15" rx="2"></rect><path d="M3.5 10h17M8 3.5v3M16 3.5v3"></path></svg>
+                <span style="min-width: 0; flex-grow: 1;">
+                  <span style="display: block; font-size: 12.5px; color: var(--ink);">Koda&rsquo;s booster &amp; annual check</span>
+                  <span class="why">the vet has sent a reminder every September since 2023</span>
+                </span>
+                <span style="font-size: 11px; color: var(--muted); flex-shrink: 0;">yearly &middot; Sept</span>
+                <button class="btn ok" style="flex-shrink: 0;">Keep</button>
+                <button class="btn" style="flex-shrink: 0;">Skip</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="width: 300px; flex-shrink: 0; display: flex; flex-direction: column; gap: 16px;">
+
+          <div class="card" style="padding: 14px; border-color: rgb(74 222 128 / 0.3); background: rgb(74 222 128 / 0.06);">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 9px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ok)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="9.5" rx="2"></rect><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"></path></svg>
+              <span style="font-size: 12px; font-weight: 600; color: var(--ink);">What I left alone</span>
+            </div>
+            <p style="margin: 0; font-size: 11.5px; line-height: 1.6; color: var(--body);">
+              <span style="color: var(--ink);">37 messages</span> held a password, a one-time code or a
+              card number. I skipped them whole &mdash; not summarised, not stored, not shown here.
+            </p>
+            <p style="margin: 9px 0 0; font-size: 11px; line-height: 1.55; color: var(--muted);">
+              Same rule the Stash uses on your clipboard. If it looks like a secret it never reaches disk.
+            </p>
+          </div>
+
+          <div class="card" style="padding: 14px;">
+            <div class="head" style="margin-bottom: 9px;">Where it would go</div>
+            <div style="display: flex; flex-direction: column; gap: 9px; font-size: 11.5px;">
+              <div style="display: flex; gap: 8px;">
+                <span style="color: var(--ink); width: 62px; flex-shrink: 0;">People</span>
+                <span style="color: var(--muted);">your personal store &mdash; never in a repo</span>
+              </div>
+              <div style="height: 1px; background: var(--line);"></div>
+              <div style="display: flex; gap: 8px;">
+                <span style="color: var(--ink); width: 62px; flex-shrink: 0;">Clients</span>
+                <span style="color: var(--muted);">a folder in your vault, with its own thread</span>
+              </div>
+              <div style="height: 1px; background: var(--line);"></div>
+              <div style="display: flex; gap: 8px;">
+                <span style="color: var(--ink); width: 62px; flex-shrink: 0;">Reminders</span>
+                <span style="color: var(--muted);">the calendar, on the space they belong to</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top: auto; display: flex; flex-direction: column; gap: 8px;">
+            <button class="btn on" style="padding: 8px; font-size: 12.5px;">Keep the 7 I ticked</button>
+            <button class="btn" style="padding: 7px; font-size: 12px;">Keep nothing &mdash; I will tell you myself</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', page: '#0d1017', panel: '#11141c', raise: '#151923', line: '#1e293b',
+          line2: '#334155', ink: '#e2e8f0', body: '#cbd5e1', dim: '#94a3b8', muted: '#64748b',
+          faint: '#475569', accent: '#818cf8', ok: '#4ade80', warn: '#fbbf24', err: '#f87171' }
+      : { app: '#e9ebf0', page: '#f6f7f9', panel: '#fdfdfe', raise: '#f0f2f6', line: '#d9dee7',
+          line2: '#c3cbd8', ink: '#16181d', body: '#333a45', dim: '#5a6472', muted: '#7d8794',
+          faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d', warn: '#b45309', err: '#dc2626' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

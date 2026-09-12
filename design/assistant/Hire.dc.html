@@ -1,0 +1,149 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: var(--accent); } a:hover { color: var(--ink); }
+    .head { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .btn { font-size: 11.5px; color: var(--dim); border: 1px solid var(--line2); border-radius: 6px; padding: 5px 12px; background: transparent; }
+    .btn.on { color: #fff; background: #4f46e5; border-color: #4f46e5; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+    .r { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-top: 1px solid var(--line); }
+    .lvl { font-size: 10.5px; font-weight: 600; border-radius: 5px; padding: 1px 7px; }
+    .mono { font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --page: {{c.page}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --line: {{c.line}}; --line2: {{c.line2}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; width: 1100px; height: 909px; background: var(--page); color: var(--body); display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden; padding: 30px;">
+
+  <div style="display: flex; align-items: flex-start; gap: 14px; margin-bottom: 22px;">
+    <span style="width: 34px; height: 34px; border-radius: 11px; background: rgb(129 140 248 / 0.16); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 13.8 9l5.7 1.8-5.7 1.8L12 18.5l-1.8-5.9L4.5 10.8 10.2 9z"></path></svg>
+    </span>
+    <div>
+      <div style="font-size: 18px; font-weight: 600; color: var(--ink); letter-spacing: -0.01em;">
+        Life has no one watching it
+      </div>
+      <p style="margin: 6px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--dim); max-width: 640px;">
+        You missed the gym three of the last five weeks and I only noticed afterwards, because
+        noticing is nobody&rsquo;s job yet. Here is who I would put on it.
+      </p>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom: 18px;">
+    <div style="padding: 15px 16px; display: flex; align-items: flex-start; gap: 13px;">
+      <span style="width: 34px; height: 34px; border-radius: 10px; background: rgb(167 139 250 / 0.16); color: #a78bfa; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">CO</span>
+      <div style="flex-grow: 1; min-width: 0;">
+        <div style="display: flex; align-items: baseline; gap: 9px;">
+          <span style="font-size: 14px; font-weight: 600; color: var(--ink);">A coach</span>
+          <span style="font-size: 10.5px; color: var(--muted);">new role &mdash; works in any space, like every other role</span>
+        </div>
+        <p style="margin: 7px 0 0; font-size: 12px; line-height: 1.6; color: var(--body);">
+          Asks you what you did, keeps the count, and says something when a week slips.
+          Does not write files or run anything.
+        </p>
+      </div>
+      <button class="btn" style="flex-shrink: 0;">Edit</button>
+    </div>
+
+    <div class="r" style="align-items: flex-start;">
+      <span style="width: 86px; flex-shrink: 0; font-size: 11px; color: var(--muted); padding-top: 2px;">Watches</span>
+      <div style="flex-grow: 1;">
+        <span style="font-size: 12.5px; color: var(--ink);">Life</span>
+        <span style="font-size: 11px; color: var(--muted);"> &mdash; the space, not the folder under it</span>
+      </div>
+    </div>
+    <div class="r" style="align-items: flex-start;">
+      <span style="width: 86px; flex-shrink: 0; font-size: 11px; color: var(--muted); padding-top: 2px;">Its goal</span>
+      <div style="flex-grow: 1; font-size: 12.5px; color: var(--ink);">
+        Consistent in the gym, and walking Koda
+        <div style="margin-top: 3px; font-size: 11px; color: var(--muted);">taken from the bot already sitting there doing nothing</div>
+      </div>
+    </div>
+    <div class="r" style="align-items: flex-start;">
+      <span style="width: 86px; flex-shrink: 0; font-size: 11px; color: var(--muted); padding-top: 2px;">Wakes</span>
+      <div style="flex-grow: 1; font-size: 12.5px; color: var(--ink);">
+        weekdays at 08:00, and Sunday evening for the week
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-bottom: 8px; display: flex; align-items: baseline; gap: 8px;">
+    <span class="head">What it would be allowed to do</span>
+    <span style="font-size: 10px; color: var(--faint);">a new row in the same table every agent lives in</span>
+  </div>
+  <div class="card" style="margin-bottom: 18px;">
+    <div class="r" style="border-top: 0;">
+      <span class="mono" style="width: 110px; flex-shrink: 0; font-size: 11.5px; color: var(--body);">memory</span>
+      <span class="lvl" style="background: rgb(74 222 128 / 0.14); color: var(--ok);">FULL</span>
+      <span style="font-size: 11px; color: var(--muted);">so it remembers what you said last week</span>
+    </div>
+    <div class="r">
+      <span class="mono" style="width: 110px; flex-shrink: 0; font-size: 11.5px; color: var(--body);">routine</span>
+      <span class="lvl" style="background: rgb(74 222 128 / 0.14); color: var(--ok);">FULL</span>
+      <span style="font-size: 11px; color: var(--muted);">so it can move its own check-in when you ask</span>
+    </div>
+    <div class="r">
+      <span class="mono" style="width: 110px; flex-shrink: 0; font-size: 11.5px; color: var(--body);">work</span>
+      <span class="lvl" style="background: rgb(74 222 128 / 0.14); color: var(--ok);">FULL</span>
+      <span style="font-size: 11px; color: var(--muted);">its plan is files in the deck, not your machine</span>
+    </div>
+    <div class="r">
+      <span class="mono" style="width: 110px; flex-shrink: 0; font-size: 11.5px; color: var(--body);">files</span>
+      <span class="lvl" style="background: rgb(56 189 248 / 0.14); color: var(--accent);">READ</span>
+      <span style="font-size: 11px; color: var(--muted);">can look in Life, cannot write there</span>
+    </div>
+    <div class="r">
+      <span class="mono" style="width: 110px; flex-shrink: 0; font-size: 11.5px; color: var(--faint);">mail</span>
+      <span class="lvl" style="background: var(--raise); color: var(--faint);">NONE</span>
+      <span style="font-size: 11px; color: var(--muted);">a coach has no business in your inbox</span>
+    </div>
+    <div class="r">
+      <span class="mono" style="width: 110px; flex-shrink: 0; font-size: 11.5px; color: var(--faint);">terminal &middot; git &middot; process</span>
+      <span class="lvl" style="background: var(--raise); color: var(--faint);">NONE</span>
+      <span style="font-size: 11px; color: var(--muted);">nothing it does needs a machine</span>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 10px; align-items: center;">
+    <button class="btn on">Hire it</button>
+    <button class="btn">Change what it can do first</button>
+    <span style="flex-grow: 1;"></span>
+    <button class="btn" style="border: 0; color: var(--muted);">No &mdash; and stop suggesting this</button>
+  </div>
+
+  <div style="margin-top: auto; padding-top: 18px; border-top: 1px solid var(--line); display: flex; gap: 10px;">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px;"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4.5M12 16h.01"></path></svg>
+    <p style="margin: 0; font-size: 11.5px; line-height: 1.6; color: var(--muted); max-width: 780px;">
+      A role is not a person you hire once &mdash; <span style="color: var(--body);">a coach could watch
+      Develtech too</span>, with a different goal and a different rhythm. Roles are global; what they
+      watch is not. That is already how architect and qa work, and it is why nothing new had to be
+      invented for this.
+    </p>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', page: '#0d1017', panel: '#11141c', raise: '#151923', line: '#1e293b',
+          line2: '#334155', ink: '#e2e8f0', body: '#cbd5e1', dim: '#94a3b8', muted: '#64748b',
+          faint: '#475569', accent: '#818cf8', ok: '#4ade80', warn: '#fbbf24', err: '#f87171' }
+      : { app: '#e9ebf0', page: '#f6f7f9', panel: '#fdfdfe', raise: '#f0f2f6', line: '#d9dee7',
+          line2: '#c3cbd8', ink: '#16181d', body: '#333a45', dim: '#5a6472', muted: '#7d8794',
+          faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d', warn: '#b45309', err: '#dc2626' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

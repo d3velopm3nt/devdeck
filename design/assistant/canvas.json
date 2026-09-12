@@ -1,0 +1,46 @@
+{
+  "artboards": [
+    { "file": "Meet.dc.html", "title": "1 · Meet", "x": 0, "y": 0, "w": 1456, "h": 909 },
+    { "file": "Learn.dc.html", "title": "2 · Learn — from your mail", "x": 1576, "y": 0, "w": 1456, "h": 909 },
+    { "file": "Main.dc.html", "title": "3 · Today, once it knows you", "x": 3152, "y": 0, "w": 1456, "h": 909 },
+    { "file": "Hire.dc.html", "title": "4 · Hire a role", "x": 4728, "y": 0, "w": 1100, "h": 909 }
+  ],
+  "annotations": [
+    {
+      "id": "surprise",
+      "x": -540,
+      "y": 0,
+      "w": 440,
+      "text": "THE SURPRISE\n\nMost of this already exists. It is pointed at software instead of at you.\n\n• An agent is already a cross-space ROLE — a markdown file with role, system prompt, provider and permissions. Your \"general role that works across spaces\" IS an agent. They just happen to be architect, dev-a, qa, reviewer.\n\n• A bot is already a per-space MANAGER — _bot.md with a goal and a rhythm. It wakes, keeps a plan, puts agents on work.\n\n• The assistant can already CREATE bots from a sentence (BotDraft + BotMaker). It has simply never been the one to suggest it.\n\n• Memory already splits general from scoped: a note with no project_id is general.\n\n• And the personality is one line, seeded once to a file you own:\n  \"You are the developer's assistant. You coordinate the team, answer questions about the work, and keep track of what matters.\""
+    },
+    {
+      "id": "missing",
+      "x": -540,
+      "y": 470,
+      "w": 440,
+      "text": "WHAT IS ACTUALLY MISSING\n\n1. A persona that is not developer-shaped, and any way to choose or shape it.\n\n2. A first run. There is none anywhere in the codebase — you land in an empty tree.\n\n3. Life-shaped roles. Six agents, all software.\n\n4. Bots with hands that are not code. The Fitness bot's goal is Koda and the gym; a bot's job is putting agents on work items in a repository. It wakes at 08:00 and can do nothing.\n\n5. The assistant never proposes. It answers."
+    },
+    {
+      "id": "mail",
+      "x": 1576,
+      "y": 960,
+      "w": 470,
+      "text": "WHY MAIL IS THE RIGHT START — AND WHERE IT GOES WRONG\n\nIt is true: your mailbox knows your clients, your bills, who you actually talk to. And MailContact already carries name, role, company, thread count, last message and a node_id linking it to a client. This is a proposal layer over things that exist, not a new system.\n\nThree ways it goes wrong, and the answers this screen commits to:\n\n• A mailbox is mostly noise. Rank by reciprocity, not volume — Amazon sent 1,204 messages and you never replied once, so it is not a person.\n\n• Reading a whole mailbox to build a profile is a big act. So nothing is kept until accepted, item by item, and a decline is remembered.\n\n• Mailboxes hold passwords, one-time codes and card numbers. Those messages are skipped WHOLE — not summarised, not stored. Same rule the Stash already applies to your clipboard.\n\nSay it plainly on screen, because this is the moment trust is either earned or lost."
+    },
+    {
+      "id": "split",
+      "x": 3152,
+      "y": 960,
+      "w": 440,
+      "text": "THE LINE THAT KEEPS THIS SAFE\n\nYour own rule, already in CLAUDE.md: anything about the USER goes in the personal store, which refuses to be created inside a git repository.\n\nSo:\n  facts about YOU (how you work, your goals, your family) → personal memory, never in a commit\n  facts about a THING (a client, an invoice, the dog's vet) → that node's deck, in the vault\n\nLife content is still node state. That is the whole reason a Life space can exist without leaking you into a repo."
+    },
+    {
+      "id": "money",
+      "x": 4728,
+      "y": 960,
+      "w": 440,
+      "text": "ON MONEY, LATER\n\nYou said email now, money later, and that ordering is right — money is the one where a mistake is not recoverable.\n\nWhen it comes, it arrives as rows in the same permission table: a role gets money:read long before anything gets money:write, and \"move money\" should probably never exist as a grant at all — only \"draft a payment for you to approve\".\n\nThe matrix is what makes handing this thing your life safe. Every new reach is a row, and the default stays approval even when that is annoying."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

@@ -279,16 +279,38 @@ fn closing_page(title: &str, body: &str) -> String {
 /// Anything that is not our callback is answered and ignored rather than
 /// accepted: browsers ask for `/favicon.ico` on their own, and treating that
 /// as a failed sign-in would end the flow before the real callback arrives.
-pub fn wait_for_callback(listener: &TcpListener, expect_state: &str) -> Result<String, String> {
+pub fn wait_for_callback(
+    listener: &TcpListener,
+    expect_state: &str,
+    timeout: std::time::Duration,
+) -> Result<String, String> {
+    // Non-blocking with a deadline, rather than blocking on `incoming()`.
+    // A blocking accept has no way out: close the browser tab without
+    // deciding, and the listener waits for a callback that will never come,
+    // forever. This is the difference between "nothing happened" and a
+    // sign-in you cannot cancel.
     listener
-        .set_nonblocking(false)
+        .set_nonblocking(true)
         .map_err(|e| format!("could not wait on the local port: {e}"))?;
+    let deadline = std::time::Instant::now() + timeout;
 
-    for stream in listener.incoming() {
-        let mut stream = match stream {
-            Ok(s) => s,
+    loop {
+        if std::time::Instant::now() > deadline {
+            return Err("the sign-in timed out. Nothing was saved -- try again, and if the                         browser never opened, check that this machine has a default browser."
+                .into());
+        }
+
+        let mut stream = match listener.accept() {
+            Ok((s, _)) => s,
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                std::thread::sleep(std::time::Duration::from_millis(120));
+                continue;
+            }
             Err(e) => return Err(format!("the browser could not reach DevDeck: {e}")),
         };
+        // A connection that opens and then says nothing must not hold the
+        // whole sign-in open either.
+        let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(5)));
 
         let mut line = String::new();
         if BufReader::new(&stream).read_line(&mut line).is_err() {
@@ -337,13 +359,15 @@ pub fn wait_for_callback(listener: &TcpListener, expect_state: &str) -> Result<S
                     other => format!("Google refused the sign-in: {other}"),
                 });
             }
-            // Not the callback — a favicon, a preflight, a stray tab.
+            // Not the callback — a favicon, a preflight, a stray tab. Answer
+            // it and keep waiting: treating a browser's own favicon request
+            // as a failed sign-in would end the flow before the real callback
+            // ever arrived.
             None => {
                 let _ = stream.write_all(closing_page("DevDeck", "Nothing to see here.").as_bytes());
             }
         }
     }
-    Err("the sign-in was closed before Google answered".into())
 }
 
 // ---------------------------------------------------------------------------
@@ -560,6 +584,13 @@ fn open_in_browser(url: &str) -> Result<(), String> {
 /// Nothing is written anywhere by this function. It returns tokens and lets
 /// the caller decide what to keep, so a sign-in that succeeds against the
 /// wrong account cannot half-overwrite the right one.
+/// How long to wait for someone to finish at Google.
+///
+/// Long enough to find a password manager and pick an account; short enough
+/// that a tab closed by accident does not leave a listener and a spinner alive
+/// until the app is quit.
+pub const SIGN_IN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(180);
+
 pub fn sign_in(hint: &str) -> Result<Tokens, String> {
     let client = client().ok_or_else(unavailable)?;
     let (listener, redirect) = loopback()?;
@@ -568,7 +599,7 @@ pub fn sign_in(hint: &str) -> Result<Tokens, String> {
 
     open_in_browser(&auth_url(&client.id, &redirect, &p.challenge, &state, hint))?;
 
-    let code = wait_for_callback(&listener, &state)?;
+    let code = wait_for_callback(&listener, &state, SIGN_IN_TIMEOUT)?;
     exchange(&client, &code, &p.verifier, &redirect)
 }
 
@@ -683,6 +714,30 @@ mod tests {
         // Never `localhost`: it can resolve to ::1 first, and then the browser
         // knocks on a door we are not behind.
         assert!(!redirect.contains("localhost"));
+    }
+
+    /// The bug this guards froze the whole window: a blocking accept has no
+    /// way out, so closing the browser tab without deciding left the listener
+    /// waiting for a callback that would never arrive.
+    #[test]
+    fn a_sign_in_nobody_finishes_gives_up_instead_of_waiting_forever() {
+        let (l, _redirect) = loopback().unwrap();
+        let started = std::time::Instant::now();
+        let out = wait_for_callback(&l, "state", std::time::Duration::from_millis(400));
+        let took = started.elapsed();
+
+        let msg = out.expect_err("nothing connected, so this cannot succeed");
+        assert!(msg.contains("timed out"), "{msg}");
+        assert!(msg.contains("Nothing was saved"), "{msg}");
+        assert!(took < std::time::Duration::from_secs(5), "{took:?}");
+    }
+
+    /// Three minutes is long enough to find a password manager and short
+    /// enough that an accidentally closed tab does not outlive the session.
+    #[test]
+    fn the_timeout_is_measured_in_minutes_not_seconds() {
+        assert!(SIGN_IN_TIMEOUT >= std::time::Duration::from_secs(60));
+        assert!(SIGN_IN_TIMEOUT <= std::time::Duration::from_secs(600));
     }
 
     #[test]

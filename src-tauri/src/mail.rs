@@ -430,6 +430,19 @@ pub fn mail_account_clear_password(id: i64) -> Result<bool, String> {
     Ok(creds::delete(&target_for(id)))
 }
 
+/// Do the whole Google conversation on a worker thread.
+///
+/// This is not a tidiness measure. A synchronous `#[tauri::command]` runs on
+/// the thread that serves the UI's messages, and this one waits minutes for a
+/// person to finish in a browser. Calling it directly froze the entire window
+/// behind a greyed-out "Waiting for your browser..." that never came back —
+/// the app could not even repaint the spinner it was showing.
+async fn wait_for_google(hint: String) -> Result<crate::gauth::Tokens, String> {
+    tauri::async_runtime::spawn_blocking(move || crate::gauth::sign_in(&hint))
+        .await
+        .map_err(|e| format!("the sign-in task did not finish: {e}"))?
+}
+
 /// Whether this build can offer Google sign-in at all.
 ///
 /// The UI asks before drawing the button, because a button that always
@@ -671,11 +684,15 @@ pub fn mail_google_available() -> bool {
 /// second, the row last. A sign-in that is cancelled at the browser touches
 /// no account at all.
 #[tauri::command]
-pub fn mail_google_sign_in(db: tauri::State<Db>, id: i64, address: String) -> Result<(), String> {
+pub async fn mail_google_sign_in(
+    db: tauri::State<'_, Db>,
+    id: i64,
+    address: String,
+) -> Result<(), String> {
     if id <= 0 {
         return Err("Save the account before signing in to it.".into());
     }
-    let tokens = crate::gauth::sign_in(&address)?;
+    let tokens = wait_for_google(address.clone()).await?;
 
     creds::set(&token_target_for(id), &address, &tokens.refresh)?;
     // An account can arrive here holding an old app password. Leaving it would
@@ -707,8 +724,8 @@ pub fn mail_google_sign_in(db: tauri::State<Db>, id: i64, address: String) -> Re
 /// adding a second one. Two rows for one mailbox would sync it twice and show
 /// every message in duplicate.
 #[tauri::command]
-pub fn mail_google_connect(db: tauri::State<Db>) -> Result<MailAccount, String> {
-    let tokens = crate::gauth::sign_in("")?;
+pub async fn mail_google_connect(db: tauri::State<'_, Db>) -> Result<MailAccount, String> {
+    let tokens = wait_for_google(String::new()).await?;
     let address = tokens.email.trim().to_string();
     if address.is_empty() {
         return Err("Google did not say which account signed in, so there is nothing to                     connect. Add the account by hand and sign in from there."

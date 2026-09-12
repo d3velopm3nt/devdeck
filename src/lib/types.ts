@@ -363,6 +363,8 @@ export interface MailAccount {
   has_password: boolean
   /** How this account proves who it is: 'password' | 'oauth'. */
   auth: string
+  /** Which space this mailbox belongs to. A suggestion, not a rule. */
+  space: string
 }
 
 /** A message as the list needs it: no bodies, so 300 rows stay cheap. */

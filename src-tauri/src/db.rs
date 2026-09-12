@@ -508,6 +508,32 @@ pub fn migrate(conn: &Connection) {
         );
     }
 
+    // What reading an attachment produced. Empty means nobody has tried yet,
+    // which is different from having tried and found nothing -- and that
+    // difference is the whole reason there is a state rather than a nullable
+    // text column.
+    if conn.prepare("SELECT extract_state FROM mail_attachments LIMIT 1").is_err() {
+        let _ = conn.execute(
+            "ALTER TABLE mail_attachments ADD COLUMN extract_state TEXT NOT NULL DEFAULT ''",
+            [],
+        );
+        let _ = conn.execute(
+            "ALTER TABLE mail_attachments ADD COLUMN extract_note TEXT NOT NULL DEFAULT ''",
+            [],
+        );
+    }
+
+    // Which space a mailbox belongs to. Used as the SUGGESTED destination for
+    // a fact learned from it, never as a rule -- a business inbox is full of
+    // ordinary life, and a guess that is right eight times in ten files two
+    // facts in the wrong company where nobody notices.
+    if conn.prepare("SELECT space FROM mail_accounts LIMIT 1").is_err() {
+        let _ = conn.execute(
+            "ALTER TABLE mail_accounts ADD COLUMN space TEXT NOT NULL DEFAULT ''",
+            [],
+        );
+    }
+
     // A mail account can be reached with a password or with Google's consent.
     // Existing rows keep the only thing they ever were, which is why the
     // default is 'password' rather than empty: a blank auth would read as

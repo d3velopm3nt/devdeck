@@ -43,6 +43,7 @@ const BLANK: MailAccount = {
   address: '',
   kind: 'imap',
   auth: 'password',
+  space: '',
   imap_host: '',
   imap_port: 993,
   smtp_host: '',

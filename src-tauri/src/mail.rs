@@ -94,6 +94,12 @@ pub struct MailAccount {
     /// Whether a password is stored. Note what this is *not*: the password.
     #[serde(default)]
     pub has_password: bool,
+    /// Which space this mailbox belongs to, by name. Empty until you say.
+    ///
+    /// A suggestion, not a rule: it becomes the default destination on each
+    /// fact card, correctable in one click on the one card that is wrong.
+    #[serde(default)]
+    pub space: String,
     /// How we prove who we are: `password` | `oauth`.
     ///
     /// Not folded into `kind`. A Gmail account can be reached either way, and
@@ -161,6 +167,12 @@ pub struct MailAttachment {
     /// a rule about.
     #[serde(default)]
     pub saved: bool,
+    /// '' not tried | text | withheld | unreadable | missing.
+    #[serde(default)]
+    pub extract_state: String,
+    /// Why, when the state is not `text`. Empty otherwise.
+    #[serde(default)]
+    pub extract_note: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -256,7 +268,7 @@ pub struct TestResult {
 // ---------------------------------------------------------------- rows
 
 const ACCOUNT_COLS: &str = "id, name, address, kind, imap_host, imap_port, smtp_host, smtp_port, \
-     username, signature, is_default, sort, created_at, last_sync, last_error, auth";
+     username, signature, is_default, sort, created_at, last_sync, last_error, auth, space";
 
 fn row_to_account(row: &rusqlite::Row) -> rusqlite::Result<MailAccount> {
     let id: i64 = row.get(0)?;
@@ -277,6 +289,7 @@ fn row_to_account(row: &rusqlite::Row) -> rusqlite::Result<MailAccount> {
         last_sync: row.get(13)?,
         last_error: row.get(14)?,
         auth: row.get::<_, String>(15).unwrap_or_else(|_| "password".into()),
+        space: row.get::<_, String>(16).unwrap_or_default(),
         has_password: creds::exists(&target_for(id)),
     })
 }
@@ -333,8 +346,8 @@ pub fn mail_account_save(db: tauri::State<Db>, def: MailAccount) -> Result<i64, 
         conn.execute(
             "INSERT INTO mail_accounts
                 (name, address, kind, imap_host, imap_port, smtp_host, smtp_port,
-                 username, signature, is_default, sort, created_at, auth)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+                 username, signature, is_default, sort, created_at, auth, space)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
             params![
                 def.name,
                 def.address.trim(),
@@ -348,7 +361,8 @@ pub fn mail_account_save(db: tauri::State<Db>, def: MailAccount) -> Result<i64, 
                 def.is_default as i64,
                 def.sort,
                 now_millis(),
-                auth_of(&def)
+                auth_of(&def),
+                def.space.trim()
             ],
         )
         .map_err(err)?;
@@ -358,7 +372,7 @@ pub fn mail_account_save(db: tauri::State<Db>, def: MailAccount) -> Result<i64, 
             "UPDATE mail_accounts
                 SET name=?1, address=?2, kind=?3, imap_host=?4, imap_port=?5,
                     smtp_host=?6, smtp_port=?7, username=?8, signature=?9,
-                    is_default=?10, sort=?11, auth=?13
+                    is_default=?10, sort=?11, auth=?13, space=?14
               WHERE id=?12",
             params![
                 def.name,
@@ -373,7 +387,8 @@ pub fn mail_account_save(db: tauri::State<Db>, def: MailAccount) -> Result<i64, 
                 def.is_default as i64,
                 def.sort,
                 def.id,
-                auth_of(&def)
+                auth_of(&def),
+                def.space.trim()
             ],
         )
         .map_err(err)?;
@@ -419,6 +434,232 @@ pub fn mail_account_clear_password(id: i64) -> Result<bool, String> {
 ///
 /// The UI asks before drawing the button, because a button that always
 /// answers "there is no client configured" is worse than no button.
+/// Read attachments that nobody has tried yet.
+///
+/// A separate pass rather than part of sync, for two reasons. OCR is slow
+/// enough that folding it into a fetch loop would make mail feel broken, and
+/// it needs an `AppHandle` for the MTA the Windows OCR engine requires, which
+/// a sync worker holding a database lock has no business carrying.
+///
+/// Every row ends in a state. `pending` never survives a pass, because "we
+/// tried and found nothing" and "nobody has looked" are different facts and
+/// the UI has to be able to tell them apart.
+#[tauri::command]
+pub fn mail_extract(app: tauri::AppHandle, db: tauri::State<Db>, limit: i64) -> Result<i64, String> {
+    let limit = limit.clamp(1, 500);
+    let todo: Vec<(i64, String, String)> = {
+        let conn = db.0.lock().unwrap();
+        let mut st = conn
+            .prepare(
+                "SELECT id, file_path, mime FROM mail_attachments
+                  WHERE extract_state = '' AND file_path <> ''
+                  ORDER BY id DESC LIMIT ?1",
+            )
+            .map_err(err)?;
+        let rows = st
+            .query_map(params![limit], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .map_err(err)?;
+        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(err)?
+    };
+
+    let mut done = 0i64;
+    for (id, path, mime) in todo {
+        let file = std::path::PathBuf::from(&path);
+        // The file can be gone: a Drive folder that is offline, or someone
+        // tidying up. That is not the same as unreadable, and saying so is the
+        // difference between "reconnect your drive" and "this type is not
+        // supported".
+        if !file.is_file() {
+            let conn = db.0.lock().unwrap();
+            conn.execute(
+                "UPDATE mail_attachments SET extract_state='missing', extract_note=?2 WHERE id=?1",
+                params![id, "the file is not where the row says it is"],
+            )
+            .map_err(err)?;
+            continue;
+        }
+
+        // Extraction happens outside the lock. OCR on a large scan takes
+        // seconds, and holding the database for that stalls every other query
+        // in the app.
+        let out = crate::mailfiles::extract(&app, &file, &mime);
+
+        let (state, note) = match &out {
+            crate::mailfiles::Extracted::Text(text) => {
+                // The text lands beside the file, not in the database. You can
+                // open it and read exactly what the machine read, which is the
+                // only way a claim about what was sent to a model is checkable.
+                match std::fs::write(crate::mailfiles::text_path(&file), text) {
+                    Ok(()) => ("text", String::new()),
+                    Err(e) => ("unreadable", format!("could not save the text: {e}")),
+                }
+            }
+            // Withheld keeps the file and never writes the text anywhere. A
+            // scanned passport becomes searchable the moment it is written
+            // down, and this is the moment it would have been.
+            crate::mailfiles::Extracted::Withheld(reason) => ("withheld", (*reason).to_string()),
+            crate::mailfiles::Extracted::Unreadable(why) => ("unreadable", why.clone()),
+        };
+
+        let conn = db.0.lock().unwrap();
+        conn.execute(
+            "UPDATE mail_attachments SET extract_state=?2, extract_note=?3 WHERE id=?1",
+            params![id, state, note],
+        )
+        .map_err(err)?;
+        done += 1;
+    }
+    Ok(done)
+}
+
+/// What one attachment's text says, for the UI and later for a learn run.
+///
+/// Returns nothing for anything withheld. The refusal is not a lookup that
+/// happens to fail: there is no stored text to return, by design.
+#[tauri::command]
+pub fn mail_attachment_text(db: tauri::State<Db>, id: i64) -> Result<Option<String>, String> {
+    let (path, state): (String, String) = {
+        let conn = db.0.lock().unwrap();
+        conn.query_row(
+            "SELECT file_path, extract_state FROM mail_attachments WHERE id=?1",
+            params![id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .map_err(err)?
+    };
+    if state != "text" {
+        return Ok(None);
+    }
+    let p = crate::mailfiles::text_path(std::path::Path::new(&path));
+    Ok(std::fs::read_to_string(p).ok())
+}
+
+/// Somebody worth learning about, and the evidence for saying so.
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct Correspondent {
+    pub contact_id: i64,
+    pub name: String,
+    pub email: String,
+    /// The company part of the address, which is most of "who is this".
+    pub domain: String,
+    pub received: i64,
+    /// How many times *you* wrote to them. The whole signal.
+    pub sent: i64,
+    pub threads: i64,
+    pub last_ts: i64,
+    /// Which account's mailbox this correspondence lives in, and therefore
+    /// which space a fact about them would be filed under by default.
+    pub account_id: i64,
+    pub space: String,
+}
+
+/// Who you actually correspond with, most-reciprocal first.
+///
+/// **Reciprocity, not volume.** A mailbox is mostly noise: Amazon has sent a
+/// thousand messages and is not a person. Ranking by how much someone sends
+/// you surfaces exactly the senders you never think about, which is the
+/// opposite of useful. Having written *back* is the one signal that separates
+/// a relationship from a subscription, and it cannot be gamed by a sender.
+///
+/// **Nothing leaves the machine.** This is a query over the inbox and sent
+/// folders, both of which are already synced. It is what makes a later learn
+/// run small enough to be worth approving, and it costs nothing to run.
+///
+/// Sent-to matching is a substring test on the recipient list. A stored
+/// `to_addrs` is a display list rather than parsed addresses, so this is the
+/// honest tool for it: it can over-count when one address contains another,
+/// and that is a rank being slightly wrong rather than a fact being wrong.
+#[tauri::command]
+pub fn mail_correspondents(db: tauri::State<Db>, limit: i64) -> Result<Vec<Correspondent>, String> {
+    let conn = db.0.lock().unwrap();
+    rank_correspondents(&conn, limit)
+}
+
+/// The ranking itself, over a connection rather than app state.
+///
+/// Split out so it can be tested against a database built by hand. The claim
+/// this makes — that reciprocity beats volume — is the one the whole learn run
+/// rests on, and a claim nothing can exercise is a claim nobody has checked.
+fn rank_correspondents(conn: &Connection, limit: i64) -> Result<Vec<Correspondent>, String> {
+    let limit = limit.clamp(1, 500);
+
+    let mut st = conn
+        .prepare(
+            "SELECT c.id, c.name, c.email,
+                    (SELECT COUNT(*) FROM mail_messages m
+                      WHERE m.mailbox='INBOX' AND lower(m.from_addr)=lower(c.email)),
+                    (SELECT COUNT(*) FROM mail_messages m
+                      WHERE m.mailbox='Sent' AND instr(lower(m.to_addrs), lower(c.email)) > 0),
+                    (SELECT COUNT(DISTINCT m.thread_key) FROM mail_messages m
+                      WHERE lower(m.from_addr)=lower(c.email)
+                         OR instr(lower(m.to_addrs), lower(c.email)) > 0),
+                    (SELECT COALESCE(MAX(m.ts), 0) FROM mail_messages m
+                      WHERE lower(m.from_addr)=lower(c.email)
+                         OR instr(lower(m.to_addrs), lower(c.email)) > 0),
+                    (SELECT COALESCE(MAX(m.account_id), 0) FROM mail_messages m
+                      WHERE lower(m.from_addr)=lower(c.email))
+               FROM mail_contacts c
+              WHERE c.email <> '' AND c.kind <> 'bot'",
+        )
+        .map_err(err)?;
+
+    let rows = st
+        .query_map([], |r| {
+            let email: String = r.get(2)?;
+            Ok(Correspondent {
+                contact_id: r.get(0)?,
+                name: r.get(1)?,
+                domain: email.split('@').nth(1).unwrap_or_default().to_string(),
+                email,
+                received: r.get(3)?,
+                sent: r.get(4)?,
+                threads: r.get(5)?,
+                last_ts: r.get(6)?,
+                account_id: r.get(7)?,
+                space: String::new(),
+            })
+        })
+        .map_err(err)?;
+
+    let mut all: Vec<Correspondent> = rows
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(err)?
+        .into_iter()
+        // Never written back means not a correspondent. This one line is what
+        // removes the thousand messages nobody wants read.
+        .filter(|c| c.sent > 0)
+        .collect();
+
+    // Each mailbox's space, so a fact gets a suggested destination without
+    // anyone guessing from the content.
+    let spaces: std::collections::HashMap<i64, String> = {
+        let mut st = conn
+            .prepare("SELECT id, space FROM mail_accounts")
+            .map_err(err)?;
+        let pairs = st
+            .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))
+            .map_err(err)?
+            .filter_map(|r| r.ok())
+            .collect::<Vec<_>>();
+        pairs.into_iter().collect()
+    };
+    for c in &mut all {
+        c.space = spaces.get(&c.account_id).cloned().unwrap_or_default();
+    }
+
+    // Replies first, then breadth of conversation, then recency. Someone you
+    // answered twenty times outranks someone you answered once however
+    // recently, because the question is who matters rather than who is new.
+    all.sort_by(|a, b| {
+        b.sent
+            .cmp(&a.sent)
+            .then(b.threads.cmp(&a.threads))
+            .then(b.last_ts.cmp(&a.last_ts))
+    });
+    all.truncate(limit as usize);
+    Ok(all)
+}
+
 #[tauri::command]
 pub fn mail_google_available() -> bool {
     crate::gauth::client().is_some()
@@ -1378,7 +1619,8 @@ pub fn mail_body(db: tauri::State<Db>, id: i64) -> Result<MailBody, String> {
 
     let mut st = conn
         .prepare(
-            "SELECT id, message_id, filename, mime, bytes, part_index, file_path
+            "SELECT id, message_id, filename, mime, bytes, part_index, file_path,
+                      extract_state, extract_note
                FROM mail_attachments WHERE message_id=?1 ORDER BY part_index",
         )
         .map_err(err)?;
@@ -1393,6 +1635,8 @@ pub fn mail_body(db: tauri::State<Db>, id: i64) -> Result<MailBody, String> {
                 part_index: r.get(5)?,
                 file_path: r.get::<_, String>(6)?,
                 saved: !r.get::<_, String>(6)?.trim().is_empty(),
+                extract_state: r.get::<_, String>(7).unwrap_or_default(),
+                extract_note: r.get::<_, String>(8).unwrap_or_default(),
             })
         })
         .map_err(err)?;
@@ -1830,6 +2074,11 @@ mod tests {
         let c = Connection::open_in_memory().unwrap();
         c.execute_batch(crate::db::CORE_SCHEMA).unwrap();
         c.execute_batch(crate::db::MAIL_SCHEMA).unwrap();
+        // Migrations too, or these tests run against a shape no installed copy
+        // of DevDeck has ever had. Columns added by a migration -- auth, space,
+        // the extraction state -- simply would not exist here, and a query
+        // that works everywhere would fail only in the test suite.
+        crate::db::migrate(&c);
         c
     }
 
@@ -2050,6 +2299,116 @@ Content-Type: multipart/mixed; boundary=\"z\"\r\n\r\n\
         assert!(name.ends_with(".csv"), "{name}");
         // Filed by message id, so two invoices with one name coexist.
         assert!(on_disk.parent().unwrap().starts_with(tmp.path()));
+    }
+
+    /// Insert one message straight into the table, so a ranking test does not
+    /// have to build a MIME document to say "this arrived".
+    fn msg(c: &Connection, mailbox: &str, from: &str, to: &str, thread: &str, ts: i64) {
+        c.execute(
+            "INSERT INTO mail_messages (account_id, uid, mailbox, from_addr, to_addrs, thread_key, ts)
+             VALUES (1, abs(random() % 100000), ?1, ?2, ?3, ?4, ?5)",
+            params![mailbox, from, to, thread, ts],
+        )
+        .unwrap();
+    }
+
+    fn contact(c: &Connection, name: &str, email: &str) {
+        c.execute(
+            "INSERT INTO mail_contacts (name, email, kind, created_at) VALUES (?1,?2,'person',0)",
+            params![name, email],
+        )
+        .unwrap();
+    }
+
+    /// The claim the whole learn run rests on: a mailbox is mostly noise, and
+    /// reciprocity is what separates a person from a subscription.
+    #[test]
+    fn a_sender_you_never_answered_is_not_a_correspondent() {
+        let c = mem();
+        c.execute(
+            "INSERT INTO mail_accounts (id, name, address, space) VALUES (1,'Me','me@d.co','Develtech')",
+            [],
+        )
+        .unwrap();
+
+        contact(&c, "Amazon", "auto@amazon.com");
+        contact(&c, "Sarah", "sarah@harbourvine.com");
+
+        // The noise: hundreds in, never once answered.
+        for i in 0..40 {
+            msg(&c, "INBOX", "auto@amazon.com", "me@d.co", &format!("order {i}"), 1000 + i);
+        }
+        // The person: fewer messages, and you wrote back.
+        for i in 0..3 {
+            msg(&c, "INBOX", "sarah@harbourvine.com", "me@d.co", &format!("invoice {i}"), 2000 + i);
+            msg(&c, "Sent", "me@d.co", "sarah@harbourvine.com", &format!("invoice {i}"), 2100 + i);
+        }
+
+        let out = rank_correspondents(&c, 50).unwrap();
+
+        assert_eq!(out.len(), 1, "only one of these two is a person");
+        let sarah = &out[0];
+        assert_eq!(sarah.email, "sarah@harbourvine.com");
+        assert_eq!(sarah.sent, 3, "three replies");
+        assert_eq!(sarah.received, 3);
+        assert_eq!(sarah.domain, "harbourvine.com", "the company, for free");
+        // Board 5: the destination comes from the mailbox, not from the content.
+        assert_eq!(sarah.space, "Develtech");
+
+        assert!(
+            !out.iter().any(|c| c.email.contains("amazon")),
+            "forty messages and no reply is still not a correspondent"
+        );
+    }
+
+    #[test]
+    fn the_person_you_answer_most_comes_first() {
+        let c = mem();
+        c.execute(
+            "INSERT INTO mail_accounts (id, name, address) VALUES (1,'Me','me@d.co')",
+            [],
+        )
+        .unwrap();
+        contact(&c, "Tom", "tom@innotrack.io");
+        contact(&c, "Priya", "priya@harbourvine.com");
+
+        for i in 0..8 {
+            msg(&c, "Sent", "me@d.co", "tom@innotrack.io", &format!("t{i}"), 100 + i);
+        }
+        // More recent, but answered once. Recency must not outrank a
+        // relationship, or the list becomes "who emailed this week".
+        msg(&c, "Sent", "me@d.co", "priya@harbourvine.com", "p0", 9_999);
+
+        let out = rank_correspondents(&c, 50).unwrap();
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].email, "tom@innotrack.io");
+        assert_eq!(out[1].email, "priya@harbourvine.com");
+    }
+
+    /// A reply addressed to several people still counts for each of them.
+    #[test]
+    fn a_reply_to_several_people_counts_for_all_of_them() {
+        let c = mem();
+        c.execute(
+            "INSERT INTO mail_accounts (id, name, address) VALUES (1,'Me','me@d.co')",
+            [],
+        )
+        .unwrap();
+        contact(&c, "Sarah", "sarah@harbourvine.com");
+        contact(&c, "Priya", "priya@harbourvine.com");
+
+        msg(
+            &c,
+            "Sent",
+            "me@d.co",
+            "Sarah <sarah@harbourvine.com>, Priya <priya@harbourvine.com>",
+            "terms",
+            5_000,
+        );
+
+        let out = rank_correspondents(&c, 50).unwrap();
+        assert_eq!(out.len(), 2, "both were written to");
+        assert!(out.iter().all(|c| c.sent == 1));
     }
 
     #[test]

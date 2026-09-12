@@ -1417,6 +1417,8 @@ export const mailGoogleAvailable = () => invoke<boolean>('mail_google_available'
 export const mailGoogleSignIn = (id: number, address: string) =>
   invoke<void>('mail_google_sign_in', { id, address })
 export const mailGoogleSignOut = (id: number) => invoke<void>('mail_google_sign_out', { id })
+/** Sign in and build the account from whichever address consented. */
+export const mailGoogleConnect = () => invoke<MailAccount>('mail_google_connect')
 /** Log in over IMAP and SMTP and report each separately. */
 export const mailAccountTest = (id: number) => invoke<MailTestResult>('mail_account_test', { id })
 /** Fetch new mail. `id` 0 syncs every account. Returns messages stored. */

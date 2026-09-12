@@ -9,6 +9,7 @@
 | `2-shield-footer.png` | Same screen, with the shield on the two-stores promise instead of a second sparkle. |
 | `3-gmail-setup.png` | The two walls of a Gmail connection, in the order you hit them. Shown only when this build has no Google client. |
 | `4-google-signin.png` | One click instead, when a client is configured. Captured with a dummy client id, so nothing ever reached Google. |
+| `5-connect-mail.png` | Step two of the first run: connect a mailbox, or skip. Google's own mark and wording. |
 
 ## What the screenshot actually verifies
 
@@ -81,6 +82,26 @@ trap.
 
 Nothing here has been run against a real Google account. That needs a client
 id, which is configuration this repository deliberately does not carry.
+
+## The first run, step two
+
+`5-connect-mail.png`. One click and no typing: the scope carries `openid
+email` alongside the mail scope, so the token reply names the account that
+consented and DevDeck builds the row from Google's answer rather than from
+anything typed. That also stops an account being created against the wrong
+mailbox, which happens more than you would think — people have several Google
+accounts and the chooser remembers a different one.
+
+The mark is inline SVG in `GoogleMark.tsx`, not from the icon registry:
+lucide ships no brand icons, and this is the one mark on the screen that must
+not be recoloured by the theme. The button keeps Google's neutral styling
+rather than the app's, because a sign-in button that looks like the app's own
+buttons is the pattern phishing pages imitate.
+
+**The first run has been completed for real**, by the owner of this machine,
+before this shot was taken: the profile on disk carries a name, a chosen
+assistant name and the `warm` voice. That is better evidence than a
+screenshot, and it is why no capture of step one clicking through exists.
 
 ## One thing worth knowing about capturing this
 

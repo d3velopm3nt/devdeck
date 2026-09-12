@@ -50,3 +50,5 @@ export const CAPTURE_OPEN_FILE: string = ''
 export const CAPTURE_MET: boolean = false
 /** Open the mail account editor on a new account of this kind: gmail | imap. */
 export const CAPTURE_MAIL_ACCOUNT: string = ''
+/** Open the first run on a given step: voice | mail. */
+export const CAPTURE_MEET_STEP: string = ''

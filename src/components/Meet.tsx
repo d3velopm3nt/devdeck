@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 import { aiw, type Voice } from '../lib/aiw'
+import * as ipc from '../lib/ipc'
+import type { MailAccount } from '../lib/types'
 import { Icon } from '../lib/icons'
+import { GoogleButton } from './GoogleMark'
+import { CAPTURE_MEET_STEP } from '../lib/devCapture'
 
 /**
  * The first run — the only screen in DevDeck that has never existed.
@@ -24,6 +28,14 @@ export function Meet({ onDone }: { onDone: () => void }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
+  // Two steps, and the first one is saved before the second begins. Closing
+  // the window at the mail step must not lose the voice you just picked.
+  const [step, setStep] = useState<'voice' | 'mail'>(
+    CAPTURE_MEET_STEP === 'mail' ? 'mail' : 'voice',
+  )
+  const [googleReady, setGoogleReady] = useState(false)
+  const [connected, setConnected] = useState<MailAccount[]>([])
+
   useEffect(() => {
     let live = true
     aiw
@@ -37,6 +49,14 @@ export function Meet({ onDone }: { onDone: () => void }) {
       // pick, and silently showing an empty row would look like a broken
       // screen rather than a backend that did not answer.
       .catch((e) => live && setErr(String(e)))
+
+    // Asked, not assumed. A build with no Google client must offer the step
+    // honestly rather than show a button that can only apologise.
+    void ipc
+      .mailGoogleAvailable()
+      .then((ok) => live && setGoogleReady(ok))
+      .catch(() => live && setGoogleReady(false))
+
     return () => {
       live = false
     }
@@ -47,14 +67,131 @@ export function Meet({ onDone }: { onDone: () => void }) {
     setBusy(true)
     try {
       await aiw.meet(name, assistantName, pick, writingOwn ? own : '')
-      onDone()
+      setStep('mail')
     } catch (e) {
       setErr(String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const connectGoogle = async () => {
+    setErr('')
+    setBusy(true)
+    try {
+      const account = await ipc.mailGoogleConnect()
+      // Re-connecting an address updates its row rather than adding one, so
+      // the list here has to do the same or it shows the same mailbox twice.
+      setConnected((all) => [...all.filter((a) => a.id !== account.id), account])
+    } catch (e) {
+      setErr(String(e))
+    } finally {
       setBusy(false)
     }
   }
 
   const ready = name.trim().length > 0 && (!writingOwn || own.trim().length > 0)
+
+  if (step === 'mail') {
+    return (
+      <div className="flex h-full flex-col overflow-auto bg-page text-body">
+        <div className="flex min-h-0 flex-grow items-center justify-center p-8">
+          <div className="flex w-full max-w-[640px] flex-col gap-7">
+            <div className="flex items-start gap-4">
+              <span className="flex h-[46px] w-[46px] flex-shrink-0 items-center justify-center rounded-[14px] bg-indigo-500/15">
+                <Icon name="mail" size={22} className="text-indigo-400" />
+              </span>
+              <div>
+                <div className="text-[24px] font-semibold tracking-tight text-ink">
+                  Where your life already is
+                </div>
+                <p className="mt-2 text-[13.5px] leading-relaxed text-dim">
+                  Your mailbox knows your clients, your bills and who you actually talk to. Connect
+                  it and I can stop asking you things you have already written down.
+                </p>
+              </div>
+            </div>
+
+            {connected.length > 0 && (
+              <div className="rounded-[10px] border border-line bg-panel">
+                {connected.map((a) => (
+                  <div
+                    key={a.id}
+                    className="flex items-center gap-2.5 border-t border-line px-3.5 py-2.5 first:border-t-0"
+                  >
+                    <Icon name="check" size={15} className="text-ok" />
+                    <span className="min-w-0 flex-grow truncate text-[12.5px] text-ink">
+                      {a.address}
+                    </span>
+                    <span className="text-[10.5px] text-muted">connected</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {googleReady ? (
+              <div className="flex flex-col items-start gap-3">
+                <GoogleButton
+                  onClick={() => void connectGoogle()}
+                  disabled={busy}
+                  label={
+                    busy
+                      ? 'Waiting for your browser...'
+                      : connected.length
+                        ? 'Connect another account'
+                        : 'Continue with Google'
+                  }
+                />
+                <p className="m-0 text-[11px] leading-relaxed text-faint">
+                  Google will say it has not verified this app. That is expected for a build
+                  signing in with its own client. Click Advanced, then continue.
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-[10px] border border-line bg-panel px-3.5 py-3">
+                <div className="text-[12px] text-ink">Mail is set up in Settings</div>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted">
+                  This build has no Google client configured, so there is no one-click sign-in. You
+                  can add any mailbox, Gmail included, from the Mail page with an app password.
+                </p>
+              </div>
+            )}
+
+            {err && (
+              <div className="rounded-[8px] border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] text-err">
+                {err}
+              </div>
+            )}
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={onDone}
+                className="rounded-[6px] bg-indigo-600 px-4 py-2 text-[12px] text-white disabled:opacity-40"
+                disabled={busy}
+              >
+                {connected.length ? 'Done' : 'Skip for now'}
+              </button>
+              {connected.length === 0 && (
+                <span className="text-[11px] text-muted">
+                  You can connect a mailbox any time from Mail.
+                </span>
+              )}
+            </div>
+
+            <div className="flex gap-2.5 border-t border-line pt-4">
+              <Icon name="secret" size={15} className="mt-0.5 flex-shrink-0 text-muted" />
+              <p className="m-0 text-[11.5px] leading-relaxed text-muted">
+                Nothing is read until you connect, and nothing about a person is kept until you
+                accept it one at a time. Messages carrying passwords, one-time codes or card
+                numbers are skipped whole — not summarised, not stored — the same rule the Stash
+                already applies to your clipboard.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-full flex-col overflow-auto bg-page text-body">

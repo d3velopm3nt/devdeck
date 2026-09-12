@@ -1126,6 +1126,7 @@ pub fn run() {
             mail::mail_account_clear_password,
             mail::mail_google_available,
             mail::mail_google_sign_in,
+            mail::mail_google_connect,
             mail::mail_google_sign_out,
             mail::mail_account_test,
             mail::mail_sync,

@@ -44,7 +44,14 @@ use std::net::TcpListener;
 /// There is no lighter scope for reading mail — `gmail.readonly` and
 /// `gmail.metadata` are restricted too — so no amount of scope trimming avoids
 /// the consent warning. Asking for less would only cost function.
-pub const SCOPE: &str = "https://mail.google.com/";
+/// `openid email` rides along so the token reply names the account.
+///
+/// It costs nothing: the request is already restricted because of the mail
+/// scope, and these two are the only scopes Google treats as free. What it
+/// buys is an onboarding step where nobody types their own address, and an
+/// account that cannot be created against the wrong mailbox because the user
+/// picked a different one in the chooser.
+pub const SCOPE: &str = "https://mail.google.com/ openid email";
 
 const AUTH_ENDPOINT: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_ENDPOINT: &str = "https://oauth2.googleapis.com/token";
@@ -355,10 +362,20 @@ struct TokenReply {
     error: String,
     #[serde(default)]
     error_description: String,
+    #[serde(default)]
+    id_token: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Tokens {
+    /// Which account consented, straight from Google.
+    ///
+    /// Not what the person typed. Those differ more often than you would
+    /// think — people have several Google accounts and the chooser remembers
+    /// a different one — and an account row built on the typed address would
+    /// then sync a mailbox the token cannot open.
+    #[serde(default)]
+    pub email: String,
     pub access: String,
     /// Empty on a refresh: Google returns one only when it issues a new one,
     /// and treating "absent" as "revoked" would log you out on every refresh.
@@ -406,6 +423,7 @@ fn post_token(form: &[(&str, &str)]) -> Result<Tokens, String> {
             .into());
     }
     Ok(Tokens {
+        email: email_from_id_token(&reply.id_token),
         access: reply.access_token,
         refresh: reply.refresh_token,
         // Land a minute early rather than discovering expiry mid-request.
@@ -476,6 +494,33 @@ pub fn refresh(c: &GoogleClient, refresh_token: &str) -> Result<Tokens, String> 
         t.refresh = refresh_token.to_string();
     }
     Ok(t)
+}
+
+/// Read the `email` claim out of an ID token.
+///
+/// The signature is deliberately not checked, and that is not a shortcut: this
+/// token came back over TLS from Google's own token endpoint in response to a
+/// request we made, which is the one case the OpenID Connect spec says a
+/// client may skip validation. There is no third party in the path to forge
+/// it.
+///
+/// An unreadable token yields an empty string rather than an error. The email
+/// is a convenience — it saves typing — and failing a whole sign-in because a
+/// claim could not be parsed would trade a real connection for a nicety.
+pub fn email_from_id_token(id_token: &str) -> String {
+    let Some(payload) = id_token.split('.').nth(1) else {
+        return String::new();
+    };
+    let Ok(bytes) = B64.decode(payload) else {
+        return String::new();
+    };
+    let Ok(v) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+        return String::new();
+    };
+    v.get("email")
+        .and_then(|e| e.as_str())
+        .unwrap_or_default()
+        .to_string()
 }
 
 /// The SASL initial response both IMAP and SMTP want, base64 of
@@ -595,6 +640,32 @@ mod tests {
     fn a_favicon_request_is_not_a_callback() {
         assert_eq!(parse_callback("GET /favicon.ico HTTP/1.1"), None);
         assert_eq!(parse_callback("GET / HTTP/1.1"), None);
+    }
+
+    #[test]
+    fn the_account_that_consented_is_read_from_the_reply() {
+        // header.payload.signature — only the middle part is read.
+        let payload = B64.encode(br#"{"email":"someone@gmail.com","email_verified":true}"#);
+        assert_eq!(
+            email_from_id_token(&format!("aGVhZGVy.{payload}.c2ln")),
+            "someone@gmail.com"
+        );
+    }
+
+    #[test]
+    fn an_unreadable_id_token_costs_the_convenience_not_the_sign_in() {
+        for bad in ["", "not-a-jwt", "a.!!!.c", "a.e30.c"] {
+            assert_eq!(email_from_id_token(bad), "", "{bad}");
+        }
+    }
+
+    #[test]
+    fn the_scope_asks_who_signed_in_as_well_as_for_the_mailbox() {
+        assert!(SCOPE.contains("https://mail.google.com/"));
+        assert!(SCOPE.contains("email"));
+        // Both must survive encoding into the URL as one space-separated value.
+        let u = auth_url("c", "http://127.0.0.1:1", "ch", "st", "");
+        assert!(u.contains("mail.google.com%2F%20openid%20email"));
     }
 
     #[test]

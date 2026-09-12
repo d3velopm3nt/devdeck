@@ -444,6 +444,72 @@ pub fn mail_google_sign_in(db: tauri::State<Db>, id: i64, address: String) -> Re
     Ok(())
 }
 
+/// Sign in and set the whole account up from what Google reports.
+///
+/// The onboarding path, where there is no account yet and nothing typed. The
+/// address is Google's answer rather than the user's guess, which is what
+/// makes this a single click and also what stops an account being built
+/// against a mailbox the token cannot open — people have several Google
+/// accounts and the chooser remembers a different one than they expect.
+///
+/// Re-connecting an address that already exists updates that row instead of
+/// adding a second one. Two rows for one mailbox would sync it twice and show
+/// every message in duplicate.
+#[tauri::command]
+pub fn mail_google_connect(db: tauri::State<Db>) -> Result<MailAccount, String> {
+    let tokens = crate::gauth::sign_in("")?;
+    let address = tokens.email.trim().to_string();
+    if address.is_empty() {
+        return Err("Google did not say which account signed in, so there is nothing to                     connect. Add the account by hand and sign in from there."
+            .into());
+    }
+
+    let id = {
+        let conn = db.0.lock().unwrap();
+        let existing: Option<i64> = conn
+            .query_row(
+                "SELECT id FROM mail_accounts WHERE lower(address)=lower(?1)",
+                params![address],
+                |r| r.get(0),
+            )
+            .ok();
+
+        match existing {
+            Some(id) => {
+                conn.execute(
+                    "UPDATE mail_accounts SET kind='gmail', auth='oauth', imap_host='imap.gmail.com',                      imap_port=993, smtp_host='smtp.gmail.com', smtp_port=465, last_error=''                      WHERE id=?1",
+                    params![id],
+                )
+                .map_err(err)?;
+                id
+            }
+            None => {
+                // First account becomes the default, because "send from" with
+                // nothing chosen is a dialog that cannot be completed.
+                let none_yet: i64 = conn
+                    .query_row("SELECT COUNT(*) FROM mail_accounts", [], |r| r.get(0))
+                    .unwrap_or(0);
+                conn.execute(
+                    "INSERT INTO mail_accounts
+                        (name, address, kind, imap_host, imap_port, smtp_host, smtp_port,
+                         username, signature, is_default, sort, created_at, auth)
+                     VALUES (?1,?2,'gmail','imap.gmail.com',993,'smtp.gmail.com',465,'','',?3,0,?4,'oauth')",
+                    params![address, address, (none_yet == 0) as i64, now_millis()],
+                )
+                .map_err(err)?;
+                conn.last_insert_rowid()
+            }
+        }
+    };
+
+    creds::set(&token_target_for(id), &address, &tokens.refresh)?;
+    creds::delete(&target_for(id));
+    token_cache().lock().unwrap().insert(id, tokens);
+
+    let conn = db.0.lock().unwrap();
+    load_account(&conn, id)
+}
+
 /// Forget Google's consent for this account.
 ///
 /// Only the local copy. Google keeps its own record until you remove DevDeck

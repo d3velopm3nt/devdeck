@@ -40,6 +40,7 @@ import {
   CAPTURE_RAIL,
   CAPTURE_MET,
   CAPTURE_MAIL_ACCOUNT,
+  CAPTURE_MEET_STEP,
   CAPTURE_SAY,
 } from './lib/devCapture'
 import { AiwSidebar } from './components/aiw/AiwSidebar'
@@ -597,7 +598,10 @@ export default function App() {
 
   // A vault exists but nobody has ever said who you are. Introduce yourself
   // before the shell, because every screen behind it is shaped by the answer.
-  if (!met && !CAPTURE_MET) {
+  // Asking to see a step of the first run means you want the first run, even
+  // on a machine that has already been through it. Looking at it changes
+  // nothing: the screen writes only when you press Next.
+  if ((!met || CAPTURE_MEET_STEP) && !CAPTURE_MET) {
     return (
       <div className="flex h-screen flex-col bg-app text-body">
         <Meet onDone={() => setMet(true)} />

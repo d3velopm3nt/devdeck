@@ -458,7 +458,11 @@ async fn wait_for_google(hint: String) -> Result<crate::gauth::Tokens, String> {
 /// tried and found nothing" and "nobody has looked" are different facts and
 /// the UI has to be able to tell them apart.
 #[tauri::command]
-pub fn mail_extract(app: tauri::AppHandle, db: tauri::State<Db>, limit: i64) -> Result<i64, String> {
+pub async fn mail_extract(app: tauri::AppHandle, limit: i64) -> Result<i64, String> {
+    off_thread(app, move |app, db| extract_pending(app, db, limit)).await
+}
+
+fn extract_pending(app: &tauri::AppHandle, db: &Db, limit: i64) -> Result<i64, String> {
     let limit = limit.clamp(1, 500);
     let todo: Vec<(i64, String, String)> = {
         let conn = db.0.lock().unwrap();
@@ -976,7 +980,11 @@ fn password_for(acct: &MailAccount) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn mail_account_test(db: tauri::State<Db>, id: i64) -> Result<TestResult, String> {
+pub async fn mail_account_test(app: tauri::AppHandle, id: i64) -> Result<TestResult, String> {
+    off_thread(app, move |_app, db| test_account(db, id)).await
+}
+
+fn test_account(db: &Db, id: i64) -> Result<TestResult, String> {
     let acct = {
         let conn = db.0.lock().unwrap();
         load_account(&conn, id)?
@@ -1245,8 +1253,37 @@ fn preview_from(text: &str, html: &str) -> String {
     flat.chars().take(240).collect()
 }
 
+/// Run slow work off the thread that serves the interface.
+///
+/// A synchronous `#[tauri::command]` runs on the thread Tauri uses to answer
+/// the UI, so anything that talks to a network freezes the whole window while
+/// it waits. Sync fetches hundreds of messages across four folders; sending
+/// opens an SMTP session; testing logs in twice; extraction runs OCR. Every
+/// one of those froze the app for as long as it took, and the first symptom is
+/// always the same: clicking does nothing and the window greys out.
+///
+/// The database cannot be moved across threads by value, so the worker asks
+/// the app handle for it instead. That is the same managed `Db` the command
+/// would have been handed.
+async fn off_thread<T, F>(app: tauri::AppHandle, f: F) -> Result<T, String>
+where
+    F: FnOnce(&tauri::AppHandle, &Db) -> Result<T, String> + Send + 'static,
+    T: Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = <tauri::AppHandle as tauri::Manager<tauri::Wry>>::state::<Db>(&app);
+        f(&app, &db)
+    })
+    .await
+    .map_err(|e| format!("the task did not finish: {e}"))?
+}
+
 #[tauri::command]
-pub fn mail_sync(app: tauri::AppHandle, db: tauri::State<Db>, id: i64) -> Result<i64, String> {
+pub async fn mail_sync(app: tauri::AppHandle, id: i64) -> Result<i64, String> {
+    off_thread(app, move |app, db| sync_accounts(app, db, id)).await
+}
+
+fn sync_accounts(app: &tauri::AppHandle, db: &Db, id: i64) -> Result<i64, String> {
     let accounts = {
         let conn = db.0.lock().unwrap();
         if id > 0 {
@@ -1332,7 +1369,7 @@ pub fn mail_sync(app: tauri::AppHandle, db: tauri::State<Db>, id: i64) -> Result
     Ok(total)
 }
 
-fn sync_one(db: &tauri::State<Db>, acct: &MailAccount) -> Result<i64, String> {
+fn sync_one(db: &Db, acct: &MailAccount) -> Result<i64, String> {
     let password = password_for(acct)?;
     // Read the folder before the network work, under its own short lock, so a
     // slow IMAP session never holds the database open waiting on a socket.
@@ -1778,11 +1815,11 @@ fn smtp_transport(
 }
 
 #[tauri::command]
-pub fn mail_send(
-    app: tauri::AppHandle,
-    db: tauri::State<Db>,
-    req: SendRequest,
-) -> Result<i64, String> {
+pub async fn mail_send(app: tauri::AppHandle, req: SendRequest) -> Result<i64, String> {
+    off_thread(app, move |app, db| send_message(app, db, req)).await
+}
+
+fn send_message(app: &tauri::AppHandle, db: &Db, req: SendRequest) -> Result<i64, String> {
     use lettre::message::{header, Attachment, MultiPart, SinglePart};
     use lettre::{Message, Transport};
 

@@ -1326,11 +1326,22 @@ fn sync_accounts(app: &tauri::AppHandle, db: &Db, id: i64) -> Result<i64, String
         match sync_one(&db, &acct) {
             Ok(n) => {
                 total += n;
-                let conn = db.0.lock().unwrap();
-                let _ = conn.execute(
-                    "UPDATE mail_accounts SET last_sync=?1, last_error='' WHERE id=?2",
-                    params![now_millis(), acct.id],
-                );
+                // Scoped, and it matters more than it looks. `activity::record`
+                // below needs this same lock, and it deliberately gives up
+                // rather than waiting forever -- because holding the database
+                // across a log call has frozen this app three times before.
+                // Leaving the guard alive here meant it gave up every time, so
+                // the "synced" event was never emitted, the interface never
+                // heard that the sync had finished, and the account went on
+                // reading "never synced" over a mailbox with three hundred
+                // messages in it.
+                {
+                    let conn = db.0.lock().unwrap();
+                    let _ = conn.execute(
+                        "UPDATE mail_accounts SET last_sync=?1, last_error='' WHERE id=?2",
+                        params![now_millis(), acct.id],
+                    );
+                }
                 push_log(
                     &app,
                     MAIL_LOG_ID,

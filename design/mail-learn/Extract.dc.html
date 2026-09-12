@@ -1,0 +1,126 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    .head { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+    .mono { font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; }
+    .tag { font-size: 10px; font-weight: 600; border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+    .ok { background: rgb(74 222 128 / 0.14); color: var(--ok); }
+    .warn { background: rgb(251 191 36 / 0.14); color: var(--warn); }
+    .err { background: rgb(248 113 113 / 0.12); color: var(--err); }
+    .dim { background: var(--raise); color: var(--muted); }
+    .r { display: flex; align-items: flex-start; gap: 10px; padding: 9px 14px; border-top: 1px solid var(--line); font-size: 11.5px; line-height: 1.5; }
+    .r:first-of-type { border-top: 0; }
+    .t { width: 88px; flex-shrink: 0; }
+  </style>
+</helmet>
+
+<div style="--page: {{c.page}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --line: {{c.line}}; --line2: {{c.line2}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; width: 1100px; height: 909px; background: var(--page); color: var(--body); display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden; padding: 30px;">
+
+  <div style="margin-bottom: 18px;">
+    <div style="font-size: 19px; font-weight: 600; color: var(--ink); letter-spacing: -0.01em;">What it can actually read</div>
+    <p style="margin: 6px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--dim); max-width: 760px;">
+      Extraction runs on this machine, before anything is sent anywhere. A type that cannot be read
+      says so on the attachment rather than quietly producing nothing.
+    </p>
+  </div>
+
+  <div class="card" style="margin-bottom: 16px;">
+    <div class="r" style="border-top: 0;">
+      <span class="t"><span class="tag ok">works today</span></span>
+      <span style="width: 150px; flex-shrink: 0; color: var(--ink);">Images</span>
+      <span style="color: var(--body);">Windows OCR, already in this codebase &mdash; <span class="mono" style="font-size: 10.5px;">shots::ocr</span> takes any image path and the screenshot watcher has used it for months. A photographed invoice is readable on day one.</span>
+    </div>
+    <div class="r">
+      <span class="t"><span class="tag ok">works today</span></span>
+      <span style="width: 150px; flex-shrink: 0; color: var(--ink);">Text, CSV, Markdown</span>
+      <span style="color: var(--body);">Read the file. Guess the encoding, because mail is full of Latin-1 that claims to be UTF-8.</span>
+    </div>
+    <div class="r">
+      <span class="t"><span class="tag warn">small job</span></span>
+      <span style="width: 150px; flex-shrink: 0; color: var(--ink);">Word, Excel</span>
+      <span style="color: var(--body);">A <span class="mono" style="font-size: 10.5px;">.docx</span> is a zip with XML inside. No new dependency, no parser to trust &mdash; unzip one entry and strip tags.</span>
+    </div>
+    <div class="r">
+      <span class="t"><span class="tag warn">one new crate</span></span>
+      <span style="width: 150px; flex-shrink: 0; color: var(--ink);">PDF, with text</span>
+      <span style="color: var(--body);">Most invoices and contracts. The only genuinely new dependency on this board.</span>
+    </div>
+    <div class="r">
+      <span class="t"><span class="tag err">not yet</span></span>
+      <span style="width: 150px; flex-shrink: 0; color: var(--ink);">PDF, scanned</span>
+      <span style="color: var(--body);">No text layer, so it must be rendered to an image before OCR can see it. That is a renderer, which is a much bigger dependency than a parser. <span style="color: var(--ink);">Say &ldquo;this looks scanned, I cannot read it&rdquo; and stop.</span></span>
+    </div>
+    <div class="r">
+      <span class="t"><span class="tag dim">never</span></span>
+      <span style="width: 150px; flex-shrink: 0; color: var(--muted);">Everything else</span>
+      <span style="color: var(--body);">Archives, executables, calendar invites, anything unknown. Kept as a file, listed on the message, not read.</span>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom: 16px;">
+    <div style="padding: 12px 14px 4px;">
+      <span class="head">The rule that matters more here than anywhere else</span>
+    </div>
+    <div style="padding: 4px 14px 14px;">
+      <p style="margin: 0 0 10px; font-size: 12px; line-height: 1.6; color: var(--body);">
+        The Stash already flags secret-shaped clips and never writes their values to disk. Attachments
+        need the same rule and need it harder, because
+        <span style="color: var(--ink);">a scanned passport becomes searchable text the moment OCR touches it</span>.
+        The file was always there; the text is new, and it is the text that gets sent to a model.
+      </p>
+      <div style="display: flex; gap: 10px; align-items: flex-start; border-top: 1px solid var(--line); padding-top: 11px;">
+        <span class="tag err" style="margin-top: 1px;">flagged</span>
+        <span style="font-size: 11.5px; line-height: 1.55; color: var(--body);">
+          card numbers &middot; ID and passport numbers &middot; bank account and routing details &middot;
+          anything shaped like a key, a token or a one-time code
+        </span>
+      </div>
+      <div style="display: flex; gap: 10px; align-items: flex-start; margin-top: 9px;">
+        <span class="tag ok" style="margin-top: 1px;">then</span>
+        <span style="font-size: 11.5px; line-height: 1.55; color: var(--body);">
+          keep the file, keep the fact that a document exists, and
+          <span style="color: var(--ink);">refuse to send that text to any model</span> &mdash; the
+          attachment says why, so a refusal never looks like a failure.
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="padding: 12px 16px;">
+    <div class="head" style="margin-bottom: 8px;">Order I would build it</div>
+    <div style="font-size: 11.5px; line-height: 1.75; color: var(--body);">
+      <div><span style="color: var(--faint);">1</span> &nbsp; Store the file and write <span class="mono" style="font-size: 10.5px;">file_path</span>. Nothing reads anything yet, and the Mail page can already open an attachment.</div>
+      <div><span style="color: var(--faint);">2</span> &nbsp; Text, CSV and images. Zero new dependencies, and OCR is already proven here.</div>
+      <div><span style="color: var(--faint);">3</span> &nbsp; The secret-shape rule, before any extracted text can reach a model.</div>
+      <div><span style="color: var(--faint);">4</span> &nbsp; Office files, then PDF with a text layer.</div>
+      <div><span style="color: var(--faint);">5</span> &nbsp; Scanned PDFs, only if you find you actually get them.</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { page: '#0d1017', panel: '#11141c', raise: '#151923', line: '#1e293b',
+          line2: '#334155', ink: '#e2e8f0', body: '#cbd5e1', dim: '#94a3b8', muted: '#64748b',
+          faint: '#475569', accent: '#818cf8', ok: '#4ade80', warn: '#fbbf24', err: '#f87171' }
+      : { page: '#f6f7f9', panel: '#fdfdfe', raise: '#f0f2f6', line: '#d9dee7',
+          line2: '#c3cbd8', ink: '#16181d', body: '#333a45', dim: '#5a6472', muted: '#7d8794',
+          faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d', warn: '#b45309', err: '#dc2626' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,104 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    .head { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+    .mono { font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; }
+    .tag { font-size: 10px; font-weight: 600; border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+    .ok { background: rgb(74 222 128 / 0.14); color: var(--ok); }
+    .warn { background: rgb(251 191 36 / 0.14); color: var(--warn); }
+    .err { background: rgb(248 113 113 / 0.12); color: var(--err); }
+    .r { display: flex; gap: 10px; padding: 9px 14px; border-top: 1px solid var(--line); font-size: 11.5px; line-height: 1.5; }
+    .r:first-of-type { border-top: 0; }
+    .k { width: 108px; flex-shrink: 0; color: var(--muted); }
+  </style>
+</helmet>
+
+<div style="--page: {{c.page}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --line: {{c.line}}; --line2: {{c.line2}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; width: 1100px; height: 909px; background: var(--page); color: var(--body); display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden; padding: 30px;">
+
+  <div style="margin-bottom: 18px;">
+    <div style="font-size: 19px; font-weight: 600; color: var(--ink); letter-spacing: -0.01em;">Where a file lands</div>
+    <p style="margin: 6px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--dim); max-width: 760px;">
+      DevDeck writes attachments to a folder you choose. That is the whole integration. Point it at a
+      synced folder and they sync; point it anywhere else and they do not.
+    </p>
+  </div>
+
+  <div class="card" style="margin-bottom: 16px; padding: 14px 16px;">
+    <div class="head" style="margin-bottom: 10px;">One setting</div>
+    <div class="mono" style="font-size: 11.5px; line-height: 1.9; color: var(--body);">
+      <div><span style="color: var(--muted);">Attachments folder</span> &nbsp;
+        <span style="color: var(--ink);">G:\My Drive\DevDeck\mail</span></div>
+      <div style="margin-top: 10px; color: var(--faint);">G:\My Drive\DevDeck\mail\</div>
+      <div style="color: var(--faint);">&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: var(--dim);">1042\</span> &nbsp;<span style="font-family: 'Segoe UI', sans-serif; font-size: 10.5px; color: var(--muted);">the message id, so two files called invoice.pdf never collide</span></div>
+      <div style="color: var(--faint);">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: var(--ink);">invoice-0472.pdf</span></div>
+      <div style="color: var(--faint);">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: var(--ink);">invoice-0472.pdf.txt</span> &nbsp;<span style="font-family: 'Segoe UI', sans-serif; font-size: 10.5px; color: var(--muted);">what extraction read, beside the file it came from</span></div>
+      <div style="color: var(--faint);">&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: var(--dim);">1043\</span></div>
+      <div style="color: var(--faint);">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: var(--ink);">signed-contract.pdf</span></div>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 14px; margin-bottom: 16px;">
+    <div class="card" style="flex: 1;">
+      <div style="padding: 11px 14px 4px;"><span class="head">On disk</span></div>
+      <div class="r" style="border-top: 0;"><span class="k">the file</span><span style="color: var(--body);">exactly the bytes that arrived, never rewritten</span></div>
+      <div class="r"><span class="k">the text</span><span style="color: var(--body);">a sibling <span class="mono">.txt</span>, so you can read what the machine read</span></div>
+      <div class="r"><span class="k">deletable</span><span style="color: var(--body);">delete the folder and DevDeck re-fetches on demand</span></div>
+    </div>
+    <div class="card" style="flex: 1;">
+      <div style="padding: 11px 14px 4px;"><span class="head">In SQLite</span></div>
+      <div class="r" style="border-top: 0;"><span class="k">already there</span><span style="color: var(--body);">filename, type, size, which part of the message</span></div>
+      <div class="r"><span class="k">new</span><span style="color: var(--body);"><span class="mono">file_path</span> finally gets written &mdash; the column exists today and nothing fills it</span></div>
+      <div class="r"><span class="k">never</span><span style="color: var(--body);">the bytes. A database is not a file store.</span></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom: 16px;">
+    <div style="padding: 11px 14px 4px;"><span class="head">Why a folder, and not a Drive integration</span></div>
+    <div class="r" style="border-top: 0;"><span class="k">no new scope</span><span style="color: var(--body);">Drive's full scope is restricted exactly like Gmail's. Integrating properly would double the verification problem we just walked around.</span></div>
+    <div class="r"><span class="k">not new exposure</span><span style="color: var(--body);">these files already sit on Google's servers, inside Gmail. Copying them to Drive keeps them with the same vendor you already trusted.</span></div>
+    <div class="r"><span class="k">your choice</span><span style="color: var(--body);">Dropbox, OneDrive, a plain local folder and a network share all work the same way, because the contract is a path.</span></div>
+  </div>
+
+  <div class="card">
+    <div style="padding: 11px 14px 4px;"><span class="head">Three snags, and what the design does about them</span></div>
+    <div class="r" style="border-top: 0; align-items: flex-start;">
+      <span class="tag warn" style="margin-top: 1px;">streaming</span>
+      <span style="color: var(--body);">Drive for Desktop streams by default, so a file can be an online-only placeholder. A read stalls, or fails with the network down. <span style="color: var(--ink);">Say so in the setting, and recommend a mirrored folder.</span></span>
+    </div>
+    <div class="r" style="align-items: flex-start;">
+      <span class="tag warn" style="margin-top: 1px;">collisions</span>
+      <span style="color: var(--body);">Everyone names it <span class="mono">invoice.pdf</span>. <span style="color: var(--ink);">A folder per message id, which is also how you find the mail a file came from.</span></span>
+    </div>
+    <div class="r" style="align-items: flex-start;">
+      <span class="tag err" style="margin-top: 1px;">path length</span>
+      <span style="color: var(--body);">Windows still trips over 260 characters, and mail filenames are long and full of characters a path cannot hold. <span style="color: var(--ink);">Sanitise and truncate the name, keep the original in the database.</span></span>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true,"section":"Theme"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { page: '#0d1017', panel: '#11141c', raise: '#151923', line: '#1e293b',
+          line2: '#334155', ink: '#e2e8f0', body: '#cbd5e1', dim: '#94a3b8', muted: '#64748b',
+          faint: '#475569', accent: '#818cf8', ok: '#4ade80', warn: '#fbbf24', err: '#f87171' }
+      : { page: '#f6f7f9', panel: '#fdfdfe', raise: '#f0f2f6', line: '#d9dee7',
+          line2: '#c3cbd8', ink: '#16181d', body: '#333a45', dim: '#5a6472', muted: '#7d8794',
+          faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d', warn: '#b45309', err: '#dc2626' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

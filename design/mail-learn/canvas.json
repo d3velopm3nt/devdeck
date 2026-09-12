@@ -1,0 +1,98 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "title": "1 · Where a file lands",
+      "x": 0,
+      "y": 0,
+      "w": 1100,
+      "h": 909
+    },
+    {
+      "file": "Extract.dc.html",
+      "title": "2 · What it can actually read",
+      "x": 1220,
+      "y": 0,
+      "w": 1100,
+      "h": 909
+    },
+    {
+      "file": "Learn.dc.html",
+      "title": "3 · One approval, with numbers",
+      "x": 2440,
+      "y": 0,
+      "w": 1456,
+      "h": 909
+    },
+    {
+      "file": "Split.dc.html",
+      "title": "4 · Where a fact goes",
+      "x": 4016,
+      "y": 0,
+      "w": 1100,
+      "h": 909
+    },
+    {
+      "file": "Spaces.dc.html",
+      "title": "5 · Which mailbox belongs to which business",
+      "x": 5236,
+      "y": 0,
+      "w": 1456,
+      "h": 909
+    }
+  ],
+  "annotations": [
+    {
+      "id": "correction",
+      "x": -560,
+      "y": 0,
+      "w": 460,
+      "text": "THE CORRECTION THIS BOARD IS BUILT ON\n\nI proposed limiting what leaves the machine to headers and signature blocks. That was the wrong knob, and you were right to push back.\n\nThe thing worth controlling is not WHICH FIELDS of a message leave. It is WHICH THREADS leave, decided once, with real numbers in front of you.\n\nNo header, signature or sender ranking can tell you that a client agreed to thirty-day terms and pays at forty-five. That sentence lives in a body and in a contract PDF, and it is exactly the sort of thing you wanted DevDeck to know.\n\nSo bodies are read in full. The control moved to the batch, not the field."
+    },
+    {
+      "id": "howclaude",
+      "x": -560,
+      "y": 440,
+      "w": 460,
+      "text": "HOW CLAUDE DOES IT, HONESTLY\n\nYes, it reads the real content, and yes that reaches Anthropic. There is no way around it: the model is the thing doing the reading, so whatever it reads goes to the server running it.\n\nWhat makes it acceptable is not the amount per message. It is that fetching is ON DEMAND and BOUNDED BY THE QUESTION. Claude does not ingest a mailbox; it pulls the two threads needed to answer what was just asked.\n\nBoard 3 is that idea with the boundary made explicit and priced, because a bulk learn run is a bigger act than answering one question and should not be disguised as one."
+    },
+    {
+      "id": "folder",
+      "x": 0,
+      "y": 960,
+      "w": 470,
+      "text": "WHY A FOLDER, NOT A DRIVE INTEGRATION\n\nGoogle Drive for Desktop presents as an ordinary folder, so DevDeck needs no Drive API, no new scope and no second verification problem. Drive's full scope is restricted exactly like Gmail's.\n\nIt is also not a new exposure: these files already sit on Google's servers inside Gmail. Copying them to Drive keeps them with the same vendor.\n\nAnd because the contract is a path, Dropbox, OneDrive, a network share or a plain local folder all work identically. You decide whether anything syncs at all.\n\nOne real snag: Drive for Desktop streams by default, so a file can be an online-only placeholder and a read stalls or fails offline. The setting should say so and recommend a mirrored folder."
+    },
+    {
+      "id": "extract",
+      "x": 1220,
+      "y": 960,
+      "w": 470,
+      "text": "MORE OF THIS EXISTS THAN EXPECTED\n\nWindows OCR is already in this codebase — shots::ocr takes any image path and the screenshot watcher has used it for months. So image attachments are close to free, and a photographed invoice is readable on day one.\n\nOffice files are zip archives with XML inside, so no parser to trust and no dependency to add.\n\nPDF with a text layer is the one genuinely new crate. Scanned PDFs need a renderer before OCR can see them, which is a much larger dependency — say \"this looks scanned, I cannot read it\" and stop.\n\nTODAY: mail_attachments stores filename, type, size and part index. There is a file_path column and nothing has ever written to it. So an invoice is known to exist and has never been opened."
+    },
+    {
+      "id": "secrets",
+      "x": 2440,
+      "y": 960,
+      "w": 470,
+      "text": "THE RULE THAT MATTERS MOST HERE\n\nThe Stash already flags secret-shaped clips and never writes their values to disk. Attachments need the same rule and need it harder.\n\nThe reason is specific: A SCANNED PASSPORT BECOMES SEARCHABLE TEXT THE MOMENT OCR TOUCHES IT. The file was always there. The text is new, and the text is what gets sent to a model.\n\nSo: keep the file, keep the fact that a document exists, and refuse to send that text anywhere. The attachment says why, so a refusal never looks like a failure.\n\nThis is designed in now rather than added later, because \"later\" means a version shipped that quietly uploaded somebody's ID."
+    },
+    {
+      "id": "build",
+      "x": 4016,
+      "y": 960,
+      "w": 440,
+      "text": "BUILD ORDER\n\n1. Store the file, write file_path. Nothing is read yet, and the Mail page can already open an attachment — useful on its own.\n2. Text, CSV and images. Zero new dependencies; OCR is proven here.\n3. The secret-shape rule, BEFORE any extracted text can reach a model.\n4. Local ranking by reciprocity. No model, nothing leaves, and it is what makes the batch small.\n5. The learn run: the estimate, the one approval, the receipt.\n6. Facts one at a time, split by the rule.\n7. Office files, then PDF with a text layer.\n8. Scanned PDFs, only if you find you actually get them.\n\nSteps 1 to 4 send nothing anywhere. That is deliberate: most of this is useful before a single byte leaves the machine."
+    },
+    {
+      "id": "spaces",
+      "x": 5236,
+      "y": 960,
+      "w": 470,
+      "text": "THE LAST MISSING FIELD\n\nToday a message knows which account it came from, and a contact can point at a node. Nothing anywhere says \"this mailbox is Develtech's\". Without it, a fact learned from business mail is indistinguishable from one learned from personal mail, and board 4 has nowhere to file it.\n\nOne field on the account closes it.\n\nWhat it is NOT: a rule. It is the suggested destination printed on each fact card, correctable in one click. A business mailbox is full of ordinary life, and a guess that is right eight times in ten files two facts in the wrong company where nobody notices.\n\nWHAT ALREADY WORKED, and needed nothing:\n\n- Several accounts at once. One command syncs them all, and every message remembers which account brought it.\n- Provider and login as separate fields, so a business Gmail on Workspace gets one-click sign-in while a business on Fastmail or cPanel uses an app password. Collapsing them would have made \"a Gmail account reached with an app password\" unrepresentable.\n- Learning does not care about the difference. By the time it runs, a message is a message.\n\nONE CONSEQUENCE THAT FALLS OUT FREE: point the personal mailbox at a space tagged Personal, and the existing rule applies -- nobody lent to that work ever gets git or terminal."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}

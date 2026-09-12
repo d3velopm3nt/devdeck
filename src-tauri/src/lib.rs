@@ -1213,6 +1213,8 @@ pub fn run() {
             aiw::commands::aiw_personal_root,
             aiw::commands::aiw_profile,
             aiw::commands::aiw_save_profile,
+            aiw::commands::aiw_voices,
+            aiw::commands::aiw_meet,
             aiw::commands::aiw_memories,
             aiw::commands::aiw_forget_memory,
             aiw::commands::aiw_assistant_context,

@@ -30,6 +30,7 @@ pub mod deck;
 pub mod events;
 pub mod grants;
 pub mod mentions;
+pub mod persona;
 pub mod personal;
 pub mod provider;
 pub mod runtime;

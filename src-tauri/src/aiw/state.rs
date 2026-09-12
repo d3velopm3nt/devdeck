@@ -1509,8 +1509,12 @@ pub fn default_agents() -> Vec<AgentDef> {
             role: "orchestrator".into(),
             provider: "mock".into(),
             model: "mock-1".into(),
-            system: "You are the developer's assistant. You coordinate the team,                      answer questions about the work, and keep track of what matters."
-                .into(),
+            // The voice is the first line and it is yours; the duties below it
+            // are the job. Seeded plain because a first run has not happened
+            // yet — the moment it does, this file is rewritten from what you
+            // picked. See `persona.rs` for why this is a file and not a
+            // setting.
+            system: super::persona::body("plain", ""),
             skills: Vec::new(),
             permissions: perms(&[
                 ("delegate", "full"),

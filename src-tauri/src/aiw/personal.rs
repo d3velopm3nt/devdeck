@@ -41,6 +41,29 @@ pub struct ProfileMeta {
     /// Free-form preferences the assistant has been told to keep.
     #[serde(default)]
     pub preferences: Vec<String>,
+    /// What to call you. Empty until you say, and never guessed from the
+    /// account name — a machine login is not a person's name.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub name: String,
+    /// What you call the assistant. Its own file holds how it *speaks*; this
+    /// is only what it answers to, kept here because it is your choice.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub assistant_name: String,
+    /// Which voice you picked: `plain` | `warm` | `blunt` | `own`.
+    ///
+    /// Recorded so the picker can show what is current. It is not the source
+    /// of truth for how the assistant talks — that is the first line of the
+    /// assistant's own file, which you may edit without coming back here.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub voice: String,
+    /// When the first run finished. Empty means it has never run.
+    ///
+    /// The marker is here rather than in settings deliberately: the first run
+    /// exists to fill this file, so "have we met" is a question this file can
+    /// answer on its own. Delete the file and you are introduced again, which
+    /// is the behaviour anyone would expect from deleting it.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub met_at: String,
 }
 
 /// One durable note. Small and separately addressable so a wrong one can be

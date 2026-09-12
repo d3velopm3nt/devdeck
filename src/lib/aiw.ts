@@ -531,6 +531,19 @@ export interface ProfileView {
   preferences: string[]
   body: string
   updated_at: string
+  name: string
+  assistant_name: string
+  voice: string
+  /** Empty until the first run has finished. */
+  met_at: string
+}
+
+export interface Voice {
+  id: string
+  name: string
+  sample: string
+  note: string
+  line: string
 }
 
 export interface MemoryView {
@@ -714,6 +727,14 @@ export const aiw = {
   profile: () => invoke<ProfileView>('aiw_profile'),
   saveProfile: (preferences: string[], body: string) =>
     invoke<ProfileView>('aiw_save_profile', { preferences, body }),
+  voices: () => invoke<Voice[]>('aiw_voices'),
+  meet: (name: string, assistantName: string, voice: string, customVoice: string) =>
+    invoke<ProfileView>('aiw_meet', {
+      name,
+      assistantName,
+      voice,
+      customVoice,
+    }),
   memories: () => invoke<MemoryView[]>('aiw_memories'),
   forgetMemory: (id: string) => invoke<boolean>('aiw_forget_memory', { id }),
 

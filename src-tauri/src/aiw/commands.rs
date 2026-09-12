@@ -1494,16 +1494,107 @@ pub struct ProfileView {
     pub preferences: Vec<String>,
     pub body: String,
     pub updated_at: String,
+    pub name: String,
+    pub assistant_name: String,
+    pub voice: String,
+    /// Empty until the first run has finished. The UI reads this to decide
+    /// whether to introduce itself, so it must be the same fact the store
+    /// holds rather than a separate flag that can drift from it.
+    pub met_at: String,
+}
+
+fn profile_view(doc: super::deck::Doc<super::personal::ProfileMeta>) -> ProfileView {
+    ProfileView {
+        preferences: doc.meta.preferences,
+        updated_at: doc.meta.updated_at,
+        name: doc.meta.name,
+        assistant_name: doc.meta.assistant_name,
+        voice: doc.meta.voice,
+        met_at: doc.meta.met_at,
+        body: doc.body,
+    }
 }
 
 #[tauri::command]
 pub fn aiw_profile(ws: Ws) -> Result<ProfileView, String> {
-    let doc = ws.convs()?.store().profile();
-    Ok(ProfileView {
-        preferences: doc.meta.preferences,
-        updated_at: doc.meta.updated_at,
-        body: doc.body,
-    })
+    Ok(profile_view(ws.convs()?.store().profile()))
+}
+
+/// The voices the first run offers, with their samples.
+#[tauri::command]
+pub fn aiw_voices() -> Vec<super::persona::Voice> {
+    super::persona::voices()
+}
+
+/// What the first run produces: a name, a voice, and a profile that exists.
+///
+/// Two writes, and they are different kinds of thing on purpose. Your name
+/// goes in the profile, which is *about you*. The voice goes in the
+/// assistant's own file, which is *about it* — and lands there as the first
+/// line of its instructions, so changing it later means editing a file rather
+/// than finding this screen again.
+#[tauri::command]
+pub fn aiw_meet(
+    ws: Ws,
+    name: String,
+    assistant_name: String,
+    voice: String,
+    custom_voice: String,
+) -> Result<ProfileView, String> {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err("Tell me what to call you first.".into());
+    }
+    let custom = custom_voice.trim().to_string();
+    let voice_id = if !custom.is_empty() {
+        "own".to_string()
+    } else if super::persona::voice(&voice).is_some() {
+        voice
+    } else {
+        return Err(format!("There is no voice called '{voice}'."));
+    };
+
+    let store = ws.convs()?.store();
+
+    // The assistant's file first. If this fails there is no half-met state:
+    // the profile still says we have never met, so the first run runs again.
+    let assistant_id = super::assistant::ASSISTANT_ID;
+    let existing = store
+        .agents()
+        .into_iter()
+        .find(|d| d.meta.id == assistant_id);
+
+    let mut doc = match existing {
+        Some(d) => d,
+        None => {
+            return Err(
+                "The assistant has no file yet, so there is nothing to give a voice to.".into(),
+            )
+        }
+    };
+
+    let assistant_name = assistant_name.trim();
+    if !assistant_name.is_empty() {
+        doc.meta.name = assistant_name.to_string();
+    }
+    // Re-voice rather than rewrite, so anything added under the duties marker
+    // survives. A body with no marker was written by hand and is left alone.
+    doc.body = match super::persona::revoice(&doc.body, &voice_id, &custom) {
+        Some(b) => b,
+        None => super::persona::body(&voice_id, &custom),
+    };
+    store.save_agent(&doc)?;
+    ws.load_agents()?;
+
+    let mut p = store.profile();
+    p.meta.updated_at = super::events::now_iso();
+    p.meta.met_at = super::events::now_iso();
+    p.meta.name = name;
+    p.meta.assistant_name = doc.meta.name.clone();
+    p.meta.voice = voice_id;
+    store.save_profile(&p)?;
+
+    Ok(profile_view(p))
 }
 
 #[tauri::command]
@@ -1513,22 +1604,18 @@ pub fn aiw_save_profile(
     body: String,
 ) -> Result<ProfileView, String> {
     let store = ws.convs()?.store();
-    let doc = super::deck::Doc {
-        meta: super::personal::ProfileMeta {
-            updated_at: super::events::now_iso(),
-            preferences: preferences
-                .into_iter()
-                .filter(|p| !p.trim().is_empty())
-                .collect(),
-        },
-        body,
-    };
+    // Read, then change the two fields this command is about. Building a fresh
+    // ProfileMeta here is how your name and the fact we have met would get
+    // erased every time you edited a preference.
+    let mut doc = store.profile();
+    doc.meta.updated_at = super::events::now_iso();
+    doc.meta.preferences = preferences
+        .into_iter()
+        .filter(|p| !p.trim().is_empty())
+        .collect();
+    doc.body = body;
     store.save_profile(&doc)?;
-    Ok(ProfileView {
-        preferences: doc.meta.preferences,
-        updated_at: doc.meta.updated_at,
-        body: doc.body,
-    })
+    Ok(profile_view(doc))
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]

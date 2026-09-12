@@ -11,6 +11,7 @@ import { ApprovalBar } from './components/aiw/ApprovalBar'
 import { FocusBar } from './components/FocusBar'
 import { SetupModal } from './components/SetupModal'
 import { VaultSetup } from './components/VaultSetup'
+import { Meet } from './components/Meet'
 import { Sheet } from './components/Sheet'
 import { UpdateBar, VersionPill, type UpState } from './components/UpdateBar'
 import { ClockToast } from './components/ClockToast'
@@ -554,6 +555,22 @@ export default function App() {
       .catch(() => setVaultRoot(null))
   }, [])
 
+  // undefined = not read yet, true = we have met, false = introduce yourself.
+  // The fact lives in the profile rather than in a settings flag, so deleting
+  // the personal store genuinely starts you over instead of leaving a machine
+  // that thinks it knows someone it has forgotten.
+  const [met, setMet] = useState<boolean | undefined>(undefined)
+  useEffect(() => {
+    void aiwApi
+      .profile()
+      .then((p) => setMet(Boolean(p.met_at)))
+      // If the profile cannot be read, do not introduce yourself — a first run
+      // that fires because of a backend error would overwrite a voice someone
+      // already chose. Assume we have met and let the rest of the app report
+      // the failure.
+      .catch(() => setMet(true))
+  }, [])
+
   const runningCount = Object.values(app.svcStates).filter((s) => s.status === 'running').length
   const liveTerms = app.terminals.filter((t) => t.alive)
 
@@ -561,7 +578,7 @@ export default function App() {
   // shell whose Explorer would only ever be empty.
   // Not asked yet: paint the ground rather than a shell that is about to be
   // replaced by the setup screen.
-  if (vaultRoot === undefined) return <div className="h-screen bg-app" />
+  if (vaultRoot === undefined || met === undefined) return <div className="h-screen bg-app" />
   if (vaultRoot === null) {
     return (
       <div className="flex h-screen flex-col bg-app text-body">
@@ -571,6 +588,16 @@ export default function App() {
             void app.refreshTree()
           }}
         />
+      </div>
+    )
+  }
+
+  // A vault exists but nobody has ever said who you are. Introduce yourself
+  // before the shell, because every screen behind it is shaped by the answer.
+  if (!met) {
+    return (
+      <div className="flex h-screen flex-col bg-app text-body">
+        <Meet onDone={() => setMet(true)} />
       </div>
     )
   }

@@ -1,0 +1,54 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "title": "1 · What has to exist", "x": 0, "y": 0, "w": 1456, "h": 909 },
+    { "file": "Plan.dc.html", "title": "2 · Inside one plan — against a day", "x": 1576, "y": 0, "w": 1456, "h": 909 },
+    { "file": "Review.dc.html", "title": "3 · A step stops for you", "x": 3152, "y": 0, "w": 1456, "h": 909 },
+    { "file": "Manager.dc.html", "title": "4 · One manager, every company", "x": 4728, "y": 0, "w": 1456, "h": 909 },
+    { "file": "Playbook.dc.html", "title": "5 · The playbook it wrote back", "x": 6304, "y": 0, "w": 1100, "h": 909 }
+  ],
+  "annotations": [
+    {
+      "id": "levels",
+      "x": -560,
+      "y": 0,
+      "w": 460,
+      "text": "THREE LEVELS, AND NO MORE — 12 Sep\n\nThe first draft of screen 1 flattened a goal, three plans and fifteen steps into one list of six. \"Build the website\" was sitting next to \"shape it\", and they are not the same size of thing.\n\n  GOAL     Walkbook — the outcome\n  PLAN     one deliverable, one owner, one timeline\n  STEP     a work item someone finishes\n\nThe rule that stops infinite nesting: A STEP NEVER BECOMES A PLAN. If a step is too big to finish, it was never a step — it is a deliverable, and it moves up a level.\n\nAll three already exist in the deck: FeatureMeta.goal, FeatureMeta.owner (one field, so \"one owner per plan\" enforces itself), WorkItem with assignee and due. Nothing new to model — screen 1 just has to draw what is already there."
+    },
+    {
+      "id": "spine",
+      "x": -560,
+      "y": 470,
+      "w": 460,
+      "text": "EVERY PLAN HAS A SPINE — and there are only two\n\nIN ORDER — the app, the site. Step 3 starts when step 2 is done. Dates fall out of the work.\n\nAGAINST A DAY — the launch. Written backwards from 6 October: two weeks out, launch day, a week after. Move the day and every step moves with it, because they are offsets from it, not fixed dates.\n\nThat second shape is why \"market the app\" could never be a step in someone else's ordered plan. It has a different clock.\n\nWorkItem.due already exists and is deliberately in the deck, not the personal store — so these dates land in the calendar and on Today for free."
+    },
+    {
+      "id": "arrows",
+      "x": 1576,
+      "y": 960,
+      "w": 470,
+      "text": "ONE KIND OF ARROW\n\nPlans wait on plans. Never on a step inside one.\n\n  The site      waits on   The app (its screens)\n  The launch    waits on   The site (being live)\n  The launch    gives      the words for the page → The site\n\nStep-to-step dependencies across plans would be a project management tool, and you would be back to maintaining a graph. Plan-to-plan is coarse enough to keep in your head and honest enough to block on: launch day will not start if the site is not live.\n\nInside a plan, order is just order — 1, 2, 3."
+    },
+    {
+      "id": "layers",
+      "x": 3152,
+      "y": 960,
+      "w": 470,
+      "text": "IS IT JUST A PROMPT? — no, and this is the part most agent products get wrong\n\nInstructions  (role file, playbook, memory)   → judgement: what good looks like\nTools         (code the agent can call)       → reach: what it can touch\nPermissions   (the matrix, per agent per tool) → trust: what it may touch HERE\n\nOnly the first is words. A prompt saying \"browse the web\" with no web tool behind it produces a model that confidently describes browsing it never did.\n\nThe registry today: Files, Git, Terminal, Process, Routines, Work, Memory. No web. Browsing arrives as an MCP server installed through Community — built for exactly this: \"Machine installs tools for you, Community installs them for your bots\", and it reports which agents can actually reach each install.\n\nOpen-source design tools come the same way when they speak MCP or have a CLI. Where they have neither, the agent cannot use them, and the honest UI says so.\n\nREVIEW BY DEFAULT (agreed): anything that leaves the machine — push, send, publish, spend — and anything you would call design. Everything else runs and you get the receipt."
+    },
+    {
+      "id": "safety",
+      "x": 4728,
+      "y": 960,
+      "w": 440,
+      "text": "TWO DEFAULTS WORTH SETTING NOW\n\n1. Web read is the largest prompt-injection surface an agent has — any page can address it. Fine alone on a marketing agent. Web + terminal + git on ONE agent sits at approval, never full. Screen 4 shows this as a row, not a mode.\n\n2. Permissions follow the work, not the worker. A manager lent to Innotrack runs under Innotrack's grants. That is what makes cross-company employees safe, and it is already the rule in the roadmap.\n\nShipped templates go. The ToolOffer catalogue stays — the curated list of what a bot may ASK for. Letting an agent find its own capabilities is, in botcatalog.rs's own words, a supply-chain problem wearing a helpful face."
+    },
+    {
+      "id": "build",
+      "x": 6304,
+      "y": 960,
+      "w": 440,
+      "text": "WHAT IS NEW TO BUILD, honestly\n\n1. A proposal — a goal with plans under it, not yet work. Tick at both levels, edit, approve. Approve writes the features AND the playbooks.\n2. A plan spine — \"in order\" or \"against a day\", and offsets that move when the day moves.\n3. Plan-to-plan waits — one arrow, and a plan that will not start when its wait is unmet.\n4. Review on a step — fires on done-with-output, not on a tool call. stop_at today fires before a command runs.\n5. A manager page — one plan grouped by space, filter chips, reach table, hands.\n6. @ reaches any manager — the subtree rule in colleagues() goes.\n7. Playbook files at both levels, and the chief of staff offering one across spaces.\n8. A web tool — an MCP fetch server through Community, read only.\n\nExample content (Walkbook, the dates, the newsletter) is illustrative. Spaces, managers and agents are this machine's own."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

@@ -872,7 +872,8 @@ struct XOAuth2 {
 impl imap::Authenticator for XOAuth2 {
     type Response = String;
     fn process(&self, _challenge: &[u8]) -> Self::Response {
-        crate::gauth::xoauth2(&self.user, &self.access)
+        // Raw, not base64: the imap crate encodes whatever comes back here.
+        crate::gauth::sasl_xoauth2(&self.user, &self.access)
     }
 }
 

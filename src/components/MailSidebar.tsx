@@ -158,11 +158,16 @@ export function MailSidebar() {
                       a.last_error ? 'text-err' : 'text-faint'
                     }`}
                   >
+                    {/* An account signed in with Google has no password and
+                        never will, so "no password stored" read as a fault on
+                        a connection that was actually finished. Whether it can
+                        log in at all is the question; a password is only one
+                        of the two ways to answer it. */}
                     {a.last_error
                       ? a.last_error
                       : a.last_sync
                         ? `synced ${fmtAgo(a.last_sync, now)}`
-                        : a.has_password
+                        : a.auth === 'oauth' || a.has_password
                           ? 'never synced'
                           : 'no password stored'}
                   </span>

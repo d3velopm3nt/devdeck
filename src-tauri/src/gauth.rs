@@ -547,10 +547,19 @@ pub fn email_from_id_token(id_token: &str) -> String {
         .to_string()
 }
 
-/// The SASL initial response both IMAP and SMTP want, base64 of
-/// `user=<addr>^Aauth=Bearer <token>^A^A`.
-pub fn xoauth2(user: &str, access: &str) -> String {
-    B64_STD.encode(format!("user={user}\x01auth=Bearer {access}\x01\x01"))
+/// The XOAUTH2 SASL string, **not** base64 encoded.
+///
+/// The encoding is deliberately not done here, and doing it was what made
+/// Google answer `Invalid SASL argument` after a sign-in that had otherwise
+/// worked perfectly. The `imap` crate takes whatever an `Authenticator`
+/// returns and base64-encodes it itself, so an already-encoded string reaches
+/// Google as base64 of base64.
+///
+/// `lettre` does not want this at all: hand it the bare access token as the
+/// password and it builds the same string from its own credentials. Two
+/// libraries, two contracts, and only one of them takes this.
+pub fn sasl_xoauth2(user: &str, access: &str) -> String {
+    format!("user={user}\x01auth=Bearer {access}\x01\x01")
 }
 
 /// Hand a URL to the default browser.
@@ -733,10 +742,16 @@ mod tests {
     }
 
     #[test]
-    fn the_sasl_string_is_what_both_protocols_expect() {
-        let s = xoauth2("me@example.com", "tok");
-        let raw = String::from_utf8(B64_STD.decode(s).unwrap()).unwrap();
-        assert_eq!(raw, "user=me@example.com\x01auth=Bearer tok\x01\x01");
+    fn the_sasl_string_is_raw_because_the_imap_crate_encodes_it() {
+        let s = sasl_xoauth2("me@example.com", "tok");
+        assert_eq!(s, "user=me@example.com\x01auth=Bearer tok\x01\x01");
+        // Encoding it here too is what sent Google base64 of base64, and its
+        // answer was the unhelpful "Invalid SASL argument".
+        assert_ne!(
+            s,
+            B64_STD.encode("user=me@example.com\x01auth=Bearer tok\x01\x01"),
+            "this must not already be encoded"
+        );
     }
 
     #[test]

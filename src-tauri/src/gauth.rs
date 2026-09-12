@@ -68,6 +68,12 @@ const BAKED_CLIENT_SECRET: &str = "";
 
 const B64: base64::engine::general_purpose::GeneralPurpose =
     base64::engine::general_purpose::URL_SAFE_NO_PAD;
+/// Standard base64, used only to assert that `sasl_xoauth2` is *not* encoded.
+///
+/// It was in use until the SASL string stopped being encoded here. Kept for
+/// the test rather than deleted, because the test's whole job is to prove the
+/// string is not this.
+#[cfg(test)]
 const B64_STD: base64::engine::general_purpose::GeneralPurpose =
     base64::engine::general_purpose::STANDARD;
 

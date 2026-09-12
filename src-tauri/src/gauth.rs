@@ -434,8 +434,22 @@ fn form_body(pairs: &[(&str, &str)]) -> String {
         .join("&")
 }
 
+/// How long to wait on Google's token endpoint.
+///
+/// `reqwest::blocking::Client::new()` has **no timeout at all**, and a refresh
+/// runs at the very start of every sync. So a request that never answered hung
+/// the sync for ever: one line in the log saying it had started, and then
+/// nothing, with no error and nothing to cancel. The IMAP side already had
+/// connect and read timeouts; this was the one hole left.
+const TOKEN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 fn post_token(form: &[(&str, &str)]) -> Result<Tokens, String> {
-    let reply: TokenReply = reqwest::blocking::Client::new()
+    let client = reqwest::blocking::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(TOKEN_TIMEOUT)
+        .build()
+        .map_err(|e| format!("could not prepare the request to Google: {e}"))?;
+    let reply: TokenReply = client
         .post(TOKEN_ENDPOINT)
         .header("Content-Type", "application/x-www-form-urlencoded")
         .body(form_body(form))

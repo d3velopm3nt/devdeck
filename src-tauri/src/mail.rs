@@ -1323,7 +1323,7 @@ fn sync_accounts(app: &tauri::AppHandle, db: &Db, id: i64) -> Result<i64, String
                 params![acct.id],
             );
         }
-        match sync_one(&db, &acct) {
+        match sync_one(&app, &db, &acct) {
             Ok(n) => {
                 total += n;
                 // Scoped, and it matters more than it looks. `activity::record`
@@ -1394,7 +1394,16 @@ fn sync_accounts(app: &tauri::AppHandle, db: &Db, id: i64) -> Result<i64, String
     Ok(total)
 }
 
-fn sync_one(db: &Db, acct: &MailAccount) -> Result<i64, String> {
+fn sync_one(app: &tauri::AppHandle, db: &Db, acct: &MailAccount) -> Result<i64, String> {
+    // Narrate each step. A sync that stalls used to leave exactly one line in
+    // the log -- "sync <address> …" -- and then silence, which says only that
+    // something started. Saying what it is about to do turns a hang into a
+    // sentence naming the thing that hung.
+    let say = |line: String| push_log(app, MAIL_LOG_ID, "mail", "system", line);
+
+    if is_oauth(acct) {
+        say("asking Google for a fresh access token…".into());
+    }
     let password = password_for(acct)?;
     // Read the folder before the network work, under its own short lock, so a
     // slow IMAP session never holds the database open waiting on a socket.
@@ -1402,7 +1411,9 @@ fn sync_one(db: &Db, acct: &MailAccount) -> Result<i64, String> {
         let conn = db.0.lock().unwrap();
         crate::mailfiles::root(&conn)
     };
+    say(format!("connecting to {}…", acct.imap_host));
     let mut session = imap_login(acct, &password)?;
+    say("connected. listing folders…".into());
 
     let mut stored = 0i64;
     let mut folder_errors: Vec<String> = Vec::new();
@@ -1426,6 +1437,7 @@ fn sync_one(db: &Db, acct: &MailAccount) -> Result<i64, String> {
         if mailbox.exists == 0 {
             continue;
         }
+        say(format!("{local}: {} on the server", mailbox.exists));
         let hi = mailbox.exists;
         let lo = hi.saturating_sub(SYNC_LIMIT).max(1);
         let set = format!("{lo}:{hi}");
@@ -1463,6 +1475,7 @@ fn sync_one(db: &Db, acct: &MailAccount) -> Result<i64, String> {
         }
     }
     let _ = session.logout();
+    say(format!("done. {stored} new or updated."));
     // A folder that failed while others worked is still worth saying out loud,
     // but only when nothing came through at all is it a failed sync. Otherwise
     // one unreadable Archive would mark a perfectly good inbox as broken.

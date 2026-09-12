@@ -1071,7 +1071,20 @@ export const useApp = create<AppState>((set, get) => ({
   },
   toast: null,
   dismissToast: () => set({ toast: null }),
-  pushActivity: (a) =>
+  pushActivity: (a) => {
+    // A finished sync is the app's own announcement that it is done, and it
+    // is more trustworthy than the call that started it. A reload during a
+    // long command orphans that call's callback, so the promise never settles
+    // and the spinner never stops — which is exactly what a mail sync did.
+    // Listening for the result as well as awaiting it means the interface
+    // recovers from that rather than sitting there turning.
+    if (a.kind === 'mail') {
+      set({ mailSyncing: false })
+      void get().refreshMail()
+      void get().refreshMailAccounts()
+      void get().refreshMailContacts()
+    }
+
     set((st) => ({
       activity: [a, ...st.activity].slice(0, 60),
       // Only the clock interrupts. Everything else in the feed happened
@@ -1080,12 +1093,18 @@ export const useApp = create<AppState>((set, get) => ({
       // that mattered gets dismissed too.
       // Suppressed only when you are already looking at where it lands:
       // Home for something that merely happened, the Inbox for a failure.
+      //
+      // Mail is the exception, and earns it: a sync takes long enough that
+      // you have looked away, so "it finished" is news rather than an echo of
+      // your own click. A failure is news wherever you are standing.
       toast:
-        (a.kind === 'schedule' || a.kind === 'bot') &&
-        st.railView !== (a.ok ? 'home' : 'inbox')
+        a.kind === 'mail' ||
+        ((a.kind === 'schedule' || a.kind === 'bot') &&
+          st.railView !== (a.ok ? 'home' : 'inbox'))
           ? a
           : st.toast,
-    })),
+    }))
+  },
 
   focus: null,
   refreshFocus: async () => set({ focus: await ipc.focusCurrent() }),

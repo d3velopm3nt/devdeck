@@ -1411,6 +1411,12 @@ export const mailAccountSetPassword = (id: number, username: string, password: s
   invoke<void>('mail_account_set_password', { id, username, password })
 export const mailAccountClearPassword = (id: number) =>
   invoke<boolean>('mail_account_clear_password', { id })
+/** Whether this build carries a Google client, so the button is worth drawing. */
+export const mailGoogleAvailable = () => invoke<boolean>('mail_google_available')
+/** Opens the browser and blocks until you consent or close the tab. */
+export const mailGoogleSignIn = (id: number, address: string) =>
+  invoke<void>('mail_google_sign_in', { id, address })
+export const mailGoogleSignOut = (id: number) => invoke<void>('mail_google_sign_out', { id })
 /** Log in over IMAP and SMTP and report each separately. */
 export const mailAccountTest = (id: number) => invoke<MailTestResult>('mail_account_test', { id })
 /** Fetch new mail. `id` 0 syncs every account. Returns messages stored. */

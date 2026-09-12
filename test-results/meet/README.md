@@ -7,7 +7,8 @@
 |---|---|
 | `1-first-run.png` | The screen exists at all. It had never existed before — every previous launch dropped you into an empty tree. |
 | `2-shield-footer.png` | Same screen, with the shield on the two-stores promise instead of a second sparkle. |
-| `3-gmail-setup.png` | The two walls of a Gmail connection, in the order you hit them, on the account sheet. |
+| `3-gmail-setup.png` | The two walls of a Gmail connection, in the order you hit them. Shown only when this build has no Google client. |
+| `4-google-signin.png` | One click instead, when a client is configured. Captured with a dummy client id, so nothing ever reached Google. |
 
 ## What the screenshot actually verifies
 
@@ -53,6 +54,33 @@ Both buttons open the real Google pages. The refusal is also translated in
 password with the same eight words, so `explain_login` says which one it is
 and still prints what the server said. Three tests cover it, including one
 that a dropped connection is **not** reported as a password problem.
+
+## Google sign-in
+
+`4-google-signin.png` is the flow proper: system browser, loopback redirect on
+a port the OS picks, PKCE, refresh token into Windows Credential Manager,
+XOAUTH2 for both IMAP and SMTP. No password reaches DevDeck.
+
+The button is disabled in the shot because the address field is empty, which
+is deliberate: without it Google shows an account chooser with a blank entry.
+
+**Why the free route is real.** The 7-day refresh-token expiry is tied to a
+publishing status of *Testing*, not to being unverified. A project set to *In
+production* issues refresh tokens that last. What an unverified app does pay
+is a consent screen saying Google has not verified it, and a **100-user
+lifetime cap on the project that cannot be reset**. Right for one person on
+their own mailbox; wrong for shipping to strangers, and that is when
+verification earns its money.
+
+Twelve tests in `gauth.rs` cover the parts that can be tested without Google:
+the challenge really is the SHA-256 of the verifier, two sign-ins never share
+one, the auth URL asks for a refresh token explicitly, a favicon request is
+not read as a callback, a form body escapes the `/` and `+` that a real
+authorization code contains, and an `invalid_grant` names the Testing-status
+trap.
+
+Nothing here has been run against a real Google account. That needs a client
+id, which is configuration this repository deliberately does not carry.
 
 ## One thing worth knowing about capturing this
 

@@ -43,6 +43,12 @@ lettre = { version = "0.11", default-features = false, features = [
 ] }
 mailparse = "0.15"
 
+# Google sign-in (src/gauth.rs). PKCE needs a SHA-256 and a base64url; the
+# verifier and the CSRF state need real randomness rather than a clock.
+base64 = "0.22"
+sha2 = "0.10"
+rand = "0.8"
+
 [profile.release]
 opt-level = 2
 lto = true

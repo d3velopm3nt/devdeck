@@ -26,6 +26,7 @@ mod db;
 mod files;
 mod events;
 mod focus;
+mod gauth;
 mod git;
 mod github;
 mod inbox;
@@ -292,6 +293,28 @@ fn open_url(url: String) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+/// Say once, at boot, whether this build can offer Google sign-in.
+///
+/// Without this the only symptom of a missing or unread client id is a button
+/// that never appears, which looks the same as a bug in the button.
+fn report_google_client() {
+    match crate::gauth::client() {
+        Some(c) => {
+            // The id is not a secret and is visible in every consent URL, but
+            // there is no reason to print all of it; enough to tell two
+            // projects apart is enough.
+            let head: String = c.id.chars().take(12).collect();
+            eprintln!(
+                "[gauth] Google sign-in available (client {head}..., secret {})",
+                if c.secret.is_empty() { "none" } else { "set" }
+            );
+        }
+        None => eprintln!(
+            "[gauth] no Google client configured - set DEVDECK_GOOGLE_CLIENT_ID to offer sign-in"
+        ),
+    }
 }
 
 // ---- self-update ----
@@ -730,6 +753,8 @@ pub fn run() {
                 _ => eprintln!("[community] MCP servers not registered: app state missing at setup"),
             }
 
+            report_google_client();
+
             // The clock. One pass at startup, which is what makes catching up
             // possible at all — while the app runs a schedule fires because its
             // moment arrived; at launch it fires because its moment passed
@@ -1099,6 +1124,9 @@ pub fn run() {
             mail::mail_account_delete,
             mail::mail_account_set_password,
             mail::mail_account_clear_password,
+            mail::mail_google_available,
+            mail::mail_google_sign_in,
+            mail::mail_google_sign_out,
             mail::mail_account_test,
             mail::mail_sync,
             mail::mail_list,

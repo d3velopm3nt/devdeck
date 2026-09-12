@@ -361,6 +361,8 @@ export interface MailAccount {
   last_error: string
   /** Whether a password is stored. Never the password — nothing reads one back. */
   has_password: boolean
+  /** How this account proves who it is: 'password' | 'oauth'. */
+  auth: string
 }
 
 /** A message as the list needs it: no bodies, so 300 rows stay cheap. */

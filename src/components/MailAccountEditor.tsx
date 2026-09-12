@@ -42,6 +42,7 @@ const BLANK: MailAccount = {
   name: '',
   address: '',
   kind: 'imap',
+  auth: 'password',
   imap_host: '',
   imap_port: 993,
   smtp_host: '',
@@ -73,6 +74,65 @@ export function MailAccountEditor() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [test, setTest] = useState<MailTestResult | null>(null)
+  const [googleReady, setGoogleReady] = useState(false)
+  const [googleWhy, setGoogleWhy] = useState('')
+
+  // Asked once, not guessed: a build with no client configured must not show
+  // a button whose only possible answer is an apology.
+  //
+  // A failure here is reported rather than read as "no". Swallowing it makes a
+  // broken call look exactly like a build with no client, which is the failure
+  // this project has a rule about.
+  useEffect(() => {
+    let live = true
+    void ipc
+      .mailGoogleAvailable()
+      .then((ok) => {
+        if (!live) return
+        setGoogleReady(ok)
+        setGoogleWhy('')
+      })
+      .catch((e) => {
+        if (!live) return
+        setGoogleReady(false)
+        setGoogleWhy(String(e))
+      })
+    return () => {
+      live = false
+    }
+  }, [])
+
+  /** Saves the account first: there is no id to hang a token on until it exists. */
+  const signInWithGoogle = async () => {
+    setError('')
+    setBusy(true)
+    try {
+      const id = await persist()
+      await ipc.mailGoogleSignIn(id, def.address.trim())
+      setDef((d) => ({ ...d, id, auth: 'oauth', has_password: false }))
+      setTest(null)
+      await refreshMailAccounts()
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const forgetGoogle = async () => {
+    setError('')
+    setBusy(true)
+    try {
+      await ipc.mailGoogleSignOut(def.id)
+      setDef((d) => ({ ...d, auth: 'password' }))
+      setTest(null)
+      await refreshMailAccounts()
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   useEffect(() => {
     if (mailAccountEditing == null) return
@@ -179,12 +239,74 @@ export function MailAccountEditor() {
             </div>
           )}
 
+          {/* One click when this build carries a Google client, and the app
+              password walkthrough when it does not. Only one of these two
+              panels ever shows: the walkthrough is three steps at Google, and
+              nobody should be reading it while a button sits above it doing
+              the same job. The password field itself stays either way, because
+              someone who already has an app password should not be made to
+              sign in to use it. */}
+          {def.kind === 'gmail' && googleReady && (
+            <div className="rounded-lg border border-line2 bg-raise/50 px-3 py-3">
+              {def.auth === 'oauth' ? (
+                <>
+                  <div className="flex items-center gap-2 text-[12px] text-ink">
+                    <Icon name="check" size={14} className="text-ok" />
+                    Connected with Google
+                  </div>
+                  <p className="mt-1 text-[11px] leading-relaxed text-muted">
+                    DevDeck holds a token, never your password. Revoking it here only forgets
+                    the local copy — remove DevDeck under your Google account's third-party
+                    connections to end it at their side too.
+                  </p>
+                  <button
+                    className="mt-2 rounded border border-line2 px-2 py-1 text-[11px] text-dim hover:border-line3 hover:text-ink"
+                    disabled={busy}
+                    onClick={() => void forgetGoogle()}
+                  >
+                    Forget this sign-in
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="text-[11.5px] font-semibold text-ink">Sign in with Google</div>
+                  <p className="mt-1 text-[11px] leading-relaxed text-muted">
+                    Opens your browser. Your password never reaches DevDeck, and you can revoke
+                    the access from your Google account at any time without changing it.
+                  </p>
+                  <p className="mt-1 text-[10.5px] leading-relaxed text-faint">
+                    Google will say it has not verified this app. That is expected for a build
+                    signing in with its own client — click Advanced, then continue.
+                  </p>
+                  <button
+                    className="mt-2 rounded border border-indigo-500/50 bg-indigo-500/10 px-2.5 py-1.5 text-[11.5px] text-ink hover:border-indigo-500 disabled:opacity-40"
+                    disabled={busy || !def.address.trim()}
+                    onClick={() => void signInWithGoogle()}
+                  >
+                    {busy ? 'Waiting for your browser...' : 'Continue with Google'}
+                  </button>
+                  {!def.address.trim() && (
+                    <div className="mt-1.5 text-[10.5px] text-faint">
+                      Fill in the email address first, so Google offers the right account.
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           {/* Gmail is the one provider where a correct password is still
               refused, and the server's own message does not say why. Everyone
               hits this once; the difference is whether it costs a minute or an
               evening. The two links are the two walls, in the order you meet
               them — app passwords do not exist until 2-Step is on. */}
-          {def.kind === 'gmail' && (
+          {googleWhy && (
+            <div className="rounded border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11px] text-warn">
+              Could not ask whether Google sign-in is available: {googleWhy}
+            </div>
+          )}
+
+          {def.kind === 'gmail' && !googleReady && (
             <div className="rounded-lg border border-line2 bg-raise/50 px-3 py-2.5">
               <div className="text-[11.5px] font-semibold text-ink">
                 Gmail needs an app password, not your Google password
@@ -305,7 +427,8 @@ export function MailAccountEditor() {
             />,
           )}
 
-          {field(
+          {def.auth !== 'oauth' &&
+            field(
             'Password',
             <input
               className="input w-full"
@@ -315,9 +438,11 @@ export function MailAccountEditor() {
               onChange={(e) => setPassword(e.target.value)}
             />,
             def.kind === 'gmail'
-              ? 'Paste the 16 characters from Google here. Written straight to Windows Credential Manager and never read back.'
+              ? googleReady
+                ? 'Only if you would rather use an app password than sign in above. Written straight to Windows Credential Manager and never read back.'
+                : 'Paste the 16 characters from Google here. Written straight to Windows Credential Manager and never read back.'
               : 'Written straight to Windows Credential Manager and never read back — this form can tell you a password exists, but can never show you one.',
-          )}
+            )}
 
           {field(
             'Signature',

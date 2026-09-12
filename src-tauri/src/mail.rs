@@ -39,6 +39,31 @@ pub fn target_for(account_id: i64) -> String {
     format!("devdeck:mail:{account_id}")
 }
 
+/// Where a Google refresh token lives. A separate credential from the
+/// password on purpose: switching an account from one to the other must not
+/// leave the other still sitting in the vault, and `has_password` must never
+/// come back true because a refresh token happens to be stored.
+pub fn token_target_for(account_id: i64) -> String {
+    format!("devdeck:mail:{account_id}:google")
+}
+
+/// An account's auth method, defaulted rather than trusted.
+///
+/// A UI that forgets the field, or an older row, must mean `password` — the
+/// only thing that existed before — rather than an empty string that no branch
+/// matches and that would fail as "unknown auth" on a working account.
+fn auth_of(a: &MailAccount) -> String {
+    match a.auth.trim() {
+        "oauth" => "oauth".to_string(),
+        _ => "password".to_string(),
+    }
+}
+
+/// Is this account reached with Google's consent rather than a password?
+fn is_oauth(a: &MailAccount) -> bool {
+    auth_of(a) == "oauth"
+}
+
 fn now_millis() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -69,6 +94,14 @@ pub struct MailAccount {
     /// Whether a password is stored. Note what this is *not*: the password.
     #[serde(default)]
     pub has_password: bool,
+    /// How we prove who we are: `password` | `oauth`.
+    ///
+    /// Not folded into `kind`. A Gmail account can be reached either way, and
+    /// a plain IMAP host can never be reached by Google sign-in, so these are
+    /// two questions and collapsing them would make one of the four
+    /// combinations unrepresentable.
+    #[serde(default)]
+    pub auth: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -213,7 +246,7 @@ pub struct TestResult {
 // ---------------------------------------------------------------- rows
 
 const ACCOUNT_COLS: &str = "id, name, address, kind, imap_host, imap_port, smtp_host, smtp_port, \
-     username, signature, is_default, sort, created_at, last_sync, last_error";
+     username, signature, is_default, sort, created_at, last_sync, last_error, auth";
 
 fn row_to_account(row: &rusqlite::Row) -> rusqlite::Result<MailAccount> {
     let id: i64 = row.get(0)?;
@@ -233,6 +266,7 @@ fn row_to_account(row: &rusqlite::Row) -> rusqlite::Result<MailAccount> {
         created_at: row.get(12)?,
         last_sync: row.get(13)?,
         last_error: row.get(14)?,
+        auth: row.get::<_, String>(15).unwrap_or_else(|_| "password".into()),
         has_password: creds::exists(&target_for(id)),
     })
 }
@@ -289,8 +323,8 @@ pub fn mail_account_save(db: tauri::State<Db>, def: MailAccount) -> Result<i64, 
         conn.execute(
             "INSERT INTO mail_accounts
                 (name, address, kind, imap_host, imap_port, smtp_host, smtp_port,
-                 username, signature, is_default, sort, created_at)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
+                 username, signature, is_default, sort, created_at, auth)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
             params![
                 def.name,
                 def.address.trim(),
@@ -303,7 +337,8 @@ pub fn mail_account_save(db: tauri::State<Db>, def: MailAccount) -> Result<i64, 
                 def.signature,
                 def.is_default as i64,
                 def.sort,
-                now_millis()
+                now_millis(),
+                auth_of(&def)
             ],
         )
         .map_err(err)?;
@@ -313,7 +348,7 @@ pub fn mail_account_save(db: tauri::State<Db>, def: MailAccount) -> Result<i64, 
             "UPDATE mail_accounts
                 SET name=?1, address=?2, kind=?3, imap_host=?4, imap_port=?5,
                     smtp_host=?6, smtp_port=?7, username=?8, signature=?9,
-                    is_default=?10, sort=?11
+                    is_default=?10, sort=?11, auth=?13
               WHERE id=?12",
             params![
                 def.name,
@@ -327,7 +362,8 @@ pub fn mail_account_save(db: tauri::State<Db>, def: MailAccount) -> Result<i64, 
                 def.signature,
                 def.is_default as i64,
                 def.sort,
-                def.id
+                def.id,
+                auth_of(&def)
             ],
         )
         .map_err(err)?;
@@ -367,6 +403,63 @@ pub fn mail_account_set_password(id: i64, username: String, password: String) ->
 #[tauri::command]
 pub fn mail_account_clear_password(id: i64) -> Result<bool, String> {
     Ok(creds::delete(&target_for(id)))
+}
+
+/// Whether this build can offer Google sign-in at all.
+///
+/// The UI asks before drawing the button, because a button that always
+/// answers "there is no client configured" is worse than no button.
+#[tauri::command]
+pub fn mail_google_available() -> bool {
+    crate::gauth::client().is_some()
+}
+
+/// Open the browser, wait for consent, and keep the refresh token.
+///
+/// Ordered so a failure leaves nothing behind: Google first, the credential
+/// second, the row last. A sign-in that is cancelled at the browser touches
+/// no account at all.
+#[tauri::command]
+pub fn mail_google_sign_in(db: tauri::State<Db>, id: i64, address: String) -> Result<(), String> {
+    if id <= 0 {
+        return Err("Save the account before signing in to it.".into());
+    }
+    let tokens = crate::gauth::sign_in(&address)?;
+
+    creds::set(&token_target_for(id), &address, &tokens.refresh)?;
+    // An account can arrive here holding an old app password. Leaving it would
+    // mean a stale credential in the vault that nothing reads and nobody can
+    // see, which is exactly the sort of thing that turns up in an audit.
+    creds::delete(&target_for(id));
+
+    {
+        let conn = db.0.lock().unwrap();
+        conn.execute(
+            "UPDATE mail_accounts SET auth='oauth', last_error='' WHERE id=?1",
+            params![id],
+        )
+        .map_err(err)?;
+    }
+    token_cache().lock().unwrap().insert(id, tokens);
+    Ok(())
+}
+
+/// Forget Google's consent for this account.
+///
+/// Only the local copy. Google keeps its own record until you remove DevDeck
+/// under your account's third-party connections, and saying otherwise would be
+/// a claim we cannot honour.
+#[tauri::command]
+pub fn mail_google_sign_out(db: tauri::State<Db>, id: i64) -> Result<(), String> {
+    creds::delete(&token_target_for(id));
+    token_cache().lock().unwrap().remove(&id);
+    let conn = db.0.lock().unwrap();
+    conn.execute(
+        "UPDATE mail_accounts SET auth='password' WHERE id=?1",
+        params![id],
+    )
+    .map_err(err)?;
+    Ok(())
 }
 
 // ---------------------------------------------------------------- IMAP
@@ -436,20 +529,109 @@ fn explain_login(host: &str, raw: &str) -> String {
     format!("IMAP login refused: {raw}")
 }
 
-fn imap_login(acct: &MailAccount, password: &str) -> Result<ImapSession, String> {
+/// The SASL side of XOAUTH2, which the imap crate asks us to supply.
+struct XOAuth2 {
+    user: String,
+    access: String,
+}
+
+impl imap::Authenticator for XOAuth2 {
+    type Response = String;
+    fn process(&self, _challenge: &[u8]) -> Self::Response {
+        crate::gauth::xoauth2(&self.user, &self.access)
+    }
+}
+
+fn login_user(acct: &MailAccount) -> String {
+    if acct.username.trim().is_empty() {
+        acct.address.clone()
+    } else {
+        acct.username.clone()
+    }
+}
+
+/// Log in with whichever proof this account carries.
+///
+/// `secret` is a password or a live access token, and which one it is comes
+/// from the account rather than from the caller — there is exactly one place
+/// that decides, so an OAuth account can never be sent down the password path
+/// and fail with a message about app passwords.
+fn imap_login(acct: &MailAccount, secret: &str) -> Result<ImapSession, String> {
     let stream = tls_stream(&acct.imap_host, acct.imap_port as u16)?;
     let client = imap::Client::new(stream);
-    let user = if acct.username.trim().is_empty() {
-        acct.address.as_str()
-    } else {
-        acct.username.as_str()
-    };
+    let user = login_user(acct);
+
+    if is_oauth(acct) {
+        return client
+            .authenticate(
+                "XOAUTH2",
+                &XOAuth2 {
+                    user,
+                    access: secret.to_string(),
+                },
+            )
+            .map_err(|(e, _)| {
+                format!(
+                    "Google accepted the sign-in but refused the mailbox: {e}.                      If this persists, remove DevDeck under your Google account's                      third-party connections and sign in again."
+                )
+            });
+    }
+
     client
-        .login(user, password)
+        .login(user, secret)
         .map_err(|(e, _)| explain_login(&acct.imap_host, &e.to_string()))
 }
 
+/// Live access tokens, by account.
+///
+/// An access token lasts an hour and a refresh costs a round trip to Google,
+/// so refreshing on every IMAP connect would put a network call in front of
+/// every sync, send and test. Memory only, deliberately: a token on disk is a
+/// second credential to protect for no gain, since the refresh token can
+/// always mint another.
+static TOKENS: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<i64, crate::gauth::Tokens>>> =
+    std::sync::OnceLock::new();
+
+fn token_cache() -> &'static std::sync::Mutex<std::collections::HashMap<i64, crate::gauth::Tokens>> {
+    TOKENS.get_or_init(Default::default)
+}
+
+fn now_ms_epoch() -> i64 {
+    now_millis()
+}
+
+/// A usable access token for an OAuth account, refreshed only when stale.
+fn access_token_for(acct: &MailAccount) -> Result<String, String> {
+    if let Some(t) = token_cache().lock().unwrap().get(&acct.id) {
+        if t.expires_at_ms > now_ms_epoch() && !t.access.is_empty() {
+            return Ok(t.access.clone());
+        }
+    }
+
+    let client = crate::gauth::client().ok_or_else(crate::gauth::unavailable)?;
+    let refresh = creds::get(&token_target_for(acct.id)).ok_or_else(|| {
+        format!(
+            "{} is set up for Google sign-in but there is no stored consent.              Open the account and sign in again.",
+            acct.address
+        )
+    })?;
+
+    let fresh = crate::gauth::refresh(&client, &refresh)?;
+    // Google reissues the refresh token occasionally; keeping the new one is
+    // what stops the account dying weeks later for no visible reason.
+    if fresh.refresh != refresh {
+        let _ = creds::set(&token_target_for(acct.id), &acct.address, &fresh.refresh);
+    }
+    let access = fresh.access.clone();
+    token_cache().lock().unwrap().insert(acct.id, fresh);
+    Ok(access)
+}
+
+/// Whatever this account proves itself with: a password, or a live token.
 fn password_for(acct: &MailAccount) -> Result<String, String> {
+    if is_oauth(acct) {
+        return access_token_for(acct);
+    }
     creds::get(&target_for(acct.id)).ok_or_else(|| {
         format!(
             "No password stored for {}. Add one in Settings → Mail accounts.",
@@ -1203,6 +1385,16 @@ fn smtp_transport(
         acct.username.clone()
     };
     let creds = Credentials::new(user, password.to_string());
+    let mechanism = if is_oauth(acct) {
+        // lettre defaults to PLAIN/LOGIN, which Google refuses outright for an
+        // access token. Naming the mechanism is what makes the token usable.
+        vec![lettre::transport::smtp::authentication::Mechanism::Xoauth2]
+    } else {
+        vec![
+            lettre::transport::smtp::authentication::Mechanism::Plain,
+            lettre::transport::smtp::authentication::Mechanism::Login,
+        ]
+    };
     // 587 is STARTTLS by convention, 465 implicit TLS. Guessing wrong here is
     // the single most common "it just hangs" in every mail client ever built.
     let builder = if acct.smtp_port == 587 {
@@ -1214,6 +1406,7 @@ fn smtp_transport(
     Ok(builder
         .port(acct.smtp_port as u16)
         .credentials(creds)
+        .authentication(mechanism)
         .timeout(Some(IO_TIMEOUT))
         .build())
 }

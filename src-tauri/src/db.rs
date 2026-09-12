@@ -508,6 +508,17 @@ pub fn migrate(conn: &Connection) {
         );
     }
 
+    // A mail account can be reached with a password or with Google's consent.
+    // Existing rows keep the only thing they ever were, which is why the
+    // default is 'password' rather than empty: a blank auth would read as
+    // "unknown" everywhere and there is nothing unknown about them.
+    if conn.prepare("SELECT auth FROM mail_accounts LIMIT 1").is_err() {
+        let _ = conn.execute(
+            "ALTER TABLE mail_accounts ADD COLUMN auth TEXT NOT NULL DEFAULT 'password'",
+            [],
+        );
+    }
+
     // A schedule can be a moment as well as a rhythm: a calendar needs the
     // 2pm on the 11th that a recurrence cannot say.
     if conn.prepare("SELECT at_ms FROM schedules LIMIT 1").is_err() {

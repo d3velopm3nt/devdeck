@@ -162,12 +162,16 @@ function HtmlBody({ html }: { html: string }) {
   }, [html, dark])
 
   return (
-    <div className="relative">
+    // Fills the height it is given instead of claiming a fixed 440px. A frame
+    // that is shorter than its pane leaves a band of empty ground under every
+    // message, and the mail scrolls inside a box while the box floats in
+    // nothing -- two scrollbars, one of them pointless.
+    <div className="relative flex min-h-0 flex-1 flex-col">
       <iframe
         title="Message body"
         sandbox=""
         srcDoc={doc}
-        className={`h-[440px] w-full rounded-lg border border-line ${
+        className={`min-h-0 w-full flex-1 rounded-lg border border-line ${
           dark ? 'bg-page' : 'bg-white'
         }`}
       />
@@ -492,14 +496,22 @@ export function MailView() {
               notes={mailNotes.length}
             />
 
-            <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
+            <div
+              className={`min-h-0 flex-1 px-5 py-4 ${
+                // The HTML body scrolls inside its own frame, so the pane must
+                // not scroll too. Every other tab is ordinary content and does.
+                tab === 'message' && mailBody?.body_html
+                  ? 'flex flex-col overflow-hidden'
+                  : 'overflow-auto'
+              }`}
+            >
               {!mailBody ? (
                 <div className="font-mono text-[11px] text-muted">loading…</div>
               ) : tab === 'message' ? (
                 mailBody.body_html ? (
                   <>
                     <HtmlBody html={mailBody.body_html} />
-                    <div className="mt-1.5 text-[11px] text-muted">
+                    <div className="mt-1.5 shrink-0 text-[11px] text-muted">
                       Remote images are blocked — a tracking pixel is a read receipt you did not
                       agree to.
                     </div>

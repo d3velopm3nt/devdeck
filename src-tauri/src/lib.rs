@@ -32,6 +32,7 @@ mod github;
 mod inbox;
 mod legacy;
 mod machine;
+mod mailfiles;
 mod mcp;
 mod mail;
 mod managers;

@@ -151,6 +151,16 @@ pub struct MailAttachment {
     pub bytes: i64,
     pub part_index: i64,
     pub file_path: String,
+    /// Whether the bytes are actually on disk.
+    ///
+    /// Derived rather than stored, from whether a path was recorded. A write
+    /// can fail for ordinary reasons — a full disk, a Drive folder that is
+    /// offline — and the row still exists so the message still lists the
+    /// attachment. Without this the UI would offer to open a file that is not
+    /// there, which is the failure-looks-like-success pattern this project has
+    /// a rule about.
+    #[serde(default)]
+    pub saved: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -850,7 +860,12 @@ struct Parsed {
     raw_headers: String,
     ts: i64,
     is_bot: bool,
-    attachments: Vec<(String, String, i64, i64)>,
+    /// name, mime, part index, and the bytes themselves.
+    ///
+    /// The parser already had these and threw them away after measuring the
+    /// length, which is why an invoice was known to exist and had never been
+    /// opened.
+    attachments: Vec<(String, String, i64, Vec<u8>)>,
 }
 
 fn parse_message(raw: &[u8], fallback_ts: i64) -> Result<Parsed, String> {
@@ -908,7 +923,7 @@ fn collect_parts(
     part: &mailparse::ParsedMail,
     text: &mut String,
     html: &mut String,
-    files: &mut Vec<(String, String, i64, i64)>,
+    files: &mut Vec<(String, String, i64, Vec<u8>)>,
     index: &mut i64,
 ) {
     use mailparse::MailHeaderMap;
@@ -928,12 +943,12 @@ fn collect_parts(
         let idx = *index;
         *index += 1;
         if is_attachment {
-            let bytes = part.get_body_raw().map(|b| b.len() as i64).unwrap_or(0);
+            let bytes = part.get_body_raw().unwrap_or_default();
             files.push((
                 filename.unwrap_or_else(|| format!("part-{idx}")),
                 mime,
-                bytes,
                 idx,
+                bytes,
             ));
         } else if mime.starts_with("text/html") {
             if html.is_empty() {
@@ -1060,6 +1075,12 @@ pub fn mail_sync(app: tauri::AppHandle, db: tauri::State<Db>, id: i64) -> Result
 
 fn sync_one(db: &tauri::State<Db>, acct: &MailAccount) -> Result<i64, String> {
     let password = password_for(acct)?;
+    // Read the folder before the network work, under its own short lock, so a
+    // slow IMAP session never holds the database open waiting on a socket.
+    let root = {
+        let conn = db.0.lock().unwrap();
+        crate::mailfiles::root(&conn)
+    };
     let mut session = imap_login(acct, &password)?;
 
     let mut stored = 0i64;
@@ -1108,7 +1129,7 @@ fn sync_one(db: &tauri::State<Db>, acct: &MailAccount) -> Result<i64, String> {
             let uid = f.uid.unwrap_or(0) as i64;
 
             let conn = db.0.lock().unwrap();
-            store_message(&conn, acct, local, uid, &parsed, !seen, flagged)?;
+            store_message(&conn, &root, acct, local, uid, &parsed, !seen, flagged)?;
             stored += 1;
         }
     }
@@ -1119,8 +1140,15 @@ fn sync_one(db: &tauri::State<Db>, acct: &MailAccount) -> Result<i64, String> {
 /// Upsert one message. Read/flag state from the server wins on first sight but
 /// never clobbers a local read — marking something read here should not be
 /// undone by the next sync.
+/// Store one message, and write its attachments under `root`.
+///
+/// The folder is a parameter rather than read from settings in here, for two
+/// reasons that point the same way: a test must never write into the real
+/// appdata folder, and a function that quietly reaches for a global setting
+/// hides the fact that it touches the disk at all.
 fn store_message(
     conn: &Connection,
+    root: &std::path::Path,
     acct: &MailAccount,
     mailbox: &str,
     uid: i64,
@@ -1195,15 +1223,24 @@ fn store_message(
     };
 
     conn.execute(
-        "DELETE FROM mail_attachments WHERE message_id=?1 AND file_path=''",
+        "DELETE FROM mail_attachments WHERE message_id=?1",
         params![msg_id],
     )
     .map_err(err)?;
-    for (name, mime, bytes, idx) in &p.attachments {
+
+    for (name, mime, idx, bytes) in &p.attachments {
+        // The file is written before the row, so a row never claims a path
+        // that is not there. A write that fails costs the file, not the
+        // message: the attachment is still listed with its name and size, its
+        // path stays empty, and the UI says it is not on disk rather than
+        // offering to open something that is not there.
+        let path = crate::mailfiles::store(root, msg_id, name, bytes)
+            .map(|pth| pth.display().to_string())
+            .unwrap_or_default();
         conn.execute(
-            "INSERT INTO mail_attachments (message_id, filename, mime, bytes, part_index)
-             VALUES (?1,?2,?3,?4,?5)",
-            params![msg_id, name, mime, bytes, idx],
+            "INSERT INTO mail_attachments (message_id, filename, mime, bytes, part_index, file_path)
+             VALUES (?1,?2,?3,?4,?5,?6)",
+            params![msg_id, name, mime, bytes.len() as i64, idx, path],
         )
         .map_err(err)?;
     }
@@ -1354,7 +1391,8 @@ pub fn mail_body(db: tauri::State<Db>, id: i64) -> Result<MailBody, String> {
                 mime: r.get(3)?,
                 bytes: r.get(4)?,
                 part_index: r.get(5)?,
-                file_path: r.get(6)?,
+                file_path: r.get::<_, String>(6)?,
+                saved: !r.get::<_, String>(6)?.trim().is_empty(),
             })
         })
         .map_err(err)?;
@@ -1795,6 +1833,30 @@ mod tests {
         c
     }
 
+    /// A throwaway attachments folder.
+    ///
+    /// Storing a message now writes files, so every test that stores one needs
+    /// somewhere that is not the real appdata directory. Named per test so two
+    /// running at once cannot delete each other's.
+    struct Tmp(std::path::PathBuf);
+    impl Tmp {
+        fn new(tag: &str) -> Self {
+            let mut p = std::env::temp_dir();
+            p.push(format!("devdeck-mail-{tag}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&p);
+            std::fs::create_dir_all(&p).unwrap();
+            Tmp(p)
+        }
+        fn path(&self) -> &std::path::Path {
+            &self.0
+        }
+    }
+    impl Drop for Tmp {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
     #[test]
     fn thread_key_strips_reply_prefixes() {
         assert_eq!(thread_key_for("Re: Fwd: Quote"), "quote");
@@ -1857,6 +1919,7 @@ Content-Disposition: attachment; filename=\"quote.pdf\"\r\n\
 
     #[test]
     fn storing_a_message_creates_its_contact_and_upserts_on_resync() {
+        let tmp = Tmp::new("contact");
         let c = mem();
         c.execute(
             "INSERT INTO mail_accounts (id, name, address) VALUES (1, 'Me', 'me@develtech.co.za')",
@@ -1871,7 +1934,7 @@ Content-Disposition: attachment; filename=\"quote.pdf\"\r\n\
         let raw = b"From: Lerato <lerato@example.com>\r\nSubject: Re: Retainer\r\n\r\nHi\r\n";
         let p = parse_message(raw, 1_700_000_000_000).unwrap();
 
-        store_message(&c, &acct, "INBOX", 42, &p, true, false).unwrap();
+        store_message(&c, tmp.path(), &acct, "INBOX", 42, &p, true, false).unwrap();
         let n: i64 = c
             .query_row("SELECT COUNT(*) FROM mail_messages", [], |r| r.get(0))
             .unwrap();
@@ -1886,7 +1949,7 @@ Content-Disposition: attachment; filename=\"quote.pdf\"\r\n\
         assert_eq!(key, "retainer");
 
         // Re-syncing the same UID updates rather than duplicating.
-        store_message(&c, &acct, "INBOX", 42, &p, true, true).unwrap();
+        store_message(&c, tmp.path(), &acct, "INBOX", 42, &p, true, true).unwrap();
         let n: i64 = c
             .query_row("SELECT COUNT(*) FROM mail_messages", [], |r| r.get(0))
             .unwrap();
@@ -1899,6 +1962,7 @@ Content-Disposition: attachment; filename=\"quote.pdf\"\r\n\
 
     #[test]
     fn a_local_read_survives_the_next_sync() {
+        let tmp = Tmp::new("read");
         let c = mem();
         c.execute(
             "INSERT INTO mail_accounts (id, name, address) VALUES (1, 'Me', 'me@develtech.co.za')",
@@ -1911,10 +1975,10 @@ Content-Disposition: attachment; filename=\"quote.pdf\"\r\n\
         };
         let raw = b"From: a@b.com\r\nSubject: Hi\r\n\r\nx\r\n";
         let p = parse_message(raw, 1).unwrap();
-        store_message(&c, &acct, "INBOX", 7, &p, true, false).unwrap();
+        store_message(&c, tmp.path(), &acct, "INBOX", 7, &p, true, false).unwrap();
         c.execute("UPDATE mail_messages SET unread=0", []).unwrap();
         // Server still reports it unseen; our read must win.
-        store_message(&c, &acct, "INBOX", 7, &p, true, false).unwrap();
+        store_message(&c, tmp.path(), &acct, "INBOX", 7, &p, true, false).unwrap();
         let unread: i64 = c
             .query_row("SELECT unread FROM mail_messages", [], |r| r.get(0))
             .unwrap();
@@ -1923,6 +1987,7 @@ Content-Disposition: attachment; filename=\"quote.pdf\"\r\n\
 
     #[test]
     fn attachments_are_replaced_not_duplicated_on_resync() {
+        let tmp = Tmp::new("atts");
         let c = mem();
         c.execute(
             "INSERT INTO mail_accounts (id, name, address) VALUES (1, 'Me', 'me@d.co')",
@@ -1939,12 +2004,52 @@ Content-Type: multipart/mixed; boundary=\"z\"\r\n\r\n\
 --z\r\nContent-Type: text/csv\r\nContent-Disposition: attachment; filename=\"a.csv\"\r\n\r\n1,2\r\n\
 --z--\r\n";
         let p = parse_message(raw, 1).unwrap();
-        store_message(&c, &acct, "INBOX", 3, &p, true, false).unwrap();
-        store_message(&c, &acct, "INBOX", 3, &p, true, false).unwrap();
+        store_message(&c, tmp.path(), &acct, "INBOX", 3, &p, true, false).unwrap();
+        store_message(&c, tmp.path(), &acct, "INBOX", 3, &p, true, false).unwrap();
         let n: i64 = c
             .query_row("SELECT COUNT(*) FROM mail_attachments", [], |r| r.get(0))
             .unwrap();
         assert_eq!(n, 1, "re-sync must not duplicate attachment rows");
+    }
+
+    /// The point of the whole slice: an attachment is now a file you can open.
+    /// Before this, `file_path` was a column nothing ever wrote to, so an
+    /// invoice was known to exist and had never once been opened.
+    #[test]
+    fn an_attachment_is_written_to_disk_and_the_row_points_at_it() {
+        let tmp = Tmp::new("written");
+        let c = mem();
+        let acct = MailAccount { id: 1, address: "me@develtech.co.za".into(), ..Default::default() };
+        c.execute(
+            "INSERT INTO mail_accounts (id, name, address) VALUES (1, 'Me', 'me@develtech.co.za')",
+            [],
+        )
+        .unwrap();
+
+        // One line on purpose: this file is stored CRLF, and a trailing
+        // backslash continuation inside a byte string fights that.
+        let raw: &[u8] = b"From: Sarah <sarah@harbourvine.com>\r\nSubject: Invoice\r\nContent-Type: multipart/mixed; boundary=\"X\"\r\n\r\n--X\r\nContent-Type: text/plain\r\n\r\nInvoice attached.\r\n--X\r\nContent-Type: text/csv\r\nContent-Disposition: attachment; filename=\"Q3 invoice: final?.csv\"\r\n\r\nitem,amount\r\nwork,1400\r\n--X--\r\n";
+        let p = parse_message(raw, 1_700_000_000_000).unwrap();
+        store_message(&c, tmp.path(), &acct, "INBOX", 9, &p, true, false).unwrap();
+
+        let path: String = c
+            .query_row("SELECT file_path FROM mail_attachments", [], |r| r.get(0))
+            .unwrap();
+        assert!(!path.is_empty(), "the row must carry a path");
+
+        let on_disk = std::path::Path::new(&path);
+        assert!(on_disk.is_file(), "{path} is not a file");
+        assert!(
+            std::fs::read_to_string(on_disk).unwrap().contains("work,1400"),
+            "the bytes that arrived must be the bytes on disk"
+        );
+
+        // The colon and the question mark would make this unopenable on Windows.
+        let name = on_disk.file_name().unwrap().to_string_lossy().to_string();
+        assert!(!name.contains(':') && !name.contains('?'), "{name}");
+        assert!(name.ends_with(".csv"), "{name}");
+        // Filed by message id, so two invoices with one name coexist.
+        assert!(on_disk.parent().unwrap().starts_with(tmp.path()));
     }
 
     #[test]

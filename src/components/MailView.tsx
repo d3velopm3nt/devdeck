@@ -134,24 +134,53 @@ function ThreadCard({
  * why the mail cannot reach back into DevDeck.
  */
 function HtmlBody({ html }: { html: string }) {
-  const doc = useMemo(
-    () =>
+  const theme = useApp((s) => s.theme)
+  // Some mail only renders on white. A newsletter that sets its own dark text
+  // and no background is dark-on-dark here, and no amount of cleverness fixes
+  // that from the outside — so the escape hatch is a button rather than a
+  // heuristic that is wrong in a way nobody can see.
+  const [forceLight, setForceLight] = useState(false)
+  const dark = theme === 'dark' && !forceLight
+
+  const doc = useMemo(() => {
+    // Defaults only. Anything the sender styled itself still wins, which is
+    // what keeps a marketing email that paints its own white table looking
+    // exactly as it was designed.
+    const ink = dark ? '#cbd5e1' : '#1f2430'
+    const bg = dark ? '#0d1017' : '#fff'
+    return (
       `<!doctype html><html><head><meta charset="utf-8">` +
       `<meta http-equiv="Content-Security-Policy" ` +
       `content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:">` +
-      `<style>body{margin:0;padding:4px;font-family:'Segoe UI',system-ui,sans-serif;` +
-      `font-size:13px;line-height:1.65;color:#1f2430;background:#fff;}` +
+      `<style>:root{color-scheme:${dark ? 'dark' : 'light'}}` +
+      `body{margin:0;padding:4px;font-family:'Segoe UI',system-ui,sans-serif;` +
+      `font-size:13px;line-height:1.65;color:${ink};background:${bg};}` +
+      `a{color:${dark ? '#818cf8' : '#4f46e5'}}` +
       `img{max-width:100%;height:auto}table{max-width:100%}` +
-      `</style></head><body>${html}</body></html>`,
-    [html],
-  )
+      `</style></head><body>${html}</body></html>`
+    )
+  }, [html, dark])
+
   return (
-    <iframe
-      title="Message body"
-      sandbox=""
-      srcDoc={doc}
-      className="h-[440px] w-full rounded-lg border border-line bg-white"
-    />
+    <div className="relative">
+      <iframe
+        title="Message body"
+        sandbox=""
+        srcDoc={doc}
+        className={`h-[440px] w-full rounded-lg border border-line ${
+          dark ? 'bg-page' : 'bg-white'
+        }`}
+      />
+      {theme === 'dark' && (
+        <button
+          onClick={() => setForceLight((v) => !v)}
+          title="Some mail is only legible on white"
+          className="absolute right-2 top-2 rounded border border-line2 bg-panel/90 px-2 py-0.5 text-[10.5px] text-muted hover:text-ink"
+        >
+          {forceLight ? 'Dark' : 'Light'}
+        </button>
+      )}
+    </div>
   )
 }
 

@@ -1452,7 +1452,17 @@ fn sync_one(app: &tauri::AppHandle, db: &Db, acct: &MailAccount) -> Result<i64, 
             .map(|b| {
                 (
                     b.name().to_string(),
-                    b.attributes().iter().map(|a| format!("{a:?}")).collect(),
+                    // The inner string, not the Debug form. `{a:?}` renders
+                    // `Custom("\All")`, which matches none of the flags below
+                    // -- so every attribute check silently failed and All Mail
+                    // was let through on its name alone.
+                    b.attributes()
+                        .iter()
+                        .filter_map(|a| match a {
+                            imap::types::NameAttribute::Custom(s) => Some(s.to_string()),
+                            _ => None,
+                        })
+                        .collect(),
                 )
             })
             .collect(),
@@ -1473,11 +1483,44 @@ fn sync_one(app: &tauri::AppHandle, db: &Db, acct: &MailAccount) -> Result<i64, 
         if mailbox.exists == 0 {
             continue;
         }
-        say(format!("{local}: {} on the server", mailbox.exists));
-        let hi = mailbox.exists;
-        let lo = hi.saturating_sub(SYNC_LIMIT).max(1);
-        let set = format!("{lo}:{hi}");
-        let fetches = match session.fetch(&set, "(UID FLAGS INTERNALDATE RFC822)") {
+        // What we already have. A sync that re-fetches the same two hundred
+        // messages every time is not a sync, it is the first sync on a loop --
+        // and with full bodies and attachments it took four minutes to learn
+        // that nothing had changed.
+        let seen: i64 = {
+            let conn = db.0.lock().unwrap();
+            conn.query_row(
+                "SELECT COALESCE(MAX(uid), 0) FROM mail_messages
+                  WHERE account_id=?1 AND mailbox=?2",
+                params![acct.id, local],
+                |r| r.get(0),
+            )
+            .unwrap_or(0)
+        };
+
+        let fetches = if seen > 0 {
+            // Everything above the highest UID we hold. IMAP guarantees UIDs
+            // only ever climb within a mailbox, so this is exactly "what
+            // arrived since last time". The server always returns at least the
+            // newest message even when nothing is new, which costs one message
+            // rather than two hundred.
+            say(format!(
+                "{local}: {} on the server, looking for anything after #{seen}",
+                mailbox.exists
+            ));
+            session.uid_fetch(format!("{}:*", seen + 1), "(UID FLAGS INTERNALDATE RFC822)")
+        } else {
+            // Never synced this folder: take the newest SYNC_LIMIT and stop.
+            // A mail client is not an archive migration tool.
+            let hi = mailbox.exists;
+            let lo = hi.saturating_sub(SYNC_LIMIT).max(1);
+            say(format!(
+                "{local}: {hi} on the server, taking the newest {}",
+                hi.min(SYNC_LIMIT)
+            ));
+            session.fetch(format!("{lo}:{hi}"), "(UID FLAGS INTERNALDATE RFC822)")
+        };
+        let fetches = match fetches {
             Ok(f) => f,
             // Skip this folder, keep the others. Aborting the whole account
             // here threw away every message already stored from the folders

@@ -555,24 +555,57 @@ pub fn xoauth2(user: &str, access: &str) -> String {
 
 /// Hand a URL to the default browser.
 ///
-/// Duplicated from `open_url` in lib.rs rather than reached for, because that
-/// one is a Tauri command and this runs on a worker thread with no app handle.
-/// Small enough that sharing it would cost more than it saves.
-fn open_in_browser(url: &str) -> Result<(), String> {
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        std::process::Command::new("explorer.exe")
-            .arg(url)
-            .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
-            .spawn()
-            .map_err(|e| format!("could not open your browser: {e}"))?;
+/// **Not `explorer.exe <url>`.** That is what the rest of this app uses and it
+/// works for a plain link, but it silently fails on this one: a consent URL is
+/// long and carries a dozen `&`-separated parameters, and explorer parses it as
+/// something other than a URL, shrugs, and opens the Documents folder instead.
+/// The browser never appears, nothing errors, and the app sits waiting for a
+/// callback that cannot arrive.
+///
+/// `ShellExecuteW` with the `open` verb is what actually asks Windows to do
+/// the thing the user means. It also returns a value that can be checked:
+/// anything at or below 32 is a failure, which is the only reason we can tell
+/// "no browser is installed" from "it opened".
+#[cfg(windows)]
+pub fn open_in_browser(url: &str) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+
+    fn wide(s: &str) -> Vec<u16> {
+        std::ffi::OsStr::new(s)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect()
     }
-    #[cfg(not(windows))]
-    {
-        let _ = url;
+
+    let verb = wide("open");
+    let target = wide(url);
+    // SAFETY: both strings are NUL-terminated and outlive the call, and the
+    // remaining arguments are the documented "no parameters, no directory".
+    let rc = unsafe {
+        ShellExecuteW(
+            std::ptr::null_mut(),
+            verb.as_ptr(),
+            target.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            SW_SHOWNORMAL as i32,
+        )
+    };
+    if (rc as isize) <= 32 {
+        return Err(format!(
+            "Windows would not open your browser (code {}). Check that a default browser is set.",
+            rc as isize
+        ));
     }
     Ok(())
+}
+
+#[cfg(not(windows))]
+pub fn open_in_browser(url: &str) -> Result<(), String> {
+    let _ = url;
+    Err("opening a browser is only implemented on Windows".into())
 }
 
 /// The whole sign-in, start to finish, on the calling thread.

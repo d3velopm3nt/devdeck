@@ -283,17 +283,14 @@ fn open_url(url: String) -> Result<(), String> {
     if !(url.starts_with("http://") || url.starts_with("https://")) {
         return Err("Only http(s) URLs can be opened".into());
     }
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        // explorer.exe hands http(s) URLs to the default browser.
-        std::process::Command::new("explorer.exe")
-            .arg(url)
-            .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
-            .spawn()
-            .map_err(|e| e.to_string())?;
-    }
-    Ok(())
+    // `explorer.exe <url>` used to be enough here and quietly is not. It works
+    // for a plain link, which is all this command was ever given, but hand it a
+    // long URL carrying a dozen `&`-separated parameters and it parses it as
+    // something other than a URL, shrugs, and opens the Documents folder. No
+    // error, no browser. Google's consent URL is exactly that shape. Both
+    // callers now go through one implementation that asks Windows properly and
+    // checks what it answered.
+    crate::gauth::open_in_browser(url)
 }
 
 /// Say once, at boot, whether this build can offer Google sign-in.

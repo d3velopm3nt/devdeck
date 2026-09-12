@@ -469,7 +469,14 @@ pub fn machine_import(path: String) -> Result<Manifest, String> {
 /// Live package configuration from the source (winget show / scoop info):
 /// version, publisher, homepage, license, description, etc.
 #[tauri::command]
-pub fn machine_show(id: String, source: String) -> Result<String, String> {
+pub async fn machine_show(id: String, source: String) -> Result<String, String> {
+    // winget and scoop both go to the network to answer this.
+    tauri::async_runtime::spawn_blocking(move || show_now(id, source))
+        .await
+        .map_err(|e| format!("the lookup did not finish: {e}"))?
+}
+
+fn show_now(id: String, source: String) -> Result<String, String> {
     let mut cmd = match source.as_str() {
         "scoop" => {
             let mut c = Command::new("powershell");

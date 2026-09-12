@@ -455,7 +455,19 @@ fn stream(app: &tauri::AppHandle, name: &str, mut cmd: Command) -> bool {
 /// Relies on the user's existing git credentials (helper / gh auth) for
 /// private repos. Output streams to the log bus.
 #[tauri::command]
-pub fn clone_repo(app: tauri::AppHandle, url: String, parent: String) -> Result<String, String> {
+pub async fn clone_repo(
+    app: tauri::AppHandle,
+    url: String,
+    parent: String,
+) -> Result<String, String> {
+    // This one waits for the clone rather than detaching, and a large
+    // repository is minutes. Every second of it froze the window.
+    tauri::async_runtime::spawn_blocking(move || clone_now(app, url, parent))
+        .await
+        .map_err(|e| format!("the clone did not finish: {e}"))?
+}
+
+fn clone_now(app: tauri::AppHandle, url: String, parent: String) -> Result<String, String> {
     let url = url.trim().to_string();
     if url.is_empty() {
         return Err("Enter a repository URL.".into());

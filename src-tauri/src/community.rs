@@ -1093,8 +1093,26 @@ pub fn community_index(db: tauri::State<Db>) -> Vec<crate::community_index::Feed
 /// its own: this is the only outbound call the module makes, and it should be
 /// somebody's decision rather than a surprise in a network log.
 #[tauri::command]
-pub fn community_refresh_index(
-    db: tauri::State<Db>,
+pub async fn community_refresh_index(
+    app: tauri::AppHandle,
+    source: Option<String>,
+) -> Result<Vec<crate::community_index::Feed>, String> {
+    // Every source here is an HTTP request to GitHub. Refreshing the index
+    // from the UI thread froze the window for the length of the slowest one.
+    //
+    // The database cannot cross a thread boundary by value, so the worker asks
+    // the app handle for the same managed instance the command would have been
+    // given.
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = <tauri::AppHandle as tauri::Manager<tauri::Wry>>::state::<Db>(&app);
+        refresh_index_now(&db, source)
+    })
+    .await
+    .map_err(|e| format!("the refresh did not finish: {e}"))?
+}
+
+fn refresh_index_now(
+    db: &Db,
     source: Option<String>,
 ) -> Result<Vec<crate::community_index::Feed>, String> {
     let wanted: Vec<String> = match source {

@@ -1309,6 +1309,20 @@ fn sync_accounts(app: &tauri::AppHandle, db: &Db, id: i64) -> Result<i64, String
             "system",
             format!("sync {} …", acct.address),
         );
+        // Clear the last failure before trying, not only after succeeding.
+        // Clearing on success alone is correct right up until a sync is
+        // interrupted -- the app quits, the machine sleeps -- and then an
+        // account that has just pulled three hundred messages still wears an
+        // error from an attempt that is no longer true. Which is exactly what
+        // happened. An error on screen should always describe the most recent
+        // attempt, and this makes that true by construction.
+        {
+            let conn = db.0.lock().unwrap();
+            let _ = conn.execute(
+                "UPDATE mail_accounts SET last_error='' WHERE id=?1",
+                params![acct.id],
+            );
+        }
         match sync_one(&db, &acct) {
             Ok(n) => {
                 total += n;
@@ -1380,6 +1394,7 @@ fn sync_one(db: &Db, acct: &MailAccount) -> Result<i64, String> {
     let mut session = imap_login(acct, &password)?;
 
     let mut stored = 0i64;
+    let mut folder_errors: Vec<String> = Vec::new();
     // Only the folders the UI has groups for. A mail client that syncs every
     // label on a Gmail account spends its life syncing.
     let wanted = ["INBOX", "Sent", "Drafts", "Archive"];
@@ -1405,7 +1420,14 @@ fn sync_one(db: &Db, acct: &MailAccount) -> Result<i64, String> {
         let set = format!("{lo}:{hi}");
         let fetches = match session.fetch(&set, "(UID FLAGS INTERNALDATE RFC822)") {
             Ok(f) => f,
-            Err(e) => return Err(format!("FETCH failed on {remote}: {e}")),
+            // Skip this folder, keep the others. Aborting the whole account
+            // here threw away every message already stored from the folders
+            // that worked, and left the account wearing an error about one
+            // folder as though nothing had synced at all.
+            Err(e) => {
+                folder_errors.push(format!("{remote}: {e}"));
+                continue;
+            }
         };
 
         for f in fetches.iter() {
@@ -1430,6 +1452,12 @@ fn sync_one(db: &Db, acct: &MailAccount) -> Result<i64, String> {
         }
     }
     let _ = session.logout();
+    // A folder that failed while others worked is still worth saying out loud,
+    // but only when nothing came through at all is it a failed sync. Otherwise
+    // one unreadable Archive would mark a perfectly good inbox as broken.
+    if !folder_errors.is_empty() && stored == 0 {
+        return Err(folder_errors.join("; "));
+    }
     Ok(stored)
 }
 

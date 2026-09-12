@@ -130,7 +130,16 @@ pub fn git_info(dir: String) -> GitInfo {
 /// Non-interactive: a repo whose credentials aren't cached fails fast and we
 /// simply return the pre-fetch status rather than hanging on a prompt.
 #[tauri::command]
-pub fn git_fetch(dir: String) -> GitInfo {
+pub async fn git_fetch(dir: String) -> GitInfo {
+    // `git fetch` talks to a remote, and a synchronous #[tauri::command] runs
+    // on the thread that answers the interface -- so on a slow network this
+    // froze the whole window for as long as the fetch took.
+    tauri::async_runtime::spawn_blocking(move || fetch_now(dir))
+        .await
+        .unwrap_or_default()
+}
+
+fn fetch_now(dir: String) -> GitInfo {
     let d = Path::new(&dir);
     if dir.trim().is_empty() || !d.is_dir() {
         return GitInfo::default();

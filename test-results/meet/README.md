@@ -7,6 +7,7 @@
 |---|---|
 | `1-first-run.png` | The screen exists at all. It had never existed before — every previous launch dropped you into an empty tree. |
 | `2-shield-footer.png` | Same screen, with the shield on the two-stores promise instead of a second sparkle. |
+| `3-gmail-setup.png` | The two walls of a Gmail connection, in the order you hit them, on the account sheet. |
 
 ## What the screenshot actually verifies
 
@@ -39,12 +40,27 @@ path is covered by tests instead of by a picture:
 
 Full suite: 496 passed, 0 failed.
 
+## Gmail
+
+`3-gmail-setup.png` is the answer to "make the Gmail connection easy". There
+are exactly two walls and the form now names both:
+
+1. Google has not accepted account passwords over IMAP since 2022.
+2. The page that makes app passwords is a 404 until 2-Step Verification is on.
+
+Both buttons open the real Google pages. The refusal is also translated in
+`mail.rs`: Gmail answers a wrong password and a correct-but-wrong-*kind*
+password with the same eight words, so `explain_login` says which one it is
+and still prints what the server said. Three tests cover it, including one
+that a dropped connection is **not** reported as a password problem.
+
 ## One thing worth knowing about capturing this
 
-The first capture came back pure white and looked like the white-screen
-crash from the `Icon name` bug. It was not. React had not mounted yet. The
-second capture of the same unchanged build was correct.
+A capture taken before WebView2 paints returns pure white, which is
+indistinguishable from the white-screen crash the `Icon name` bug used to
+cause. It cost two cold restarts here before the third capture of an
+unchanged build came back correct.
 
-The harness's "2 distinct sample colours" line said `ok` for the blank one
-and `ok` for the good one. The counter cannot tell them apart. Open the
-image.
+The harness's sample-colour line says `ok` either way. `scripts/shoot.ps1`
+now retries until the frame has more than two colours, which answers "has it
+drawn" but never "is it right". Still open the image.

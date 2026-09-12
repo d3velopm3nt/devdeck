@@ -10,6 +10,7 @@ import { useApp } from '../store'
 import * as ipc from '../lib/ipc'
 import { Icon } from '../lib/icons'
 import type { MailAccount, MailKind, MailTestResult } from '../lib/types'
+import { CAPTURE_MAIL_ACCOUNT } from '../lib/devCapture'
 
 /** Gmail is IMAP + SMTP with Google's hosts filled in — the transport is
  *  identical, so it is a preset rather than a separate code path. */
@@ -31,6 +32,11 @@ const PRESETS: Record<MailKind, { label: string; hint: string; fill: Partial<Mai
   },
 }
 
+/** Where Google actually keeps these. Both are stable, documented entry
+ *  points rather than deep links into a flow that moves. */
+const GMAIL_2SV_URL = 'https://myaccount.google.com/signinoptions/twosv'
+const GMAIL_APP_PW_URL = 'https://myaccount.google.com/apppasswords'
+
 const BLANK: MailAccount = {
   id: 0,
   name: '',
@@ -50,11 +56,19 @@ const BLANK: MailAccount = {
   has_password: false,
 }
 
+/** Screenshot harness: start a new account on a given provider, because this
+ *  session cannot click the provider buttons. Empty in normal use. */
+function blankForCapture(): Partial<MailAccount> {
+  const k = CAPTURE_MAIL_ACCOUNT as MailKind
+  if (!k || !PRESETS[k]) return {}
+  return { kind: k, ...PRESETS[k].fill }
+}
+
 export function MailAccountEditor() {
   const { mailAccountEditing, mailAccounts, openMailAccountEditor, refreshMailAccounts, syncMail } =
     useApp()
 
-  const [def, setDef] = useState<MailAccount>(BLANK)
+  const [def, setDef] = useState<MailAccount>(() => ({ ...BLANK, ...blankForCapture() }))
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -63,7 +77,7 @@ export function MailAccountEditor() {
   useEffect(() => {
     if (mailAccountEditing == null) return
     const found = mailAccounts.find((a) => a.id === mailAccountEditing)
-    setDef(found ? { ...found } : { ...BLANK })
+    setDef(found ? { ...found } : { ...BLANK, ...blankForCapture() })
     setPassword('')
     setError('')
     setTest(null)
@@ -162,6 +176,43 @@ export function MailAccountEditor() {
           {error && (
             <div className="rounded border border-red-500/30 bg-red-500/5 px-3 py-2 text-[12px] text-err">
               {error}
+            </div>
+          )}
+
+          {/* Gmail is the one provider where a correct password is still
+              refused, and the server's own message does not say why. Everyone
+              hits this once; the difference is whether it costs a minute or an
+              evening. The two links are the two walls, in the order you meet
+              them — app passwords do not exist until 2-Step is on. */}
+          {def.kind === 'gmail' && (
+            <div className="rounded-lg border border-line2 bg-raise/50 px-3 py-2.5">
+              <div className="text-[11.5px] font-semibold text-ink">
+                Gmail needs an app password, not your Google password
+              </div>
+              <p className="mt-1 text-[11px] leading-relaxed text-muted">
+                Google stopped accepting account passwords over IMAP in 2022. An app password is 16
+                characters, generated once, and revocable on its own without touching your account.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <button
+                  className="rounded border border-line2 px-2 py-1 text-[11px] text-dim hover:border-line3 hover:text-ink"
+                  onClick={() => void ipc.openUrl(GMAIL_2SV_URL).catch((e) => setError(String(e)))}
+                >
+                  1 · Turn on 2-Step Verification
+                </button>
+                <button
+                  className="rounded border border-indigo-500/50 bg-indigo-500/10 px-2 py-1 text-[11px] text-ink hover:border-indigo-500"
+                  onClick={() =>
+                    void ipc.openUrl(GMAIL_APP_PW_URL).catch((e) => setError(String(e)))
+                  }
+                >
+                  2 · Make an app password
+                </button>
+              </div>
+              <p className="mt-1.5 text-[10.5px] text-faint">
+                Step 2 is a 404 until step 1 is done — that page only exists on accounts with
+                2-Step on.
+              </p>
             </div>
           )}
 
@@ -264,7 +315,7 @@ export function MailAccountEditor() {
               onChange={(e) => setPassword(e.target.value)}
             />,
             def.kind === 'gmail'
-              ? 'Gmail needs an app password, not your Google password. Written straight to Windows Credential Manager and never read back.'
+              ? 'Paste the 16 characters from Google here. Written straight to Windows Credential Manager and never read back.'
               : 'Written straight to Windows Credential Manager and never read back — this form can tell you a password exists, but can never show you one.',
           )}
 

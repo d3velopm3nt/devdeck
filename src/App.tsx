@@ -38,6 +38,8 @@ import {
   CAPTURE_EVENT,
   CAPTURE_NODE,
   CAPTURE_RAIL,
+  CAPTURE_MET,
+  CAPTURE_MAIL_ACCOUNT,
   CAPTURE_SAY,
 } from './lib/devCapture'
 import { AiwSidebar } from './components/aiw/AiwSidebar'
@@ -254,6 +256,7 @@ export default function App() {
   // update takes effect without a full reload.
   useEffect(() => {
     if (CAPTURE_RAIL && railView !== CAPTURE_RAIL) app.setRailView(CAPTURE_RAIL as typeof railView)
+    if (CAPTURE_MAIL_ACCOUNT && app.mailAccountEditing == null) app.openMailAccountEditor(0)
   })
 
   // Screenshot harness: open a node's thread, and say things in it.
@@ -594,7 +597,7 @@ export default function App() {
 
   // A vault exists but nobody has ever said who you are. Introduce yourself
   // before the shell, because every screen behind it is shaped by the answer.
-  if (!met) {
+  if (!met && !CAPTURE_MET) {
     return (
       <div className="flex h-screen flex-col bg-app text-body">
         <Meet onDone={() => setMet(true)} />

@@ -45,3 +45,8 @@ export const CAPTURE_ADD: boolean = false
 /** Open the Git document for this node id on mount. */
 export const CAPTURE_GIT: string = ''
 export const CAPTURE_OPEN_FILE: string = ''
+
+/** Skip the first run, for shots of anything behind it. */
+export const CAPTURE_MET: boolean = false
+/** Open the mail account editor on a new account of this kind: gmail | imap. */
+export const CAPTURE_MAIL_ACCOUNT: string = ''

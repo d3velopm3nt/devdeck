@@ -406,6 +406,36 @@ impl FirstAddr for String {
 
 type ImapSession = imap::Session<rustls_connector::TlsStream<TcpStream>>;
 
+/// Turn a server's refusal into the sentence that fixes it.
+///
+/// Gmail answers a wrong password and a *right* password that is your Google
+/// account password with the same eight words: `[AUTHENTICATIONFAILED]
+/// Invalid credentials (Failure)`. One of those you fix by retyping, the other
+/// you cannot fix by retyping at all, and the message does not distinguish
+/// them — so people retype their Google password until they give up.
+///
+/// The raw line is always kept, because a translated error that turns out to
+/// be about something else is worse than a cryptic one.
+fn explain_login(host: &str, raw: &str) -> String {
+    let gmail = host.contains("gmail.com") || host.contains("googlemail.com");
+    let auth = raw.to_ascii_lowercase();
+    let refused = auth.contains("authenticationfailed")
+        || auth.contains("invalid credentials")
+        || auth.contains("username and password not accepted");
+
+    if gmail && refused {
+        return format!(
+            "Google refused it. Gmail has not accepted account passwords over IMAP since 2022 —              it needs a 16-character app password, which is a different thing you generate once.              Turn on 2-Step Verification first, or the page that makes them does not exist.              (Server said: {raw})"
+        );
+    }
+    if refused {
+        return format!(
+            "{host} refused that username and password. If the account has two-factor              authentication, most hosts need an app-specific password here rather than the one              you log in with. (Server said: {raw})"
+        );
+    }
+    format!("IMAP login refused: {raw}")
+}
+
 fn imap_login(acct: &MailAccount, password: &str) -> Result<ImapSession, String> {
     let stream = tls_stream(&acct.imap_host, acct.imap_port as u16)?;
     let client = imap::Client::new(stream);
@@ -416,7 +446,7 @@ fn imap_login(acct: &MailAccount, password: &str) -> Result<ImapSession, String>
     };
     client
         .login(user, password)
-        .map_err(|(e, _)| format!("IMAP login refused: {e}"))
+        .map_err(|(e, _)| explain_login(&acct.imap_host, &e.to_string()))
 }
 
 fn password_for(acct: &MailAccount) -> Result<String, String> {
@@ -1662,5 +1692,40 @@ Content-Type: multipart/mixed; boundary=\"z\"\r\n\r\n\
     fn credential_target_is_scoped_per_account() {
         assert_eq!(target_for(4), "devdeck:mail:4");
         assert_ne!(target_for(4), crate::creds::target_for(4));
+    }
+
+    /// The failure people actually hit, and the one the raw server line cannot
+    /// tell them how to fix.
+    #[test]
+    fn gmail_refusing_a_google_password_says_what_is_wrong() {
+        let out = explain_login(
+            "imap.gmail.com",
+            "[AUTHENTICATIONFAILED] Invalid credentials (Failure)",
+        );
+        assert!(out.contains("app password"), "must name the actual fix");
+        assert!(
+            out.contains("2-Step Verification"),
+            "the app-password page does not exist without it, which is the second wall"
+        );
+        // Never swallow what the server said: a translation that guessed wrong
+        // is worse than a cryptic line.
+        assert!(out.contains("Invalid credentials"));
+    }
+
+    #[test]
+    fn another_host_gets_the_general_advice_not_the_gmail_one() {
+        let out = explain_login("imap.fastmail.com", "[AUTHENTICATIONFAILED] no");
+        assert!(out.contains("imap.fastmail.com"));
+        assert!(!out.contains("Google"));
+        assert!(out.contains("app-specific password"));
+    }
+
+    /// A network problem is not a password problem, and telling someone to go
+    /// and make an app password because their wifi dropped wastes an evening.
+    #[test]
+    fn a_failure_that_is_not_about_credentials_is_left_alone() {
+        let out = explain_login("imap.gmail.com", "connection reset by peer");
+        assert!(out.starts_with("IMAP login refused:"));
+        assert!(!out.contains("app password"));
     }
 }

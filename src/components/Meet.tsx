@@ -5,6 +5,11 @@ import type { MailAccount } from '../lib/types'
 import { Icon } from '../lib/icons'
 import { GoogleButton } from './GoogleMark'
 import { CAPTURE_MEET_STEP } from '../lib/devCapture'
+import { LearnStep } from './setup/LearnStep'
+import { LifeStep } from './setup/LifeStep'
+import { HomeStep } from './setup/HomeStep'
+
+export type MeetStep = 'voice' | 'mail' | 'learn' | 'life' | 'home'
 
 /**
  * The first run — the only screen in DevDeck that has never existed.
@@ -18,7 +23,7 @@ import { CAPTURE_MEET_STEP } from '../lib/devCapture'
  * What it writes lands in two different places on purpose, and the footer says
  * so out loud, because this is the moment that trust is either earned or lost.
  */
-export function Meet({ onDone }: { onDone: () => void }) {
+export function Meet({ onDone, start }: { onDone: () => void; start?: MeetStep }) {
   const [voices, setVoices] = useState<Voice[] | null>(null)
   const [pick, setPick] = useState('plain')
   const [own, setOwn] = useState('')
@@ -30,8 +35,8 @@ export function Meet({ onDone }: { onDone: () => void }) {
 
   // Two steps, and the first one is saved before the second begins. Closing
   // the window at the mail step must not lose the voice you just picked.
-  const [step, setStep] = useState<'voice' | 'mail'>(
-    CAPTURE_MEET_STEP === 'mail' ? 'mail' : 'voice',
+  const [step, setStep] = useState<MeetStep>(
+    start ?? ((CAPTURE_MEET_STEP as MeetStep) || 'voice'),
   )
   const [googleReady, setGoogleReady] = useState(false)
   const [connected, setConnected] = useState<MailAccount[]>([])
@@ -91,6 +96,19 @@ export function Meet({ onDone }: { onDone: () => void }) {
   }
 
   const ready = name.trim().length > 0 && (!writingOwn || own.trim().length > 0)
+
+  // The three steps after mail. Each can be skipped, and skipping one goes
+  // on to the next rather than out: Not now on the learn run still offers
+  // your home.
+  if (step === 'learn') {
+    return <LearnStep onDone={() => setStep('life')} onSkip={() => setStep('life')} />
+  }
+  if (step === 'life') {
+    return <LifeStep onDone={() => setStep('home')} />
+  }
+  if (step === 'home') {
+    return <HomeStep onDone={onDone} onSkip={onDone} />
+  }
 
   if (step === 'mail') {
     return (
@@ -165,11 +183,11 @@ export function Meet({ onDone }: { onDone: () => void }) {
 
             <div className="flex items-center gap-3">
               <button
-                onClick={onDone}
+                onClick={() => setStep('learn')}
                 className="rounded-[6px] bg-indigo-600 px-4 py-2 text-[12px] text-white disabled:opacity-40"
                 disabled={busy}
               >
-                {connected.length ? 'Done' : 'Skip for now'}
+                {connected.length ? 'Next' : 'Skip for now'}
               </button>
               {connected.length === 0 && (
                 <span className="text-[11px] text-muted">

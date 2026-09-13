@@ -586,6 +586,28 @@ export type ApprovalDecision =
   | 'deny'
   | 'deny-always'
 
+/** Somebody in your life: a person or a pet, as a file in the personal store. */
+export interface PersonView {
+  id: string
+  name: string
+  /** person | pet */
+  kind: string
+  /** wife, daughter, sister, dog, vet, domestic worker, in words. */
+  role: string
+  /** Lives with you. */
+  home: boolean
+  /** ISO date, or empty. */
+  birthday: string
+  emails: string[]
+  /** Health and the like. Shown on their page, never in a bulk read. */
+  private: string[]
+  /** mail | you | calendar */
+  source: string
+  created_at: string
+  /** Everything remembered about them, in words. */
+  notes: string
+}
+
 export const aiw = {
   projects: () => invoke<AiProject[]>('aiw_projects'),
   /** Re-read the project tree. Call after anything adds, renames or removes a
@@ -735,8 +757,17 @@ export const aiw = {
       voice,
       customVoice,
     }),
+  /** Everyone in your life, home first. Personal store, never a repository. */
+  people: () => invoke<PersonView[]>('aiw_people'),
+  /** Save one. An empty id creates. Private lines the screen did not show are kept. */
+  personSave: (person: PersonView) => invoke<PersonView>('aiw_person_save', { person }),
+  /** Delete the file, not hide it. */
+  personForget: (id: string) => invoke<boolean>('aiw_person_forget', { id }),
   memories: () => invoke<MemoryView[]>('aiw_memories'),
   forgetMemory: (id: string) => invoke<boolean>('aiw_forget_memory', { id }),
+  /** Keep something you said, in your words, as a note about you. */
+  remember: (title: string, body: string, tags: string[] = []) =>
+    invoke<MemoryView>('aiw_remember', { title, body, tags }),
 
   pendingApprovals: () => invoke<ApprovalRequest[]>('aiw_pending_approvals'),
   resolveApproval: (id: string, decision: ApprovalDecision) =>

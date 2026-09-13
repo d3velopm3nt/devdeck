@@ -1681,6 +1681,7 @@ The receipts in the thread are the record. A line such as \"claimed by @dev-a\" 
         // A bot's gate is its team, not the matrix — see `Persona`. This is
         // the file's list; `persona_for` widens it with the thread's.
         may_delegate_to: Some(bot.team.clone()),
+        home: Some(bot.node_id.to_string()),
         plan: if bot.feature.trim().is_empty() {
             None
         } else {

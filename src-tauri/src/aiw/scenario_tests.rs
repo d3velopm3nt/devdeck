@@ -1261,6 +1261,7 @@ fn a_bot_with_no_agent_can_talk_in_a_room_but_cannot_move_work() {
         plan: None,
         hand_on_to: Vec::new(),
         manages_with: Vec::new(),
+        home: None,
         talk_only: false,
     };
     Assistant::send_as(
@@ -1461,6 +1462,7 @@ fn a_failed_turn_still_reports_that_it_ended() {
         plan: None,
         hand_on_to: Vec::new(),
         manages_with: Vec::new(),
+        home: None,
         talk_only: false,
     };
 
@@ -1523,6 +1525,7 @@ fn a_manager_can_take_an_item_itself() {
         plan: Some("offline-synchronisation".into()),
         hand_on_to: Vec::new(),
         manages_with: Vec::new(),
+        home: None,
         talk_only: false,
     };
     Assistant::send_as(&w, &c, &conv.id, "@me take \"Sync status UI\"", &quiet, &voice).unwrap();
@@ -1574,6 +1577,7 @@ fn a_manager_can_pass_an_item_to_another_manager() {
             project_id: "tyrex".into(),
             plan: Some("offline-synchronisation".into()),
         }],
+        home: None,
         talk_only: false,
     };
     Assistant::send_as(
@@ -1656,6 +1660,7 @@ fn passing_to_a_manager_with_no_plan_is_refused_out_loud() {
             project_id: "tyrex".into(),
             plan: None,
         }],
+        home: None,
         talk_only: false,
     };
     Assistant::send_as(&w, &c, &conv.id, "@assetx take \"Retry backoff\"", &quiet, &voice)
@@ -1697,6 +1702,7 @@ fn two_bots_hold_a_conversation_in_one_feature_thread() {
         plan: None,
         hand_on_to: Vec::new(),
         manages_with: Vec::new(),
+        home: None,
         talk_only: false,
     };
 
@@ -3305,4 +3311,30 @@ process.stdin.on("data", (d) => { buf += d; let i;
 
     w.mcp.stop("notes");
     let _ = std::fs::remove_file(&script);
+}
+
+/// The Personal tag, enforced at the gate a manager reaches a space through.
+#[test]
+fn nothing_from_a_business_is_lent_into_a_personal_space_and_its_manager_is_lent_nowhere() {
+    use super::state::Workspace;
+    let ws = Workspace::new();
+    let mut personal = std::collections::HashMap::new();
+    // 7 is the Home workspace; 8 its Pool folder; 9 a second Personal space.
+    personal.insert("7".to_string(), "7".to_string());
+    personal.insert("8".to_string(), "7".to_string());
+    personal.insert("9".to_string(), "9".to_string());
+    ws.set_personal(personal);
+
+    // Develtech's manager (home 3, a business) may not put work in Home.
+    assert!(ws.may_work_in(Some("3"), "8").is_err());
+    // Home's own manager may, anywhere under Home.
+    assert!(ws.may_work_in(Some("7"), "8").is_ok());
+    // But not in another Personal space: two workspaces are two.
+    assert!(ws.may_work_in(Some("7"), "9").is_err());
+    // And not in a business.
+    assert!(ws.may_work_in(Some("7"), "3").is_err());
+    // You, with no home, may work anywhere: the assistant and a session you start.
+    assert!(ws.may_work_in(None, "8").is_ok());
+    // Business to business is the ordinary case and untouched.
+    assert!(ws.may_work_in(Some("3"), "4").is_ok());
 }

@@ -424,6 +424,32 @@ impl Deck {
     }
 
     /// Decisions for one feature plus the project-wide ones, newest first.
+    /// Everything in `knowledge/`, by file name: (stem, body without frontmatter).
+    ///
+    /// This is where a kept fact about a space lands, and until this existed
+    /// nothing read it back: a fact was written, approved, and never reached
+    /// the agent working there. Notes are plain markdown with optional
+    /// frontmatter; an unreadable one is skipped rather than failing the rest.
+    pub fn knowledge(&self) -> Vec<(String, String)> {
+        let mut out: Vec<(String, String)> = fs::read_dir(self.knowledge_dir())
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter(|e| e.path().extension().map(|x| x == "md").unwrap_or(false))
+            .filter_map(|e| {
+                let raw = fs::read_to_string(e.path()).ok()?;
+                let stem = e.path().file_stem()?.to_string_lossy().to_string();
+                let body = parse_doc::<serde_json::Value>(&raw)
+                    .map(|d| d.body)
+                    .unwrap_or(raw);
+                Some((stem, body.trim().to_string()))
+            })
+            .filter(|(_, b)| !b.is_empty())
+            .collect();
+        out.sort_by(|a, b| a.0.cmp(&b.0));
+        out
+    }
+
     /// Scoped deliberately: a feature must not receive another feature's
     /// decisions, which is what the isolation test asserts.
     pub fn decisions(&self, slug: Option<&str>) -> Vec<Doc<DecisionMeta>> {

@@ -121,6 +121,22 @@ pub fn starters() -> Vec<Starter> {
             bot: true,
         },
         Starter {
+            id: s("home"),
+            name: s("Your home"),
+            what: s(
+                "The house you run: who works there, what it runs on, what needs doing and when. A small business with a pool.",
+            ),
+            brings: s("Pool, Garden, House · a Monday look at what is due · a Home manager"),
+            label: s("Personal"),
+            folders: vec![
+                folder("Pool", "Chemicals, the service, the pump."),
+                folder("Garden", "Who comes, and what the seasons need."),
+                folder("House", "Everything with a switch, a pipe or a policy."),
+            ],
+            routines: vec![weekly("What is due at home", 1, 8 * 60)],
+            bot: true,
+        },
+        Starter {
             id: s("practice"),
             name: s("Something you practise"),
             what: s(

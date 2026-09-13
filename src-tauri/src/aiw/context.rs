@@ -429,6 +429,30 @@ impl ContextService {
             }
         }
 
+        // -- knowledge (inherited) ------------------------------------------
+        // What has been learned about this space: kept facts from mail, notes
+        // someone wrote. Inherited like the rules, because a fact that a
+        // client pays at forty-five days is true for every feature.
+        let known = deck.knowledge();
+        if !known.is_empty() {
+            let body = known
+                .iter()
+                .take(60)
+                .map(|(name, body)| format!("- {name}: {}", body.lines().next().unwrap_or_default()))
+                .collect::<Vec<_>>()
+                .join("
+");
+            sections.push(ContextSection {
+                key: "knowledge".into(),
+                title: "What is known about this space".into(),
+                inclusion: Inclusion::Inherited,
+                tokens: estimate_tokens(&body),
+                source: ".devdeck/knowledge/".into(),
+                body,
+                reason: None,
+            });
+        }
+
         // -- feature context (the core) -----------------------------------
         let fctx = deck.read_doc_opt::<ContextMeta>(&deck.feature_context(feature_id))?;
         let commit = fctx.as_ref().and_then(|d| d.meta.commit.clone());
@@ -796,6 +820,26 @@ mod tests {
         p.meta.rules = vec!["Offline-first; the network is a bonus.".into()];
         deck.write_doc_at(&deck.project_md(), &p).unwrap();
         (t, deck)
+    }
+
+    /// A kept fact about a space has to reach whoever works there. Before
+    /// this, `knowledge/` was written and never read: a fact was approved and
+    /// the agent still knew nothing.
+    #[test]
+    fn what_is_known_about_a_space_reaches_every_feature_in_it() {
+        let (_t, deck) = seeded("knowledge");
+        let f = deck.create_feature("Invoices", "Bill them.", &[]).unwrap();
+        fs::create_dir_all(deck.knowledge_dir()).unwrap();
+        fs::write(
+            deck.knowledge_dir().join("harbour-vine-pays-late.md"),
+            "---\nsource: mail\n---\n\nHarbour & Vine agreed 30-day terms and pays at 45.\n",
+        )
+        .unwrap();
+
+        let ctx = ContextService::assemble(&deck, &deck.root, "tyrex", &f, None, &[]).unwrap();
+        let known = ctx.section("knowledge").expect("a knowledge section");
+        assert!(known.body.contains("pays at 45"), "{}", known.body);
+        assert_eq!(known.inclusion, Inclusion::Inherited, "true for every feature, like a rule");
     }
 
     #[test]

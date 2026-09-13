@@ -34,7 +34,8 @@ import { Icon, type IconName } from '../lib/icons'
 import { fmtAgo } from '../lib/time'
 import { findNode, subtreeIds, workspaceOf } from '../lib/tree'
 import { FocusStart } from './FocusBar'
-import { activityItem, approvalItem, conflictItem, unread } from '../lib/inbox'
+import { activityItem, approvalItem, conflictItem, factItem, unread } from '../lib/inbox'
+import * as ipc from '../lib/ipc'
 import { CAPTURE_INBOX_UNREAD } from '../lib/devCapture'
 
 type Tone = 'wait' | 'agent' | 'fail' | 'news'
@@ -53,6 +54,9 @@ interface Row {
   /// focus session holds it back.
   nodeId?: number | null
   onOpen?: () => void
+  /// Answerable here. A proposed fact wants a yes or a no, not a visit to
+  /// another page; the row carries its own buttons so the answer is one click.
+  actions?: { label: string; primary?: boolean; run: () => Promise<void> }[]
 }
 
 const TONE: Record<Tone, { dot: string; text: string }> = {
@@ -87,8 +91,28 @@ export function InboxPage() {
   useEffect(() => {
     void refreshActivity().finally(() => setLoaded(true))
     void refreshInbox()
+    void loadFacts()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Facts the learn run proposed and nobody has answered. They are questions,
+  // and this is the one place questions live: the Life and Home pages show a
+  // count and send you here rather than keeping queues of their own.
+  const [facts, setFacts] = useState<ipc.LearnFact[]>([])
+  const loadFacts = async () => {
+    try {
+      setFacts(await ipc.learnFacts(0, 'proposed'))
+    } catch {
+      // No learn tables yet, or none proposed. An empty list is the honest
+      // reading of both; a banner would be noise on a page about other things.
+      setFacts([])
+    }
+  }
+  const answerFact = async (f: ipc.LearnFact, keep: boolean) => {
+    if (keep) await ipc.learnKeep(f.id, f.text, f.node_id)
+    else await ipc.learnDecline(f.id)
+    setFacts((cur) => cur.filter((x) => x.id !== f.id))
+  }
 
   // Screenshot harness: put the newest failure back to unread, through the
   // same command the button calls. Without a mouse there is no other way to
@@ -141,6 +165,25 @@ export function InboxPage() {
       })
     }
 
+    for (const f of facts) {
+      out.push({
+        id: factItem(f.id),
+        tone: 'wait',
+        icon: 'ai',
+        title: f.text,
+        evidence: `${f.kind === 'thing' ? 'About a space' : 'About you'} · ${
+          f.source || 'from your mail'
+        } · would go to ${f.destination}`,
+        space: f.space,
+        at: f.created_at,
+        nodeId: f.node_id || null,
+        actions: [
+          { label: 'Keep', primary: true, run: () => answerFact(f, true) },
+          { label: 'No', run: () => answerFact(f, false) },
+        ],
+      })
+    }
+
     for (const c of aiw.conflicts.filter((x) => !x.resolved)) {
       out.push({
         id: conflictItem(c.id),
@@ -189,7 +232,8 @@ export function InboxPage() {
     const rank = (r: Row) =>
       (unread(r.id, r.at, marks) ? 0 : 2) + (r.tone === 'wait' ? 0 : 1)
     return out.sort((x, y) => rank(x) - rank(y) || y.at - x.at)
-  }, [activity, aiw.approvals, aiw.conflicts, aiw.agents, nodes, showBottom, setRailView, marks])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activity, aiw.approvals, aiw.conflicts, aiw.agents, nodes, showBottom, setRailView, marks, facts])
 
   // What the focus session holds. Only things that need you: news was never
   // going to interrupt, so hiding it would only make the page emptier.
@@ -351,6 +395,17 @@ export function InboxPage() {
                   </div>
                   <div className="mt-0.5 text-[11px] leading-[1.5] text-muted">{r.evidence}</div>
                   <div className="mt-2 flex items-center gap-1.5">
+                    {r.actions?.map((a) => (
+                      <button
+                        key={a.label}
+                        className={a.primary ? 'btn-primary text-[11px]' : 'btn-ghost text-[11px]'}
+                        onClick={() => {
+                          void a.run().then(() => markInbox([r.id], true))
+                        }}
+                      >
+                        {a.label}
+                      </button>
+                    ))}
                     {r.onOpen && (
                       <button
                         className="btn-ghost text-[11px]"

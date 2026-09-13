@@ -249,6 +249,20 @@ export function Today() {
       <div className="flex min-h-0 flex-1 gap-5 overflow-auto px-7 pb-6">
         <div className="flex min-w-0 flex-1 flex-col gap-5">
           <section>
+            {/* The rest of setup, for anyone who met the assistant before
+                these steps existed. Goes away once Home is a space. */}
+            {!nodes.some((x) => x.kind === 'workspace' && x.name === 'Home') && (
+              <button
+                className="mb-3 flex w-full items-center gap-2.5 rounded-lg border border-indigo-500/30 bg-indigo-500/5 px-3 py-2 text-left hover:bg-indigo-500/10"
+                onClick={() => window.dispatchEvent(new CustomEvent('devdeck:setup', { detail: 'learn' }))}
+              >
+                <Icon name="ai" size={13} className="text-indigo-400" />
+                <span className="text-[12px] text-ink">Finish setting up</span>
+                <span className="text-[11px] text-muted">
+                  read your mail, say who is in your life, make Home a space
+                </span>
+              </button>
+            )}
             <Head title="Needs you" note="approvals, questions, a reply" />
             {needs === 0 ? (
               <Card>

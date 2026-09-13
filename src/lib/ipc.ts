@@ -1565,6 +1565,80 @@ export const learnKeep = (id: number, text: string, nodeId = 0) =>
   invoke<string>('learn_keep', { id, text, nodeId })
 /** Say no. Writes a row, not a note — so it is not offered twice. */
 export const learnDecline = (id: number) => invoke<void>('learn_decline', { id })
+
+/** Somebody in a live run's plan. */
+export interface LivePerson {
+  contact_id: number
+  name: string
+  email: string
+  threads: number
+  messages: number
+}
+export interface LearnPlanEvent {
+  run_id: number
+  people: LivePerson[]
+  threads: number
+  messages: number
+  tokens: number
+  cost_usd: number
+  model: string
+}
+export interface LearnFactEvent {
+  run_id: number
+  index: number
+  total: number
+  person: LivePerson
+  fact: LearnFact
+}
+export interface LearnPersonEvent {
+  run_id: number
+  index: number
+  total: number
+  person: LivePerson
+  facts: number
+  tokens_so_far: number
+  cost_so_far: number
+}
+export interface LearnDoneEvent {
+  run: LearnRun
+  stopped: boolean
+}
+export interface LearnFailedEvent {
+  run_id: number
+  index: number
+  person: LivePerson
+  error: string
+}
+
+/**
+ * The same run, told live: one request per person, one fact per line. The
+ * promise resolves with the receipt when the last person is done, or when
+ * Stop was pressed; the events arrive along the way.
+ */
+export const learnRunLive = (people = 12, only: number[] = [], depth = 'full') =>
+  invoke<LearnRun>('learn_run_live', { people, only, depth })
+/** Stop after the person being read. Everything that came back stays. */
+export const learnStop = () => invoke<void>('learn_stop')
+/** Everything a live run says, as it says it. Returns the unsubscribe. */
+export async function onLearn(h: {
+  plan?: (e: LearnPlanEvent) => void
+  fact?: (e: LearnFactEvent) => void
+  person?: (e: LearnPersonEvent) => void
+  done?: (e: LearnDoneEvent) => void
+  failed?: (e: LearnFailedEvent) => void
+}): Promise<() => void> {
+  const offs = await Promise.all([
+    listen<LearnPlanEvent>('learn:plan', (e) => h.plan?.(e.payload)),
+    listen<LearnFactEvent>('learn:fact', (e) => h.fact?.(e.payload)),
+    listen<LearnPersonEvent>('learn:person', (e) => h.person?.(e.payload)),
+    listen<LearnDoneEvent>('learn:done', (e) => h.done?.(e.payload)),
+    listen<LearnFailedEvent>('learn:failed', (e) => h.failed?.(e.payload)),
+  ])
+  return () => offs.forEach((off) => off())
+}
+/** Write a note into a space's knowledge folder. What Home's setup answers become. */
+export const learnNoteSave = (nodeId: number, title: string, body: string) =>
+  invoke<string>('learn_note_save', { nodeId, title, body })
 /** Log in over IMAP and SMTP and report each separately. */
 export const mailAccountTest = (id: number) => invoke<MailTestResult>('mail_account_test', { id })
 /** Fetch new mail. `id` 0 syncs every account. Returns messages stored. */

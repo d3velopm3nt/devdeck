@@ -120,6 +120,32 @@ pub fn sync_projects_from_tree(ws: &Arc<Workspace>, conn: &rusqlite::Connection)
         .map(PathBuf::from);
     let Some(vault) = vault else { return 0 };
 
+    // Which nodes sit under a workspace tagged Personal. Walked up from each
+    // node rather than read off the node, because the tag is on the workspace
+    // and a folder three levels down is just as much your home.
+    let by_id: std::collections::HashMap<i64, (Option<i64>, String)> = nodes
+        .iter()
+        .map(|n| (n.id, (n.parent_id, n.label.clone().unwrap_or_default())))
+        .collect();
+    let mut personal: std::collections::HashMap<String, String> = Default::default();
+    for n in &nodes {
+        let mut cur = Some(n.id);
+        let mut hops = 0;
+        while let Some(id) = cur {
+            let Some((parent, label)) = by_id.get(&id) else { break };
+            if label.eq_ignore_ascii_case("Personal") {
+                personal.insert(n.id.to_string(), id.to_string());
+                break;
+            }
+            cur = *parent;
+            hops += 1;
+            if hops > 32 {
+                break;
+            }
+        }
+    }
+    ws.set_personal(personal);
+
     let wanted: Vec<(String, String, PathBuf, PathBuf)> = nodes
         .into_iter()
         .filter(|n| !n.rel_path.trim().is_empty())
@@ -1618,6 +1644,93 @@ pub fn aiw_save_profile(
     Ok(profile_view(doc))
 }
 
+// ---------------------------------------------------------------------------
+// People — your life, as records in the personal store
+// ---------------------------------------------------------------------------
+
+/// One person or pet, as the UI sees them.
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
+pub struct PersonView {
+    pub id: String,
+    pub name: String,
+    pub kind: String,
+    pub role: String,
+    pub home: bool,
+    pub birthday: String,
+    pub emails: Vec<String>,
+    pub private: Vec<String>,
+    pub source: String,
+    pub created_at: String,
+    /// Everything remembered about them, in words. The body of their file.
+    pub notes: String,
+}
+
+fn person_view(d: super::deck::Doc<super::personal::PersonMeta>) -> PersonView {
+    PersonView {
+        id: d.meta.id,
+        name: d.meta.name,
+        kind: d.meta.kind,
+        role: d.meta.role,
+        home: d.meta.home,
+        birthday: d.meta.birthday,
+        emails: d.meta.emails,
+        private: d.meta.private,
+        source: d.meta.source,
+        created_at: d.meta.created_at,
+        notes: d.body,
+    }
+}
+
+/// Everyone on file. Home first.
+#[tauri::command]
+pub fn aiw_people(ws: Ws) -> Result<Vec<PersonView>, String> {
+    Ok(ws.convs()?.store().people().into_iter().map(person_view).collect())
+}
+
+/// Save one person. An empty id creates; a known id rewrites in place.
+///
+/// Read-modify-write on an existing record rather than replacing it, so a
+/// screen that only knows about the name and role cannot erase the private
+/// lines it never showed.
+#[tauri::command]
+pub fn aiw_person_save(ws: Ws, person: PersonView) -> Result<PersonView, String> {
+    let store = ws.convs()?.store();
+    let existing = if person.id.is_empty() {
+        None
+    } else {
+        store.people().into_iter().find(|p| p.meta.id == person.id)
+    };
+    let mut doc = existing.unwrap_or_else(|| super::deck::Doc {
+        meta: super::personal::PersonMeta::default(),
+        body: String::new(),
+    });
+    doc.meta.id = person.id;
+    doc.meta.name = person.name.trim().to_string();
+    doc.meta.kind = if person.kind.trim().is_empty() { "person".into() } else { person.kind };
+    doc.meta.role = person.role.trim().to_string();
+    doc.meta.home = person.home;
+    doc.meta.birthday = person.birthday.trim().to_string();
+    doc.meta.emails = person.emails.into_iter().filter(|e| !e.trim().is_empty()).collect();
+    doc.meta.private = person.private.into_iter().filter(|e| !e.trim().is_empty()).collect();
+    if doc.meta.source.is_empty() {
+        doc.meta.source = if person.source.is_empty() { "you".into() } else { person.source };
+    }
+    doc.body = person.notes;
+    store.save_person(&doc)?;
+    let saved = store
+        .people()
+        .into_iter()
+        .find(|p| p.meta.name == doc.meta.name && (doc.meta.id.is_empty() || p.meta.id == doc.meta.id))
+        .ok_or_else(|| "saved, but could not read it back".to_string())?;
+    Ok(person_view(saved))
+}
+
+/// Delete the file. Not hide: forgetting someone must not keep a folder on them.
+#[tauri::command]
+pub fn aiw_person_forget(ws: Ws, id: String) -> Result<bool, String> {
+    Ok(ws.convs()?.store().forget_person(&id))
+}
+
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct MemoryView {
     pub id: String,
@@ -1644,6 +1757,43 @@ pub fn aiw_memories(ws: Ws) -> Result<Vec<MemoryView>, String> {
             body: d.body,
         })
         .collect())
+}
+
+/// Remember something you said, in your words, as a note about you.
+#[tauri::command]
+pub fn aiw_remember(
+    ws: Ws,
+    title: String,
+    body: String,
+    tags: Vec<String>,
+) -> Result<MemoryView, String> {
+    let store = ws.convs()?.store();
+    let doc = super::deck::Doc {
+        meta: super::personal::MemoryMeta {
+            id: String::new(),
+            title: title.trim().to_string(),
+            created_at: super::events::now_iso(),
+            project_id: None,
+            tags,
+        },
+        body: body.trim().to_string(),
+    };
+    if doc.body.is_empty() {
+        return Err("nothing to remember".into());
+    }
+    let path = store.save_memory(&doc)?;
+    let id = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default();
+    Ok(MemoryView {
+        id,
+        title: doc.meta.title,
+        created_at: doc.meta.created_at,
+        project_id: None,
+        tags: doc.meta.tags,
+        body: doc.body,
+    })
 }
 
 #[tauri::command]

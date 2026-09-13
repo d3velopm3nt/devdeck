@@ -50,7 +50,7 @@ export const CAPTURE_OPEN_FILE: string = ''
 export const CAPTURE_MET: boolean = false
 /** Open the mail account editor on a new account of this kind: gmail | imap. */
 export const CAPTURE_MAIL_ACCOUNT: string = ''
-/** Open the first run on a given step: voice | mail. */
+/** Open the first run on a given step: voice | mail | learn | life | home. */
 export const CAPTURE_MEET_STEP: string = ''
 /** Open the learn run on mount. This session cannot deliver clicks, so the
  *  only way to photograph the estimate is to open the panel the same way the

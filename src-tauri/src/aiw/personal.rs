@@ -83,6 +83,45 @@ pub struct MemoryMeta {
     pub tags: Vec<String>,
 }
 
+/// Somebody in your life, as a file.
+///
+/// Your wife, your children, your sister, the dog. One file each in the
+/// personal store, so a wrong one can be deleted without touching the rest and
+/// none of it can ever be committed. A Home space *refers* to these by id and
+/// never copies them: the space knows Grace works Mondays, this file knows
+/// everything else.
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct PersonMeta {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    /// person | pet
+    #[serde(default)]
+    pub kind: String,
+    /// wife, daughter, sister, friend, dog, vet, domestic worker -- in words.
+    #[serde(default)]
+    pub role: String,
+    /// Lives with you. What "your home" on the Life page lists.
+    #[serde(default)]
+    pub home: bool,
+    /// ISO date, or empty.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub birthday: String,
+    /// Addresses this person writes from, so a fact about "Sarah" can find her.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub emails: Vec<String>,
+    /// Health and the like. Kept, shown on their page, never put in a bulk
+    /// read or handed to anything that is not the assistant answering you.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub private: Vec<String>,
+    /// mail | you | calendar -- where the record first came from.
+    #[serde(default)]
+    pub source: String,
+    #[serde(default)]
+    pub created_at: String,
+}
+
 /// An agent, as a file.
 ///
 /// The frontmatter is what the runtime needs; the body is the agent's
@@ -166,6 +205,9 @@ impl PersonalStore {
     pub fn memory_dir(&self) -> PathBuf {
         self.root.join("memory")
     }
+    pub fn people_dir(&self) -> PathBuf {
+        self.root.join("people")
+    }
 
     pub fn profile_md(&self) -> PathBuf {
         self.root.join("profile.md")
@@ -209,6 +251,7 @@ impl PersonalStore {
         std::fs::create_dir_all(self.memory_dir()).map_err(|e| e.to_string())?;
         std::fs::create_dir_all(self.agents_dir()).map_err(|e| e.to_string())?;
         std::fs::create_dir_all(self.skills_dir()).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(self.people_dir()).map_err(|e| e.to_string())?;
         Ok(())
     }
 
@@ -348,6 +391,63 @@ impl PersonalStore {
 
     pub fn forget_memory(&self, id: &str) -> bool {
         std::fs::remove_file(self.memory_dir().join(format!("{id}.md"))).is_ok()
+    }
+
+    /// Everyone, by name. Home first, because that is who the page opens on.
+    pub fn people(&self) -> Vec<Doc<PersonMeta>> {
+        let mut out = self.read_dir_docs::<PersonMeta>(&self.people_dir());
+        out.sort_by(|a, b| {
+            b.meta.home.cmp(&a.meta.home).then_with(|| a.meta.name.cmp(&b.meta.name))
+        });
+        out
+    }
+
+    /// The person an address or a name refers to, if one is on file.
+    ///
+    /// Address first, because it is exact; then a whole-name match, because
+    /// "Anna" in a fact and "Anna Botha" on file are the same person and a
+    /// substring match on "Ann" would say so about Annabel too.
+    pub fn person_for(&self, hint: &str) -> Option<Doc<PersonMeta>> {
+        let h = hint.trim().to_ascii_lowercase();
+        if h.is_empty() {
+            return None;
+        }
+        let all = self.people();
+        if let Some(p) = all
+            .iter()
+            .find(|p| p.meta.emails.iter().any(|e| e.to_ascii_lowercase() == h))
+        {
+            return Some(p.clone());
+        }
+        all.into_iter().find(|p| {
+            let n = p.meta.name.to_ascii_lowercase();
+            n == h || n.split_whitespace().next().is_some_and(|first| first == h)
+        })
+    }
+
+    pub fn save_person(&self, doc: &Doc<PersonMeta>) -> PersonalResult<PathBuf> {
+        if doc.meta.name.trim().is_empty() {
+            return Err("a person needs a name".into());
+        }
+        let mut doc = doc.clone();
+        if doc.meta.id.is_empty() {
+            doc.meta.id = super::events::new_id("person");
+        }
+        if doc.meta.kind.is_empty() {
+            doc.meta.kind = "person".into();
+        }
+        if doc.meta.created_at.is_empty() {
+            doc.meta.created_at = super::events::now_iso();
+        }
+        let p = self.people_dir().join(format!("{}.md", doc.meta.id));
+        self.write_doc_at(&p, &doc)?;
+        Ok(p)
+    }
+
+    /// Deletes the file. Not an archive, not a flag: a person you asked to be
+    /// forgotten is not kept in a folder called forgotten.
+    pub fn forget_person(&self, id: &str) -> bool {
+        std::fs::remove_file(self.people_dir().join(format!("{id}.md"))).is_ok()
     }
 }
 

@@ -18,6 +18,8 @@ import type { Activity } from './types'
 export const activityItem = (id: number) => `activity:${id}`
 export const approvalItem = (id: string) => `approval:${id}`
 export const conflictItem = (id: string) => `conflict:${id}`
+/// A fact the learn run proposed and nobody has answered.
+export const factItem = (id: number) => `fact:${id}`
 
 export interface ReadState {
   /// item id → read. Absent means nobody has said.

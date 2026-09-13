@@ -210,6 +210,9 @@ pub struct Persona {
     /// The shell fills this in, because `aiw` knows nothing about bots. What
     /// arrives here is a plain list of rooms with plans.
     pub hand_on_to: Vec<Colleague>,
+    /// The project this persona lives in, when it is a manager. What the
+    /// Personal gate judges it by: a Home manager's home is Home.
+    pub home: Option<String>,
     /// Tools this persona may use without a row in the permission matrix.
     ///
     /// A bot has no row — an id nothing knows gets nothing, which is what
@@ -260,6 +263,7 @@ impl Persona {
             may_delegate_to: None,
             plan: None,
             hand_on_to: Vec::new(),
+            home: None,
             manages_with: Vec::new(),
             talk_only: false,
         }
@@ -283,6 +287,7 @@ impl Persona {
             may_delegate_to: None,
             plan: None,
             hand_on_to: Vec::new(),
+            home: None,
             manages_with: Vec::new(),
             talk_only: true,
         }
@@ -1497,6 +1502,12 @@ impl Assistant {
         let Some(project) = ws.project(&project_id) else {
             return refuse(format!("No project '{project_id}', so nothing moved."));
         };
+        // The Personal gate. Judged before anything is written, and by the
+        // speaker's home rather than its team: a business manager pulled into
+        // Home's thread still may not put work there.
+        if let Err(why) = ws.may_work_in(persona.home.as_deref(), &project_id) {
+            return refuse(why);
+        }
         let wanted = h.what.trim().to_lowercase();
         if wanted.is_empty() {
             return refuse("Say which work item to hand over.".into());
@@ -1615,6 +1626,9 @@ impl Assistant {
                 to.name
             ));
         };
+        if let Err(why) = ws.may_work_in(persona.home.as_deref(), &to.project_id) {
+            return refuse(why);
+        }
 
         // On their plan. An item already there is not added twice — being told
         // about it again is not a second piece of work.
@@ -2483,6 +2497,19 @@ impl Assistant {
                     }
                 }
                 add("project", "Project in focus", ".devdeck · features", "deck", s);
+
+                // Kept facts about the space. Written by the learn run and by
+                // hand; until this line nothing read them back.
+                let known = deck.knowledge();
+                if !known.is_empty() {
+                    let mut s = format!("## Known about {}
+", p.name);
+                    for (name, body) in known.iter().take(60) {
+                        s.push_str(&format!("- {name}: {}
+", truncate(body, 240)));
+                    }
+                    add("knowledge", "Known about this space", ".devdeck · knowledge", "deck", s);
+                }
             }
         }
 

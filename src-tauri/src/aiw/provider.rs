@@ -678,6 +678,39 @@ impl LLMProvider for MockProvider {
                 request.agent_id, request.goal
             ));
         }
+        // A learn run: read the people out of the batch and offer one scripted
+        // fact each. A provider, not a bypass: it reads what it was sent, and
+        // every fact says it is scripted so nobody mistakes it for something
+        // learned.
+        if request.system.starts_with(super::learn::SYSTEM_MARK) {
+            let mut lines = Vec::new();
+            for l in request.context.lines() {
+                let Some(rest) = l.strip_prefix("- ") else { continue };
+                let Some((name, _)) = rest.split_once(" <") else { continue };
+                let name = name.trim();
+                if name.is_empty() {
+                    continue;
+                }
+                lines.push(serde_json::json!({
+                    "kind": "you",
+                    "text": format!("{name} is someone you write to (scripted by the mock provider)"),
+                    "source": "the mock provider, from the people in the batch",
+                    "about": name,
+                }));
+            }
+            let message = lines
+                .iter()
+                .map(|v| v.to_string())
+                .collect::<Vec<_>>()
+                .join("
+");
+            return Ok(AgentResponse {
+                message,
+                actions: vec![AgentAction::Done { summary: "read".into() }],
+                complete: true,
+                usage: None,
+            });
+        }
         // Named in a thread, with no tools: the scripts below would start
         // writing fixture files, which is exactly what a mention must not do.
         // Say what a scripted agent can honestly say.
@@ -708,6 +741,28 @@ impl LLMProvider for MockProvider {
             );
         }
         Ok(response)
+    }
+    /// A learn reply, a line at a time.
+    ///
+    /// The real providers deliver a fact the moment its line is finished, and
+    /// the screen is built around that. The mock paces its scripted lines the
+    /// same way so the screen can be seen working without a key. The pause is
+    /// the only pretence in it, and it is short.
+    fn run_streaming(
+        &self,
+        request: &AgentRequest,
+        on_delta: &dyn Fn(&str),
+    ) -> Result<AgentResponse, String> {
+        let r = self.run(request)?;
+        if request.system.starts_with(super::learn::SYSTEM_MARK) {
+            for line in r.message.lines() {
+                on_delta(&format!("{line}\n"));
+                std::thread::sleep(std::time::Duration::from_millis(120));
+            }
+        } else if !r.message.is_empty() {
+            on_delta(&r.message);
+        }
+        Ok(r)
     }
     fn health(&self) -> ProviderHealth {
         ProviderHealth {

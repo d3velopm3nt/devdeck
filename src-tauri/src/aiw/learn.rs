@@ -462,6 +462,31 @@ pub fn build_corpus(
         corpus.declined = rows.flatten().collect();
     }
 
+    // What earlier runs already read: thread key -> when. A message older than
+    // that moment was in a batch you paid for and answered; only what arrived
+    // since goes again. This is what makes a second run read the *next*
+    // mail rather than the same newest mail, and what makes the estimate's
+    // "run it again and they are next" a true sentence.
+    let already: std::collections::HashMap<String, i64> = {
+        let mut st = conn
+            .prepare("SELECT thread_keys, started_at FROM learn_runs WHERE status = 'done'")
+            .map_err(err)?;
+        let rows = st
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))
+            .map_err(err)?;
+        let mut map: std::collections::HashMap<String, i64> = Default::default();
+        for (keys, at) in rows.flatten() {
+            for k in read_json::<Vec<String>>(&keys) {
+                let e = map.entry(k).or_insert(at);
+                if at > *e {
+                    *e = at;
+                }
+            }
+        }
+        map
+    };
+    let mut read_before = 0i64;
+
     let mut secret_skipped = 0i64;
     let mut withheld = 0i64;
     let mut unreadable = 0i64;
@@ -519,6 +544,10 @@ pub fn build_corpus(
             // below the cut, and the cut is arbitrary.
             if message_secret_reason(&m.subject, &m.body).is_some() {
                 secret_skipped += 1;
+                continue;
+            }
+            if already.get(&m.thread_key).is_some_and(|at| m.ts <= *at) {
+                read_before += 1;
                 continue;
             }
             m.body = match depth {
@@ -631,6 +660,13 @@ pub fn build_corpus(
             why: "from senders you have never replied to — reciprocity, not volume".into(),
         });
     }
+    if read_before > 0 {
+        corpus.excluded.push(LearnExclusion {
+            kind: "read".into(),
+            count: read_before,
+            why: "already read by an earlier run -- only what arrived since goes again".into(),
+        });
+    }
     if secret_skipped > 0 {
         corpus.excluded.push(LearnExclusion {
             kind: "secret".into(),
@@ -723,6 +759,11 @@ fn attachments_for(conn: &Connection, message_id: i64) -> Result<(Vec<LearnAttac
 // The prompt
 // ---------------------------------------------------------------------------
 
+/// The first words of the learn prompt. The mock provider recognises a learn
+/// request by them and answers with scripted facts instead of a scripted
+/// developer session.
+pub const SYSTEM_MARK: &str = "You are reading somebody's mail";
+
 /// What the model is asked for, and the rule it has to file under.
 ///
 /// The store split is in the prompt because the model is the one deciding
@@ -733,7 +774,8 @@ fn attachments_for(conn: &Connection, message_id: i64) -> Result<(Vec<LearnAttac
 pub const SYSTEM: &str = "\
 You are reading somebody's mail so their assistant knows who they deal with.
 
-Return ONLY a JSON array. No prose, no code fence. Each element:
+Return ONLY facts, ONE JSON OBJECT PER LINE. No prose, no code fence, no
+array around them. Each line:
 
   {\"kind\": \"thing\" | \"you\",
    \"text\": \"one specific sentence\",
@@ -836,12 +878,49 @@ pub struct ProposedFact {
     pub about: String,
 }
 
-/// Pull the JSON array out of a reply that may be wrapped in prose or a fence.
+/// Anything that is not explicitly a thing is filed as personal.
 ///
-/// Models are told to return only an array and mostly do. "Mostly" is not a
-/// contract, and the alternative to salvaging is throwing away a run somebody
-/// paid for because it said "Here you go:" first.
+/// The two mistakes are not symmetrical: a client note in the personal store
+/// is untidy, and a personal note in a repository is somebody's private life
+/// in a pull request.
+fn normalise(mut f: ProposedFact) -> ProposedFact {
+    f.kind = if f.kind.trim().eq_ignore_ascii_case("thing") {
+        "thing".into()
+    } else {
+        "you".into()
+    };
+    f.text = f.text.trim().to_string();
+    f
+}
+
+/// One fact from one line, if the line is one.
+///
+/// The model is asked for one JSON object per line so a fact can be shown the
+/// moment its line is finished, before the rest are written. A line of prose,
+/// a fence, or half an object is not a fact and yields nothing.
+pub fn parse_fact_line(line: &str) -> Option<ProposedFact> {
+    let l = line.trim().trim_end_matches(',');
+    if !l.starts_with('{') || !l.ends_with('}') {
+        return None;
+    }
+    let f = serde_json::from_str::<ProposedFact>(l).ok()?;
+    if f.text.trim().is_empty() {
+        return None;
+    }
+    Some(normalise(f))
+}
+
+/// Every fact in a whole reply.
+///
+/// Line by line first, which is the shape asked for. Then, because "mostly"
+/// is not a contract, a JSON array wrapped in prose or a fence is salvaged
+/// rather than a run somebody paid for being thrown away because it said
+/// "Here you go:" first.
 pub fn parse_facts(reply: &str) -> Vec<ProposedFact> {
+    let lines: Vec<ProposedFact> = reply.lines().filter_map(parse_fact_line).collect();
+    if !lines.is_empty() {
+        return lines;
+    }
     let salvaged = extract_array(reply).unwrap_or_default();
     let candidates = [reply.trim(), salvaged.as_str()];
     for c in candidates {
@@ -852,20 +931,7 @@ pub fn parse_facts(reply: &str) -> Vec<ProposedFact> {
             return v
                 .into_iter()
                 .filter(|f| !f.text.trim().is_empty())
-                .map(|mut f| {
-                    // Anything that is not explicitly a thing is filed as
-                    // personal. The two mistakes are not symmetrical: a client
-                    // note in the personal store is untidy, and a personal note
-                    // in a repository is somebody's private life in a pull
-                    // request.
-                    f.kind = if f.kind.trim().eq_ignore_ascii_case("thing") {
-                        "thing".into()
-                    } else {
-                        "you".into()
-                    };
-                    f.text = f.text.trim().to_string();
-                    f
-                })
+                .map(normalise)
                 .collect();
         }
     }
@@ -1140,8 +1206,11 @@ pub fn destination_model(ws: &super::state::Workspace) -> (String, String, Strin
             Some(p) if p.id() == super::provider::MockProvider::ID => (
                 p.name().to_string(),
                 agent.model.clone(),
-                false,
-                "your assistant is on the mock provider, which cannot read mail. \
+                // Ready: the mock is a provider, not a bypass. It reads the
+                // batch and answers with scripted facts, and says so, so the
+                // whole run works with no key and nothing leaving the machine.
+                true,
+                "The mock provider answers with scripted facts drawn from the batch. Nothing is sent and nothing is learned from your mail. For the real thing: \
                  Point it at Anthropic under Providers and pick a model."
                     .into(),
             ),
@@ -1332,6 +1401,310 @@ pub fn run(
 }
 
 // ---------------------------------------------------------------------------
+// The live run: one person at a time, facts as they are written
+// ---------------------------------------------------------------------------
+
+/// Set by `learn_stop`, read between people and between facts. A stopped run
+/// keeps everything that came back: the receipt was written before the first
+/// send and each person's facts are filed as they arrive.
+static STOP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Somebody in the plan, as the screen lists them.
+#[derive(Serialize, Clone, Debug, Default)]
+pub struct LivePerson {
+    pub contact_id: i64,
+    pub name: String,
+    pub email: String,
+    pub threads: i64,
+    pub messages: i64,
+}
+
+fn live_person(p: &LearnPerson) -> LivePerson {
+    LivePerson {
+        contact_id: p.contact_id,
+        name: if p.name.trim().is_empty() { p.email.clone() } else { p.name.clone() },
+        email: p.email.clone(),
+        threads: p.threads,
+        messages: p.messages,
+    }
+}
+
+/// File one proposed fact and hand back the row, so the screen can show it
+/// with the destination a yes would give it.
+fn file_fact(
+    conn: &Connection,
+    run_id: i64,
+    f: &ProposedFact,
+    people: &[LearnPerson],
+    thread_keys: &[String],
+) -> Option<LearnFact> {
+    let person = people.iter().find(|p| {
+        let a = f.about.to_ascii_lowercase();
+        !a.is_empty()
+            && (a.contains(&p.email.to_ascii_lowercase())
+                || (!p.domain.is_empty() && a.contains(&p.domain.to_ascii_lowercase()))
+                || (!p.name.is_empty() && a.contains(&p.name.to_ascii_lowercase())))
+    });
+    let space = person.map(|p| p.space.clone()).unwrap_or_default();
+    let node_id = if f.kind == "thing" { node_for_space(conn, &space) } else { 0 };
+    conn.execute(
+        "INSERT INTO learn_facts
+            (run_id, kind, text, source, thread_keys, contact_id, space, node_id, status, created_at)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'proposed',?9)",
+        params![
+            run_id,
+            f.kind,
+            f.text,
+            f.source,
+            serde_json::to_string(thread_keys).unwrap_or_else(|_| "[]".into()),
+            person.map(|p| p.contact_id).unwrap_or(0),
+            space,
+            node_id,
+            now_millis(),
+        ],
+    )
+    .ok()?;
+    let id = conn.last_insert_rowid();
+    facts(conn, run_id, "").ok()?.into_iter().find(|x| x.id == id)
+}
+
+/// The run, one person at a time, telling the window as it goes.
+///
+/// Four events, all under `learn:`: `plan` once, then for each person every
+/// `fact` the moment its line is finished and one `person` when they are
+/// done, then `done` (or `failed`). One request per person is what makes the
+/// progress true -- three of nine is three people actually read -- and one
+/// fact per line is what lets a fact show before the rest are written.
+///
+/// The receipt is written before the first send, as in `run`, and each
+/// person's facts are filed as they arrive, so Stop at any point loses
+/// nothing that came back.
+pub fn run_live(
+    app: &tauri::AppHandle,
+    ws: &super::state::Workspace,
+    db: &Db,
+    people: i64,
+    only: &[i64],
+    depth: Depth,
+) -> Result<LearnRun, String> {
+    use tauri::Emitter;
+    STOP.store(false, std::sync::atomic::Ordering::SeqCst);
+
+    let (provider_id, _provider_name, model, ready, note) = destination_model(ws);
+    if !ready {
+        return Err(note);
+    }
+    let provider = {
+        let providers = ws.providers.lock().unwrap();
+        providers.get(&provider_id)
+    }
+    .ok_or_else(|| format!("'{provider_id}' is not configured"))?;
+
+    // The whole batch first: it is the receipt, and the plan the screen shows.
+    let whole = {
+        let conn = db.0.lock().unwrap();
+        build_corpus(&conn, people, only, depth)?
+    };
+    if whole.messages.is_empty() {
+        return Err("nothing to read -- every message for these people was held back".into());
+    }
+    let (_, chars, tokens) = whole.body();
+    let thread_keys = whole.thread_keys();
+    let (cost_usd, _) = estimate_cost(&model, tokens);
+
+    let run_id = {
+        let conn = db.0.lock().unwrap();
+        conn.execute(
+            "INSERT INTO learn_runs
+                (started_at, provider, model, status, depth, people, threads, messages,
+                 attachments, chars, tokens, held_back, thread_keys, held_json)
+             VALUES (?1,?2,?3,'sent',?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+            params![
+                now_millis(),
+                provider_id,
+                model,
+                depth.as_str(),
+                whole.people.len() as i64,
+                thread_keys.len() as i64,
+                whole.messages.len() as i64,
+                whole.attachments.len() as i64,
+                chars,
+                tokens,
+                whole.held_back(),
+                serde_json::to_string(&thread_keys).unwrap_or_else(|_| "[]".into()),
+                serde_json::to_string(&whole.excluded).unwrap_or_else(|_| "[]".into()),
+            ],
+        )
+        .map_err(err)?;
+        conn.last_insert_rowid()
+    };
+
+    let plan: Vec<LivePerson> = whole.people.iter().map(live_person).collect();
+    let _ = app.emit(
+        "learn:plan",
+        serde_json::json!({
+            "run_id": run_id,
+            "people": plan,
+            "threads": thread_keys.len(),
+            "messages": whole.messages.len(),
+            "tokens": tokens,
+            "cost_usd": cost_usd,
+            "model": model,
+        }),
+    );
+    crate::services::push_log(
+        app,
+        crate::mail::MAIL_LOG_ID,
+        "mail",
+        "system",
+        format!(
+            "learn run {run_id}: reading {} people, one at a time, with {model}",
+            whole.people.len()
+        ),
+    );
+
+    let total = whole.people.len();
+    let mut tokens_so_far: i64 = 0;
+    let mut facts_total = 0usize;
+    let mut stopped = false;
+
+    for (i, person) in whole.people.iter().enumerate() {
+        if STOP.load(std::sync::atomic::Ordering::SeqCst) {
+            stopped = true;
+            break;
+        }
+        // This person's slice, built the same way the whole was. Asked for
+        // every ranked person so a late name in the ranking is still found.
+        let part = {
+            let conn = db.0.lock().unwrap();
+            build_corpus(&conn, 100, &[person.contact_id], depth)?
+        };
+        if part.messages.is_empty() {
+            continue;
+        }
+        let (prompt, part_chars, part_tokens) = part.body();
+        let _ = part_chars;
+        let request = AgentRequest {
+            agent_id: super::assistant::ASSISTANT_ID.into(),
+            role: "assistant".into(),
+            model: model.clone(),
+            system: SYSTEM.into(),
+            context: prompt,
+            goal: format!(
+                "Read the mail with {} and return what is worth remembering, one JSON object per line.",
+                live_person(person).name
+            ),
+            ..Default::default()
+        };
+
+        // Facts land as their line completes. A line can arrive in pieces, so
+        // the tail is kept until its newline; whatever is left when the reply
+        // ends is tried once more.
+        let buffer = std::cell::RefCell::new(String::new());
+        let count = std::cell::Cell::new(0usize);
+        let who = live_person(person);
+        let on_line = |line: &str| {
+            let Some(f) = parse_fact_line(line) else { return };
+            let filed = {
+                let conn = db.0.lock().unwrap();
+                file_fact(&conn, run_id, &f, &whole.people, &part.thread_keys())
+            };
+            if let Some(filed) = filed {
+                count.set(count.get() + 1);
+                let _ = app.emit(
+                    "learn:fact",
+                    serde_json::json!({
+                        "run_id": run_id,
+                        "index": i,
+                        "total": total,
+                        "person": who,
+                        "fact": filed,
+                    }),
+                );
+            }
+        };
+        let outcome = provider.run_streaming(&request, &|delta: &str| {
+            let mut buf = buffer.borrow_mut();
+            buf.push_str(delta);
+            while let Some(nl) = buf.find('\n') {
+                let line = buf[..nl].to_string();
+                buf.replace_range(..=nl, "");
+                on_line(&line);
+            }
+        });
+        let rest = std::mem::take(&mut *buffer.borrow_mut());
+        if !rest.trim().is_empty() {
+            on_line(&rest);
+        }
+
+        match outcome {
+            Ok(r) => {
+                tokens_so_far += r
+                    .usage
+                    .map(|u| (u.input + u.output) as i64)
+                    .unwrap_or(part_tokens);
+            }
+            Err(e) => {
+                let _ = app.emit(
+                    "learn:failed",
+                    serde_json::json!({ "run_id": run_id, "index": i, "person": who, "error": e }),
+                );
+                let conn = db.0.lock().unwrap();
+                let _ = conn.execute(
+                    "UPDATE learn_runs SET status='failed', finished_at=?2, error=?3 WHERE id=?1",
+                    params![run_id, now_millis(), e.clone()],
+                );
+                return Err(e);
+            }
+        }
+        facts_total += count.get();
+        let (cost_so_far, _) = estimate_cost(&model, tokens_so_far);
+        let _ = app.emit(
+            "learn:person",
+            serde_json::json!({
+                "run_id": run_id,
+                "index": i,
+                "total": total,
+                "person": who,
+                "facts": count.get(),
+                "tokens_so_far": tokens_so_far,
+                "cost_so_far": cost_so_far,
+            }),
+        );
+    }
+
+    {
+        let conn = db.0.lock().unwrap();
+        let _ = conn.execute(
+            "UPDATE learn_runs SET status='done', finished_at=?2, tokens=?3 WHERE id=?1",
+            params![run_id, now_millis(), tokens_so_far.max(1)],
+        );
+    }
+    crate::activity::record(
+        app,
+        "mail",
+        if stopped { "Stopped reading your mail".to_string() } else { "Read your mail".to_string() },
+        format!(
+            "{} people, {} fact{} proposed",
+            whole.people.len(),
+            facts_total,
+            if facts_total == 1 { "" } else { "s" }
+        ),
+        true,
+        None,
+    );
+    let run = {
+        let conn = db.0.lock().unwrap();
+        runs(&conn, 1)?
+            .into_iter()
+            .find(|r| r.id == run_id)
+            .ok_or_else(|| "the receipt is missing".to_string())?
+    };
+    let _ = app.emit("learn:done", serde_json::json!({ "run": run, "stopped": stopped }));
+    Ok(run)
+}
+
+// ---------------------------------------------------------------------------
 // Deciding a fact
 // ---------------------------------------------------------------------------
 
@@ -1512,6 +1885,32 @@ pub async fn learn_run(
     .map_err(|e| format!("the run did not finish: {e}"))?
 }
 
+/// The same run, told live: one person at a time, facts as they are written.
+#[tauri::command]
+pub async fn learn_run_live(
+    app: tauri::AppHandle,
+    ws: Ws<'_>,
+    people: i64,
+    only: Vec<i64>,
+    depth: String,
+) -> Result<LearnRun, String> {
+    let ws = (*ws).clone();
+    let depth = Depth::parse(&depth);
+    let people = if people > 0 { people } else { DEFAULT_PEOPLE };
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = <tauri::AppHandle as tauri::Manager<tauri::Wry>>::state::<Db>(&app);
+        run_live(&app, &ws, &db, people, &only, depth)
+    })
+    .await
+    .map_err(|e| format!("the run did not finish: {e}"))?
+}
+
+/// Stop after the person being read. Everything that came back stays.
+#[tauri::command]
+pub fn learn_stop() {
+    STOP.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
 #[tauri::command]
 pub fn learn_runs(db: tauri::State<Db>, limit: i64) -> Result<Vec<LearnRun>, String> {
     let conn = db.0.lock().unwrap();
@@ -1533,6 +1932,44 @@ pub fn learn_keep(
 ) -> Result<String, String> {
     let conn = db.0.lock().unwrap();
     keep(&conn, id, &text, node_id)
+}
+
+/// Write one note into a space's `knowledge/` by hand.
+///
+/// What the Home setup's answers become: the address, who works there, that
+/// there is a pool. Same folder a kept fact lands in, same shape, so the
+/// space's manager reads it the same way.
+#[tauri::command]
+pub fn learn_note_save(
+    db: tauri::State<Db>,
+    node_id: i64,
+    title: String,
+    body: String,
+) -> Result<String, String> {
+    let conn = db.0.lock().unwrap();
+    let dir = thing_dir(&conn, node_id)?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("could not open {}: {e}", dir.display()))?;
+    let title = title.trim();
+    let body = body.trim();
+    if title.is_empty() || body.is_empty() {
+        return Err("a note needs a title and something in it".into());
+    }
+    let path = dir.join(format!("{}.md", slug(title)));
+    std::fs::write(
+        &path,
+        format!(
+            "---
+source: you
+learned_at: {}
+---
+
+{body}
+",
+            chrono::Local::now().format("%Y-%m-%d")
+        ),
+    )
+    .map_err(|e| format!("could not write it: {e}"))?;
+    Ok(path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -2019,6 +2456,38 @@ mod tests {
         // A haiku is already cheaper than a sonnet. Never step up.
         let list = vec![ModelInfo { id: "claude-sonnet-5".into(), ..Default::default() }];
         assert_eq!(read_model("claude-haiku-4-5", &list).0, "claude-haiku-4-5");
+    }
+
+    /// A second run must not pay for the same mail twice. What an earlier run
+    /// read is skipped, and only what arrived since goes again.
+    #[test]
+    fn a_thread_an_earlier_run_read_is_not_read_again_unless_new_mail_arrived() {
+        let c = mem();
+        let a = account(&c, "Develtech");
+        contact(&c, "Sarah", "sarah@harbourvine.com");
+        msg(&c, a, 1, "INBOX", "sarah@harbourvine.com", "me@example.com", "Terms", "old");
+        msg(&c, a, 2, "Sent", "me@example.com", "sarah@harbourvine.com", "Re: Terms", "old");
+        c.execute(
+            "INSERT INTO learn_runs (started_at, status, thread_keys) VALUES (?1, 'done', ?2)",
+            params![1_700_000_000_000i64 + 5, serde_json::to_string(&vec!["t1", "t2"]).unwrap()],
+        )
+        .unwrap();
+
+        let corpus = build_corpus(&c, 12, &[], Depth::Full).unwrap();
+        assert!(corpus.messages.is_empty(), "everything was read before");
+        assert_eq!(corpus.excluded.iter().find(|x| x.kind == "read").unwrap().count, 2);
+
+        // A reply arrives in one of those threads: that message goes, the old
+        // ones still do not.
+        c.execute(
+            "INSERT INTO mail_messages (account_id, uid, mailbox, thread_key, from_addr, to_addrs, subject, body_text, ts)
+             VALUES (?1, 9, 'INBOX', 't1', 'sarah@harbourvine.com', 'me@example.com', 'Re: Terms', 'new', ?2)",
+            params![a, 1_700_000_000_000i64 + 9],
+        )
+        .unwrap();
+        let corpus = build_corpus(&c, 12, &[], Depth::Full).unwrap();
+        assert_eq!(corpus.messages.len(), 1);
+        assert_eq!(corpus.messages[0].body, "new");
     }
 
     /// "Choose who" has to actually narrow it.

@@ -591,6 +591,15 @@ export default function App() {
   // the personal store genuinely starts you over instead of leaving a machine
   // that thinks it knows someone it has forgotten.
   const [met, setMet] = useState<boolean | undefined>(undefined)
+  // Setup can be reopened on a step: Today offers "finish setting up" and
+  // the assistant can send you here. A window event rather than store state,
+  // because nothing else needs to know and the store is already large.
+  const [setupAt, setSetupAt] = useState<import('./components/Meet').MeetStep | null>(null)
+  useEffect(() => {
+    const on = (e: Event) => setSetupAt((e as CustomEvent<string>).detail as never)
+    window.addEventListener('devdeck:setup', on)
+    return () => window.removeEventListener('devdeck:setup', on)
+  }, [])
   useEffect(() => {
     void aiwApi
       .profile()
@@ -628,10 +637,16 @@ export default function App() {
   // Asking to see a step of the first run means you want the first run, even
   // on a machine that has already been through it. Looking at it changes
   // nothing: the screen writes only when you press Next.
-  if ((!met || CAPTURE_MEET_STEP) && !CAPTURE_MET) {
+  if ((!met || CAPTURE_MEET_STEP || setupAt) && !CAPTURE_MET) {
     return (
       <div className="flex h-screen flex-col bg-app text-body">
-        <Meet onDone={() => setMet(true)} />
+        <Meet
+          start={setupAt ?? undefined}
+          onDone={() => {
+            setMet(true)
+            setSetupAt(null)
+          }}
+        />
       </div>
     )
   }

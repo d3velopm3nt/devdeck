@@ -360,6 +360,10 @@ pub struct Workspace {
     pub providers: Mutex<ProviderRegistry>,
     pub reconciler: Box<dyn ContextReconciler>,
     projects: Mutex<HashMap<String, Arc<ProjectHandle>>>,
+    /// Project id -> the id of the Personal workspace it sits in, for every
+    /// project under one. Filled by the tree sync; the tree is the truth about
+    /// labels and this is only a copy of it.
+    personal: Mutex<HashMap<String, String>>,
     agents: Mutex<Vec<AgentDef>>,
     sessions: Mutex<Vec<Session>>,
     claims: Mutex<Vec<WorkClaim>>,
@@ -393,6 +397,7 @@ impl Workspace {
             routine_maker: std::sync::OnceLock::new(),
             call_log: std::sync::OnceLock::new(),
             conversations: std::sync::OnceLock::new(),
+            personal: Mutex::new(HashMap::new()),
             grants: std::sync::OnceLock::new(),
             providers: Mutex::new(ProviderRegistry::new()),
             reconciler: Box::new(DeterministicReconciler),
@@ -665,6 +670,43 @@ impl Workspace {
 
     pub fn project(&self, id: &str) -> Option<Arc<ProjectHandle>> {
         self.projects.lock().unwrap().get(id).cloned()
+    }
+
+    /// Which projects are Personal, and which workspace makes them so.
+    pub fn set_personal(&self, map: HashMap<String, String>) {
+        *self.personal.lock().unwrap() = map;
+    }
+
+    /// The Personal workspace a project sits in, if any.
+    pub fn personal_root(&self, project_id: &str) -> Option<String> {
+        self.personal.lock().unwrap().get(project_id).cloned()
+    }
+
+    /// May something whose home is `actor_home` put work in `target`?
+    ///
+    /// The Personal tag, enforced. A Personal space is your home or your life:
+    /// nothing from a business may be lent into it, and its own manager is
+    /// lent nowhere. Two workspaces both tagged Personal are still two: the
+    /// Home manager has no business in a space about your health.
+    ///
+    /// `None` for the actor means it has no home: the assistant, or an agent
+    /// started by hand. Those are you acting, and you may work anywhere.
+    pub fn may_work_in(&self, actor_home: Option<&str>, target: &str) -> Result<(), String> {
+        let target_root = self.personal_root(target);
+        let actor_root = actor_home.and_then(|h| self.personal_root(h));
+        match (target_root, actor_root) {
+            (Some(t), Some(a)) if t == a => Ok(()),
+            (Some(_), _) if actor_home.is_none() => Ok(()),
+            (Some(_), _) => Err(
+                "That space is Personal. Only its own manager may put work there; nothing from a business space is lent into it. Nothing moved."
+                    .into(),
+            ),
+            (None, Some(_)) => Err(
+                "A manager from a Personal space is not lent to a business space. Nothing moved."
+                    .into(),
+            ),
+            (None, None) => Ok(()),
+        }
     }
 
     pub fn project_ids(&self) -> Vec<String> {

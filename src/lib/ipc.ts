@@ -1636,6 +1636,13 @@ export async function onLearn(h: {
   ])
   return () => offs.forEach((off) => off())
 }
+/** One note in a space's knowledge folder. */
+export interface KnownNote {
+  name: string
+  body: string
+}
+/** Everything known about a space: kept facts and setup answers, as its manager sees them. */
+export const learnNotes = (nodeId: number) => invoke<KnownNote[]>('learn_notes', { nodeId })
 /** Write a note into a space's knowledge folder. What Home's setup answers become. */
 export const learnNoteSave = (nodeId: number, title: string, body: string) =>
   invoke<string>('learn_note_save', { nodeId, title, body })

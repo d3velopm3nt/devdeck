@@ -691,12 +691,18 @@ impl LLMProvider for MockProvider {
                 if name.is_empty() {
                     continue;
                 }
-                lines.push(serde_json::json!({
-                    "kind": "you",
-                    "text": format!("{name} is someone you write to (scripted by the mock provider)"),
-                    "source": "the mock provider, from the people in the batch",
-                    "about": name,
-                }));
+                for text in [
+                    format!("{name} is someone you write back to (scripted by the mock provider)"),
+                    format!("You and {name} have an ongoing thread (scripted by the mock provider)"),
+                    format!("{name} would be worth a record in your life (scripted by the mock provider)"),
+                ] {
+                    lines.push(serde_json::json!({
+                        "kind": "you",
+                        "text": text,
+                        "source": "the mock provider, from the people in the batch",
+                        "about": name,
+                    }));
+                }
             }
             let message = lines
                 .iter()
@@ -757,7 +763,7 @@ impl LLMProvider for MockProvider {
         if request.system.starts_with(super::learn::SYSTEM_MARK) {
             for line in r.message.lines() {
                 on_delta(&format!("{line}\n"));
-                std::thread::sleep(std::time::Duration::from_millis(120));
+                std::thread::sleep(std::time::Duration::from_millis(400));
             }
         } else if !r.message.is_empty() {
             on_delta(&r.message);

@@ -28,7 +28,7 @@ import { useAiw } from '../lib/aiwStore'
 import { aiw, ago } from '../lib/aiw'
 import * as ipc from '../lib/ipc'
 import { Icon } from '../lib/icons'
-import { openNodeThread, openSpace } from '../lib/dock'
+import { openLife, openNodeThread, openSpace } from '../lib/dock'
 import { findNode, workspaceOf } from '../lib/tree'
 import { DAY_MS, hhmm, startOfDay } from '../lib/calendarWindow'
 
@@ -263,6 +263,12 @@ export function Today() {
                 </span>
               </button>
             )}
+            <div className="mb-3 flex items-center gap-2">
+              <button className="btn-ghost text-[11.5px]" onClick={() => openLife()}>
+                <Icon name="contacts" size={12} /> Your life
+              </button>
+              <span className="text-[10.5px] text-faint">the people, kept on this machine</span>
+            </div>
             <Head title="Needs you" note="approvals, questions, a reply" />
             {needs === 0 ? (
               <Card>

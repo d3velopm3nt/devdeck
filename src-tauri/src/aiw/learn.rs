@@ -1934,6 +1934,33 @@ pub fn learn_keep(
     keep(&conn, id, &text, node_id)
 }
 
+/// One note in a space's knowledge folder, as the page shows it.
+#[derive(Serialize, Clone, Debug, Default)]
+pub struct KnownNote {
+    pub name: String,
+    pub body: String,
+}
+
+/// Everything known about a space: the notes in its `knowledge/`.
+///
+/// Kept facts and setup answers alike. Read through the deck so the page sees
+/// exactly what the space's manager sees, and no more.
+#[tauri::command]
+pub fn learn_notes(db: tauri::State<Db>, node_id: i64) -> Result<Vec<KnownNote>, String> {
+    let conn = db.0.lock().unwrap();
+    let dir = match thing_dir(&conn, node_id) {
+        Ok(d) => d,
+        Err(_) => return Ok(Vec::new()),
+    };
+    let deck_dir = dir.parent().and_then(|p| p.parent()).map(|p| p.to_path_buf());
+    let Some(root) = deck_dir else { return Ok(Vec::new()) };
+    Ok(super::deck::Deck::new(root)
+        .knowledge()
+        .into_iter()
+        .map(|(name, body)| KnownNote { name: name.replace('-', " "), body })
+        .collect())
+}
+
 /// Write one note into a space's `knowledge/` by hand.
 ///
 /// What the Home setup's answers become: the address, who works there, that

@@ -61,3 +61,8 @@ export const CAPTURE_LEARN: boolean = false
  *  re-applies itself locks whoever is using it out of every other view.
  *  Empty in every shipped build. */
 export const CAPTURE_MAIL_PANE: string = ''
+/** On the learn step, press through to a phase without a mouse:
+ *  approve | reading | done. Reading starts the run on whatever provider the
+ *  assistant is on, so this is only ever set on a throwaway profile with the
+ *  mock. Empty in every shipped build. */
+export const CAPTURE_LEARN_AUTO: string = ''

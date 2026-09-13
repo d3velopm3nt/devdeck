@@ -124,6 +124,21 @@ export function openLearnRun() {
   api.getPanel(id)?.api.setActive()
 }
 
+/// Open (or focus) Your life. Not a rail item: the rail went from twelve
+/// doors to seven and this must not undo that.
+export function openLife() {
+  if (!api) return
+  useApp.getState().setRailView('projects')
+  const id = 'life'
+  const existing = api.getPanel(id)
+  if (existing) {
+    existing.api.setActive()
+    return
+  }
+  addToMain({ id, component: 'life', title: 'Your life' })
+  api.getPanel(id)?.api.setActive()
+}
+
 /// Open (or focus) a node's thread — the first thing a click on the tree
 /// does now. Every level has one, which is the whole model: you talk to a
 /// workspace, a folder or a project, and what differs is what it can say.

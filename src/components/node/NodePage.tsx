@@ -37,7 +37,7 @@ import { Git } from '../aiw/AiWorkspace'
 /// some of them greyed out: a folder with no repository has no Git tab at all,
 /// rather than a Git tab that apologises. That is the whole point of the shape
 /// — a client is not a deficient project.
-type Tab = 'thread' | 'files' | 'git' | 'services' | 'commands' | 'reminders'
+type Tab = 'thread' | 'known' | 'files' | 'git' | 'services' | 'commands' | 'reminders'
 
 /// Git, pointed at this node first.
 ///
@@ -66,6 +66,9 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
   const [dir, setDir] = useState('')
   const [tab, setTab] = useState<Tab>('thread')
   const [reminders, setReminders] = useState(0)
+  // What is known about this space: kept facts and setup answers, read the
+  // way its manager reads them. A tab only when there is something in it.
+  const [known, setKnown] = useState<ipc.KnownNote[]>([])
 
   useEffect(() => {
     void ipc.vaultDir(nodeId).then(setDir).catch(() => setDir(''))
@@ -77,6 +80,7 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
       .catch(() => setReminders(0))
     void refreshBots()
     void a.loadAllWork()
+    void ipc.learnNotes(nodeId).then(setKnown).catch(() => setKnown([]))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodeId])
 
@@ -112,6 +116,7 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
   const isProject = node.kind === 'project'
   const TABS: { id: Tab; label: string; when: boolean; count?: number }[] = [
     { id: 'thread', label: 'Thread', when: true },
+    { id: 'known', label: 'Known', when: known.length > 0, count: known.length },
     { id: 'files', label: 'Files', when: true },
     // Only where there is a repository to be behind. A vault folder has no
     // branch, and a Git tab over it would be a question with no answer.
@@ -247,6 +252,25 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
       {tab === 'reminders' && (
         <div className="min-h-0 flex-1 overflow-auto px-5 py-3">
           <NodeReminders nodeId={nodeId} />
+        </div>
+      )}
+
+      {tab === 'known' && (
+        <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
+          <div className="grid max-w-[980px] grid-cols-2 gap-3">
+            {known.map((k) => (
+              <div key={k.name} className="rounded-lg border border-line bg-panel p-3.5">
+                <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted">
+                  {k.name}
+                </div>
+                <div className="whitespace-pre-line text-[12.5px] leading-relaxed text-body">{k.body}</div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-4 max-w-[980px] text-[11px] leading-relaxed text-faint">
+            The notes in this space&rsquo;s knowledge folder: facts you kept from mail and answers
+            you gave at setup. Its manager reads exactly this, and nothing from your personal store.
+          </p>
         </div>
       )}
 

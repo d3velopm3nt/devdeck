@@ -38,6 +38,12 @@ export function Meet({ onDone, start }: { onDone: () => void; start?: MeetStep }
   const [step, setStep] = useState<MeetStep>(
     start ?? ((CAPTURE_MEET_STEP as MeetStep) || 'voice'),
   )
+  // Screenshot harness: follow the flag when it changes under a hot reload,
+  // so a shot of each step does not need a cold start each time.
+  useEffect(() => {
+    if (CAPTURE_MEET_STEP) setStep(CAPTURE_MEET_STEP as MeetStep)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [CAPTURE_MEET_STEP])
   const [googleReady, setGoogleReady] = useState(false)
   const [connected, setConnected] = useState<MailAccount[]>([])
 

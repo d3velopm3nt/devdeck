@@ -12,6 +12,7 @@ import * as ipc from '../../lib/ipc'
 import { Icon } from '../../lib/icons'
 import { useApp } from '../../store'
 import type { MailCounts } from '../../lib/types'
+import { CAPTURE_LEARN_AUTO } from '../../lib/devCapture'
 
 type Phase = 'sorting' | 'approve' | 'reading' | 'done'
 
@@ -136,6 +137,19 @@ export function LearnStep({ onDone, onSkip }: { onDone: () => void; onSkip: () =
       setStopping(false)
     }
   }
+
+  // Screenshot harness: press the buttons a person would, once the numbers
+  // are on screen. Only meaningful on a throwaway profile.
+  const autoRan = useRef(false)
+  useEffect(() => {
+    if (!CAPTURE_LEARN_AUTO || !est || !counts || mailSyncing || autoRan.current) return
+    if (phase === 'sorting') setPhase('approve')
+    else if (phase === 'approve' && CAPTURE_LEARN_AUTO !== 'approve') {
+      autoRan.current = true
+      void start()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, est, counts, mailSyncing, CAPTURE_LEARN_AUTO])
 
   useEffect(() => {
     // Keep the newest fact in view as they arrive.

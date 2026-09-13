@@ -106,6 +106,7 @@ function Welcome() {
 import { NodePage } from './components/node/NodePage'
 import { AssistantThread } from './components/thread/AssistantThread'
 import { LearnRunPage } from './components/LearnRunPage'
+import { LifePage } from './components/LifePage'
 import {
   AssistantPanel,
   ContextPanel,
@@ -122,6 +123,9 @@ const components = {
   // The learn run is a document, not a sheet: it has steps, it survives a
   // reload mid-decision, and you want it beside the mail it is reading.
   'mail-learn': () => <LearnRunPage />,
+  // Your life: the people, from the personal store. A document, so it can
+  // sit beside Home while you fill both in.
+  life: () => <LifePage />,
   'space-detail': (props: IDockviewPanelProps<{ id: number }>) => <SpaceDetailPage {...props} />,
   'bot-detail': (props: IDockviewPanelProps<{ id: number; ask?: boolean }>) => <BotPage {...props} />,
   'service-detail': (props: IDockviewPanelProps<{ id: number }>) => <ServiceDetailPage {...props} />,

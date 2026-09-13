@@ -7,8 +7,10 @@ import { useEffect, useState } from 'react'
 import { useApp } from '../store'
 import * as ipc from '../lib/ipc'
 import { Icon } from '../lib/icons'
+import { openLearnRun } from '../lib/dock'
 import { fmtAgo } from '../lib/time'
-import type { MailContact } from '../lib/types'
+import type { MailContact, MailMessage } from '../lib/types'
+import { MailPaneSwitch } from './MailPaneSwitch'
 
 const BLANK: MailContact = {
   id: 0,
@@ -71,6 +73,10 @@ export function ContactsView() {
     saveContact,
     linkContact,
     openCompose,
+    mailQuery,
+    mailAccounts,
+    setMailQuery,
+    openContactMessage,
   } = useApp()
 
   const [group, setGroup] = useState<Group>('all')
@@ -124,6 +130,46 @@ export function ContactsView() {
   // Close the editor when the selection moves out from under it.
   useEffect(() => setEditing(null), [mailContactSelectedId])
 
+  // Every message with the selected person, in and out, across every account.
+  // Fetched per selection rather than held in the store: it is only ever for
+  // the one contact on screen.
+  const [emails, setEmails] = useState<MailMessage[]>([])
+  const [emailsErr, setEmailsErr] = useState('')
+  const [emailsLoading, setEmailsLoading] = useState(false)
+  useEffect(() => {
+    if (mailContactSelectedId == null) {
+      setEmails([])
+      return
+    }
+    let live = true
+    setEmailsLoading(true)
+    setEmailsErr('')
+    void ipc
+      .mailContactMessages(mailContactSelectedId, 200)
+      .then((m) => {
+        if (live) setEmails(m)
+      })
+      // Shown, not swallowed: an empty list and a failed query look the same,
+      // and one of them says you have never written to this person.
+      .catch((e) => {
+        if (!live) return
+        setEmails([])
+        setEmailsErr(String(e))
+      })
+      .finally(() => {
+        if (live) setEmailsLoading(false)
+      })
+    return () => {
+      live = false
+    }
+  }, [mailContactSelectedId])
+
+  // Which account the list is filtered to, so the filter is never invisible.
+  const filterAccount =
+    mailQuery.account_id != null
+      ? mailAccounts.find((a) => a.id === mailQuery.account_id)
+      : undefined
+
   const save = async (def: MailContact) => {
     setError('')
     try {
@@ -142,6 +188,21 @@ export function ContactsView() {
     <div className="flex h-full">
       {/* ---- list ---- */}
       <section className="flex w-[400px] shrink-0 flex-col border-r border-line bg-page">
+        <MailPaneSwitch />
+        {filterAccount && (
+          <div className="flex items-center gap-2 border-b border-line bg-indigo-500/5 px-3 py-1.5 text-[11px] text-dim">
+            <Icon name="mail" size={11} className="shrink-0 text-indigo-300" />
+            <span className="min-w-0 flex-1 truncate">
+              People in <span className="text-body">{filterAccount.address}</span>
+            </span>
+            <button
+              className="shrink-0 text-info hover:underline"
+              onClick={() => void setMailQuery({ account_id: null })}
+            >
+              All accounts
+            </button>
+          </div>
+        )}
         <div className="flex items-center gap-2 border-b border-line px-2.5 py-2">
           <div className="flex flex-1 items-center gap-1.5 rounded border border-line2 bg-page px-2 py-1">
             <Icon name="search" size={12} className="text-faint" />
@@ -189,6 +250,15 @@ export function ContactsView() {
               Ranked by how often <span className="text-body">you wrote back</span>, not by how much
               they sent. A retailer with four hundred messages you never answered is a
               subscription, not a person. Counted here on this machine.
+              {/* The way into the learn run lives here rather than on a toolbar:
+                  this ranking is the reason the run is small enough to approve,
+                  and the sentence above is the argument for it. */}
+              <button
+                className="mt-1.5 flex items-center gap-1.5 text-[11px] text-info hover:underline"
+                onClick={() => openLearnRun()}
+              >
+                <Icon name="bot" size={11} /> Read these threads and learn who they are
+              </button>
             </div>
           )}
           {rankErr && (
@@ -200,7 +270,9 @@ export function ContactsView() {
             <div className="px-3 py-8 text-center text-[12px] leading-5 text-muted">
               {group === 'reciprocal'
                 ? 'Nobody yet. This fills in once your Sent folder has synced.'
-                : 'No contacts here yet. They appear on their own as mail arrives.'}
+                : filterAccount
+                  ? `Nobody here from ${filterAccount.address}.`
+                  : 'No contacts here yet. They appear on their own as mail arrives.'}
             </div>
           )}
           {visible.map((c) => (
@@ -344,6 +416,77 @@ export function ContactsView() {
             {selected.notes && (
               <div className="mt-4 rounded-lg border border-line bg-panel px-3.5 py-3 text-[12.5px] leading-[1.7] text-body">
                 {selected.notes}
+              </div>
+            )}
+
+            {/* Everything with this person: what they sent, what you sent them,
+                and threads they were copied on. Across every account, because
+                the person is the filter here, not the mailbox. */}
+            <div className="mb-2 mt-5 flex items-center gap-2">
+              <span className="font-mono text-[9.5px] uppercase tracking-[0.08em] text-muted">
+                Emails
+              </span>
+              {!emailsLoading && !emailsErr && (
+                <span className="font-mono text-[10px] text-faint">
+                  {emails.length}
+                  {emails.length >= 200 ? '+' : ''}
+                </span>
+              )}
+            </div>
+            {emailsErr ? (
+              <div className="rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 text-[12px] text-err">
+                Could not load their mail: {emailsErr}
+              </div>
+            ) : emailsLoading && emails.length === 0 ? (
+              <div className="px-1 text-[12px] text-muted">Loading...</div>
+            ) : emails.length === 0 ? (
+              <div className="rounded-lg border border-line bg-panel px-3.5 py-3 text-[12px] text-muted">
+                No mail with them in what has synced so far.
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-lg border border-line bg-panel">
+                {emails.map((m, i) => {
+                  // Yours when it sits in Sent or came from the account itself.
+                  const mine =
+                    m.mailbox === 'Sent' ||
+                    m.from_addr.toLowerCase() === m.account_address.toLowerCase()
+                  return (
+                    <button
+                      key={m.id}
+                      className={`flex w-full items-start gap-2.5 px-3.5 py-2.5 text-left hover:bg-hover/50 ${
+                        i > 0 ? 'border-t border-line' : ''
+                      }`}
+                      title={mine ? `You to ${m.to_addrs}` : `From ${m.from_name || m.from_addr}`}
+                      onClick={() => void openContactMessage(m)}
+                    >
+                      <Icon
+                        name={mine ? 'send' : 'inbox'}
+                        size={12}
+                        className={`mt-[3px] shrink-0 ${mine ? 'text-info' : 'text-dim'}`}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className={`block truncate text-[12.5px] ${
+                            m.unread ? 'font-semibold text-ink' : 'text-body'
+                          }`}
+                        >
+                          {m.subject || '(no subject)'}
+                        </span>
+                        <span className="block truncate text-[11.5px] text-muted">{m.preview}</span>
+                      </span>
+                      <span className="shrink-0 text-right">
+                        <span className="block font-mono text-[9.5px] text-muted">
+                          {fmtAgo(m.ts, now)}
+                        </span>
+                        {mailAccounts.length > 1 && (
+                          <span className="block max-w-[160px] truncate font-mono text-[9.5px] text-faint">
+                            {m.account_address}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  )
+                })}
               </div>
             )}
           </div>

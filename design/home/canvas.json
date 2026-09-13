@@ -1,0 +1,46 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "title": "1 · Home, the space", "x": 0, "y": 0, "w": 1456, "h": 909 },
+    { "file": "Rhythm.dc.html", "title": "2 · Routines and food", "x": 1576, "y": 0, "w": 1456, "h": 909 },
+    { "file": "Upkeep.dc.html", "title": "3 · Upkeep, kept by the Home manager", "x": 3152, "y": 0, "w": 1456, "h": 909 },
+    { "file": "Helper.dc.html", "title": "4 · Someone who works here", "x": 4728, "y": 0, "w": 1456, "h": 909 }
+  ],
+  "annotations": [
+    {
+      "id": "space",
+      "x": 0,
+      "y": 1030,
+      "w": 460,
+      "text": "HOME IS A SPACE, TAGGED PERSONAL\n\nIt sits in the tree next to Develtech and Innotrack and works the same way: folders, a manager that wakes on a rhythm, a plan, a thread, files. A house is run like a small business, with suppliers, staff, schedules and upkeep.\n\nTagged Personal, which is what keeps it apart: no manager or agent from a business space can be lent to it, and its own Home manager works only here.\n\nNames, companies, places and dates on these boards are made up."
+    },
+    {
+      "id": "split",
+      "x": 520,
+      "y": 1030,
+      "w": 440,
+      "text": "WHAT GOES IN THE SPACE, AND WHAT DOES NOT\n\nIn Home's deck, in your vault: the house, services, suppliers, upkeep, routines, the plan.\n\nIn Your life, the personal store: anything private about a person. Emma's allergy is shown on the Routines tab but stored in Your life; the space only knows the house is nut-free.\n\nNowhere at all: account numbers, alarm and gate codes, ID numbers, bank details.\n\nOPEN QUESTION: is your vault folder synced or shared with anyone? If it is, Home's deck travels with it, and that has to be decided before this is built."
+    },
+    {
+      "id": "sources",
+      "x": 1576,
+      "y": 1030,
+      "w": 460,
+      "text": "MOST OF A HOUSE IS ALREADY IN YOUR MAIL\n\nInvoices say who services what and how often. Order confirmations say what you eat. Receipts say how often you buy pool chemicals.\n\nThat means reading senders you PAY, not only people you reply to. Today's ranking skips them, because you never reply to AquaCare. Deciding which senders count as the house is a real change to the learn run.\n\nThe week is a pattern learned over months, not events. When a real week breaks it, that becomes a question on Today."
+    },
+    {
+      "id": "upkeep",
+      "x": 3152,
+      "y": 1030,
+      "w": 470,
+      "text": "THE HOME MANAGER KEEPS THE LIST\n\nNobody types a maintenance plan. Every 5 to 6 weeks comes from eight receipts. Often lasts 10 to 15 years is general knowledge, labelled as such, never presented as a fact about your geyser.\n\nAdd to the plan puts an item on the Home manager's plan, the same work items every other manager keeps.\n\nIt drafts, you send. Sending without asking starts off, and paying is shown but not switchable until money exists."
+    },
+    {
+      "id": "helper",
+      "x": 4728,
+      "y": 1030,
+      "w": 440,
+      "text": "PEOPLE WHO WORK IN YOUR HOME\n\nShe is a person, not a service row. Her page is deliberately thin: her days, the arrangement, what she needs to know, and decisions about her.\n\nHer ID number, bank details and alarm code are never written down, using the same rule that already skips one-time codes.\n\nShe has left removes the page rather than keeping a file on someone who no longer works for you.\n\nOPEN QUESTION: Home next to Life in the tree, or inside it?"
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

@@ -1,0 +1,97 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: #818cf8; } a:hover { color: #a5b4fc; }
+    .mono { font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+    .row { display: flex; align-items: baseline; gap: 12px; padding: 9px 16px; border-top: 1px solid var(--line); font-size: 12px; }
+    .row .k { width: 84px; flex-shrink: 0; font-size: 11px; color: var(--muted); }
+  </style>
+</helmet>
+
+<div style="--page: {{c.page}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --line: {{c.line}}; --line2: {{c.line2}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; width: 1456px; height: 909px; background: var(--page); color: var(--body); display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;">
+
+  <div style="height: 32px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--panel);">
+    <span style="font-size: 11.5px; color: var(--dim);">DevDeck</span>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; justify-content: center; padding: 44px 32px; min-height: 0;">
+    <div style="width: 680px; display: flex; flex-direction: column; gap: 22px;">
+
+      <div style="display: flex; align-items: center; gap: 10px; font-size: 11px;">
+        <span style="display: flex; align-items: center; gap: 6px; color: var(--muted);"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ok);"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>Voice</span>
+        <span style="width: 24px; height: 1px; background: var(--line2);"></span>
+        <span style="display: flex; align-items: center; gap: 6px; color: var(--muted);"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ok);"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>Mail</span>
+        <span style="width: 24px; height: 1px; background: var(--line2);"></span>
+        <span style="display: flex; align-items: center; gap: 6px; color: var(--muted);"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ok);"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>Learn</span>
+      </div>
+
+      <div style="display: flex; align-items: flex-start; gap: 16px;">
+        <span style="width: 46px; height: 46px; flex-shrink: 0; border-radius: 14px; background: rgb(74 222 128 / 0.13); display: flex; align-items: center; justify-content: center; color: var(--ok);">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+        </span>
+        <div>
+          <div style="font-size: 24px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink);">I know your people now</div>
+          <p style="margin: 8px 0 0; font-size: 13.5px; line-height: 1.6; color: var(--dim);">I read nine people&#39;s threads. What you kept I use from here on. What you dismissed will not come back.</p>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;">
+        <div class="card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 6px;">
+          <span style="font-size: 30px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1;">17</span>
+          <span style="font-size: 12px; color: var(--muted);">kept</span>
+        </div>
+        <div class="card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; border-color: rgb(99 102 241 / 0.45);">
+          <span style="font-size: 30px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1;">5</span>
+          <span style="font-size: 12px; color: var(--muted);">still waiting for you</span>
+        </div>
+        <div class="card" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 6px;">
+          <span style="font-size: 30px; font-weight: 600; color: var(--dim); font-variant-numeric: tabular-nums; line-height: 1;">4</span>
+          <span style="font-size: 12px; color: var(--muted);">dismissed</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="padding: 11px 16px; font-size: 12.5px; font-weight: 600; color: var(--ink);">Receipt</div>
+        <div class="row"><span class="k mono">sent</span><span style="color: var(--body);">317 messages in 192 threads, 104,880 tokens, to <span class="mono" style="color: var(--ink);">claude-sonnet-5</span> &middot; $0.38</span></div>
+        <div class="row"><span class="k mono">held back</span><span style="color: var(--body);">238 messages from senders you never answered, or carrying codes. None reached the model.</span></div>
+        <div class="row"><span class="k mono">ignored</span><span style="color: var(--body);">106 automated messages. Counted, never read, never raised.</span></div>
+        <div class="row"><span class="k mono">kept in</span><span class="mono" style="font-size: 11px; color: var(--body);">%APPDATA%\devdeck\assistant\memory</span></div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <button style="font-size: 12px; color: #fff; background: #4f46e5; border: 0; border-radius: 6px; padding: 8px 16px;">Go to Today</button>
+        <button style="font-size: 12px; color: var(--dim); background: transparent; border: 1px solid var(--line2); border-radius: 6px; padding: 7px 14px;">Review the 5 waiting</button>
+        <span style="flex-grow: 1;"></span>
+        <span style="font-size: 11px; color: var(--faint);">The 5 also wait for you in Inbox.</span>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { page: '#0d1017', panel: '#11141c', raise: '#151923', line: '#1e293b',
+          line2: '#334155', ink: '#e2e8f0', body: '#cbd5e1', dim: '#94a3b8', muted: '#64748b',
+          faint: '#475569', accent: '#818cf8', ok: '#4ade80', warn: '#fbbf24' }
+      : { page: '#f6f7f9', panel: '#fdfdfe', raise: '#f0f2f6', line: '#d9dee7',
+          line2: '#c3cbd8', ink: '#16181d', body: '#333a45', dim: '#5a6472', muted: '#7d8794',
+          faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d', warn: '#b45309' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "title": "1 · Your people", "x": 0, "y": 0, "w": 1456, "h": 909 },
+    { "file": "Teach.dc.html", "title": "2 · Filling in your home", "x": 1576, "y": 0, "w": 1456, "h": 909 },
+    { "file": "Person.dc.html", "title": "3 · One person", "x": 3152, "y": 0, "w": 1456, "h": 909 },
+    { "file": "Today.dc.html", "title": "4 · Where it pays off", "x": 4728, "y": 0, "w": 1456, "h": 909 }
+  ],
+  "annotations": [
+    {
+      "id": "where",
+      "x": 0,
+      "y": 1030,
+      "w": 460,
+      "text": "WHERE IT LIVES, AN OPEN QUESTION\n\nDrawn as a document called Your life, opened from Today or from the assistant. It deliberately does not take a slot on the rail: the rail went from twelve doors to seven and this should not undo that.\n\nIt is NOT the Life space in your vault. That space is files in a folder. This page reads the personal store, which refuses to live inside any repository, because this is the most personal thing DevDeck will ever hold.\n\nNames, places and dates on these boards are made up."
+    },
+    {
+      "id": "sources",
+      "x": 520,
+      "y": 1030,
+      "w": 420,
+      "text": "THREE WAYS IT LEARNS\n\n- From mail: the learn run proposes, you confirm. A guess stays in To confirm until you answer.\n- You tell it: in your own words, any time. Kept as said, marked you told me.\n- From your calendar: recurring things like swimming on Saturday.\n\nEvery line shows which one it came from, so a wrong fact can be traced back to what caused it."
+    },
+    {
+      "id": "teach",
+      "x": 1576,
+      "y": 1030,
+      "w": 460,
+      "text": "ASK LITTLE, AND ONLY WHAT IT CANNOT WORK OUT\n\nThe assistant starts from what the mail already says and asks you to correct it, rather than handing you a blank form about your family.\n\nStructured where structure helps (dog or cat, one click), free text everywhere else. Pepper is our cat, she is three becomes a fact without a form.\n\nCould follow the learn step in onboarding, or open any time from Tell me about someone."
+    },
+    {
+      "id": "private",
+      "x": 3152,
+      "y": 1030,
+      "w": 470,
+      "text": "CHILDREN AND HEALTH ARE PRIVATE BY DEFAULT\n\nHealth details are kept, but marked private: used when you ask something that needs them (can Emma eat at this party?), never included in a bulk read or a run.\n\nNo manager or agent working on a business space can see any of it. That is the same permission rule that already stops a bot reaching git, applied to people.\n\nWhat it may do is a list of switches, off for anything that signs, pays or sends on a child's behalf.\n\nForget deletes every line, it does not hide them."
+    },
+    {
+      "id": "today",
+      "x": 4728,
+      "y": 1030,
+      "w": 440,
+      "text": "THE POINT OF ALL OF IT\n\nToday gains a Home area next to your businesses, using the existing area chips.\n\nThe first row is the reason to know any of this: a concert tonight, a call that runs into it, and the drive time. None of the three sources knows that alone.\n\nPets use the same page shape as a person: vet, vaccinations, food, who walks them."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

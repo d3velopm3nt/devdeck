@@ -24,7 +24,7 @@ use crate::db::{err, Db};
 use crate::services::push_log;
 
 /// System log stream for mail, alongside setup (-300k) and git (-400k).
-const MAIL_LOG_ID: i64 = -500_000;
+pub const MAIL_LOG_ID: i64 = -500_000;
 /// Messages pulled per mailbox per sync. A mail client is not an archive
 /// migration tool; older mail stays on the server until you go looking.
 const SYNC_LIMIT: u32 = 200;
@@ -602,6 +602,15 @@ pub fn mail_correspondents(db: tauri::State<Db>, limit: i64) -> Result<Vec<Corre
 /// Split out so it can be tested against a database built by hand. The claim
 /// this makes — that reciprocity beats volume — is the one the whole learn run
 /// rests on, and a claim nothing can exercise is a claim nobody has checked.
+/// The ranking, for anything outside this module.
+///
+/// The learn run needs exactly this list and must not build its own: two
+/// answers to "who do you actually deal with" is two answers, and the one on
+/// the approval screen has to be the one that gets read.
+pub fn rank_correspondents_pub(conn: &Connection, limit: i64) -> Result<Vec<Correspondent>, String> {
+    rank_correspondents(conn, limit)
+}
+
 fn rank_correspondents(conn: &Connection, limit: i64) -> Result<Vec<Correspondent>, String> {
     let limit = limit.clamp(1, 500);
 
@@ -2338,21 +2347,50 @@ fn send_message(app: &tauri::AppHandle, db: &Db, req: SendRequest) -> Result<i64
 
 // ---------------------------------------------------------------- contacts
 
+/// Every contact, or only the people who appear in one account's mail.
+///
+/// `account_id` is the account selected in the sidebar. Clicking an account
+/// filters whichever view is open, so Contacts has to answer "who is in this
+/// mailbox" the same way the message list answers "what is in it" -- one flat
+/// address book across a personal inbox and three businesses put family and
+/// suppliers in the same list. A person who appears in two mailboxes shows under
+/// both, and there is still one record of them.
 #[tauri::command]
-pub fn mail_contacts_list(db: tauri::State<Db>) -> Result<Vec<MailContact>, String> {
+pub fn mail_contacts_list(
+    db: tauri::State<Db>,
+    account_id: Option<i64>,
+) -> Result<Vec<MailContact>, String> {
     let conn = db.0.lock().unwrap();
+    list_contacts(&conn, account_id)
+}
+
+fn list_contacts(conn: &Connection, account_id: Option<i64>) -> Result<Vec<MailContact>, String> {
+    // Matched on addresses as well as `contact_id`, which is only set on mail
+    // the contact SENT. Somebody you only ever wrote to is still in your
+    // mailbox. The `c.email <> ''` guard matters: instr() with an empty needle
+    // is 1, and a blank address would match every message there is.
     let mut st = conn
         .prepare(
             "SELECT c.id, c.name, c.email, c.alt_email, c.role, c.company, c.phone, c.notes,
                     c.tags, c.node_id, c.kind, c.created_at,
-                    (SELECT COUNT(DISTINCT m.thread_key) FROM mail_messages m WHERE m.contact_id=c.id),
-                    COALESCE((SELECT MAX(m.ts) FROM mail_messages m WHERE m.contact_id=c.id), 0)
+                    (SELECT COUNT(DISTINCT m.thread_key) FROM mail_messages m
+                      WHERE m.contact_id=c.id AND (?1 IS NULL OR m.account_id=?1)),
+                    COALESCE((SELECT MAX(m.ts) FROM mail_messages m
+                      WHERE m.contact_id=c.id AND (?1 IS NULL OR m.account_id=?1)), 0)
                FROM mail_contacts c
+              WHERE ?1 IS NULL OR EXISTS (
+                    SELECT 1 FROM mail_messages m
+                     WHERE m.account_id = ?1
+                       AND (m.contact_id = c.id
+                            OR (c.email <> ''
+                                AND (lower(m.from_addr) = lower(c.email)
+                                     OR instr(lower(m.to_addrs), lower(c.email)) > 0
+                                     OR instr(lower(m.cc_addrs), lower(c.email)) > 0))))
               ORDER BY c.name = '' , c.name COLLATE NOCASE",
         )
         .map_err(err)?;
     let rows = st
-        .query_map([], |r| {
+        .query_map(params![account_id], |r| {
             Ok(MailContact {
                 id: r.get(0)?,
                 name: r.get(1)?,
@@ -2372,6 +2410,74 @@ pub fn mail_contacts_list(db: tauri::State<Db>) -> Result<Vec<MailContact>, Stri
         })
         .map_err(err)?;
     rows.collect::<rusqlite::Result<Vec<_>>>().map_err(err)
+}
+
+/// Every message to or from one contact, newest first, across every account.
+///
+/// Matched on the address as well as `contact_id`, because `contact_id` is only
+/// set on mail they sent: a thread you started with them, or one they were
+/// copied on, carries no contact and would be missing from the one list whose
+/// whole point is "everything with this person".
+///
+/// A message can be stored more than once -- in the Inbox and again under each
+/// Gmail label it wears -- so duplicates are dropped by Message-ID, keeping the
+/// copy in one of the four real folders so opening it lands somewhere familiar.
+#[tauri::command]
+pub fn mail_contact_messages(
+    db: tauri::State<Db>,
+    id: i64,
+    limit: i64,
+) -> Result<Vec<MailMessage>, String> {
+    let conn = db.0.lock().unwrap();
+    contact_messages(&conn, id, limit)
+}
+
+fn contact_messages(conn: &Connection, id: i64, limit: i64) -> Result<Vec<MailMessage>, String> {
+    let (email, alt): (String, String) = conn
+        .query_row(
+            "SELECT lower(trim(email)), lower(trim(alt_email)) FROM mail_contacts WHERE id=?1",
+            params![id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .map_err(|_| "That contact is no longer there.".to_string())?;
+    let limit = limit.clamp(1, 1000);
+
+    // Asked for three times the limit so that dropping label duplicates still
+    // leaves a full page.
+    let sql = format!(
+        "SELECT {MSG_COLS} FROM mail_messages m
+           LEFT JOIN mail_accounts a ON a.id = m.account_id
+          WHERE m.contact_id = ?1
+             OR (?2 <> '' AND (lower(m.from_addr) = ?2
+                               OR instr(lower(m.to_addrs), ?2) > 0
+                               OR instr(lower(m.cc_addrs), ?2) > 0))
+             OR (?3 <> '' AND (lower(m.from_addr) = ?3
+                               OR instr(lower(m.to_addrs), ?3) > 0
+                               OR instr(lower(m.cc_addrs), ?3) > 0))
+          ORDER BY m.ts DESC,
+                   CASE m.mailbox WHEN 'INBOX' THEN 0 WHEN 'Sent' THEN 0
+                                  WHEN 'Drafts' THEN 0 WHEN 'Archive' THEN 0 ELSE 1 END
+          LIMIT {}",
+        limit * 3
+    );
+    let mut st = conn.prepare(&sql).map_err(err)?;
+    let rows = st
+        .query_map(params![id, email, alt], row_to_msg)
+        .map_err(err)?;
+
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for m in rows {
+        let m = m.map_err(err)?;
+        if !m.message_id.is_empty() && !seen.insert(m.message_id.clone()) {
+            continue;
+        }
+        out.push(m);
+        if out.len() as i64 >= limit {
+            break;
+        }
+    }
+    Ok(out)
 }
 
 #[tauri::command]
@@ -2820,6 +2926,93 @@ Content-Type: multipart/mixed; boundary=\"z\"\r\n\r\n\
             params![name, email],
         )
         .unwrap();
+    }
+
+    /// A message in a given account, with the fields the contact queries read.
+    #[allow(clippy::too_many_arguments)]
+    fn msg_in(
+        c: &Connection,
+        account: i64,
+        mailbox: &str,
+        from: &str,
+        to: &str,
+        cc: &str,
+        message_id: &str,
+        ts: i64,
+    ) {
+        c.execute(
+            "INSERT INTO mail_messages
+                (account_id, uid, mailbox, from_addr, to_addrs, cc_addrs, message_id, thread_key, ts)
+             VALUES (?1, ?7, ?2, ?3, ?4, ?5, ?6, ?6, ?7)",
+            params![account, mailbox, from, to, cc, message_id, ts],
+        )
+        .unwrap();
+    }
+
+    fn contact_id(c: &Connection, email: &str) -> i64 {
+        c.query_row("SELECT id FROM mail_contacts WHERE email=?1", params![email], |r| r.get(0))
+            .unwrap()
+    }
+
+    /// Clicking an account filters Contacts the way it filters the mail. One
+    /// address book across a personal inbox and a business one put family and
+    /// clients in the same list.
+    #[test]
+    fn clicking_an_account_shows_only_the_people_in_that_mailbox() {
+        let c = mem();
+        c.execute(
+            "INSERT INTO mail_accounts (id, name, address) VALUES (1,'Me','me@personal.co'), (2,'Biz','me@biz.co')",
+            [],
+        )
+        .unwrap();
+        contact(&c, "Mom", "mom@family.com");
+        contact(&c, "Sarah", "sarah@client.com");
+        contact(&c, "Tom", "tom@both.com");
+        // No address at all. instr() with an empty needle is 1, so without a
+        // guard this contact would "appear" in every mailbox there is.
+        contact(&c, "Blank", "");
+
+        msg_in(&c, 1, "INBOX", "mom@family.com", "me@personal.co", "", "m1", 1);
+        msg_in(&c, 2, "INBOX", "sarah@client.com", "me@biz.co", "", "m2", 2);
+        // Tom never wrote to either: he is in one mailbox because you wrote to
+        // him, and in the other because he was copied.
+        msg_in(&c, 1, "Sent", "me@personal.co", "tom@both.com", "", "m3", 3);
+        msg_in(&c, 2, "INBOX", "sarah@client.com", "me@biz.co", "tom@both.com", "m4", 4);
+
+        let names = |acct: Option<i64>| -> Vec<String> {
+            list_contacts(&c, acct).unwrap().into_iter().map(|x| x.name).collect()
+        };
+        assert_eq!(names(None).len(), 4, "unfiltered is everybody");
+        assert_eq!(names(Some(1)), vec!["Mom", "Tom"]);
+        assert_eq!(names(Some(2)), vec!["Sarah", "Tom"], "one person, in both mailboxes");
+    }
+
+    /// A contact's page lists everything with them, not only what they sent.
+    /// `contact_id` is only set on inbound mail, so matching on it alone lost
+    /// every thread you started and every one they were copied on.
+    #[test]
+    fn a_contact_shows_every_message_with_them_not_only_what_they_sent() {
+        let c = mem();
+        c.execute(
+            "INSERT INTO mail_accounts (id, name, address) VALUES (1,'Me','me@d.co')",
+            [],
+        )
+        .unwrap();
+        contact(&c, "Sarah", "Sarah@Client.com");
+        let sarah = contact_id(&c, "Sarah@Client.com");
+
+        msg_in(&c, 1, "INBOX", "sarah@client.com", "me@d.co", "", "from-her", 10);
+        msg_in(&c, 1, "Sent", "me@d.co", "sarah@client.com", "", "to-her", 20);
+        msg_in(&c, 1, "INBOX", "boss@client.com", "me@d.co", "sarah@client.com", "cc-her", 30);
+        msg_in(&c, 1, "INBOX", "someone@else.com", "me@d.co", "", "not-her", 40);
+        // The same message again under a Gmail label. One message, one row.
+        msg_in(&c, 1, "Work", "sarah@client.com", "me@d.co", "", "from-her", 10);
+
+        let out = contact_messages(&c, sarah, 50).unwrap();
+        let ids: Vec<&str> = out.iter().map(|m| m.message_id.as_str()).collect();
+        assert_eq!(ids, vec!["cc-her", "to-her", "from-her"], "newest first, all three, nobody else");
+        let kept = out.iter().find(|m| m.message_id == "from-her").unwrap();
+        assert_eq!(kept.mailbox, "INBOX", "the duplicate kept is the one in a real folder");
     }
 
     /// The claim the whole learn run rests on: a mailbox is mostly noise, and

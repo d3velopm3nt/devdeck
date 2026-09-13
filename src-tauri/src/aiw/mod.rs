@@ -11,6 +11,7 @@
 //! - `tools`     ToolRegistry + ToolService. Agents reach the machine only here.
 //! - `context`   Assembly, checkpoints, deltas, reconciliation.
 //! - `conflict`  Watches events, decides when two pieces of work disagree.
+//! - `learn`     The mail learn run: estimate, one approval, receipt, facts.
 //! - `deck`      `.devdeck` on disk — a project's durable truth, committed.
 //! - `personal`  `%APPDATA%\devdeckssistant` — *your* durable truth, never committed.
 //! - `approval`  Where a tool call goes to ask a person.
@@ -29,6 +30,7 @@ pub mod context;
 pub mod deck;
 pub mod events;
 pub mod grants;
+pub mod learn;
 pub mod mentions;
 pub mod persona;
 pub mod personal;

@@ -1,0 +1,210 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: #818cf8; } a:hover { color: #a5b4fc; }
+    .head { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .note { font-size: 10px; color: var(--faint); }
+    .rail { display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 8px; border-radius: 8px; font-size: 12px; color: var(--muted); position: relative; }
+    .rail-on { background: var(--raise); color: var(--ink); }
+    .rail-on::before { content: ""; position: absolute; left: -6px; top: 6px; bottom: 6px; width: 2.5px; border-radius: 2px; background: #6366f1; }
+    .tr { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 6px; border-radius: 6px; font-size: 12.5px; color: var(--body); }
+    .tr.on { background: var(--raise); color: var(--ink); }
+    .tchip { border-radius: 999px; padding: 0 8px; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; line-height: 1.6; }
+    .hc { border-radius: 999px; border: 1px solid var(--line); padding: 1px 8px; font-size: 10.5px; color: var(--muted); }
+    .hc.dashed { border-style: dashed; border-color: var(--line2); color: var(--faint); }
+    .gb { font-size: 11px; color: var(--dim); border: 1px solid var(--line2); border-radius: 6px; padding: 4px 10px; white-space: nowrap; }
+    .tab { border-radius: 6px; padding: 4px 10px; font-size: 12px; color: var(--dim); }
+    .tab.on { background: var(--raise); color: var(--ink); }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+    .row { display: flex; align-items: center; gap: 10px; padding: 9px 13px; border-top: 1px solid var(--line); font-size: 12px; }
+    .row:first-child { border-top: 0; }
+    .t { color: var(--ink); }
+    .src { font-size: 10.5px; color: var(--faint); white-space: nowrap; }
+    .chip { font-size: 11px; border-radius: 5px; padding: 3px 8px; background: var(--raise); color: var(--body); white-space: nowrap; }
+    .col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+    .dh { font-size: 11px; font-weight: 600; color: var(--dim); padding: 0 2px 5px; border-bottom: 1px solid var(--line); }
+    .blk { border-radius: 6px; padding: 7px 9px; font-size: 11.5px; line-height: 1.4; color: var(--ink); border-left: 2px solid; }
+    .blk span { display: block; font-size: 10.5px; color: var(--muted); margin-top: 1px; }
+    .fam { background: rgb(251 191 36 / 0.09); border-color: #fbbf24; }
+    .help { background: rgb(99 102 241 / 0.10); border-color: #818cf8; }
+    .chore { background: rgb(148 163 184 / 0.08); border-color: #64748b; }
+    .food { background: rgb(74 222 128 / 0.08); border-color: #4ade80; }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --page: {{c.page}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --line: {{c.line}}; --line2: {{c.line2}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --teal: {{c.teal}}; width: 1456px; height: 909px; background: var(--app); color: var(--body); display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;">
+
+  <div style="height: 32px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--panel);">
+    <span style="font-size: 11.5px; color: var(--dim);">DevDeck</span>
+    <span style="font-size: 11.5px; color: var(--faint);">File</span>
+    <span style="font-size: 11.5px; color: var(--faint);">View</span>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; min-height: 0;">
+    <div style="width: 160px; flex-shrink: 0; background: var(--app); border-right: 1px solid var(--line); padding: 8px 6px; display: flex; flex-direction: column; gap: 2px;">
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 1.8"></path></svg><span>Today</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3.5 13.5 6 5.5h12l2.5 8v5h-17z"></path><path d="M3.5 13.5H9l1 2h4l1-2h5.5"></path></svg><span>Inbox</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="2"></rect><path d="M3.5 10h17M8 3.5v3M16 3.5v3"></path></svg><span>Calendar</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="5.5" width="18" height="13" rx="2"></rect><path d="m3.5 7 8.5 6 8.5-6"></path></svg><span>Mail</span></div>
+      <div class="rail rail-on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"></path><path d="M3.5 7 12 11.6 20.5 7M12 11.6v9.9"></path></svg><span>Spaces</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="7" width="16" height="12" rx="2"></rect><path d="M9 12h.01M15 12h.01M12 3v4"></path></svg><span>Team</span></div>
+      <div style="flex-grow: 1;"></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m14.5 5.5 4 4-9 9h-4v-4z"></path></svg><span>Tools</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12H3.5"></path></svg><span>Settings</span></div>
+    </div>
+
+    <div style="width: 280px; flex-shrink: 0; background: var(--app); border-right: 1px solid var(--line); display: flex; flex-direction: column;">
+      <div style="height: 38px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-bottom: 1px solid var(--line);">
+        <span style="font-size: 12.5px; font-weight: 600; color: var(--ink);">Spaces</span>
+        <span style="flex-grow: 1;"></span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="color: var(--muted);"><circle cx="11" cy="11" r="6.5"></circle><path d="m20 20-4.2-4.2"></path></svg>
+        <span style="font-size: 11px; color: #fff; background: #4f46e5; border-radius: 6px; padding: 3px 10px;">+ Add</span>
+      </div>
+      <div style="padding: 8px 6px; display: flex; flex-direction: column; gap: 1px;">
+        <div class="tr"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color: var(--muted);"><path d="m9 6 6 6-6 6"></path></svg><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="color: #818cf8;"><circle cx="12" cy="6" r="2.5"></circle><circle cx="6" cy="17" r="2.5"></circle><circle cx="18" cy="17" r="2.5"></circle><path d="M10.8 8.2 7.2 14.8M13.2 8.2l3.6 6.6M8.5 17h7"></path></svg><span>Demo</span></div>
+        <div class="tr"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color: var(--muted);"><path d="m9 6 6 6-6 6"></path></svg><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="color: #818cf8;"><circle cx="12" cy="6" r="2.5"></circle><circle cx="6" cy="17" r="2.5"></circle><circle cx="18" cy="17" r="2.5"></circle><path d="M10.8 8.2 7.2 14.8M13.2 8.2l3.6 6.6M8.5 17h7"></path></svg><span>Develtech</span><span class="tchip" style="background: rgb(129 140 248 / 0.16); color: var(--accent);">Business</span></div>
+        <div class="tr"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color: var(--muted);"><path d="m9 6 6 6-6 6"></path></svg><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="color: #818cf8;"><circle cx="12" cy="6" r="2.5"></circle><circle cx="6" cy="17" r="2.5"></circle><circle cx="18" cy="17" r="2.5"></circle><path d="M10.8 8.2 7.2 14.8M13.2 8.2l3.6 6.6M8.5 17h7"></path></svg><span>Innotrack</span><span class="tchip" style="background: rgb(129 140 248 / 0.16); color: var(--accent);">Business</span></div>
+        <div class="tr"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color: var(--muted);"><path d="m9 6 6 6-6 6"></path></svg><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="color: #818cf8;"><circle cx="12" cy="6" r="2.5"></circle><circle cx="6" cy="17" r="2.5"></circle><circle cx="18" cy="17" r="2.5"></circle><path d="M10.8 8.2 7.2 14.8M13.2 8.2l3.6 6.6M8.5 17h7"></path></svg><span>Life</span></div>
+        <div class="tr on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color: var(--muted);"><path d="m6 9 6 6 6-6"></path></svg><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color: var(--teal);"><path d="M3.5 11 12 4l8.5 7"></path><path d="M5.5 9.5V20h13V9.5"></path></svg><span style="font-weight: 600;">Home</span><span class="tchip" style="background: rgb(45 212 191 / 0.15); color: var(--teal);">Personal</span></div>
+        <div class="tr" style="padding-left: 32px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" style="color: var(--muted);"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"></path></svg><span>Pool</span></div>
+        <div class="tr" style="padding-left: 32px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" style="color: var(--muted);"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"></path></svg><span>Garden</span></div>
+        <div class="tr" style="padding-left: 32px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" style="color: var(--muted);"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"></path></svg><span>House</span></div>
+      </div>
+    </div>
+
+    <div style="flex-grow: 1; min-width: 0; background: var(--page); display: flex; flex-direction: column;">
+      <div style="flex-shrink: 0; border-bottom: 1px solid var(--line); padding: 12px 20px; display: flex; align-items: flex-start; gap: 12px;">
+        <span style="width: 30px; height: 30px; flex-shrink: 0; border-radius: 8px; background: #5eead4; color: rgb(0 0 0 / 0.8); font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center;">HO</span>
+        <div style="flex-grow: 1; min-width: 0;">
+          <div style="display: flex; align-items: baseline; gap: 8px;"><span style="font-size: 15px; font-weight: 600; color: var(--ink);">Home</span><span class="tchip" style="background: rgb(45 212 191 / 0.15); color: var(--teal);">Personal</span></div>
+          <div style="margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px;"><span class="hc">3 folders</span><span class="hc" style="color: var(--accent);">Home manager</span><span class="hc">5 open items</span><span class="hc dashed">no repository of its own</span></div>
+        </div>
+        <span class="gb">Its bot</span><span class="gb">Settings</span>
+      </div>
+      <div style="flex-shrink: 0; display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--line); padding: 8px 20px;">
+        <span class="tab">House</span><span class="tab on">Routines</span><span class="tab">Upkeep</span><span class="tab">People</span><span class="tab">Thread</span><span class="tab">Files</span>
+        <span style="flex-grow: 1;"></span>
+        <span style="font-size: 10.5px; color: var(--faint);">worked out from order confirmations, school mail and your calendar</span>
+      </div>
+
+      <div style="flex-grow: 1; min-height: 0; display: flex; flex-direction: column; gap: 16px; padding: 16px 20px; overflow: hidden;">
+
+        <section style="display: flex; flex-direction: column; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <span class="head">A normal week</span>
+            <span style="font-size: 10.5px; color: var(--faint);">a pattern, not a calendar</span>
+            <span style="flex-grow: 1;"></span>
+            <span style="display: flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--muted);"><span style="width: 8px; height: 8px; border-radius: 2px; background: #fbbf24;"></span>family</span>
+            <span style="display: flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--muted);"><span style="width: 8px; height: 8px; border-radius: 2px; background: #818cf8;"></span>help at the house</span>
+            <span style="display: flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--muted);"><span style="width: 8px; height: 8px; border-radius: 2px; background: #4ade80;"></span>food</span>
+            <span style="display: flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--muted);"><span style="width: 8px; height: 8px; border-radius: 2px; background: #64748b;"></span>chores</span>
+          </div>
+          <div class="card" style="padding: 12px; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; align-content: start;">
+            <div class="col">
+              <div class="dh">Mon</div>
+              <div class="blk fam">School run<span>07:10</span></div>
+              <div class="blk help">Grace<span>08:00 to 15:00</span></div>
+              <div class="blk fam">Aftercare pickup<span>17:00</span></div>
+            </div>
+            <div class="col">
+              <div class="dh">Tue</div>
+              <div class="blk fam">Running with Thabo<span>06:00</span></div>
+              <div class="blk fam">School run<span>07:10</span></div>
+              <div class="blk help">Garden service<span>morning</span></div>
+              <div class="blk chore">Bins out<span>at night</span></div>
+            </div>
+            <div class="col">
+              <div class="dh">Wed</div>
+              <div class="blk fam">School run<span>07:10</span></div>
+              <div class="blk help">Grace<span>08:00 to 15:00</span></div>
+              <div class="blk fam">Megan collects<span>Josh closes at noon</span></div>
+            </div>
+            <div class="col">
+              <div class="dh">Thu</div>
+              <div class="blk fam">School run<span>07:10</span></div>
+              <div class="blk food">Groceries<span>10 to 12</span></div>
+              <div class="blk help">Pool service<span>first Thursday</span></div>
+            </div>
+            <div class="col">
+              <div class="dh">Fri</div>
+              <div class="blk fam">School run<span>07:10</span></div>
+              <div class="blk help">Grace<span>pay day</span></div>
+              <div class="blk food">Pizza night</div>
+            </div>
+            <div class="col">
+              <div class="dh">Sat</div>
+              <div class="blk fam">Emma swimming<span>09:00</span></div>
+              <div class="blk fam">Braai at Ruan and Lize&#39;s<span>every second week</span></div>
+            </div>
+            <div class="col">
+              <div class="dh">Sun</div>
+              <div class="blk food">Lunch at Anna&#39;s<span>most weeks</span></div>
+              <div class="blk chore">Pool cover on<span>evening</span></div>
+            </div>
+          </div>
+        </section>
+
+        <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px;">
+          <section>
+            <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px;"><span class="head">Who eats what</span></div>
+            <div class="card">
+              <div class="row">
+                <span class="t" style="width: 52px;">Emma</span>
+                <span style="flex-grow: 1; display: flex; align-items: center; gap: 6px; color: var(--ink);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--warn);"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>Peanut allergy</span>
+                <span class="src">kept in Your life</span>
+              </div>
+              <div class="row"><span class="t" style="width: 52px;">Megan</span><span style="flex-grow: 1; color: var(--ink);">Pescatarian</span><span class="src">from mail</span></div>
+              <div class="row"><span class="t" style="width: 52px;">Josh</span><span style="flex-grow: 1; color: var(--ink);">No cow&#39;s milk</span><span class="src" style="color: var(--warn);">to confirm</span></div>
+              <div class="row"><span class="t" style="width: 52px;">You</span><span style="flex-grow: 1; color: var(--muted);">Nothing I know of</span></div>
+            </div>
+          </section>
+
+          <section>
+            <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px;"><span class="head">House rules</span></div>
+            <div class="card">
+              <div class="row" style="flex-direction: column; align-items: flex-start; gap: 3px;"><span class="t">The house is nut-free</span><span class="src">the reason stays in Your life, not in this space</span></div>
+              <div class="row" style="flex-direction: column; align-items: flex-start; gap: 3px;"><span class="t">Fish, not meat, on weeknights</span><span class="src">you told me</span></div>
+            </div>
+          </section>
+
+          <section>
+            <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px;"><span class="head">Groceries</span><span class="note">from 9 order confirmations</span></div>
+            <div class="card" style="padding: 11px 13px; display: flex; flex-direction: column; gap: 9px;">
+              <span style="font-size: 12px; color: var(--ink);">Woolworths delivery, Thursdays 10 to 12</span>
+              <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                <span class="chip">oat milk</span><span class="chip">salmon</span><span class="chip">lunch wraps</span><span class="chip">cat food</span><span class="chip">dog food, monthly</span>
+              </div>
+            </div>
+          </section>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', page: '#0d1017', panel: '#11141c', raise: '#151923', line: '#1e293b',
+          line2: '#334155', ink: '#e2e8f0', body: '#cbd5e1', dim: '#94a3b8', muted: '#64748b',
+          faint: '#475569', accent: '#818cf8', ok: '#4ade80', warn: '#fbbf24', teal: '#2dd4bf' }
+      : { app: '#e9ebf0', page: '#f6f7f9', panel: '#fdfdfe', raise: '#f0f2f6', line: '#d9dee7',
+          line2: '#c3cbd8', ink: '#16181d', body: '#333a45', dim: '#5a6472', muted: '#7d8794',
+          faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d', warn: '#b45309', teal: '#0f766e' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

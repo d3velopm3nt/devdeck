@@ -1,0 +1,177 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: #818cf8; } a:hover { color: #a5b4fc; }
+    .head { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .note { font-size: 10px; color: var(--faint); }
+    .rail { display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 8px; border-radius: 8px; font-size: 12px; color: var(--muted); position: relative; }
+    .rail-on { background: var(--raise); color: var(--ink); }
+    .rail-on::before { content: ""; position: absolute; left: -6px; top: 6px; bottom: 6px; width: 2.5px; border-radius: 2px; background: #6366f1; }
+    .tr { display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 6px; border-radius: 6px; font-size: 12.5px; color: var(--body); }
+    .tr.on { background: var(--raise); color: var(--ink); }
+    .tchip { border-radius: 999px; padding: 0 8px; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; line-height: 1.6; }
+    .hc { border-radius: 999px; border: 1px solid var(--line); padding: 1px 8px; font-size: 10.5px; color: var(--muted); }
+    .hc.dashed { border-style: dashed; border-color: var(--line2); color: var(--faint); }
+    .gb { font-size: 11px; color: var(--dim); border: 1px solid var(--line2); border-radius: 6px; padding: 4px 10px; white-space: nowrap; }
+    .tab { border-radius: 6px; padding: 4px 10px; font-size: 12px; color: var(--dim); }
+    .tab.on { background: var(--raise); color: var(--ink); }
+    .tab i { font-style: normal; margin-left: 6px; font-size: 10px; color: var(--faint); }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+    .trow { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 130px minmax(0, 1fr) 70px; gap: 12px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--line); font-size: 12px; }
+    .th { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); border-top: 0; }
+    .grp { padding: 6px 14px; border-top: 1px solid var(--line); background: var(--raise); font-size: 11px; font-weight: 600; color: var(--dim); }
+    .t { color: var(--ink); }
+    .s { font-size: 11px; color: var(--muted); }
+    .pill { font-size: 10px; font-weight: 600; border-radius: 4px; padding: 2px 6px; text-align: center; white-space: nowrap; }
+    .due { background: rgb(251 191 36 / 0.14); color: var(--warn); }
+    .soon { background: rgb(129 140 248 / 0.14); color: var(--accent); }
+    .ok { background: rgb(74 222 128 / 0.12); color: var(--ok); }
+    .watch { background: var(--raise); color: var(--dim); }
+    .chip { height: 24px; box-sizing: border-box; display: flex; align-items: center; border-radius: 999px; border: 1px solid var(--line2); padding: 0 10px; font-size: 11px; color: var(--dim); }
+    .chip.on { background: var(--raise); color: var(--ink); }
+    .btn { font-size: 11px; color: var(--dim); border: 1px solid var(--line2); border-radius: 6px; padding: 4px 10px; background: transparent; white-space: nowrap; }
+    .btn.on { color: #fff; background: #4f46e5; border-color: #4f46e5; }
+    .row { display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-top: 1px solid var(--line); font-size: 11.5px; }
+    .row:first-child { border-top: 0; }
+    .toggle { width: 24px; height: 14px; border-radius: 999px; background: #4f46e5; position: relative; flex-shrink: 0; }
+    .toggle::after { content: ""; position: absolute; top: 2px; right: 2px; width: 10px; height: 10px; border-radius: 999px; background: #fff; }
+    .toggle.off { background: var(--line2); }
+    .toggle.off::after { right: auto; left: 2px; }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --page: {{c.page}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --line: {{c.line}}; --line2: {{c.line2}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --teal: {{c.teal}}; width: 1456px; height: 909px; background: var(--app); color: var(--body); display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;">
+
+  <div style="height: 32px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--panel);">
+    <span style="font-size: 11.5px; color: var(--dim);">DevDeck</span>
+    <span style="font-size: 11.5px; color: var(--faint);">File</span>
+    <span style="font-size: 11.5px; color: var(--faint);">View</span>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; min-height: 0;">
+    <div style="width: 160px; flex-shrink: 0; background: var(--app); border-right: 1px solid var(--line); padding: 8px 6px; display: flex; flex-direction: column; gap: 2px;">
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 1.8"></path></svg><span>Today</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3.5 13.5 6 5.5h12l2.5 8v5h-17z"></path><path d="M3.5 13.5H9l1 2h4l1-2h5.5"></path></svg><span>Inbox</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="2"></rect><path d="M3.5 10h17M8 3.5v3M16 3.5v3"></path></svg><span>Calendar</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="5.5" width="18" height="13" rx="2"></rect><path d="m3.5 7 8.5 6 8.5-6"></path></svg><span>Mail</span></div>
+      <div class="rail rail-on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"></path><path d="M3.5 7 12 11.6 20.5 7M12 11.6v9.9"></path></svg><span>Spaces</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="7" width="16" height="12" rx="2"></rect><path d="M9 12h.01M15 12h.01M12 3v4"></path></svg><span>Team</span></div>
+      <div style="flex-grow: 1;"></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m14.5 5.5 4 4-9 9h-4v-4z"></path></svg><span>Tools</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12H3.5"></path></svg><span>Settings</span></div>
+    </div>
+
+    <div style="width: 280px; flex-shrink: 0; background: var(--app); border-right: 1px solid var(--line); display: flex; flex-direction: column;">
+      <div style="height: 38px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-bottom: 1px solid var(--line);">
+        <span style="font-size: 12.5px; font-weight: 600; color: var(--ink);">Spaces</span>
+        <span style="flex-grow: 1;"></span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="color: var(--muted);"><circle cx="11" cy="11" r="6.5"></circle><path d="m20 20-4.2-4.2"></path></svg>
+        <span style="font-size: 11px; color: #fff; background: #4f46e5; border-radius: 6px; padding: 3px 10px;">+ Add</span>
+      </div>
+      <div style="padding: 8px 6px; display: flex; flex-direction: column; gap: 1px;">
+        <div class="tr"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color: var(--muted);"><path d="m9 6 6 6-6 6"></path></svg><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="color: #818cf8;"><circle cx="12" cy="6" r="2.5"></circle><circle cx="6" cy="17" r="2.5"></circle><circle cx="18" cy="17" r="2.5"></circle><path d="M10.8 8.2 7.2 14.8M13.2 8.2l3.6 6.6M8.5 17h7"></path></svg><span>Demo</span></div>
+        <div class="tr"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color: var(--muted);"><path d="m9 6 6 6-6 6"></path></svg><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="color: #818cf8;"><circle cx="12" cy="6" r="2.5"></circle><circle cx="6" cy="17" r="2.5"></circle><circle cx="18" cy="17" r="2.5"></circle><path d="M10.8 8.2 7.2 14.8M13.2 8.2l3.6 6.6M8.5 17h7"></path></svg><span>Develtech</span><span class="tchip" style="background: rgb(129 140 248 / 0.16); color: var(--accent);">Business</span></div>
+        <div class="tr"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color: var(--muted);"><path d="m9 6 6 6-6 6"></path></svg><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="color: #818cf8;"><circle cx="12" cy="6" r="2.5"></circle><circle cx="6" cy="17" r="2.5"></circle><circle cx="18" cy="17" r="2.5"></circle><path d="M10.8 8.2 7.2 14.8M13.2 8.2l3.6 6.6M8.5 17h7"></path></svg><span>Innotrack</span><span class="tchip" style="background: rgb(129 140 248 / 0.16); color: var(--accent);">Business</span></div>
+        <div class="tr"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color: var(--muted);"><path d="m9 6 6 6-6 6"></path></svg><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="color: #818cf8;"><circle cx="12" cy="6" r="2.5"></circle><circle cx="6" cy="17" r="2.5"></circle><circle cx="18" cy="17" r="2.5"></circle><path d="M10.8 8.2 7.2 14.8M13.2 8.2l3.6 6.6M8.5 17h7"></path></svg><span>Life</span></div>
+        <div class="tr on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color: var(--muted);"><path d="m6 9 6 6 6-6"></path></svg><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color: var(--teal);"><path d="M3.5 11 12 4l8.5 7"></path><path d="M5.5 9.5V20h13V9.5"></path></svg><span style="font-weight: 600;">Home</span><span class="tchip" style="background: rgb(45 212 191 / 0.15); color: var(--teal);">Personal</span></div>
+        <div class="tr" style="padding-left: 32px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" style="color: var(--muted);"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"></path></svg><span>Pool</span></div>
+        <div class="tr" style="padding-left: 32px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" style="color: var(--muted);"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"></path></svg><span>Garden</span></div>
+        <div class="tr" style="padding-left: 32px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" style="color: var(--muted);"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"></path></svg><span>House</span></div>
+      </div>
+    </div>
+
+    <div style="flex-grow: 1; min-width: 0; background: var(--page); display: flex; flex-direction: column;">
+      <div style="flex-shrink: 0; border-bottom: 1px solid var(--line); padding: 12px 20px; display: flex; align-items: flex-start; gap: 12px;">
+        <span style="width: 30px; height: 30px; flex-shrink: 0; border-radius: 8px; background: #5eead4; color: rgb(0 0 0 / 0.8); font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center;">HO</span>
+        <div style="flex-grow: 1; min-width: 0;">
+          <div style="display: flex; align-items: baseline; gap: 8px;"><span style="font-size: 15px; font-weight: 600; color: var(--ink);">Home</span><span class="tchip" style="background: rgb(45 212 191 / 0.15); color: var(--teal);">Personal</span></div>
+          <div style="margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px;"><span class="hc">3 folders</span><span class="hc" style="color: var(--accent);">Home manager</span><span class="hc">5 open items</span><span class="hc dashed">no repository of its own</span></div>
+        </div>
+        <span class="gb">Its bot</span><span class="gb">Settings</span>
+      </div>
+      <div style="flex-shrink: 0; display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--line); padding: 8px 20px;">
+        <span class="tab">House</span><span class="tab">Routines</span><span class="tab on">Upkeep<i>1 due</i></span><span class="tab">People</span><span class="tab">Thread</span><span class="tab">Files</span>
+        <span style="flex-grow: 1;"></span>
+        <span style="font-size: 10.5px; color: var(--faint);">worked out from invoices, receipts and service mails</span>
+      </div>
+
+      <div style="flex-grow: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 14px 20px; overflow: hidden;">
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <span class="chip on">All</span><span class="chip">Pool</span><span class="chip">Garden</span><span class="chip">House</span><span class="chip">Due soon</span>
+        </div>
+
+        <div class="card">
+          <div class="trow th"><span>What</span><span>Who</span><span>Last done</span><span>Next</span><span></span></div>
+          <div class="grp">Pool</div>
+          <div class="trow"><span class="t">Chemicals</span><span class="s">you, from Pool Shop</span><span class="s">7 weeks ago</span><span class="s">you buy every 5 to 6</span><span class="pill due">due</span></div>
+          <div class="trow"><span class="t">Service and backwash</span><span class="s">AquaCare</span><span class="s">5 September</span><span class="s">2 October</span><span class="pill ok">booked</span></div>
+          <div class="trow"><span class="t">Salt cell clean</span><span class="s">AquaCare</span><span class="s">March</span><span class="s">before summer</span><span class="pill soon">soon</span></div>
+          <div class="grp">Garden</div>
+          <div class="trow"><span class="t">Irrigation check</span><span class="s">GreenCut Services</span><span class="s">last October</span><span class="s">before the heat</span><span class="pill soon">soon</span></div>
+          <div class="trow"><span class="t">Hedges and trees</span><span class="s">GreenCut Services</span><span class="s">June</span><span class="s">every quarter</span><span class="pill ok">fine</span></div>
+          <div class="grp">House</div>
+          <div class="trow"><span class="t">Gate motor service</span><span class="s">GateTech</span><span class="s">October 2025</span><span class="s">every year</span><span class="pill soon">soon</span></div>
+          <div class="trow"><span class="t">Alarm backup battery</span><span class="s">Sentinel</span><span class="s">2024</span><span class="s">every 2 years</span><span class="pill soon">soon</span></div>
+          <div class="trow"><span class="t">Gutters</span><span class="s">nobody yet</span><span class="s">not known</span><span class="s">before the rains</span><span class="pill watch">ask</span></div>
+          <div class="trow"><span class="t">Geyser</span><span class="s">Johan the plumber</span><span class="s">installed 2016</span><span class="s">often lasts 10 to 15 years</span><span class="pill watch">watch</span></div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 290px; gap: 12px; flex-grow: 1; min-height: 0;">
+          <div class="card" style="padding: 11px 13px; display: flex; flex-direction: column; gap: 7px;">
+            <span style="font-size: 12px; line-height: 1.5; color: var(--ink);">You buy pool chemicals every five to six weeks, and it has been seven.</span>
+            <span class="note" style="font-size: 10.5px;">from 8 Pool Shop receipts</span>
+            <div style="display: flex; gap: 6px; margin-top: auto;"><button class="btn on">Remind me Saturday</button><button class="btn">Already have</button></div>
+          </div>
+          <div class="card" style="padding: 11px 13px; display: flex; flex-direction: column; gap: 7px;">
+            <span style="font-size: 12px; line-height: 1.5; color: var(--ink);">AquaCare&#39;s monthly invoice went up in August.</span>
+            <span class="note" style="font-size: 10.5px;">from their last 12 invoices</span>
+            <div style="display: flex; gap: 6px; margin-top: auto;"><button class="btn">Noted</button></div>
+          </div>
+          <div class="card" style="padding: 11px 13px; display: flex; flex-direction: column; gap: 7px;">
+            <span style="font-size: 12px; line-height: 1.5; color: var(--ink);">Nobody cleans the gutters, as far as I can tell.</span>
+            <span class="note" style="font-size: 10.5px;">no mail about it in four years</span>
+            <div style="display: flex; gap: 6px; margin-top: auto;"><button class="btn">We do it ourselves</button><button class="btn on">Add to the plan</button></div>
+          </div>
+          <div class="card">
+            <div style="padding: 9px 12px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--line);">
+              <span style="width: 18px; height: 18px; border-radius: 5px; background: rgb(129 140 248 / 0.16); color: var(--accent); font-size: 8px; font-weight: 700; display: flex; align-items: center; justify-content: center;">HM</span>
+              <span style="font-size: 12px; font-weight: 600; color: var(--ink);">Home manager</span>
+              <span style="flex-grow: 1;"></span>
+              <span style="font-size: 10.5px; color: var(--muted);">wakes Mondays</span>
+            </div>
+            <div class="row"><span style="flex-grow: 1; color: var(--body);">Keeps this list and the plan</span><span class="toggle"></span></div>
+            <div class="row"><span style="flex-grow: 1; color: var(--body);">Drafts bookings for you to send</span><span class="toggle"></span></div>
+            <div class="row"><span style="flex-grow: 1; color: var(--body);">Sends a booking without asking</span><span class="toggle off"></span></div>
+            <div class="row"><span style="flex-grow: 1; color: var(--body);">Pays for anything</span><span style="font-size: 10.5px; color: var(--muted);">comes with money</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', page: '#0d1017', panel: '#11141c', raise: '#151923', line: '#1e293b',
+          line2: '#334155', ink: '#e2e8f0', body: '#cbd5e1', dim: '#94a3b8', muted: '#64748b',
+          faint: '#475569', accent: '#818cf8', ok: '#4ade80', warn: '#fbbf24', teal: '#2dd4bf' }
+      : { app: '#e9ebf0', page: '#f6f7f9', panel: '#fdfdfe', raise: '#f0f2f6', line: '#d9dee7',
+          line2: '#c3cbd8', ink: '#16181d', body: '#333a45', dim: '#5a6472', muted: '#7d8794',
+          faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d', warn: '#b45309', teal: '#0f766e' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

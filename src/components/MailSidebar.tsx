@@ -58,7 +58,6 @@ export function MailSidebar() {
     mailQuery,
     mailPane,
     mailSyncing,
-    mailContacts,
     setMailQuery,
     setMailPane,
     openMailAccountEditor,
@@ -93,26 +92,10 @@ export function MailSidebar() {
         </button>
       </div>
 
-      {/* Contacts live inside Mail rather than taking a rail slot of their own:
-          an address book with no mail in it is a filing cabinet. */}
-      <div className="flex gap-1 border-b border-line px-2.5 py-1.5">
-        {(['mail', 'contacts'] as const).map((p) => (
-          <button
-            key={p}
-            className={`flex-1 rounded px-2 py-1 text-center text-[11.5px] capitalize ${
-              mailPane === p
-                ? 'border border-indigo-500 bg-indigo-500/10 text-ink'
-                : 'border border-line2 text-dim hover:text-ink'
-            }`}
-            onClick={() => setMailPane(p)}
-          >
-            {p}
-            {p === 'contacts' && mailContacts.length > 0 && (
-              <span className="ml-1.5 font-mono text-[9.5px] text-muted">{mailContacts.length}</span>
-            )}
-          </button>
-        ))}
-      </div>
+      {/* The Mail | Contacts switch lives on the list it switches now, above
+          the search box -- see MailPaneSwitch. Contacts still live inside Mail
+          rather than taking a rail slot: an address book with no mail in it is
+          a filing cabinet. */}
 
       <div className="min-h-0 flex-1 overflow-auto p-1.5">
         <div className="flex items-center px-2 pb-1 pt-1 font-mono text-[9.5px] uppercase tracking-[0.08em] text-muted">
@@ -222,8 +205,13 @@ export function MailSidebar() {
             label={g.label}
             tint={g.tint}
             n={countFor(mailCounts, g.key)}
-            active={!mailQuery.label && mailQuery.group === g.key}
-            onClick={() => void openMailLabel(null).then(() => setMailQuery({ group: g.key }))}
+            // A folder is mail. Clicking Inbox while Contacts is showing used
+            // to change a list you could not see.
+            active={mailPane === 'mail' && !mailQuery.label && mailQuery.group === g.key}
+            onClick={() => {
+              setMailPane('mail')
+              void openMailLabel(null).then(() => setMailQuery({ group: g.key }))
+            }}
           />
         ))}
 
@@ -253,8 +241,11 @@ export function MailSidebar() {
                   label={l.name}
                   tint="text-dim"
                   n={l.messages}
-                  active={mailQuery.label === l.remote}
-                  onClick={() => void openMailLabel(l)}
+                  active={mailPane === 'mail' && mailQuery.label === l.remote}
+                  onClick={() => {
+                    setMailPane('mail')
+                    void openMailLabel(l)
+                  }}
                 />
               ))}
           </>

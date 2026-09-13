@@ -52,3 +52,12 @@ export const CAPTURE_MET: boolean = false
 export const CAPTURE_MAIL_ACCOUNT: string = ''
 /** Open the first run on a given step: voice | mail. */
 export const CAPTURE_MEET_STEP: string = ''
+/** Open the learn run on mount. This session cannot deliver clicks, so the
+ *  only way to photograph the estimate is to open the panel the same way the
+ *  link in Contacts does. Empty in every shipped build. */
+export const CAPTURE_LEARN: boolean = false
+/** Open Mail on this pane, once: mail | contacts. Once and not on every render,
+ *  because the app may be in use while the shot is taken and a flag that
+ *  re-applies itself locks whoever is using it out of every other view.
+ *  Empty in every shipped build. */
+export const CAPTURE_MAIL_PANE: string = ''

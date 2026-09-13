@@ -1449,6 +1449,122 @@ export const mailLabels = (accountId = 0) =>
 /** Fetch one label's mail. Labels cost nothing until you open one. */
 export const mailSyncLabel = (labelId: number) =>
   invoke<number>('mail_sync_label', { labelId })
+
+// ---------------------------------------------------------------------------
+// The learn run
+// ---------------------------------------------------------------------------
+
+/** Somebody a run proposes to read about. */
+export interface LearnPerson {
+  contact_id: number
+  name: string
+  email: string
+  domain: string
+  /** The space of the mailbox they write to — a suggestion, never a rule. */
+  space: string
+  threads: number
+  messages: number
+  attachments: number
+  chars: number
+  received: number
+  sent: number
+}
+
+/** Something deliberately left out, with the reason attached. */
+export interface LearnExclusion {
+  kind: string
+  count: number
+  why: string
+}
+
+/**
+ * What one decision buys. Every number here is computed from the batch that
+ * would actually be sent, so the figure you approve is the figure that leaves.
+ */
+export interface LearnEstimate {
+  people: LearnPerson[]
+  threads: number
+  messages: number
+  attachments: number
+  chars: number
+  tokens: number
+  /** Zero when the model has no published price — see `price_note`, not free. */
+  cost_usd: number
+  price_note: string
+  excluded: LearnExclusion[]
+  depth: string
+  provider: string
+  provider_name: string
+  model: string
+  /** False when the run could not read anything: no provider, or the mock. */
+  ready: boolean
+  /** Why it cannot run. Empty when it can. */
+  note: string
+  /** Why the model differs from the assistant's. Never a reason it is blocked. */
+  model_note: string
+}
+
+/** A receipt. Written when the batch is posted, not when it succeeds. */
+export interface LearnRun {
+  id: number
+  started_at: number
+  finished_at: number
+  provider: string
+  model: string
+  status: string
+  depth: string
+  people: number
+  threads: number
+  messages: number
+  attachments: number
+  chars: number
+  tokens: number
+  held_back: number
+  thread_keys: string[]
+  held: LearnExclusion[]
+  error: string
+  facts: number
+  kept: number
+}
+
+/** A proposed fact, waiting for a yes. */
+export interface LearnFact {
+  id: number
+  run_id: number
+  /** thing = about a client or project · you = about you. Decides the store. */
+  kind: string
+  text: string
+  source: string
+  thread_keys: string[]
+  contact_id: number
+  space: string
+  node_id: number
+  status: string
+  written_to: string
+  created_at: number
+  /** Where a yes would put it. Computed fresh, never stored. */
+  destination: string
+}
+
+/** What a run would cost and what it would leave out. Nothing is sent. */
+export const learnEstimate = (people = 12, only: number[] = [], depth = 'full') =>
+  invoke<LearnEstimate>('learn_estimate', { people, only, depth })
+/** Everybody a run could read about, for the Choose who list. */
+export const learnPeople = (limit = 50) =>
+  invoke<Correspondent[]>('learn_people', { limit })
+/** Send it. The one call in DevDeck that puts your mail on the wire. */
+export const learnRun = (people = 12, only: number[] = [], depth = 'full') =>
+  invoke<LearnRun>('learn_run', { people, only, depth })
+/** Past runs, newest first. Each row is its own receipt. */
+export const learnRuns = (limit = 20) => invoke<LearnRun[]>('learn_runs', { limit })
+/** Proposals. `runId` 0 for every run, `status` '' for every state. */
+export const learnFacts = (runId = 0, status = 'proposed') =>
+  invoke<LearnFact[]>('learn_facts', { runId, status })
+/** Say yes to one, with whatever edit you made. Returns where it was written. */
+export const learnKeep = (id: number, text: string, nodeId = 0) =>
+  invoke<string>('learn_keep', { id, text, nodeId })
+/** Say no. Writes a row, not a note — so it is not offered twice. */
+export const learnDecline = (id: number) => invoke<void>('learn_decline', { id })
 /** Log in over IMAP and SMTP and report each separately. */
 export const mailAccountTest = (id: number) => invoke<MailTestResult>('mail_account_test', { id })
 /** Fetch new mail. `id` 0 syncs every account. Returns messages stored. */
@@ -1468,7 +1584,12 @@ export const mailLinkNode = (id: number, nodeId: number | null) =>
   invoke<void>('mail_link_node', { id, nodeId })
 export const mailSend = (req: SendRequest) => invoke<number>('mail_send', { req })
 
-export const mailContactsList = () => invoke<MailContact[]>('mail_contacts_list')
+/** Contacts. With an account, only the people who appear in that mailbox. */
+export const mailContactsList = (accountId: number | null = null) =>
+  invoke<MailContact[]>('mail_contacts_list', { accountId })
+/** Every message to or from one contact, newest first, across every account. */
+export const mailContactMessages = (id: number, limit = 200) =>
+  invoke<MailMessage[]>('mail_contact_messages', { id, limit })
 export const mailContactSave = (def: MailContact) => invoke<number>('mail_contact_save', { def })
 export const mailContactDelete = (id: number) => invoke<void>('mail_contact_delete', { id })
 /** Link (or unlink) a contact to the client node they belong to. */

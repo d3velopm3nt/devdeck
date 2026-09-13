@@ -105,6 +105,25 @@ export function openAssistant() {
   api.getPanel(id)?.api.setActive()
 }
 
+/// Open (or focus) the learn run.
+///
+/// Switches the rail like every other opener, and has to: the dock surface is
+/// only mounted under `projects`, so a panel added while Mail is showing goes
+/// somewhere real and invisible. That is not a detail to rediscover with a
+/// screenshot, which is how this comment came to say the opposite.
+export function openLearnRun() {
+  if (!api) return
+  useApp.getState().setRailView('projects')
+  const id = 'mail-learn'
+  const existing = api.getPanel(id)
+  if (existing) {
+    existing.api.setActive()
+    return
+  }
+  addToMain({ id, component: 'mail-learn', title: 'Read your mail' })
+  api.getPanel(id)?.api.setActive()
+}
+
 /// Open (or focus) a node's thread — the first thing a click on the tree
 /// does now. Every level has one, which is the whole model: you talk to a
 /// workspace, a folder or a project, and what differs is what it can say.

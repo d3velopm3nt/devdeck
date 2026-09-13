@@ -1684,8 +1684,33 @@ impl LLMProvider for AnthropicProvider {
     fn name(&self) -> &str {
         "Anthropic"
     }
+    /// The built-in list, newest first.
+    ///
+    /// This is what anything reaching for a model sees when the directory
+    /// cannot be asked, so it has to carry the current generation: a list
+    /// stopping at 4.5 quietly sent the learn run to a year-old Sonnet while
+    /// the assistant itself was on Opus 5. `fetch_models` still asks Anthropic
+    /// when it can, and that answer always wins.
     fn list_models(&self) -> Vec<ModelInfo> {
         vec![
+            ModelInfo {
+                id: "claude-opus-5".into(),
+                name: "Claude Opus 5".into(),
+                context_window: Some(200_000),
+                ..Default::default()
+            },
+            ModelInfo {
+                id: "claude-sonnet-5".into(),
+                name: "Claude Sonnet 5".into(),
+                context_window: Some(200_000),
+                ..Default::default()
+            },
+            ModelInfo {
+                id: "claude-haiku-4-5".into(),
+                name: "Claude Haiku 4.5".into(),
+                context_window: Some(200_000),
+                ..Default::default()
+            },
             ModelInfo {
                 id: "claude-opus-4-5".into(),
                 name: "Claude Opus 4.5".into(),

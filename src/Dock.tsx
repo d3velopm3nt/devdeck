@@ -105,6 +105,7 @@ function Welcome() {
 
 import { NodePage } from './components/node/NodePage'
 import { AssistantThread } from './components/thread/AssistantThread'
+import { LearnRunPage } from './components/LearnRunPage'
 import {
   AssistantPanel,
   ContextPanel,
@@ -118,6 +119,9 @@ const components = {
   'node-config': (props: IDockviewPanelProps<{ id: number }>) => <NodeConfigPage {...props} />,
   'node-thread': (props: IDockviewPanelProps<{ id: number }>) => <NodePage {...props} />,
   'assistant-thread': () => <AssistantThread />,
+  // The learn run is a document, not a sheet: it has steps, it survives a
+  // reload mid-decision, and you want it beside the mail it is reading.
+  'mail-learn': () => <LearnRunPage />,
   'space-detail': (props: IDockviewPanelProps<{ id: number }>) => <SpaceDetailPage {...props} />,
   'bot-detail': (props: IDockviewPanelProps<{ id: number; ask?: boolean }>) => <BotPage {...props} />,
   'service-detail': (props: IDockviewPanelProps<{ id: number }>) => <ServiceDetailPage {...props} />,

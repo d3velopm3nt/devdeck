@@ -5,6 +5,7 @@
 
 import { useMemo, useState } from 'react'
 import { useApp } from '../store'
+import { MailPaneSwitch } from './MailPaneSwitch'
 import { Icon, type IconName } from '../lib/icons'
 import { fmtAgo } from '../lib/time'
 import type { MailChip, MailMessage } from '../lib/types'
@@ -319,6 +320,7 @@ export function MailView() {
     <div className="flex h-full">
       {/* ---- thread list ---- */}
       <section className="flex w-[400px] shrink-0 flex-col border-r border-line bg-page">
+        <MailPaneSwitch />
         <div className="flex items-center gap-2 border-b border-line px-2.5 py-2">
           <div className="flex flex-1 items-center gap-1.5 rounded border border-line2 bg-page px-2 py-1">
             <Icon name="search" size={12} className="text-faint" />

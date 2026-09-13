@@ -437,6 +437,66 @@ pub const MAIL_SCHEMA: &str = r#"
             created_at INTEGER NOT NULL DEFAULT 0
         );
         CREATE INDEX IF NOT EXISTS mail_assistant_thread ON mail_assistant(thread_key);
+
+        -- A learn run: one decision, one batch, one receipt.
+        --
+        -- The row IS the receipt. It is written when the batch is sent and
+        -- never rewritten, because a receipt you can edit afterwards is not a
+        -- receipt -- and the counts here are what actually left the machine,
+        -- not what an estimate said would.
+        CREATE TABLE IF NOT EXISTS learn_runs (
+            id INTEGER PRIMARY KEY,
+            started_at INTEGER NOT NULL DEFAULT 0,
+            finished_at INTEGER NOT NULL DEFAULT 0,
+            provider TEXT NOT NULL DEFAULT '',
+            model TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'sent',   -- sent | done | failed
+            depth TEXT NOT NULL DEFAULT 'full',    -- full | headers
+            people INTEGER NOT NULL DEFAULT 0,
+            threads INTEGER NOT NULL DEFAULT 0,
+            messages INTEGER NOT NULL DEFAULT 0,
+            attachments INTEGER NOT NULL DEFAULT 0,
+            chars INTEGER NOT NULL DEFAULT 0,
+            tokens INTEGER NOT NULL DEFAULT 0,
+            held_back INTEGER NOT NULL DEFAULT 0,
+            -- The thread keys, as JSON. The point of the receipt is that you
+            -- can check the claim rather than trust it, and you cannot check a
+            -- count.
+            thread_keys TEXT NOT NULL DEFAULT '[]',
+            held_json TEXT NOT NULL DEFAULT '[]',
+            error TEXT NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS learn_runs_started ON learn_runs(started_at DESC);
+
+        -- One proposed fact, waiting for a yes.
+        --
+        -- Proposals live here rather than in the deck or the personal store
+        -- because nothing is written to either until you say so: a declined
+        -- proposal must leave a "no" behind so it is not offered twice, and a
+        -- "no" is not a note about you.
+        CREATE TABLE IF NOT EXISTS learn_facts (
+            id INTEGER PRIMARY KEY,
+            run_id INTEGER NOT NULL REFERENCES learn_runs(id) ON DELETE CASCADE,
+            -- thing = about a client, a project, an invoice. you = about you.
+            -- Which one decides the store, and getting it wrong puts personal
+            -- notes in somebody's pull request.
+            kind TEXT NOT NULL DEFAULT 'thing',
+            text TEXT NOT NULL DEFAULT '',
+            -- Where it came from, in words you can check.
+            source TEXT NOT NULL DEFAULT '',
+            -- The evidence, as thread keys.
+            thread_keys TEXT NOT NULL DEFAULT '[]',
+            contact_id INTEGER NOT NULL DEFAULT 0,
+            space TEXT NOT NULL DEFAULT '',
+            node_id INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'proposed', -- proposed | kept | declined
+            -- Where it went once kept. Empty until then.
+            written_to TEXT NOT NULL DEFAULT '',
+            created_at INTEGER NOT NULL DEFAULT 0,
+            decided_at INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS learn_facts_run ON learn_facts(run_id);
+        CREATE INDEX IF NOT EXISTS learn_facts_status ON learn_facts(status);
 "#;
 
 /// The Stash full-text index: an external-content FTS5 table kept in sync by

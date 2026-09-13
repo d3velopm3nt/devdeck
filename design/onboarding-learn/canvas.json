@@ -1,0 +1,46 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "title": "1 · Sorting, on this machine", "x": 0, "y": 0, "w": 1456, "h": 909 },
+    { "file": "Approve.dc.html", "title": "2 · One approval", "x": 1576, "y": 0, "w": 1456, "h": 909 },
+    { "file": "Reading.dc.html", "title": "3 · Reading, live", "x": 3152, "y": 0, "w": 1456, "h": 909 },
+    { "file": "Done.dc.html", "title": "4 · Done", "x": 4728, "y": 0, "w": 1456, "h": 909 }
+  ],
+  "annotations": [
+    {
+      "id": "where",
+      "x": 0,
+      "y": 1030,
+      "w": 460,
+      "text": "WHERE THIS SITS\n\nVoice, then Mail (the existing Continue with Google step, unchanged), then these four.\n\nSorting starts the moment Gmail connects. The first sync takes a minute or two, so there is real work to watch rather than a spinner.\n\nNot now on screen 2 finishes setup. The run stays available from Mail, so skipping costs nothing.\n\nNames and numbers on these boards are made up."
+    },
+    {
+      "id": "ignored",
+      "x": 520,
+      "y": 1030,
+      "w": 420,
+      "text": "AUTOMATED MAIL: OPTION A\n\nCounted and set aside silently. Never read, never sent, never raised as a question, and left unread.\n\nThe only place it appears is a count: on screen 1 while sorting, and on the receipt at the end, so you know it was seen and not forgotten."
+    },
+    {
+      "id": "live",
+      "x": 3152,
+      "y": 1030,
+      "w": 470,
+      "text": "WHAT MAKES SCREEN 3 REAL\n\n- One request per person, so the progress is true: 3 of 9 is three people actually read, not a guess at a percentage.\n- The model writes one fact per line, so each card can appear the moment its line is finished. The dashed card is the line being written.\n- The cost ticks from what each finished request actually reports, not from the estimate.\n- Stop keeps every fact that came back. The receipt is written per person as they are sent, so a stopped run still says exactly what left.\n\nTested against a made-up mailbox, never yours."
+    },
+    {
+      "id": "personal",
+      "x": 3680,
+      "y": 1030,
+      "w": 420,
+      "text": "PERSONAL MAILBOX, SO NO SPLIT\n\nNo thing or you tag on the cards, and no destination under each one. For a personal mailbox every fact goes to one place, so it is said once in the footer instead of repeated on every card.\n\nClients, and choosing a space per fact, come back when a business mailbox is connected."
+    },
+    {
+      "id": "done",
+      "x": 4728,
+      "y": 1030,
+      "w": 440,
+      "text": "LEFT OUT ON PURPOSE\n\nOnly headers and signatures is not offered in onboarding. It is still on the Read your mail tab for later runs.\n\nThe 5 waiting facts are not lost if you click Go to Today: they wait in Inbox until you answer them."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

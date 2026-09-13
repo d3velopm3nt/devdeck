@@ -387,6 +387,8 @@ export interface AppState {
   saveContact: (def: MailContact) => Promise<void>
   linkContact: (id: number, nodeId: number | null) => Promise<void>
   setMailPane: (p: 'mail' | 'contacts') => void
+  /** Open one of a contact's messages in Mail, in the folder it lives in. */
+  openContactMessage: (msg: MailMessage) => Promise<void>
   setAssistantStatus: (id: number, status: AssistantNote['status']) => Promise<void>
   refreshConnections: () => Promise<void>
   refreshConnQueries: () => Promise<void>
@@ -1384,17 +1386,29 @@ export const useApp = create<AppState>((set, get) => ({
   refreshMailAccounts: async () => set({ mailAccounts: await ipc.mailAccountsList() }),
 
   refreshMailContacts: async () => {
-    const mailContacts = await ipc.mailContactsList()
+    // Scoped by the account picked in the sidebar, the same filter the message
+    // list uses. One address book across every mailbox put family and
+    // suppliers in a single list.
+    const mailContacts = await ipc.mailContactsList(get().mailQuery.account_id)
     set({ mailContacts })
+    // Keep the selection on somebody still in the list: filtering to an
+    // account can take the selected person out of it.
     const { mailContactSelectedId } = get()
-    if (mailContactSelectedId == null && mailContacts.length > 0) {
-      set({ mailContactSelectedId: mailContacts[0].id })
+    if (mailContactSelectedId == null || !mailContacts.some((c) => c.id === mailContactSelectedId)) {
+      set({ mailContactSelectedId: mailContacts[0]?.id ?? null })
     }
   },
 
   setMailQuery: async (patch) => {
     set((st) => ({ mailQuery: { ...st.mailQuery, ...patch } }))
-    await get().refreshMail()
+    // The account filters both lists, so changing it refreshes the address
+    // book as well as the mail -- or Contacts would keep showing the account
+    // you just left.
+    if ('account_id' in patch) {
+      await Promise.all([get().refreshMail(), get().refreshMailContacts()])
+    } else {
+      await get().refreshMail()
+    }
   },
 
   selectMailMessage: async (id) => {
@@ -1578,6 +1592,33 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   setMailPane: (p) => set({ mailPane: p }),
+
+  openContactMessage: async (msg) => {
+    const folders: Record<string, MailQuery['group']> = {
+      INBOX: 'inbox',
+      Sent: 'sent',
+      Drafts: 'drafts',
+      Archive: 'archive',
+    }
+    const group = folders[msg.mailbox]
+    set({ mailPane: 'mail' })
+    // An account filter stays only if the message is in that account.
+    // Otherwise it moves to the message's own account, rather than opening
+    // mail that the list around it says is not there.
+    const account = get().mailQuery.account_id
+    await get().setMailQuery({
+      ...(group ? { group, label: null } : { label: msg.mailbox }),
+      chip: 'all',
+      search: '',
+      ...(account != null && account !== msg.account_id ? { account_id: msg.account_id } : {}),
+    })
+    // An old message can sit beyond the list's first page. Put it at the top
+    // rather than select something the list cannot show.
+    if (!get().mailMessages.some((m) => m.id === msg.id)) {
+      set((st) => ({ mailMessages: [msg, ...st.mailMessages] }))
+    }
+    await get().selectMailMessage(msg.id)
+  },
 
   setAssistantStatus: async (id, status) => {
     await ipc.mailAssistantStatus(id, status)

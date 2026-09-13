@@ -1,0 +1,166 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: #818cf8; } a:hover { color: #a5b4fc; }
+    .mono { font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; }
+    .head { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .rail { display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 8px; border-radius: 8px; font-size: 12px; color: var(--muted); position: relative; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+    .av { width: 20px; height: 20px; border-radius: 6px; font-size: 8px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .guess { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-top: 1px solid var(--line); }
+    .src { font-size: 10.5px; color: var(--faint); }
+    .btn { font-size: 11.5px; color: var(--dim); border: 1px solid var(--line2); border-radius: 6px; padding: 5px 11px; background: transparent; white-space: nowrap; }
+    .btn.on { color: #fff; background: #4f46e5; border-color: #4f46e5; }
+    .pick { font-size: 11.5px; color: var(--dim); border: 1px solid var(--line2); border-radius: 999px; padding: 4px 11px; background: transparent; white-space: nowrap; }
+    .pick.on { color: var(--ink); border-color: #6366f1; background: rgb(99 102 241 / 0.12); }
+    .field { font-size: 12px; color: var(--ink); border: 1px solid var(--line2); border-radius: 8px; padding: 7px 10px; background: var(--page); }
+  </style>
+</helmet>
+
+<div style="--app: {{c.app}}; --page: {{c.page}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --line: {{c.line}}; --line2: {{c.line2}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; width: 1456px; height: 909px; background: var(--app); color: var(--body); display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;">
+
+  <div style="height: 32px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--panel);">
+    <span style="font-size: 11.5px; color: var(--dim);">DevDeck</span>
+    <span style="font-size: 11.5px; color: var(--faint);">File</span>
+    <span style="font-size: 11.5px; color: var(--faint);">View</span>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; min-height: 0;">
+    <div style="width: 160px; flex-shrink: 0; background: var(--app); border-right: 1px solid var(--line); padding: 8px 6px; display: flex; flex-direction: column; gap: 2px;">
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 1.8"></path></svg><span>Today</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3.5 13.5 6 5.5h12l2.5 8v5h-17z"></path><path d="M3.5 13.5H9l1 2h4l1-2h5.5"></path></svg><span>Inbox</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="2"></rect><path d="M3.5 10h17M8 3.5v3M16 3.5v3"></path></svg><span>Calendar</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="5.5" width="18" height="13" rx="2"></rect><path d="m3.5 7 8.5 6 8.5-6"></path></svg><span>Mail</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"></path><path d="M3.5 7 12 11.6 20.5 7M12 11.6v9.9"></path></svg><span>Spaces</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="7" width="16" height="12" rx="2"></rect><path d="M9 12h.01M15 12h.01M12 3v4"></path></svg><span>Team</span></div>
+      <div style="flex-grow: 1;"></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m14.5 5.5 4 4-9 9h-4v-4z"></path></svg><span>Tools</span></div>
+      <div class="rail"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12H3.5"></path></svg><span>Settings</span></div>
+    </div>
+
+    <div style="flex-grow: 1; min-width: 0; background: var(--page); display: flex; flex-direction: column;">
+      <div style="height: 34px; flex-shrink: 0; display: flex; align-items: stretch; border-bottom: 1px solid var(--line); background: var(--app); padding-left: 8px;">
+        <span style="display: flex; align-items: center; gap: 10px; padding: 0 14px; font-size: 12px; color: var(--ink); background: var(--page); border-left: 1px solid var(--line); border-right: 1px solid var(--line);">Your life</span>
+      </div>
+
+      <div style="flex-grow: 1; min-height: 0; display: flex; justify-content: center; padding: 22px 28px; overflow: hidden;">
+        <div style="width: 860px; display: flex; flex-direction: column; gap: 16px;">
+
+          <div style="display: flex; gap: 11px;">
+            <span class="av" style="background: rgb(129 140 248 / 0.16); color: var(--accent); margin-top: 3px;">DV</span>
+            <div style="min-width: 0; flex-grow: 1;">
+              <div style="font-size: 11px; color: var(--muted); margin-bottom: 6px;">Dev &middot; just now</div>
+              <p style="margin: 0 0 12px; font-size: 12.5px; line-height: 1.6; color: var(--body);">From your mail I think these are the people you live with. Tell me what I got wrong, and who I missed. I will only ask about things I cannot work out myself.</p>
+
+              <div class="card">
+                <div style="display: flex; align-items: center; gap: 10px; padding: 11px 14px;">
+                  <span style="font-size: 12.5px; font-weight: 600; color: var(--ink);">Your home</span>
+                  <span style="flex-grow: 1;"></span>
+                  <span class="src">each guess shows what it is based on</span>
+                </div>
+
+                <div class="guess">
+                  <div style="flex-grow: 1; min-width: 0;">
+                    <div style="font-size: 12.5px; color: var(--ink);">Megan <span style="color: var(--muted);">is your</span> wife</div>
+                    <div class="src">41 threads, and she signs &quot;love, M&quot;</div>
+                  </div>
+                  <div style="display: flex; gap: 6px; align-items: center;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ok);"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+                    <span style="font-size: 11px; color: var(--ok);">right</span>
+                  </div>
+                </div>
+
+                <div class="guess" style="background: var(--raise);">
+                  <div style="flex-grow: 1; min-width: 0;">
+                    <div style="font-size: 12.5px; color: var(--ink);">Emma and Josh <span style="color: var(--muted);">are your</span> children</div>
+                    <div class="src">school newsletters and playschool invoices addressed to you</div>
+                  </div>
+                  <div style="display: flex; gap: 6px;"><button class="btn on">Right</button><button class="btn">Not quite</button></div>
+                </div>
+
+                <div class="guess">
+                  <div style="flex-grow: 1; min-width: 0;">
+                    <div style="font-size: 12.5px; color: var(--ink);">Biscuit <span style="color: var(--muted);">is a pet. What kind?</span></div>
+                    <div class="src">vaccination reminders from Dr Naidoo&#39;s rooms</div>
+                  </div>
+                  <div style="display: flex; gap: 6px;"><button class="pick on">Dog</button><button class="pick">Cat</button><button class="pick">Other</button><button class="pick">Not a pet</button></div>
+                </div>
+
+                <div style="padding: 12px 14px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 9px;">
+                  <span class="head">Anyone I missed?</span>
+                  <div style="display: grid; grid-template-columns: minmax(0, 1fr) 150px 150px auto; gap: 8px; align-items: center;">
+                    <span class="field">Pepper</span>
+                    <span class="field" style="display: flex; align-items: center; justify-content: space-between;">pet <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color: var(--muted);"><path d="m6 9 6 6 6-6"></path></svg></span>
+                    <span class="field" style="color: var(--faint);">birthday, if you like</span>
+                    <button class="btn">Add</button>
+                  </div>
+                  <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                    <span style="font-size: 11px; color: var(--faint);">Usually:</span>
+                    <button class="pick">partner</button><button class="pick">child</button><button class="pick">pet</button><button class="pick">parent</button><button class="pick">someone who helps at home</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 11px; justify-content: flex-end;">
+            <div style="max-width: 520px; background: var(--raise); border: 1px solid var(--line); border-radius: 10px; padding: 9px 13px; font-size: 12.5px; line-height: 1.55; color: var(--ink);">Pepper is our cat, she is three. And Emma is allergic to peanuts.</div>
+          </div>
+
+          <div style="display: flex; gap: 11px;">
+            <span class="av" style="background: rgb(129 140 248 / 0.16); color: var(--accent); margin-top: 3px;">DV</span>
+            <div style="min-width: 0; flex-grow: 1;">
+              <div class="card">
+                <div class="guess" style="border-top: 0;">
+                  <span style="flex-grow: 1; font-size: 12.5px; color: var(--ink);">Pepper, cat, 3</span>
+                  <span class="src">you told me</span>
+                  <button class="btn on">Keep</button>
+                </div>
+                <div class="guess">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color: var(--warn); flex-shrink: 0;"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>
+                  <div style="flex-grow: 1; min-width: 0;">
+                    <div style="font-size: 12.5px; color: var(--ink);">Emma is allergic to peanuts</div>
+                    <div class="src">health, so kept private: used when a question needs it, never in a bulk read</div>
+                  </div>
+                  <button class="btn on">Keep</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top: auto; display: flex; align-items: center; gap: 10px; border: 1px solid var(--line2); border-radius: 10px; padding: 9px 12px; background: var(--panel);">
+            <span style="flex-grow: 1; font-size: 12.5px; color: var(--faint);">Tell me anything, in your own words</span>
+            <button class="btn">Done for now</button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', page: '#0d1017', panel: '#11141c', raise: '#151923', line: '#1e293b',
+          line2: '#334155', ink: '#e2e8f0', body: '#cbd5e1', dim: '#94a3b8', muted: '#64748b',
+          faint: '#475569', accent: '#818cf8', ok: '#4ade80', warn: '#fbbf24', err: '#f87171' }
+      : { app: '#e9ebf0', page: '#f6f7f9', panel: '#fdfdfe', raise: '#f0f2f6', line: '#d9dee7',
+          line2: '#c3cbd8', ink: '#16181d', body: '#333a45', dim: '#5a6472', muted: '#7d8794',
+          faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d', warn: '#b45309', err: '#dc2626' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

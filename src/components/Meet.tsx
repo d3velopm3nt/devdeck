@@ -1,15 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { aiw, type Voice } from '../lib/aiw'
 import * as ipc from '../lib/ipc'
 import type { MailAccount } from '../lib/types'
 import { Icon } from '../lib/icons'
 import { GoogleButton } from './GoogleMark'
 import { CAPTURE_MEET_STEP } from '../lib/devCapture'
-import { LearnStep } from './setup/LearnStep'
+import { Frame, LearnStep } from './setup/LearnStep'
 import { LifeStep } from './setup/LifeStep'
 import { HomeStep } from './setup/HomeStep'
+import { SETUP_AT, SETUP_REACHED, isStep, stepIndex, type SetupStep } from './setup/steps'
 
-export type MeetStep = 'voice' | 'mail' | 'learn' | 'life' | 'home'
+export type MeetStep = SetupStep
 
 /**
  * The first run — the only screen in DevDeck that has never existed.
@@ -56,6 +57,64 @@ export function Meet({
   const [googleReady, setGoogleReady] = useState(false)
   const [connected, setConnected] = useState<MailAccount[]>([])
 
+  // Where you got to. The furthest step is what the bar lets you go back
+  // to; the step you are on is saved as you move, so Today reopens there.
+  const [reached, setReached] = useState<MeetStep | 'done'>(start ?? 'voice')
+  useEffect(() => {
+    void ipc
+      .settingGet(SETUP_REACHED)
+      .then((v) => {
+        const saved = v === 'done' ? 'done' : isStep(v) ? v : null
+        if (saved && stepIndex(saved) > stepIndex(start ?? 'voice')) setReached(saved)
+      })
+      .catch(() => {})
+  }, [start])
+  const go = (s: MeetStep) => {
+    setStep(s)
+    void ipc.settingSet(SETUP_AT, s).catch(() => {})
+    if (stepIndex(s) > stepIndex(reached)) {
+      setReached(s)
+      void ipc.settingSet(SETUP_REACHED, s).catch(() => {})
+    }
+  }
+  const finish = () => {
+    void ipc.settingSet(SETUP_AT, 'done').catch(() => {})
+    void ipc.settingSet(SETUP_REACHED, 'done').catch(() => {})
+    setReached('done')
+    onDone()
+  }
+  const nav = { reached, onGo: go }
+
+  // What was chosen before, so going back to a step shows it. The voice
+  // step also skips the save when nothing changed: re-saving would be
+  // harmless, but a Next that writes nothing should not say Saving.
+  const [loaded, setLoaded] = useState<{ name: string; assistant: string; voice: string } | null>(
+    null,
+  )
+  const prefilled = useRef(false)
+  useEffect(() => {
+    let live = true
+    void aiw
+      .profile()
+      .then((p) => {
+        if (!live || !p.met_at) return
+        prefilled.current = true
+        setName(p.name)
+        setAssistantName(p.assistant_name || 'Assistant')
+        if (p.voice === 'own') setWritingOwn(true)
+        else if (p.voice) setPick(p.voice)
+        setLoaded({ name: p.name, assistant: p.assistant_name || 'Assistant', voice: p.voice })
+      })
+      .catch(() => {})
+    void ipc
+      .mailAccountsList()
+      .then((a) => live && setConnected(a))
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [])
+
   useEffect(() => {
     let live = true
     aiw
@@ -63,7 +122,7 @@ export function Meet({
       .then((v) => {
         if (!live) return
         setVoices(v)
-        if (v.length) setPick(v[0].id)
+        if (v.length) setPick((cur) => (prefilled.current ? cur : v[0].id))
       })
       // A failure here is not cosmetic: with no voices there is nothing to
       // pick, and silently showing an empty row would look like a broken
@@ -82,12 +141,28 @@ export function Meet({
     }
   }, [])
 
-  const go = async () => {
+  const saveVoice = async () => {
     setErr('')
+    // Back here with nothing changed: on to mail, nothing to write. A voice
+    // you wrote yourself stays unless you write another.
+    const unchanged =
+      loaded &&
+      name.trim() === loaded.name &&
+      assistantName.trim() === loaded.assistant &&
+      (writingOwn ? own.trim() === '' && loaded.voice === 'own' : pick === loaded.voice)
+    if (unchanged) {
+      go('mail')
+      return
+    }
     setBusy(true)
     try {
       await aiw.meet(name, assistantName, pick, writingOwn ? own : '')
-      setStep('mail')
+      setLoaded({
+        name: name.trim(),
+        assistant: assistantName.trim(),
+        voice: writingOwn ? 'own' : pick,
+      })
+      go('mail')
     } catch (e) {
       setErr(String(e))
     } finally {
@@ -110,7 +185,8 @@ export function Meet({
     }
   }
 
-  const ready = name.trim().length > 0 && (!writingOwn || own.trim().length > 0)
+  const ready =
+    name.trim().length > 0 && (!writingOwn || own.trim().length > 0 || loaded?.voice === 'own')
 
   // The three steps after mail. Each can be skipped, and skipping one goes
   // on to the next rather than out: Not now on the learn run still offers
@@ -121,21 +197,19 @@ export function Meet({
   const close = onClose ?? onDone
   if (step === 'learn') {
     return (
-      <LearnStep onDone={() => setStep('life')} onSkip={() => setStep('life')} onClose={close} />
+      <LearnStep onDone={() => go('life')} onSkip={() => go('life')} onClose={close} nav={nav} />
     )
   }
   if (step === 'life') {
-    return <LifeStep onDone={() => setStep('home')} onClose={close} />
+    return <LifeStep onDone={() => go('home')} onClose={close} nav={nav} />
   }
   if (step === 'home') {
-    return <HomeStep onDone={onDone} onSkip={onDone} onClose={close} />
+    return <HomeStep onDone={finish} onSkip={finish} onClose={close} nav={nav} />
   }
 
   if (step === 'mail') {
     return (
-      <div className="flex h-full flex-col overflow-auto bg-page text-body">
-        <div className="flex min-h-0 flex-grow items-center justify-center p-8">
-          <div className="flex w-full max-w-[640px] flex-col gap-7">
+      <Frame step="mail" onClose={close} nav={nav}>
             <div className="flex items-start gap-4">
               <span className="flex h-[46px] w-[46px] flex-shrink-0 items-center justify-center rounded-[14px] bg-indigo-500/15">
                 <Icon name="mail" size={22} className="text-indigo-400" />
@@ -204,7 +278,7 @@ export function Meet({
 
             <div className="flex items-center gap-3">
               <button
-                onClick={() => setStep('learn')}
+                onClick={() => go('learn')}
                 className="rounded-[6px] bg-indigo-600 px-4 py-2 text-[12px] text-white disabled:opacity-40"
                 disabled={busy}
               >
@@ -226,16 +300,14 @@ export function Meet({
                 already applies to your clipboard.
               </p>
             </div>
-          </div>
-        </div>
-      </div>
+      </Frame>
     )
   }
 
+  // Before anyone has met there is nothing to close to: the name is the
+  // first thing the app needs. Reopened later, the corner has its Close.
   return (
-    <div className="flex h-full flex-col overflow-auto bg-page text-body">
-      <div className="flex min-h-0 flex-grow items-center justify-center p-8">
-        <div className="flex w-full max-w-[780px] flex-col gap-7">
+    <Frame step="voice" onClose={start ? close : undefined} nav={start ? nav : undefined}>
           <div className="flex items-start gap-4">
             <span className="flex h-[46px] w-[46px] flex-shrink-0 items-center justify-center rounded-[14px] bg-indigo-500/15">
               <Icon name="ai" size={22} className="text-indigo-400" />
@@ -344,7 +416,7 @@ export function Meet({
             </div>
             <button
               disabled={!ready || busy}
-              onClick={() => void go()}
+              onClick={() => void saveVoice()}
               className="flex-shrink-0 rounded-[6px] bg-indigo-600 px-4 py-2 text-[12px] text-white disabled:cursor-not-allowed disabled:opacity-40"
             >
               {busy ? 'Saving…' : 'Next'}
@@ -366,8 +438,6 @@ export function Meet({
               your vault. Two places, on purpose, so nothing personal ends up in a commit.
             </p>
           </div>
-        </div>
-      </div>
-    </div>
+    </Frame>
   )
 }

@@ -11,6 +11,7 @@ import * as ipc from '../../lib/ipc'
 import { aiw, type PersonView } from '../../lib/aiw'
 import { Icon } from '../../lib/icons'
 import { Err, Frame, Header } from './LearnStep'
+import type { SetupNav } from './steps'
 
 /// What somebody usually is. In words, because a role is a word and not a
 /// code: "wife" is stored as "wife".
@@ -53,7 +54,15 @@ const blank = (): Draft => ({
   why: 'you',
 })
 
-export function LifeStep({ onDone, onClose }: { onDone: () => void; onClose?: () => void }) {
+export function LifeStep({
+  onDone,
+  onClose,
+  nav,
+}: {
+  onDone: () => void
+  onClose?: () => void
+  nav?: SetupNav
+}) {
   const [rows, setRows] = useState<Draft[]>([])
   const [adding, setAdding] = useState<Draft>(blank())
   const [free, setFree] = useState('')
@@ -156,7 +165,7 @@ export function LifeStep({ onDone, onClose }: { onDone: () => void; onClose?: ()
   const named = rows.filter((r) => r.role).length
 
   return (
-    <Frame step="life" onClose={onClose}>
+    <Frame step="life" onClose={onClose} nav={nav}>
       <Header
         icon="contacts"
         title="Who is in your life"

@@ -13,6 +13,7 @@ import { Icon } from '../../lib/icons'
 import { Err, Frame, Header } from './LearnStep'
 import { useApp } from '../../store'
 import { CAPTURE_HOME_AUTO } from '../../lib/devCapture'
+import type { SetupNav } from './steps'
 
 interface Worker {
   key: string
@@ -25,12 +26,17 @@ export function HomeStep({
   onDone,
   onSkip,
   onClose,
+  nav,
 }: {
   onDone: () => void
   onSkip: () => void
   onClose?: () => void
+  nav?: SetupNav
 }) {
-  const { refreshTree } = useApp()
+  const { refreshTree, nodes } = useApp()
+  // Made already, on an earlier pass. Coming back here shows the space
+  // rather than a form that would make a second one.
+  const existing = nodes.find((x) => x.kind === 'workspace' && x.name === 'Home')
   const [starter, setStarter] = useState<ipc.Starter | null>(null)
   const [address, setAddress] = useState('')
   const [kind, setKind] = useState('')
@@ -142,8 +148,36 @@ export function HomeStep({
     }
   }
 
+  if (existing && !made) {
+    return (
+      <Frame step="home" onClose={onClose} nav={nav}>
+        <Header
+          icon="home"
+          ok
+          title="Home is a space"
+          text="It is in Spaces, tagged Personal, with a Home manager that keeps what is due. What you told me is on its Known tab, and that is where anything else about the house goes."
+        />
+        <div className="flex items-center gap-3 rounded-[10px] border border-line bg-panel px-4 py-3">
+          <Icon name="home" size={16} className="text-indigo-400" />
+          <span className="text-[13px] font-semibold text-ink">{existing.name}</span>
+          <span className="rounded bg-raise px-1.5 py-0.5 text-[10.5px] text-muted">Personal</span>
+          <span className="flex-1" />
+          <span className="text-[11px] text-muted">Spaces, then Home, then Known</span>
+        </div>
+        <div className="flex items-center gap-3 border-t border-line pt-4">
+          <button className="btn-primary text-[12px]" onClick={onDone}>
+            Finish
+          </button>
+          <span className="text-[11px] text-faint">
+            Add to the house from its Known tab, or ask the Home manager in its thread.
+          </span>
+        </div>
+      </Frame>
+    )
+  }
+
   return (
-    <Frame step="home" onClose={onClose}>
+    <Frame step="home" onClose={onClose} nav={nav}>
       <Header
         icon="home"
         title="The house you run"

@@ -1623,6 +1623,13 @@ pub fn run_live(
     let mut tokens_so_far: i64 = 0;
     let mut facts_total = 0usize;
     let mut stopped = false;
+    // What has actually gone. The row above was written with the whole plan
+    // so a crash mid-run leaves a receipt; from here it is corrected after
+    // every person, so a Stop after the second of nine says two of nine and
+    // the other seven are still unread next time.
+    let mut sent_keys: Vec<String> = Vec::new();
+    let mut sent_messages: i64 = 0;
+    let mut sent_people: i64 = 0;
 
     for (i, person) in whole.people.iter().enumerate() {
         if STOP.load(std::sync::atomic::Ordering::SeqCst) {
@@ -1729,6 +1736,26 @@ pub fn run_live(
             }
         }
         facts_total += count.get();
+        sent_people += 1;
+        sent_messages += part.messages.len() as i64;
+        for k in part.thread_keys() {
+            if !sent_keys.contains(&k) {
+                sent_keys.push(k);
+            }
+        }
+        {
+            let conn = db.0.lock().unwrap();
+            let _ = conn.execute(
+                "UPDATE learn_runs SET people=?2, threads=?3, messages=?4, thread_keys=?5 WHERE id=?1",
+                params![
+                    run_id,
+                    sent_people,
+                    sent_keys.len() as i64,
+                    sent_messages,
+                    serde_json::to_string(&sent_keys).unwrap_or_else(|_| "[]".into()),
+                ],
+            );
+        }
         let (cost_so_far, _) = estimate_cost(&model, tokens_so_far);
         let _ = app.emit(
             "learn:person",

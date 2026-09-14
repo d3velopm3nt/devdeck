@@ -13,36 +13,47 @@ import { Icon } from '../../lib/icons'
 import { useApp } from '../../store'
 import type { MailCounts } from '../../lib/types'
 import { CAPTURE_LEARN_AUTO } from '../../lib/devCapture'
+import { SETUP_ORDER, stepIndex, type SetupNav, type SetupStep } from './steps'
 
 type Phase = 'sorting' | 'approve' | 'reading' | 'done'
 
 const n = (v: number) => v.toLocaleString()
 
-function Steps({ at }: { at: 'learn' | 'life' | 'home' }) {
-  const order: Array<'voice' | 'mail' | 'learn' | 'life' | 'home'> = ['voice', 'mail', 'learn', 'life', 'home']
+/**
+ * The step bar. Every step you have reached is a button back to it; the
+ * ones ahead are not, because there is nothing there yet.
+ */
+function Steps({ at, nav }: { at: SetupStep; nav?: SetupNav }) {
   const label = { voice: 'Voice', mail: 'Mail', learn: 'Learn', life: 'Life', home: 'Home' }
-  const idx = order.indexOf(at)
+  const idx = stepIndex(at)
+  const reached = nav ? Math.max(stepIndex(nav.reached), idx) : idx
   return (
     <div className="flex items-center gap-2.5 text-[11px]">
-      {order.map((s, i) => (
-        <span key={s} className="flex items-center gap-2.5">
-          {i > 0 && <span className="h-px w-6 bg-line2" />}
-          <span
-            className={`flex items-center gap-1.5 ${
-              i === idx ? 'font-semibold text-ink' : 'text-muted'
-            }`}
-          >
-            {i < idx ? (
-              <Icon name="check" size={12} className="text-ok" />
-            ) : i === idx ? (
-              <span className="h-[7px] w-[7px] rounded-full bg-indigo-400" />
-            ) : (
-              <span className="h-[7px] w-[7px] rounded-full border border-line2" />
-            )}
-            {label[s]}
+      {SETUP_ORDER.map((s, i) => {
+        const can = !!nav && i <= reached && i !== idx
+        return (
+          <span key={s} className="flex items-center gap-2.5">
+            {i > 0 && <span className="h-px w-6 bg-line2" />}
+            <button
+              disabled={!can}
+              onClick={() => nav?.onGo(s)}
+              title={can ? `Back to ${label[s]}` : undefined}
+              className={`flex items-center gap-1.5 rounded px-1 py-0.5 ${
+                i === idx ? 'font-semibold text-ink' : 'text-muted'
+              } ${can ? 'hover:bg-hover hover:text-ink' : 'cursor-default'}`}
+            >
+              {i < reached && i !== idx ? (
+                <Icon name="check" size={12} className="text-ok" />
+              ) : i === idx ? (
+                <span className="h-[7px] w-[7px] rounded-full bg-indigo-400" />
+              ) : (
+                <span className="h-[7px] w-[7px] rounded-full border border-line2" />
+              )}
+              {label[s]}
+            </button>
           </span>
-        </span>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -60,10 +71,12 @@ export function LearnStep({
   onDone,
   onSkip,
   onClose,
+  nav,
 }: {
   onDone: () => void
   onSkip: () => void
   onClose?: () => void
+  nav?: SetupNav
 }) {
   const { mailSyncing, mailAccounts, refreshMailAccounts } = useApp()
   const [phase, setPhase] = useState<Phase>('sorting')
@@ -74,6 +87,25 @@ export function LearnStep({
   const [counts, setCounts] = useState<MailCounts | null>(null)
   const [est, setEst] = useState<ipc.LearnEstimate | null>(null)
   const [err, setErr] = useState('')
+
+  // What an earlier run did, so coming back here shows it rather than a
+  // screen that says nobody, because everybody has been read.
+  const [lastRun, setLastRun] = useState<ipc.LearnRun | null>(null)
+  const [inboxWaiting, setInboxWaiting] = useState(0)
+  useEffect(() => {
+    if (phase !== 'sorting') return
+    let live = true
+    void Promise.all([ipc.learnRuns(1), ipc.learnFacts(0, 'proposed')])
+      .then(([runs, facts]) => {
+        if (!live) return
+        setLastRun(runs.find((r) => r.status === 'done') ?? null)
+        setInboxWaiting(facts.length)
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [phase])
 
   // Sorting: what is on the machine, polled while the first sync runs. It is
   // a local query each time, and the numbers are the same ones the approval
@@ -253,11 +285,67 @@ export function LearnStep({
   const secret = est?.excluded.find((x) => x.kind === 'secret')?.count ?? 0
   const strangers = est?.excluded.find((x) => x.kind === 'strangers')?.count ?? 0
 
+  const readBefore = est?.excluded.find((x) => x.kind === 'read')?.count ?? 0
+  const when = (r: ipc.LearnRun) =>
+    new Date(r.finished_at || r.started_at).toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'long',
+    })
+
+  // ---- already read --------------------------------------------------------
+  // Everybody you write to was read by an earlier run and nothing new has
+  // arrived since. Zero people with no explanation looked like a bug; this
+  // is what it means.
+  if (phase === 'sorting' && lastRun && est && counts && !mailSyncing && est.people.length === 0) {
+    return (
+      <Frame step="learn" onClose={close} nav={nav}>
+        <Header
+          icon="check"
+          ok
+          title="Your mail has been read"
+          text={`On ${when(lastRun)} I read ${lastRun.people} ${
+            lastRun.people === 1 ? 'person' : 'people'
+          }: ${n(lastRun.messages)} messages in ${n(lastRun.threads)} threads, with ${
+            lastRun.model
+          }. Nothing has arrived since that is worth reading again.`}
+        />
+        <div className="grid grid-cols-3 gap-3">
+          <Stat head="people read" big={String(lastRun.people)} tone="ink" />
+          <Stat head="kept" big={String(lastRun.kept)} tone="ink" />
+          <Stat head="waiting for you" big={String(inboxWaiting)} tone="ink" accent>
+            <p className="mt-1 text-[11.5px] leading-relaxed text-muted">
+              In your Inbox, each with Keep and No.
+            </p>
+          </Stat>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <Stat head="Automated, ignored" big={counts ? n(automated) : '…'} tone="dim" />
+          <Stat head="Skipped whole" big={n(secret)} tone="dim" />
+          <Stat head="Never answered" big={n(strangers)} tone="dim" />
+        </div>
+        {err && <Err>{err}</Err>}
+        <div className="flex items-center gap-3 border-t border-line pt-4">
+          <Icon name="secret" size={15} className="text-ok" />
+          <span className="text-[12px] text-body">
+            New mail from these people goes in the next run, from Mail.
+          </span>
+          <span className="flex-1" />
+          <button className="btn-primary text-[12px]" onClick={onDone}>
+            Continue
+          </button>
+          <button className="btn-ghost text-[12px]" onClick={onSkip}>
+            Not now
+          </button>
+        </div>
+      </Frame>
+    )
+  }
+
   // ---- sorting -------------------------------------------------------------
   if (phase === 'sorting') {
     const ready = !mailSyncing && !!est && !!counts
     return (
-      <Frame step="learn" onClose={close}>
+      <Frame step="learn" onClose={close} nav={nav}>
         <Header
           icon="mail"
           title="Reading your mail, here first"
@@ -317,6 +405,14 @@ export function LearnStep({
           </Stat>
         </div>
 
+        {lastRun && (
+          <p className="m-0 text-[11.5px] leading-relaxed text-muted">
+            An earlier run on {when(lastRun)} read {n(lastRun.threads)} threads
+            {readBefore > 0 ? `; ${n(readBefore)} of them are left out here` : ''}. Only what
+            arrived since goes this time.
+            {inboxWaiting > 0 ? ` ${inboxWaiting} of its facts are still waiting in your Inbox.` : ''}
+          </p>
+        )}
         {err && <Err>{err}</Err>}
 
         <div className="flex items-center gap-3 border-t border-line pt-4">
@@ -344,7 +440,7 @@ export function LearnStep({
   if (phase === 'approve') {
     const people = est?.people ?? []
     return (
-      <Frame step="learn" onClose={close}>
+      <Frame step="learn" onClose={close} nav={nav}>
         <Header
           icon="contacts"
           title={`${people.length} ${people.length === 1 ? 'person' : 'people'} you actually talk to`}
@@ -433,7 +529,7 @@ export function LearnStep({
     // The person being read on top, then the ones already read.
     const started = (plan?.people ?? []).filter((_, i) => i <= doneIdx + 1).reverse()
     return (
-      <Frame step="learn" wide onClose={close}>
+      <Frame step="learn" wide onClose={close} nav={nav}>
         <div className="flex items-end gap-4">
           <div className="flex-1">
             <div className="text-[24px] font-semibold tracking-tight text-ink">
@@ -574,7 +670,7 @@ export function LearnStep({
     (p) => !decided[p.contact_id] && facts.some((f) => f.contact_id === p.contact_id && f.status === 'proposed'),
   )
   return (
-    <Frame step="learn" wide={open.length > 0} onClose={close}>
+    <Frame step="learn" wide={open.length > 0} onClose={close} nav={nav}>
       <Header
         icon="check"
         ok
@@ -630,12 +726,15 @@ export function Frame({
   step,
   wide,
   onClose,
+  nav,
   children,
 }: {
-  step: 'learn' | 'life' | 'home'
+  step: SetupStep
   wide?: boolean
   /** Leave setup where it is. Shown as a Close in the corner. */
   onClose?: () => void
+  /** Makes the step bar clickable back to any step already reached. */
+  nav?: SetupNav
   children: React.ReactNode
 }) {
   return (
@@ -645,7 +744,7 @@ export function Frame({
           className={`flex w-full min-h-0 flex-col gap-6 ${wide ? 'max-w-[1080px]' : 'max-w-[760px]'}`}
         >
           <div className="flex items-center">
-            <Steps at={step} />
+            <Steps at={step} nav={nav} />
             <span className="flex-1" />
             {onClose && (
               <button

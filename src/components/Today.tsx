@@ -254,7 +254,19 @@ export function Today() {
             {!nodes.some((x) => x.kind === 'workspace' && x.name === 'Home') && (
               <button
                 className="mb-3 flex w-full items-center gap-2.5 rounded-lg border border-indigo-500/30 bg-indigo-500/5 px-3 py-2 text-left hover:bg-indigo-500/10"
-                onClick={() => window.dispatchEvent(new CustomEvent('devdeck:setup', { detail: 'learn' }))}
+                onClick={() =>
+                  // Where you left off, not always the first of the three.
+                  void ipc
+                    .settingGet('setup.at')
+                    .catch(() => null)
+                    .then((at) =>
+                      window.dispatchEvent(
+                        new CustomEvent('devdeck:setup', {
+                          detail: at && at !== 'done' && at !== 'voice' && at !== 'mail' ? at : 'learn',
+                        }),
+                      ),
+                    )
+                }
               >
                 <Icon name="ai" size={13} className="text-indigo-400" />
                 <span className="text-[12px] text-ink">Finish setting up</span>

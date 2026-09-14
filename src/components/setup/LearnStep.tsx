@@ -56,8 +56,12 @@ interface LiveFact {
 }
 
 export function LearnStep({ onDone, onSkip }: { onDone: () => void; onSkip: () => void }) {
-  const { mailSyncing, mailAccounts } = useApp()
+  const { mailSyncing, mailAccounts, refreshMailAccounts } = useApp()
   const [phase, setPhase] = useState<Phase>('sorting')
+  useEffect(() => {
+    // The first run has not opened Mail, so the store has nothing yet.
+    void refreshMailAccounts()
+  }, [refreshMailAccounts])
   const [counts, setCounts] = useState<MailCounts | null>(null)
   const [est, setEst] = useState<ipc.LearnEstimate | null>(null)
   const [err, setErr] = useState('')
@@ -146,7 +150,10 @@ export function LearnStep({ onDone, onSkip }: { onDone: () => void; onSkip: () =
     if (phase === 'sorting') setPhase('approve')
     else if (phase === 'approve' && CAPTURE_LEARN_AUTO !== 'approve') {
       autoRan.current = true
-      void start()
+      // Not at once: a fresh window takes ten seconds or more to paint, and
+      // the mock reads six people in seven. Starting immediately means the
+      // run is over before there is anything to photograph.
+      window.setTimeout(() => void start(), 20000)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, est, counts, mailSyncing, CAPTURE_LEARN_AUTO])

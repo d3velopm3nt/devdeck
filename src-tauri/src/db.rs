@@ -87,10 +87,25 @@ pub struct LayoutDef {
     pub data: String, // dockview layout JSON
 }
 
+/// Where DevDeck keeps everything about this machine: the database, the
+/// personal store, the attachments folder by default.
+///
+/// `%APPDATA%\devdeck`, unless `DEVDECK_HOME` says otherwise. The override
+/// exists so a throwaway profile can be run beside the real one -- a test
+/// mailbox, a screenshot run, a demo -- without touching a byte of yours.
+/// `dirs` reads the known-folder API rather than the environment, so setting
+/// APPDATA does nothing; this is the one switch that does.
+pub fn home_dir() -> PathBuf {
+    match std::env::var("DEVDECK_HOME") {
+        Ok(h) if !h.trim().is_empty() => PathBuf::from(h.trim()),
+        _ => dirs::config_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("devdeck"),
+    }
+}
+
 pub fn db_path() -> PathBuf {
-    let dir = dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("devdeck");
+    let dir = home_dir();
     let _ = std::fs::create_dir_all(&dir);
     dir.join("devdeck.sqlite")
 }

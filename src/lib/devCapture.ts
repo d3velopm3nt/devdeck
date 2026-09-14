@@ -1,4 +1,4 @@
-export const CAPTURE_RAIL: string = ''
+﻿export const CAPTURE_RAIL: string = ''
 export const CAPTURE_PAGE = ''
 export const CAPTURE_PROJECT = ''
 export const CAPTURE_FEATURE = ''
@@ -27,7 +27,7 @@ export const CAPTURE_CHECK: string = ''
 export const CAPTURE_CONTEXT: boolean = false
 export const CAPTURE_BELL: boolean = false
 /** Put the newest failure back to unread, through the same command a click
- *  uses — the only way to photograph an unread row without a mouse. */
+ *  uses â€” the only way to photograph an unread row without a mouse. */
 export const CAPTURE_INBOX_UNREAD: boolean = false
 export const CAPTURE_CAL_VIEW: string = ''
 export const CAPTURE_EVENT: string = ''
@@ -66,3 +66,10 @@ export const CAPTURE_MAIL_PANE: string = ''
  *  assistant is on, so this is only ever set on a throwaway profile with the
  *  mock. Empty in every shipped build. */
 export const CAPTURE_LEARN_AUTO: string = ''
+/** Open Your life on mount. Empty in every shipped build. */
+export const CAPTURE_LIFE_PAGE: boolean = false
+/** On the home step, fill in sample answers and make the space, without a
+ *  mouse. Only on a throwaway profile. Empty in every shipped build. */
+export const CAPTURE_HOME_AUTO: boolean = false
+/** Which tab a node page opens on: known | files | ... Empty in every shipped build. */
+export const CAPTURE_NODE_TAB: string = ''

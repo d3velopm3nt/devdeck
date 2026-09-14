@@ -188,10 +188,9 @@ impl PersonalStore {
     /// `%APPDATA%\devdeck\assistant` on Windows; the platform equivalent
     /// elsewhere. Alongside `devdeck.sqlite`, which lives in the same place.
     pub fn default_root() -> PathBuf {
-        dirs::config_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("devdeck")
-            .join("assistant")
+        // Beside the database, wherever that is -- `DEVDECK_HOME` moves both
+        // together, so a throwaway profile is a whole profile.
+        crate::db::home_dir().join("assistant")
     }
 
     pub fn root(&self) -> &Path {

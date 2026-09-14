@@ -51,10 +51,8 @@ pub enum Extracted {
 
 /// The default root, used when nothing is configured.
 pub fn default_root() -> PathBuf {
-    let base = std::env::var("APPDATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("."));
-    base.join("devdeck").join("mail")
+    // Beside the database. `DEVDECK_HOME` moves the whole profile at once.
+    crate::db::home_dir().join("mail")
 }
 
 pub fn root(conn: &rusqlite::Connection) -> PathBuf {

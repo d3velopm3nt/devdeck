@@ -16,6 +16,7 @@
 // dashboard — is one click away rather than five rows in the tree.
 
 import { useEffect, useMemo, useState } from 'react'
+import { CAPTURE_NODE_TAB } from '../../lib/devCapture'
 import type { IDockviewPanelProps } from 'dockview-react'
 import * as ipc from '../../lib/ipc'
 import { useApp } from '../../store'
@@ -64,7 +65,7 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
   const { nodes, commands, services, gitByNode, bots, refreshBots } = useApp()
   const a = useAiw()
   const [dir, setDir] = useState('')
-  const [tab, setTab] = useState<Tab>('thread')
+  const [tab, setTab] = useState<Tab>((CAPTURE_NODE_TAB as Tab) || 'thread')
   const [reminders, setReminders] = useState(0)
   // What is known about this space: kept facts and setup answers, read the
   // way its manager reads them. A tab only when there is something in it.

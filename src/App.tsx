@@ -42,6 +42,7 @@ import {
   CAPTURE_MAIL_ACCOUNT,
   CAPTURE_LEARN,
   CAPTURE_MAIL_PANE,
+  CAPTURE_LIFE_PAGE,
   CAPTURE_MEET_STEP,
   CAPTURE_SAY,
 } from './lib/devCapture'
@@ -58,7 +59,7 @@ import { routeOutput } from './lib/termBus'
 import { useApp } from './store'
 import { forgetFileListings } from './lib/fileIndex'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
-import { openNodeThread, dockApi, openFile, openTerminalPanel, openEditor, openNodeSetup, openSingleton, openLearnRun, saveLayout, restoreLayout } from './lib/dock'
+import { openNodeThread, dockApi, openFile, openTerminalPanel, openEditor, openNodeSetup, openSingleton, openLearnRun, openLife, saveLayout, restoreLayout } from './lib/dock'
 import { openTerminal, launchProfile } from './lib/runner'
 import { resolveDir } from './lib/tree'
 
@@ -276,6 +277,18 @@ export default function App() {
     app.setRailView('mail')
     app.setMailPane(CAPTURE_MAIL_PANE as 'mail' | 'contacts')
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Screenshot harness: open Your life, once the dock is up.
+  useEffect(() => {
+    if (!CAPTURE_LIFE_PAGE) return
+    const open = window.setInterval(() => {
+      const dock = dockApi()
+      if (!dock || dock.panels.length === 0) return
+      window.clearInterval(open)
+      openLife()
+    }, 400)
+    window.setTimeout(() => window.clearInterval(open), 20000)
   }, [])
 
   // Screenshot harness: open the learn run.

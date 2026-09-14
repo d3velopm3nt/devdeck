@@ -660,6 +660,23 @@ pub fn build_corpus(
             why: "from senders you have never replied to — reciprocity, not volume".into(),
         });
     }
+    // Codes anywhere in the inbox, not only in the chosen people's mail. Most
+    // of them come from senders you never answer, which the ranking already
+    // leaves out -- but "skipped whole" on the screen is a promise about the
+    // mailbox, and the number has to be the mailbox's.
+    let secret_everywhere: i64 = {
+        let mut st = conn
+            .prepare("SELECT subject, body_text FROM mail_messages WHERE mailbox='INBOX' LIMIT 5000")
+            .map_err(err)?;
+        let rows = st
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
+            .map_err(err)?;
+        rows.flatten()
+            .filter(|(s, b)| message_secret_reason(s, b).is_some())
+            .count() as i64
+    };
+    let secret_skipped = secret_skipped.max(secret_everywhere);
+
     if read_before > 0 {
         corpus.excluded.push(LearnExclusion {
             kind: "read".into(),

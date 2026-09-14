@@ -6,12 +6,13 @@
 // is where the Home manager reads from. The people who work there become
 // records in your personal store; the space only keeps their role and days.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as ipc from '../../lib/ipc'
 import { aiw } from '../../lib/aiw'
 import { Icon } from '../../lib/icons'
 import { Err, Frame, Header } from './LearnStep'
 import { useApp } from '../../store'
+import { CAPTURE_HOME_AUTO } from '../../lib/devCapture'
 
 interface Worker {
   key: string
@@ -43,6 +44,27 @@ export function HomeStep({ onDone, onSkip }: { onDone: () => void; onSkip: () =>
       .then((all) => setStarter(all.find((s) => s.id === 'home') ?? null))
       .catch((e) => setErr(String(e)))
   }, [])
+
+  // Screenshot harness: sample answers, then the button. Made-up, like the
+  // rest of the throwaway profile.
+  const autoRan = useRef(false)
+  useEffect(() => {
+    if (!CAPTURE_HOME_AUTO || !starter || autoRan.current) return
+    autoRan.current = true
+    setAddress('12 Acacia Lane, Parkview')
+    setKind('A house with a pool and a garden')
+    setSince('2021')
+    setPool(true)
+    setPoolNote('AquaCare, first Thursday of the month; salt chlorinator, pump on a 6-hour timer')
+    setGarden(true)
+    setGardenNote('GreenCut Services on Tuesdays; irrigation on two zones')
+    setWorkers([{ key: 'w-1', name: 'Grace Mthembu', role: 'domestic worker', days: 'Mon, Wed, Fri' }])
+    setExtra('Prepaid electricity. Bins go out on Tuesday night.')
+    window.setTimeout(() => {
+      const btn = document.querySelector<HTMLButtonElement>('[data-capture="make-home"]')
+      btn?.click()
+    }, 800)
+  }, [starter])
 
   const create = async () => {
     setBusy(true)
@@ -245,7 +267,12 @@ export function HomeStep({ onDone, onSkip }: { onDone: () => void; onSkip: () =>
       )}
 
       <div className="flex items-center gap-3">
-        <button className="btn-primary text-[12px]" disabled={busy} onClick={() => void create()}>
+        <button
+          className="btn-primary text-[12px]"
+          disabled={busy}
+          data-capture="make-home"
+          onClick={() => void create()}
+        >
           {busy ? 'Making Home…' : 'Make the Home space'}
         </button>
         <button className="btn-ghost text-[12px]" disabled={busy} onClick={onSkip}>

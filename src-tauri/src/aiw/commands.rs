@@ -1156,10 +1156,7 @@ pub async fn aiw_run_demo(
 ) -> Result<DemoResult, String> {
     let base = match base_dir {
         Some(d) => PathBuf::from(d),
-        None => dirs::config_dir()
-            .ok_or("no config dir")?
-            .join("devdeck")
-            .join("demo"),
+        None => crate::db::home_dir().join("demo"),
     };
     // A re-run must start clean, or the second run inherits the first's
     // commits and the delta is meaningless.

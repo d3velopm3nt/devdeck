@@ -512,6 +512,21 @@ pub const MAIL_SCHEMA: &str = r#"
         );
         CREATE INDEX IF NOT EXISTS learn_facts_run ON learn_facts(run_id);
         CREATE INDEX IF NOT EXISTS learn_facts_status ON learn_facts(status);
+
+        -- One row per person a run read: the model's summary of them and
+        -- the one decision about their card. The facts under the card are
+        -- in learn_facts, by run and contact.
+        CREATE TABLE IF NOT EXISTS learn_people (
+            id INTEGER PRIMARY KEY,
+            run_id INTEGER NOT NULL REFERENCES learn_runs(id) ON DELETE CASCADE,
+            contact_id INTEGER NOT NULL DEFAULT 0,
+            name TEXT NOT NULL DEFAULT '',
+            email TEXT NOT NULL DEFAULT '',
+            summary TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'proposed', -- proposed | kept | declined
+            decided_at INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS learn_people_run ON learn_people(run_id);
 "#;
 
 /// The Stash full-text index: an external-content FTS5 table kept in sync by

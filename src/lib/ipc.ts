@@ -1547,8 +1547,8 @@ export interface LearnFact {
 }
 
 /** What a run would cost and what it would leave out. Nothing is sent. */
-export const learnEstimate = (people = 12, only: number[] = [], depth = 'full') =>
-  invoke<LearnEstimate>('learn_estimate', { people, only, depth })
+export const learnEstimate = (people = 12, only: number[] = [], depth = 'full', fresh = false) =>
+  invoke<LearnEstimate>('learn_estimate', { people, only, depth, fresh })
 /** Everybody a run could read about, for the Choose who list. */
 export const learnPeople = (limit = 50) =>
   invoke<Correspondent[]>('learn_people', { limit })
@@ -1577,6 +1577,8 @@ export interface KeptLine {
  * decline those, and put the summary on the person's record.
  */
 export interface PersonDecision {
+  run_id: number
+  contact_id: number
   name: string
   email: string
   summary: string
@@ -1590,6 +1592,18 @@ export interface PersonOutcome {
 }
 export const learnDecidePerson = (decision: PersonDecision) =>
   invoke<PersonOutcome>('learn_decide_person', { decision })
+
+/** A person's card as a run left it: summary, facts, and the decision. */
+export interface LearnCard {
+  run_id: number
+  person: LivePerson
+  summary: string
+  /** proposed | kept | declined */
+  status: string
+  facts: LearnFact[]
+}
+/** The cards of a run, to decide or look at again. `runId` 0 is the latest. */
+export const learnReview = (runId = 0) => invoke<LearnCard[]>('learn_review', { runId })
 
 /** Somebody in a live run's plan. */
 export interface LivePerson {
@@ -1650,8 +1664,8 @@ export interface LearnFailedEvent {
  * promise resolves with the receipt when the last person is done, or when
  * Stop was pressed; the events arrive along the way.
  */
-export const learnRunLive = (people = 12, only: number[] = [], depth = 'full') =>
-  invoke<LearnRun>('learn_run_live', { people, only, depth })
+export const learnRunLive = (people = 12, only: number[] = [], depth = 'full', fresh = false) =>
+  invoke<LearnRun>('learn_run_live', { people, only, depth, fresh })
 /** Stop after the person being read. Everything that came back stays. */
 export const learnStop = () => invoke<void>('learn_stop')
 /** Everything a live run says, as it says it. Returns the unsubscribe. */

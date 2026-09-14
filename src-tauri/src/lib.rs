@@ -1136,6 +1136,7 @@ pub fn run() {
             aiw::learn::learn_run,
             aiw::learn::learn_run_live,
             aiw::learn::learn_decide_person,
+            aiw::learn::learn_review,
             aiw::learn::learn_stop,
             aiw::learn::learn_note_save,
             aiw::learn::learn_notes,

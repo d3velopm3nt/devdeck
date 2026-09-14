@@ -26,7 +26,7 @@
 //! goes to the personal store, and there is no path in this file that writes a
 //! `you` fact anywhere near a repository.
 
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
 use super::context::estimate_tokens;
@@ -436,6 +436,19 @@ pub fn build_corpus(
     only: &[i64],
     depth: Depth,
 ) -> Result<Corpus, String> {
+    build_corpus_opts(conn, people, only, depth, false)
+}
+
+/// The same, with `fresh`: read everything again, as if no earlier run had.
+/// For the person who wants the cards again after a run that was decided
+/// fact by fact, and knows it is sent again.
+pub fn build_corpus_opts(
+    conn: &Connection,
+    people: i64,
+    only: &[i64],
+    depth: Depth,
+    fresh: bool,
+) -> Result<Corpus, String> {
     let ranked = crate::mail::rank_correspondents_pub(conn, people.max(1).min(100))?;
     let chosen: Vec<crate::mail::Correspondent> = if only.is_empty() {
         ranked
@@ -467,7 +480,9 @@ pub fn build_corpus(
     // since goes again. This is what makes a second run read the *next*
     // mail rather than the same newest mail, and what makes the estimate's
     // "run it again and they are next" a true sentence.
-    let already: std::collections::HashMap<String, i64> = {
+    let already: std::collections::HashMap<String, i64> = if fresh {
+        Default::default()
+    } else {
         let mut st = conn
             .prepare("SELECT thread_keys, started_at FROM learn_runs WHERE status = 'done'")
             .map_err(err)?;
@@ -1542,6 +1557,7 @@ pub fn run_live(
     people: i64,
     only: &[i64],
     depth: Depth,
+    fresh: bool,
 ) -> Result<LearnRun, String> {
     use tauri::Emitter;
     STOP.store(false, std::sync::atomic::Ordering::SeqCst);
@@ -1559,7 +1575,7 @@ pub fn run_live(
     // The whole batch first: it is the receipt, and the plan the screen shows.
     let whole = {
         let conn = db.0.lock().unwrap();
-        build_corpus(&conn, people, only, depth)?
+        build_corpus_opts(&conn, people, only, depth, fresh)?
     };
     if whole.messages.is_empty() {
         return Err("nothing to read -- every message for these people was held back".into());
@@ -1640,10 +1656,21 @@ pub fn run_live(
         // every ranked person so a late name in the ranking is still found.
         let part = {
             let conn = db.0.lock().unwrap();
-            build_corpus(&conn, 100, &[person.contact_id], depth)?
+            build_corpus_opts(&conn, 100, &[person.contact_id], depth, fresh)?
         };
         if part.messages.is_empty() {
             continue;
+        }
+        // Their card, before a word comes back: a crash mid-person still
+        // leaves a card to decide, with whatever facts had landed.
+        {
+            let who = live_person(person);
+            let conn = db.0.lock().unwrap();
+            let _ = conn.execute(
+                "INSERT INTO learn_people (run_id, contact_id, name, email, status)
+                 VALUES (?1, ?2, ?3, ?4, 'proposed')",
+                params![run_id, who.contact_id, who.name, who.email],
+            );
         }
         let (prompt, part_chars, part_tokens) = part.body();
         let _ = part_chars;
@@ -1669,6 +1696,13 @@ pub fn run_live(
         let who = live_person(person);
         let on_line = |line: &str| {
             if let Some(text) = parse_summary_line(line) {
+                {
+                    let conn = db.0.lock().unwrap();
+                    let _ = conn.execute(
+                        "UPDATE learn_people SET summary=?3 WHERE run_id=?1 AND contact_id=?2",
+                        params![run_id, who.contact_id, text],
+                    );
+                }
                 let _ = app.emit(
                     "learn:summary",
                     serde_json::json!({
@@ -1942,14 +1976,16 @@ pub async fn learn_estimate(
     people: i64,
     only: Vec<i64>,
     depth: String,
+    fresh: Option<bool>,
 ) -> Result<LearnEstimate, String> {
     let (provider, provider_name, model, ready, note) = destination_model(&ws);
     let conn = db.0.lock().unwrap();
-    let corpus = build_corpus(
+    let corpus = build_corpus_opts(
         &conn,
         if people > 0 { people } else { DEFAULT_PEOPLE },
         &only,
         Depth::parse(&depth),
+        fresh.unwrap_or(false),
     )?;
     Ok(corpus.estimate(&provider, &provider_name, &model, ready, &note))
 }
@@ -1992,13 +2028,15 @@ pub async fn learn_run_live(
     people: i64,
     only: Vec<i64>,
     depth: String,
+    fresh: Option<bool>,
 ) -> Result<LearnRun, String> {
     let ws = (*ws).clone();
     let depth = Depth::parse(&depth);
     let people = if people > 0 { people } else { DEFAULT_PEOPLE };
+    let fresh = fresh.unwrap_or(false);
     tauri::async_runtime::spawn_blocking(move || {
         let db = <tauri::AppHandle as tauri::Manager<tauri::Wry>>::state::<Db>(&app);
-        run_live(&app, &ws, &db, people, &only, depth)
+        run_live(&app, &ws, &db, people, &only, depth, fresh)
     })
     .await
     .map_err(|e| format!("the run did not finish: {e}"))?
@@ -2121,6 +2159,10 @@ pub struct KeptLine {
 /// and the lines you unticked are declined; dismiss it and they all are.
 #[derive(Deserialize, Clone, Debug, Default)]
 pub struct PersonDecision {
+    #[serde(default)]
+    pub run_id: i64,
+    #[serde(default)]
+    pub contact_id: i64,
     pub name: String,
     #[serde(default)]
     pub email: String,
@@ -2160,35 +2202,171 @@ pub fn decide_person(conn: &Connection, d: &PersonDecision) -> Result<PersonOutc
         decline(conn, *id)?;
         out.declined += 1;
     }
+    // The card's own status. A card from before there were cards has no
+    // row yet; it gets one now so the decision is remembered.
+    let status = if d.keep.is_empty() && d.summary.trim().is_empty() { "declined" } else { "kept" };
+    if d.run_id > 0 {
+        let changed = conn
+            .execute(
+                "UPDATE learn_people SET status=?3, decided_at=?4 WHERE run_id=?1 AND contact_id=?2",
+                params![d.run_id, d.contact_id, status, now_millis()],
+            )
+            .map_err(err)?;
+        if changed == 0 {
+            conn.execute(
+                "INSERT INTO learn_people (run_id, contact_id, name, email, summary, status, decided_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![d.run_id, d.contact_id, d.name, d.email, d.summary, status, now_millis()],
+            )
+            .map_err(err)?;
+        }
+    }
+
     let summary = d.summary.trim();
     if summary.is_empty() || d.name.trim().is_empty() {
         return Ok(out);
     }
-    // The summary goes on the person, not into memory: it is what they are
-    // to you, and the Life page reads it from their record.
+    // The summary is a note in memory about them, not a person in your life.
+    // Your life is family, friends and pets, and you say who those are;
+    // a tax consultant you write to is somebody the assistant knows about.
     let store = super::personal::PersonalStore::open().map_err(|e| e.to_string())?;
-    let found = if d.email.trim().is_empty() { None } else { store.person_for(&d.email) }
-        .or_else(|| store.person_for(&d.name));
-    let mut doc = found.unwrap_or_else(|| super::deck::Doc {
-        meta: super::personal::PersonMeta {
-            name: d.name.trim().to_string(),
-            source: "mail".into(),
-            ..Default::default()
+    let doc = super::deck::Doc {
+        meta: super::personal::MemoryMeta {
+            id: String::new(),
+            title: format!("About {}", d.name.trim()),
+            created_at: chrono::Local::now().to_rfc3339(),
+            project_id: None,
+            tags: vec!["mail".into(), "learned".into(), "person".into()],
         },
-        body: String::new(),
-    });
-    let email = d.email.trim().to_ascii_lowercase();
-    if !email.is_empty() && !doc.meta.emails.iter().any(|e| e.eq_ignore_ascii_case(&email)) {
-        doc.meta.emails.push(email);
-    }
-    if doc.body.trim().is_empty() {
-        doc.body = summary.to_string();
-    } else if !doc.body.contains(summary) {
-        doc.body = format!("{}\n\n{summary}", doc.body.trim_end());
-    }
-    let path = store.save_person(&doc).map_err(|e| e.to_string())?;
+        body: format!(
+            "{summary}\n\n> from your mail with {}\n",
+            if d.email.trim().is_empty() { d.name.trim() } else { d.email.trim() }
+        ),
+    };
+    let path = store.save_memory(&doc).map_err(|e| e.to_string())?;
     out.person_file = path.to_string_lossy().to_string();
     Ok(out)
+}
+
+/// A person's card as a run left it: the summary, the facts, the decision.
+#[derive(Serialize, Clone, Debug, Default)]
+pub struct LearnCard {
+    pub run_id: i64,
+    pub person: LivePerson,
+    pub summary: String,
+    /// proposed | kept | declined
+    pub status: String,
+    pub facts: Vec<LearnFact>,
+}
+
+/// The cards of a run, to decide or to look at again. `run_id` 0 is the
+/// latest finished run.
+///
+/// A run from before there were cards has no rows in `learn_people`; its
+/// facts are grouped by contact instead, so it can still be decided a
+/// person at a time rather than a fact at a time.
+pub fn review(conn: &Connection, run_id: i64) -> Result<Vec<LearnCard>, String> {
+    let run_id = if run_id > 0 {
+        run_id
+    } else {
+        match conn
+            .query_row(
+                "SELECT id FROM learn_runs WHERE status='done' ORDER BY started_at DESC LIMIT 1",
+                [],
+                |r| r.get::<_, i64>(0),
+            )
+            .optional()
+            .map_err(err)?
+        {
+            Some(id) => id,
+            None => return Ok(Vec::new()),
+        }
+    };
+    let all = facts(conn, run_id, "")?;
+    let mut cards: Vec<LearnCard> = {
+        let mut st = conn
+            .prepare(
+                "SELECT contact_id, name, email, summary, status FROM learn_people
+                  WHERE run_id = ?1 ORDER BY id",
+            )
+            .map_err(err)?;
+        let rows = st
+            .query_map(params![run_id], |r| {
+                Ok(LearnCard {
+                    run_id,
+                    person: LivePerson {
+                        contact_id: r.get(0)?,
+                        name: r.get(1)?,
+                        email: r.get(2)?,
+                        threads: 0,
+                        messages: 0,
+                    },
+                    summary: r.get(3)?,
+                    status: r.get(4)?,
+                    facts: Vec::new(),
+                })
+            })
+            .map_err(err)?;
+        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(err)?
+    };
+    let covered: std::collections::HashSet<i64> = cards.iter().map(|c| c.person.contact_id).collect();
+    let mut orphans: Vec<i64> = Vec::new();
+    for f in &all {
+        if !covered.contains(&f.contact_id) && !orphans.contains(&f.contact_id) {
+            orphans.push(f.contact_id);
+        }
+    }
+    for contact_id in orphans {
+        let (name, email) = if contact_id > 0 {
+            conn.query_row(
+                "SELECT name, email FROM mail_contacts WHERE id = ?1",
+                params![contact_id],
+                |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
+            )
+            .optional()
+            .map_err(err)?
+            .unwrap_or_default()
+        } else {
+            (String::new(), String::new())
+        };
+        let name = if name.trim().is_empty() {
+            if email.is_empty() { "Not about one person".to_string() } else { email.clone() }
+        } else {
+            name
+        };
+        cards.push(LearnCard {
+            run_id,
+            person: LivePerson { contact_id, name, email, threads: 0, messages: 0 },
+            summary: String::new(),
+            status: String::new(),
+            facts: Vec::new(),
+        });
+    }
+    for c in &mut cards {
+        c.facts = all.iter().filter(|f| f.contact_id == c.person.contact_id).cloned().collect();
+        c.person.threads = {
+            let mut keys: Vec<&String> = c.facts.iter().flat_map(|f| f.thread_keys.iter()).collect();
+            keys.sort();
+            keys.dedup();
+            keys.len() as i64
+        };
+        if c.status.is_empty() {
+            c.status = if c.facts.iter().any(|f| f.status == "proposed") {
+                "proposed".into()
+            } else if c.facts.iter().any(|f| f.status == "kept") {
+                "kept".into()
+            } else {
+                "declined".into()
+            };
+        }
+    }
+    Ok(cards)
+}
+
+#[tauri::command(async)]
+pub fn learn_review(db: tauri::State<Db>, run_id: i64) -> Result<Vec<LearnCard>, String> {
+    let conn = db.0.lock().unwrap();
+    review(&conn, run_id)
 }
 
 #[cfg(test)]
@@ -2381,6 +2559,59 @@ mod tests {
         let out = parse_facts(r#"[{"kind":"thing","text":"   "},{"kind":"thing","text":"real"}]"#);
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].text, "real");
+    }
+
+    /// A run's cards come back to be decided a person at a time, and a run
+    /// from before there were cards is grouped by person from its facts.
+    #[test]
+    fn a_run_comes_back_as_one_card_per_person() {
+        let c = mem();
+        c.execute(
+            "INSERT INTO mail_contacts (id, name, email, kind, created_at) VALUES (7,'Anna','anna@x.com','person',0)",
+            [],
+        )
+        .unwrap();
+        c.execute(
+            "INSERT INTO learn_runs (id, started_at, provider, model, status, depth, thread_keys, held_json)
+             VALUES (1, 10, 'mock', 'mock-1', 'done', 'full', '[]', '[]')",
+            [],
+        )
+        .unwrap();
+        for text in ["Anna is your sister", "Anna's son is Josh"] {
+            c.execute(
+                "INSERT INTO learn_facts (run_id, kind, text, source, thread_keys, contact_id, space, node_id, status, created_at)
+                 VALUES (1, 'you', ?1, 'mail', '[\"t1\"]', 7, '', 0, 'proposed', 0)",
+                params![text],
+            )
+            .unwrap();
+        }
+        // No learn_people row: a run from before there were cards.
+        let cards = review(&c, 0).unwrap();
+        assert_eq!(cards.len(), 1, "one person, one card");
+        assert_eq!(cards[0].person.name, "Anna");
+        assert_eq!(cards[0].facts.len(), 2);
+        assert_eq!(cards[0].status, "proposed");
+        assert_eq!(cards[0].person.threads, 1);
+
+        // Decide the card: one line kept, one dismissed, no summary.
+        let ids: Vec<i64> = cards[0].facts.iter().map(|f| f.id).collect();
+        let out = decide_person(
+            &c,
+            &PersonDecision {
+                run_id: 1,
+                contact_id: 7,
+                name: "Anna".into(),
+                email: "anna@x.com".into(),
+                summary: String::new(),
+                keep: vec![],
+                decline: vec![ids[0], ids[1]],
+            },
+        )
+        .unwrap();
+        assert_eq!(out.declined, 2);
+        let cards = review(&c, 1).unwrap();
+        assert_eq!(cards[0].status, "declined", "the card remembers its decision");
+        assert!(cards[0].facts.iter().all(|f| f.status == "declined"));
     }
 
     /// The first line sums the person up. It is shown, and kept on the

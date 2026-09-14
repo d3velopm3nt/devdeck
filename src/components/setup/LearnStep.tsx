@@ -15,7 +15,7 @@ import type { MailCounts } from '../../lib/types'
 import { CAPTURE_LEARN_AUTO } from '../../lib/devCapture'
 import { SETUP_ORDER, stepIndex, type SetupNav, type SetupStep } from './steps'
 
-type Phase = 'sorting' | 'approve' | 'reading' | 'done'
+type Phase = 'sorting' | 'approve' | 'reading' | 'review' | 'done'
 
 const n = (v: number) => v.toLocaleString()
 
@@ -155,8 +155,22 @@ export function LearnStep({
   const [mode, setMode] = useState<'now' | 'end'>('now')
   const [result, setResult] = useState<ipc.LearnDoneEvent | null>(null)
   const [stopping, setStopping] = useState(false)
+  // After the run, and on the way back: the cards as the run left them.
+  const [cards, setCards] = useState<ipc.LearnCard[]>([])
 
-  const start = async () => {
+  const review = async (runId: number, done: ipc.LearnDoneEvent | null) => {
+    try {
+      const c = await ipc.learnReview(runId)
+      setCards(c)
+      if (done) setResult(done)
+      setPhase(c.some((x) => x.status === 'proposed') ? 'review' : 'done')
+    } catch (e) {
+      setErr(String(e))
+      setPhase('done')
+    }
+  }
+
+  const start = async (fresh = false) => {
     setErr('')
     setPhase('reading')
     setFacts([])
@@ -166,6 +180,7 @@ export function LearnStep({
     setDoneIdx(-1)
     setCost(0)
     setPlan(null)
+    setCards([])
     planRef.current = null
     const off = await ipc.onLearn({
       plan: (e) => {
@@ -191,14 +206,13 @@ export function LearnStep({
         if (e.summary) setSummaries((cur) => ({ ...cur, [e.person.contact_id]: e.summary }))
         setCurrent(planRef.current?.people[e.index + 1] ?? null)
       },
-      done: (e) => {
-        setResult(e)
-        setPhase('done')
-      },
+      // The run is over: whatever is still undecided comes back as cards
+      // from the receipt, so "at the end" has an end.
+      done: (e) => void review(e.run.id, e),
       failed: (e) => setErr(`${e.person.name}: ${e.error}`),
     })
     try {
-      await ipc.learnRunLive(12, [], 'full')
+      await ipc.learnRunLive(12, [], 'full', fresh)
     } catch (e) {
       setErr(String(e))
       setPhase('approve')
@@ -224,32 +238,51 @@ export function LearnStep({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, est, counts, mailSyncing, CAPTURE_LEARN_AUTO])
 
-  // One decision per person. Keep files every line and puts the summary on
-  // their record; Change files the ticked lines with their edits and
-  // declines the rest; Dismiss declines them all.
-  const decideCard = async (p: ipc.LivePerson, keep: ipc.KeptLine[], decline: number[]) => {
+  // One decision per person. Keep files every line and writes the summary
+  // as a note about them; Change files the ticked lines with their edits
+  // and declines the rest; Dismiss declines them all.
+  const decide = async (
+    runId: number,
+    p: ipc.LivePerson,
+    summary: string,
+    keep: ipc.KeptLine[],
+    decline: number[],
+  ) => {
     setBusyCard(p.contact_id)
     setErr('')
     try {
       await ipc.learnDecidePerson({
+        run_id: runId,
+        contact_id: p.contact_id,
         name: p.name,
         email: p.email,
-        summary: keep.length ? (summaries[p.contact_id] ?? '') : '',
+        summary: keep.length ? summary : '',
         keep,
         decline,
       })
       const kept = new Map(keep.map((k) => [k.id, k.text]))
       const gone = new Set(decline)
+      const status = keep.length ? 'kept' : 'declined'
+      const settle = <T extends { id: number; text: string; status: string }>(f: T): T =>
+        kept.has(f.id)
+          ? { ...f, text: kept.get(f.id) ?? f.text, status: 'kept' }
+          : gone.has(f.id)
+            ? { ...f, status: 'declined' }
+            : f
       setFacts((cur) =>
-        cur.map((f) =>
-          kept.has(f.fact.id)
-            ? { ...f, fact: { ...f.fact, text: kept.get(f.fact.id) ?? f.fact.text }, status: 'kept' }
-            : gone.has(f.fact.id)
-              ? { ...f, status: 'declined' }
-              : f,
+        cur.map((f) => {
+          const next = settle(f.fact)
+          return next === f.fact ? f : { ...f, fact: next, status: next.status as LiveFact['status'] }
+        }),
+      )
+      setDecided((cur) => ({ ...cur, [p.contact_id]: status }))
+      setCards((cur) =>
+        cur.map((c) =>
+          c.run_id === runId && c.person.contact_id === p.contact_id
+            ? { ...c, status, facts: c.facts.map(settle) }
+            : c,
         ),
       )
-      setDecided((cur) => ({ ...cur, [p.contact_id]: keep.length ? 'kept' : 'declined' }))
     } catch (e) {
       setErr(String(e))
     } finally {
@@ -258,7 +291,7 @@ export function LearnStep({
   }
 
   // Leaving mid-run stops it after the person being read. What came back
-  // is filed and waits in the Inbox; the receipt covers what was sent.
+  // is filed and waits as cards; the receipt covers what was sent.
   const close = onClose
     ? () => {
         if (phase === 'reading') void ipc.learnStop()
@@ -266,7 +299,8 @@ export function LearnStep({
       }
     : undefined
 
-  const cardFor = (p: ipc.LivePerson, reading: boolean, showButtons: boolean) => (
+  // A card from the live run, fed by the events.
+  const liveCard = (p: ipc.LivePerson, reading: boolean, showButtons: boolean) => (
     <PersonCard
       key={p.contact_id}
       p={p}
@@ -276,7 +310,27 @@ export function LearnStep({
       reading={reading}
       showButtons={showButtons}
       busy={busyCard === p.contact_id}
-      onDecide={(keep, decline) => void decideCard(p, keep, decline)}
+      onDecide={(keep, decline) =>
+        void decide(plan?.run_id ?? 0, p, summaries[p.contact_id] ?? '', keep, decline)
+      }
+    />
+  )
+  // A card from the receipt, for the review.
+  const storedCard = (c: ipc.LearnCard) => (
+    <PersonCard
+      key={`${c.run_id}-${c.person.contact_id}`}
+      p={c.person}
+      facts={c.facts.map((f) => ({
+        fact: f,
+        contact_id: c.person.contact_id,
+        status: (f.status === 'kept' || f.status === 'declined' ? f.status : 'proposed') as LiveFact['status'],
+      }))}
+      summary={c.summary}
+      state={c.status === 'kept' || c.status === 'declined' ? c.status : undefined}
+      reading={false}
+      showButtons
+      busy={busyCard === c.person.contact_id}
+      onDecide={(keep, decline) => void decide(c.run_id, c.person, c.summary, keep, decline)}
     />
   )
 
@@ -294,52 +348,17 @@ export function LearnStep({
 
   // ---- already read --------------------------------------------------------
   // Everybody you write to was read by an earlier run and nothing new has
-  // arrived since. Zero people with no explanation looked like a bug; this
-  // is what it means.
-  if (phase === 'sorting' && lastRun && est && counts && !mailSyncing && est.people.length === 0) {
-    return (
-      <Frame step="learn" onClose={close} nav={nav}>
-        <Header
-          icon="check"
-          ok
-          title="Your mail has been read"
-          text={`On ${when(lastRun)} I read ${lastRun.people} ${
-            lastRun.people === 1 ? 'person' : 'people'
-          }: ${n(lastRun.messages)} messages in ${n(lastRun.threads)} threads, with ${
-            lastRun.model
-          }. Nothing has arrived since that is worth reading again.`}
-        />
-        <div className="grid grid-cols-3 gap-3">
-          <Stat head="people read" big={String(lastRun.people)} tone="ink" />
-          <Stat head="kept" big={String(lastRun.kept)} tone="ink" />
-          <Stat head="waiting for you" big={String(inboxWaiting)} tone="ink" accent>
-            <p className="mt-1 text-[11.5px] leading-relaxed text-muted">
-              In your Inbox, each with Keep and No.
-            </p>
-          </Stat>
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          <Stat head="Automated, ignored" big={counts ? n(automated) : '…'} tone="dim" />
-          <Stat head="Skipped whole" big={n(secret)} tone="dim" />
-          <Stat head="Never answered" big={n(strangers)} tone="dim" />
-        </div>
-        {err && <Err>{err}</Err>}
-        <div className="flex items-center gap-3 border-t border-line pt-4">
-          <Icon name="secret" size={15} className="text-ok" />
-          <span className="text-[12px] text-body">
-            New mail from these people goes in the next run, from Mail.
-          </span>
-          <span className="flex-1" />
-          <button className="btn-primary text-[12px]" onClick={onDone}>
-            Continue
-          </button>
-          <button className="btn-ghost text-[12px]" onClick={onSkip}>
-            Not now
-          </button>
-        </div>
-      </Frame>
-    )
-  }
+  // arrived since. That run's cards are what there is to look at: one per
+  // person, decided or still waiting. Zero people with no explanation
+  // looked like a bug.
+  const sentToReview = useRef(false)
+  useEffect(() => {
+    if (phase !== 'sorting' || sentToReview.current) return
+    if (!lastRun || !est || !counts || mailSyncing || est.people.length > 0) return
+    sentToReview.current = true
+    void review(lastRun.id, { run: lastRun, stopped: false })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, lastRun, est, counts, mailSyncing])
 
   // ---- sorting -------------------------------------------------------------
   if (phase === 'sorting') {
@@ -526,18 +545,22 @@ export function LearnStep({
     const total = plan?.people.length ?? 0
     const done = doneIdx + 1
     const pct = total ? Math.round((done / total) * 100) : 0
-    // The person being read on top, then the ones already read.
-    const started = (plan?.people ?? []).filter((_, i) => i <= doneIdx + 1).reverse()
+    // One card on the right: the first person read and not yet decided.
+    // While there is none, the person being read, as it happens.
+    const toDecide = (plan?.people ?? []).filter((p, i) => i <= doneIdx && !decided[p.contact_id])
+    const showing = mode === 'now' && toDecide.length > 0 ? toDecide[0] : current
+    // Live means still being read: not one of the ones already read.
+    const isLive = !!showing && !toDecide.some((p) => p.contact_id === showing.contact_id)
     return (
       <Frame step="learn" wide onClose={close} nav={nav}>
         <div className="flex items-end gap-4">
           <div className="flex-1">
             <div className="text-[24px] font-semibold tracking-tight text-ink">
-              Reading, one person at a time
+              One person at a time
             </div>
             <p className="mt-1.5 text-[13.5px] leading-relaxed text-dim">
-              Each person gets a card: who they are to you, then what I noticed. Keep the card,
-              change it, or dismiss it. One decision per person.
+              For each person: who they are to you, from all the mail between you, and what I
+              noticed. Keep it, change it, or dismiss it, then the next person.
             </p>
           </div>
           <span className="flex overflow-hidden rounded-md border border-line2 text-[11.5px]">
@@ -568,9 +591,11 @@ export function LearnStep({
         <div className="flex flex-col gap-1.5">
           <div className="flex items-baseline gap-3.5 text-[12px]">
             <span className="text-ink">
-              <b className="font-semibold">{done}</b> of {total} people
+              <b className="font-semibold">{done}</b> of {total} people read
             </span>
-            <span className="text-muted">{facts.length} facts so far</span>
+            <span className="text-muted">
+              {Object.keys(decided).length} decided
+            </span>
             <span className="text-muted">${cost.toFixed(2)} so far</span>
             <span className="flex-1" />
             <span className="text-[11px] text-faint">
@@ -586,64 +611,34 @@ export function LearnStep({
         </div>
 
         <div className="grid min-h-0 flex-1 grid-cols-[260px_minmax(0,1fr)] gap-4">
-          <div className="min-h-0 self-start overflow-auto rounded-[10px] border border-line bg-panel">
-            <div className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
-              People
-            </div>
-            {(plan?.people ?? []).map((p, i) => {
-              const state = i <= doneIdx ? 'done' : current?.contact_id === p.contact_id ? 'now' : 'wait'
-              return (
-                <div
-                  key={p.contact_id}
-                  className={`flex items-center gap-2.5 border-t border-line px-3 py-2 text-[12px] ${
-                    state === 'now' ? 'bg-raise' : ''
-                  }`}
-                >
-                  {state === 'done' ? (
-                    <Icon name="check" size={13} className="text-ok" />
-                  ) : state === 'now' ? (
-                    <Icon name="update" size={13} spin className="text-indigo-400" />
-                  ) : (
-                    <span className="flex h-[13px] w-[13px] items-center justify-center">
-                      <span className="h-[6px] w-[6px] rounded-full border border-faint" />
-                    </span>
-                  )}
-                  <span
-                    className={`min-w-0 flex-1 truncate ${
-                      state === 'wait' ? 'text-muted' : state === 'now' ? 'font-semibold text-ink' : 'text-body'
-                    }`}
-                  >
-                    {p.name}
-                  </span>
-                  <span className="text-[11px] text-muted">
-                    {state === 'done'
-                      ? decided[p.contact_id] === 'kept'
-                        ? 'kept'
-                        : decided[p.contact_id] === 'declined'
-                          ? 'dismissed'
-                          : `${perPerson[p.contact_id] ?? 0} facts`
-                      : state === 'now'
-                        ? `${p.threads} threads`
-                        : ''}
-                  </span>
-                </div>
-              )
-            })}
-            {!plan && (
-              <div className="border-t border-line px-3 py-2 text-[12px] text-muted">
-                Sorting the batch…
-              </div>
-            )}
-          </div>
+          <PeopleList
+            people={plan?.people ?? []}
+            stateOf={(p, i) =>
+              decided[p.contact_id] ??
+              (i <= doneIdx ? 'read' : current?.contact_id === p.contact_id ? 'now' : 'wait')
+            }
+            noteOf={(p, i) =>
+              i <= doneIdx && !decided[p.contact_id] ? `${perPerson[p.contact_id] ?? 0} facts` : ''
+            }
+            empty={!plan ? 'Sorting the batch…' : ''}
+          />
 
           <div className="flex min-h-0 flex-col gap-3 overflow-auto pr-1">
-            {started.length === 0 && (
+            {!showing && (
               <div className="rounded-[10px] border border-dashed border-line2 px-4 py-3 text-[12px] text-muted">
                 Sorting the batch on this machine, then the first person…
               </div>
             )}
-            {started.map((p) =>
-              cardFor(p, current?.contact_id === p.contact_id, mode === 'now'),
+            {showing && liveCard(showing, isLive, mode === 'now' && !isLive)}
+            {mode === 'now' && toDecide.length > 1 && (
+              <span className="text-[11px] text-muted">
+                {toDecide.length - 1} more read and waiting for you after this one.
+              </span>
+            )}
+            {mode === 'end' && (
+              <span className="text-[11px] text-muted">
+                The cards wait until the run is over.
+              </span>
             )}
           </div>
         </div>
@@ -660,36 +655,95 @@ export function LearnStep({
     )
   }
 
+  // ---- review --------------------------------------------------------------
+  // The cards of a run, one at a time, whether the run just ended or was
+  // weeks ago.
+  if (phase === 'review') {
+    const open = cards.filter((c) => c.status === 'proposed')
+    const cur = open[0]
+    const run = result?.run ?? lastRun
+    return (
+      <Frame step="learn" wide onClose={close} nav={nav}>
+        <div className="flex items-end gap-4">
+          <div className="flex-1">
+            <div className="text-[24px] font-semibold tracking-tight text-ink">
+              One person at a time
+            </div>
+            <p className="mt-1.5 text-[13.5px] leading-relaxed text-dim">
+              {run
+                ? `Read on ${when(run)} with ${run.model}. `
+                : ''}
+              For each person: who they are to you and what I noticed. Keep it, change it, or
+              dismiss it, then the next.
+            </p>
+          </div>
+          <button
+            className="btn-ghost text-[11.5px]"
+            title="Send the same mail again and get fresh cards. Costs what the approval said."
+            onClick={() => setPhase('approve')}
+          >
+            Read again
+          </button>
+        </div>
+
+        <div className="flex items-baseline gap-3.5 text-[12px]">
+          <span className="text-ink">
+            <b className="font-semibold">{cards.length - open.length}</b> of {cards.length} decided
+          </span>
+          {inboxWaiting > 0 && (
+            <span className="text-muted">the same facts are in your Inbox, if you would rather</span>
+          )}
+        </div>
+
+        <div className="grid min-h-0 flex-1 grid-cols-[260px_minmax(0,1fr)] gap-4">
+          <PeopleList
+            people={cards.map((c) => c.person)}
+            stateOf={(p) => {
+              const c = cards.find((x) => x.person.contact_id === p.contact_id)
+              return c?.status === 'kept' || c?.status === 'declined'
+                ? c.status
+                : cur?.person.contact_id === p.contact_id
+                  ? 'now'
+                  : 'read'
+            }}
+            noteOf={(p) => {
+              const c = cards.find((x) => x.person.contact_id === p.contact_id)
+              return c && c.status === 'proposed' ? `${c.facts.length} facts` : ''
+            }}
+          />
+          <div className="flex min-h-0 flex-col gap-3 overflow-auto pr-1">
+            {cur && storedCard(cur)}
+            {open.length > 1 && (
+              <span className="text-[11px] text-muted">{open.length - 1} more after this one.</span>
+            )}
+          </div>
+        </div>
+
+        {err && <Err>{err}</Err>}
+      </Frame>
+    )
+  }
+
   // ---- done ----------------------------------------------------------------
-  const kept = facts.filter((f) => f.status === 'kept').length
-  const declined = facts.filter((f) => f.status === 'declined').length
-  const waiting = facts.filter((f) => f.status === 'proposed').length
-  const run = result?.run
-  // The cards not yet decided, so "at the end" has an end to decide at.
-  const open = (plan?.people ?? []).filter(
-    (p) => !decided[p.contact_id] && facts.some((f) => f.contact_id === p.contact_id && f.status === 'proposed'),
-  )
+  const allFacts = cards.flatMap((c) => c.facts)
+  const kept = allFacts.filter((f) => f.status === 'kept').length
+  const declined = allFacts.filter((f) => f.status === 'declined').length
+  const waiting = allFacts.filter((f) => f.status === 'proposed').length
+  const run = result?.run ?? lastRun
+  const people = cards.filter((c) => c.status === 'kept').length
   return (
-    <Frame step="learn" wide={open.length > 0} onClose={close} nav={nav}>
+    <Frame step="learn" onClose={close} nav={nav}>
       <Header
         icon="check"
         ok
         title={result?.stopped ? 'Stopped, and kept what came back' : 'I know your people now'}
-        text={`I read ${plan?.people.length ?? 0} people's threads. What you kept I use from here on. What you dismissed will not come back.`}
+        text={`${cards.length} ${cards.length === 1 ? 'person' : 'people'}, ${people} kept. What you kept I use from here on. What you dismissed will not come back.`}
       />
       <div className="grid grid-cols-3 gap-3">
-        <Stat head="kept" big={String(kept)} tone="ink" />
-        <Stat head="still waiting for you" big={String(waiting)} tone="ink" accent />
+        <Stat head="people kept" big={String(people)} tone="ink" />
+        <Stat head="facts kept" big={String(kept)} tone="ink" />
         <Stat head="dismissed" big={String(declined)} tone="dim" />
       </div>
-      {open.length > 0 && (
-        <div className="flex flex-col gap-3">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">
-            {open.length === 1 ? 'One card to decide' : `${open.length} cards to decide`}
-          </span>
-          {open.map((p) => cardFor(p, false, true))}
-        </div>
-      )}
       {err && <Err>{err}</Err>}
       {run && (
         <div className="rounded-[10px] border border-line bg-panel">
@@ -697,6 +751,8 @@ export function LearnStep({
           <Rcpt k="sent">
             {n(run.messages)} messages in {n(run.threads)} threads, {n(run.tokens)} tokens, to{' '}
             <span className="font-mono text-ink">{run.model}</span>
+            {' on '}
+            {when(run)}
           </Rcpt>
           <Rcpt k="held back">
             {n(run.held_back)} messages from senders you never answered, or carrying codes. None
@@ -704,7 +760,7 @@ export function LearnStep({
           </Rcpt>
           <Rcpt k="ignored">{n(automated)} automated messages. Counted, never read, never raised.</Rcpt>
           <Rcpt k="kept in">
-            <span className="font-mono text-[11px]">your personal store, memory and people</span>
+            <span className="font-mono text-[11px]">your personal store, memory</span>
           </Rcpt>
         </div>
       )}
@@ -712,8 +768,16 @@ export function LearnStep({
         <button className="btn-primary text-[12px]" onClick={onDone}>
           Continue
         </button>
+        {cards.length > 0 && (
+          <button className="btn-ghost text-[12px]" onClick={() => setPhase('review')}>
+            Look at the cards
+          </button>
+        )}
+        <button className="btn-ghost text-[12px] text-muted" onClick={() => setPhase('approve')}>
+          Read again
+        </button>
         <span className="text-[11px] text-faint">
-          {waiting > 0 ? `The ${waiting} waiting also wait for you in Inbox.` : ''}
+          {waiting > 0 ? `${waiting} facts still undecided.` : ''}
         </span>
       </div>
     </Frame>
@@ -883,6 +947,73 @@ function Rcpt({ k, children }: { k: string; children: React.ReactNode }) {
   )
 }
 
+/** The left-hand list: everybody in the run and where each one is. */
+function PeopleList({
+  people,
+  stateOf,
+  noteOf,
+  empty,
+}: {
+  people: ipc.LivePerson[]
+  stateOf: (p: ipc.LivePerson, i: number) => 'kept' | 'declined' | 'read' | 'now' | 'wait'
+  noteOf: (p: ipc.LivePerson, i: number) => string
+  empty?: string
+}) {
+  return (
+    <div className="min-h-0 self-start overflow-auto rounded-[10px] border border-line bg-panel">
+      <div className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
+        People
+      </div>
+      {people.map((p, i) => {
+        const state = stateOf(p, i)
+        return (
+          <div
+            key={p.contact_id}
+            className={`flex items-center gap-2.5 border-t border-line px-3 py-2 text-[12px] ${
+              state === 'now' ? 'bg-raise' : ''
+            }`}
+          >
+            {state === 'kept' ? (
+              <Icon name="check" size={13} className="text-ok" />
+            ) : state === 'declined' ? (
+              <Icon name="close" size={13} className="text-faint" />
+            ) : state === 'now' ? (
+              <Icon name="update" size={13} spin className="text-indigo-400" />
+            ) : state === 'read' ? (
+              <span className="flex h-[13px] w-[13px] items-center justify-center">
+                <span className="h-[6px] w-[6px] rounded-full bg-indigo-400" />
+              </span>
+            ) : (
+              <span className="flex h-[13px] w-[13px] items-center justify-center">
+                <span className="h-[6px] w-[6px] rounded-full border border-faint" />
+              </span>
+            )}
+            <span
+              className={`min-w-0 flex-1 truncate ${
+                state === 'wait' ? 'text-muted' : state === 'now' ? 'font-semibold text-ink' : 'text-body'
+              }`}
+            >
+              {p.name}
+            </span>
+            <span className="text-[11px] text-muted">
+              {state === 'kept'
+                ? 'kept'
+                : state === 'declined'
+                  ? 'dismissed'
+                  : state === 'now'
+                    ? p.threads > 0
+                      ? `${p.threads} threads`
+                      : ''
+                    : noteOf(p, i)}
+            </span>
+          </div>
+        )
+      })}
+      {empty && <div className="border-t border-line px-3 py-2 text-[12px] text-muted">{empty}</div>}
+    </div>
+  )
+}
+
 /**
  * One person, one decision.
  *
@@ -967,6 +1098,10 @@ function PersonCard({
         <p className="m-0 text-[13px] leading-relaxed text-ink">{summary}</p>
       ) : reading ? (
         <p className="m-0 text-[12px] text-muted">Reading their threads…</p>
+      ) : facts.length > 0 ? (
+        <p className="m-0 text-[11.5px] text-muted">
+          Read before there were summaries. What I noticed:
+        </p>
       ) : null}
 
       {facts.length > 0 && !changing && (

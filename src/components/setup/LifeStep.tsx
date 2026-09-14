@@ -1,58 +1,48 @@
-// The life step of the first run: your home, filled in from what the mail
-// already suggests, corrected by you.
+// The life step of the first run: who is in your life.
 //
-// It starts from the people you actually write to rather than a blank form
-// about your family, and asks only what it cannot work out: what somebody is
-// to you, and who it missed. Everything saved here is a record in the
-// personal store; nothing about a person ever goes into a space.
+// Your family, your friends, your pets. Your own answers, and nothing else:
+// no mailbox can know who your sister is, and the people you write to were
+// dealt with in the learn step, one at a time. Everything saved here is a
+// record in the personal store; nothing about a person ever goes into a
+// space.
 
 import { useEffect, useState } from 'react'
-import * as ipc from '../../lib/ipc'
 import { aiw, type PersonView } from '../../lib/aiw'
 import { Icon } from '../../lib/icons'
 import { Err, Frame, Header } from './LearnStep'
 import type { SetupNav } from './steps'
 
 /// What somebody usually is. In words, because a role is a word and not a
-/// code: "wife" is stored as "wife".
-const ROLES = ['partner', 'child', 'parent', 'sibling', 'friend', 'pet', 'helps at home'] as const
-type Role = (typeof ROLES)[number]
+/// code: "wife" is stored as "wife" if that is what you type.
+const RELATIONS = ['partner', 'child', 'parent', 'sibling', 'friend'] as const
+const FAMILY = new Set<string>(RELATIONS)
 
-/// Which roles mean "lives with you". A parent may, a sibling may not, and
-/// a guess either way is wrong for half the people: those ask.
-const AT_HOME: Record<Role, boolean | null> = {
+/// A guess at who lives with you, corrected with one click.
+const LIVES_WITH: Record<string, boolean> = {
   partner: true,
   child: true,
-  parent: null,
-  sibling: null,
+  parent: false,
+  sibling: false,
   friend: false,
-  pet: true,
-  'helps at home': false,
 }
 
-interface Draft {
+interface Row {
   key: string
   name: string
-  email: string
-  role: Role | ''
+  role: string
   home: boolean
-  kind: 'person' | 'pet'
-  birthday: string
-  /// Where the suggestion came from, so a row can say so.
-  why: string
   saved?: PersonView
 }
 
-const blank = (): Draft => ({
-  key: `new-${Date.now()}`,
-  name: '',
-  email: '',
-  role: '',
-  home: true,
-  kind: 'person',
-  birthday: '',
-  why: 'you',
-})
+interface Pet {
+  key: string
+  name: string
+  what: string
+  saved?: PersonView
+}
+
+let seq = 0
+const key = () => `new-${Date.now()}-${seq++}`
 
 export function LifeStep({
   onDone,
@@ -63,94 +53,107 @@ export function LifeStep({
   onClose?: () => void
   nav?: SetupNav
 }) {
-  const [rows, setRows] = useState<Draft[]>([])
-  const [adding, setAdding] = useState<Draft>(blank())
+  const [rows, setRows] = useState<Row[]>([])
+  const [pets, setPets] = useState<Pet[]>([])
   const [free, setFree] = useState('')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [loaded, setLoaded] = useState(false)
 
+  // The add rows.
+  const [name, setName] = useState('')
+  const [role, setRole] = useState<string>('partner')
+  const [other, setOther] = useState('')
+  const [home, setHome] = useState(true)
+  const [petName, setPetName] = useState('')
+  const [petWhat, setPetWhat] = useState('')
+
+  // Already on file, so coming back here shows what you said.
   useEffect(() => {
     let live = true
-    void (async () => {
-      try {
-        const [people, known] = await Promise.all([ipc.learnPeople(12), aiw.people()])
+    void aiw
+      .people()
+      .then((known) => {
         if (!live) return
-        // Already on file first, then the mail's suggestions that are not.
-        const onFile: Draft[] = known.map((p) => ({
-          key: p.id,
-          name: p.name,
-          email: p.emails[0] ?? '',
-          role: (ROLES.find((r) => r === p.role) ?? '') as Role | '',
-          home: p.home,
-          kind: p.kind === 'pet' ? 'pet' : 'person',
-          birthday: p.birthday,
-          why: p.source === 'mail' ? 'from your mail' : 'you told me',
-          saved: p,
-        }))
-        const seen = new Set(known.flatMap((p) => p.emails.map((e) => e.toLowerCase())))
-        const fromMail: Draft[] = people
-          .filter((c) => !seen.has(c.email.toLowerCase()))
-          .slice(0, 8)
-          .map((c) => ({
-            key: `mail-${c.contact_id}`,
-            name: c.name || c.email,
-            email: c.email,
-            role: '',
-            home: false,
-            kind: 'person',
-            birthday: '',
-            why: `${c.threads} threads, and you wrote back ${c.sent} times`,
-          }))
-        setRows([...onFile, ...fromMail])
-      } catch (e) {
-        if (live) setErr(String(e))
-      } finally {
-        if (live) setLoaded(true)
-      }
-    })()
+        setPets(
+          known
+            .filter((p) => p.kind === 'pet')
+            .map((p) => ({ key: p.id, name: p.name, what: p.role, saved: p })),
+        )
+        setRows(
+          known
+            .filter((p) => p.kind !== 'pet' && (FAMILY.has(p.role) || p.source === 'you'))
+            .filter((p) => p.role !== 'helps at home')
+            .map((p) => ({ key: p.id, name: p.name, role: p.role, home: p.home, saved: p })),
+        )
+      })
+      .catch((e) => live && setErr(String(e)))
+      .finally(() => live && setLoaded(true))
     return () => {
       live = false
     }
   }, [])
 
-  const setRole = (key: string, role: Role) =>
-    setRows((cur) =>
-      cur.map((r) =>
-        r.key === key
-          ? {
-              ...r,
-              role,
-              kind: role === 'pet' ? 'pet' : 'person',
-              home: AT_HOME[role] ?? r.home,
-            }
-          : r,
-      ),
-    )
+  const addRow = () => {
+    const n = name.trim()
+    const r = (role === 'other' ? other : role).trim()
+    if (!n || !r) return
+    setRows((cur) => [...cur, { key: key(), name: n, role: r, home }])
+    setName('')
+    setOther('')
+  }
+  const addPet = () => {
+    const n = petName.trim()
+    if (!n) return
+    setPets((cur) => [...cur, { key: key(), name: n, what: petWhat.trim() }])
+    setPetName('')
+    setPetWhat('')
+  }
+  const dropRow = async (r: Row) => {
+    setRows((cur) => cur.filter((x) => x.key !== r.key))
+    if (r.saved) await aiw.personForget(r.saved.id).catch((e) => setErr(String(e)))
+  }
+  const dropPet = async (p: Pet) => {
+    setPets((cur) => cur.filter((x) => x.key !== p.key))
+    if (p.saved) await aiw.personForget(p.saved.id).catch((e) => setErr(String(e)))
+  }
 
   const save = async () => {
     setBusy(true)
     setErr('')
     try {
       for (const r of rows) {
-        if (!r.role) continue
-        const p: PersonView = {
+        await aiw.personSave({
           id: r.saved?.id ?? '',
-          name: r.name.trim(),
-          kind: r.kind,
+          name: r.name,
+          kind: 'person',
           role: r.role,
           home: r.home,
-          birthday: r.birthday,
-          emails: r.email ? [r.email] : (r.saved?.emails ?? []),
+          birthday: r.saved?.birthday ?? '',
+          emails: r.saved?.emails ?? [],
           private: r.saved?.private ?? [],
-          source: r.saved?.source ?? (r.why === 'you' ? 'you' : 'mail'),
+          source: r.saved?.source ?? 'you',
           created_at: r.saved?.created_at ?? '',
           notes: r.saved?.notes ?? '',
-        }
-        await aiw.personSave(p)
+        })
+      }
+      for (const p of pets) {
+        await aiw.personSave({
+          id: p.saved?.id ?? '',
+          name: p.name,
+          kind: 'pet',
+          role: p.what || 'pet',
+          home: true,
+          birthday: p.saved?.birthday ?? '',
+          emails: [],
+          private: p.saved?.private ?? [],
+          source: p.saved?.source ?? 'you',
+          created_at: p.saved?.created_at ?? '',
+          notes: p.saved?.notes ?? '',
+        })
       }
       // What you typed in your own words is kept as said, as a note about
-      // you, until a later run turns it into records.
+      // you, until a later pass turns it into records.
       if (free.trim()) {
         await aiw.remember(`About your life: ${free.trim()}`, free.trim(), ['life', 'you-told-me'])
       }
@@ -162,149 +165,149 @@ export function LifeStep({
     }
   }
 
-  const named = rows.filter((r) => r.role).length
+  const say = (r: Row) => `${r.name} is your ${r.role}${r.home ? ', and lives with you' : ''}`
 
   return (
     <Frame step="life" onClose={onClose} nav={nav}>
       <Header
         icon="contacts"
         title="Who is in your life"
-        text="From your mail I think these are the people closest to you. Tell me what each of them is to you, and who I missed. I only ask what I cannot work out myself."
+        text="Your family, your friends, your pets. Nothing here comes from your mail: the people you write to were the last step, and this is the part no mailbox can know."
       />
 
       <div className="rounded-[10px] border border-line bg-panel">
         <div className="flex items-center gap-2 border-b border-line px-4 py-3">
-          <span className="text-[12.5px] font-semibold text-ink">Your people</span>
-          <span className="ml-auto text-[10.5px] text-faint">each row says what it is based on</span>
+          <span className="text-[12.5px] font-semibold text-ink">Family and friends</span>
+          <span className="ml-auto text-[10.5px] text-faint">kept on this machine, never in a space</span>
         </div>
         {!loaded && <div className="px-4 py-3 text-[12px] text-muted">Reading…</div>}
         {loaded && rows.length === 0 && (
-          <div className="px-4 py-3 text-[12px] text-muted">
-            Nobody yet. Add the people you live with below.
-          </div>
+          <div className="px-4 py-3 text-[12px] text-muted">Nobody yet. Add them below.</div>
         )}
         {rows.map((r) => (
-          <div key={r.key} className="flex flex-col gap-2 border-t border-line px-4 py-3">
-            <div className="flex items-center gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="text-[12.5px] text-ink">
-                  {r.name}
-                  {r.role && (
-                    <span className="text-muted">
-                      {' '}
-                      is your {r.role}
-                      {r.home ? ', and lives with you' : ''}
-                    </span>
-                  )}
-                </div>
-                <div className="text-[10.5px] text-faint">{r.why}</div>
-              </div>
-              {r.role && (
-                <label className="flex items-center gap-1.5 text-[11px] text-muted">
-                  <input
-                    type="checkbox"
-                    checked={r.home}
-                    onChange={(e) =>
-                      setRows((cur) =>
-                        cur.map((x) => (x.key === r.key ? { ...x, home: e.target.checked } : x)),
-                      )
-                    }
-                  />
-                  lives with you
-                </label>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {ROLES.map((role) => (
-                <button
-                  key={role}
-                  className={`rounded-full border px-2.5 py-0.5 text-[11px] ${
-                    r.role === role
-                      ? 'border-indigo-500 bg-indigo-500/10 text-ink'
-                      : 'border-line2 text-dim hover:text-ink'
-                  }`}
-                  onClick={() => setRole(r.key, role)}
-                >
-                  {role}
-                </button>
-              ))}
-              <button
-                className={`rounded-full border px-2.5 py-0.5 text-[11px] ${
-                  r.role === '' && r.why !== 'you'
-                    ? 'border-line2 text-faint'
-                    : 'border-line2 text-dim hover:text-ink'
-                }`}
-                title="Not family, not a friend — leave them out"
-                onClick={() =>
-                  setRows((cur) => cur.map((x) => (x.key === r.key ? { ...x, role: '' } : x)))
+          <div key={r.key} className="flex items-center gap-3 border-t border-line px-4 py-2.5">
+            <Icon name="contacts" size={13} className="text-muted" />
+            <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink">{say(r)}</span>
+            <label className="flex items-center gap-1.5 text-[11px] text-muted">
+              <input
+                type="checkbox"
+                checked={r.home}
+                onChange={(e) =>
+                  setRows((cur) =>
+                    cur.map((x) => (x.key === r.key ? { ...x, home: e.target.checked } : x)),
+                  )
                 }
-              >
-                not one of these
-              </button>
-            </div>
-          </div>
-        ))}
-
-        <div className="flex flex-col gap-2.5 border-t border-line px-4 py-3">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">
-            Anyone I missed?
-          </span>
-          <div className="grid grid-cols-[minmax(0,1fr)_150px_150px_auto] items-center gap-2">
-            <input
-              className="input text-[12px]"
-              placeholder="name"
-              value={adding.name}
-              onChange={(e) => setAdding({ ...adding, name: e.target.value })}
-            />
-            <select
-              className="input text-[12px]"
-              value={adding.role}
-              onChange={(e) => {
-                const role = e.target.value as Role | ''
-                setAdding({
-                  ...adding,
-                  role,
-                  kind: role === 'pet' ? 'pet' : 'person',
-                  home: role ? (AT_HOME[role] ?? true) : true,
-                })
-              }}
-            >
-              <option value="">what they are</option>
-              {ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-            <input
-              className="input text-[12px]"
-              type="date"
-              title="birthday, if you like"
-              value={adding.birthday}
-              onChange={(e) => setAdding({ ...adding, birthday: e.target.value })}
-            />
+              />
+              lives with you
+            </label>
             <button
-              className="btn-ghost text-[12px]"
-              disabled={!adding.name.trim() || !adding.role}
-              onClick={() => {
-                setRows((cur) => [...cur, { ...adding, key: `new-${Date.now()}` }])
-                setAdding(blank())
-              }}
+              className="btn-ghost text-[11px] text-muted"
+              title="Remove"
+              onClick={() => void dropRow(r)}
             >
-              <Icon name="add" size={11} /> Add
+              <Icon name="close" size={12} />
             </button>
           </div>
+        ))}
+        <div className="grid grid-cols-[minmax(0,1fr)_150px_minmax(0,1fr)_auto_auto] items-center gap-2 border-t border-line px-4 py-3">
+          <input
+            className="input text-[12px]"
+            placeholder="name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addRow()}
+          />
+          <select className="input text-[12px]" value={role} onChange={(e) => setRole(e.target.value)}>
+            {RELATIONS.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+            <option value="other">something else…</option>
+          </select>
+          {role === 'other' ? (
+            <input
+              className="input text-[12px]"
+              placeholder="what they are to you, in a word"
+              value={other}
+              onChange={(e) => setOther(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addRow()}
+            />
+          ) : (
+            <span />
+          )}
+          <label className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-muted">
+            <input
+              type="checkbox"
+              checked={home}
+              onChange={(e) => setHome(e.target.checked)}
+            />
+            lives with you
+          </label>
+          <button
+            className="btn-ghost text-[11.5px]"
+            disabled={!name.trim() || (role === 'other' && !other.trim())}
+            onClick={() => {
+              addRow()
+              setHome(LIVES_WITH[role] ?? true)
+            }}
+          >
+            Add
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-[10px] border border-line bg-panel">
+        <div className="flex items-center gap-2 border-b border-line px-4 py-3">
+          <span className="text-[12.5px] font-semibold text-ink">Pets</span>
+        </div>
+        {loaded && pets.length === 0 && (
+          <div className="px-4 py-3 text-[12px] text-muted">None, or none yet.</div>
+        )}
+        {pets.map((p) => (
+          <div key={p.key} className="flex items-center gap-3 border-t border-line px-4 py-2.5">
+            <Icon name="home" size={13} className="text-muted" />
+            <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink">
+              {p.name}
+              {p.what && <span className="text-muted">, {p.what}</span>}
+            </span>
+            <button
+              className="btn-ghost text-[11px] text-muted"
+              title="Remove"
+              onClick={() => void dropPet(p)}
+            >
+              <Icon name="close" size={12} />
+            </button>
+          </div>
+        ))}
+        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 border-t border-line px-4 py-3">
+          <input
+            className="input text-[12px]"
+            placeholder="name"
+            value={petName}
+            onChange={(e) => setPetName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addPet()}
+          />
+          <input
+            className="input text-[12px]"
+            placeholder="dog, cat, two goldfish"
+            value={petWhat}
+            onChange={(e) => setPetWhat(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addPet()}
+          />
+          <button className="btn-ghost text-[11.5px]" disabled={!petName.trim()} onClick={addPet}>
+            Add
+          </button>
         </div>
       </div>
 
       <div className="flex flex-col gap-2">
         <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">
-          Or just tell me, in your own words
+          Anything else about your life, in your own words
         </span>
         <textarea
-          className="w-full resize-none rounded-[8px] border border-line2 bg-panel p-3 text-[12.5px] leading-relaxed text-ink outline-none placeholder:text-faint focus:border-indigo-500"
-          rows={3}
-          placeholder="Pepper is our cat, she is three. Emma is allergic to peanuts."
+          className="input min-h-[64px] resize-y text-[12px]"
+          placeholder="Two kids at Oakhill Primary. My mother lives nearby and comes for Sunday lunch. We travel to Cape Town every December."
           value={free}
           onChange={(e) => setFree(e.target.value)}
         />
@@ -312,22 +315,16 @@ export function LifeStep({
 
       {err && <Err>{err}</Err>}
 
-      <div className="flex items-center gap-3">
-        <button className="btn-primary text-[12px]" disabled={busy} onClick={() => void save()}>
-          {busy ? 'Saving…' : named > 0 || free.trim() ? 'Save and continue' : 'Continue'}
-        </button>
-        <span className="text-[11px] text-muted">
-          {named} {named === 1 ? 'person' : 'people'} named. You can add more any time.
+      <div className="flex items-center gap-3 border-t border-line pt-4">
+        <Icon name="secret" size={15} className="text-muted" />
+        <span className="text-[11.5px] text-muted">
+          Each person is a file in your personal store. Only the assistant reads them, never a
+          manager.
         </span>
-      </div>
-
-      <div className="flex gap-2.5 border-t border-line pt-4">
-        <Icon name="secret" size={15} className="mt-0.5 shrink-0 text-muted" />
-        <p className="m-0 text-[11.5px] leading-relaxed text-muted">
-          Each person is a file in your personal store, outside every space and repository. A Home
-          space refers to them by name and never copies anything private. Health details are
-          shown on their page and never put in a bulk read.
-        </p>
+        <span className="flex-1" />
+        <button className="btn-primary text-[12px]" disabled={busy} onClick={() => void save()}>
+          {busy ? 'Saving…' : rows.length + pets.length > 0 ? 'Save and continue' : 'Continue'}
+        </button>
       </div>
     </Frame>
   )

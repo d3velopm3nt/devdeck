@@ -1,0 +1,114 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "title": "1 · Add a business, read its website",
+      "x": 0,
+      "y": 0,
+      "w": 1456,
+      "h": 909
+    },
+    {
+      "file": "Sells.dc.html",
+      "title": "2 · What it sells: products and services",
+      "x": 1576,
+      "y": 0,
+      "w": 1456,
+      "h": 909
+    },
+    {
+      "file": "Code.dc.html",
+      "title": "3 · Link GitHub repositories to products",
+      "x": 3152,
+      "y": 0,
+      "w": 1456,
+      "h": 909
+    },
+    {
+      "file": "Mail.dc.html",
+      "title": "4 · Mail on its domain",
+      "x": 4728,
+      "y": 0,
+      "w": 1456,
+      "h": 909
+    },
+    {
+      "file": "Learn.dc.html",
+      "title": "5 · Learn, one organisation at a time",
+      "x": 0,
+      "y": 1760,
+      "w": 1456,
+      "h": 909
+    },
+    {
+      "file": "Team.dc.html",
+      "title": "6 · Team: roles, not a manager per project",
+      "x": 1576,
+      "y": 1760,
+      "w": 1456,
+      "h": 909
+    },
+    {
+      "file": "Space.dc.html",
+      "title": "7 · Innotrack, made",
+      "x": 3152,
+      "y": 1760,
+      "w": 1456,
+      "h": 909
+    }
+  ],
+  "annotations": [
+    {
+      "id": "clean",
+      "x": 0,
+      "y": 1030,
+      "w": 470,
+      "text": "A NEW BUSINESS STARTS CLEAN\n\nInnotrack is the example because you named it. The one line on the website is real: RFID Enabled Solutions for Mining & Asset Management.\n\nThat is all a plain read of the site returns, because the rest is drawn by script. DevDeck has to open the site in a browser window of its own to read the other pages. That is a real piece of work to build, not a detail.\n\nEvery suggestion says where it came from, and a guess says it is a guess."
+    },
+    {
+      "id": "sells",
+      "x": 1576,
+      "y": 1030,
+      "w": 460,
+      "text": "PRODUCTS AND SERVICES\n\nA product is something you build and it can have code. A service is work done for a customer, like an installation, with nothing to link.\n\nThe names here are examples built from the site's tagline, apart from Site surveys, shown as one you typed.\n\nMail read later in Learn can suggest more, and they come back to this list rather than being added quietly."
+    },
+    {
+      "id": "code",
+      "x": 3152,
+      "y": 1030,
+      "w": 470,
+      "text": "A PRODUCT HOLDS PROJECTS\n\nTick a repository and choose its product. It becomes a project in that product, cloned where you say, or used where it already is.\n\nThe repository names are made up.\n\nGitHub sign-in in DevDeck is written but its app is not registered yet. Pasting a token works today, and that is enough to list repositories.\n\nThe website repository is offered to Marketing, not to a product."
+    },
+    {
+      "id": "mail",
+      "x": 4728,
+      "y": 1030,
+      "w": 440,
+      "text": "MAIL\n\nSame as before: every mailbox on the domain belongs to the business, and after the first only its address and password are asked for.\n\nNew here: a partner's own mailbox is theirs. It is only added if they share it."
+    },
+    {
+      "id": "learn",
+      "x": 0,
+      "y": 2790,
+      "w": 460,
+      "text": "LEARN, TIED TO WHAT IT SELLS\n\nEach organisation is a client, supplier, adviser or partner firm, and says which products and services it has to do with. That is what lets the right role pick it up.\n\nThe organisations and facts are made up."
+    },
+    {
+      "id": "team",
+      "x": 1576,
+      "y": 2790,
+      "w": 480,
+      "text": "ROLES, THE WAY A COMPANY HAS THEM\n\nOne engineering lead for all three projects, one product manager for both products. A role owns work, never a folder, which is how the manager design in the roadmap already describes it.\n\nThe roles are suggested from what the business does. You put them on the team or keep doing them yourself, which shows as you do this rather than a gap.\n\nEveryone reports to the directors. Reporting lines between roles can come later.\n\nA manager already working for another business is offered above the roles, never assumed. Choosing it adds this business to its work instead of making a second one."
+    },
+    {
+      "id": "space",
+      "x": 3152,
+      "y": 2790,
+      "w": 450,
+      "text": "THE SPACE AFTERWARDS\n\nProducts hold their projects in the tree. Services and the organisation folders sit beside them.\n\nThe Team tab says what each role is on. Anything that needs a director, like a release or a dependency update, waits here and on Today, and nothing is pushed without a yes.\n\nWhat each role is doing on this board is example content."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}

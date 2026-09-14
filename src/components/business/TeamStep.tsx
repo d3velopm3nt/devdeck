@@ -6,11 +6,12 @@
 // doing it. A manager already working for another business is offered above
 // the roles, and never assumed.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as ipc from '../../lib/ipc'
 import { Icon } from '../../lib/icons'
 import { openNodeThread } from '../../lib/dock'
 import { Err, Header } from '../setup/LearnStep'
+import { CAPTURE_BUSINESS_AUTO } from '../../lib/devCapture'
 import { Foot } from './BusinessStep'
 import { BizFrame, type StepProps } from './shared'
 
@@ -59,6 +60,15 @@ export function TeamStep({ view, setView, nav, onClose }: StepProps) {
       })
       .catch((e) => setErr(String(e)))
   }, [view?.node_id])
+
+  // Screenshot harness: make the team as suggested, without a mouse.
+  const autoRan = useRef(false)
+  useEffect(() => {
+    if (autoRan.current || CAPTURE_BUSINESS_AUTO !== 'make' || !offer) return
+    autoRan.current = true
+    window.setTimeout(() => void make(), 8000)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [offer])
 
   if (!view) return null
   const name = view.meta.name

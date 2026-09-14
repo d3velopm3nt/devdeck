@@ -5,10 +5,11 @@
 // script returns little to a plain read, and the screen says so and offers to
 // read it the way a browser draws it.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as ipc from '../../lib/ipc'
 import { Icon } from '../../lib/icons'
 import { Err, Header } from '../setup/LearnStep'
+import { CAPTURE_BUSINESS_AUTO } from '../../lib/devCapture'
 import { BizFrame, ItemRow, hostOf, yours, type StepProps } from './shared'
 
 const FIELDS: { field: string; label: string }[] = [
@@ -29,6 +30,16 @@ export function BusinessStep({ view, setView, nav, onClose, next }: StepProps) {
   useEffect(() => {
     setWebsite(view?.meta.website ?? '')
     setDirs(view?.meta.directors ?? [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view?.node_id])
+
+  // Screenshot harness: read the site without a mouse, on a throwaway profile.
+  const autoRan = useRef(false)
+  useEffect(() => {
+    if (autoRan.current || !view) return
+    if (CAPTURE_BUSINESS_AUTO !== 'read' && CAPTURE_BUSINESS_AUTO !== 'browser') return
+    autoRan.current = true
+    window.setTimeout(() => void read(CAPTURE_BUSINESS_AUTO === 'browser', view), 4000)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view?.node_id])
 
@@ -260,7 +271,7 @@ export function BusinessStep({ view, setView, nav, onClose, next }: StepProps) {
                   {view.site.thin
                     ? meta.site_how === 'browser'
                       ? 'even drawn in a browser window, the site has almost no words on it'
-                      : "the site's title, and the only line a plain read returns. The rest of the site is drawn by script"
+                      : "the site's title. A plain read returns almost nothing else, because the rest of the site is drawn by script"
                     : `${view.site.pages.length} ${view.site.pages.length === 1 ? 'page' : 'pages'} read${
                         meta.site_how === 'browser' ? ' in a browser window' : ''
                       }`}

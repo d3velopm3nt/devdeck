@@ -4,12 +4,13 @@
 // what never does before the red button does anything. A space whose folder
 // holds a repository is refused, because clearing it would delete code.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as ipc from '../../lib/ipc'
 import { Icon } from '../../lib/icons'
 import { Err, Frame, Header } from '../setup/LearnStep'
 import { Foot } from './BusinessStep'
 import { openBusiness } from './TodayBusinesses'
+import { CAPTURE_CLEAR_AUTO } from '../../lib/devCapture'
 
 export function ClearBusinesses({ onClose }: { onClose: () => void }) {
   const [preview, setPreview] = useState<ipc.ClearPreview | null>(null)
@@ -27,6 +28,15 @@ export function ClearBusinesses({ onClose }: { onClose: () => void }) {
       })
       .catch((e) => setErr(String(e)))
   }, [])
+
+  // Screenshot harness: press the red button on a throwaway profile.
+  const autoRan = useRef(false)
+  useEffect(() => {
+    if (autoRan.current || !CAPTURE_CLEAR_AUTO || !preview || ticked.size === 0) return
+    autoRan.current = true
+    window.setTimeout(() => void clear(), 8000)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preview, ticked])
 
   const clear = async () => {
     setBusy(true)

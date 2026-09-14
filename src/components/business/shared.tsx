@@ -76,7 +76,7 @@ function StateChip({ item }: { item: ipc.Suggestion }) {
   }
   return (
     <span className="rounded-full bg-amber-500/10 px-2 text-[9px] font-semibold uppercase leading-[1.6] tracking-wider text-warn">
-      {item.kind === 'guess' ? 'a guess' : 'suggested'}
+      {item.kind === 'guess' ? 'a guess' : item.kind === 'quote' ? "the site's words" : 'suggested'}
     </span>
   )
 }

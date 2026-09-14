@@ -51,6 +51,18 @@ things land so we never have to reconstruct state from memory.
 - [x] **Stash Phase 1** — event-driven clipboard capture, classifier, secret
       guardrail, auto project tag, and the vault view (rail → sidebar → list +
       detail, FTS5 search)
+- [x] **Adding a business** (`feat/business-setup`, `design/business-setup/`) —
+      a whole-window flow like first run: the business and its directors, its
+      website read into suggestions that say where each came from (a hidden
+      browser window reads sites drawn by script), products and services,
+      GitHub repositories linked to products as projects, mailboxes on its
+      domain, Learn one organisation at a time, and a team of company roles
+      rather than a manager per project, with managers from another business
+      offered, never assumed. A business space opens on a Team tab, and old
+      workspaces can be cleared after a preview that never touches code. See
+      **[test-results/business-setup/REPORT.md](test-results/business-setup/REPORT.md)**:
+      verified on a throwaway profile with the mock provider and example
+      repositories, so a real model, real GitHub and real IMAP are untested.
 
 ---
 

@@ -6,11 +6,12 @@
 // listed. A website repository is offered to Marketing, and a repository
 // whose name looks like part of a product is a labelled guess.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import * as ipc from '../../lib/ipc'
 import { Icon } from '../../lib/icons'
 import { useApp } from '../../store'
 import { Err, Header } from '../setup/LearnStep'
+import { CAPTURE_BUSINESS_AUTO } from '../../lib/devCapture'
 import { Foot } from './BusinessStep'
 import { BizFrame, hostOf, type StepProps } from './shared'
 
@@ -27,7 +28,7 @@ const when = (iso: string) => {
   return `updated ${new Date(t).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}`
 }
 
-export function CodeStep({ view, nav, onClose, next }: StepProps) {
+export function CodeStep({ view, setView, nav, onClose, next }: StepProps) {
   const { nodes, refreshTree } = useApp()
   const [list, setList] = useState<ipc.RepoList | null>(null)
   const [owner, setOwner] = useState('')
@@ -67,6 +68,38 @@ export function CodeStep({ view, nav, onClose, next }: StepProps) {
         .map((i) => ({ id: i.node_id, name: i.text })),
     [view],
   )
+  // Screenshot harness: give the agreed products their folders, pick the
+  // example repositories and link them, without a mouse. Throwaway profile only.
+  const autoRan = useRef(false)
+  useEffect(() => {
+    if (autoRan.current || !view || !list || !cloneInto) return
+    if (CAPTURE_BUSINESS_AUTO !== 'pick' && CAPTURE_BUSINESS_AUTO !== 'link') return
+    autoRan.current = true
+    void (async () => {
+      let v = view
+      if (!v.meta.items.some((i) => i.field === 'product' && i.node_id > 0)) {
+        v = await ipc.businessCommitItems(v.node_id)
+        setView(v)
+      }
+      const prods = v.meta.items.filter((i) => i.field === 'product' && i.node_id > 0)
+      const mkt = v.folders.find((f) => f.name.toLowerCase() === 'marketing')
+      const picks: Record<string, number> = {}
+      for (const r of list.repos) {
+        if (r.owner !== 'innotrack' || r.name === 'mobile-scanner') continue
+        if (r.name === 'website') {
+          if (mkt) picks[r.full_name] = mkt.node_id
+        } else if (r.name === 'rfid-gateway' && prods[1]) {
+          picks[r.full_name] = prods[1].node_id
+        } else if (prods[0]) {
+          picks[r.full_name] = prods[0].node_id
+        }
+      }
+      setPick(picks)
+      if (CAPTURE_BUSINESS_AUTO === 'link') window.setTimeout(() => void link(picks), 3000)
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [list, cloneInto, view?.node_id])
+
   const parents = [...products, ...(marketing ? [{ id: marketing.node_id, name: 'Marketing' }] : [])]
   const nameOf = (id: number) => parents.find((p) => p.id === id)?.name ?? ''
   const projectsUnder = (id: number) => nodes.filter((n) => n.parent_id === id && n.kind === 'project')
@@ -104,11 +137,11 @@ export function CodeStep({ view, nav, onClose, next }: StepProps) {
     })
     .filter((x): x is { repo: ipc.Repo; parent: number; shared: string; with: string } => !!x)[0]
 
-  const link = async () => {
+  const link = async (picksArg: Record<string, number> = pick) => {
     setBusy('link')
     setErr('')
     const out: string[] = []
-    for (const [full, parent] of picked) {
+    for (const [full, parent] of Object.entries(picksArg)) {
       const repo = list?.repos.find((r) => r.full_name === full)
       if (!repo) continue
       try {
@@ -381,7 +414,7 @@ export function CodeStep({ view, nav, onClose, next }: StepProps) {
       {err && <Err>{err}</Err>}
       <div className="flex items-center gap-3">
         {picked.length > 0 ? (
-          <button className="btn-primary text-[12px]" disabled={!!busy || !cloneInto.trim()} onClick={() => void link()}>
+          <button className="btn-primary text-[12px]" disabled={!!busy || !cloneInto.trim()} onClick={() => void link(pick)}>
             {busy === 'link' ? 'Linking…' : `Link ${picked.length} ${picked.length === 1 ? 'repository' : 'repositories'}`}
           </button>
         ) : (

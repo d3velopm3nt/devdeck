@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as ipc from '../../lib/ipc'
 import { Icon } from '../../lib/icons'
 import { Err, Header } from '../setup/LearnStep'
+import { CAPTURE_BUSINESS_AUTO } from '../../lib/devCapture'
 import { Foot } from './BusinessStep'
 import { BizFrame, isAgreed, type StepProps } from './shared'
 
@@ -87,6 +88,41 @@ export function BusinessLearnStep({ view, nav, onClose, next }: StepProps) {
         setErr('')
       })
       .catch((e) => setErr(String(e)))
+  }, [nodeId])
+
+  // Screenshot harness: approve the read without a mouse, on a throwaway
+  // profile with the mock provider. Late enough for the approval to be seen.
+  const autoRan = useRef(false)
+  useEffect(() => {
+    if (autoRan.current || CAPTURE_BUSINESS_AUTO !== 'learn' || !est || !est.ready || est.messages === 0) return
+    autoRan.current = true
+    window.setTimeout(() => void start(), 12000)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [est])
+
+  // Screenshot harness: open the cards the last run left and keep the first
+  // one as it stands, without reading again. Throwaway profile only.
+  const keepRan = useRef(false)
+  useEffect(() => {
+    if (keepRan.current || CAPTURE_BUSINESS_AUTO !== 'keep' || !nodeId) return
+    keepRan.current = true
+    void (async () => {
+      const c = (await ipc.learnReview(0)) as Card[]
+      setCards(c)
+      setPhase('review')
+      const first = c.find((x) => x.status === 'proposed')
+      if (!first) return
+      window.setTimeout(() => {
+        void decide(first, {
+          role: first.role || 'client',
+          relates: first.relates,
+          summary: first.summary,
+          keep: first.facts.filter((f) => f.status === 'proposed').map((f) => ({ id: f.id, text: f.text, node_id: f.node_id })),
+          decline: [],
+        })
+      }, 6000)
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodeId])
 
   if (!view) return null
@@ -208,9 +244,17 @@ export function BusinessLearnStep({ view, nav, onClose, next }: StepProps) {
               </div>
             </div>
             <div className="flex items-center gap-2 rounded-b-[10px] border-t border-line bg-raise px-4 py-3">
-              <button className="btn-primary text-[12px]" disabled={!est.ready || est.messages === 0} onClick={() => void start()}>
-                Read them
-              </button>
+              {est.messages === 0 ? (
+                // Everything was read by an earlier run and nothing new has
+                // arrived: the cards that run left are what there is.
+                <button className="btn-primary text-[12px]" onClick={() => void loadCards(0)}>
+                  See the cards
+                </button>
+              ) : (
+                <button className="btn-primary text-[12px]" disabled={!est.ready} onClick={() => void start()}>
+                  Read them
+                </button>
+              )}
               <span className="flex-1" />
               <button className="btn-ghost text-[12px]" onClick={() => next('team')}>
                 Not now

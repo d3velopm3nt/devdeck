@@ -145,7 +145,13 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
     ...(counts.kids ? [{ text: `${counts.kids} folder${counts.kids === 1 ? '' : 's'}` }] : []),
     ...(counts.cmds ? [{ text: `${counts.cmds} command${counts.cmds === 1 ? '' : 's'}` }] : []),
     ...(counts.svcs ? [{ text: `${counts.svcs} service${counts.svcs === 1 ? '' : 's'}` }] : []),
-    ...(bot ? [{ text: bot.name, tone: 'text-indigo-400' }] : [{ text: 'no bot', dashed: true }]),
+    // A business has a team of roles, shown on its Team tab. Naming one of
+    // them here as "its bot" would say the space has one manager.
+    ...(isBusiness
+      ? []
+      : bot
+        ? [{ text: bot.name, tone: 'text-indigo-400' }]
+        : [{ text: 'no bot', dashed: true }]),
     ...(counts.open ? [{ text: `${counts.open} open item${counts.open === 1 ? '' : 's'}` }] : []),
     ...(isProject
       ? dir
@@ -191,7 +197,8 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-            {bot ? (
+            {/* A business has a team of roles, not one bot: its Team tab says who. */}
+            {bot && !isBusiness ? (
               <button className="btn-ghost text-[11px]" onClick={() => openBot(bot.node_id, bot.name)}>
                 <Icon name="bot" size={12} /> Its bot
               </button>

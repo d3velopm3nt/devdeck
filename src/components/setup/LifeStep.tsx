@@ -7,15 +7,16 @@
 // space.
 
 import { useEffect, useState } from 'react'
+import * as ipc from '../../lib/ipc'
 import { aiw, type PersonView } from '../../lib/aiw'
 import { Icon } from '../../lib/icons'
 import { Err, Frame, Header } from './LearnStep'
 import type { SetupNav } from './steps'
+import { isFamily, relationGroup } from '../../lib/relations'
 
 /// What somebody usually is. In words, because a role is a word and not a
 /// code: "wife" is stored as "wife" if that is what you type.
 const RELATIONS = ['partner', 'child', 'parent', 'sibling', 'friend'] as const
-const FAMILY = new Set<string>(RELATIONS)
 
 /// A guess at who lives with you, corrected with one click.
 const LIVES_WITH: Record<string, boolean> = {
@@ -68,6 +69,14 @@ export function LifeStep({
   const [petName, setPetName] = useState('')
   const [petWhat, setPetWhat] = useState('')
 
+  // What the learn step already knows. The facts you kept say who your
+  // wife is and whose sons those are; asking you again would be the form
+  // pretending the last step never happened. One small request, from the
+  // kept facts only, cached until you keep more.
+  const [suggested, setSuggested] = useState<ipc.LifeProposal[]>([])
+  const [asking, setAsking] = useState(false)
+  const [passed, setPassed] = useState<Set<string>>(new Set())
+
   // Already on file, so coming back here shows what you said.
   useEffect(() => {
     let live = true
@@ -82,17 +91,42 @@ export function LifeStep({
         )
         setRows(
           known
-            .filter((p) => p.kind !== 'pet' && (FAMILY.has(p.role) || p.source === 'you'))
+            .filter(
+              (p) =>
+                p.kind !== 'pet' &&
+                (isFamily(p.role) || relationGroup(p.role) === 'friend' || p.source === 'you'),
+            )
             .filter((p) => p.role !== 'helps at home')
             .map((p) => ({ key: p.id, name: p.name, role: p.role, home: p.home, saved: p })),
         )
+        setAsking(true)
+        return ipc.learnLifeProposals().then((found) => {
+          if (!live) return
+          const have = new Set(known.map((p) => p.name.trim().toLowerCase()))
+          setSuggested(found.filter((f) => !have.has(f.name.trim().toLowerCase())))
+        })
       })
       .catch((e) => live && setErr(String(e)))
-      .finally(() => live && setLoaded(true))
+      .finally(() => {
+        if (live) {
+          setLoaded(true)
+          setAsking(false)
+        }
+      })
     return () => {
       live = false
     }
   }, [])
+
+  const take = (f: ipc.LifeProposal) => {
+    if (f.kind === 'pet') setPets((cur) => [...cur, { key: key(), name: f.name, what: f.relation }])
+    else setRows((cur) => [...cur, { key: key(), name: f.name, role: f.relation, home: f.home }])
+    setSuggested((cur) => cur.filter((x) => x !== f))
+  }
+  const pass = (f: ipc.LifeProposal) => {
+    setPassed((cur) => new Set(cur).add(f.name))
+    setSuggested((cur) => cur.filter((x) => x !== f))
+  }
 
   const addRow = () => {
     const n = name.trim()
@@ -166,14 +200,45 @@ export function LifeStep({
   }
 
   const say = (r: Row) => `${r.name} is your ${r.role}${r.home ? ', and lives with you' : ''}`
+  const passedNote = passed.size > 0 ? `${passed.size} left out` : ''
 
   return (
     <Frame step="life" onClose={onClose} nav={nav}>
       <Header
         icon="contacts"
         title="Who is in your life"
-        text="Your family, your friends, your pets. Nothing here comes from your mail: the people you write to were the last step, and this is the part no mailbox can know."
+        text="Your family, your friends, your pets. What the facts you kept already say is offered first; the rest is yours to add. Nothing here is read from your mail again."
       />
+
+      {(asking || suggested.length > 0) && (
+        <div className="rounded-[10px] border border-indigo-500/40 bg-panel">
+          <div className="flex items-center gap-2 border-b border-line px-4 py-3">
+            <Icon name="ai" size={13} className="text-indigo-400" />
+            <span className="text-[12.5px] font-semibold text-ink">From what I read</span>
+            <span className="ml-auto text-[10.5px] text-faint">
+              {asking ? 'reading the facts you kept…' : passedNote || 'from the facts you kept, nothing else'}
+            </span>
+          </div>
+          {suggested.map((f) => (
+            <div key={f.name} className="flex items-center gap-3 border-t border-line px-4 py-2.5">
+              <Icon name={f.kind === 'pet' ? 'home' : 'contacts'} size={13} className="text-muted" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[12.5px] text-ink">
+                  {f.name} <span className="text-muted">is your {f.relation}</span>
+                  {f.home && f.kind !== 'pet' && <span className="text-muted">, and lives with you</span>}
+                </div>
+                {f.why && <div className="truncate text-[10.5px] text-faint">{f.why}</div>}
+              </div>
+              <button className="btn-primary text-[11px]" onClick={() => take(f)}>
+                Yes
+              </button>
+              <button className="btn-ghost text-[11px] text-muted" onClick={() => pass(f)}>
+                No
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="rounded-[10px] border border-line bg-panel">
         <div className="flex items-center gap-2 border-b border-line px-4 py-3">

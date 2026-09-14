@@ -10,6 +10,7 @@ import { aiw, type PersonView } from '../lib/aiw'
 import * as ipc from '../lib/ipc'
 import { Icon } from '../lib/icons'
 import { useApp } from '../store'
+import { relationGroup } from '../lib/relations'
 
 const GROUPS: Array<{ key: string; title: string; note: string; pick: (p: PersonView) => boolean }> = [
   { key: 'home', title: 'Home', note: 'the people and animals you live with', pick: (p) => p.home },
@@ -17,15 +18,15 @@ const GROUPS: Array<{ key: string; title: string; note: string; pick: (p: Person
     key: 'family',
     title: 'Family',
     note: 'beyond your home',
-    pick: (p) => !p.home && ['partner', 'child', 'parent', 'sibling'].includes(p.role),
+    pick: (p) => !p.home && ['partner', 'child', 'parent', 'sibling'].includes(relationGroup(p.role, p.kind)),
   },
-  { key: 'friends', title: 'Friends', note: 'people you choose to see', pick: (p) => !p.home && p.role === 'friend' },
-  { key: 'pets', title: 'Pets', note: '', pick: (p) => !p.home && p.kind === 'pet' },
+  { key: 'friends', title: 'Friends', note: 'people you choose to see', pick: (p) => !p.home && relationGroup(p.role, p.kind) === 'friend' },
+  { key: 'pets', title: 'Pets', note: '', pick: (p) => !p.home && relationGroup(p.role, p.kind) === 'pet' },
   {
     key: 'help',
     title: 'Who helps',
     note: 'at home, or with something in it',
-    pick: (p) => !p.home && p.kind !== 'pet' && !['partner', 'child', 'parent', 'sibling', 'friend'].includes(p.role),
+    pick: (p) => !p.home && relationGroup(p.role, p.kind) === 'other',
   },
 ]
 

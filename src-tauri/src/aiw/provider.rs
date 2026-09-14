@@ -727,6 +727,20 @@ impl LLMProvider for MockProvider {
                 usage: None,
             });
         }
+        // Who is in your life: two scripted rows, so the step has something
+        // to offer on a profile with no key.
+        if request.system.starts_with(super::learn::LIFE_MARK) {
+            return Ok(AgentResponse {
+                message: [
+                    r#"{"name":"Anna (scripted by the mock provider)","relation":"sister","kind":"person","home":false,"why":"the mock provider cannot read the facts"}"#,
+                    r#"{"name":"Biscuit (scripted by the mock provider)","relation":"dog","kind":"pet","home":true,"why":"the mock provider cannot read the facts"}"#,
+                ]
+                .join("\n"),
+                actions: vec![AgentAction::Done { summary: "listed".into() }],
+                complete: true,
+                usage: None,
+            });
+        }
         // A card's summary written again: two sentences from the lines it was
         // given, and a note that they are scripted.
         if request.system.starts_with(super::learn::SUMMARY_MARK) {

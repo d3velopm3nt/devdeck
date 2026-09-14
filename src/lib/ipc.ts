@@ -1606,6 +1606,21 @@ export interface LearnCard {
 }
 /** The cards of a run, to decide or look at again. `runId` 0 is the latest. */
 export const learnReview = (runId = 0) => invoke<LearnCard[]>('learn_review', { runId })
+/** Somebody the kept facts say is family, a friend or a pet. */
+export interface LifeProposal {
+  name: string
+  /** wife, stepson, father, friend, dog: as the facts put it. */
+  relation: string
+  kind: 'person' | 'pet' | string
+  home: boolean
+  /** The fact that says so. */
+  why: string
+}
+/**
+ * Who the kept facts say is in your life. One small request from what was
+ * already read and kept; cached until more is kept.
+ */
+export const learnLifeProposals = () => invoke<LifeProposal[]>('learn_life_proposals')
 /** The summary written again from the lines kept. One small request to the model. */
 export const learnSummarise = (name: string, facts: string[]) =>
   invoke<string>('learn_summarise', { name, facts })

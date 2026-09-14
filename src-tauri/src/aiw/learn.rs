@@ -2341,6 +2341,176 @@ pub async fn learn_summarise(ws: Ws<'_>, name: String, facts: Vec<String>) -> Re
     .map_err(|e| format!("did not finish: {e}"))?
 }
 
+// ---------------------------------------------------------------------------
+// Who is in your life, from what was kept
+// ---------------------------------------------------------------------------
+
+/// The mock recognises a life request by these words.
+pub const LIFE_MARK: &str = "You are working out who is in somebody's life";
+
+pub const LIFE_SYSTEM: &str = "\
+You are working out who is in somebody's life from facts they have chosen to
+keep about the people they write to. Return ONLY JSON, ONE OBJECT PER LINE, no
+prose, no fence, no array:
+
+  {\"name\": \"the person's or animal's name\",
+   \"relation\": \"wife | husband | partner | son | daughter | stepson | father |
+                mother | brother | sister | friend | dog | cat ... in one word,
+                as the facts put it\",
+   \"kind\": \"person\" | \"pet\",
+   \"home\": true if they live with the mailbox owner, else false,
+   \"why\": \"the fact that says so, in a few words\"}
+
+Only family, partners, children, stepchildren, parents, siblings, close
+friends and pets. NOT colleagues, accountants, suppliers, clients, doctors or
+anyone known only through business. Only what the facts state; never guess a
+relation. One line per person; a child of the owner's partner is the owner's
+stepson or stepdaughter. Nothing else.";
+
+/// Somebody the kept facts say is family, a friend or a pet.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct LifeProposal {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub relation: String,
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub home: bool,
+    #[serde(default)]
+    pub why: String,
+}
+
+const PET_WORDS: &[&str] = &["dog", "cat", "puppy", "kitten", "horse", "pony", "bird", "parrot", "rabbit", "hamster", "fish", "goldfish", "pet"];
+
+/// Parse and tidy what the model sent: a name, a one-word relation, pet or
+/// person worked out from the relation when the model did not say.
+pub fn parse_life(reply: &str) -> Vec<LifeProposal> {
+    let mut out: Vec<LifeProposal> = Vec::new();
+    let mut lines: Vec<LifeProposal> = reply
+        .lines()
+        .filter_map(|l| {
+            let l = l.trim().trim_end_matches(',');
+            if !l.starts_with('{') || !l.ends_with('}') {
+                return None;
+            }
+            serde_json::from_str::<LifeProposal>(l).ok()
+        })
+        .collect();
+    if lines.is_empty() {
+        if let Some(arr) = extract_array(reply) {
+            lines = serde_json::from_str::<Vec<LifeProposal>>(&arr).unwrap_or_default();
+        }
+    }
+    for mut p in lines {
+        p.name = p.name.trim().to_string();
+        p.relation = p.relation.trim().trim_matches('.').to_ascii_lowercase();
+        p.why = p.why.trim().to_string();
+        if p.name.is_empty() || p.relation.is_empty() {
+            continue;
+        }
+        let pet = p.kind.trim().eq_ignore_ascii_case("pet")
+            || PET_WORDS.iter().any(|w| p.relation.split_whitespace().any(|r| r == *w));
+        p.kind = if pet { "pet".into() } else { "person".into() };
+        if out.iter().any(|q| q.name.eq_ignore_ascii_case(&p.name)) {
+            continue;
+        }
+        out.push(p);
+    }
+    out
+}
+
+/// Who the kept facts say is in your life. One small request, from what was
+/// already read and kept; nothing new leaves the machine. Cached against the
+/// number of facts kept, so coming back to the step does not ask again
+/// until you have kept more.
+#[tauri::command]
+pub async fn learn_life_proposals(app: tauri::AppHandle, ws: Ws<'_>) -> Result<Vec<LifeProposal>, String> {
+    let ws = (*ws).clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = <tauri::AppHandle as tauri::Manager<tauri::Wry>>::state::<Db>(&app);
+        let (kept, summaries) = {
+            let conn = db.0.lock().unwrap();
+            let mut st = conn
+                .prepare("SELECT text FROM learn_facts WHERE status = 'kept' ORDER BY decided_at, id")
+                .map_err(err)?;
+            let kept: Vec<String> = st
+                .query_map([], |r| r.get::<_, String>(0))
+                .map_err(err)?
+                .flatten()
+                .collect();
+            let mut st = conn
+                .prepare("SELECT name, summary FROM learn_people WHERE status = 'kept' AND summary <> ''")
+                .map_err(err)?;
+            let summaries: Vec<(String, String)> = st
+                .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
+                .map_err(err)?
+                .flatten()
+                .collect();
+            (kept, summaries)
+        };
+        if kept.is_empty() && summaries.is_empty() {
+            return Ok(Vec::new());
+        }
+        let stamp = format!("{}:{}", kept.len(), summaries.len());
+        {
+            let conn = db.0.lock().unwrap();
+            if let Ok(Some(cached)) = crate::db::setting_get_conn(&conn, "life.proposals") {
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&cached) {
+                    if v.get("stamp").and_then(|s| s.as_str()) == Some(stamp.as_str()) {
+                        if let Some(items) = v.get("items") {
+                            if let Ok(items) = serde_json::from_value::<Vec<LifeProposal>>(items.clone()) {
+                                return Ok(items);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let (provider_id, _, model, ready, note) = destination_model(&ws);
+        if !ready {
+            return Err(note);
+        }
+        let provider = {
+            let providers = ws.providers.lock().unwrap();
+            providers.get(&provider_id)
+        }
+        .ok_or_else(|| format!("'{provider_id}' is not configured"))?;
+        let mut context = String::from("# What the owner kept\n\n");
+        for (name, summary) in &summaries {
+            context.push_str(&format!("## {name}\n{summary}\n\n"));
+        }
+        context.push_str("## Facts\n");
+        for k in &kept {
+            context.push_str(&format!("- {k}\n"));
+        }
+        let request = AgentRequest {
+            agent_id: super::assistant::ASSISTANT_ID.into(),
+            role: "assistant".into(),
+            model,
+            system: LIFE_SYSTEM.into(),
+            context,
+            goal: "List the family, friends and pets these facts name, one JSON object per line.".into(),
+            ..Default::default()
+        };
+        let reply = provider.run(&request)?;
+        let items = parse_life(&reply.message);
+        {
+            let conn = db.0.lock().unwrap();
+            let _ = crate::db::setting_set_conn(
+                &conn,
+                "life.proposals",
+                &serde_json::json!({ "stamp": stamp, "items": items }).to_string(),
+            );
+        }
+        Ok(items)
+    })
+    .await
+    .map_err(|e| format!("did not finish: {e}"))?
+}
+
 /// A person's card as a run left it: the summary, the facts, the decision.
 #[derive(Serialize, Clone, Debug, Default)]
 pub struct LearnCard {
@@ -2732,6 +2902,27 @@ mod tests {
         let out = parse_facts(r#"[{"kind":"thing","text":"   "},{"kind":"thing","text":"real"}]"#);
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].text, "real");
+    }
+
+    /// What the model says about who is in your life is tidied: pets are
+    /// pets whatever it called them, a name comes once, and a line with no
+    /// name or no relation is nothing.
+    #[test]
+    fn who_is_in_your_life_is_read_from_the_reply() {
+        let reply = r#"{"name":"Rachel","relation":"Wife","home":true,"why":"Rachel is your wife"}
+{"name":"Biscuit","relation":"dog","home":true,"why":"Biscuit's vaccination"}
+{"name":"Rachel","relation":"partner","home":true}
+{"name":"","relation":"friend"}
+{"name":"Tax Plus","relation":""}"#;
+        let out = parse_life(reply);
+        assert_eq!(out.len(), 2);
+        assert_eq!((out[0].name.as_str(), out[0].relation.as_str(), out[0].kind.as_str()), ("Rachel", "wife", "person"));
+        assert_eq!((out[1].name.as_str(), out[1].kind.as_str()), ("Biscuit", "pet"));
+        assert!(out[1].home);
+
+        // Wrapped in prose and an array: still read.
+        let arr = "Here you go:\n[{\"name\":\"Dad\",\"relation\":\"father\",\"home\":false}]";
+        assert_eq!(parse_life(arr).len(), 1);
     }
 
     /// A line you write on the card yourself is filed like the rest, with

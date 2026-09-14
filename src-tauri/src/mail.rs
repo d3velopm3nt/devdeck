@@ -587,11 +587,10 @@ pub struct Correspondent {
 /// folders, both of which are already synced. It is what makes a later learn
 /// run small enough to be worth approving, and it costs nothing to run.
 ///
-/// Sent-to matching is a substring test on the recipient list. A stored
-/// `to_addrs` is a display list rather than parsed addresses, so this is the
-/// honest tool for it: it can over-count when one address contains another,
-/// and that is a rank being slightly wrong rather than a fact being wrong.
-#[tauri::command]
+/// Sent-to matching reads each address out of the recipient list, which is a
+/// display list rather than parsed addresses; a piece with no angle brackets
+/// is taken whole.
+#[tauri::command(async)]
 pub fn mail_correspondents(db: tauri::State<Db>, limit: i64) -> Result<Vec<Correspondent>, String> {
     let conn = db.0.lock().unwrap();
     rank_correspondents(&conn, limit)
@@ -614,48 +613,111 @@ pub fn rank_correspondents_pub(conn: &Connection, limit: i64) -> Result<Vec<Corr
 fn rank_correspondents(conn: &Connection, limit: i64) -> Result<Vec<Correspondent>, String> {
     let limit = limit.clamp(1, 500);
 
-    let mut st = conn
-        .prepare(
-            "SELECT c.id, c.name, c.email,
-                    (SELECT COUNT(*) FROM mail_messages m
-                      WHERE m.mailbox='INBOX' AND lower(m.from_addr)=lower(c.email)),
-                    (SELECT COUNT(*) FROM mail_messages m
-                      WHERE m.mailbox='Sent' AND instr(lower(m.to_addrs), lower(c.email)) > 0),
-                    (SELECT COUNT(DISTINCT m.thread_key) FROM mail_messages m
-                      WHERE lower(m.from_addr)=lower(c.email)
-                         OR instr(lower(m.to_addrs), lower(c.email)) > 0),
-                    (SELECT COALESCE(MAX(m.ts), 0) FROM mail_messages m
-                      WHERE lower(m.from_addr)=lower(c.email)
-                         OR instr(lower(m.to_addrs), lower(c.email)) > 0),
-                    (SELECT COALESCE(MAX(m.account_id), 0) FROM mail_messages m
-                      WHERE lower(m.from_addr)=lower(c.email))
-               FROM mail_contacts c
-              WHERE c.email <> '' AND c.kind <> 'bot'",
-        )
-        .map_err(err)?;
-
-    let rows = st
-        .query_map([], |r| {
-            let email: String = r.get(2)?;
-            Ok(Correspondent {
-                contact_id: r.get(0)?,
-                name: r.get(1)?,
-                domain: email.split('@').nth(1).unwrap_or_default().to_string(),
-                email,
-                received: r.get(3)?,
-                sent: r.get(4)?,
-                threads: r.get(5)?,
-                last_ts: r.get(6)?,
-                account_id: r.get(7)?,
-                space: String::new(),
+    // One pass over the messages, not one query per contact. The first
+    // version was five correlated subqueries per contact, each a full scan
+    // with lower() and instr() on every row: on a real mailbox that is
+    // contacts x messages x five, tens of seconds, and it ran under the
+    // database lock every time the setup screen polled. Every sync command
+    // waiting on that lock waited on the main thread, and the window froze.
+    struct Tally {
+        received: i64,
+        sent: i64,
+        threads: std::collections::HashSet<String>,
+        last_ts: i64,
+        account_id: i64,
+    }
+    let mut tallies: Vec<Tally> = Vec::new();
+    let mut contacts: Vec<(i64, String, String)> = Vec::new();
+    let mut by_email: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    {
+        let mut st = conn
+            .prepare("SELECT id, name, email FROM mail_contacts WHERE email <> '' AND kind <> 'bot'")
+            .map_err(err)?;
+        let rows = st
+            .query_map([], |r| {
+                Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?))
             })
-        })
-        .map_err(err)?;
+            .map_err(err)?;
+        for (id, name, email) in rows.flatten() {
+            let key = email.trim().to_ascii_lowercase();
+            if by_email.contains_key(&key) {
+                continue;
+            }
+            by_email.insert(key, contacts.len());
+            contacts.push((id, name, email));
+            tallies.push(Tally {
+                received: 0,
+                sent: 0,
+                threads: std::collections::HashSet::new(),
+                last_ts: 0,
+                account_id: 0,
+            });
+        }
+    }
+    if contacts.is_empty() {
+        return Ok(Vec::new());
+    }
 
-    let mut all: Vec<Correspondent> = rows
-        .collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(err)?
+    {
+        let mut st = conn
+            .prepare(
+                "SELECT from_addr, to_addrs, thread_key, mailbox, ts, account_id FROM mail_messages",
+            )
+            .map_err(err)?;
+        let rows = st
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, String>(3)?,
+                    r.get::<_, i64>(4)?,
+                    r.get::<_, i64>(5)?,
+                ))
+            })
+            .map_err(err)?;
+        for (from, to, thread, mailbox, ts, account) in rows.flatten() {
+            let from = from.trim().to_ascii_lowercase();
+            if let Some(&i) = by_email.get(&from) {
+                let t = &mut tallies[i];
+                if mailbox == "INBOX" {
+                    t.received += 1;
+                }
+                t.threads.insert(thread.clone());
+                t.last_ts = t.last_ts.max(ts);
+                t.account_id = t.account_id.max(account);
+            }
+            for addr in recipient_addrs(&to) {
+                if addr == from {
+                    continue;
+                }
+                if let Some(&i) = by_email.get(&addr) {
+                    let t = &mut tallies[i];
+                    if mailbox == "Sent" {
+                        t.sent += 1;
+                    }
+                    t.threads.insert(thread.clone());
+                    t.last_ts = t.last_ts.max(ts);
+                }
+            }
+        }
+    }
+
+    let mut all: Vec<Correspondent> = contacts
         .into_iter()
+        .zip(tallies)
+        .map(|((contact_id, name, email), t)| Correspondent {
+            contact_id,
+            name,
+            domain: email.split('@').nth(1).unwrap_or_default().to_string(),
+            email,
+            received: t.received,
+            sent: t.sent,
+            threads: t.threads.len() as i64,
+            last_ts: t.last_ts,
+            account_id: t.account_id,
+            space: String::new(),
+        })
         // Never written back means not a correspondent. This one line is what
         // removes the thousand messages nobody wants read.
         .filter(|c| c.sent > 0)
@@ -689,6 +751,30 @@ fn rank_correspondents(conn: &Connection, limit: i64) -> Result<Vec<Corresponden
     });
     all.truncate(limit as usize);
     Ok(all)
+}
+
+/// The addresses in a stored recipient list, lowercased.
+///
+/// `to_addrs` is a display list -- `Sarah <sarah@x.com>, priya@y.com` -- so
+/// each piece is the part in angle brackets when there is one and the whole
+/// piece when there is not.
+fn recipient_addrs(list: &str) -> Vec<String> {
+    list.split([',', ';'])
+        .filter_map(|piece| {
+            let piece = piece.trim();
+            if piece.is_empty() {
+                return None;
+            }
+            let addr = match (piece.find('<'), piece.rfind('>')) {
+                (Some(a), Some(b)) if b > a => &piece[a + 1..b],
+                _ => piece,
+            };
+            let addr = addr.trim().trim_matches('"').to_ascii_lowercase();
+            // A quoted display name with a comma in it splits into pieces
+            // that are not addresses. An address has an @ in it.
+            if addr.contains('@') { Some(addr) } else { None }
+        })
+        .collect()
 }
 
 /// A label on the server, and whether we have ever fetched its mail.
@@ -2050,7 +2136,9 @@ pub fn mail_list(db: tauri::State<Db>, query: MailQuery) -> Result<Vec<MailMessa
     rows.collect::<rusqlite::Result<Vec<_>>>().map_err(err)
 }
 
-#[tauri::command]
+// Polled by the setup screen. Off the main thread, or a wait for the lock
+// while a run holds it is a frozen window.
+#[tauri::command(async)]
 pub fn mail_counts(db: tauri::State<Db>) -> Result<MailCounts, String> {
     let conn = db.0.lock().unwrap();
     let one = |sql: &str| -> i64 {
@@ -3104,6 +3192,18 @@ Content-Type: multipart/mixed; boundary=\"z\"\r\n\r\n\
         let out = rank_correspondents(&c, 50).unwrap();
         assert_eq!(out.len(), 2, "both were written to");
         assert!(out.iter().all(|c| c.sent == 1));
+    }
+
+    /// The recipient list is a display list. Each address comes out of it
+    /// whatever the dressing, and a display name is never mistaken for one.
+    #[test]
+    fn every_address_comes_out_of_a_recipient_list() {
+        assert_eq!(
+            recipient_addrs("Sarah <Sarah@HarbourVine.com>, priya@y.com; \"Tom, Jr\" <tom@z.io>"),
+            vec!["sarah@harbourvine.com", "priya@y.com", "tom@z.io"]
+        );
+        assert!(recipient_addrs("").is_empty());
+        assert_eq!(recipient_addrs(" , ; "), Vec::<String>::new());
     }
 
     #[test]

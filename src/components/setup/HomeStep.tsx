@@ -21,7 +21,15 @@ interface Worker {
   days: string
 }
 
-export function HomeStep({ onDone, onSkip }: { onDone: () => void; onSkip: () => void }) {
+export function HomeStep({
+  onDone,
+  onSkip,
+  onClose,
+}: {
+  onDone: () => void
+  onSkip: () => void
+  onClose?: () => void
+}) {
   const { refreshTree } = useApp()
   const [starter, setStarter] = useState<ipc.Starter | null>(null)
   const [address, setAddress] = useState('')
@@ -135,7 +143,7 @@ export function HomeStep({ onDone, onSkip }: { onDone: () => void; onSkip: () =>
   }
 
   return (
-    <Frame step="home">
+    <Frame step="home" onClose={onClose}>
       <Header
         icon="home"
         title="The house you run"

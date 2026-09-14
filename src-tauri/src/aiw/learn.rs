@@ -791,8 +791,19 @@ pub const SYSTEM_MARK: &str = "You are reading somebody's mail";
 pub const SYSTEM: &str = "\
 You are reading somebody's mail so their assistant knows who they deal with.
 
-Return ONLY facts, ONE JSON OBJECT PER LINE. No prose, no code fence, no
-array around them. Each line:
+Return ONLY JSON, ONE OBJECT PER LINE. No prose, no code fence, no array
+around them.
+
+The FIRST line sums this person up, so the reader can decide about them in one
+go instead of fact by fact:
+
+  {\"kind\": \"summary\",
+   \"text\": \"two or three sentences: who they are to the mailbox owner, what
+            the two of them deal with together, and what is going on between
+            them now\",
+   \"about\": \"the person\"}
+
+Then the facts, one per line:
 
   {\"kind\": \"thing\" | \"you\",
    \"text\": \"one specific sentence\",
@@ -921,10 +932,32 @@ pub fn parse_fact_line(line: &str) -> Option<ProposedFact> {
         return None;
     }
     let f = serde_json::from_str::<ProposedFact>(l).ok()?;
-    if f.text.trim().is_empty() {
+    if f.text.trim().is_empty() || is_summary(&f) {
         return None;
     }
     Some(normalise(f))
+}
+
+fn is_summary(f: &ProposedFact) -> bool {
+    f.kind.trim().eq_ignore_ascii_case("summary")
+}
+
+/// The one line that sums a person up, if this is it.
+///
+/// Not a fact: it is never filed as one, so a batch's counts are facts and a
+/// summary cannot be kept by accident as a sentence about nothing. It is
+/// shown at the top of the person's card and written to their record when
+/// the card is kept.
+pub fn parse_summary_line(line: &str) -> Option<String> {
+    let l = line.trim().trim_end_matches(',');
+    if !l.starts_with('{') || !l.ends_with('}') {
+        return None;
+    }
+    let f = serde_json::from_str::<ProposedFact>(l).ok()?;
+    if !is_summary(&f) || f.text.trim().is_empty() {
+        return None;
+    }
+    Some(f.text.trim().to_string())
 }
 
 /// Every fact in a whole reply.
@@ -1454,14 +1487,20 @@ fn file_fact(
     f: &ProposedFact,
     people: &[LearnPerson],
     thread_keys: &[String],
+    fallback_contact: i64,
 ) -> Option<LearnFact> {
-    let person = people.iter().find(|p| {
-        let a = f.about.to_ascii_lowercase();
-        !a.is_empty()
-            && (a.contains(&p.email.to_ascii_lowercase())
-                || (!p.domain.is_empty() && a.contains(&p.domain.to_ascii_lowercase()))
-                || (!p.name.is_empty() && a.contains(&p.name.to_ascii_lowercase())))
-    });
+    let person = people
+        .iter()
+        .find(|p| {
+            let a = f.about.to_ascii_lowercase();
+            !a.is_empty()
+                && (a.contains(&p.email.to_ascii_lowercase())
+                    || (!p.domain.is_empty() && a.contains(&p.domain.to_ascii_lowercase()))
+                    || (!p.name.is_empty() && a.contains(&p.name.to_ascii_lowercase())))
+        })
+        // A live run asks about one person at a time, so a fact whose
+        // `about` says "her sister" still belongs on that person's card.
+        .or_else(|| people.iter().find(|p| p.contact_id == fallback_contact));
     let space = person.map(|p| p.space.clone()).unwrap_or_default();
     let node_id = if f.kind == "thing" { node_for_space(conn, &space) } else { 0 };
     conn.execute(
@@ -1619,12 +1658,27 @@ pub fn run_live(
         // ends is tried once more.
         let buffer = std::cell::RefCell::new(String::new());
         let count = std::cell::Cell::new(0usize);
+        let summary = std::cell::RefCell::new(String::new());
         let who = live_person(person);
         let on_line = |line: &str| {
+            if let Some(text) = parse_summary_line(line) {
+                let _ = app.emit(
+                    "learn:summary",
+                    serde_json::json!({
+                        "run_id": run_id,
+                        "index": i,
+                        "total": total,
+                        "person": who,
+                        "text": text,
+                    }),
+                );
+                *summary.borrow_mut() = text;
+                return;
+            }
             let Some(f) = parse_fact_line(line) else { return };
             let filed = {
                 let conn = db.0.lock().unwrap();
-                file_fact(&conn, run_id, &f, &whole.people, &part.thread_keys())
+                file_fact(&conn, run_id, &f, &whole.people, &part.thread_keys(), person.contact_id)
             };
             if let Some(filed) = filed {
                 count.set(count.get() + 1);
@@ -1684,6 +1738,7 @@ pub fn run_live(
                 "total": total,
                 "person": who,
                 "facts": count.get(),
+                "summary": summary.borrow().clone(),
                 "tokens_so_far": tokens_so_far,
                 "cost_so_far": cost_so_far,
             }),
@@ -1873,7 +1928,7 @@ pub async fn learn_estimate(
 }
 
 /// Everybody the run could read about, so "Choose who" has a list.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn learn_people(db: tauri::State<Db>, limit: i64) -> Result<Vec<crate::mail::Correspondent>, String> {
     let conn = db.0.lock().unwrap();
     crate::mail::rank_correspondents_pub(&conn, if limit > 0 { limit } else { 50 })
@@ -1928,19 +1983,19 @@ pub fn learn_stop() {
     STOP.store(true, std::sync::atomic::Ordering::SeqCst);
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn learn_runs(db: tauri::State<Db>, limit: i64) -> Result<Vec<LearnRun>, String> {
     let conn = db.0.lock().unwrap();
     runs(&conn, if limit > 0 { limit } else { 20 })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn learn_facts(db: tauri::State<Db>, run_id: i64, status: String) -> Result<Vec<LearnFact>, String> {
     let conn = db.0.lock().unwrap();
     facts(&conn, run_id, &status)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn learn_keep(
     db: tauri::State<Db>,
     id: i64,
@@ -1962,7 +2017,7 @@ pub struct KnownNote {
 ///
 /// Kept facts and setup answers alike. Read through the deck so the page sees
 /// exactly what the space's manager sees, and no more.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn learn_notes(db: tauri::State<Db>, node_id: i64) -> Result<Vec<KnownNote>, String> {
     let conn = db.0.lock().unwrap();
     let dir = match thing_dir(&conn, node_id) {
@@ -1983,7 +2038,7 @@ pub fn learn_notes(db: tauri::State<Db>, node_id: i64) -> Result<Vec<KnownNote>,
 /// What the Home setup's answers become: the address, who works there, that
 /// there is a pool. Same folder a kept fact lands in, same shape, so the
 /// space's manager reads it the same way.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn learn_note_save(
     db: tauri::State<Db>,
     node_id: i64,
@@ -2016,10 +2071,97 @@ learned_at: {}
     Ok(path.to_string_lossy().to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn learn_decline(db: tauri::State<Db>, id: i64) -> Result<(), String> {
     let conn = db.0.lock().unwrap();
     decline(&conn, id)
+}
+
+/// One fact, as kept: the id and the words, which may have been edited.
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct KeptLine {
+    pub id: i64,
+    pub text: String,
+    #[serde(default)]
+    pub node_id: i64,
+}
+
+/// A person's card, decided in one go.
+///
+/// A run proposes a dozen facts per person, and a dozen decisions per person
+/// is admin nobody does. The card is the unit instead: keep it and every
+/// fact on it is kept and the summary goes on the person's record; change it
+/// and the lines you unticked are declined; dismiss it and they all are.
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct PersonDecision {
+    pub name: String,
+    #[serde(default)]
+    pub email: String,
+    #[serde(default)]
+    pub summary: String,
+    #[serde(default)]
+    pub keep: Vec<KeptLine>,
+    #[serde(default)]
+    pub decline: Vec<i64>,
+}
+
+#[derive(Serialize, Clone, Debug, Default)]
+pub struct PersonOutcome {
+    pub kept: usize,
+    pub declined: usize,
+    /// The person's file in the personal store, when a summary was written.
+    pub person_file: String,
+}
+
+#[tauri::command(async)]
+pub fn learn_decide_person(db: tauri::State<Db>, decision: PersonDecision) -> Result<PersonOutcome, String> {
+    let conn = db.0.lock().unwrap();
+    decide_person(&conn, &decision)
+}
+
+pub fn decide_person(conn: &Connection, d: &PersonDecision) -> Result<PersonOutcome, String> {
+    let mut out = PersonOutcome::default();
+    for line in &d.keep {
+        match keep(conn, line.id, &line.text, line.node_id) {
+            Ok(_) => out.kept += 1,
+            // Kept a moment ago from the same card: not a failure.
+            Err(e) if e.contains("already kept") => {}
+            Err(e) => return Err(e),
+        }
+    }
+    for id in &d.decline {
+        decline(conn, *id)?;
+        out.declined += 1;
+    }
+    let summary = d.summary.trim();
+    if summary.is_empty() || d.name.trim().is_empty() {
+        return Ok(out);
+    }
+    // The summary goes on the person, not into memory: it is what they are
+    // to you, and the Life page reads it from their record.
+    let store = super::personal::PersonalStore::open().map_err(|e| e.to_string())?;
+    let found = if d.email.trim().is_empty() { None } else { store.person_for(&d.email) }
+        .or_else(|| store.person_for(&d.name));
+    let mut doc = found.unwrap_or_else(|| super::deck::Doc {
+        meta: super::personal::PersonMeta {
+            name: d.name.trim().to_string(),
+            source: "mail".into(),
+            ..Default::default()
+        },
+        body: String::new(),
+    });
+    let email = d.email.trim().to_ascii_lowercase();
+    if !email.is_empty() && !doc.meta.emails.iter().any(|e| e.eq_ignore_ascii_case(&email)) {
+        doc.meta.emails.push(email);
+    }
+    if doc.body.trim().is_empty() {
+        doc.body = summary.to_string();
+    } else if !doc.body.contains(summary) {
+        doc.body = format!("{}\n\n{summary}", doc.body.trim_end());
+    }
+    let path = store.save_person(&doc).map_err(|e| e.to_string())?;
+    out.person_file = path.to_string_lossy().to_string();
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -2212,6 +2354,27 @@ mod tests {
         let out = parse_facts(r#"[{"kind":"thing","text":"   "},{"kind":"thing","text":"real"}]"#);
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].text, "real");
+    }
+
+    /// The first line sums the person up. It is shown, and kept on the
+    /// person, but it is never a fact: a run's counts are facts, and a
+    /// summary kept as one would be a sentence about nothing in memory.
+    #[test]
+    fn a_summary_line_is_a_summary_and_never_a_fact() {
+        let line = r#"{"kind":"summary","text":"Anna is your sister. You plan Sunday lunches.","about":"Anna"}"#;
+        assert_eq!(
+            parse_summary_line(line).as_deref(),
+            Some("Anna is your sister. You plan Sunday lunches.")
+        );
+        assert!(parse_fact_line(line).is_none(), "a summary is not filed as a fact");
+
+        let fact = r#"{"kind":"you","text":"Anna's son is Josh","about":"Anna"}"#;
+        assert!(parse_summary_line(fact).is_none());
+        assert!(parse_fact_line(fact).is_some());
+
+        // A whole reply: the summary line does not change the fact count.
+        let reply = format!("{line}\n{fact}\n");
+        assert_eq!(parse_facts(&reply).len(), 1);
     }
 
     /// Board 5, in code: a `you` fact never gets a deck path, whatever space

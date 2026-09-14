@@ -23,7 +23,16 @@ export type MeetStep = 'voice' | 'mail' | 'learn' | 'life' | 'home'
  * What it writes lands in two different places on purpose, and the footer says
  * so out loud, because this is the moment that trust is either earned or lost.
  */
-export function Meet({ onDone, start }: { onDone: () => void; start?: MeetStep }) {
+export function Meet({
+  onDone,
+  onClose,
+  start,
+}: {
+  onDone: () => void
+  /** Leave setup where it is. The steps after mail can always be finished from Today. */
+  onClose?: () => void
+  start?: MeetStep
+}) {
   const [voices, setVoices] = useState<Voice[] | null>(null)
   const [pick, setPick] = useState('plain')
   const [own, setOwn] = useState('')
@@ -106,14 +115,20 @@ export function Meet({ onDone, start }: { onDone: () => void; start?: MeetStep }
   // The three steps after mail. Each can be skipped, and skipping one goes
   // on to the next rather than out: Not now on the learn run still offers
   // your home.
+  // Closing is not skipping: it leaves setup where it is, and Today offers
+  // to finish it. Before anyone has met, the voice step has already been
+  // saved by the time these show, so closing is safe there too.
+  const close = onClose ?? onDone
   if (step === 'learn') {
-    return <LearnStep onDone={() => setStep('life')} onSkip={() => setStep('life')} />
+    return (
+      <LearnStep onDone={() => setStep('life')} onSkip={() => setStep('life')} onClose={close} />
+    )
   }
   if (step === 'life') {
-    return <LifeStep onDone={() => setStep('home')} />
+    return <LifeStep onDone={() => setStep('home')} onClose={close} />
   }
   if (step === 'home') {
-    return <HomeStep onDone={onDone} onSkip={onDone} />
+    return <HomeStep onDone={onDone} onSkip={onDone} onClose={close} />
   }
 
   if (step === 'mail') {

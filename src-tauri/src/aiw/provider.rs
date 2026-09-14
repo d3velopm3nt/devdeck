@@ -691,6 +691,16 @@ impl LLMProvider for MockProvider {
                 if name.is_empty() {
                     continue;
                 }
+                lines.push(serde_json::json!({
+                    "kind": "summary",
+                    "text": format!(
+                        "{name} is someone you write back to. What the two of you deal with \
+                         is not something the mock provider can read; a real model would say \
+                         here, in two or three sentences, what {name} is to you and what is \
+                         going on between you now (scripted by the mock provider)."
+                    ),
+                    "about": name,
+                }));
                 for text in [
                     format!("{name} is someone you write back to (scripted by the mock provider)"),
                     format!("You and {name} have an ongoing thread (scripted by the mock provider)"),

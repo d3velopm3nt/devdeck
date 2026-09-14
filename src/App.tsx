@@ -659,6 +659,10 @@ export default function App() {
             setMet(true)
             setSetupAt(null)
           }}
+          onClose={() => {
+            setMet(true)
+            setSetupAt(null)
+          }}
         />
       </div>
     )

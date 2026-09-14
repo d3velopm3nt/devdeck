@@ -53,7 +53,7 @@ const blank = (): Draft => ({
   why: 'you',
 })
 
-export function LifeStep({ onDone }: { onDone: () => void }) {
+export function LifeStep({ onDone, onClose }: { onDone: () => void; onClose?: () => void }) {
   const [rows, setRows] = useState<Draft[]>([])
   const [adding, setAdding] = useState<Draft>(blank())
   const [free, setFree] = useState('')
@@ -156,7 +156,7 @@ export function LifeStep({ onDone }: { onDone: () => void }) {
   const named = rows.filter((r) => r.role).length
 
   return (
-    <Frame step="life">
+    <Frame step="life" onClose={onClose}>
       <Header
         icon="contacts"
         title="Who is in your life"

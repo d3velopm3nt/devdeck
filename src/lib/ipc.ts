@@ -1566,6 +1566,31 @@ export const learnKeep = (id: number, text: string, nodeId = 0) =>
 /** Say no. Writes a row, not a note — so it is not offered twice. */
 export const learnDecline = (id: number) => invoke<void>('learn_decline', { id })
 
+/** One fact as kept from a card: the id and the words, edited or not. */
+export interface KeptLine {
+  id: number
+  text: string
+  node_id?: number
+}
+/**
+ * A person's card, decided in one go: keep these lines (with any edits),
+ * decline those, and put the summary on the person's record.
+ */
+export interface PersonDecision {
+  name: string
+  email: string
+  summary: string
+  keep: KeptLine[]
+  decline: number[]
+}
+export interface PersonOutcome {
+  kept: number
+  declined: number
+  person_file: string
+}
+export const learnDecidePerson = (decision: PersonDecision) =>
+  invoke<PersonOutcome>('learn_decide_person', { decision })
+
 /** Somebody in a live run's plan. */
 export interface LivePerson {
   contact_id: number
@@ -1596,8 +1621,18 @@ export interface LearnPersonEvent {
   total: number
   person: LivePerson
   facts: number
+  /** What they are to you, in two or three sentences. Empty if the model gave none. */
+  summary: string
   tokens_so_far: number
   cost_so_far: number
+}
+/** The first line the model writes about a person: who they are to you. */
+export interface LearnSummaryEvent {
+  run_id: number
+  index: number
+  total: number
+  person: LivePerson
+  text: string
 }
 export interface LearnDoneEvent {
   run: LearnRun
@@ -1622,6 +1657,7 @@ export const learnStop = () => invoke<void>('learn_stop')
 /** Everything a live run says, as it says it. Returns the unsubscribe. */
 export async function onLearn(h: {
   plan?: (e: LearnPlanEvent) => void
+  summary?: (e: LearnSummaryEvent) => void
   fact?: (e: LearnFactEvent) => void
   person?: (e: LearnPersonEvent) => void
   done?: (e: LearnDoneEvent) => void
@@ -1629,6 +1665,7 @@ export async function onLearn(h: {
 }): Promise<() => void> {
   const offs = await Promise.all([
     listen<LearnPlanEvent>('learn:plan', (e) => h.plan?.(e.payload)),
+    listen<LearnSummaryEvent>('learn:summary', (e) => h.summary?.(e.payload)),
     listen<LearnFactEvent>('learn:fact', (e) => h.fact?.(e.payload)),
     listen<LearnPersonEvent>('learn:person', (e) => h.person?.(e.payload)),
     listen<LearnDoneEvent>('learn:done', (e) => h.done?.(e.payload)),

@@ -87,6 +87,9 @@ export function LearnStep({
   const [counts, setCounts] = useState<MailCounts | null>(null)
   const [est, setEst] = useState<ipc.LearnEstimate | null>(null)
   const [err, setErr] = useState('')
+  // Read again: the estimate and the run ignore what earlier runs read, so
+  // the same people go once more and come back as cards with summaries.
+  const [fresh, setFresh] = useState(false)
 
   // What an earlier run did, so coming back here shows it rather than a
   // screen that says nobody, because everybody has been read.
@@ -115,7 +118,10 @@ export function LearnStep({
     let live = true
     const tick = async () => {
       try {
-        const [c, e] = await Promise.all([ipc.mailCounts(), ipc.learnEstimate(12, [], 'full')])
+        const [c, e] = await Promise.all([
+          ipc.mailCounts(),
+          ipc.learnEstimate(12, [], 'full', fresh),
+        ])
         if (!live) return
         setCounts(c)
         setEst(e)
@@ -139,7 +145,7 @@ export function LearnStep({
       live = false
       window.clearInterval(id)
     }
-  }, [phase, mailSyncing])
+  }, [phase, mailSyncing, fresh])
 
   // Reading: fed by the run.
   const [plan, setPlan] = useState<ipc.LearnPlanEvent | null>(null)
@@ -175,7 +181,7 @@ export function LearnStep({
     }
   }
 
-  const start = async (fresh = false) => {
+  const start = async (again = fresh) => {
     setErr('')
     setPhase('reading')
     setFacts([])
@@ -217,7 +223,8 @@ export function LearnStep({
       failed: (e) => setErr(`${e.person.name}: ${e.error}`),
     })
     try {
-      await ipc.learnRunLive(12, [], 'full', fresh)
+      await ipc.learnRunLive(12, [], 'full', again)
+      setFresh(false)
     } catch (e) {
       setErr(String(e))
       setPhase('approve')
@@ -471,8 +478,16 @@ export function LearnStep({
       <Frame step="learn" onClose={close} nav={nav}>
         <Header
           icon="contacts"
-          title={`${people.length} ${people.length === 1 ? 'person' : 'people'} you actually talk to`}
-          text={`Sorting is done, and it all ran here. To learn what these people are to you I have to read the threads themselves, which means sending them to ${est?.provider_name || 'your provider'}. Once, and this is exactly what that is.`}
+          title={
+            fresh
+              ? `${people.length} ${people.length === 1 ? 'person' : 'people'}, read again`
+              : `${people.length} ${people.length === 1 ? 'person' : 'people'} you actually talk to`
+          }
+          text={
+            fresh
+              ? `The same threads go to ${est?.provider_name || 'your provider'} once more, and every person comes back as a card: who they are to you in a few sentences, then what I noticed. What an earlier run read is not skipped this time.`
+              : `Sorting is done, and it all ran here. To learn what these people are to you I have to read the threads themselves, which means sending them to ${est?.provider_name || 'your provider'}. Once, and this is exactly what that is.`
+          }
         />
 
         {est && (
@@ -692,7 +707,10 @@ export function LearnStep({
           <button
             className="btn-ghost text-[11.5px]"
             title="Send the same mail again and get fresh cards. Costs what the approval said."
-            onClick={() => setPhase('approve')}
+            onClick={() => {
+              setFresh(true)
+              setPhase('approve')
+            }}
           >
             Read again
           </button>
@@ -799,7 +817,13 @@ export function LearnStep({
             Look at the cards
           </button>
         )}
-        <button className="btn-ghost text-[12px] text-muted" onClick={() => setPhase('approve')}>
+        <button
+          className="btn-ghost text-[12px] text-muted"
+          onClick={() => {
+            setFresh(true)
+            setPhase('approve')
+          }}
+        >
           Read again
         </button>
         <span className="text-[11px] text-faint">

@@ -13,7 +13,7 @@ import { Icon } from '../../lib/icons'
 import { useApp } from '../../store'
 import type { MailCounts } from '../../lib/types'
 import { CAPTURE_LEARN_AUTO } from '../../lib/devCapture'
-import { SETUP_ORDER, stepIndex, type SetupNav, type SetupStep } from './steps'
+import { PERSONAL_STEPS, type SetupNav, type StepDef } from './steps'
 
 type Phase = 'sorting' | 'approve' | 'reading' | 'review' | 'done'
 
@@ -21,23 +21,24 @@ const n = (v: number) => v.toLocaleString()
 
 /**
  * The step bar. Every step you have reached is a button back to it; the
- * ones ahead are not, because there is nothing there yet.
+ * ones ahead are not, because there is nothing there yet. The order is the
+ * flow's: personal setup, or adding a business.
  */
-function Steps({ at, nav }: { at: SetupStep; nav?: SetupNav }) {
-  const label = { voice: 'Voice', mail: 'Mail', learn: 'Learn', life: 'Life', home: 'Home' }
-  const idx = stepIndex(at)
-  const reached = nav ? Math.max(stepIndex(nav.reached), idx) : idx
+function Steps({ at, nav, order = PERSONAL_STEPS }: { at: string; nav?: SetupNav; order?: StepDef[] }) {
+  const pos = (s: string) => (s === 'done' ? order.length : order.findIndex((o) => o.id === s))
+  const idx = pos(at)
+  const reached = nav ? Math.max(pos(nav.reached), idx) : idx
   return (
     <div className="flex items-center gap-2.5 text-[11px]">
-      {SETUP_ORDER.map((s, i) => {
+      {order.map((o, i) => {
         const can = !!nav && i <= reached && i !== idx
         return (
-          <span key={s} className="flex items-center gap-2.5">
+          <span key={o.id} className="flex items-center gap-2.5">
             {i > 0 && <span className="h-px w-6 bg-line2" />}
             <button
               disabled={!can}
-              onClick={() => nav?.onGo(s)}
-              title={can ? `Back to ${label[s]}` : undefined}
+              onClick={() => nav?.onGo(o.id)}
+              title={can ? `Back to ${o.label}` : undefined}
               className={`flex items-center gap-1.5 rounded px-1 py-0.5 ${
                 i === idx ? 'font-semibold text-ink' : 'text-muted'
               } ${can ? 'hover:bg-hover hover:text-ink' : 'cursor-default'}`}
@@ -49,7 +50,7 @@ function Steps({ at, nav }: { at: SetupStep; nav?: SetupNav }) {
               ) : (
                 <span className="h-[7px] w-[7px] rounded-full border border-line2" />
               )}
-              {label[s]}
+              {o.label}
             </button>
           </span>
         )
@@ -851,10 +852,16 @@ export function Frame({
   wide,
   onClose,
   nav,
+  order,
+  aside,
   children,
 }: {
-  step: SetupStep
+  step: string
   wide?: boolean
+  /** The flow's steps, when it is not personal setup. */
+  order?: StepDef[]
+  /** A word beside Close: which business this is. */
+  aside?: string
   /** Leave setup where it is. Shown as a Close in the corner. */
   onClose?: () => void
   /** Makes the step bar clickable back to any step already reached. */
@@ -868,8 +875,9 @@ export function Frame({
           className={`flex w-full min-h-0 flex-col gap-6 ${wide ? 'max-w-[1080px]' : 'max-w-[760px]'}`}
         >
           <div className="flex items-center">
-            <Steps at={step} nav={nav} />
+            <Steps at={step} nav={nav} order={order} />
             <span className="flex-1" />
+            {aside && <span className="mr-3 text-[10.5px] text-faint">{aside}</span>}
             {onClose && (
               <button
                 className="btn-ghost flex items-center gap-1.5 text-[11.5px] text-muted"

@@ -727,6 +727,16 @@ impl LLMProvider for MockProvider {
                 usage: None,
             });
         }
+        // A business's website: quote only what is on the page, and say
+        // plainly in every other line that the mock is guessing.
+        if request.system.starts_with(super::site::SITE_MARK) {
+            return Ok(AgentResponse {
+                message: super::site::mock_reply(&request.context),
+                actions: vec![AgentAction::Done { summary: "read".into() }],
+                complete: true,
+                usage: None,
+            });
+        }
         // Who is in your life: two scripted rows, so the step has something
         // to offer on a profile with no key.
         if request.system.starts_with(super::learn::LIFE_MARK) {

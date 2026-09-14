@@ -260,6 +260,44 @@ fn write(dir: &Path, b: &Bot) -> Result<(), String> {
 // The heartbeat row
 // ---------------------------------------------------------------------------
 
+/// Make a manager's clock agree with its file, for code that saved the file
+/// itself. The same reconciliation a bot's save does.
+pub fn sync_manager_heartbeat(conn: &Connection, handle: &str) -> Result<Option<i64>, String> {
+    let m = crate::managers::get(conn, handle).ok_or_else(|| format!("there is no manager called @{handle}"))?;
+    let names: std::collections::HashMap<i64, String> = db::nodes_on(conn)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|n| (n.id, n.name))
+        .collect();
+    let b = from_manager(conn, &m, crate::managers::owned_by(conn, handle), &names);
+    sync_heartbeat(conn, &b)
+}
+
+/// A rhythm in words: "Weekdays 07:00", "Fridays 16:00".
+pub fn rhythm_words(every: &str, at_min: i64, days: &str) -> String {
+    let at = fmt_at(at_min);
+    let names = ["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"];
+    match every.trim() {
+        "" => String::new(),
+        "hourly" => "Every hour".into(),
+        "daily" => format!("Daily {at}"),
+        "weekdays" => format!("Weekdays {at}"),
+        "weekly" => {
+            let d: Vec<&str> = days
+                .split(',')
+                .filter_map(|x| x.trim().parse::<usize>().ok())
+                .filter_map(|i| names.get(i).copied())
+                .collect();
+            if d.is_empty() {
+                format!("Weekly {at}")
+            } else {
+                format!("{} {at}", d.join(" and "))
+            }
+        }
+        other => format!("{other} {at}"),
+    }
+}
+
 fn heartbeat(conn: &Connection, handle: &str) -> Option<(i64, Option<i64>)> {
     conn.query_row(
         "SELECT id, last_run FROM schedules WHERE kind = 'bot' AND manager = ?1 LIMIT 1",
@@ -695,6 +733,7 @@ fn save_into(
         stop_at: prior.as_ref().map(|p| p.stop_at.clone()).unwrap_or_default(),
         was: prior.as_ref().map(|p| p.was.clone()).unwrap_or_default(),
         home: prior.as_ref().map(|p| p.home).unwrap_or(node_id),
+        businesses: prior.as_ref().map(|p| p.businesses.clone()).unwrap_or_default(),
     };
     crate::managers::save(conn, &m)?;
 
@@ -1127,6 +1166,7 @@ pub(crate) fn create_into(
         stop_at: vec![],
         was: String::new(),
         home: node_id,
+        businesses: Vec::new(),
     };
     crate::managers::save(conn, &m)?;
     let names: std::collections::HashMap<i64, String> = db::nodes_on(conn)

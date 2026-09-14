@@ -73,3 +73,7 @@ export const CAPTURE_LIFE_PAGE: boolean = false
 export const CAPTURE_HOME_AUTO: boolean = false
 /** Which tab a node page opens on: known | files | ... Empty in every shipped build. */
 export const CAPTURE_NODE_TAB: string = ''
+/** Open adding a business: `new`, a node id, or `id:step`. Empty in every shipped build. */
+export const CAPTURE_BUSINESS: string = ''
+/** Open the screen that clears old business workspaces. Empty in every shipped build. */
+export const CAPTURE_CLEAR: boolean = false

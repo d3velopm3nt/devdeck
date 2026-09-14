@@ -16,6 +16,7 @@
 // your consent.
 
 import { useEffect, useState } from 'react'
+import { openBusiness } from './business/TodayBusinesses'
 import * as ipc from '../lib/ipc'
 import { useApp } from '../store'
 import { Icon } from '../lib/icons'
@@ -85,6 +86,14 @@ export function SpaceSetup({ onClose }: { onClose: () => void }) {
   // yourself — the two are not tied, and a decision you are working out at work
   // is Business.
   const choose = (s: ipc.Starter) => {
+    // A business has steps of its own: its website, what it sells, its code,
+    // mail and team. The sheet hands over to them rather than drafting a
+    // folder list the business steps would then have to undo.
+    if (s.id === 'business') {
+      onClose()
+      openBusiness()
+      return
+    }
     setPick(s.id)
     setFolders(s.folders.map((f) => ({ ...f })))
     setRoutines(s.routines.map((r) => ({ ...r })))

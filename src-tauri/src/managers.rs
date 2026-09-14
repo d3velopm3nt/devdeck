@@ -89,6 +89,11 @@ pub struct Manager {
     /// this is how it is found until then.
     #[serde(default)]
     pub home: i64,
+    /// The businesses this manager works for, by space id. A manager can work
+    /// for more than one: that is offered on a business's team step, never
+    /// assumed. Empty for a manager that is not a business role.
+    #[serde(default)]
+    pub businesses: Vec<i64>,
 }
 
 /// `<vault>/.devdeck/team`, or None when no vault has been chosen yet.
@@ -154,6 +159,9 @@ fn parse(handle: &str, raw: &str) -> Manager {
                         "skills" => m.skills = list(&v),
                         "was" => m.was = v,
                         "home" => m.home = v.parse().unwrap_or(0),
+                        "businesses" => {
+                            m.businesses = list(&v).iter().filter_map(|x| x.parse().ok()).collect()
+                        }
                         _ => {}
                     }
                 }
@@ -209,6 +217,12 @@ fn serialise(m: &Manager) -> String {
     }
     if m.home != 0 {
         out.push_str(&format!("home: {}\n", m.home));
+    }
+    if !m.businesses.is_empty() {
+        out.push_str(&format!(
+            "businesses: [{}]\n",
+            m.businesses.iter().map(|b| b.to_string()).collect::<Vec<_>>().join(", ")
+        ));
     }
     out.push_str("---\n");
     if !m.body.trim().is_empty() {
@@ -382,6 +396,7 @@ pub fn migrate_from_bots(conn: &Connection) -> Vec<String> {
             stop_at: b.stop_at.clone(),
             was: format!("{}/{}", b.dir.trim_end_matches(['/', '\\']), crate::bots::FILE),
             home: b.node_id,
+            businesses: Vec::new(),
         };
         if fs::create_dir_all(&d).is_err() {
             return done;
@@ -441,8 +456,10 @@ mod tests {
             stop_at: vec!["before any push".into()],
             was: String::new(),
             home: 0,
+            businesses: vec![3, 21],
         };
         let back = parse("marketing", &serialise(&m));
+        assert_eq!(back.businesses, vec![3, 21], "the businesses it works for survive");
         assert_eq!(back.name, m.name);
         assert_eq!(back.role, m.role);
         assert_eq!(back.goal, m.goal);

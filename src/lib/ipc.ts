@@ -1754,3 +1754,199 @@ export const mailAssistantAdd = (note: AssistantNote) =>
   invoke<number>('mail_assistant_add', { note })
 export const mailAssistantStatus = (id: number, status: AssistantNote['status']) =>
   invoke<void>('mail_assistant_status', { id, status })
+
+// ---------------------------------------------------------------------------
+// A business
+// ---------------------------------------------------------------------------
+
+/** Someone who runs the business. Kept with the business, never in Your life. */
+export interface Director {
+  name: string
+  email: string
+  you: boolean
+}
+
+/** One thing the business might be, sell or be about, and where it came from. */
+export interface Suggestion {
+  id: string
+  /** what | serves | industry | where | product | service */
+  field: string
+  text: string
+  /** quote | suggestion | guess | you */
+  kind: string
+  source: string
+  /** open | agreed | declined */
+  state: string
+  /** An agreed product or service's own folder, once made. */
+  node_id: number
+}
+
+export interface BusinessMeta {
+  name: string
+  website: string
+  directors: Director[]
+  items: Suggestion[]
+  /** plain | browser, empty until read */
+  site_how: string
+  site_read_at: string
+  site_chars: number
+  site_pages: string[]
+  /** business | sells | code | mail | learn | team | done */
+  step: string
+  made: boolean
+}
+
+export interface FolderRef {
+  node_id: number
+  name: string
+}
+
+export interface SiteSummary {
+  how: string
+  chars: number
+  pages: string[]
+  title: string
+  excerpt: string
+  /** Almost nothing came back from a plain read: a site drawn by script. */
+  thin: boolean
+}
+
+export interface BusinessView {
+  node_id: number
+  meta: BusinessMeta
+  folders: FolderRef[]
+  site: SiteSummary
+}
+
+export interface BusinessSummary {
+  node_id: number
+  name: string
+  website: string
+  /** Went through the business steps. An old workspace tagged Business is listed too. */
+  set_up: boolean
+  step: string
+  made: boolean
+  products: number
+  services: number
+  mailboxes: number
+  directors: number
+}
+
+export const businessList = () => invoke<BusinessSummary[]>('business_list')
+export const businessGet = (nodeId: number) => invoke<BusinessView>('business_get', { nodeId })
+/** Make the space, its folders and its record. Clean: nothing copied from anywhere. */
+export const businessCreate = (name: string, website: string) =>
+  invoke<BusinessView>('business_create', { name, website })
+export const businessSave = (nodeId: number, meta: BusinessMeta) =>
+  invoke<BusinessView>('business_save', { nodeId, meta })
+/** Read the website and suggest what the business is. `browser` reads the pages as drawn. */
+export const businessReadSite = (nodeId: number, browser = false) =>
+  invoke<BusinessView>('business_read_site', { nodeId, browser })
+/** Give every agreed product and service its own folder. */
+export const businessCommitItems = (nodeId: number) =>
+  invoke<BusinessView>('business_commit_items', { nodeId })
+
+// ---- a business's code ------------------------------------------------------
+
+export interface Repo {
+  full_name: string
+  name: string
+  owner: string
+  description: string
+  private: boolean
+  updated_at: string
+  language: string
+  clone_url: string
+  html_url: string
+}
+export interface RepoList {
+  /** github | example */
+  source: string
+  login: string
+  signed_in: boolean
+  repos: Repo[]
+  note: string
+}
+export interface Linked {
+  node_id: number
+  name: string
+  path: string
+  /** Already on this machine: used where it was, not cloned. */
+  reused: boolean
+  commands: number
+  services: number
+}
+export const businessRepos = () => invoke<RepoList>('business_repos')
+export const businessCloneFolder = (nodeId: number) => invoke<string>('business_clone_folder', { nodeId })
+/** Link a repository to a product (or Marketing) as a project, cloning it if it is not here. */
+export const businessLinkRepo = (req: { business: number; parent: number; repo: Repo; clone_into: string }) =>
+  invoke<Linked>('business_link_repo', { req })
+
+// ---- clearing old workspaces --------------------------------------------------
+
+export interface ClearProject {
+  node_id: number
+  name: string
+  repo: string
+}
+export interface ClearSpace {
+  node_id: number
+  name: string
+  label: string
+  suggested: boolean
+  folders: number
+  projects: ClearProject[]
+  managers: string[]
+  services: number
+  commands: number
+  reminders: number
+  vault_dir: string
+  blocked: string
+}
+export interface ClearPreview {
+  spaces: ClearSpace[]
+}
+export const businessClearPreview = () => invoke<ClearPreview>('business_clear_preview')
+/** Clears the spaces named. Only ever called from the red button. */
+export const businessClear = (nodeIds: number[]) =>
+  invoke<string[]>('business_clear', { nodeIds, confirm: 'clear' })
+
+// ---- a business's team ----------------------------------------------------------
+
+export interface RoleOffer {
+  id: string
+  name: string
+  job: string
+  every: string
+  at_min: number
+  days: string
+  team: string[]
+  stop_at: string[]
+  rhythm: string
+  covers: string[]
+  on: boolean
+  why: string
+  /** Already made for this business: its handle. */
+  made: string
+}
+export interface ManagerOffer {
+  handle: string
+  name: string
+  role: string
+  works_for: string[]
+  rhythm: string
+}
+export interface TeamOffer {
+  roles: RoleOffer[]
+  others: ManagerOffer[]
+  members: string[]
+  directors: string[]
+}
+export interface TeamMade {
+  made: string[]
+  joined: string[]
+  problems: string[]
+}
+export const businessTeam = (nodeId: number) => invoke<TeamOffer>('business_team', { nodeId })
+export const businessMakeTeam = (nodeId: number, roles: string[], reuse: string[]) =>
+  invoke<TeamMade>('business_make_team', { nodeId, roles, reuse })

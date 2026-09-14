@@ -91,11 +91,11 @@ pub fn starters() -> Vec<Starter> {
     vec![
         Starter {
             id: s("business"),
-            name: s("A business or a client"),
+            name: s("A business"),
             what: s(
-                "The company itself, or someone you work for. Products live inside it as folders.",
+                "Your company. Its website is read, then what it sells, its code, its mail and its team, one step at a time.",
             ),
-            brings: s("Clients, Money, Marketing · Monday and Friday"),
+            brings: s("Opens adding a business"),
             label: s("Business"),
             folders: vec![
                 folder("Clients", "Who the work is for."),

@@ -20,8 +20,34 @@ export const stepIndex = (s: SetupStep | 'done' | null | undefined): number =>
 export const isStep = (s: string | null | undefined): s is SetupStep =>
   !!s && (SETUP_ORDER as string[]).includes(s)
 
-/** What the step bar needs to be clickable. */
+/** What the step bar needs to be clickable. Any flow: personal setup or a business. */
 export interface SetupNav {
-  reached: SetupStep | 'done'
-  onGo: (s: SetupStep) => void
+  reached: string
+  onGo(s: string): void
 }
+
+/** One step in a step bar. */
+export interface StepDef {
+  id: string
+  label: string
+}
+
+export const PERSONAL_STEPS: StepDef[] = [
+  { id: 'voice', label: 'Voice' },
+  { id: 'mail', label: 'Mail' },
+  { id: 'learn', label: 'Learn' },
+  { id: 'life', label: 'Life' },
+  { id: 'home', label: 'Home' },
+]
+
+export type BusinessStepId = 'business' | 'sells' | 'code' | 'mail' | 'learn' | 'team'
+
+/** Adding a business. Each step can be gone back to once reached. */
+export const BUSINESS_STEPS: StepDef[] = [
+  { id: 'business', label: 'Business' },
+  { id: 'sells', label: 'What it sells' },
+  { id: 'code', label: 'Code' },
+  { id: 'mail', label: 'Mail' },
+  { id: 'learn', label: 'Learn' },
+  { id: 'team', label: 'Team' },
+]

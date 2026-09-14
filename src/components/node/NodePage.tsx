@@ -17,6 +17,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { CAPTURE_NODE_TAB } from '../../lib/devCapture'
+import { BusinessTab } from '../business/BusinessTab'
 import type { IDockviewPanelProps } from 'dockview-react'
 import * as ipc from '../../lib/ipc'
 import { useApp } from '../../store'
@@ -38,7 +39,7 @@ import { Git } from '../aiw/AiWorkspace'
 /// some of them greyed out: a folder with no repository has no Git tab at all,
 /// rather than a Git tab that apologises. That is the whole point of the shape
 /// — a client is not a deficient project.
-type Tab = 'thread' | 'known' | 'files' | 'git' | 'services' | 'commands' | 'reminders'
+type Tab = 'team' | 'thread' | 'known' | 'files' | 'git' | 'services' | 'commands' | 'reminders'
 
 /// Git, pointed at this node first.
 ///
@@ -70,6 +71,8 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
   // What is known about this space: kept facts and setup answers, read the
   // way its manager reads them. A tab only when there is something in it.
   const [known, setKnown] = useState<ipc.KnownNote[]>([])
+  // A business made through the business steps opens on its Team tab.
+  const [isBusiness, setIsBusiness] = useState(false)
 
   useEffect(() => {
     void ipc.vaultDir(nodeId).then(setDir).catch(() => setDir(''))
@@ -82,6 +85,14 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
     void refreshBots()
     void a.loadAllWork()
     void ipc.learnNotes(nodeId).then(setKnown).catch(() => setKnown([]))
+    setIsBusiness(false)
+    void ipc
+      .businessGet(nodeId)
+      .then(() => {
+        setIsBusiness(true)
+        if (!CAPTURE_NODE_TAB) setTab('team')
+      })
+      .catch(() => setIsBusiness(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodeId])
 
@@ -116,6 +127,7 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
 
   const isProject = node.kind === 'project'
   const TABS: { id: Tab; label: string; when: boolean; count?: number }[] = [
+    { id: 'team', label: 'Team', when: isBusiness },
     { id: 'thread', label: 'Thread', when: true },
     { id: 'known', label: 'Known', when: known.length > 0, count: known.length },
     { id: 'files', label: 'Files', when: true },
@@ -237,6 +249,8 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
           </span>
         )}
       </div>
+
+      {tab === 'team' && isBusiness && <BusinessTab nodeId={nodeId} />}
 
       {tab === 'files' && (
         <div className="min-h-0 flex-1 px-5 py-3">

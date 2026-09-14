@@ -1156,6 +1156,7 @@ pub fn run() {
             business_code::business_link_repo,
             business_team::business_team,
             business_team::business_make_team,
+            business_team::business_space,
             aiw::learn::learn_stop,
             aiw::learn::learn_note_save,
             aiw::learn::learn_notes,

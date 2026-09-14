@@ -420,6 +420,94 @@ pub fn business_make_team(
     Ok(made)
 }
 
+/// One manager on a business's team, as the space's Team tab shows it.
+#[derive(Serialize, Clone, Debug, Default)]
+pub struct MemberView {
+    pub handle: String,
+    pub name: String,
+    pub role: String,
+    pub goal: String,
+    pub rhythm: String,
+    /// When its heartbeat last ran, in milliseconds. None until it has.
+    pub last_woke: Option<i64>,
+    /// Items not done on the features it owns.
+    pub open_items: usize,
+    /// Other businesses it also works for, by name.
+    pub also_for: Vec<String>,
+}
+
+#[derive(Serialize, Clone, Debug, Default)]
+pub struct KindCount {
+    pub folder: String,
+    pub count: usize,
+}
+
+#[derive(Serialize, Clone, Debug, Default)]
+pub struct SpaceView {
+    pub members: Vec<MemberView>,
+    /// Roles nobody is on: the directors keep doing them.
+    pub keeps: Vec<String>,
+    pub organisations: Vec<KindCount>,
+}
+
+pub fn space_view(conn: &Connection, node_id: i64) -> Result<SpaceView, String> {
+    let offer = team_offer(conn, node_id)?;
+    let mut members = Vec::new();
+    for m in crate::managers::all(conn).into_iter().filter(|m| m.businesses.contains(&node_id)) {
+        let last_woke: Option<i64> = conn
+            .query_row(
+                "SELECT last_run FROM schedules WHERE kind = 'bot' AND manager = ?1 LIMIT 1",
+                params![m.handle],
+                |r| r.get::<_, Option<i64>>(0),
+            )
+            .unwrap_or(None);
+        let mut open_items = 0usize;
+        for (owner_node, slug) in crate::managers::owned_by(conn, &m.handle) {
+            let Some(dir) = crate::db::node_deck_dir_by_id(conn, owner_node) else { continue };
+            if let Ok(work) = crate::aiw::deck::Deck::new(dir).work(&slug) {
+                open_items += work.meta.items.iter().filter(|i| i.status != "done").count();
+            }
+        }
+        let others: Vec<i64> = m.businesses.iter().copied().filter(|b| *b != node_id).collect();
+        members.push(MemberView {
+            handle: m.handle.clone(),
+            name: m.name.clone(),
+            role: m.role.clone(),
+            goal: m.goal.clone(),
+            rhythm: crate::bots::rhythm_words(&m.every, m.at_min, &m.days),
+            last_woke,
+            open_items,
+            also_for: names_of(conn, &others),
+        });
+    }
+    let keeps = offer
+        .roles
+        .iter()
+        .filter(|r| r.made.is_empty())
+        .map(|r| r.def.name.clone())
+        .collect();
+    let organisations = ["Clients", "Suppliers", "Advisers", "Partner firms"]
+        .iter()
+        .map(|f| KindCount {
+            folder: f.to_string(),
+            count: conn
+                .query_row(
+                    "SELECT COUNT(*) FROM nodes WHERE parent_id = (SELECT id FROM nodes WHERE parent_id = ?1 AND name = ?2 COLLATE NOCASE)",
+                    params![node_id, f],
+                    |r| r.get::<_, i64>(0),
+                )
+                .unwrap_or(0) as usize,
+        })
+        .collect();
+    Ok(SpaceView { members, keeps, organisations })
+}
+
+#[tauri::command(async)]
+pub fn business_space(db: tauri::State<Db>, node_id: i64) -> Result<SpaceView, String> {
+    let conn = db.0.lock().unwrap();
+    space_view(&conn, node_id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

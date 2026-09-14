@@ -313,6 +313,49 @@ pub fn merge_lines(items: &mut Vec<Suggestion>, lines: &[SiteLine]) {
     }
 }
 
+/// The mailboxes that belong to a business: tied to it by name.
+pub fn accounts_of(conn: &Connection, node_id: i64) -> Vec<i64> {
+    let Ok(name) = conn.query_row("SELECT name FROM nodes WHERE id = ?1", params![node_id], |r| r.get::<_, String>(0))
+    else {
+        return Vec::new();
+    };
+    let Ok(mut st) = conn.prepare("SELECT id FROM mail_accounts WHERE space = ?1 COLLATE NOCASE ORDER BY id") else {
+        return Vec::new();
+    };
+    st.query_map(params![name], |r| r.get::<_, i64>(0))
+        .map(|rows| rows.flatten().collect())
+        .unwrap_or_default()
+}
+
+/// What a learn run for this business reads: its mailboxes, its name, and
+/// what it sells, so each organisation can say what it has to do with.
+pub fn scope_of(conn: &Connection, node_id: i64) -> Result<crate::aiw::learn::Scope, String> {
+    if node_id <= 0 {
+        return Ok(Default::default());
+    }
+    let meta = read(conn, node_id)?.ok_or("That space has not been set up as a business.")?;
+    let accounts = accounts_of(conn, node_id);
+    if accounts.is_empty() {
+        return Err(format!("{} has no mailbox yet. Add one in the mail step first.", meta.name));
+    }
+    let offers = meta
+        .items
+        .iter()
+        .filter(|i| (i.field == "product" || i.field == "service") && (i.state == "agreed" || (i.kind == "you" && i.state != "declined")))
+        .map(|i| i.text.clone())
+        .collect();
+    Ok(crate::aiw::learn::Scope { accounts, business: node_id, name: meta.name, offers })
+}
+
+/// Write a note into the business's knowledge, which its managers read.
+pub fn knowledge_note(conn: &Connection, node_id: i64, slug: &str, body: &str) -> Result<String, String> {
+    let deck = deck_of(conn, node_id)?;
+    std::fs::create_dir_all(deck.knowledge_dir()).map_err(err)?;
+    let p = deck.knowledge_dir().join(format!("{slug}.md"));
+    std::fs::write(&p, body).map_err(err)?;
+    Ok(p.to_string_lossy().to_string())
+}
+
 // ---------------------------------------------------------------------------
 // Reading the site
 // ---------------------------------------------------------------------------

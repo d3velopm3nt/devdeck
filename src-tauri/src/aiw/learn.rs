@@ -449,7 +449,19 @@ pub fn build_corpus_opts(
     depth: Depth,
     fresh: bool,
 ) -> Result<Corpus, String> {
-    let ranked = crate::mail::rank_correspondents_pub(conn, people.max(1).min(100))?;
+    build_corpus_scoped(conn, people, only, depth, fresh, &[])
+}
+
+/// The same, over some mailboxes only: a business's.
+pub fn build_corpus_scoped(
+    conn: &Connection,
+    people: i64,
+    only: &[i64],
+    depth: Depth,
+    fresh: bool,
+    accounts: &[i64],
+) -> Result<Corpus, String> {
+    let ranked = crate::mail::rank_correspondents_scoped(conn, people.max(1).min(100), accounts)?;
     let chosen: Vec<crate::mail::Correspondent> = if only.is_empty() {
         ranked
     } else {
@@ -513,6 +525,14 @@ pub fn build_corpus_opts(
     let mut gathered: Vec<(LearnPerson, Vec<LearnMessage>)> = Vec::new();
     let mut atts: std::collections::HashMap<i64, Vec<LearnAttachment>> = Default::default();
 
+    let account_scope = if accounts.is_empty() {
+        String::new()
+    } else {
+        format!(
+            " AND account_id IN ({})",
+            accounts.iter().map(|a| a.to_string()).collect::<Vec<_>>().join(",")
+        )
+    };
     for c in &chosen {
         let person = LearnPerson {
             contact_id: c.contact_id,
@@ -526,15 +546,15 @@ pub fn build_corpus_opts(
         };
 
         let mut st = conn
-            .prepare(
+            .prepare(&format!(
                 "SELECT id, thread_key, mailbox, from_name, from_addr, to_addrs,
                         subject, body_text, ts
                    FROM mail_messages
-                  WHERE lower(from_addr) = lower(?1)
-                     OR instr(lower(to_addrs), lower(?1)) > 0
+                  WHERE (lower(from_addr) = lower(?1)
+                     OR instr(lower(to_addrs), lower(?1)) > 0){account_scope}
                   ORDER BY ts DESC
-                  LIMIT ?2",
-            )
+                  LIMIT ?2"
+            ))
             .map_err(err)?;
         let rows = st
             .query_map(params![c.email, MESSAGES_PER_PERSON as i64], |r| {
@@ -845,6 +865,162 @@ clients\" is not — leave it out.
 Never return: a one-time code, a password, a card or account number, or
 anything you would not want written to a file. Never invent. If the mail does
 not support a claim, do not make it. Ten true sentences beat forty guesses.";
+
+/// The words that mark a learn request as being for a business.
+pub const BUSINESS_MARK: &str = "for a business";
+
+pub const BUSINESS_SYSTEM: &str = "\
+You are reading somebody's mail for a business, so that its team knows the
+organisations it deals with.
+
+Return ONLY JSON, ONE OBJECT PER LINE. No prose, no code fence, no array
+around them.
+
+The FIRST line sums up the organisation this mail is with:
+
+  {\"kind\": \"summary\",
+   \"text\": \"two or three sentences: who they are to the business, what the
+            two deal with together, and what is going on between them now\",
+   \"role\": \"client\" | \"supplier\" | \"adviser\" | \"partner firm\",
+   \"relates\": [\"the business's products or services this organisation has
+               to do with, only names from the list you are given\"]}
+
+role: a client buys from the business; a supplier sells to it; an adviser is
+an accountant, lawyer or consultant it takes advice from; a partner firm
+works alongside it. If the mail does not make it clear, leave role empty.
+
+Then the facts, one per line:
+
+  {\"kind\": \"thing\" | \"you\",
+   \"text\": \"one specific sentence\",
+   \"source\": \"where you saw it, in plain words\",
+   \"about\": \"the organisation or the person at it\"}
+
+kind is where the fact is kept, and it matters:
+  \"thing\" - about the organisation and the business's dealings with it:
+             terms, orders, prices, the people there and their roles, what
+             was agreed and what actually happened. Kept with the business,
+             where its team may read it.
+  \"you\"   - about the mailbox owner personally rather than the business:
+             their own tax, family, health, private plans. Private, and
+             never shown to the team.
+If a fact is about both, split it in two.
+
+Never return a one-time code, a password, a card or account number, or
+anything you would not want written to a file. Never invent. Ten true
+sentences beat forty guesses.";
+
+/// Free mail: an address here is a person, not an organisation.
+pub const FREE_MAIL: &[&str] = &[
+    "gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com", "msn.com",
+    "yahoo.com", "yahoo.co.uk", "icloud.com", "me.com", "mac.com", "aol.com", "proton.me",
+    "protonmail.com", "gmx.com", "gmx.net", "zoho.com", "mweb.co.za", "telkomsa.net",
+    "vodamail.co.za", "webmail.co.za", "iafrica.com",
+];
+
+/// What a run reads, and for whom. The default is you: every mailbox, one
+/// card per person.
+#[derive(Clone, Debug, Default)]
+pub struct Scope {
+    pub accounts: Vec<i64>,
+    /// The business space, or 0 for you.
+    pub business: i64,
+    pub name: String,
+    /// The business's agreed products and services, by name.
+    pub offers: Vec<String>,
+}
+
+/// One card's worth of mail: a person, or every contact at one organisation.
+#[derive(Clone, Debug, Default)]
+pub struct Unit {
+    pub key: String,
+    pub ids: Vec<i64>,
+    pub live: LivePerson,
+}
+
+/// An organisation's name from its domain: `ridgeback-mining.co.za` is
+/// Ridgeback Mining. A guess the card lets you correct.
+pub fn org_name(domain: &str) -> String {
+    let root = domain.trim().trim_start_matches("www.").split('.').next().unwrap_or(domain);
+    root.split(['-', '_'])
+        .filter(|w| !w.is_empty())
+        .map(|w| {
+            let mut c = w.chars();
+            match c.next() {
+                Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// People grouped into organisations by the domain they write from. Three
+/// people at one firm are one card. Someone on free mail is their own card.
+pub fn organisations(people: &[LearnPerson]) -> Vec<Unit> {
+    let mut out: Vec<Unit> = Vec::new();
+    for p in people {
+        let d = p.domain.trim().to_ascii_lowercase();
+        let free = d.is_empty() || FREE_MAIL.contains(&d.as_str());
+        let key = if free { format!("person:{}", p.contact_id) } else { d.clone() };
+        if let Some(u) = out.iter_mut().find(|u| u.key == key) {
+            u.ids.push(p.contact_id);
+            u.live.threads += p.threads;
+            u.live.messages += p.messages;
+            continue;
+        }
+        let me = live_person(p);
+        out.push(Unit {
+            key,
+            ids: vec![p.contact_id],
+            live: LivePerson {
+                contact_id: p.contact_id,
+                name: if free { me.name } else { org_name(&d) },
+                email: if free { p.email.clone() } else { d },
+                threads: p.threads,
+                messages: p.messages,
+            },
+        });
+    }
+    out
+}
+
+/// A business card's first line: the summary, a role, and what it relates to.
+#[derive(Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct OrgSummary {
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub text: String,
+    #[serde(default)]
+    pub role: String,
+    #[serde(default)]
+    pub relates: Vec<String>,
+}
+
+/// The summary line, for a person or an organisation. A role nobody
+/// recognises is left empty for the owner to choose, rather than guessed.
+pub fn parse_org_summary(line: &str) -> Option<OrgSummary> {
+    let l = line.trim().trim_end_matches(',');
+    if !l.starts_with('{') || !l.ends_with('}') {
+        return None;
+    }
+    let mut s: OrgSummary = serde_json::from_str(l).ok()?;
+    if !s.kind.trim().eq_ignore_ascii_case("summary") || s.text.trim().is_empty() {
+        return None;
+    }
+    s.text = s.text.trim().to_string();
+    let r = s.role.trim().to_ascii_lowercase().replace(['_', '-'], " ");
+    s.role = match r.as_str() {
+        "client" | "customer" => "client".into(),
+        "supplier" | "vendor" => "supplier".into(),
+        "adviser" | "advisor" | "accountant" | "lawyer" | "consultant" => "adviser".into(),
+        "partner" | "partner firm" | "partnerfirm" => "partner firm".into(),
+        _ => String::new(),
+    };
+    s.relates.retain(|x| !x.trim().is_empty());
+    Some(s)
+}
 
 /// The corpus as one prompt body.
 pub fn render(corpus: &Corpus) -> String {
@@ -1558,6 +1734,7 @@ pub fn run_live(
     only: &[i64],
     depth: Depth,
     fresh: bool,
+    scope: &Scope,
 ) -> Result<LearnRun, String> {
     use tauri::Emitter;
     STOP.store(false, std::sync::atomic::Ordering::SeqCst);
@@ -1575,7 +1752,7 @@ pub fn run_live(
     // The whole batch first: it is the receipt, and the plan the screen shows.
     let whole = {
         let conn = db.0.lock().unwrap();
-        build_corpus_opts(&conn, people, only, depth, fresh)?
+        build_corpus_scoped(&conn, people, only, depth, fresh, &scope.accounts)?
     };
     if whole.messages.is_empty() {
         return Err("nothing to read -- every message for these people was held back".into());
@@ -1611,7 +1788,17 @@ pub fn run_live(
         conn.last_insert_rowid()
     };
 
-    let plan: Vec<LivePerson> = whole.people.iter().map(live_person).collect();
+    // One card per person for you; one per organisation for a business.
+    let units: Vec<Unit> = if scope.business > 0 {
+        organisations(&whole.people)
+    } else {
+        whole
+            .people
+            .iter()
+            .map(|p| Unit { key: format!("person:{}", p.contact_id), ids: vec![p.contact_id], live: live_person(p) })
+            .collect()
+    };
+    let plan: Vec<LivePerson> = units.iter().map(|u| u.live.clone()).collect();
     let _ = app.emit(
         "learn:plan",
         serde_json::json!({
@@ -1630,12 +1817,13 @@ pub fn run_live(
         "mail",
         "system",
         format!(
-            "learn run {run_id}: reading {} people, one at a time, with {model}",
-            whole.people.len()
+            "learn run {run_id}: reading {} {}, one at a time, with {model}",
+            units.len(),
+            if scope.business > 0 { "organisations" } else { "people" }
         ),
     );
 
-    let total = whole.people.len();
+    let total = units.len();
     let mut tokens_so_far: i64 = 0;
     let mut facts_total = 0usize;
     let mut stopped = false;
@@ -1647,7 +1835,7 @@ pub fn run_live(
     let mut sent_messages: i64 = 0;
     let mut sent_people: i64 = 0;
 
-    for (i, person) in whole.people.iter().enumerate() {
+    for (i, unit) in units.iter().enumerate() {
         if STOP.load(std::sync::atomic::Ordering::SeqCst) {
             stopped = true;
             break;
@@ -1656,7 +1844,7 @@ pub fn run_live(
         // every ranked person so a late name in the ranking is still found.
         let part = {
             let conn = db.0.lock().unwrap();
-            build_corpus_opts(&conn, 100, &[person.contact_id], depth, fresh)?
+            build_corpus_scoped(&conn, 100, &unit.ids, depth, fresh, &scope.accounts)?
         };
         if part.messages.is_empty() {
             continue;
@@ -1664,12 +1852,19 @@ pub fn run_live(
         // Their card, before a word comes back: a crash mid-person still
         // leaves a card to decide, with whatever facts had landed.
         {
-            let who = live_person(person);
+            let who = unit.live.clone();
             let conn = db.0.lock().unwrap();
             let _ = conn.execute(
-                "INSERT INTO learn_people (run_id, contact_id, name, email, status)
-                 VALUES (?1, ?2, ?3, ?4, 'proposed')",
-                params![run_id, who.contact_id, who.name, who.email],
+                "INSERT INTO learn_people (run_id, contact_id, name, email, status, business, contact_ids)
+                 VALUES (?1, ?2, ?3, ?4, 'proposed', ?5, ?6)",
+                params![
+                    run_id,
+                    who.contact_id,
+                    who.name,
+                    who.email,
+                    scope.business,
+                    serde_json::to_string(&unit.ids).unwrap_or_else(|_| "[]".into())
+                ],
             );
         }
         let (prompt, part_chars, part_tokens) = part.body();
@@ -1678,12 +1873,28 @@ pub fn run_live(
             agent_id: super::assistant::ASSISTANT_ID.into(),
             role: "assistant".into(),
             model: model.clone(),
-            system: SYSTEM.into(),
-            context: prompt,
-            goal: format!(
-                "Read the mail with {} and return what is worth remembering, one JSON object per line.",
-                live_person(person).name
-            ),
+            system: if scope.business > 0 { BUSINESS_SYSTEM.into() } else { SYSTEM.into() },
+            context: if scope.business > 0 {
+                format!(
+                    "# The business\n\n{}\nSells: {}\n\n# Organisation: {}\n\n{prompt}",
+                    scope.name,
+                    if scope.offers.is_empty() { "nothing agreed yet".to_string() } else { scope.offers.join("; ") },
+                    unit.live.name
+                )
+            } else {
+                prompt
+            },
+            goal: if scope.business > 0 {
+                format!(
+                    "Read {}'s mail with {} and return what is worth remembering, one JSON object per line.",
+                    scope.name, unit.live.name
+                )
+            } else {
+                format!(
+                    "Read the mail with {} and return what is worth remembering, one JSON object per line.",
+                    unit.live.name
+                )
+            },
             ..Default::default()
         };
 
@@ -1693,14 +1904,22 @@ pub fn run_live(
         let buffer = std::cell::RefCell::new(String::new());
         let count = std::cell::Cell::new(0usize);
         let summary = std::cell::RefCell::new(String::new());
-        let who = live_person(person);
+        let role = std::cell::RefCell::new((String::new(), Vec::<String>::new()));
+        let who = unit.live.clone();
         let on_line = |line: &str| {
-            if let Some(text) = parse_summary_line(line) {
+            if let Some(sum) = parse_org_summary(line) {
+                let text = sum.text.clone();
                 {
                     let conn = db.0.lock().unwrap();
                     let _ = conn.execute(
-                        "UPDATE learn_people SET summary=?3 WHERE run_id=?1 AND contact_id=?2",
-                        params![run_id, who.contact_id, text],
+                        "UPDATE learn_people SET summary=?3, role=?4, relates=?5 WHERE run_id=?1 AND contact_id=?2",
+                        params![
+                            run_id,
+                            who.contact_id,
+                            text,
+                            sum.role,
+                            serde_json::to_string(&sum.relates).unwrap_or_else(|_| "[]".into())
+                        ],
                     );
                 }
                 let _ = app.emit(
@@ -1711,15 +1930,31 @@ pub fn run_live(
                         "total": total,
                         "person": who,
                         "text": text,
+                        "role": sum.role,
+                        "relates": sum.relates,
                     }),
                 );
                 *summary.borrow_mut() = text;
+                *role.borrow_mut() = (sum.role, sum.relates);
                 return;
             }
             let Some(f) = parse_fact_line(line) else { return };
             let filed = {
                 let conn = db.0.lock().unwrap();
-                file_fact(&conn, run_id, &f, &whole.people, &part.thread_keys(), person.contact_id)
+                let mut filed = file_fact(&conn, run_id, &f, &whole.people, &part.thread_keys(), unit.ids[0]);
+                // For a business, what is about an organisation is the
+                // business's to keep, whatever mailbox space it came through.
+                if let Some(ff) = filed.as_mut() {
+                    if scope.business > 0 && ff.kind == "thing" {
+                        let _ = conn.execute(
+                            "UPDATE learn_facts SET node_id = ?2, space = ?3 WHERE id = ?1",
+                            params![ff.id, scope.business, scope.name],
+                        );
+                        ff.node_id = scope.business;
+                        ff.space = scope.name.clone();
+                    }
+                }
+                filed
             };
             if let Some(filed) = filed {
                 count.set(count.get() + 1);
@@ -1800,6 +2035,8 @@ pub fn run_live(
                 "person": who,
                 "facts": count.get(),
                 "summary": summary.borrow().clone(),
+                "role": role.borrow().0.clone(),
+                "relates": role.borrow().1.clone(),
                 "tokens_so_far": tokens_so_far,
                 "cost_so_far": cost_so_far,
             }),
@@ -1985,15 +2222,18 @@ pub async fn learn_estimate(
     only: Vec<i64>,
     depth: String,
     fresh: Option<bool>,
+    business: Option<i64>,
 ) -> Result<LearnEstimate, String> {
     let (provider, provider_name, model, ready, note) = destination_model(&ws);
     let conn = db.0.lock().unwrap();
-    let corpus = build_corpus_opts(
+    let scope = crate::business::scope_of(&conn, business.unwrap_or(0))?;
+    let corpus = build_corpus_scoped(
         &conn,
         if people > 0 { people } else { DEFAULT_PEOPLE },
         &only,
         Depth::parse(&depth),
         fresh.unwrap_or(false),
+        &scope.accounts,
     )?;
     Ok(corpus.estimate(&provider, &provider_name, &model, ready, &note))
 }
@@ -2037,6 +2277,7 @@ pub async fn learn_run_live(
     only: Vec<i64>,
     depth: String,
     fresh: Option<bool>,
+    business: Option<i64>,
 ) -> Result<LearnRun, String> {
     let ws = (*ws).clone();
     let depth = Depth::parse(&depth);
@@ -2044,7 +2285,11 @@ pub async fn learn_run_live(
     let fresh = fresh.unwrap_or(false);
     tauri::async_runtime::spawn_blocking(move || {
         let db = <tauri::AppHandle as tauri::Manager<tauri::Wry>>::state::<Db>(&app);
-        run_live(&app, &ws, &db, people, &only, depth, fresh)
+        let scope = {
+            let conn = db.0.lock().unwrap();
+            crate::business::scope_of(&conn, business.unwrap_or(0))?
+        };
+        run_live(&app, &ws, &db, people, &only, depth, fresh, &scope)
     })
     .await
     .map_err(|e| format!("the run did not finish: {e}"))?
@@ -2184,6 +2429,13 @@ pub struct PersonDecision {
     /// with you as the source.
     #[serde(default)]
     pub add: Vec<String>,
+    /// The business this card is for, or 0 for you.
+    #[serde(default)]
+    pub business: i64,
+    #[serde(default)]
+    pub role: String,
+    #[serde(default)]
+    pub relates: Vec<String>,
 }
 
 #[derive(Serialize, Clone, Debug, Default)]
@@ -2196,8 +2448,60 @@ pub struct PersonOutcome {
 
 #[tauri::command(async)]
 pub fn learn_decide_person(db: tauri::State<Db>, decision: PersonDecision) -> Result<PersonOutcome, String> {
-    let conn = db.0.lock().unwrap();
-    decide_person(&conn, &decision)
+    let out = {
+        let conn = db.0.lock().unwrap();
+        decide_person(&conn, &decision)?
+    };
+    // A kept organisation gets its folder under the kind the owner chose.
+    let kept = !decision.keep.is_empty() || !decision.add.is_empty() || !decision.summary.trim().is_empty();
+    let (folder, label) = match decision.role.as_str() {
+        "client" => ("Clients", "Client"),
+        "supplier" => ("Suppliers", "Supplier"),
+        "adviser" => ("Advisers", "Adviser"),
+        "partner firm" => ("Partner firms", "Partner firm"),
+        _ => ("", ""),
+    };
+    if decision.business > 0 && kept && !folder.is_empty() {
+        let name = crate::business::folder_name(&decision.name);
+        let (parent, existing) = {
+            let conn = db.0.lock().unwrap();
+            let parent: Option<i64> = conn
+                .query_row(
+                    "SELECT id FROM nodes WHERE parent_id = ?1 AND name = ?2 COLLATE NOCASE",
+                    params![decision.business, folder],
+                    |r| r.get(0),
+                )
+                .optional()
+                .map_err(err)?;
+            let existing: Option<i64> = match parent {
+                Some(pid) => conn
+                    .query_row(
+                        "SELECT id FROM nodes WHERE parent_id = ?1 AND name = ?2 COLLATE NOCASE",
+                        params![pid, name],
+                        |r| r.get(0),
+                    )
+                    .optional()
+                    .map_err(err)?,
+                None => None,
+            };
+            (parent, existing)
+        };
+        if let (Some(parent), false) = (parent, name.is_empty()) {
+            let id = match existing {
+                Some(id) => id,
+                None => crate::vault::vault_create(db.clone(), Some(parent), name)?.id,
+            };
+            let _ = crate::vault::vault_set_meta(
+                db.clone(),
+                id,
+                Some(label.into()),
+                None,
+                None,
+                (!decision.summary.trim().is_empty()).then(|| decision.summary.trim().to_string()),
+            );
+        }
+    }
+    Ok(out)
 }
 
 /// Lines you wrote on a card yourself: a proposed row each, with you as
@@ -2258,8 +2562,35 @@ pub fn decide_person(conn: &Connection, d: &PersonDecision) -> Result<PersonOutc
         }
     }
 
+    if d.business > 0 && d.run_id > 0 {
+        conn.execute(
+            "UPDATE learn_people SET role = ?3, relates = ?4 WHERE run_id = ?1 AND contact_id = ?2",
+            params![
+                d.run_id,
+                d.contact_id,
+                d.role,
+                serde_json::to_string(&d.relates).unwrap_or_else(|_| "[]".into())
+            ],
+        )
+        .map_err(err)?;
+    }
+
     let summary = d.summary.trim();
     if summary.is_empty() || d.name.trim().is_empty() {
+        return Ok(out);
+    }
+    // For a business, the summary is what the business knows about the
+    // organisation: a note in the business's knowledge, read by its team.
+    if d.business > 0 {
+        let slug = crate::managers::handle_from(d.name.trim());
+        let body = format!(
+            "---\nid: {slug}\nsource: mail\nrole: {}\nrelates: [{}]\n---\n\n# {}\n\n{summary}\n\n> from the business's mail with {}\n",
+            if d.role.is_empty() { "unknown" } else { d.role.as_str() },
+            d.relates.join(", "),
+            d.name.trim(),
+            if d.email.trim().is_empty() { d.name.trim() } else { d.email.trim() }
+        );
+        out.person_file = crate::business::knowledge_note(conn, d.business, &slug, &body)?;
         return Ok(out);
     }
     // The summary is a note in memory about them, not a person in your life.
@@ -2516,6 +2847,12 @@ pub async fn learn_life_proposals(app: tauri::AppHandle, ws: Ws<'_>) -> Result<V
 pub struct LearnCard {
     pub run_id: i64,
     pub person: LivePerson,
+    /// client | supplier | adviser | partner firm, for an organisation.
+    pub role: String,
+    /// The business's products and services it has to do with.
+    pub relates: Vec<String>,
+    /// The business space, or 0 for a card about you.
+    pub business: i64,
     pub summary: String,
     /// proposed | kept | declined
     pub status: String,
@@ -2550,7 +2887,7 @@ pub fn review(conn: &Connection, run_id: i64) -> Result<Vec<LearnCard>, String> 
     let mut cards: Vec<LearnCard> = {
         let mut st = conn
             .prepare(
-                "SELECT contact_id, name, email, summary, status FROM learn_people
+                "SELECT contact_id, name, email, summary, status, role, relates, business FROM learn_people
                   WHERE run_id = ?1 ORDER BY id",
             )
             .map_err(err)?;
@@ -2567,6 +2904,9 @@ pub fn review(conn: &Connection, run_id: i64) -> Result<Vec<LearnCard>, String> 
                     },
                     summary: r.get(3)?,
                     status: r.get(4)?,
+                    role: r.get(5)?,
+                    relates: read_json(&r.get::<_, String>(6)?),
+                    business: r.get(7)?,
                     facts: Vec::new(),
                 })
             })
@@ -2604,6 +2944,7 @@ pub fn review(conn: &Connection, run_id: i64) -> Result<Vec<LearnCard>, String> 
             summary: String::new(),
             status: String::new(),
             facts: Vec::new(),
+            ..Default::default()
         });
     }
     for c in &mut cards {
@@ -2950,6 +3291,45 @@ mod tests {
         assert_eq!(cid, 7);
     }
 
+    /// Three people at one firm are one card; someone on free mail is their own.
+    #[test]
+    fn a_business_reads_one_organisation_at_a_time() {
+        let p = |id: i64, name: &str, email: &str| LearnPerson {
+            contact_id: id,
+            name: name.into(),
+            email: email.into(),
+            domain: email.split('@').nth(1).unwrap_or_default().into(),
+            threads: 2,
+            messages: 3,
+            ..Default::default()
+        };
+        let units = organisations(&[
+            p(1, "Thandi", "thandi@tagworks-supply.co.za"),
+            p(2, "", "orders@tagworks-supply.co.za"),
+            p(3, "Pieter", "pieter@gmail.com"),
+            p(4, "Lindi", "lindi@ridgeback-mining.co.za"),
+        ]);
+        assert_eq!(units.len(), 3);
+        assert_eq!(units[0].live.name, "Tagworks Supply");
+        assert_eq!(units[0].ids, vec![1, 2]);
+        assert_eq!(units[0].live.threads, 4, "the firm's threads, all of them");
+        assert_eq!(units[1].live.name, "Pieter", "free mail is a person");
+        assert_eq!(org_name("www.ridgeback-mining.co.za"), "Ridgeback Mining");
+    }
+
+    #[test]
+    fn an_organisation_summary_carries_its_role_and_what_it_relates_to() {
+        let s = parse_org_summary(
+            r#"{"kind":"summary","text":"They supply the tags.","role":"Vendor","relates":["Mining equipment tracking",""]}"#,
+        )
+        .unwrap();
+        assert_eq!(s.role, "supplier", "a vendor is a supplier");
+        assert_eq!(s.relates, vec!["Mining equipment tracking"]);
+        let unknown = parse_org_summary(r#"{"kind":"summary","text":"Unclear.","role":"friend"}"#).unwrap();
+        assert_eq!(unknown.role, "", "a role nobody recognises is left for the owner");
+        assert!(parse_org_summary(r#"{"kind":"thing","text":"x"}"#).is_none());
+    }
+
     /// A run's cards come back to be decided a person at a time, and a run
     /// from before there were cards is grouped by person from its facts.
     #[test]
@@ -3019,6 +3399,7 @@ mod tests {
                 keep: vec![],
                 decline: ids.clone(),
                 add: vec![],
+                ..Default::default()
             },
         )
         .unwrap();

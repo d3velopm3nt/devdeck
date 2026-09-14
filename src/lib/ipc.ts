@@ -1547,8 +1547,8 @@ export interface LearnFact {
 }
 
 /** What a run would cost and what it would leave out. Nothing is sent. */
-export const learnEstimate = (people = 12, only: number[] = [], depth = 'full', fresh = false) =>
-  invoke<LearnEstimate>('learn_estimate', { people, only, depth, fresh })
+export const learnEstimate = (people = 12, only: number[] = [], depth = 'full', fresh = false, business = 0) =>
+  invoke<LearnEstimate>('learn_estimate', { people, only, depth, fresh, business })
 /** Everybody a run could read about, for the Choose who list. */
 export const learnPeople = (limit = 50) =>
   invoke<Correspondent[]>('learn_people', { limit })
@@ -1586,6 +1586,10 @@ export interface PersonDecision {
   decline: number[]
   /** Lines you wrote on the card yourself. Filed and kept with the rest. */
   add: string[]
+  /** For a business's card: the business, what the organisation is, and what it relates to. */
+  business?: number
+  role?: string
+  relates?: string[]
 }
 export interface PersonOutcome {
   kept: number
@@ -1599,6 +1603,12 @@ export const learnDecidePerson = (decision: PersonDecision) =>
 export interface LearnCard {
   run_id: number
   person: LivePerson
+  /** client | supplier | adviser | partner firm, for an organisation. */
+  role: string
+  /** The business's products and services it has to do with. */
+  relates: string[]
+  /** The business space, or 0 for a card about you. */
+  business: number
   summary: string
   /** proposed | kept | declined */
   status: string
@@ -1667,6 +1677,9 @@ export interface LearnSummaryEvent {
   total: number
   person: LivePerson
   text: string
+  /** For an organisation: what it is to the business, and what it relates to. */
+  role?: string
+  relates?: string[]
 }
 export interface LearnDoneEvent {
   run: LearnRun
@@ -1684,8 +1697,8 @@ export interface LearnFailedEvent {
  * promise resolves with the receipt when the last person is done, or when
  * Stop was pressed; the events arrive along the way.
  */
-export const learnRunLive = (people = 12, only: number[] = [], depth = 'full', fresh = false) =>
-  invoke<LearnRun>('learn_run_live', { people, only, depth, fresh })
+export const learnRunLive = (people = 12, only: number[] = [], depth = 'full', fresh = false, business = 0) =>
+  invoke<LearnRun>('learn_run_live', { people, only, depth, fresh, business })
 /** Stop after the person being read. Everything that came back stays. */
 export const learnStop = () => invoke<void>('learn_stop')
 /** Everything a live run says, as it says it. Returns the unsubscribe. */
@@ -1950,3 +1963,26 @@ export interface TeamMade {
 export const businessTeam = (nodeId: number) => invoke<TeamOffer>('business_team', { nodeId })
 export const businessMakeTeam = (nodeId: number, roles: string[], reuse: string[]) =>
   invoke<TeamMade>('business_make_team', { nodeId, roles, reuse })
+
+/** One manager on a business's team, for the space's Team tab. */
+export interface MemberView {
+  handle: string
+  name: string
+  role: string
+  goal: string
+  rhythm: string
+  last_woke: number | null
+  open_items: number
+  also_for: string[]
+}
+export interface KindCount {
+  folder: string
+  count: number
+}
+export interface SpaceView {
+  members: MemberView[]
+  /** Roles nobody is on: the directors keep doing them. */
+  keeps: string[]
+  organisations: KindCount[]
+}
+export const businessSpace = (nodeId: number) => invoke<SpaceView>('business_space', { nodeId })

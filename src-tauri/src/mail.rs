@@ -629,6 +629,10 @@ fn rank_correspondents(conn: &Connection, limit: i64) -> Result<Vec<Corresponden
     let mut tallies: Vec<Tally> = Vec::new();
     let mut contacts: Vec<(i64, String, String)> = Vec::new();
     let mut by_email: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    // Your own addresses. You write to yourself -- notes, forwards -- and a
+    // contact row for your own mailbox would rank you as the person you
+    // answer most. You are not somebody to learn about from your mail.
+    let own = own_addresses(conn)?;
     {
         let mut st = conn
             .prepare("SELECT id, name, email FROM mail_contacts WHERE email <> '' AND kind <> 'bot'")
@@ -640,7 +644,7 @@ fn rank_correspondents(conn: &Connection, limit: i64) -> Result<Vec<Corresponden
             .map_err(err)?;
         for (id, name, email) in rows.flatten() {
             let key = email.trim().to_ascii_lowercase();
-            if by_email.contains_key(&key) {
+            if by_email.contains_key(&key) || own.contains(&key) {
                 continue;
             }
             by_email.insert(key, contacts.len());
@@ -751,6 +755,24 @@ fn rank_correspondents(conn: &Connection, limit: i64) -> Result<Vec<Corresponden
     });
     all.truncate(limit as usize);
     Ok(all)
+}
+
+/// The addresses of your own mailboxes, lowercased.
+pub fn own_addresses(conn: &Connection) -> Result<std::collections::HashSet<String>, String> {
+    let mut st = conn.prepare("SELECT address, username FROM mail_accounts").map_err(err)?;
+    let rows = st
+        .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
+        .map_err(err)?;
+    let mut out = std::collections::HashSet::new();
+    for (a, u) in rows.flatten() {
+        for s in [a, u] {
+            let s = s.trim().to_ascii_lowercase();
+            if s.contains('@') {
+                out.insert(s);
+            }
+        }
+    }
+    Ok(out)
 }
 
 /// The addresses in a stored recipient list, lowercased.
@@ -3166,6 +3188,28 @@ Content-Type: multipart/mixed; boundary=\"z\"\r\n\r\n\
         assert_eq!(out.len(), 2);
         assert_eq!(out[0].email, "tom@innotrack.io");
         assert_eq!(out[1].email, "priya@harbourvine.com");
+    }
+
+    /// Forwarding things to yourself does not make you your own best
+    /// correspondent.
+    #[test]
+    fn you_are_not_one_of_the_people_you_write_to() {
+        let c = mem();
+        c.execute(
+            "INSERT INTO mail_accounts (id, name, address) VALUES (1,'Me','me@d.co')",
+            [],
+        )
+        .unwrap();
+        contact(&c, "Me", "me@d.co");
+        contact(&c, "Sarah", "sarah@harbourvine.com");
+        for i in 0..5 {
+            msg(&c, "Sent", "me@d.co", "me@d.co", &format!("note {i}"), 100 + i);
+        }
+        msg(&c, "Sent", "me@d.co", "sarah@harbourvine.com", "terms", 5_000);
+
+        let out = rank_correspondents(&c, 50).unwrap();
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].email, "sarah@harbourvine.com");
     }
 
     /// A reply addressed to several people still counts for each of them.

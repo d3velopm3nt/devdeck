@@ -157,13 +157,18 @@ export function LearnStep({
   const [stopping, setStopping] = useState(false)
   // After the run, and on the way back: the cards as the run left them.
   const [cards, setCards] = useState<ipc.LearnCard[]>([])
+  // The person you clicked in the list. Null follows the run: the first
+  // one waiting for you, else the one being read. Cleared by a decision,
+  // so the next card comes up on its own.
+  const [selected, setSelected] = useState<number | null>(null)
 
   const review = async (runId: number, done: ipc.LearnDoneEvent | null) => {
     try {
       const c = await ipc.learnReview(runId)
       setCards(c)
+      setSelected(null)
       if (done) setResult(done)
-      setPhase(c.some((x) => x.status === 'proposed') ? 'review' : 'done')
+      setPhase(c.some((x) => x.status === 'proposed') || phase === 'sorting' ? 'review' : 'done')
     } catch (e) {
       setErr(String(e))
       setPhase('done')
@@ -276,6 +281,7 @@ export function LearnStep({
         }),
       )
       setDecided((cur) => ({ ...cur, [p.contact_id]: status }))
+      setSelected(null)
       setCards((cur) =>
         cur.map((c) =>
           c.run_id === runId && c.person.contact_id === p.contact_id
@@ -346,19 +352,9 @@ export function LearnStep({
       month: 'long',
     })
 
-  // ---- already read --------------------------------------------------------
-  // Everybody you write to was read by an earlier run and nothing new has
-  // arrived since. That run's cards are what there is to look at: one per
-  // person, decided or still waiting. Zero people with no explanation
-  // looked like a bug.
-  const sentToReview = useRef(false)
-  useEffect(() => {
-    if (phase !== 'sorting' || sentToReview.current) return
-    if (!lastRun || !est || !counts || mailSyncing || est.people.length > 0) return
-    sentToReview.current = true
-    void review(lastRun.id, { run: lastRun, stopped: false })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, lastRun, est, counts, mailSyncing])
+  // Everybody you write to was read already and nothing new has arrived.
+  // The sorting screen still shows the counts; Continue goes to the cards.
+  const allRead = !!lastRun && !!est && !!counts && !mailSyncing && est.people.length === 0
 
   // ---- sorting -------------------------------------------------------------
   if (phase === 'sorting') {
@@ -395,21 +391,27 @@ export function LearnStep({
 
         <div className="grid grid-cols-3 gap-3">
           <Stat
-            head="People you write back to"
-            big={est ? String(est.people.length) : '…'}
+            head={allRead ? 'People, all read' : 'People you write back to'}
+            big={allRead && lastRun ? String(lastRun.people) : est ? String(est.people.length) : '…'}
             tone="ink"
             accent
           >
-            <div className="mt-1 flex flex-col gap-1 text-[12px] text-body">
-              {(est?.people ?? []).slice(0, 4).map((p) => (
-                <span key={p.contact_id} className="truncate">
-                  {p.name || p.email}
-                </span>
-              ))}
-              {est && est.people.length > 4 && (
-                <span className="text-faint">+ {est.people.length - 4} more</span>
-              )}
-            </div>
+            {allRead && lastRun ? (
+              <p className="mt-1 text-[11.5px] leading-relaxed text-muted">
+                Read on {when(lastRun)}. Nothing new since. Their cards are next.
+              </p>
+            ) : (
+              <div className="mt-1 flex flex-col gap-1 text-[12px] text-body">
+                {(est?.people ?? []).slice(0, 4).map((p) => (
+                  <span key={p.contact_id} className="truncate">
+                    {p.name || p.email}
+                  </span>
+                ))}
+                {est && est.people.length > 4 && (
+                  <span className="text-faint">+ {est.people.length - 4} more</span>
+                )}
+              </div>
+            )}
           </Stat>
           <Stat head="Automated, ignored" big={counts ? n(automated) : '…'} tone="dim">
             <p className="mt-1 text-[11.5px] leading-relaxed text-muted">
@@ -439,8 +441,15 @@ export function LearnStep({
           <span className="text-[12px] text-body">Nothing has left this machine.</span>
           <span className="flex-1" />
           {ready ? (
-            <button className="btn-primary text-[12px]" onClick={() => setPhase('approve')}>
-              Continue
+            <button
+              className="btn-primary text-[12px]"
+              onClick={() =>
+                allRead && lastRun
+                  ? void review(lastRun.id, { run: lastRun, stopped: false })
+                  : setPhase('approve')
+              }
+            >
+              {allRead ? 'See the cards' : 'Continue'}
             </button>
           ) : (
             <span className="text-[11px] text-muted">
@@ -548,7 +557,8 @@ export function LearnStep({
     // One card on the right: the first person read and not yet decided.
     // While there is none, the person being read, as it happens.
     const toDecide = (plan?.people ?? []).filter((p, i) => i <= doneIdx && !decided[p.contact_id])
-    const showing = mode === 'now' && toDecide.length > 0 ? toDecide[0] : current
+    const picked = selected == null ? null : (plan?.people.find((p) => p.contact_id === selected) ?? null)
+    const showing = picked ?? (mode === 'now' && toDecide.length > 0 ? toDecide[0] : current)
     // Live means still being read: not one of the ones already read.
     const isLive = !!showing && !toDecide.some((p) => p.contact_id === showing.contact_id)
     return (
@@ -621,6 +631,8 @@ export function LearnStep({
               i <= doneIdx && !decided[p.contact_id] ? `${perPerson[p.contact_id] ?? 0} facts` : ''
             }
             empty={!plan ? 'Sorting the batch…' : ''}
+            selected={showing?.contact_id ?? null}
+            onSelect={(p, i) => i <= doneIdx + 1 && setSelected(p.contact_id)}
           />
 
           <div className="flex min-h-0 flex-col gap-3 overflow-auto pr-1">
@@ -629,7 +641,7 @@ export function LearnStep({
                 Sorting the batch on this machine, then the first person…
               </div>
             )}
-            {showing && liveCard(showing, isLive, mode === 'now' && !isLive)}
+            {showing && liveCard(showing, isLive, (mode === 'now' || picked != null) && !isLive)}
             {mode === 'now' && toDecide.length > 1 && (
               <span className="text-[11px] text-muted">
                 {toDecide.length - 1} more read and waiting for you after this one.
@@ -660,7 +672,7 @@ export function LearnStep({
   // weeks ago.
   if (phase === 'review') {
     const open = cards.filter((c) => c.status === 'proposed')
-    const cur = open[0]
+    const cur = (selected == null ? null : cards.find((c) => c.person.contact_id === selected)) ?? open[0] ?? cards[0]
     const run = result?.run ?? lastRun
     return (
       <Frame step="learn" wide onClose={close} nav={nav}>
@@ -710,11 +722,25 @@ export function LearnStep({
               const c = cards.find((x) => x.person.contact_id === p.contact_id)
               return c && c.status === 'proposed' ? `${c.facts.length} facts` : ''
             }}
+            selected={cur?.person.contact_id ?? null}
+            onSelect={(p) => setSelected(p.contact_id)}
           />
           <div className="flex min-h-0 flex-col gap-3 overflow-auto pr-1">
             {cur && storedCard(cur)}
-            {open.length > 1 && (
-              <span className="text-[11px] text-muted">{open.length - 1} more after this one.</span>
+            {open.length > 0 && (
+              <span className="text-[11px] text-muted">
+                {open.length === 1 && cur?.status === 'proposed'
+                  ? 'The last one to decide.'
+                  : `${open.length - (cur?.status === 'proposed' ? 1 : 0)} still to decide. Click anyone on the left.`}
+              </span>
+            )}
+            {open.length === 0 && (
+              <div className="flex items-center gap-3">
+                <span className="text-[11px] text-muted">All decided.</span>
+                <button className="btn-primary text-[11.5px]" onClick={() => setPhase('done')}>
+                  Done
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -953,11 +979,16 @@ function PeopleList({
   stateOf,
   noteOf,
   empty,
+  selected,
+  onSelect,
 }: {
   people: ipc.LivePerson[]
   stateOf: (p: ipc.LivePerson, i: number) => 'kept' | 'declined' | 'read' | 'now' | 'wait'
   noteOf: (p: ipc.LivePerson, i: number) => string
   empty?: string
+  /** The card on the right. */
+  selected: number | null
+  onSelect: (p: ipc.LivePerson, i: number) => void
 }) {
   return (
     <div className="min-h-0 self-start overflow-auto rounded-[10px] border border-line bg-panel">
@@ -966,11 +997,14 @@ function PeopleList({
       </div>
       {people.map((p, i) => {
         const state = stateOf(p, i)
+        const on = selected === p.contact_id
         return (
-          <div
+          <button
             key={p.contact_id}
-            className={`flex items-center gap-2.5 border-t border-line px-3 py-2 text-[12px] ${
-              state === 'now' ? 'bg-raise' : ''
+            onClick={() => onSelect(p, i)}
+            disabled={state === 'wait'}
+            className={`flex w-full items-center gap-2.5 border-t border-line px-3 py-2 text-left text-[12px] ${
+              on ? 'bg-raise' : state === 'wait' ? '' : 'hover:bg-hover'
             }`}
           >
             {state === 'kept' ? (
@@ -990,7 +1024,7 @@ function PeopleList({
             )}
             <span
               className={`min-w-0 flex-1 truncate ${
-                state === 'wait' ? 'text-muted' : state === 'now' ? 'font-semibold text-ink' : 'text-body'
+                state === 'wait' ? 'text-muted' : on || state === 'now' ? 'font-semibold text-ink' : 'text-body'
               }`}
             >
               {p.name}
@@ -1006,7 +1040,7 @@ function PeopleList({
                       : ''
                     : noteOf(p, i)}
             </span>
-          </div>
+          </button>
         )
       })}
       {empty && <div className="border-t border-line px-3 py-2 text-[12px] text-muted">{empty}</div>}

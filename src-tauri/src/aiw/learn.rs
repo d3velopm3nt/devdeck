@@ -2282,6 +2282,7 @@ pub fn review(conn: &Connection, run_id: i64) -> Result<Vec<LearnCard>, String> 
             None => return Ok(Vec::new()),
         }
     };
+    attribute_orphans(conn, run_id)?;
     let all = facts(conn, run_id, "")?;
     let mut cards: Vec<LearnCard> = {
         let mut st = conn
@@ -2361,6 +2362,85 @@ pub fn review(conn: &Connection, run_id: i64) -> Result<Vec<LearnCard>, String> 
         }
     }
     Ok(cards)
+}
+
+/// Give a fact with no person the person whose threads it came from.
+///
+/// A run from before there were cards tagged a fact with a person only
+/// when the model's `about` named one, so most of its facts belong to
+/// nobody and would pile up in one card. Each fact carries the thread keys
+/// of the request that produced it, and those threads have a sender: the
+/// contact seen most across them, your own address not counting, is the
+/// person. Written back, so it is decided once.
+fn attribute_orphans(conn: &Connection, run_id: i64) -> Result<(), String> {
+    let own = crate::mail::own_addresses(conn)?;
+    let own_ids: Vec<i64> = {
+        let mut st = conn.prepare("SELECT id, email FROM mail_contacts").map_err(err)?;
+        let rows = st
+            .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))
+            .map_err(err)?;
+        rows.flatten()
+            .filter(|(_, e)| own.contains(&e.trim().to_ascii_lowercase()))
+            .map(|(id, _)| id)
+            .collect()
+    };
+    let orphans: Vec<(i64, String)> = {
+        let mut st = conn
+            .prepare("SELECT id, thread_keys, contact_id FROM learn_facts WHERE run_id = ?1")
+            .map_err(err)?;
+        let rows = st
+            .query_map(params![run_id], |r| {
+                Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?))
+            })
+            .map_err(err)?;
+        rows.flatten()
+            .filter(|(_, _, cid)| *cid == 0 || own_ids.contains(cid))
+            .map(|(id, keys, _)| (id, keys))
+            .collect()
+    };
+    if orphans.is_empty() {
+        return Ok(());
+    }
+    let mut by_keys: std::collections::HashMap<String, i64> = Default::default();
+    for (id, keys_json) in orphans {
+        let who = if let Some(w) = by_keys.get(&keys_json) {
+            *w
+        } else {
+            let keys = read_json::<Vec<String>>(&keys_json);
+            let mut tally: std::collections::HashMap<i64, i64> = Default::default();
+            if !keys.is_empty() {
+                let marks = std::iter::repeat("?").take(keys.len()).collect::<Vec<_>>().join(",");
+                let mut st = conn
+                    .prepare(&format!(
+                        "SELECT contact_id, COUNT(*) FROM mail_messages
+                          WHERE contact_id > 0 AND thread_key IN ({marks}) GROUP BY contact_id"
+                    ))
+                    .map_err(err)?;
+                let refs: Vec<&dyn rusqlite::ToSql> = keys.iter().map(|k| k as &dyn rusqlite::ToSql).collect();
+                let rows = st
+                    .query_map(rusqlite::params_from_iter(refs), |r| {
+                        Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?))
+                    })
+                    .map_err(err)?;
+                for (cid, n) in rows.flatten() {
+                    if !own_ids.contains(&cid) {
+                        tally.insert(cid, n);
+                    }
+                }
+            }
+            let w = tally.into_iter().max_by_key(|(_, n)| *n).map(|(c, _)| c).unwrap_or(0);
+            by_keys.insert(keys_json, w);
+            w
+        };
+        if who > 0 {
+            conn.execute(
+                "UPDATE learn_facts SET contact_id = ?2 WHERE id = ?1",
+                params![id, who],
+            )
+            .map_err(err)?;
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command(async)]
@@ -2585,11 +2665,35 @@ mod tests {
             )
             .unwrap();
         }
+        // A fact tagged with nobody, from a thread Anna wrote in: hers.
+        c.execute(
+            "INSERT INTO mail_accounts (id, name, address) VALUES (1,'Me','me@x.com')",
+            [],
+        )
+        .unwrap();
+        c.execute(
+            "INSERT INTO mail_messages (account_id, uid, mailbox, from_addr, to_addrs, thread_key, ts, contact_id)
+             VALUES (1, 1, 'INBOX', 'anna@x.com', 'me@x.com', 't1', 5, 7)",
+            [],
+        )
+        .unwrap();
+        c.execute(
+            "INSERT INTO learn_facts (run_id, kind, text, source, thread_keys, contact_id, space, node_id, status, created_at)
+             VALUES (1, 'you', 'Sunday lunch is at Anna''s', 'mail', '[\"t1\"]', 0, '', 0, 'proposed', 0)",
+            [],
+        )
+        .unwrap();
         // No learn_people row: a run from before there were cards.
         let cards = review(&c, 0).unwrap();
-        assert_eq!(cards.len(), 1, "one person, one card");
+        assert_eq!(cards.len(), 1, "one person, one card, the orphan included");
+        assert_eq!(cards[0].facts.len(), 3);
+        // The orphan is attributed once: written back, not re-derived.
+        let n: i64 = c
+            .query_row("SELECT COUNT(*) FROM learn_facts WHERE contact_id = 0", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 0);
         assert_eq!(cards[0].person.name, "Anna");
-        assert_eq!(cards[0].facts.len(), 2);
+        assert_eq!(cards[0].facts.len(), 3, "her two, and the one tagged with nobody");
         assert_eq!(cards[0].status, "proposed");
         assert_eq!(cards[0].person.threads, 1);
 
@@ -2604,11 +2708,11 @@ mod tests {
                 email: "anna@x.com".into(),
                 summary: String::new(),
                 keep: vec![],
-                decline: vec![ids[0], ids[1]],
+                decline: ids.clone(),
             },
         )
         .unwrap();
-        assert_eq!(out.declined, 2);
+        assert_eq!(out.declined, ids.len());
         let cards = review(&c, 1).unwrap();
         assert_eq!(cards[0].status, "declined", "the card remembers its decision");
         assert!(cards[0].facts.iter().all(|f| f.status == "declined"));

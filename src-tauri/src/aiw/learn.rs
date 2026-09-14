@@ -1841,6 +1841,14 @@ pub fn run_live(
 // Deciding a fact
 // ---------------------------------------------------------------------------
 
+/// Where a kept fact goes. A fact about a company or a project goes with
+/// that thing when the mailbox names a space. A personal mailbox names
+/// none, and its facts about a firm are still yours: they go to the
+/// personal store, which is the rule for everything that mailbox teaches.
+fn goes_to_a_space(kind: &str, node_id: i64) -> bool {
+    kind == "thing" && node_id > 0
+}
+
 /// Say yes to one fact. This is where something is finally written.
 ///
 /// `text` and `node_id` are passed back in so an edit made on the screen is
@@ -1868,7 +1876,7 @@ pub fn keep(
         f.node_id = node_id;
     }
 
-    let written = if f.kind == "thing" {
+    let written = if goes_to_a_space(&f.kind, f.node_id) {
         let dir = thing_dir(conn, f.node_id)?;
         std::fs::create_dir_all(&dir).map_err(|e| format!("could not open {}: {e}", dir.display()))?;
         let slug = slug(&f.text);
@@ -2172,6 +2180,10 @@ pub struct PersonDecision {
     pub keep: Vec<KeptLine>,
     #[serde(default)]
     pub decline: Vec<i64>,
+    /// Lines you wrote yourself on the card. Filed and kept like the rest,
+    /// with you as the source.
+    #[serde(default)]
+    pub add: Vec<String>,
 }
 
 #[derive(Serialize, Clone, Debug, Default)]
@@ -2188,9 +2200,29 @@ pub fn learn_decide_person(db: tauri::State<Db>, decision: PersonDecision) -> Re
     decide_person(&conn, &decision)
 }
 
+/// Lines you wrote on a card yourself: a proposed row each, with you as
+/// the source, so they are kept the same way as the rest.
+fn add_lines(conn: &Connection, run_id: i64, contact_id: i64, add: &[String]) -> Result<Vec<KeptLine>, String> {
+    let mut out = Vec::new();
+    for text in add.iter().map(|t| t.trim()).filter(|t| !t.is_empty()) {
+        conn.execute(
+            "INSERT INTO learn_facts
+                (run_id, kind, text, source, thread_keys, contact_id, space, node_id, status, created_at)
+             VALUES (?1, 'you', ?2, 'you wrote it on the card', '[]', ?3, '', 0, 'proposed', ?4)",
+            params![run_id, text, contact_id, now_millis()],
+        )
+        .map_err(err)?;
+        out.push(KeptLine { id: conn.last_insert_rowid(), text: text.to_string(), node_id: 0 });
+    }
+    Ok(out)
+}
+
 pub fn decide_person(conn: &Connection, d: &PersonDecision) -> Result<PersonOutcome, String> {
     let mut out = PersonOutcome::default();
-    for line in &d.keep {
+    // Your own lines first: a row each, then kept with the others.
+    let mut lines: Vec<KeptLine> = d.keep.clone();
+    lines.extend(add_lines(conn, d.run_id, d.contact_id, &d.add)?);
+    for line in &lines {
         match keep(conn, line.id, &line.text, line.node_id) {
             Ok(_) => out.kept += 1,
             // Kept a moment ago from the same card: not a failure.
@@ -2204,12 +2236,16 @@ pub fn decide_person(conn: &Connection, d: &PersonDecision) -> Result<PersonOutc
     }
     // The card's own status. A card from before there were cards has no
     // row yet; it gets one now so the decision is remembered.
-    let status = if d.keep.is_empty() && d.summary.trim().is_empty() { "declined" } else { "kept" };
+    let status = if lines.is_empty() && d.summary.trim().is_empty() { "declined" } else { "kept" };
     if d.run_id > 0 {
+        // The summary as you left it, edits included, so the card reads the
+        // same next time.
         let changed = conn
             .execute(
-                "UPDATE learn_people SET status=?3, decided_at=?4 WHERE run_id=?1 AND contact_id=?2",
-                params![d.run_id, d.contact_id, status, now_millis()],
+                "UPDATE learn_people SET status=?3, decided_at=?4,
+                        summary = CASE WHEN ?5 = '' THEN summary ELSE ?5 END
+                  WHERE run_id=?1 AND contact_id=?2",
+                params![d.run_id, d.contact_id, status, now_millis(), d.summary.trim()],
             )
             .map_err(err)?;
         if changed == 0 {
@@ -2246,6 +2282,63 @@ pub fn decide_person(conn: &Connection, d: &PersonDecision) -> Result<PersonOutc
     let path = store.save_memory(&doc).map_err(|e| e.to_string())?;
     out.person_file = path.to_string_lossy().to_string();
     Ok(out)
+}
+
+/// What the model is asked for when a card's lines have changed and the
+/// summary should say what they say now. The mock recognises it by these
+/// words.
+pub const SUMMARY_MARK: &str = "You are writing a short summary of one person";
+
+pub const SUMMARY_SYSTEM: &str = "\
+You are writing a short summary of one person for the owner of a mailbox, from
+the facts the owner has decided to keep about them. Two or three sentences, in
+plain words, second person (\"your accountant\", \"you and she\"): who the person
+is to the owner, what the two of them deal with together, and what is going on
+between them now. Only what the facts support. No preamble, no heading, no
+bullet points: the sentences and nothing else.";
+
+/// Write the summary again from the lines that are kept. One small request;
+/// the lines are what was already read, so nothing new leaves the machine.
+#[tauri::command]
+pub async fn learn_summarise(ws: Ws<'_>, name: String, facts: Vec<String>) -> Result<String, String> {
+    let ws = (*ws).clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let (provider_id, _, model, ready, note) = destination_model(&ws);
+        if !ready {
+            return Err(note);
+        }
+        let provider = {
+            let providers = ws.providers.lock().unwrap();
+            providers.get(&provider_id)
+        }
+        .ok_or_else(|| format!("'{provider_id}' is not configured"))?;
+        let lines: Vec<String> = facts
+            .iter()
+            .map(|f| f.trim())
+            .filter(|f| !f.is_empty())
+            .map(|f| format!("- {f}"))
+            .collect();
+        if lines.is_empty() {
+            return Err("nothing kept to sum up".into());
+        }
+        let request = AgentRequest {
+            agent_id: super::assistant::ASSISTANT_ID.into(),
+            role: "assistant".into(),
+            model,
+            system: SUMMARY_SYSTEM.into(),
+            context: format!("# {name}\n\nWhat is kept about them:\n\n{}\n", lines.join("\n")),
+            goal: format!("Sum {name} up in two or three sentences from the facts above."),
+            ..Default::default()
+        };
+        let reply = provider.run(&request)?;
+        let text = reply.message.trim().trim_matches('"').trim().to_string();
+        if text.is_empty() {
+            return Err("the model sent nothing back".into());
+        }
+        Ok(text)
+    })
+    .await
+    .map_err(|e| format!("did not finish: {e}"))?
 }
 
 /// A person's card as a run left it: the summary, the facts, the decision.
@@ -2641,6 +2734,31 @@ mod tests {
         assert_eq!(out[0].text, "real");
     }
 
+    /// A line you write on the card yourself is filed like the rest, with
+    /// you as the source, and a blank line is not a fact.
+    #[test]
+    fn a_line_you_add_to_a_card_is_filed_with_the_others() {
+        let c = mem();
+        c.execute(
+            "INSERT INTO learn_runs (id, started_at, provider, model, status, depth, thread_keys, held_json)
+             VALUES (1, 10, 'mock', 'mock-1', 'done', 'full', '[]', '[]')",
+            [],
+        )
+        .unwrap();
+        let lines = add_lines(&c, 1, 7, &["Anna's birthday is in May".into(), "   ".into()]).unwrap();
+        assert_eq!(lines.len(), 1, "a blank line is not a fact");
+        let (text, source, cid): (String, String, i64) = c
+            .query_row(
+                "SELECT text, source, contact_id FROM learn_facts WHERE id = ?1",
+                params![lines[0].id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(text, "Anna's birthday is in May");
+        assert_eq!(source, "you wrote it on the card");
+        assert_eq!(cid, 7);
+    }
+
     /// A run's cards come back to be decided a person at a time, and a run
     /// from before there were cards is grouped by person from its facts.
     #[test]
@@ -2709,6 +2827,7 @@ mod tests {
                 summary: String::new(),
                 keep: vec![],
                 decline: ids.clone(),
+                add: vec![],
             },
         )
         .unwrap();
@@ -2788,25 +2907,15 @@ mod tests {
         assert!(decline(&c, id + 999).is_err(), "declining nothing is an error");
     }
 
-    /// A `thing` fact with nowhere to go says so instead of writing somewhere
-    /// convenient.
+    /// A `thing` fact goes with its thing when the mailbox names a space.
+    /// From a personal mailbox, which names none, it is still yours: it goes
+    /// to the personal store rather than being guessed into a space or
+    /// refused. Every fact that mailbox teaches lands there.
     #[test]
-    fn a_thing_fact_with_no_space_refuses_rather_than_guessing() {
-        let c = mem();
-        c.execute("INSERT INTO learn_runs (started_at) VALUES (1)", []).unwrap();
-        let run_id = c.last_insert_rowid();
-        c.execute(
-            "INSERT INTO learn_facts (run_id, kind, text, node_id, created_at)
-             VALUES (?1,'thing','They pay at 45 days',0,2)",
-            params![run_id],
-        )
-        .unwrap();
-        let id = c.last_insert_rowid();
-
-        let e = keep(&c, id, "They pay at 45 days", 0).unwrap_err();
-        assert!(e.contains("no space"), "{e}");
-        let still = facts(&c, run_id, "").unwrap();
-        assert_eq!(still[0].status, "proposed", "a failed keep must not mark it kept");
+    fn a_thing_fact_with_no_space_goes_to_the_personal_store() {
+        assert!(goes_to_a_space("thing", 3));
+        assert!(!goes_to_a_space("thing", 0), "no space named: personal");
+        assert!(!goes_to_a_space("you", 3), "about you: personal, whatever the space");
     }
 
     #[test]

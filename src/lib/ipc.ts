@@ -1584,6 +1584,8 @@ export interface PersonDecision {
   summary: string
   keep: KeptLine[]
   decline: number[]
+  /** Lines you wrote on the card yourself. Filed and kept with the rest. */
+  add: string[]
 }
 export interface PersonOutcome {
   kept: number
@@ -1604,6 +1606,9 @@ export interface LearnCard {
 }
 /** The cards of a run, to decide or look at again. `runId` 0 is the latest. */
 export const learnReview = (runId = 0) => invoke<LearnCard[]>('learn_review', { runId })
+/** The summary written again from the lines kept. One small request to the model. */
+export const learnSummarise = (name: string, facts: string[]) =>
+  invoke<string>('learn_summarise', { name, facts })
 
 /** Somebody in a live run's plan. */
 export interface LivePerson {

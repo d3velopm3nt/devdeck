@@ -727,6 +727,21 @@ impl LLMProvider for MockProvider {
                 usage: None,
             });
         }
+        // A card's summary written again: two sentences from the lines it was
+        // given, and a note that they are scripted.
+        if request.system.starts_with(super::learn::SUMMARY_MARK) {
+            let n = request.context.lines().filter(|l| l.starts_with("- ")).count();
+            return Ok(AgentResponse {
+                message: format!(
+                    "Summed up from the {n} line{} you kept (scripted by the mock provider). A real \
+                     model would say here who they are to you and what is going on between you now.",
+                    if n == 1 { "" } else { "s" }
+                ),
+                actions: vec![AgentAction::Done { summary: "summed up".into() }],
+                complete: true,
+                usage: None,
+            });
+        }
         // Named in a thread, with no tools: the scripts below would start
         // writing fixture files, which is exactly what a mention must not do.
         // Say what a scripted agent can honestly say.

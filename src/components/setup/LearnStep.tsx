@@ -259,6 +259,7 @@ export function LearnStep({
     summary: string,
     keep: ipc.KeptLine[],
     decline: number[],
+    add: string[] = [],
   ) => {
     setBusyCard(p.contact_id)
     setErr('')
@@ -268,13 +269,14 @@ export function LearnStep({
         contact_id: p.contact_id,
         name: p.name,
         email: p.email,
-        summary: keep.length ? summary : '',
+        summary: keep.length || add.length ? summary : '',
         keep,
         decline,
+        add,
       })
       const kept = new Map(keep.map((k) => [k.id, k.text]))
       const gone = new Set(decline)
-      const status = keep.length ? 'kept' : 'declined'
+      const status = keep.length || add.length ? 'kept' : 'declined'
       const settle = <T extends { id: number; text: string; status: string }>(f: T): T =>
         kept.has(f.id)
           ? { ...f, text: kept.get(f.id) ?? f.text, status: 'kept' }
@@ -288,14 +290,20 @@ export function LearnStep({
         }),
       )
       setDecided((cur) => ({ ...cur, [p.contact_id]: status }))
+      if (summary) setSummaries((cur) => ({ ...cur, [p.contact_id]: summary }))
       setSelected(null)
       setCards((cur) =>
         cur.map((c) =>
           c.run_id === runId && c.person.contact_id === p.contact_id
-            ? { ...c, status, facts: c.facts.map(settle) }
+            ? { ...c, status, summary: summary || c.summary, facts: c.facts.map(settle) }
             : c,
         ),
       )
+      // Lines you added are rows now; the receipt has them.
+      if (add.length && runId > 0) {
+        const fresh = await ipc.learnReview(runId).catch(() => null)
+        if (fresh) setCards(fresh)
+      }
     } catch (e) {
       setErr(String(e))
     } finally {
@@ -323,8 +331,8 @@ export function LearnStep({
       reading={reading}
       showButtons={showButtons}
       busy={busyCard === p.contact_id}
-      onDecide={(keep, decline) =>
-        void decide(plan?.run_id ?? 0, p, summaries[p.contact_id] ?? '', keep, decline)
+      onDecide={(keep, decline, summary, add) =>
+        void decide(plan?.run_id ?? 0, p, summary, keep, decline, add)
       }
     />
   )
@@ -343,7 +351,9 @@ export function LearnStep({
       reading={false}
       showButtons
       busy={busyCard === c.person.contact_id}
-      onDecide={(keep, decline) => void decide(c.run_id, c.person, c.summary, keep, decline)}
+      onDecide={(keep, decline, summary, add) =>
+        void decide(c.run_id, c.person, summary, keep, decline, add)
+      }
     />
   )
 
@@ -1076,9 +1086,12 @@ function PeopleList({
  * One person, one decision.
  *
  * The summary is the model's first line about them and the facts are the
- * rest. Keep files everything and writes the summary to their record;
- * Change opens the lines for ticking and editing; Dismiss declines them
- * all. A dozen Keep buttons per person was admin nobody was going to do.
+ * rest. Keep files everything and writes the summary as a note about them;
+ * Change opens the card: the summary as text you can edit, the lines for
+ * ticking and editing, a line of your own, and Update summary, which has
+ * the model write the summary again from the lines you are keeping. Dismiss
+ * declines them all. A dozen Keep buttons per person was admin nobody was
+ * going to do.
  */
 function PersonCard({
   p,
@@ -1097,31 +1110,58 @@ function PersonCard({
   reading: boolean
   showButtons: boolean
   busy: boolean
-  onDecide: (keep: ipc.KeptLine[], decline: number[]) => void
+  onDecide: (keep: ipc.KeptLine[], decline: number[], summary: string, add: string[]) => void
 }) {
   const [changing, setChanging] = useState(false)
   const [on, setOn] = useState<Record<number, boolean>>({})
   const [text, setText] = useState<Record<number, string>>({})
+  const [draft, setDraft] = useState(summary)
+  const [added, setAdded] = useState<string[]>([])
+  const [line, setLine] = useState('')
+  const [summing, setSumming] = useState(false)
+  const [note, setNote] = useState('')
+  // The model's summary can land after the card is on screen.
+  useEffect(() => {
+    if (!changing) setDraft(summary)
+  }, [summary, changing])
+
   const proposed = facts.filter((f) => f.status === 'proposed')
   const canDecide = showButtons && !state && !reading && !busy && (proposed.length > 0 || !!summary)
+  const ticked = () => proposed.filter((f) => on[f.fact.id] ?? true)
+  const wording = (f: LiveFact) => (text[f.fact.id] ?? f.fact.text).trim() || f.fact.text
 
   const keepAll = () =>
     onDecide(
       proposed.map((f) => ({ id: f.fact.id, text: f.fact.text, node_id: f.fact.node_id })),
       [],
+      summary,
+      [],
     )
-  const dismissAll = () => onDecide([], proposed.map((f) => f.fact.id))
+  const dismissAll = () => onDecide([], proposed.map((f) => f.fact.id), '', [])
   const keepThese = () => {
-    const keep = proposed
-      .filter((f) => on[f.fact.id] ?? true)
-      .map((f) => ({
-        id: f.fact.id,
-        text: (text[f.fact.id] ?? f.fact.text).trim() || f.fact.text,
-        node_id: f.fact.node_id,
-      }))
+    const keep = ticked().map((f) => ({ id: f.fact.id, text: wording(f), node_id: f.fact.node_id }))
     const decline = proposed.filter((f) => !(on[f.fact.id] ?? true)).map((f) => f.fact.id)
+    const extra = [...added, line.trim()].filter(Boolean)
     setChanging(false)
-    onDecide(keep, decline)
+    onDecide(keep, decline, draft.trim(), extra)
+  }
+  const addLine = () => {
+    const l = line.trim()
+    if (!l) return
+    setAdded((cur) => [...cur, l])
+    setLine('')
+  }
+  const rewrite = async () => {
+    setSumming(true)
+    setNote('')
+    try {
+      const lines = [...ticked().map(wording), ...added, line.trim()].filter(Boolean)
+      setDraft(await ipc.learnSummarise(p.name, lines))
+    } catch (e) {
+      setNote(String(e))
+    } finally {
+      setSumming(false)
+    }
   }
 
   return (
@@ -1152,7 +1192,27 @@ function PersonCard({
         )}
       </div>
 
-      {summary ? (
+      {changing ? (
+        <div className="flex flex-col gap-1.5">
+          <textarea
+            className="input min-h-[72px] resize-y text-[13px] leading-relaxed"
+            placeholder="Who they are to you, in two or three sentences."
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+          />
+          <div className="flex items-center gap-2">
+            <button
+              className="btn-ghost text-[11px]"
+              disabled={summing}
+              title="Have the model write the summary again from the lines you are keeping. One small request."
+              onClick={() => void rewrite()}
+            >
+              {summing ? 'Writing…' : 'Update summary from the lines'}
+            </button>
+            {note && <span className="text-[11px] text-err">{note}</span>}
+          </div>
+        </div>
+      ) : summary ? (
         <p className="m-0 text-[13px] leading-relaxed text-ink">{summary}</p>
       ) : reading ? (
         <p className="m-0 text-[12px] text-muted">Reading their threads…</p>
@@ -1201,6 +1261,30 @@ function PersonCard({
               />
             </label>
           ))}
+          {added.map((a, i) => (
+            <div key={`add-${i}`} className="flex items-start gap-2 text-[12px]">
+              <Icon name="check" size={12} className="mt-[5px] shrink-0 text-ok" />
+              <span className="flex-1 text-body">{a}</span>
+              <button
+                className="btn-ghost text-[11px] text-muted"
+                onClick={() => setAdded((cur) => cur.filter((_, j) => j !== i))}
+              >
+                <Icon name="close" size={11} />
+              </button>
+            </div>
+          ))}
+          <div className="flex items-center gap-2">
+            <input
+              className="input flex-1 text-[12px]"
+              placeholder="A line of your own about them"
+              value={line}
+              onChange={(e) => setLine(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addLine()}
+            />
+            <button className="btn-ghost text-[11.5px]" disabled={!line.trim()} onClick={addLine}>
+              Add
+            </button>
+          </div>
           <span className="text-[11px] text-faint">
             Untick a line to dismiss it. Edit the words and they are kept as you wrote them.
           </span>
@@ -1214,7 +1298,13 @@ function PersonCard({
               <button className="btn-primary text-[11.5px]" onClick={keepThese}>
                 Keep these
               </button>
-              <button className="btn-ghost text-[11.5px]" onClick={() => setChanging(false)}>
+              <button
+                className="btn-ghost text-[11.5px]"
+                onClick={() => {
+                  setChanging(false)
+                  setDraft(summary)
+                }}
+              >
                 Cancel
               </button>
             </>
@@ -1223,11 +1313,9 @@ function PersonCard({
               <button className="btn-primary text-[11.5px]" onClick={keepAll}>
                 Keep
               </button>
-              {proposed.length > 0 && (
-                <button className="btn-ghost text-[11.5px]" onClick={() => setChanging(true)}>
-                  Change
-                </button>
-              )}
+              <button className="btn-ghost text-[11.5px]" onClick={() => setChanging(true)}>
+                Change
+              </button>
               <button className="btn-ghost text-[11.5px] text-muted" onClick={dismissAll}>
                 Dismiss
               </button>

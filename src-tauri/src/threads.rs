@@ -61,8 +61,12 @@ fn feature_persona(
     let managing = {
         let db = app.try_state::<Db>().ok_or("no database")?;
         let conn = db.0.lock().unwrap();
-        crate::bots::bot_on_node(&conn, node_id)
-            .filter(|b| b.feature.trim() == feature_id)
+        crate::bots::managers_on(&conn, node_id)
+            .into_iter()
+            .find(|b| {
+                b.portfolio.iter().any(|o| o.node_id == node_id && o.feature == feature_id)
+                    || b.feature.trim() == feature_id
+            })
             .map(|b| (crate::bots::persona_in(&conn, ws, &b), b.name.clone()))
     };
     match managing {
@@ -182,7 +186,21 @@ fn persona_for_thread(
     if let Some(node_id) = conv.bot_node.or(conv.node) {
         let db = app.try_state::<Db>().ok_or("no database")?;
         let conn = db.0.lock().unwrap();
-        if let Some(bot) = crate::bots::bot_on_node(&conn, node_id) {
+        // A manager's own chat answers as that manager. A space's thread
+        // answers as its manager only when it has exactly one.
+        let bot = match (&conv.bot_handle, conv.bot_node) {
+            (Some(h), _) => crate::bots::bot_on(&conn, h),
+            (None, Some(n)) => crate::bots::bot_on_node(&conn, n),
+            (None, None) => {
+                let mut on = crate::bots::managers_on(&conn, node_id);
+                if on.len() == 1 {
+                    on.pop()
+                } else {
+                    None
+                }
+            }
+        };
+        if let Some(bot) = bot {
             return Ok(crate::bots::persona_in(&conn, ws, &bot));
         }
     }
@@ -214,10 +232,10 @@ fn pull_in_bots(
     };
     let mut named = Vec::new();
     for name in names {
-        let Some(bot) = bots.iter().find(|b| crate::bots::answers_to(b, &name)) else {
+        let Some(bot) = crate::bots::find_mentioned(&bots, &name) else {
             continue;
         };
-        let id = format!("bot:{}", bot.node_id);
+        let id = format!("bot:{}", crate::bots::handle_of(bot));
         if let Ok(true) = convs.add_participant(conv_id, &id) {
             let _ = convs.post(
                 conv_id,
@@ -227,7 +245,7 @@ fn pull_in_bots(
                 ),
             );
         }
-        if !named.iter().any(|b: &crate::bots::Bot| b.node_id == bot.node_id) {
+        if !named.iter().any(|b: &crate::bots::Bot| b.handle == bot.handle) {
             named.push(bot.clone());
         }
     }
@@ -471,10 +489,15 @@ fn node_persona(
     node_id: i64,
     node_name: &str,
 ) -> Result<Persona, String> {
-    let bot = {
+    let (bot, several) = {
         let db = app.try_state::<Db>().ok_or("no database")?;
         let conn = db.0.lock().unwrap();
-        crate::bots::bot_on_node(&conn, node_id).map(|b| crate::bots::persona_in(&conn, ws, &b))
+        let mut on = crate::bots::managers_on(&conn, node_id);
+        if on.len() == 1 {
+            (on.pop().map(|b| crate::bots::persona_in(&conn, ws, &b)), Vec::new())
+        } else {
+            (None, on)
+        }
     };
     let mut p = match bot {
         Some(p) => p,
@@ -483,10 +506,25 @@ fn node_persona(
                 .agent(crate::aiw::assistant::ASSISTANT_ID)
                 .ok_or("no assistant agent")?;
             let mut p = Persona::assistant(&agent.system);
-            p.system.push_str(&format!(
-                "\n\nYou are talking about “{node_name}”, one node of the vault tree. There is no \
-                 bot here, so you answer for it."
-            ));
+            if several.is_empty() {
+                p.system.push_str(&format!(
+                    "\n\nYou are talking about “{node_name}”, one node of the vault tree. There is no \
+                     bot here, so you answer for it."
+                ));
+            } else {
+                // Several managers share this room. The assistant answers for
+                // the space; each of them answers when named.
+                p.system.push_str(&format!(
+                    "\n\nYou are talking about “{node_name}”, one node of the vault tree. Several \
+                     managers work here, all in this thread: {}. You answer for the space. When \
+                     something is one of theirs, say so and name them with @ so they are pulled in.",
+                    several
+                        .iter()
+                        .map(|b| format!("{} (@{})", b.name, crate::bots::handle_of(b)))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            }
             p
         }
     };
@@ -508,7 +546,27 @@ pub fn node_thread(
         let conn = db.0.lock().unwrap();
         db::node_by_id(&conn, node_id).map_err(|e| e.to_string())?.name
     };
-    ws.convs()?.for_node(node_id, &name)
+    let conv = ws.convs()?.for_node(node_id, &name)?;
+    seat_managers(&app, &workspace, &conv.id, node_id);
+    ws.convs()?.load(&conv.id)
+}
+
+/// Every manager working in a space sits in its thread, the room they share,
+/// so each can be seen there and reached with its handle.
+fn seat_managers(app: &tauri::AppHandle, ws: &Arc<Workspace>, conv_id: &str, node_id: i64) {
+    let Some(db) = app.try_state::<Db>() else { return };
+    let bots = {
+        let conn = db.0.lock().unwrap();
+        crate::bots::managers_on(&conn, node_id)
+    };
+    // One manager is the room's host already, not a guest in it.
+    if bots.len() < 2 {
+        return;
+    }
+    let Ok(convs) = ws.convs() else { return };
+    for b in bots {
+        let _ = convs.add_participant(conv_id, &format!("bot:{}", crate::bots::handle_of(&b)));
+    }
 }
 
 #[tauri::command]
@@ -527,6 +585,7 @@ pub async fn node_thread_send(
     };
     let who = node_persona(&app, &workspace, node_id, &name)?;
     let conv_id = workspace.convs()?.for_node(node_id, &name)?.id;
+    seat_managers(&app, &workspace, &conv_id, node_id);
     let named = pull_in_bots(&app, &workspace, &conv_id, &text);
 
     let emit = app.clone();

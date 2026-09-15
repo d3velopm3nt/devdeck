@@ -998,6 +998,7 @@ pub fn run() {
             bots::bot_delete,
             bots::bot_create,
             bots::bot_plan,
+            bots::bot_plan_proposal,
             bots::bot_work,
             bots::bot_work_save,
             bots::bot_work_delete,

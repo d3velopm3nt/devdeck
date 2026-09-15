@@ -197,7 +197,7 @@ export function Thread({
   // ran when someone typed `@` — so the whole window went white at exactly
   // the moment the feature was being used.
   const [speaking, setSpeaking] = useState<Record<string, string>>({})
-  const hostId = conv?.bot_node != null ? `bot:${conv.bot_node}` : conv?.messages.find((m) => m.by && m.from === 'assistant')?.by
+  const hostId = conv?.bot_handle ? `bot:${conv.bot_handle}` : conv?.bot_node != null ? `bot:${conv.bot_node}` : conv?.messages.find((m) => m.by && m.from === 'assistant')?.by
   // The picker: which handles match the `@word` at the caret, and which one is
   // lit. It is a courtesy — the backend reads `@name` out of the sent text
   // either way — but a thing that only works if you already know the exact
@@ -221,17 +221,17 @@ export function Thread({
   const handles: Handle[] = mention
     ? [
         { handle: 'you', name: 'you — puts it in the Inbox', kind: 'you' as const },
-        // A bot answers to its folder's name, hyphenated, which is what the
-        // backend resolves. Its display name is shown beside it.
+        // A manager answers to its handle, which the backend resolves first:
+        // several managers on one space all answer to the space's name.
         ...bots.map((b) => ({
-          handle: b.node_name.trim().toLowerCase().replace(/\s+/g, '-'),
+          handle: b.handle || b.node_name.trim().toLowerCase().replace(/\s+/g, '-'),
           name: b.name,
           kind: 'bot' as const,
           meta: b.agent ? `runs ${b.agent}` : 'watches only',
           state: b.every
             ? { text: 'watching', tone: 'text-muted' }
             : { text: 'no heartbeat', tone: 'text-faint' },
-          open: () => openBot(b.node_id, b.name),
+          open: () => openBot(b.node_id, b.name, false, b.handle),
         })),
         ...agents
           .filter((a) => a.id !== 'assistant')

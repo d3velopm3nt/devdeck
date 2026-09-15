@@ -56,7 +56,7 @@ export function BotPlan({
     if (!title) return
     setAdding('')
     run(() =>
-      ipc.botWorkSave({ nodeId: bot.node_id, id: '', title, status: 'unclaimed', assignee: null }),
+      ipc.botWorkSave({ nodeId: bot.node_id, handle: bot.handle, id: '', title, status: 'unclaimed', assignee: null }),
     )
   }
 
@@ -95,7 +95,8 @@ export function BotPlan({
       {missing.length > 0 && (
         <div className="rounded-lg border border-indigo-500/30 bg-indigo-500/[0.05] px-3.5 py-3">
           <div className="text-[12px] text-ink">
-            {template?.name} brings {missing.length} step{missing.length === 1 ? '' : 's'}
+            {template?.name} {template?.id === 'proposal' ? 'proposes' : 'brings'} {missing.length} step
+            {missing.length === 1 ? '' : 's'}
             {work.length > 0 ? ' you do not have' : ''}
           </div>
           <ul className="mt-2 flex flex-col gap-1">
@@ -110,7 +111,7 @@ export function BotPlan({
           </ul>
           <button
             className="btn-primary mt-2.5 text-[11.5px]"
-            onClick={() => run(() => ipc.botPlan(bot.node_id, missing))}
+            onClick={() => run(() => ipc.botPlan(bot.node_id, missing, bot.handle))}
           >
             Add them to the plan
           </button>
@@ -136,7 +137,7 @@ export function BotPlan({
               onClick={() =>
                 run(() =>
                   ipc.botWorkSave({
-                    nodeId: bot.node_id,
+                    nodeId: bot.node_id, handle: bot.handle,
                     id: w.id,
                     title: w.title,
                     status: w.status === 'done' ? 'in-progress' : 'done',
@@ -161,7 +162,7 @@ export function BotPlan({
                     setEditing(null)
                     run(() =>
                       ipc.botWorkSave({
-                        nodeId: bot.node_id,
+                        nodeId: bot.node_id, handle: bot.handle,
                         id: w.id,
                         title: draft.trim(),
                         status: w.status,
@@ -200,7 +201,7 @@ export function BotPlan({
                   setAssigning(null)
                   run(() =>
                     ipc.botWorkSave({
-                      nodeId: bot.node_id,
+                      nodeId: bot.node_id, handle: bot.handle,
                       id: w.id,
                       title: w.title,
                       status: w.status,
@@ -234,7 +235,7 @@ export function BotPlan({
               onChange={(e) =>
                 run(() =>
                   ipc.botWorkSave({
-                    nodeId: bot.node_id,
+                    nodeId: bot.node_id, handle: bot.handle,
                     id: w.id,
                     title: w.title,
                     status: e.target.value,
@@ -255,7 +256,7 @@ export function BotPlan({
               title="Remove this step"
               onClick={() => {
                 if (!confirm(`Remove “${w.title}” from the plan?`)) return
-                run(() => ipc.botWorkDelete(bot.node_id, w.id))
+                run(() => ipc.botWorkDelete(bot.node_id, w.id, bot.handle))
               }}
             >
               <Icon name="delete" size={12} />

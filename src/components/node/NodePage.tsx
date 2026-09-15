@@ -29,6 +29,7 @@ import { openAiwDoc, openBot, openNodeConfig, openNodeSetup, openSpace } from '.
 import { Thread } from '../thread/Thread'
 import { NodeFiles } from './NodeFiles'
 import { NodeReminders } from './NodeReminders'
+import { NodeManagers } from './NodeManagers'
 import { NodeAside } from './NodeAside'
 import { NodeRuns } from './NodeRuns'
 import { Git } from '../aiw/AiWorkspace'
@@ -39,7 +40,7 @@ import { Git } from '../aiw/AiWorkspace'
 /// some of them greyed out: a folder with no repository has no Git tab at all,
 /// rather than a Git tab that apologises. That is the whole point of the shape
 /// — a client is not a deficient project.
-type Tab = 'team' | 'thread' | 'known' | 'files' | 'git' | 'services' | 'commands' | 'reminders'
+type Tab = 'team' | 'thread' | 'known' | 'files' | 'git' | 'services' | 'commands' | 'reminders' | 'managers'
 
 /// Git, pointed at this node first.
 ///
@@ -99,7 +100,10 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
   const node = findNode(nodes, nodeId)
   const parent = node ? findNode(nodes, node.parent_id) : null
   const ws = workspaceOf(nodes, node)
-  const bot = bots.find((b) => b.node_id === nodeId)
+  // Every manager working here. A business has several; a space with
+  // exactly one still has "its bot".
+  const managers = bots.filter((b) => b.node_id === nodeId || (b.businesses ?? []).includes(nodeId))
+  const bot = managers.length === 1 ? managers[0] : undefined
   const git = gitByNode[nodeId]
 
   const counts = useMemo(() => {
@@ -139,6 +143,7 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
     { id: 'services', label: 'Services', when: counts.svcs > 0, count: counts.svcs },
     { id: 'commands', label: 'Commands', when: counts.cmds > 0, count: counts.cmds },
     { id: 'reminders', label: 'Reminders', when: true, count: reminders || undefined },
+    { id: 'managers', label: 'Managers', when: true, count: managers.length || undefined },
   ]
   const chips: { text: string; tone?: string; dashed?: boolean }[] = [
     ...(git?.branch ? [{ text: git.branch }] : []),
@@ -199,7 +204,7 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
             {/* A business has a team of roles, not one bot: its Team tab says who. */}
             {bot && !isBusiness ? (
-              <button className="btn-ghost text-[11px]" onClick={() => openBot(bot.node_id, bot.name)}>
+              <button className="btn-ghost text-[11px]" onClick={() => openBot(bot.node_id, bot.name, false, bot.handle)}>
                 <Icon name="bot" size={12} /> Its bot
               </button>
             ) : null}
@@ -277,6 +282,12 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
         </div>
       )}
 
+      {tab === 'managers' && (
+        <div className="min-h-0 flex-1 overflow-auto px-5 py-3">
+          <NodeManagers node={node} managers={managers} isBusiness={isBusiness} />
+        </div>
+      )}
+
       {tab === 'known' && (
         <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
           <div className="grid max-w-[980px] grid-cols-2 gap-3">
@@ -325,7 +336,9 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
             <>
               {bot
                 ? `${bot.name} watches this space. Its wakes land here as receipts.`
-                : 'Nothing watches this space yet. Ask about it, or give it a bot from its settings.'}
+                : managers.length > 1
+                  ? `${managers.map((m) => m.name).join(', ')} work in this space. Their wakes land here, each under its own name, and @ reaches one.`
+                  : 'Nothing watches this space yet. Ask about it, or give it a bot from its settings.'}
             </>
           }
         />

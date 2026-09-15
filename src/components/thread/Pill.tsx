@@ -109,18 +109,22 @@ export const ThreadContext = createContext<{ convId: string | null; feature: boo
 
 /// The id behind an `@handle`, or null when nobody answers to it.
 ///
-/// Agents are named by id. A bot answers to its folder's name, hyphenated —
-/// the same rule the backend resolves — and to the start of its own name.
+/// Agents are named by id. A manager answers to its handle first, then to its
+/// folder's name, hyphenated — the same order the backend resolves — and to
+/// the start of its own name.
 export function resolveHandle(
   handle: string,
   agents: { id: string; name: string }[],
-  bots: { node_id: number; node_name: string; name: string }[],
+  bots: { node_id: number; node_name: string; name: string; handle?: string }[],
 ): string | null {
   const h = handle.toLowerCase()
   if (h === 'you') return 'you'
   if (agents.some((a) => a.id.toLowerCase() === h)) return h
   const slug = (s: string) => s.trim().toLowerCase().replace(/\s+/g, '-')
-  const bot = bots.find(
+  // Its handle first: several managers on one space answer to its name.
+  const bot =
+    bots.find((b) => !!b.handle && b.handle.toLowerCase() === h) ??
+    bots.find(
     (b) =>
       slug(b.node_name) === h ||
       slug(b.name) === h ||
@@ -128,7 +132,7 @@ export function resolveHandle(
       slug(b.node_name).split('-')[0] === h ||
       slug(b.name).split('-')[0] === h,
   )
-  return bot ? `bot:${bot.node_id}` : null
+  return bot ? `bot:${bot.handle || bot.node_id}` : null
 }
 
 export function Pill({
@@ -213,7 +217,9 @@ export function Pill({
   }
 
   const isBot = id.startsWith('bot:')
-  const bot = isBot ? bots.find((b) => `bot:${b.node_id}` === id) : undefined
+  const bot = isBot
+    ? (bots.find((b) => `bot:${b.handle}` === id) ?? bots.find((b) => `bot:${b.node_id}` === id))
+    : undefined
   const agent = !isBot ? agents.find((a) => a.id === id) : undefined
   const live = sessions.find(
     (x) => x.agent_id === id && (x.status === 'working' || x.status === 'planning'),
@@ -355,7 +361,7 @@ export function Pill({
             <span className="mt-2 flex gap-1.5">
               <button
                 className="btn-ghost text-[11px]"
-                onClick={() => openBot(bot.node_id, bot.name)}
+                onClick={() => openBot(bot.node_id, bot.name, false, bot.handle)}
               >
                 <Icon name="bot" size={11} /> Open its page
               </button>

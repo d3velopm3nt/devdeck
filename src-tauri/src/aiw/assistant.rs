@@ -132,6 +132,10 @@ pub struct ConversationMeta {
     /// did — so it is the same record, marked rather than duplicated.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bot_node: Option<i64>,
+    /// The manager whose own chat this is, by handle. A space can have several
+    /// managers, so the node alone no longer says whose chat it is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bot_handle: Option<String>,
     /// The feature this is the thread of, when it is one.
     ///
     /// The feature *is* the room: it already exists in the deck, so it gains
@@ -450,6 +454,8 @@ pub struct ConversationSummary {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bot_node: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bot_handle: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub feature: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub node: Option<i64>,
@@ -631,6 +637,60 @@ impl Conversations {
         Ok(meta)
     }
 
+    /// A manager's own chat, by handle: found, adopted, or made.
+    ///
+    /// Adopted: a chat made while a space had one manager was keyed by the
+    /// node. The manager it was made for (the title is its name) takes it;
+    /// any other manager on the same space gets a chat of its own.
+    pub fn for_manager(
+        &self,
+        handle: &str,
+        node_id: i64,
+        project_id: &str,
+        name: &str,
+    ) -> Result<ConversationMeta, String> {
+        let _gate = writing();
+        let list = self.list();
+        if let Some(existing) = list.iter().find(|c| c.bot_handle.as_deref() == Some(handle)) {
+            return self.load(&existing.id);
+        }
+        if let Some(old) = list
+            .iter()
+            .find(|c| c.bot_handle.is_none() && c.bot_node == Some(node_id) && c.title == name)
+        {
+            let mut conv = self.load(&old.id)?;
+            conv.bot_handle = Some(handle.to_string());
+            self.save(&conv)?;
+            return Ok(conv);
+        }
+        let now = now_iso();
+        let meta = ConversationMeta {
+            id: new_id("conv"),
+            title: name.to_string(),
+            started_at: now.clone(),
+            updated_at: now,
+            project_id: Some(project_id.to_string()),
+            bot_node: Some(node_id),
+            bot_handle: Some(handle.to_string()),
+            ..Default::default()
+        };
+        self.save(&meta)?;
+        Ok(meta)
+    }
+
+    /// Something a manager said on its own in a room it shares, under its
+    /// own name rather than the room's.
+    pub fn post_as(&self, conv_id: &str, text: &str, by: &str) -> Result<ChatMessage, String> {
+        self.post(conv_id, ChatMessage {
+            at: now_iso(),
+            from: Speaker::Assistant,
+            text: text.trim().to_string(),
+            tool: Some("wake".into()),
+            ok: Some(true),
+            by: Some(by.to_string()),
+        })
+    }
+
     /// Something the bot said on its own — a wake report — appended without a
     /// turn. The receipt is the log, and the thread is where the receipt goes.
     pub fn post_as_bot(&self, conv_id: &str, text: &str) -> Result<ChatMessage, String> {
@@ -682,6 +742,7 @@ impl Conversations {
         fresh.feature = conv.feature.clone();
         fresh.node = conv.node;
         fresh.bot_node = conv.bot_node;
+        fresh.bot_handle = conv.bot_handle.clone();
         for p in &conv.participants {
             if !fresh.participants.iter().any(|x| x.eq_ignore_ascii_case(p)) {
                 fresh.participants.push(p.clone());
@@ -786,6 +847,7 @@ impl Conversations {
                 updated_at: m.updated_at,
                 project_id: m.project_id,
                 bot_node: m.bot_node,
+                bot_handle: m.bot_handle,
                 feature: m.feature,
                 node: m.node,
                 participants: m.participants,
@@ -1692,7 +1754,7 @@ impl Assistant {
         }
 
         // Their room hears about it, from the manager who asked.
-        match convs.for_bot(to.node_id, &to.project_id, &to.name) {
+        match convs.for_manager(&to.handle, to.node_id, &to.project_id, &to.name) {
             Ok(room) => {
                 let _ = convs.post(
                     &room.id,

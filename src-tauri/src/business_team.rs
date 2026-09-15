@@ -114,6 +114,89 @@ pub fn catalogue() -> Vec<RoleDef> {
     ]
 }
 
+/// A role's first steps, from what the business has: its projects, its
+/// products, its clients. Proposed when a manager wakes with nothing on its
+/// plan, and added only when you say so.
+pub fn first_steps(conn: &Connection, role: &str, node_id: i64) -> Vec<String> {
+    let nodes = crate::db::nodes_on(conn).unwrap_or_default();
+    let mut under: Vec<i64> = vec![node_id];
+    let mut i = 0;
+    while i < under.len() {
+        let id = under[i];
+        for n in nodes.iter().filter(|n| n.parent_id == Some(id)) {
+            under.push(n.id);
+        }
+        i += 1;
+    }
+    let projects: Vec<String> = nodes
+        .iter()
+        .filter(|n| n.kind == "project" && n.id != node_id && under.contains(&n.id))
+        .map(|n| n.name.clone())
+        .collect();
+    let in_folder = |name: &str| -> Vec<String> {
+        nodes
+            .iter()
+            .find(|n| n.parent_id == Some(node_id) && n.name.eq_ignore_ascii_case(name))
+            .map(|f| nodes.iter().filter(|n| n.parent_id == Some(f.id)).map(|n| n.name.clone()).collect())
+            .unwrap_or_default()
+    };
+    let meta = business::read(conn, node_id).ok().flatten();
+    let name = meta.as_ref().map(|m| m.name.clone()).filter(|n| !n.is_empty()).unwrap_or_else(|| "the business".into());
+    let products: Vec<String> = meta
+        .as_ref()
+        .map(|m| {
+            m.items
+                .iter()
+                .filter(|i| i.field == "product" && (i.state == "agreed" || (i.kind == "you" && i.state != "declined")))
+                .map(|i| i.text.clone())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let mut out: Vec<String> = Vec::new();
+    match role {
+        "engineering" => {
+            for p in projects.iter().take(3) {
+                out.push(format!("Check {p} builds and its tests pass"));
+            }
+            if projects.is_empty() {
+                out.push(format!("List the repositories {name} depends on"));
+            }
+            out.push("List dependencies with known vulnerabilities across the repositories".into());
+            out.push("Review the open pull requests and say which are stuck".into());
+        }
+        "product" => {
+            for p in products.iter().take(3) {
+                out.push(format!("Write down what goes into the next release of {p}"));
+            }
+            out.push(format!("Collect what clients have asked {name} for, by product"));
+        }
+        "operations" => {
+            out.push(format!("List what is due this week across {name}"));
+            out.push("Note anything stuck waiting on someone, and on whom".into());
+        }
+        "client-success" => {
+            let clients = in_folder("Clients");
+            for c in clients.iter().take(3) {
+                out.push(format!("Check whether {c} is waiting on a reply"));
+            }
+            if clients.is_empty() {
+                out.push(format!("List the clients waiting on a reply from {name}"));
+            }
+        }
+        "finance" => {
+            out.push("List invoices sent and not yet paid".into());
+            out.push("Note quotes waiting on an answer".into());
+        }
+        "sales-marketing" => {
+            out.push(format!("Check the website still says what {name} sells"));
+            out.push("List proposals sent and not yet answered".into());
+        }
+        _ => {}
+    }
+    out
+}
+
 #[derive(Serialize, Clone, Debug, Default, PartialEq)]
 pub struct RoleOffer {
     #[serde(flatten)]

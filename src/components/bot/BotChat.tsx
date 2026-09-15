@@ -17,12 +17,12 @@ export function BotChat({ bot }: { bot: ipc.Bot }) {
   const acts = bot.agent.trim().length > 0
   return (
     <Thread
-      reloadKey={bot.node_id}
+      reloadKey={bot.handle || bot.node_id}
       dir={bot.dir}
       nodeId={bot.node_id}
       agentId={acts ? bot.agent : 'assistant'}
-      load={() => ipc.botThread(bot.node_id)}
-      send={(text) => ipc.botThreadSend(bot.node_id, text)}
+      load={() => ipc.botThread(bot.node_id, bot.handle)}
+      send={(text) => ipc.botThreadSend(bot.node_id, text, bot.handle)}
       name={bot.name}
       placeholder={`Message ${bot.name} — @ an agent to pull one in`}
       footnote={

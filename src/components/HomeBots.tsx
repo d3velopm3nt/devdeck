@@ -58,7 +58,7 @@ export function HomeBots() {
   const { nodes } = useApp()
   const aiw = useAiw()
   const [bots, setBots] = useState<ipc.Bot[] | null>(null)
-  const [standing, setStanding] = useState<Record<number, ipc.BotStanding>>({})
+  const [standing, setStanding] = useState<Record<string, ipc.BotStanding>>({})
   const [err, setErr] = useState('')
 
   useEffect(() => {
@@ -69,13 +69,13 @@ export function HomeBots() {
       .catch((e) => setErr(String(e)))
     void ipc
       .botsStanding()
-      .then((rows) => setStanding(Object.fromEntries(rows.map((r) => [r.node_id, r]))))
+      .then((rows) => setStanding(Object.fromEntries(rows.map((r) => [r.handle || String(r.node_id), r]))))
       .catch(() => {})
   }, [])
 
   const rows = useMemo(() => {
     return (bots ?? []).map((b) => {
-      const s = standing[b.node_id]
+      const s = standing[b.handle || String(b.node_id)]
       const project = String(b.node_id)
       const working = aiw.sessions.some(
         (x) => x.project_id === project && (x.status === 'working' || x.status === 'planning'),
@@ -159,10 +159,10 @@ export function HomeBots() {
             const [a, b] = twoLines(bot.name)
             return (
               <button
-                key={bot.node_id}
+                key={bot.handle || bot.node_id}
                 className={`flex w-[96px] shrink-0 flex-col items-center gap-1.5 rounded-xl border px-1 py-2.5 transition hover:-translate-y-0.5 hover:shadow-lg ${tone.tile}`}
                 title={`${bot.name} — ${says}`}
-                onClick={() => openBot(bot.node_id, bot.name)}
+                onClick={() => openBot(bot.node_id, bot.name, false, bot.handle)}
               >
                 <span className="relative flex items-center justify-center">
                   {/* The ring is the whole "live" idea: it breathes while the
@@ -232,11 +232,11 @@ export function HomeBots() {
             const tone = TONE[mood]
             return (
               <button
-                key={bot.node_id}
+                key={bot.handle || bot.node_id}
                 className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-hover/40 ${
                   mood === 'blocked' ? 'bg-red-500/[0.06]' : ''
                 }`}
-                onClick={() => openBot(bot.node_id, bot.name)}
+                onClick={() => openBot(bot.node_id, bot.name, false, bot.handle)}
               >
                 <span className={`h-2 w-2 shrink-0 rounded-full ${tone.dot}`} />
                 <span className="w-[104px] shrink-0 truncate text-[12px] font-semibold text-ink">

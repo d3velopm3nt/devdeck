@@ -29,13 +29,19 @@ import { AssistantThread } from './thread/AssistantThread'
 import { CAPTURE_BOT } from '../lib/devCapture'
 
 /// Who is on the right: a bot by its node, or the assistant.
-type Picked = { kind: 'assistant' } | { kind: 'bot'; nodeId: number; ask?: boolean }
+type Picked = { kind: 'assistant' } | { kind: 'bot'; nodeId: number; handle?: string; ask?: boolean }
+
+const isPicked = (p: Picked, b: { handle: string; node_id: number }) =>
+  p.kind === 'bot' && (p.handle ? p.handle === b.handle : p.nodeId === b.node_id)
 
 const KEY = 'devdeck.bots.picked'
 
 function loadPicked(): Picked {
   if (CAPTURE_BOT) return { kind: 'bot', nodeId: Number(CAPTURE_BOT) }
-  const v = Number(localStorage.getItem(KEY))
+  const raw = localStorage.getItem(KEY) ?? ''
+  const v = Number(raw)
+  // A handle now; a space's id from before a space could have several.
+  if (raw && !Number.isFinite(v)) return { kind: 'bot', nodeId: 0, handle: raw }
   return Number.isFinite(v) && v > 0 ? { kind: 'bot', nodeId: v } : { kind: 'assistant' }
 }
 
@@ -47,7 +53,7 @@ export function BotsPage({ compact }: { compact?: boolean } = {}) {
   const [picked, setPicked] = useState<Picked>(loadPicked)
 
   useEffect(() => {
-    localStorage.setItem(KEY, picked.kind === 'bot' ? String(picked.nodeId) : '')
+    localStorage.setItem(KEY, picked.kind === 'bot' ? picked.handle || String(picked.nodeId) : '')
   }, [picked])
 
   useEffect(() => {
@@ -59,7 +65,11 @@ export function BotsPage({ compact }: { compact?: boolean } = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const previewOf = (nodeId: number) => threads?.find((t) => t.bot_node === nodeId)
+  // Each manager's own chat, by handle. Several share a space, so the space
+  // alone would give all of them the same last line.
+  const previewOf = (b: { handle: string; node_id: number; name: string }) =>
+    threads?.find((t) => t.bot_handle === b.handle) ??
+    threads?.find((t) => !t.bot_handle && t.bot_node === b.node_id && t.title === b.name)
   const assistantThread = threads?.find((t) => !t.bot_node && !t.feature && !t.node)
 
   // Every bot, every workspace. A bot two tabs over is still one of yours,
@@ -73,7 +83,7 @@ export function BotsPage({ compact }: { compact?: boolean } = {}) {
 
   // A bot that was deleted while selected must not leave a page for nothing.
   const current: Picked =
-    picked.kind === 'bot' && bots.length > 0 && !bots.some((b) => b.node_id === picked.nodeId)
+    picked.kind === 'bot' && bots.length > 0 && !bots.some((b) => isPicked(picked, b))
       ? { kind: 'assistant' }
       : picked
 
@@ -140,15 +150,15 @@ export function BotsPage({ compact }: { compact?: boolean } = {}) {
           {bots.map((b) => {
             const node = findNode(nodes, b.node_id)
             const ws = workspaceOf(nodes, node)
-            const t = previewOf(b.node_id)
-            const on = current.kind === 'bot' && current.nodeId === b.node_id
+            const t = previewOf(b)
+            const on = isPicked(current, b)
             return (
               <button
-                key={b.node_id}
+                key={b.handle || b.node_id}
                 className={`flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left ${
                   on ? 'bg-hover' : 'hover:bg-hover/50'
                 }`}
-                onClick={() => setPicked({ kind: 'bot', nodeId: b.node_id })}
+                onClick={() => setPicked({ kind: 'bot', nodeId: b.node_id, handle: b.handle })}
               >
                 <span
                   className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[10px] font-bold text-black/80"
@@ -208,7 +218,12 @@ export function BotsPage({ compact }: { compact?: boolean } = {}) {
         {current.kind === 'assistant' ? (
           <AssistantThread />
         ) : (
-          <BotDetail key={current.nodeId} nodeId={current.nodeId} ask={current.ask} />
+          <BotDetail
+            key={current.handle || current.nodeId}
+            nodeId={bots.find((b) => isPicked(current, b))?.node_id ?? current.nodeId}
+            handle={current.handle}
+            ask={current.ask}
+          />
         )}
       </div>
 
@@ -220,7 +235,7 @@ export function BotsPage({ compact }: { compact?: boolean } = {}) {
             void refreshBots()
             // Straight onto its page, with the interview open: a bot that was
             // just made is the one time asking is welcome.
-            setPicked({ kind: 'bot', nodeId: b.node_id, ask: true })
+            setPicked({ kind: 'bot', nodeId: b.node_id, handle: b.handle, ask: true })
           }}
         />
       )}

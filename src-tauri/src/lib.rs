@@ -1172,6 +1172,7 @@ pub fn run() {
             mail::mail_sync,
             mail::mail_list,
             mail::mail_counts,
+            mail::mail_account_boxes,
             mail::mail_body,
             mail::mail_mark_read,
             mail::mail_set_flag,

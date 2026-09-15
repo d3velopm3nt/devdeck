@@ -468,6 +468,24 @@ pub fn build_corpus_scoped(
         ranked.into_iter().filter(|c| only.contains(&c.contact_id)).collect()
     };
     if chosen.is_empty() {
+        if !accounts.is_empty() {
+            let ids = accounts.iter().map(|a| a.to_string()).collect::<Vec<_>>().join(",");
+            let sent: i64 = conn
+                .query_row(
+                    &format!("SELECT COUNT(*) FROM mail_messages WHERE mailbox='Sent' AND account_id IN ({ids})"),
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap_or(0);
+            return Err(if sent == 0 {
+                "there is nobody to learn about yet. Learn reads the people you have written to, and no sent \
+                 mail has been fetched from these mailboxes. Go back to Mail, open a mailbox's mail to check \
+                 Sent, and fetch again"
+                    .into()
+            } else {
+                "there is nobody to learn about yet: nobody in these mailboxes has had a reply from you".into()
+            });
+        }
         return Err(
             "there is nobody to learn about yet — sync a mailbox first, and reply to somebody"
                 .into(),

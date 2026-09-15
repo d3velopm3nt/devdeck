@@ -7,6 +7,7 @@ import type { MailAccount, MailTestResult } from '../../lib/types'
 import { Icon } from '../../lib/icons'
 import { explainMailError } from '../../lib/mailError'
 import { Err } from '../setup/LearnStep'
+import { FetchedMail } from './FetchedMail'
 
 export interface FetchResult {
   ok: boolean
@@ -30,9 +31,14 @@ export function MailboxRow({ account: a, business, kind, busy, disabled, result,
   const [editing, setEditing] = useState(false)
   const [showDetail, setShowDetail] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [showMail, setShowMail] = useState(false)
 
-  const raw = result ? (result.ok ? '' : result.text) : a.last_error
+  // A fetch that worked can still have skipped a folder, and says so on the
+  // account, so the account's own error wins over a bare "n new".
+  const raw = result && !result.ok ? result.text : a.last_error
   const problem = raw && !busy ? explainMailError(raw, `${a.imap_host}:${a.imap_port}`) : null
+  const warn = problem?.kind === 'partial'
+  const fetched = !!a.last_sync || !!result?.ok
 
   const copy = async (text: string) => {
     try {
@@ -58,8 +64,8 @@ export function MailboxRow({ account: a, business, kind, busy, disabled, result,
             {busy ? (
               <span className="text-info">· fetching…</span>
             ) : problem ? (
-              <span className="flex items-center gap-1 text-err">
-                · <Icon name="alert" size={11} /> couldn&apos;t fetch
+              <span className={`flex items-center gap-1 ${warn ? 'text-warn' : 'text-err'}`}>
+                · <Icon name="alert" size={11} /> {warn ? 'fetched, some folders skipped' : "couldn't fetch"}
               </span>
             ) : result?.ok ? (
               <span className="flex items-center gap-1 text-ok">
@@ -75,6 +81,16 @@ export function MailboxRow({ account: a, business, kind, busy, disabled, result,
         {onTie && (
           <button className="btn-ghost text-[11.5px]" onClick={onTie}>
             Belongs to {business}
+          </button>
+        )}
+        {fetched && (
+          <button
+            className="btn-ghost text-[11.5px]"
+            onClick={() => setShowMail((v) => !v)}
+            title="See what has been fetched"
+            aria-expanded={showMail}
+          >
+            <Icon name="mail" size={12} /> {showMail ? 'Hide mail' : 'Show mail'}
           </button>
         )}
         {!editing && (
@@ -94,10 +110,15 @@ export function MailboxRow({ account: a, business, kind, busy, disabled, result,
       </div>
 
       {problem && !editing && (
-        <div role="alert" className="mx-4 mb-3 flex gap-2.5 rounded-[8px] border border-red-500/30 bg-red-500/10 px-3 py-2.5">
-          <Icon name="alert" size={14} className="mt-0.5 shrink-0 text-err" />
+        <div
+          role="alert"
+          className={`mx-4 mb-3 flex gap-2.5 rounded-[8px] border px-3 py-2.5 ${
+            warn ? 'border-amber-500/30 bg-amber-500/5' : 'border-red-500/30 bg-red-500/10'
+          }`}
+        >
+          <Icon name="alert" size={14} className={`mt-0.5 shrink-0 ${warn ? 'text-warn' : 'text-err'}`} />
           <div className="min-w-0 flex-1">
-            <div className="text-[12px] font-medium text-err">{problem.title}</div>
+            <div className={`text-[12px] font-medium ${warn ? 'text-warn' : 'text-err'}`}>{problem.title}</div>
             <div className="mt-0.5 text-[11.5px] leading-relaxed text-body">{problem.hint}</div>
             {showDetail && (
               <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded border border-line bg-page px-2 py-1.5 font-mono text-[10.5px] leading-relaxed text-dim">
@@ -123,6 +144,8 @@ export function MailboxRow({ account: a, business, kind, busy, disabled, result,
           </div>
         </div>
       )}
+
+      {showMail && <FetchedMail accountId={a.id} stamp={a.last_sync} />}
 
       {editing && (
         <MailboxEdit

@@ -3,7 +3,7 @@
 // The server's own reply is always kept as `detail`: the explanation is a
 // guess about the cause, and a guess must never hide the evidence.
 
-export type MailProblemKind = 'password' | 'server' | 'certificate' | 'reader' | 'other'
+export type MailProblemKind = 'password' | 'server' | 'certificate' | 'reader' | 'partial' | 'other'
 
 export interface MailProblem {
   kind: MailProblemKind
@@ -12,11 +12,36 @@ export interface MailProblem {
   detail: string
 }
 
+/** "INBOX: …; INBOX.Sent: …" names the folders it is about. */
+function folderNames(detail: string): string[] {
+  return [
+    ...new Set(
+      detail
+        .split(/;\s*/)
+        .map((part) => part.match(/^([^:\s][^:]{0,60}):\s/)?.[1])
+        .filter((f): f is string => !!f),
+    ),
+  ]
+}
+
 export function explainMailError(raw: string, host = ''): MailProblem {
   const detail = raw.trim()
   const l = detail.toLowerCase()
   const at = host || 'the server'
 
+  if (l.startsWith('fetched, but skipped')) {
+    const rest = detail.replace(/^fetched, but skipped\s*/i, '')
+    const folders = folderNames(rest)
+    const sent = folders.some((f) => /sent/i.test(f))
+    return {
+      kind: 'partial',
+      title: `Fetched, but ${folders.length ? folders.join(' and ') : 'some folders'} could not be read`,
+      hint: `The rest came through. ${
+        sent ? 'Learn needs the Sent folder, because it reads the people you have written to. ' : ''
+      }Try again, and if it happens again, copy what the server said and send it on.`,
+      detail: rest,
+    }
+  }
   if (l.includes('no password stored')) {
     return {
       kind: 'password',
@@ -65,14 +90,7 @@ export function explainMailError(raw: string, host = ''): MailProblem {
     }
   }
   if (l.includes('unexpected parse') || l.includes('unable to parse') || l.includes('could not be read')) {
-    const folders = [
-      ...new Set(
-        detail
-          .split(/;\s*/)
-          .map((part) => part.match(/^([^:\s][^:]{0,60}):\s/)?.[1])
-          .filter((f): f is string => !!f),
-      ),
-    ]
+    const folders = folderNames(detail)
     return {
       kind: 'reader',
       title: 'Signed in, but the messages could not be read',

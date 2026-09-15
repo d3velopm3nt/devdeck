@@ -714,7 +714,9 @@ fn rank_correspondents_in(conn: &Connection, limit: i64, accounts: &[i64]) -> Re
                 }
                 if let Some(&i) = by_email.get(&addr) {
                     let t = &mut tallies[i];
-                    if mailbox == "Sent" {
+                    // Written by you wherever it is filed: a copy kept in the
+                    // inbox, or a server whose Sent folder was not fetched.
+                    if mailbox == "Sent" || own.contains(&from) {
                         t.sent += 1;
                     }
                     t.threads.insert(thread.clone());
@@ -1789,7 +1791,7 @@ fn sync_accounts(app: &tauri::AppHandle, db: &Db, id: i64) -> Result<i64, String
                 {
                     let conn = db.0.lock().unwrap();
                     let _ = conn.execute(
-                        "UPDATE mail_accounts SET last_sync=?1, last_error='' WHERE id=?2",
+                        "UPDATE mail_accounts SET last_sync=?1 WHERE id=?2",
                         params![now_millis(), acct.id],
                     );
                 }
@@ -1951,7 +1953,12 @@ oselect" | r"lagged" | r"\important"
         }
         let mailbox = match session.select(&remote) {
             Ok(m) => m,
-            Err(_) => continue,
+            // Said, not skipped in silence: a Sent folder that would not open
+            // left Learn with nobody to read and nothing on screen to say why.
+            Err(e) => {
+                folder_errors.push(format!("{remote}: could not open it: {e}"));
+                continue;
+            }
         };
         if mailbox.exists == 0 {
             continue;
@@ -2060,6 +2067,17 @@ oselect" | r"lagged" | r"\important"
     // one unreadable Archive would mark a perfectly good inbox as broken.
     if !folder_errors.is_empty() && stored == 0 {
         return Err(folder_errors.join("; "));
+    }
+    // Some folders came through and some did not. Not a failed sync, but not
+    // one to report as clean either: the account carries it as a warning.
+    // The error was cleared before this attempt began, so it is only ever
+    // about this one.
+    if !folder_errors.is_empty() {
+        let conn = db.0.lock().unwrap();
+        let _ = conn.execute(
+            "UPDATE mail_accounts SET last_error=?1 WHERE id=?2",
+            params![format!("fetched, but skipped {}", folder_errors.join("; ")), acct.id],
+        );
     }
     Ok(stored)
 }
@@ -2275,6 +2293,49 @@ pub fn mail_list(db: tauri::State<Db>, query: MailQuery) -> Result<Vec<MailMessa
         .query_map(rusqlite::params_from_iter(refs), row_to_msg)
         .map_err(err)?;
     rows.collect::<rusqlite::Result<Vec<_>>>().map_err(err)
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct MailBoxCount {
+    pub mailbox: String,
+    pub count: i64,
+    pub last_ts: i64,
+}
+
+/// What has been fetched from one account, folder by folder. Inbox, Sent and
+/// Drafts are always listed, at nought when nothing came, because an empty
+/// Sent is the thing worth seeing: Learn reads the people you wrote to.
+#[tauri::command(async)]
+pub fn mail_account_boxes(db: tauri::State<Db>, id: i64) -> Result<Vec<MailBoxCount>, String> {
+    let conn = db.0.lock().unwrap();
+    let mut st = conn
+        .prepare("SELECT mailbox, COUNT(*), MAX(ts) FROM mail_messages WHERE account_id=?1 GROUP BY mailbox")
+        .map_err(err)?;
+    let mut out: Vec<MailBoxCount> = st
+        .query_map(params![id], |r| {
+            Ok(MailBoxCount {
+                mailbox: r.get(0)?,
+                count: r.get(1)?,
+                last_ts: r.get::<_, Option<i64>>(2)?.unwrap_or(0),
+            })
+        })
+        .map_err(err)?
+        .flatten()
+        .collect();
+    for want in ["INBOX", "Sent", "Drafts"] {
+        if !out.iter().any(|b| b.mailbox == want) {
+            out.push(MailBoxCount { mailbox: want.into(), count: 0, last_ts: 0 });
+        }
+    }
+    let rank = |m: &str| match m {
+        "INBOX" => 0,
+        "Sent" => 1,
+        "Drafts" => 2,
+        "Archive" => 3,
+        _ => 4,
+    };
+    out.sort_by(|a, b| rank(&a.mailbox).cmp(&rank(&b.mailbox)).then(a.mailbox.cmp(&b.mailbox)));
+    Ok(out)
 }
 
 // Polled by the setup screen. Off the main thread, or a wait for the lock
@@ -3313,6 +3374,23 @@ Content-Type: multipart/mixed; boundary=\"z\"\r\n\r\n\
             !out.iter().any(|c| c.email.contains("amazon")),
             "forty messages and no reply is still not a correspondent"
         );
+    }
+
+    #[test]
+    fn mail_you_wrote_counts_wherever_it_is_filed() {
+        let c = mem();
+        c.execute(
+            "INSERT INTO mail_accounts (id, name, address, space) VALUES (1,'Me','me@d.co','Innotrack')",
+            [],
+        )
+        .unwrap();
+        contact(&c, "Kim", "kim@ridgeback.co.za");
+        msg(&c, "INBOX", "kim@ridgeback.co.za", "me@d.co", "quote", 1000);
+        // A copy of the reply kept in the inbox, and no Sent folder fetched.
+        msg(&c, "INBOX", "me@d.co", "kim@ridgeback.co.za", "re: quote", 1100);
+        let out = rank_correspondents(&c, 50).unwrap();
+        assert_eq!(out.len(), 1, "you wrote to Kim, so Kim is somebody to learn about");
+        assert_eq!(out[0].sent, 1);
     }
 
     #[test]

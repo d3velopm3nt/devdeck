@@ -1736,6 +1736,13 @@ export const mailAccountTest = (id: number) => invoke<MailTestResult>('mail_acco
 export const mailSync = (id = 0) => invoke<number>('mail_sync', { id })
 export const mailList = (query: MailQuery) => invoke<MailMessage[]>('mail_list', { query })
 export const mailCounts = () => invoke<MailCounts>('mail_counts')
+/** What has been fetched from one account, folder by folder. */
+export interface MailBoxCount {
+  mailbox: string
+  count: number
+  last_ts: number
+}
+export const mailAccountBoxes = (id: number) => invoke<MailBoxCount[]>('mail_account_boxes', { id })
 /** Bodies and attachment metadata, only for the message you opened. */
 export const mailBody = (id: number) => invoke<MailBody>('mail_body', { id })
 export const mailMarkRead = (id: number, read: boolean) =>

@@ -940,30 +940,25 @@ fn sync_label_now(app: &tauri::AppHandle, db: &Db, label_id: i64) -> Result<i64,
     }
 
     let fetches = if seen > 0 {
-        session.uid_fetch(format!("{}:*", seen + 1), "(UID FLAGS INTERNALDATE RFC822)")
+        fetch_messages(&mut session, true, &format!("{}:*", seen + 1))
     } else {
         let hi = mailbox.exists;
         let lo = hi.saturating_sub(SYNC_LIMIT).max(1);
         say(format!("{remote}: {hi} on the server, taking the newest {}", hi.min(SYNC_LIMIT)));
-        session.fetch(format!("{lo}:{hi}"), "(UID FLAGS INTERNALDATE RFC822)")
+        fetch_messages(&mut session, false, &format!("{lo}:{hi}"))
     };
     let fetches = fetches.map_err(|e| format!("could not read {remote}: {e}"))?;
 
     let mut stored = 0i64;
-    for f in fetches.iter() {
-        let Some(raw) = f.body().or_else(|| f.header()) else {
-            continue;
-        };
-        let internal = f
-            .internal_date()
-            .map(|d| d.timestamp_millis())
-            .unwrap_or_else(now_millis);
+    for f in fetches.messages.iter() {
+        let raw = f.raw.as_slice();
+        let internal = f.internal.unwrap_or_else(now_millis);
         let Ok(parsed) = parse_message(raw, internal) else {
             continue;
         };
-        let unread = !f.flags().iter().any(|fl| *fl == imap::types::Flag::Seen);
-        let flagged = f.flags().iter().any(|fl| *fl == imap::types::Flag::Flagged);
-        let uid = f.uid.unwrap_or(0) as i64;
+        let unread = !f.seen;
+        let flagged = f.flagged;
+        let uid = f.uid as i64;
 
         let conn = db.0.lock().unwrap();
         if store_message(&conn, &root, &acct, &remote, uid, &parsed, unread, flagged)? {
@@ -1287,6 +1282,113 @@ fn access_token_for(acct: &MailAccount) -> Result<String, String> {
     let access = fresh.access.clone();
     token_cache().lock().unwrap().insert(acct.id, fresh);
     Ok(access)
+}
+
+/// One message as a FETCH handed it over.
+#[derive(Debug)]
+struct Fetched {
+    uid: u32,
+    seen: bool,
+    flagged: bool,
+    internal: Option<i64>,
+    raw: Vec<u8>,
+}
+
+/// What a FETCH returned: the messages, and whatever else the server said
+/// while it was sending them.
+#[derive(Debug, Default)]
+struct FetchRead {
+    messages: Vec<Fetched>,
+    other: Vec<String>,
+}
+
+/// FETCH, with the reply read here rather than by the imap crate.
+///
+/// The crate fails the whole FETCH on any untagged reply in the middle that is
+/// not one of the five it expects, and says only "Encountered unexpected parse
+/// response", throwing away the reply that would explain it. Dovecot on a
+/// cPanel host failed every folder that way straight after a good login, which
+/// looks exactly like a wrong password. RFC 3501 section 7 lets a server say
+/// other things during a FETCH, so they are kept as notes instead.
+fn fetch_messages(session: &mut ImapSession, by_uid: bool, range: &str) -> Result<FetchRead, String> {
+    let command = format!(
+        "{}FETCH {range} (UID FLAGS INTERNALDATE RFC822)",
+        if by_uid { "UID " } else { "" }
+    );
+    let data = session
+        .run_command_and_read_response(&command)
+        .map_err(|e| e.to_string())?;
+    read_fetches(&data)
+}
+
+fn clip_note(s: &str, max: usize) -> String {
+    let s = s.trim();
+    if s.chars().count() <= max {
+        return s.to_string();
+    }
+    format!("{}…", s.chars().take(max).collect::<String>())
+}
+
+fn read_fetches(mut data: &[u8]) -> Result<FetchRead, String> {
+    use imap_proto::{AttributeValue, Response};
+    let mut out = FetchRead::default();
+    let mut unreadable: Option<String> = None;
+    while !data.is_empty() {
+        match imap_proto::parse_response(data) {
+            Ok((rest, Response::Fetch(_, attrs))) => {
+                data = rest;
+                let mut m = Fetched { uid: 0, seen: false, flagged: false, internal: None, raw: Vec::new() };
+                for a in attrs {
+                    match a {
+                        AttributeValue::Uid(u) => m.uid = u,
+                        AttributeValue::Flags(flags) => {
+                            m.seen |= flags.iter().any(|f| f.eq_ignore_ascii_case(r"\Seen"));
+                            m.flagged |= flags.iter().any(|f| f.eq_ignore_ascii_case(r"\Flagged"));
+                        }
+                        AttributeValue::InternalDate(d) => {
+                            m.internal = chrono::DateTime::parse_from_str(d.trim(), "%d-%b-%Y %H:%M:%S %z")
+                                .ok()
+                                .map(|t| t.timestamp_millis())
+                        }
+                        AttributeValue::Rfc822(Some(b)) | AttributeValue::BodySection { data: Some(b), .. } => {
+                            m.raw = b.to_vec()
+                        }
+                        AttributeValue::Rfc822Header(Some(b)) if m.raw.is_empty() => m.raw = b.to_vec(),
+                        _ => {}
+                    }
+                }
+                // A FETCH with no message in it is the server volunteering a
+                // flag change, not a message.
+                if !m.raw.is_empty() {
+                    out.messages.push(m);
+                }
+            }
+            Ok((rest, other)) => {
+                data = rest;
+                out.other.push(clip_note(&format!("{other:?}"), 200));
+            }
+            Err(_) => {
+                // Not a reply anything can read. Keep the start of it, so the
+                // error quotes the server, and carry on from the next line.
+                let end = data
+                    .windows(2)
+                    .position(|w| w == b"\r\n")
+                    .map(|i| i + 2)
+                    .unwrap_or(data.len());
+                if unreadable.is_none() {
+                    unreadable = Some(clip_note(&String::from_utf8_lossy(&data[..end]), 200));
+                }
+                data = &data[end..];
+            }
+        }
+    }
+    if let Some(line) = unreadable {
+        if out.messages.is_empty() {
+            return Err(format!("the server's reply could not be read: {line}"));
+        }
+        out.other.push(format!("a line that could not be read: {line}"));
+    }
+    Ok(out)
 }
 
 /// Whatever this account proves itself with: a password, or a live token.
@@ -1879,7 +1981,7 @@ oselect" | r"lagged" | r"\important"
                 "{local}: {} on the server, looking for anything after #{seen}",
                 mailbox.exists
             ));
-            session.uid_fetch(format!("{}:*", seen + 1), "(UID FLAGS INTERNALDATE RFC822)")
+            fetch_messages(&mut session, true, &format!("{}:*", seen + 1))
         } else {
             // Never synced this folder: take the newest SYNC_LIMIT and stop.
             // A mail client is not an archive migration tool.
@@ -1889,10 +1991,15 @@ oselect" | r"lagged" | r"\important"
                 "{local}: {hi} on the server, taking the newest {}",
                 hi.min(SYNC_LIMIT)
             ));
-            session.fetch(format!("{lo}:{hi}"), "(UID FLAGS INTERNALDATE RFC822)")
+            fetch_messages(&mut session, false, &format!("{lo}:{hi}"))
         };
         let fetches = match fetches {
-            Ok(f) => f,
+            Ok(f) => {
+                for note in &f.other {
+                    push_log(app, MAIL_LOG_ID, "mail", "debug", format!("{local}: the server also said {note}"));
+                }
+                f
+            }
             // Skip this folder, keep the others. Aborting the whole account
             // here threw away every message already stored from the folders
             // that worked, and left the account wearing an error about one
@@ -1903,21 +2010,16 @@ oselect" | r"lagged" | r"\important"
             }
         };
 
-        for f in fetches.iter() {
-            let Some(raw) = f.body().or_else(|| f.header()) else {
-                continue;
-            };
-            let internal = f
-                .internal_date()
-                .map(|d| d.timestamp_millis())
-                .unwrap_or_else(now_millis);
+        for f in fetches.messages.iter() {
+            let raw = f.raw.as_slice();
+            let internal = f.internal.unwrap_or_else(now_millis);
             let parsed = match parse_message(raw, internal) {
                 Ok(p) => p,
                 Err(_) => continue,
             };
-            let seen = f.flags().iter().any(|fl| *fl == imap::types::Flag::Seen);
-            let flagged = f.flags().iter().any(|fl| *fl == imap::types::Flag::Flagged);
-            let uid = f.uid.unwrap_or(0) as i64;
+            let seen = f.seen;
+            let flagged = f.flagged;
+            let uid = f.uid as i64;
 
             let fresh = {
                 let conn = db.0.lock().unwrap();
@@ -2759,6 +2861,36 @@ pub fn mail_assistant_status(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_fetch_survives_the_server_saying_something_else_in_the_middle() {
+        let body = b"From: a@innotrack.co.za\r\nSubject: hi\r\n\r\nhello\r\n";
+        let mut data = Vec::new();
+        data.extend_from_slice(
+            format!(
+                "* 1 FETCH (UID 7 FLAGS (\\Seen $Forwarded) INTERNALDATE \" 5-Sep-2026 10:11:12 +0200\" RFC822 {{{}}}\r\n",
+                body.len()
+            )
+            .as_bytes(),
+        );
+        data.extend_from_slice(body);
+        data.extend_from_slice(b")\r\n* OK Still here\r\n* 2 FETCH (UID 8 FLAGS () RFC822 {5}\r\nabcde)\r\n* 3 FETCH (FLAGS (\\Flagged))\r\n");
+        let read = read_fetches(&data).unwrap();
+        assert_eq!(read.messages.len(), 2);
+        assert_eq!(read.messages[0].uid, 7);
+        assert!(read.messages[0].seen && !read.messages[0].flagged);
+        assert!(read.messages[0].internal.is_some());
+        assert_eq!(read.messages[0].raw, body.to_vec());
+        assert_eq!(read.messages[1].uid, 8);
+        assert!(!read.messages[1].seen);
+        assert!(read.other.iter().any(|o| o.contains("Still here")), "{:?}", read.other);
+    }
+
+    #[test]
+    fn a_reply_nothing_can_read_is_an_error_that_quotes_it() {
+        let e = read_fetches(b"garbage from the server\r\n").unwrap_err();
+        assert!(e.contains("garbage from the server"), "{e}");
+    }
 
     fn mem() -> Connection {
         let c = Connection::open_in_memory().unwrap();

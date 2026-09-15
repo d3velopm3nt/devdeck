@@ -37,6 +37,9 @@ reqwest = { version = "0.13", default-features = false, features = ["blocking", 
 # but OpenSSL headers on any other machine, and a mail client that only builds
 # on the maintainer's laptop is not a mail client.
 imap = { version = "2.4", default-features = false }
+# Only its parser: FETCH is read by us, so an untagged reply the imap crate
+# does not expect mid-fetch is logged instead of failing the folder.
+imap-proto = "0.10"
 rustls-connector = "0.19"
 lettre = { version = "0.11", default-features = false, features = [
     "smtp-transport", "builder", "rustls-tls", "rustls-native-certs", "hostname",

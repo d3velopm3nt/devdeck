@@ -693,6 +693,7 @@ export default function App() {
           onClose={() => {
             setBusiness(null)
             void app.refreshTree()
+            window.dispatchEvent(new CustomEvent('devdeck:businesses-changed'))
           }}
         />
       </div>

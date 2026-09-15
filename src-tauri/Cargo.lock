@@ -671,6 +671,7 @@ dependencies = [
  "dirs",
  "image",
  "imap",
+ "imap-proto",
  "lettre",
  "mailparse",
  "portable-pty",

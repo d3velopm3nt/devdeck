@@ -573,6 +573,10 @@ pub struct Correspondent {
     /// which space a fact about them would be filed under by default.
     pub account_id: i64,
     pub space: String,
+    /// Who wrote to them, lowercased: your own addresses, or anyone at the
+    /// business's domains when the ranking is for a business.
+    #[serde(default)]
+    pub written_by: Vec<String>,
 }
 
 /// Who you actually correspond with, most-reciprocal first.
@@ -617,14 +621,32 @@ pub fn rank_correspondents_scoped(
     limit: i64,
     accounts: &[i64],
 ) -> Result<Vec<Correspondent>, String> {
-    rank_correspondents_in(conn, limit, accounts)
+    rank_correspondents_in(conn, limit, accounts, &[])
+}
+
+/// The same, for a business: mail written by anyone at the business's own
+/// domains counts as the business writing. A client only a partner answers
+/// is still somebody the business deals with, and the partner is on the list
+/// too, as its team.
+pub fn rank_correspondents_for(
+    conn: &Connection,
+    limit: i64,
+    accounts: &[i64],
+    domains: &[String],
+) -> Result<Vec<Correspondent>, String> {
+    rank_correspondents_in(conn, limit, accounts, domains)
 }
 
 fn rank_correspondents(conn: &Connection, limit: i64) -> Result<Vec<Correspondent>, String> {
-    rank_correspondents_in(conn, limit, &[])
+    rank_correspondents_in(conn, limit, &[], &[])
 }
 
-fn rank_correspondents_in(conn: &Connection, limit: i64, accounts: &[i64]) -> Result<Vec<Correspondent>, String> {
+fn rank_correspondents_in(
+    conn: &Connection,
+    limit: i64,
+    accounts: &[i64],
+    domains: &[String],
+) -> Result<Vec<Correspondent>, String> {
     let limit = limit.clamp(1, 500);
 
     // One pass over the messages, not one query per contact. The first
@@ -639,6 +661,8 @@ fn rank_correspondents_in(conn: &Connection, limit: i64, accounts: &[i64]) -> Re
         threads: std::collections::HashSet<String>,
         last_ts: i64,
         account_id: i64,
+        /// Who wrote to them: you, or someone at the business.
+        by: Vec<String>,
     }
     let mut tallies: Vec<Tally> = Vec::new();
     let mut contacts: Vec<(i64, String, String)> = Vec::new();
@@ -669,6 +693,7 @@ fn rank_correspondents_in(conn: &Connection, limit: i64, accounts: &[i64]) -> Re
                 threads: std::collections::HashSet::new(),
                 last_ts: 0,
                 account_id: 0,
+                by: Vec::new(),
             });
         }
     }
@@ -679,7 +704,7 @@ fn rank_correspondents_in(conn: &Connection, limit: i64, accounts: &[i64]) -> Re
     {
         let mut st = conn
             .prepare(
-                "SELECT from_addr, to_addrs, thread_key, mailbox, ts, account_id FROM mail_messages",
+                "SELECT from_addr, to_addrs, thread_key, mailbox, ts, account_id, cc_addrs FROM mail_messages",
             )
             .map_err(err)?;
         let rows = st
@@ -691,14 +716,16 @@ fn rank_correspondents_in(conn: &Connection, limit: i64, accounts: &[i64]) -> Re
                     r.get::<_, String>(3)?,
                     r.get::<_, i64>(4)?,
                     r.get::<_, i64>(5)?,
+                    r.get::<_, Option<String>>(6)?.unwrap_or_default(),
                 ))
             })
             .map_err(err)?;
-        for (from, to, thread, mailbox, ts, account) in rows.flatten() {
+        for (from, to, thread, mailbox, ts, account, cc) in rows.flatten() {
             if !accounts.is_empty() && !accounts.contains(&account) {
                 continue;
             }
             let from = from.trim().to_ascii_lowercase();
+            let from_us = own.contains(&from) || domains.iter().any(|d| from.ends_with(&format!("@{d}")));
             if let Some(&i) = by_email.get(&from) {
                 let t = &mut tallies[i];
                 if mailbox == "INBOX" {
@@ -708,7 +735,8 @@ fn rank_correspondents_in(conn: &Connection, limit: i64, accounts: &[i64]) -> Re
                 t.last_ts = t.last_ts.max(ts);
                 t.account_id = t.account_id.max(account);
             }
-            for addr in recipient_addrs(&to) {
+            // Copied counts: a client on the Cc of a reply was written to.
+            for addr in recipient_addrs(&to).into_iter().chain(recipient_addrs(&cc)) {
                 if addr == from {
                     continue;
                 }
@@ -716,8 +744,11 @@ fn rank_correspondents_in(conn: &Connection, limit: i64, accounts: &[i64]) -> Re
                     let t = &mut tallies[i];
                     // Written by you wherever it is filed: a copy kept in the
                     // inbox, or a server whose Sent folder was not fetched.
-                    if mailbox == "Sent" || own.contains(&from) {
+                    if mailbox == "Sent" || from_us {
                         t.sent += 1;
+                        if !t.by.contains(&from) {
+                            t.by.push(from.clone());
+                        }
                     }
                     t.threads.insert(thread.clone());
                     t.last_ts = t.last_ts.max(ts);
@@ -740,6 +771,7 @@ fn rank_correspondents_in(conn: &Connection, limit: i64, accounts: &[i64]) -> Re
             last_ts: t.last_ts,
             account_id: t.account_id,
             space: String::new(),
+            written_by: t.by,
         })
         // Never written back means not a correspondent. This one line is what
         // removes the thousand messages nobody wants read.
@@ -3462,6 +3494,38 @@ Content-Type: multipart/mixed; boundary=\"z\"\r\n\r\n\
         let biz = rank_correspondents_scoped(&c, 50, &[2]).unwrap();
         assert_eq!(biz.len(), 1);
         assert_eq!(biz[0].email, "orders@tags.co");
+    }
+
+    #[test]
+    fn a_client_only_a_partner_answered_is_still_the_business_s() {
+        let c = mem();
+        c.execute("INSERT INTO mail_accounts (id, name, address) VALUES (1,'Biz','jj@biz.co')", []).unwrap();
+        contact(&c, "Kim", "kim@firm.co");
+        contact(&c, "Sam", "sam@other.co");
+        contact(&c, "Kate", "kate@biz.co");
+        // The partner answers the client, copying the mailbox owner.
+        c.execute(
+            "INSERT INTO mail_messages (account_id, uid, mailbox, from_addr, to_addrs, cc_addrs, thread_key, ts)
+             VALUES (1, 1, 'INBOX', 'kate@biz.co', 'Kim <kim@firm.co>', 'jj@biz.co', 'a', 1)",
+            [],
+        )
+        .unwrap();
+        // The owner writes to the partner, and copies somebody.
+        c.execute(
+            "INSERT INTO mail_messages (account_id, uid, mailbox, from_addr, to_addrs, cc_addrs, thread_key, ts)
+             VALUES (1, 2, 'Sent', 'jj@biz.co', 'kate@biz.co', 'sam@other.co', 'b', 2)",
+            [],
+        )
+        .unwrap();
+
+        let mine = rank_correspondents(&c, 50).unwrap();
+        assert!(!mine.iter().any(|x| x.email == "kim@firm.co"), "you never wrote to Kim");
+        assert!(mine.iter().any(|x| x.email == "sam@other.co"), "a copy is writing to them");
+
+        let biz = rank_correspondents_for(&c, 50, &[1], &["biz.co".to_string()]).unwrap();
+        let kim = biz.iter().find(|x| x.email == "kim@firm.co").expect("the partner wrote to Kim");
+        assert_eq!(kim.written_by, vec!["kate@biz.co".to_string()]);
+        assert!(biz.iter().any(|x| x.email == "kate@biz.co"), "the partner is on the list, as team");
     }
 
     /// A reply addressed to several people still counts for each of them.

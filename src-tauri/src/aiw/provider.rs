@@ -687,13 +687,20 @@ impl LLMProvider for MockProvider {
         {
             // For a business: one summary for the organisation, with a role
             // and what it relates to, then facts about the dealings.
-            let org = request
+            let team_member = request
                 .context
                 .lines()
-                .find_map(|l| l.strip_prefix("# Organisation: "))
-                .unwrap_or("This organisation")
-                .trim()
-                .to_string();
+                .find_map(|l| l.strip_prefix("# Team member: "))
+                .map(|s| s.split(" <").next().unwrap_or(s).trim().to_string());
+            let org = team_member.clone().unwrap_or_else(|| {
+                request
+                    .context
+                    .lines()
+                    .find_map(|l| l.strip_prefix("# Organisation: "))
+                    .unwrap_or("This organisation")
+                    .trim()
+                    .to_string()
+            });
             let first_offer = request
                 .context
                 .lines()
@@ -709,9 +716,32 @@ impl LLMProvider for MockProvider {
                      deal with; a real model would say here who they are to the business and what \
                      is going on now (scripted by the mock provider)."
                 ),
-                "role": "client",
+                "role": if team_member.is_some() { "team" } else { "client" },
+                "title": if team_member.is_some() { "on the business's team (scripted by the mock provider)" } else { "" },
                 "relates": if first_offer.is_empty() { vec![] } else { vec![first_offer] },
             })];
+            // One line for each person listed at the organisation.
+            if team_member.is_none() {
+                let mut inside = false;
+                for l in request.context.lines() {
+                    if l.trim() == "## People there" {
+                        inside = true;
+                        continue;
+                    }
+                    if inside && l.starts_with('#') {
+                        break;
+                    }
+                    let Some(rest) = l.strip_prefix("- ").filter(|_| inside) else { continue };
+                    let Some((name, email)) = rest.split_once(" <") else { continue };
+                    lines.push(serde_json::json!({
+                        "kind": "contact",
+                        "email": email.trim_end_matches('>').trim(),
+                        "name": name.trim(),
+                        "title": "",
+                        "text": format!("{} writes to the business from {org} (scripted by the mock provider)", name.trim()),
+                    }));
+                }
+            }
             for text in [
                 format!("{org} is in the business's mail (scripted by the mock provider)"),
                 format!("The business and {org} have an ongoing thread (scripted by the mock provider)"),

@@ -1468,6 +1468,8 @@ export interface LearnPerson {
   chars: number
   received: number
   sent: number
+  /** Who wrote to them: you, or for a business anyone on its team. */
+  written_by?: string[]
 }
 
 /** Something deliberately left out, with the reason attached. */
@@ -1590,6 +1592,8 @@ export interface PersonDecision {
   business?: number
   role?: string
   relates?: string[]
+  title?: string
+  contacts?: ContactSummary[]
 }
 export interface PersonOutcome {
   kept: number
@@ -1599,6 +1603,14 @@ export interface PersonOutcome {
 export const learnDecidePerson = (decision: PersonDecision) =>
   invoke<PersonOutcome>('learn_decide_person', { decision })
 
+/** One person at an organisation, as the mail shows them. */
+export interface ContactSummary {
+  contact_id: number
+  email: string
+  name: string
+  title: string
+  text: string
+}
 /** A person's card as a run left it: summary, facts, and the decision. */
 export interface LearnCard {
   run_id: number
@@ -1613,6 +1625,12 @@ export interface LearnCard {
   /** proposed | kept | declined */
   status: string
   facts: LearnFact[]
+  /** organisation | person | team, for a business's card. */
+  kind?: string
+  /** For someone on the business's team: what they do there. */
+  title?: string
+  /** The people at an organisation, each with what the mail says of them. */
+  contacts?: ContactSummary[]
 }
 /** The cards of a run, to decide or look at again. `runId` 0 is the latest. */
 export const learnReview = (runId = 0) => invoke<LearnCard[]>('learn_review', { runId })
@@ -1646,6 +1664,8 @@ export interface LivePerson {
 export interface LearnPlanEvent {
   run_id: number
   people: LivePerson[]
+  /** organisation | person | team, one per entry in `people`. */
+  kinds?: string[]
   threads: number
   messages: number
   tokens: number
@@ -1801,7 +1821,15 @@ export interface Suggestion {
   node_id: number
 }
 
+/** Somebody on the business's own team, as Learn found them and you kept them. */
+export interface TeamMember {
+  name: string
+  email: string
+  title: string
+  summary: string
+}
 export interface BusinessMeta {
+  team?: TeamMember[]
   name: string
   website: string
   directors: Director[]

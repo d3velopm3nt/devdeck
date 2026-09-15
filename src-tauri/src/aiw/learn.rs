@@ -108,6 +108,9 @@ pub struct LearnPerson {
     /// Their side and yours, which is why they are on the list at all.
     pub received: i64,
     pub sent: i64,
+    /// Who wrote to them: you, or for a business anyone on its team.
+    #[serde(default)]
+    pub written_by: Vec<String>,
 }
 
 /// Something deliberately left out, and why.
@@ -449,7 +452,7 @@ pub fn build_corpus_opts(
     depth: Depth,
     fresh: bool,
 ) -> Result<Corpus, String> {
-    build_corpus_scoped(conn, people, only, depth, fresh, &[])
+    build_corpus_scoped(conn, people, only, depth, fresh, &[], &[])
 }
 
 /// The same, over some mailboxes only: a business's.
@@ -460,8 +463,9 @@ pub fn build_corpus_scoped(
     depth: Depth,
     fresh: bool,
     accounts: &[i64],
+    domains: &[String],
 ) -> Result<Corpus, String> {
-    let ranked = crate::mail::rank_correspondents_scoped(conn, people.max(1).min(100), accounts)?;
+    let ranked = crate::mail::rank_correspondents_for(conn, people.max(1).min(100), accounts, domains)?;
     let chosen: Vec<crate::mail::Correspondent> = if only.is_empty() {
         ranked
     } else {
@@ -483,7 +487,7 @@ pub fn build_corpus_scoped(
                  Sent, and fetch again"
                     .into()
             } else {
-                "there is nobody to learn about yet: nobody in these mailboxes has had a reply from you".into()
+                "there is nobody to learn about yet: nobody in these mailboxes has had a reply from you or anyone at the business".into()
             });
         }
         return Err(
@@ -560,6 +564,7 @@ pub fn build_corpus_scoped(
             space: c.space.clone(),
             received: c.received,
             sent: c.sent,
+            written_by: c.written_by.clone(),
             ..Default::default()
         };
 
@@ -569,7 +574,8 @@ pub fn build_corpus_scoped(
                         subject, body_text, ts
                    FROM mail_messages
                   WHERE (lower(from_addr) = lower(?1)
-                     OR instr(lower(to_addrs), lower(?1)) > 0){account_scope}
+                     OR instr(lower(to_addrs), lower(?1)) > 0
+                     OR instr(lower(COALESCE(cc_addrs, '')), lower(?1)) > 0){account_scope}
                   ORDER BY ts DESC
                   LIMIT ?2"
             ))
@@ -710,7 +716,11 @@ pub fn build_corpus_scoped(
         corpus.excluded.push(LearnExclusion {
             kind: "strangers".into(),
             count: strangers,
-            why: "from senders you have never replied to — reciprocity, not volume".into(),
+            why: if domains.is_empty() {
+                "from senders you have never replied to — reciprocity, not volume".into()
+            } else {
+                "from senders nobody at the business has written to — reciprocity, not volume".into()
+            },
         });
     }
     // Codes anywhere in the inbox, not only in the chosen people's mail. Most
@@ -926,7 +936,22 @@ If a fact is about both, split it in two.
 
 Never return a one-time code, a password, a card or account number, or
 anything you would not want written to a file. Never invent. Ten true
-sentences beat forty guesses.";
+sentences beat forty guesses.
+
+After the summary, when the mail is with an organisation, one line for each
+person listed under \"People there\" that the mail says something about:
+
+  {\"kind\": \"contact\",
+   \"email\": \"their address, exactly as listed\",
+   \"name\": \"their name\",
+   \"title\": \"their job or role at the organisation, if the mail shows it\",
+   \"text\": \"one or two sentences: what they deal with the business about\"}
+
+When the mail is with a \"Team member\", they work at the business itself: a
+partner, a director or staff. Then the summary's role is \"team\", it carries
+\"title\": what they do for the business, and its text says what they handle,
+which organisations they deal with, and what is going on. No contact lines
+for a team member.";
 
 /// Free mail: an address here is a person, not an organisation.
 pub const FREE_MAIL: &[&str] = &[
@@ -946,6 +971,9 @@ pub struct Scope {
     pub name: String,
     /// The business's agreed products and services, by name.
     pub offers: Vec<String>,
+    /// The business's own email domains: its website's and its mailboxes'.
+    /// Somebody writing from one is on its team, not a client.
+    pub domains: Vec<String>,
 }
 
 /// One card's worth of mail: a person, or every contact at one organisation.
@@ -954,6 +982,8 @@ pub struct Unit {
     pub key: String,
     pub ids: Vec<i64>,
     pub live: LivePerson,
+    /// organisation | person | team
+    pub kind: String,
 }
 
 /// An organisation's name from its domain: `ridgeback-mining.co.za` is
@@ -975,12 +1005,22 @@ pub fn org_name(domain: &str) -> String {
 
 /// People grouped into organisations by the domain they write from. Three
 /// people at one firm are one card. Someone on free mail is their own card.
-pub fn organisations(people: &[LearnPerson]) -> Vec<Unit> {
+///
+/// Somebody at one of the business's own domains is not an organisation it
+/// deals with: they are its team, a card each, after the organisations.
+pub fn organisations(people: &[LearnPerson], team: &[String]) -> Vec<Unit> {
     let mut out: Vec<Unit> = Vec::new();
     for p in people {
         let d = p.domain.trim().to_ascii_lowercase();
+        let ours = !d.is_empty() && team.iter().any(|t| t.eq_ignore_ascii_case(&d));
         let free = d.is_empty() || FREE_MAIL.contains(&d.as_str());
-        let key = if free { format!("person:{}", p.contact_id) } else { d.clone() };
+        let (key, kind) = if ours {
+            (format!("team:{}", p.contact_id), "team")
+        } else if free {
+            (format!("person:{}", p.contact_id), "person")
+        } else {
+            (d.clone(), "organisation")
+        };
         if let Some(u) = out.iter_mut().find(|u| u.key == key) {
             u.ids.push(p.contact_id);
             u.live.threads += p.threads;
@@ -988,18 +1028,21 @@ pub fn organisations(people: &[LearnPerson]) -> Vec<Unit> {
             continue;
         }
         let me = live_person(p);
+        let org = kind == "organisation";
         out.push(Unit {
             key,
             ids: vec![p.contact_id],
             live: LivePerson {
                 contact_id: p.contact_id,
-                name: if free { me.name } else { org_name(&d) },
-                email: if free { p.email.clone() } else { d },
+                name: if org { org_name(&d) } else { me.name },
+                email: if org { d } else { p.email.clone() },
                 threads: p.threads,
                 messages: p.messages,
             },
+            kind: kind.into(),
         });
     }
+    out.sort_by_key(|u| u.kind == "team");
     out
 }
 
@@ -1014,6 +1057,9 @@ pub struct OrgSummary {
     pub role: String,
     #[serde(default)]
     pub relates: Vec<String>,
+    /// For someone on the business's team: what they do there.
+    #[serde(default)]
+    pub title: String,
 }
 
 /// The summary line, for a person or an organisation. A role nobody
@@ -1034,10 +1080,61 @@ pub fn parse_org_summary(line: &str) -> Option<OrgSummary> {
         "supplier" | "vendor" => "supplier".into(),
         "adviser" | "advisor" | "accountant" | "lawyer" | "consultant" => "adviser".into(),
         "partner" | "partner firm" | "partnerfirm" => "partner firm".into(),
+        "team" | "staff" | "employee" | "colleague" | "director" => "team".into(),
         _ => String::new(),
     };
     s.relates.retain(|x| !x.trim().is_empty());
     Some(s)
+}
+
+/// One person at an organisation, as the mail shows them: who they are there
+/// and what they deal with the business about.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct ContactSummary {
+    #[serde(default)]
+    pub contact_id: i64,
+    #[serde(default)]
+    pub email: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub text: String,
+}
+
+/// A contact line, if the line is one. Checked before a fact, or a contact
+/// would be filed as a fact about you.
+pub fn parse_contact_line(line: &str) -> Option<ContactSummary> {
+    let l = line.trim().trim_end_matches(',');
+    if !l.starts_with('{') || !l.ends_with('}') {
+        return None;
+    }
+    #[derive(Deserialize)]
+    struct Raw {
+        #[serde(default)]
+        kind: String,
+        #[serde(default)]
+        email: String,
+        #[serde(default)]
+        name: String,
+        #[serde(default)]
+        title: String,
+        #[serde(default)]
+        text: String,
+    }
+    let r: Raw = serde_json::from_str(l).ok()?;
+    let email = r.email.trim().to_ascii_lowercase();
+    if !r.kind.trim().eq_ignore_ascii_case("contact") || !email.contains('@') || r.text.trim().is_empty() {
+        return None;
+    }
+    Some(ContactSummary {
+        contact_id: 0,
+        email,
+        name: r.name.trim().to_string(),
+        title: r.title.trim().to_string(),
+        text: r.text.trim().to_string(),
+    })
 }
 
 /// The corpus as one prompt body.
@@ -1770,7 +1867,7 @@ pub fn run_live(
     // The whole batch first: it is the receipt, and the plan the screen shows.
     let whole = {
         let conn = db.0.lock().unwrap();
-        build_corpus_scoped(&conn, people, only, depth, fresh, &scope.accounts)?
+        build_corpus_scoped(&conn, people, only, depth, fresh, &scope.accounts, &scope.domains)?
     };
     if whole.messages.is_empty() {
         return Err("nothing to read -- every message for these people was held back".into());
@@ -1808,12 +1905,17 @@ pub fn run_live(
 
     // One card per person for you; one per organisation for a business.
     let units: Vec<Unit> = if scope.business > 0 {
-        organisations(&whole.people)
+        organisations(&whole.people, &scope.domains)
     } else {
         whole
             .people
             .iter()
-            .map(|p| Unit { key: format!("person:{}", p.contact_id), ids: vec![p.contact_id], live: live_person(p) })
+            .map(|p| Unit {
+                key: format!("person:{}", p.contact_id),
+                ids: vec![p.contact_id],
+                live: live_person(p),
+                kind: "person".into(),
+            })
             .collect()
     };
     let plan: Vec<LivePerson> = units.iter().map(|u| u.live.clone()).collect();
@@ -1822,6 +1924,7 @@ pub fn run_live(
         serde_json::json!({
             "run_id": run_id,
             "people": plan,
+            "kinds": units.iter().map(|u| u.kind.clone()).collect::<Vec<_>>(),
             "threads": thread_keys.len(),
             "messages": whole.messages.len(),
             "tokens": tokens,
@@ -1862,7 +1965,7 @@ pub fn run_live(
         // every ranked person so a late name in the ranking is still found.
         let part = {
             let conn = db.0.lock().unwrap();
-            build_corpus_scoped(&conn, 100, &unit.ids, depth, fresh, &scope.accounts)?
+            build_corpus_scoped(&conn, 100, &unit.ids, depth, fresh, &scope.accounts, &scope.domains)?
         };
         if part.messages.is_empty() {
             continue;
@@ -1873,15 +1976,16 @@ pub fn run_live(
             let who = unit.live.clone();
             let conn = db.0.lock().unwrap();
             let _ = conn.execute(
-                "INSERT INTO learn_people (run_id, contact_id, name, email, status, business, contact_ids)
-                 VALUES (?1, ?2, ?3, ?4, 'proposed', ?5, ?6)",
+                "INSERT INTO learn_people (run_id, contact_id, name, email, status, business, contact_ids, kind)
+                 VALUES (?1, ?2, ?3, ?4, 'proposed', ?5, ?6, ?7)",
                 params![
                     run_id,
                     who.contact_id,
                     who.name,
                     who.email,
                     scope.business,
-                    serde_json::to_string(&unit.ids).unwrap_or_else(|_| "[]".into())
+                    serde_json::to_string(&unit.ids).unwrap_or_else(|_| "[]".into()),
+                    unit.kind
                 ],
             );
         }
@@ -1893,16 +1997,35 @@ pub fn run_live(
             model: model.clone(),
             system: if scope.business > 0 { BUSINESS_SYSTEM.into() } else { SYSTEM.into() },
             context: if scope.business > 0 {
+                let about = if unit.kind == "team" {
+                    format!(
+                        "# Team member: {} <{}>\n\nThey work at {} itself.",
+                        unit.live.name, unit.live.email, scope.name
+                    )
+                } else {
+                    let there: Vec<String> = whole
+                        .people
+                        .iter()
+                        .filter(|p| unit.ids.contains(&p.contact_id))
+                        .map(|p| format!("- {} <{}>", if p.name.trim().is_empty() { &p.email } else { &p.name }, p.email))
+                        .collect();
+                    format!("# Organisation: {}\n\n## People there\n\n{}", unit.live.name, there.join("\n"))
+                };
                 format!(
-                    "# The business\n\n{}\nSells: {}\n\n# Organisation: {}\n\n{prompt}",
+                    "# The business\n\n{}\nIts own email domains: {}\nSells: {}\n\n{about}\n\n{prompt}",
                     scope.name,
+                    if scope.domains.is_empty() { "unknown".to_string() } else { scope.domains.join(", ") },
                     if scope.offers.is_empty() { "nothing agreed yet".to_string() } else { scope.offers.join("; ") },
-                    unit.live.name
                 )
             } else {
                 prompt
             },
-            goal: if scope.business > 0 {
+            goal: if scope.business > 0 && unit.kind == "team" {
+                format!(
+                    "Read {}'s mail with {}, who is on its own team, and return what is worth remembering, one JSON object per line.",
+                    scope.name, unit.live.name
+                )
+            } else if scope.business > 0 {
                 format!(
                     "Read {}'s mail with {} and return what is worth remembering, one JSON object per line.",
                     scope.name, unit.live.name
@@ -1925,18 +2048,59 @@ pub fn run_live(
         let role = std::cell::RefCell::new((String::new(), Vec::<String>::new()));
         let who = unit.live.clone();
         let on_line = |line: &str| {
-            if let Some(sum) = parse_org_summary(line) {
+            // A person at the organisation: kept on its card, matched to
+            // somebody who is really there, never filed as a fact.
+            if let Some(mut c) = parse_contact_line(line) {
+                if scope.business > 0 && unit.kind == "organisation" {
+                    if let Some(p) = whole
+                        .people
+                        .iter()
+                        .find(|p| unit.ids.contains(&p.contact_id) && p.email.eq_ignore_ascii_case(&c.email))
+                    {
+                        c.contact_id = p.contact_id;
+                        if c.name.is_empty() {
+                            c.name = p.name.clone();
+                        }
+                        let conn = db.0.lock().unwrap();
+                        let cur: String = conn
+                            .query_row(
+                                "SELECT contacts FROM learn_people WHERE run_id=?1 AND contact_id=?2",
+                                params![run_id, who.contact_id],
+                                |r| r.get(0),
+                            )
+                            .unwrap_or_else(|_| "[]".into());
+                        let mut list: Vec<ContactSummary> = read_json(&cur);
+                        list.retain(|x| x.contact_id != c.contact_id);
+                        list.push(c);
+                        let _ = conn.execute(
+                            "UPDATE learn_people SET contacts=?3 WHERE run_id=?1 AND contact_id=?2",
+                            params![run_id, who.contact_id, serde_json::to_string(&list).unwrap_or_else(|_| "[]".into())],
+                        );
+                    }
+                }
+                return;
+            }
+            if let Some(mut sum) = parse_org_summary(line) {
+                // Who is on the team is decided by the domain, not the model.
+                if scope.business > 0 {
+                    if unit.kind == "team" {
+                        sum.role = "team".into();
+                    } else if sum.role == "team" {
+                        sum.role = String::new();
+                    }
+                }
                 let text = sum.text.clone();
                 {
                     let conn = db.0.lock().unwrap();
                     let _ = conn.execute(
-                        "UPDATE learn_people SET summary=?3, role=?4, relates=?5 WHERE run_id=?1 AND contact_id=?2",
+                        "UPDATE learn_people SET summary=?3, role=?4, relates=?5, title=?6 WHERE run_id=?1 AND contact_id=?2",
                         params![
                             run_id,
                             who.contact_id,
                             text,
                             sum.role,
-                            serde_json::to_string(&sum.relates).unwrap_or_else(|_| "[]".into())
+                            serde_json::to_string(&sum.relates).unwrap_or_else(|_| "[]".into()),
+                            sum.title
                         ],
                     );
                 }
@@ -2252,6 +2416,7 @@ pub async fn learn_estimate(
         Depth::parse(&depth),
         fresh.unwrap_or(false),
         &scope.accounts,
+        &scope.domains,
     )?;
     Ok(corpus.estimate(&provider, &provider_name, &model, ready, &note))
 }
@@ -2454,6 +2619,12 @@ pub struct PersonDecision {
     pub role: String,
     #[serde(default)]
     pub relates: Vec<String>,
+    /// For someone on the business's team: what they do there.
+    #[serde(default)]
+    pub title: String,
+    /// The people at an organisation, as the card shows them.
+    #[serde(default)]
+    pub contacts: Vec<ContactSummary>,
 }
 
 #[derive(Serialize, Clone, Debug, Default)]
@@ -2519,6 +2690,25 @@ pub fn learn_decide_person(db: tauri::State<Db>, decision: PersonDecision) -> Re
             );
         }
     }
+    // Someone on the team, kept: in the business's record, by address, so
+    // the team step and its managers know who the business is.
+    if decision.business > 0 && kept && decision.role == "team" {
+        let conn = db.0.lock().unwrap();
+        if let Some(mut meta) = crate::business::read(&conn, decision.business)? {
+            let email = decision.email.trim().to_ascii_lowercase();
+            let member = crate::business::TeamMember {
+                name: decision.name.trim().to_string(),
+                email: email.clone(),
+                title: decision.title.trim().to_string(),
+                summary: decision.summary.trim().to_string(),
+            };
+            match meta.team.iter_mut().find(|m| m.email.eq_ignore_ascii_case(&email)) {
+                Some(m) => *m = member,
+                None => meta.team.push(member),
+            }
+            crate::business::write(&conn, decision.business, &meta)?;
+        }
+    }
     Ok(out)
 }
 
@@ -2582,12 +2772,15 @@ pub fn decide_person(conn: &Connection, d: &PersonDecision) -> Result<PersonOutc
 
     if d.business > 0 && d.run_id > 0 {
         conn.execute(
-            "UPDATE learn_people SET role = ?3, relates = ?4 WHERE run_id = ?1 AND contact_id = ?2",
+            "UPDATE learn_people SET role = ?3, relates = ?4, title = ?5, contacts = ?6
+              WHERE run_id = ?1 AND contact_id = ?2",
             params![
                 d.run_id,
                 d.contact_id,
                 d.role,
-                serde_json::to_string(&d.relates).unwrap_or_else(|_| "[]".into())
+                serde_json::to_string(&d.relates).unwrap_or_else(|_| "[]".into()),
+                d.title.trim(),
+                serde_json::to_string(&d.contacts).unwrap_or_else(|_| "[]".into())
             ],
         )
         .map_err(err)?;
@@ -2600,12 +2793,28 @@ pub fn decide_person(conn: &Connection, d: &PersonDecision) -> Result<PersonOutc
     // For a business, the summary is what the business knows about the
     // organisation: a note in the business's knowledge, read by its team.
     if d.business > 0 {
-        let slug = crate::managers::handle_from(d.name.trim());
+        let team = d.role == "team";
+        let slug = format!("{}{}", if team { "team-" } else { "" }, crate::managers::handle_from(d.name.trim()));
+        let mut people = String::new();
+        if !team && !d.contacts.is_empty() {
+            people.push_str("\n## People there\n\n");
+            for c in &d.contacts {
+                people.push_str(&format!(
+                    "- {}{} <{}>: {}\n",
+                    if c.name.trim().is_empty() { c.email.trim() } else { c.name.trim() },
+                    if c.title.trim().is_empty() { String::new() } else { format!(", {}", c.title.trim()) },
+                    c.email.trim(),
+                    c.text.trim()
+                ));
+            }
+        }
         let body = format!(
-            "---\nid: {slug}\nsource: mail\nrole: {}\nrelates: [{}]\n---\n\n# {}\n\n{summary}\n\n> from the business's mail with {}\n",
+            "---\nid: {slug}\nsource: mail\nrole: {}\n{}relates: [{}]\n---\n\n# {}\n\n{}{summary}\n{people}\n> from the business's mail with {}\n",
             if d.role.is_empty() { "unknown" } else { d.role.as_str() },
+            if d.title.trim().is_empty() { String::new() } else { format!("title: {}\n", d.title.trim()) },
             d.relates.join(", "),
             d.name.trim(),
+            if team && !d.title.trim().is_empty() { format!("On the team: {}.\n\n", d.title.trim()) } else { String::new() },
             if d.email.trim().is_empty() { d.name.trim() } else { d.email.trim() }
         );
         out.person_file = crate::business::knowledge_note(conn, d.business, &slug, &body)?;
@@ -2875,6 +3084,12 @@ pub struct LearnCard {
     /// proposed | kept | declined
     pub status: String,
     pub facts: Vec<LearnFact>,
+    /// organisation | person | team, for a business's card.
+    pub kind: String,
+    /// For someone on the business's team: what they do there.
+    pub title: String,
+    /// The people at an organisation, each with what the mail says of them.
+    pub contacts: Vec<ContactSummary>,
 }
 
 /// The cards of a run, to decide or to look at again. `run_id` 0 is the
@@ -2905,7 +3120,7 @@ pub fn review(conn: &Connection, run_id: i64) -> Result<Vec<LearnCard>, String> 
     let mut cards: Vec<LearnCard> = {
         let mut st = conn
             .prepare(
-                "SELECT contact_id, name, email, summary, status, role, relates, business FROM learn_people
+                "SELECT contact_id, name, email, summary, status, role, relates, business, kind, title, contacts FROM learn_people
                   WHERE run_id = ?1 ORDER BY id",
             )
             .map_err(err)?;
@@ -2926,6 +3141,9 @@ pub fn review(conn: &Connection, run_id: i64) -> Result<Vec<LearnCard>, String> 
                     relates: read_json(&r.get::<_, String>(6)?),
                     business: r.get(7)?,
                     facts: Vec::new(),
+                    kind: r.get(8)?,
+                    title: r.get(9)?,
+                    contacts: read_json(&r.get::<_, String>(10)?),
                 })
             })
             .map_err(err)?;
@@ -3326,13 +3544,56 @@ mod tests {
             p(2, "", "orders@tagworks-supply.co.za"),
             p(3, "Pieter", "pieter@gmail.com"),
             p(4, "Lindi", "lindi@ridgeback-mining.co.za"),
-        ]);
+        ], &[]);
         assert_eq!(units.len(), 3);
         assert_eq!(units[0].live.name, "Tagworks Supply");
         assert_eq!(units[0].ids, vec![1, 2]);
         assert_eq!(units[0].live.threads, 4, "the firm's threads, all of them");
         assert_eq!(units[1].live.name, "Pieter", "free mail is a person");
         assert_eq!(org_name("www.ridgeback-mining.co.za"), "Ridgeback Mining");
+    }
+
+    #[test]
+    fn someone_at_the_business_s_own_domain_is_its_team_not_a_client() {
+        let p = |id: i64, name: &str, email: &str| LearnPerson {
+            contact_id: id,
+            name: name.into(),
+            email: email.into(),
+            domain: email.split('@').nth(1).unwrap_or_default().into(),
+            threads: 1,
+            messages: 1,
+            ..Default::default()
+        };
+        let units = organisations(
+            &[
+                p(1, "Kate", "kate@innotrack.co.za"),
+                p(2, "Lindi", "lindi@ridgeback-mining.co.za"),
+                p(3, "Jo", "jo@ridgeback-mining.co.za"),
+                p(4, "Sipho", "sipho@innotrack.co.za"),
+            ],
+            &["innotrack.co.za".to_string()],
+        );
+        assert_eq!(units.len(), 3, "one firm, two people on the team");
+        assert_eq!(units[0].kind, "organisation", "the organisations come first");
+        assert_eq!(units[0].ids, vec![2, 3]);
+        assert_eq!(units[1].kind, "team");
+        assert_eq!(units[1].live.name, "Kate");
+        assert_eq!(units[1].live.email, "kate@innotrack.co.za");
+        assert_eq!(units[2].live.name, "Sipho");
+    }
+
+    #[test]
+    fn a_contact_line_is_a_person_at_the_organisation_not_a_fact() {
+        let c = parse_contact_line(
+            r#"{"kind":"contact","email":"Lindi@Ridgeback-Mining.co.za","name":"Lindi","title":"Procurement","text":"Orders the tags."}"#,
+        )
+        .unwrap();
+        assert_eq!(c.email, "lindi@ridgeback-mining.co.za");
+        assert_eq!(c.title, "Procurement");
+        assert!(parse_contact_line(r#"{"kind":"thing","text":"x","email":"a@b.co"}"#).is_none());
+        let s = parse_org_summary(r#"{"kind":"summary","text":"Runs sales.","role":"Staff","title":"Sales"}"#).unwrap();
+        assert_eq!(s.role, "team");
+        assert_eq!(s.title, "Sales");
     }
 
     #[test]

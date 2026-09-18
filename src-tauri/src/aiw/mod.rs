@@ -8,6 +8,8 @@
 //! - `commands`  Tauri entry points. The only thing the UI can call.
 //! - `runtime`   AgentRuntime — the session lifecycle every agent goes through.
 //! - `provider`  LLMProvider trait + Mock / Anthropic / OpenAI-compatible.
+//! - `cli_agent` The other kind of engine: an external coding CLI that
+//!               executes rather than proposes, and reports what it did.
 //! - `tools`     ToolRegistry + ToolService. Agents reach the machine only here.
 //! - `context`   Assembly, checkpoints, deltas, reconciliation.
 //! - `conflict`  Watches events, decides when two pieces of work disagree.
@@ -24,6 +26,7 @@
 
 pub mod approval;
 pub mod assistant;
+pub mod cli_agent;
 pub mod commands;
 pub mod conflict;
 pub mod context;

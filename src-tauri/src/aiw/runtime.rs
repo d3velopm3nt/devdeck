@@ -130,6 +130,23 @@ pub struct SessionOutcome {
     pub conflicts_detected: usize,
 }
 
+/// What the work produced, whichever engine did it.
+///
+/// The two engines learn these in opposite ways — our own loop counts as it
+/// goes, a delegated CLI reports at the end — and completion must not care
+/// which, or the record of a session would depend on who typed it.
+struct Work {
+    summary: String,
+    turns: u32,
+    refused: usize,
+    files_touched: Vec<String>,
+    failed: Option<String>,
+    /// The turn budget, when we were the one counting. `None` for a delegated
+    /// run: it has its own limits and running out of ours is not something
+    /// that can happen to it, so it must never be reported as if it had.
+    budget: Option<u32>,
+}
+
 /// A session that has started, taken its checkpoint and claimed its work, but
 /// has not yet run its provider loop.
 ///
@@ -160,9 +177,20 @@ impl AgentRuntime {
         Self::begin_inner(ws, cmd)
     }
 
-    /// Run a live session's provider loop through to completion.
+    /// Run a live session through to completion.
+    ///
+    /// Which engine does the work is a property of the agent: an agent pointed
+    /// at a CLI runner has its work done by that CLI, and one pointed at a
+    /// model provider has it done by the loop below. The two produce the same
+    /// `SessionOutcome` and go through the same completion, so every caller —
+    /// `hand_over`, `delegate.start`, a thread wake, a bot's clock — is
+    /// untouched by the difference.
     pub fn drive(ws: &Arc<Workspace>, live: LiveSession) -> Result<SessionOutcome, String> {
-        Self::drive_inner(ws, live)
+        if super::cli_agent::is_cli_runner(&live.agent.provider) {
+            Self::drive_delegated(ws, live)
+        } else {
+            Self::drive_inner(ws, live)
+        }
     }
 
     /// Run one agent to completion.
@@ -172,7 +200,7 @@ impl AgentRuntime {
     /// and would make "did the conflict fire?" a race.
     pub fn run(ws: &Arc<Workspace>, cmd: &StartAgentCommand) -> Result<SessionOutcome, String> {
         let live = Self::begin_inner(ws, cmd)?;
-        Self::drive_inner(ws, live)
+        Self::drive(ws, live)
     }
 
     fn begin_inner(ws: &Arc<Workspace>, cmd: &StartAgentCommand) -> Result<LiveSession, String> {
@@ -781,10 +809,220 @@ impl AgentRuntime {
             }
         }
 
-        // -- 6. complete ---------------------------------------------------
+        Self::complete(
+            ws,
+            cmd,
+            &agent,
+            &scope,
+            &checkpoint,
+            &claim_id,
+            &claimed,
+            &started,
+            session_id,
+            context.total_tokens,
+            Work {
+                summary,
+                turns,
+                refused,
+                files_touched,
+                failed,
+                budget: Some(budget),
+            },
+        )
+    }
+
+    /// Hand the work to an external coding CLI and wait for its report.
+    ///
+    /// Everything before this ran the same way it always did: the context is
+    /// assembled, the checkpoint taken, the claim held. What changes is who
+    /// does the work — and that we learn what happened from a report rather
+    /// than by watching every step.
+    fn drive_delegated(ws: &Arc<Workspace>, live: LiveSession) -> Result<SessionOutcome, String> {
+        let LiveSession {
+            session_id,
+            cmd,
+            agent,
+            scope,
+            checkpoint,
+            claim_id,
+            claimed,
+            started,
+            context,
+            intent,
+        } = live;
+        let cmd = &cmd;
+        let Some(project) = ws.project(&cmd.project_id) else {
+            return Err(format!("unknown project '{}'", cmd.project_id));
+        };
+
+        let spec = super::cli_agent::RunnerSpec {
+            // The program is the runner's own default until there is a place
+            // to say otherwise; `resolve_program` finds it on PATH the same
+            // way an MCP server's command is found.
+            program: String::new(),
+            model: agent.model.clone(),
+            permission_mode: String::new(),
+            unattended: cmd.unattended,
+        };
+        let prompt = Self::brief(&agent, &intent, &context, &cmd.stop_at);
+
+        let sid = session_id.clone();
+        let bus_ws = ws.clone();
+        let bus_scope = scope.clone();
+        let mut turns = 0u32;
+        let outcome = super::cli_agent::run(&spec, &project.root, &prompt, &mut |e| {
+            if e.kind == "message" {
+                turns += 1;
+            }
+            bus_ws.update_session(&sid, |s| {
+                s.transcript.push(TranscriptEntry {
+                    at: now_iso(),
+                    kind: e.kind.into(),
+                    text: e.text.clone(),
+                });
+            });
+            if e.kind == "tool" {
+                bus_ws.bus.emit(DomainEvent::new(
+                    EventType::ToolExecuted,
+                    bus_scope.clone(),
+                    serde_json::json!({ "tool": e.text, "by": "runner" }),
+                ));
+            }
+        });
+
+        let work = match outcome {
+            Ok(r) => {
+                // What it cost and how to reach it again. Recorded on the
+                // session rather than dropped: a delegated run spends real
+                // money somewhere you cannot see, and the id is the only way
+                // back into it.
+                ws.update_session(&session_id, |s| {
+                    s.transcript.push(TranscriptEntry {
+                        at: now_iso(),
+                        kind: "runner".into(),
+                        text: format!(
+                            "{} session {} · ${:.4}",
+                            agent.provider, r.runner_session_id, r.cost_usd
+                        ),
+                    });
+                });
+                Work {
+                    turns: if r.turns > 0 { r.turns } else { turns },
+                    refused: r.refused,
+                    // What the CLI touched is read from the repository, not
+                    // from the report — it does not list files, and guessing
+                    // from prose would be a worse answer than none. Filling
+                    // this in is the reconciliation step, still to come.
+                    files_touched: vec![],
+                    failed: (!r.ok).then(|| {
+                        if r.summary.is_empty() {
+                            format!("{} stopped without finishing", agent.name)
+                        } else {
+                            r.summary.clone()
+                        }
+                    }),
+                    summary: r.summary,
+                    budget: None,
+                }
+            }
+            // A runner that could not start is a failed session and says so.
+            // The alternative — an empty success — is the update-checker bug.
+            Err(e) => Work {
+                summary: String::new(),
+                turns,
+                refused: 0,
+                files_touched: vec![],
+                failed: Some(e),
+                budget: None,
+            },
+        };
+
+        Self::complete(
+            ws,
+            cmd,
+            &agent,
+            &scope,
+            &checkpoint,
+            &claim_id,
+            &claimed,
+            &started,
+            session_id,
+            context.total_tokens,
+            work,
+        )
+    }
+
+    /// What the CLI is told.
+    ///
+    /// The assembled context is the whole point of delegating from here rather
+    /// than opening a terminal: the CLI arrives knowing the feature, the plan
+    /// and the work item, instead of being told "fix the login bug" by someone
+    /// who then has to explain the project from scratch.
+    fn brief(
+        agent: &super::state::AgentDef,
+        intent: &str,
+        context: &super::context::AssembledContext,
+        stop_at: &[String],
+    ) -> String {
+        let mut p = String::new();
+        p.push_str("You are ");
+        p.push_str(&agent.name);
+        p.push_str(", working in this repository as part of DevDeck.\n\n# What to do\n\n");
+        p.push_str(intent);
+        p.push_str("\n\n");
+        if !stop_at.is_empty() {
+            // Review points are words, not permissions, and the CLI has no
+            // notion of ours — so they are said rather than enforced, and the
+            // session-level gate is what actually holds.
+            p.push_str("# Stop and ask first\n\n");
+            for rule in stop_at {
+                p.push_str("- ");
+                p.push_str(rule);
+                p.push('\n');
+            }
+            p.push('\n');
+        }
+        p.push_str("# Context\n\n");
+        p.push_str(&context.to_prompt());
+        p
+    }
+
+    /// Everything after the work, whichever engine did it.
+    ///
+    /// Shared on purpose: the claim, the work item, the durable session record
+    /// and the events are DevDeck's account of what happened, and they must not
+    /// diverge because the typing was done elsewhere.
+    #[allow(clippy::too_many_arguments)]
+    fn complete(
+        ws: &Arc<Workspace>,
+        cmd: &StartAgentCommand,
+        agent: &super::state::AgentDef,
+        scope: &EventScope,
+        checkpoint: &super::context::Checkpoint,
+        claim_id: &str,
+        claimed: &DomainEvent,
+        started: &DomainEvent,
+        session_id: String,
+        context_tokens: usize,
+        work: Work,
+    ) -> Result<SessionOutcome, String> {
+        let Work {
+            mut summary,
+            turns,
+            refused,
+            files_touched,
+            failed,
+            budget,
+        } = work;
+        let Some(project) = ws.project(&cmd.project_id) else {
+            return Err(format!("unknown project '{}'", cmd.project_id));
+        };
+        let deck = project.deck();
+        let scope = scope.clone();
+
         let conflicts_before = ws.conflicts.open(Some(&cmd.project_id)).len();
         ws.release_claim(
-            &claim_id,
+            claim_id,
             if failed.is_some() {
                 "released"
             } else {
@@ -801,7 +1039,7 @@ impl AgentRuntime {
                 scope.clone(),
                 serde_json::json!({ "claimId": claim_id }),
             )
-            .caused_by(&claimed),
+            .caused_by(claimed),
         );
 
         if let Some(wi) = &cmd.work_item_id {
@@ -822,7 +1060,7 @@ impl AgentRuntime {
                     scope.clone(),
                     serde_json::json!({ "error": e }),
                 )
-                .caused_by(&started),
+                .caused_by(started),
             );
             SessionStatus::Failed
         } else {
@@ -832,7 +1070,7 @@ impl AgentRuntime {
                     scope.clone(),
                     serde_json::json!({ "summary": summary }),
                 )
-                .caused_by(&started),
+                .caused_by(started),
             );
             SessionStatus::Completed
         };
@@ -843,7 +1081,7 @@ impl AgentRuntime {
                 // Out of turns is a specific thing that happened, and saying
                 // "no summary" for it is the same failure as reporting an
                 // unreachable server as up to date.
-                None if turns >= budget => format!(
+                None if budget.is_some_and(|b| turns >= b) => format!(
                     "Stopped after {turns} turns without finishing — the turn budget ran out.                      Its last words: {}",
                     ws.session(&session_id)
                         .and_then(|s| s.transcript.iter().rev().find(|t| t.kind == "message").map(|t| t.text.clone()))
@@ -885,7 +1123,7 @@ impl AgentRuntime {
                 scope,
                 serde_json::json!({ "summary": summary, "turns": turns }),
             )
-            .caused_by(&started),
+            .caused_by(started),
         );
 
         Ok(SessionOutcome {
@@ -895,7 +1133,7 @@ impl AgentRuntime {
             turns,
             summary,
             files_touched,
-            context_tokens: context.total_tokens,
+            context_tokens,
             conflicts_detected: conflicts_before,
         })
     }

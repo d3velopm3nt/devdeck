@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { save as saveDialog } from '@tauri-apps/plugin-dialog'
 import * as ipc from '../lib/ipc'
 import type { LogLevel } from '../lib/types'
+import { logKind } from '../lib/logIds'
 import { useApp } from '../store'
 
 const LEVEL_COLOR: Record<LogLevel, string> = {
@@ -20,15 +21,28 @@ const LEVELS: LogLevel[] = ['error', 'warn', 'info', 'debug']
 export function LogViewer() {
   const { logs, clearLogs, logFocus } = useApp()
   const [search, setSearch] = useState('')
-  const [source, setSource] = useState<string>('all')
+  // By id, not by name. Names are not unique — a service you called "mail"
+  // and the mail system stream would otherwise be one entry showing both.
+  const [source, setSource] = useState<number | 'all'>('all')
   const [levels, setLevels] = useState<Set<LogLevel>>(new Set(LEVELS))
   const [follow, setFollow] = useState(true)
   const endRef = useRef<HTMLDivElement>(null)
 
   const sources = useMemo(() => {
-    const s = new Set<string>()
-    for (const l of logs) s.add(l.service)
-    return [...s].sort()
+    const byId = new Map<number, string>()
+    for (const l of logs) if (!byId.has(l.service_id)) byId.set(l.service_id, l.service)
+    // Two sources really can share a name, which is the whole reason this is
+    // keyed by id — so when that happens the label has to say which is which,
+    // or the dropdown shows two identical options.
+    const names = new Map<string, number>()
+    for (const n of byId.values()) names.set(n, (names.get(n) ?? 0) + 1)
+    return [...byId]
+      .map(([id, name]) => ({
+        id,
+        name,
+        label: (names.get(name) ?? 0) > 1 ? `${name} (${logKind(id)})` : name,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label))
   }, [logs])
 
   const filtered = useMemo(() => {
@@ -36,7 +50,7 @@ export function LogViewer() {
     return logs.filter(
       (l) =>
         levels.has(l.level) &&
-        (source === 'all' || l.service === source) &&
+        (source === 'all' || l.service_id === source) &&
         (q === '' || l.line.toLowerCase().includes(q) || l.service.toLowerCase().includes(q)),
     )
   }, [logs, search, source, levels])
@@ -49,7 +63,7 @@ export function LogViewer() {
   // stacktrace clip in Stash focuses it on the error text instead.
   useEffect(() => {
     if (!logFocus) return
-    setSource(logFocus.name)
+    setSource(logFocus.serviceId)
     if (logFocus.search != null) setSearch(logFocus.search)
   }, [logFocus])
 
@@ -82,11 +96,15 @@ export function LogViewer() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <select className="input text-[11.5px]" value={source} onChange={(e) => setSource(e.target.value)}>
+        <select
+          className="input text-[11.5px]"
+          value={source}
+          onChange={(e) => setSource(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+        >
           <option value="all">All sources</option>
           {sources.map((s) => (
-            <option key={s} value={s}>
-              {s}
+            <option key={s.id} value={s.id}>
+              {s.label}
             </option>
           ))}
         </select>

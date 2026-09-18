@@ -672,4 +672,36 @@ mod tests {
             assert!(*id <= -100_000, "'{name}' at {id} is not far enough below zero");
         }
     }
+
+    /// The frontend filters logs by id too, so it keeps its own copy of these
+    /// in `src/lib/logIds.ts`. Two tables that must agree and nothing checking
+    /// is how the -500_000 collision happened in the first place, so this
+    /// reads the real file rather than trusting the comment that says to keep
+    /// them in step.
+    #[test]
+    fn the_frontends_copy_of_the_ids_agrees() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../src/lib/logIds.ts");
+        let ts = std::fs::read_to_string(path).expect("src/lib/logIds.ts is missing");
+        for (id, name) in SYSTEM_LOG_IDS {
+            let konst = format!("{}_LOG_ID", name.to_uppercase());
+            let want = format!("export const {konst} = {}", fmt_underscored(*id));
+            assert!(
+                ts.contains(&want),
+                "src/lib/logIds.ts does not say `{want}` — it and services.rs have drifted"
+            );
+        }
+    }
+
+    /// `-700_000`, the way both files write it.
+    fn fmt_underscored(id: i64) -> String {
+        let digits = id.abs().to_string();
+        let grouped: String = digits
+            .as_bytes()
+            .rchunks(3)
+            .rev()
+            .map(|c| std::str::from_utf8(c).unwrap())
+            .collect::<Vec<_>>()
+            .join("_");
+        format!("{}{grouped}", if id < 0 { "-" } else { "" })
+    }
 }

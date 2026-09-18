@@ -48,7 +48,7 @@ export function ServiceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
 
   // This service's slice of the master log, newest last.
   const svcLogs = useMemo(
-    () => (svc ? logs.filter((l) => l.service === svc.name).slice(-40) : []),
+    () => (svc ? logs.filter((l) => l.service_id === svc.id).slice(-40) : []),
     [logs, svc],
   )
 
@@ -118,7 +118,7 @@ export function ServiceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
             title="Filter the bottom Logs to this service"
             onClick={() => {
               showBottom('logs')
-              focusServiceLogs(svc.name)
+              focusServiceLogs(svc.id)
             }}
           >
             <Icon name="logs" size={12} /> Logs
@@ -216,7 +216,7 @@ export function ServiceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
             className="text-[10.5px] text-indigo-400 hover:underline"
             onClick={() => {
               showBottom('logs')
-              focusServiceLogs(svc.name)
+              focusServiceLogs(svc.id)
             }}
           >
             open full log →

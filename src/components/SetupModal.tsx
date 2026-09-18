@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from 'react'
 import * as ipc from '../lib/ipc'
+import { SETUP_LOG_ID } from '../lib/logIds'
 import { useApp } from '../store'
 import type { ServiceDef } from '../lib/types'
 import { Icon } from '../lib/icons'
@@ -31,7 +32,7 @@ export function SetupModal({
     if (!running) return
     const subs = [
       ipc.onSvcLog((e) => {
-        if (e.service === 'project setup') setStatus(e.line)
+        if (e.service_id === SETUP_LOG_ID) setStatus(e.line)
       }),
       ipc.onSetupDone((ok) => {
         if (ok) void ipc.svcStart(svc.id).finally(() => void refreshServices())

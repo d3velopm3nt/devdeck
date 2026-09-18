@@ -373,7 +373,7 @@ export function Explorer() {
   }
   const viewService = (svc: ServiceDef) => {
     useApp.getState().showBottom('logs')
-    focusServiceLogs(svc.name)
+    focusServiceLogs(svc.id)
   }
 
   // Push a project's branch. Same shape as the pull below: fire and let the

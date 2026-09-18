@@ -795,7 +795,12 @@ pub fn aiw_grant_forget(ws: Ws, id: String) -> Result<(), String> {
 
 #[tauri::command]
 pub fn aiw_providers(ws: Ws) -> Vec<(String, String, ProviderHealth)> {
-    ws.providers.lock().unwrap().list()
+    let mut all = ws.providers.lock().unwrap().list();
+    // The CLI runners sit in the same list because the question the list
+    // answers — "what can this agent be pointed at?" — has one answer, even
+    // though a runner is a different kind of engine from a model provider.
+    all.extend(super::cli_agent::runners());
+    all
 }
 
 #[tauri::command]
@@ -1203,6 +1208,9 @@ pub async fn aiw_models(
     ws: Ws<'_>,
     provider_id: String,
 ) -> Result<super::provider::ModelCatalog, String> {
+    if super::cli_agent::is_cli_runner(&provider_id) {
+        return Ok(super::cli_agent::model_catalog(&provider_id));
+    }
     let w = ws.inner().clone();
     blocking(move || w.model_catalog(&provider_id)).await
 }

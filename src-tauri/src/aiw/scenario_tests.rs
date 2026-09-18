@@ -2600,6 +2600,28 @@ fn a_workspace_with_no_bot_maker_refuses_rather_than_pretending() {
     assert!(e.contains("cannot create bots"), "{e}");
 }
 
+/// The orchestrator cannot be pointed at a coding CLI.
+///
+/// It is an agent in the same list as everyone else, so the settings dropdown
+/// offers it every runner — but it talks rather than works, and a runner gives
+/// it nothing to answer a message with. Refused where the choice is made, with
+/// the reason, rather than as a puzzling failure on the next thing typed.
+///
+/// Checked before the runner's own health, so this holds on a machine that has
+/// the CLI installed and on one that does not.
+#[test]
+fn the_assistant_cannot_be_put_on_a_coding_cli() {
+    let ws = Workspace::new();
+    let e = ws
+        .set_agent_provider(
+            super::assistant::ASSISTANT_ID,
+            super::cli_agent::CLAUDE_CODE,
+            "sonnet",
+        )
+        .expect_err("the orchestrator needs a model");
+    assert!(e.contains("needs a model"), "{e}");
+}
+
 /// A workspace nobody gave a log sink keeps quiet instead of falling over.
 ///
 /// Every headless build and every test in this file is in exactly that state,

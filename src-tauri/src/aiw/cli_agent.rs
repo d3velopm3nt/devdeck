@@ -33,6 +33,71 @@ pub fn is_cli_runner(id: &str) -> bool {
     id == CLAUDE_CODE
 }
 
+/// The runners, as the Providers list sees them: id, label, health.
+///
+/// Health here is one question — *would a spawn find the program?* — asked the
+/// same way the spawn asks it, so Settings cannot say "ready" beside a run
+/// that is about to fail with "program not found". An unconfigured runner
+/// comes back `configured: false`, which is what greys it out in the agent
+/// dropdown and prints "not set up" beside it.
+pub fn runners() -> Vec<(String, String, super::provider::ProviderHealth)> {
+    vec![(
+        CLAUDE_CODE.to_string(),
+        "Claude Code (CLI)".to_string(),
+        health(CLAUDE_CODE),
+    )]
+}
+
+pub fn health(runner: &str) -> super::provider::ProviderHealth {
+    let program = default_program(runner);
+    let present = crate::mcp::program_present(program);
+    super::provider::ProviderHealth {
+        ok: present,
+        configured: present,
+        detail: if present {
+            format!("`{program}` is on PATH — sessions run in the repository, under its own permissions")
+        } else {
+            format!("`{program}` is not on PATH. Install the CLI, or put it somewhere this machine can find it.")
+        },
+    }
+}
+
+fn default_program(runner: &str) -> &'static str {
+    match runner {
+        CLAUDE_CODE => "claude",
+        _ => "",
+    }
+}
+
+/// What `--model` accepts.
+///
+/// Marked as a fallback rather than a live list, because it is: the CLI has no
+/// "list models" call, so these are the aliases its help documents and nothing
+/// asked it just now. Saying otherwise would be exactly the stale-list-shown-
+/// as-fresh problem the model picker exists to avoid. No prices either — a
+/// delegated run bills through whatever account the CLI is signed in to, which
+/// is not a figure DevDeck is in any position to state.
+pub fn model_catalog(runner: &str) -> super::provider::ModelCatalog {
+    if !is_cli_runner(runner) {
+        return super::provider::ModelCatalog::fallback(
+            Vec::new(),
+            format!("'{runner}' is not a CLI runner"),
+        );
+    }
+    let models = ["opus", "sonnet", "haiku", "fable"]
+        .iter()
+        .map(|id| super::provider::ModelInfo {
+            id: (*id).to_string(),
+            name: format!("{}{}", id[..1].to_uppercase(), &id[1..]),
+            ..Default::default()
+        })
+        .collect();
+    super::provider::ModelCatalog::fallback(
+        models,
+        "the CLI publishes no model list — these are the aliases it accepts, and a full id works too",
+    )
+}
+
 #[cfg(windows)]
 fn no_window(cmd: &mut Command) {
     use std::os::windows::process::CommandExt;

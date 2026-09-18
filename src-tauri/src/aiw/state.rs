@@ -784,7 +784,23 @@ impl Workspace {
         provider: &str,
         model: &str,
     ) -> Result<AgentDef, String> {
-        if self.providers.lock().unwrap().get(provider).is_none() {
+        if super::cli_agent::is_cli_runner(provider) {
+            // The orchestrator talks, decides and delegates; it does not go and
+            // work in a repository. Pointing it at a CLI runner would leave it
+            // with no provider to answer a message, so the refusal is here
+            // rather than as a confusing failure on the next thing you type.
+            if agent_id == super::assistant::ASSISTANT_ID {
+                return Err(
+                    "The assistant is the one you talk to, so it needs a model rather than a \
+                     coding CLI. Point a specialist at it instead."
+                        .into(),
+                );
+            }
+            let h = super::cli_agent::health(provider);
+            if !h.configured {
+                return Err(h.detail);
+            }
+        } else if self.providers.lock().unwrap().get(provider).is_none() {
             return Err(format!(
                 "'{provider}' is not configured — set it up under Providers first"
             ));

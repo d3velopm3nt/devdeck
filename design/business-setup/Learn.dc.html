@@ -1,0 +1,115 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: #818cf8; } a:hover { color: #a5b4fc; }
+    .mono { font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; }
+    .head { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .note { font-size: 10.5px; color: var(--faint); }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    .ch { display: flex; align-items: center; gap: 8px; padding: 10px 14px; }
+    .row { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-top: 1px solid var(--line); font-size: 12px; }
+    .row.first { border-top: 0; }
+    .t { color: var(--ink); font-size: 12.5px; }
+    .s { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .src { font-size: 10.5px; color: var(--faint); white-space: nowrap; }
+    .bp { display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; border-radius: 4px; border: 1px solid #4f46e5; background: #4f46e5; color: #fff; padding: 4px 10px; font-size: 12px; font-family: inherit; }
+    .bg { display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; border-radius: 4px; border: 1px solid var(--line2); background: var(--soft); color: var(--body); padding: 4px 10px; font-size: 12px; font-family: inherit; }
+    .sm { font-size: 11.5px; padding: 3px 9px; }
+    .in { border-radius: 4px; border: 1px solid var(--line2); background: var(--page); padding: 5px 8px; color: var(--ink); font-size: 12px; box-sizing: border-box; min-height: 28px; display: flex; align-items: center; gap: 6px; }
+    .ph { color: var(--faint); }
+    .lab { font-size: 11px; color: var(--muted); }
+    .chip { border-radius: 999px; border: 1px solid var(--line2); padding: 2px 10px; font-size: 11px; color: var(--dim); white-space: nowrap; }
+    .chip.on { border-color: #6366f1; background: rgb(99 102 241 / .12); color: var(--ink); }
+    .tchip { border-radius: 999px; padding: 0 8px; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; line-height: 1.6; white-space: nowrap; }
+    .biz { background: rgb(129 140 248 / .16); color: var(--accent); }
+    .sug { background: rgb(251 191 36 / .14); color: var(--warn); }
+    .agreed { background: rgb(74 222 128 / .13); color: var(--ok); }
+    .pers { background: rgb(45 212 191 / .15); color: #2dd4bf; }
+    .mini { width: 24px; height: 24px; border-radius: 999px; font-size: 9.5px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: var(--raise); color: var(--dim); }
+    .dot { width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; }
+    .box { width: 15px; height: 15px; border-radius: 3px; box-sizing: border-box; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+    .box.off { border: 1px solid var(--line2); }
+    .box.on { background: #4f46e5; }
+    .rail { display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 8px; border-radius: 8px; font-size: 12px; color: var(--muted); position: relative; }
+    .rail-on { background: var(--raise); color: var(--ink); }
+    .rail-on::before { content: ""; position: absolute; left: -6px; top: 6px; bottom: 6px; width: 2.5px; border-radius: 2px; background: #6366f1; }
+    .tr { display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 6px; border-radius: 6px; font-size: 12.5px; color: var(--body); }
+    .tr.on { background: var(--raise); color: var(--ink); }
+    .tab { border-radius: 6px; padding: 4px 10px; font-size: 12px; color: var(--dim); }
+    .tab.on { background: var(--raise); color: var(--ink); }
+    .role-client { background: rgb(129 140 248 / .16); color: var(--accent); }
+    .role-supplier { background: rgb(56 189 248 / .15); color: var(--info); }
+    .role-adviser { background: rgb(251 191 36 / .15); color: var(--warn); }
+    .role-partnerfirm { background: rgb(167 139 250 / .16); color: var(--viol); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinning { animation: spin 1s linear infinite; }
+  </style>
+</helmet>
+<div style="--app: {{c.app}}; --page: {{c.page}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --soft: {{c.soft}}; --line: {{c.line}}; --line2: {{c.line2}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; --info: {{c.info}}; --viol: {{c.viol}}; width: 1456px; height: 909px; background: var(--page); color: var(--body); display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;">
+  <div style="height: 32px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--panel);"><span style="font-size: 11.5px; color: var(--dim);">DevDeck</span><span style="font-size: 11.5px; color: var(--faint);">File</span><span style="font-size: 11.5px; color: var(--faint);">View</span></div>
+  <div style="flex-grow: 1; display: flex; justify-content: center; padding: 36px 32px 28px; min-height: 0;">
+    <div style="width: 1080px; display: flex; flex-direction: column; gap: 20px; min-height: 0;">
+      <div style="display: flex; align-items: center;"><div style="display: flex; align-items: center; gap: 9px; font-size: 11px;"><span style="display: flex; align-items: center; gap: 6px; padding: 2px 4px; color: var(--muted);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ok)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>Business</span><span style="width: 20px; height: 1px; background: var(--line2);"></span><span style="display: flex; align-items: center; gap: 6px; padding: 2px 4px; color: var(--muted);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ok)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>What it sells</span><span style="width: 20px; height: 1px; background: var(--line2);"></span><span style="display: flex; align-items: center; gap: 6px; padding: 2px 4px; color: var(--muted);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ok)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>Code</span><span style="width: 20px; height: 1px; background: var(--line2);"></span><span style="display: flex; align-items: center; gap: 6px; padding: 2px 4px; color: var(--muted);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ok)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>Mail</span><span style="width: 20px; height: 1px; background: var(--line2);"></span><span style="display: flex; align-items: center; gap: 6px; padding: 2px 4px; color: var(--ink); font-weight: 600;"><span style="width: 7px; height: 7px; border-radius: 999px; background: #818cf8;"></span>Learn</span><span style="width: 20px; height: 1px; background: var(--line2);"></span><span style="display: flex; align-items: center; gap: 6px; padding: 2px 4px; color: var(--muted);"><span style="width: 7px; height: 7px; border-radius: 999px; border: 1px solid var(--line2); box-sizing: border-box;"></span>Team</span></div><span style="flex-grow: 1;"></span><span class="note" style="margin-right: 12px;">Innotrack</span><span class="bg sm" style="color: var(--muted);"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"></path></svg>Close</span></div>
+
+<div style="display: flex; align-items: flex-end; gap: 16px;">
+  <div style="flex-grow: 1;">
+    <div style="font-size: 24px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink);">One organisation at a time</div>
+    <p style="margin: 6px 0 0; font-size: 13.5px; line-height: 1.6; color: var(--dim);">For each company Innotrack deals with: what kind it is, what it has to do with the products and services, and what is going on. Keep it, change it, or dismiss it, then the next.</p>
+  </div>
+  <span class="bg sm">Read again</span>
+</div>
+<div style="display: flex; align-items: baseline; gap: 14px; font-size: 12px;"><span style="color: var(--ink);"><b style="font-weight: 600;">2</b> of 6 decided</span><span style="color: var(--muted);">read after you approved it, from info@ and you@innotrack.co.za</span></div>
+<div style="flex-grow: 1; min-height: 0; display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 16px;">
+  <div class="card" style="align-self: start;">
+    <div class="ch"><span class="head">Organisations</span></div>
+    <div style="display: flex; align-items: center; gap: 9px; padding: 8px 12px; border-top: 1px solid var(--line); font-size: 12px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ok)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg><span style="flex-grow: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--body);">Ridgeback Mining</span><span class="tchip role-client">client</span><span style="font-size: 10.5px; color: var(--muted); white-space: nowrap; width: 44px; text-align: right;">kept</span></div><div style="display: flex; align-items: center; gap: 9px; padding: 8px 12px; border-top: 1px solid var(--line); font-size: 12px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ok)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg><span style="flex-grow: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--body);">Sable Minerals</span><span class="tchip role-client">client</span><span style="font-size: 10.5px; color: var(--muted); white-space: nowrap; width: 44px; text-align: right;">kept</span></div><div style="display: flex; align-items: center; gap: 9px; padding: 8px 12px; border-top: 1px solid var(--line); font-size: 12px; background: var(--raise);"><span style="width: 13px; height: 13px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><span style="width: 6px; height: 6px; border-radius: 999px; background: #818cf8;"></span></span><span style="flex-grow: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; color: var(--ink);">TagWorks Supply</span><span class="tchip role-supplier">supplier</span><span style="font-size: 10.5px; color: var(--muted); white-space: nowrap; width: 44px; text-align: right;">5 facts</span></div><div style="display: flex; align-items: center; gap: 9px; padding: 8px 12px; border-top: 1px solid var(--line); font-size: 12px;"><span style="width: 13px; height: 13px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><span style="width: 6px; height: 6px; border-radius: 999px; background: #818cf8;"></span></span><span style="flex-grow: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--body);">Karoo Freight</span><span class="tchip role-supplier">supplier</span><span style="font-size: 10.5px; color: var(--muted); white-space: nowrap; width: 44px; text-align: right;">3 facts</span></div><div style="display: flex; align-items: center; gap: 9px; padding: 8px 12px; border-top: 1px solid var(--line); font-size: 12px;"><span style="width: 13px; height: 13px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><span style="width: 6px; height: 6px; border-radius: 999px; background: #818cf8;"></span></span><span style="flex-grow: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--body);">Baobab Accounting</span><span class="tchip role-adviser">adviser</span><span style="font-size: 10.5px; color: var(--muted); white-space: nowrap; width: 44px; text-align: right;">4 facts</span></div><div style="display: flex; align-items: center; gap: 9px; padding: 8px 12px; border-top: 1px solid var(--line); font-size: 12px;"><span style="width: 13px; height: 13px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><span style="width: 6px; height: 6px; border-radius: 999px; background: #818cf8;"></span></span><span style="flex-grow: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--body);">Veld Systems</span><span class="tchip role-partnerfirm">partner firm</span><span style="font-size: 10.5px; color: var(--muted); white-space: nowrap; width: 44px; text-align: right;">6 facts</span></div>
+  </div>
+  <div class="card" style="padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; align-self: start; border-color: rgb(99 102 241 / .4);">
+    <div style="display: flex; align-items: baseline; gap: 8px;">
+      <span style="font-size: 15px; font-weight: 600; color: var(--ink);">TagWorks Supply</span>
+      <span class="mono" style="font-size: 11px; color: var(--muted);">tagworks.example</span>
+      <span style="flex-grow: 1;"></span>
+      <span style="font-size: 11px; color: var(--muted);">22 threads &middot; 5 facts</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;"><span class="lab" style="margin-right: 4px;">To Innotrack they are</span><span class="chip">a client</span><span class="chip on">a supplier</span><span class="chip">an adviser</span><span class="chip">a partner firm</span></div>
+    <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;"><span class="lab" style="margin-right: 4px;">They have to do with</span><span class="chip on">Mining equipment tracking</span><span class="chip on">RFID tagging and installation</span><span class="chip">Asset tracking platform</span></div>
+    <p style="margin: 0; font-size: 13px; line-height: 1.6; color: var(--ink);">TagWorks supplies the RFID tags and readers Innotrack fits on site. Orders go in about once a month, and the latest one is waiting on high-temperature tags.</p>
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <span class="head">What I noticed</span>
+      <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px;">
+        <li style="display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.55;"><span style="margin-top: 7px; width: 5px; height: 5px; border-radius: 999px; background: var(--faint); flex-shrink: 0;"></span><span style="color: var(--body);">Supplies the tags and fixed readers used on mine sites</span></li><li style="display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.55;"><span style="margin-top: 7px; width: 5px; height: 5px; border-radius: 999px; background: var(--faint); flex-shrink: 0;"></span><span style="color: var(--body);">Orders are placed about monthly, from info@</span></li><li style="display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.55;"><span style="margin-top: 7px; width: 5px; height: 5px; border-radius: 999px; background: var(--faint); flex-shrink: 0;"></span><span style="color: var(--body);">High-temperature tags have a six-week lead time</span></li><li style="display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.55;"><span style="margin-top: 7px; width: 5px; height: 5px; border-radius: 999px; background: var(--faint); flex-shrink: 0;"></span><span style="color: var(--body);">Innotrack pays them on 30-day terms</span></li><li style="display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.55;"><span style="margin-top: 7px; width: 5px; height: 5px; border-radius: 999px; background: var(--faint); flex-shrink: 0;"></span><span style="color: var(--body);">Thandi is the person Innotrack deals with</span></li>
+      </ul>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px; padding-top: 2px;"><span class="bp sm">Keep</span><span class="bg sm">Change</span><span class="bg sm" style="color: var(--muted);">Dismiss</span><span style="flex-grow: 1;"></span><span class="note">3 more after this one. Click anyone on the left.</span></div>
+  </div>
+</div>
+<div style="display: flex; align-items: center; gap: 10px;"><span class="bp">Next: team</span><span class="bg">Back</span></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', page: '#0d1017', panel: '#11141c', raise: '#151923', soft: 'rgb(30 41 59 / 0.4)',
+          line: '#1e293b', line2: '#334155', ink: '#e2e8f0', body: '#cbd5e1', dim: '#94a3b8', muted: '#64748b',
+          faint: '#475569', accent: '#818cf8', ok: '#4ade80', warn: '#fbbf24', err: '#f87171', info: '#38bdf8', viol: '#a78bfa' }
+      : { app: '#e9ebf0', page: '#f6f7f9', panel: '#fdfdfe', raise: '#f0f2f6', soft: 'rgb(203 213 225 / 0.35)',
+          line: '#d9dee7', line2: '#c3cbd8', ink: '#16181d', body: '#333a45', dim: '#5a6472', muted: '#7d8794',
+          faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d', warn: '#b45309', err: '#dc2626', info: '#0369a1', viol: '#6d28d9' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

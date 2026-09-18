@@ -12,6 +12,8 @@ import { FocusBar } from './components/FocusBar'
 import { SetupModal } from './components/SetupModal'
 import { VaultSetup } from './components/VaultSetup'
 import { Meet } from './components/Meet'
+import { BusinessSetup } from './components/business/BusinessSetup'
+import { ClearBusinesses } from './components/business/ClearBusinesses'
 import { Sheet } from './components/Sheet'
 import { UpdateBar, VersionPill, type UpState } from './components/UpdateBar'
 import { ClockToast } from './components/ClockToast'
@@ -39,6 +41,8 @@ import {
   CAPTURE_NODE,
   CAPTURE_RAIL,
   CAPTURE_MET,
+  CAPTURE_BUSINESS,
+  CAPTURE_CLEAR,
   CAPTURE_MAIL_ACCOUNT,
   CAPTURE_LEARN,
   CAPTURE_MAIL_PANE,
@@ -608,6 +612,24 @@ export default function App() {
   // the assistant can send you here. A window event rather than store state,
   // because nothing else needs to know and the store is already large.
   const [setupAt, setSetupAt] = useState<import('./components/Meet').MeetStep | null>(null)
+  // Adding or carrying on with a business: a whole-window flow, like first run.
+  const [business, setBusiness] = useState<{ nodeId?: number; step?: string } | null>(() => {
+    if (!CAPTURE_BUSINESS) return null
+    if (CAPTURE_BUSINESS === 'new') return {}
+    const [id, step] = CAPTURE_BUSINESS.split(':')
+    return { nodeId: Number(id), step: step || undefined }
+  })
+  const [clearing, setClearing] = useState(CAPTURE_CLEAR)
+  useEffect(() => {
+    const onBusiness = (e: Event) => setBusiness(((e as CustomEvent).detail ?? {}) as never)
+    const onClear = () => setClearing(true)
+    window.addEventListener('devdeck:business', onBusiness)
+    window.addEventListener('devdeck:clear-businesses', onClear)
+    return () => {
+      window.removeEventListener('devdeck:business', onBusiness)
+      window.removeEventListener('devdeck:clear-businesses', onClear)
+    }
+  }, [])
   useEffect(() => {
     const on = (e: Event) => setSetupAt((e as CustomEvent<string>).detail as never)
     window.addEventListener('devdeck:setup', on)
@@ -650,6 +672,33 @@ export default function App() {
   // Asking to see a step of the first run means you want the first run, even
   // on a machine that has already been through it. Looking at it changes
   // nothing: the screen writes only when you press Next.
+  if (clearing) {
+    return (
+      <div className="flex h-screen flex-col bg-app text-body">
+        <ClearBusinesses
+          onClose={() => {
+            setClearing(false)
+            void app.refreshTree()
+          }}
+        />
+      </div>
+    )
+  }
+  if (business) {
+    return (
+      <div className="flex h-screen flex-col bg-app text-body">
+        <BusinessSetup
+          nodeId={business.nodeId}
+          start={business.step}
+          onClose={() => {
+            setBusiness(null)
+            void app.refreshTree()
+          }}
+        />
+      </div>
+    )
+  }
+
   if ((!met || CAPTURE_MEET_STEP || setupAt) && !CAPTURE_MET) {
     return (
       <div className="flex h-screen flex-col bg-app text-body">

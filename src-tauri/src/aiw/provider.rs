@@ -682,6 +682,52 @@ impl LLMProvider for MockProvider {
         // fact each. A provider, not a bypass: it reads what it was sent, and
         // every fact says it is scripted so nobody mistakes it for something
         // learned.
+        if request.system.starts_with(super::learn::SYSTEM_MARK)
+            && request.system.contains(super::learn::BUSINESS_MARK)
+        {
+            // For a business: one summary for the organisation, with a role
+            // and what it relates to, then facts about the dealings.
+            let org = request
+                .context
+                .lines()
+                .find_map(|l| l.strip_prefix("# Organisation: "))
+                .unwrap_or("This organisation")
+                .trim()
+                .to_string();
+            let first_offer = request
+                .context
+                .lines()
+                .find_map(|l| l.strip_prefix("Sells: "))
+                .and_then(|l| l.split("; ").next())
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+            let mut lines = vec![serde_json::json!({
+                "kind": "summary",
+                "text": format!(
+                    "{org} writes to the business. The mock provider cannot read what the two of you \
+                     deal with; a real model would say here who they are to the business and what \
+                     is going on now (scripted by the mock provider)."
+                ),
+                "role": "client",
+                "relates": if first_offer.is_empty() { vec![] } else { vec![first_offer] },
+            })];
+            for text in [
+                format!("{org} is in the business's mail (scripted by the mock provider)"),
+                format!("The business and {org} have an ongoing thread (scripted by the mock provider)"),
+            ] {
+                lines.push(serde_json::json!({
+                    "kind": "thing", "text": text,
+                    "source": "the mock provider, from the batch", "about": org,
+                }));
+            }
+            return Ok(AgentResponse {
+                message: lines.iter().map(|v| v.to_string()).collect::<Vec<_>>().join("\n"),
+                actions: vec![AgentAction::Done { summary: "read".into() }],
+                complete: true,
+                usage: None,
+            });
+        }
         if request.system.starts_with(super::learn::SYSTEM_MARK) {
             let mut lines = Vec::new();
             for l in request.context.lines() {
@@ -722,6 +768,16 @@ impl LLMProvider for MockProvider {
 ");
             return Ok(AgentResponse {
                 message,
+                actions: vec![AgentAction::Done { summary: "read".into() }],
+                complete: true,
+                usage: None,
+            });
+        }
+        // A business's website: quote only what is on the page, and say
+        // plainly in every other line that the mock is guessing.
+        if request.system.starts_with(super::site::SITE_MARK) {
+            return Ok(AgentResponse {
+                message: super::site::mock_reply(&request.context),
                 actions: vec![AgentAction::Done { summary: "read".into() }],
                 complete: true,
                 usage: None,

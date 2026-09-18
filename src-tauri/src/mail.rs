@@ -610,7 +610,21 @@ pub fn rank_correspondents_pub(conn: &Connection, limit: i64) -> Result<Vec<Corr
     rank_correspondents(conn, limit)
 }
 
+/// The same ranking over some mailboxes only: a business's, when a learn run
+/// is for that business. Empty means every mailbox.
+pub fn rank_correspondents_scoped(
+    conn: &Connection,
+    limit: i64,
+    accounts: &[i64],
+) -> Result<Vec<Correspondent>, String> {
+    rank_correspondents_in(conn, limit, accounts)
+}
+
 fn rank_correspondents(conn: &Connection, limit: i64) -> Result<Vec<Correspondent>, String> {
+    rank_correspondents_in(conn, limit, &[])
+}
+
+fn rank_correspondents_in(conn: &Connection, limit: i64, accounts: &[i64]) -> Result<Vec<Correspondent>, String> {
     let limit = limit.clamp(1, 500);
 
     // One pass over the messages, not one query per contact. The first
@@ -681,6 +695,9 @@ fn rank_correspondents(conn: &Connection, limit: i64) -> Result<Vec<Corresponden
             })
             .map_err(err)?;
         for (from, to, thread, mailbox, ts, account) in rows.flatten() {
+            if !accounts.is_empty() && !accounts.contains(&account) {
+                continue;
+            }
             let from = from.trim().to_ascii_lowercase();
             if let Some(&i) = by_email.get(&from) {
                 let t = &mut tallies[i];
@@ -3210,6 +3227,31 @@ Content-Type: multipart/mixed; boundary=\"z\"\r\n\r\n\
         let out = rank_correspondents(&c, 50).unwrap();
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].email, "sarah@harbourvine.com");
+    }
+
+    /// A business's learn run ranks only the people in that business's mail.
+    #[test]
+    fn a_ranking_can_be_kept_to_some_mailboxes() {
+        let c = mem();
+        c.execute("INSERT INTO mail_accounts (id, name, address) VALUES (1,'Me','me@gmail.com')", []).unwrap();
+        c.execute("INSERT INTO mail_accounts (id, name, address) VALUES (2,'Biz','info@biz.co')", []).unwrap();
+        contact(&c, "Sister", "sis@gmail.com");
+        contact(&c, "Supplier", "orders@tags.co");
+        c.execute(
+            "INSERT INTO mail_messages (account_id, uid, mailbox, from_addr, to_addrs, thread_key, ts) VALUES (1, 1, 'Sent', 'me@gmail.com', 'sis@gmail.com', 'a', 1)",
+            [],
+        )
+        .unwrap();
+        c.execute(
+            "INSERT INTO mail_messages (account_id, uid, mailbox, from_addr, to_addrs, thread_key, ts) VALUES (2, 2, 'Sent', 'info@biz.co', 'orders@tags.co', 'b', 2)",
+            [],
+        )
+        .unwrap();
+        let all = rank_correspondents(&c, 50).unwrap();
+        assert_eq!(all.len(), 2);
+        let biz = rank_correspondents_scoped(&c, 50, &[2]).unwrap();
+        assert_eq!(biz.len(), 1);
+        assert_eq!(biz[0].email, "orders@tags.co");
     }
 
     /// A reply addressed to several people still counts for each of them.

@@ -16,6 +16,10 @@ mod aiw;
 mod botcatalog;
 mod botmind;
 mod bots;
+mod business;
+mod business_clear;
+mod business_code;
+mod business_team;
 mod calendar;
 mod community;
 mod community_index;
@@ -1139,6 +1143,20 @@ pub fn run() {
             aiw::learn::learn_review,
             aiw::learn::learn_summarise,
             aiw::learn::learn_life_proposals,
+            business::business_list,
+            business::business_get,
+            business::business_create,
+            business::business_save,
+            business::business_read_site,
+            business::business_commit_items,
+            business_clear::business_clear_preview,
+            business_clear::business_clear,
+            business_code::business_repos,
+            business_code::business_clone_folder,
+            business_code::business_link_repo,
+            business_team::business_team,
+            business_team::business_make_team,
+            business_team::business_space,
             aiw::learn::learn_stop,
             aiw::learn::learn_note_save,
             aiw::learn::learn_notes,

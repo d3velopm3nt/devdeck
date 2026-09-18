@@ -73,3 +73,12 @@ export const CAPTURE_LIFE_PAGE: boolean = false
 export const CAPTURE_HOME_AUTO: boolean = false
 /** Which tab a node page opens on: known | files | ... Empty in every shipped build. */
 export const CAPTURE_NODE_TAB: string = ''
+/** Open adding a business: `new`, a node id, or `id:step`. Empty in every shipped build. */
+export const CAPTURE_BUSINESS: string = ''
+/** Open the screen that clears old business workspaces. Empty in every shipped build. */
+export const CAPTURE_CLEAR: boolean = false
+/** On a business step, press through without a mouse: read | browser | pick | link | learn | make.
+ *  Only ever set on a throwaway profile. Empty in every shipped build. */
+export const CAPTURE_BUSINESS_AUTO: string = ''
+/** On the clearing screen, press the red button. Only on a throwaway profile. Empty in every shipped build. */
+export const CAPTURE_CLEAR_AUTO: boolean = false

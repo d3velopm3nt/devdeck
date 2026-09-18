@@ -1,0 +1,111 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: #818cf8; } a:hover { color: #a5b4fc; }
+    .mono { font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; }
+    .head { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .note { font-size: 10.5px; color: var(--faint); }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    .ch { display: flex; align-items: center; gap: 8px; padding: 10px 14px; }
+    .row { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-top: 1px solid var(--line); font-size: 12px; }
+    .row.first { border-top: 0; }
+    .t { color: var(--ink); font-size: 12.5px; }
+    .s { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .src { font-size: 10.5px; color: var(--faint); white-space: nowrap; }
+    .bp { display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; border-radius: 4px; border: 1px solid #4f46e5; background: #4f46e5; color: #fff; padding: 4px 10px; font-size: 12px; font-family: inherit; }
+    .bg { display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; border-radius: 4px; border: 1px solid var(--line2); background: var(--soft); color: var(--body); padding: 4px 10px; font-size: 12px; font-family: inherit; }
+    .sm { font-size: 11.5px; padding: 3px 9px; }
+    .in { border-radius: 4px; border: 1px solid var(--line2); background: var(--page); padding: 5px 8px; color: var(--ink); font-size: 12px; box-sizing: border-box; min-height: 28px; display: flex; align-items: center; gap: 6px; }
+    .ph { color: var(--faint); }
+    .lab { font-size: 11px; color: var(--muted); }
+    .chip { border-radius: 999px; border: 1px solid var(--line2); padding: 2px 10px; font-size: 11px; color: var(--dim); white-space: nowrap; }
+    .chip.on { border-color: #6366f1; background: rgb(99 102 241 / .12); color: var(--ink); }
+    .tchip { border-radius: 999px; padding: 0 8px; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; line-height: 1.6; white-space: nowrap; }
+    .biz { background: rgb(129 140 248 / .16); color: var(--accent); }
+    .sug { background: rgb(251 191 36 / .14); color: var(--warn); }
+    .agreed { background: rgb(74 222 128 / .13); color: var(--ok); }
+    .pers { background: rgb(45 212 191 / .15); color: #2dd4bf; }
+    .mini { width: 24px; height: 24px; border-radius: 999px; font-size: 9.5px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: var(--raise); color: var(--dim); }
+    .dot { width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; }
+    .box { width: 15px; height: 15px; border-radius: 3px; box-sizing: border-box; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+    .box.off { border: 1px solid var(--line2); }
+    .box.on { background: #4f46e5; }
+    .rail { display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 8px; border-radius: 8px; font-size: 12px; color: var(--muted); position: relative; }
+    .rail-on { background: var(--raise); color: var(--ink); }
+    .rail-on::before { content: ""; position: absolute; left: -6px; top: 6px; bottom: 6px; width: 2.5px; border-radius: 2px; background: #6366f1; }
+    .tr { display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 6px; border-radius: 6px; font-size: 12.5px; color: var(--body); }
+    .tr.on { background: var(--raise); color: var(--ink); }
+    .tab { border-radius: 6px; padding: 4px 10px; font-size: 12px; color: var(--dim); }
+    .tab.on { background: var(--raise); color: var(--ink); }
+    .role-client { background: rgb(129 140 248 / .16); color: var(--accent); }
+    .role-supplier { background: rgb(56 189 248 / .15); color: var(--info); }
+    .role-adviser { background: rgb(251 191 36 / .15); color: var(--warn); }
+    .role-partnerfirm { background: rgb(167 139 250 / .16); color: var(--viol); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinning { animation: spin 1s linear infinite; }
+  </style>
+</helmet>
+<div style="--app: {{c.app}}; --page: {{c.page}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --soft: {{c.soft}}; --line: {{c.line}}; --line2: {{c.line2}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; --info: {{c.info}}; --viol: {{c.viol}}; width: 1456px; height: 909px; background: var(--page); color: var(--body); display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;">
+  <div style="height: 32px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--panel);"><span style="font-size: 11.5px; color: var(--dim);">DevDeck</span><span style="font-size: 11.5px; color: var(--faint);">File</span><span style="font-size: 11.5px; color: var(--faint);">View</span></div>
+  <div style="flex-grow: 1; display: flex; justify-content: center; padding: 36px 32px 28px; min-height: 0;">
+    <div style="width: 1080px; display: flex; flex-direction: column; gap: 20px; min-height: 0;">
+      <div style="display: flex; align-items: center;"><div style="display: flex; align-items: center; gap: 9px; font-size: 11px;"><span style="display: flex; align-items: center; gap: 6px; padding: 2px 4px; color: var(--muted);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ok)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>Business</span><span style="width: 20px; height: 1px; background: var(--line2);"></span><span style="display: flex; align-items: center; gap: 6px; padding: 2px 4px; color: var(--muted);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ok)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>What it sells</span><span style="width: 20px; height: 1px; background: var(--line2);"></span><span style="display: flex; align-items: center; gap: 6px; padding: 2px 4px; color: var(--ink); font-weight: 600;"><span style="width: 7px; height: 7px; border-radius: 999px; background: #818cf8;"></span>Code</span><span style="width: 20px; height: 1px; background: var(--line2);"></span><span style="display: flex; align-items: center; gap: 6px; padding: 2px 4px; color: var(--muted);"><span style="width: 7px; height: 7px; border-radius: 999px; border: 1px solid var(--line2); box-sizing: border-box;"></span>Mail</span><span style="width: 20px; height: 1px; background: var(--line2);"></span><span style="display: flex; align-items: center; gap: 6px; padding: 2px 4px; color: var(--muted);"><span style="width: 7px; height: 7px; border-radius: 999px; border: 1px solid var(--line2); box-sizing: border-box;"></span>Learn</span><span style="width: 20px; height: 1px; background: var(--line2);"></span><span style="display: flex; align-items: center; gap: 6px; padding: 2px 4px; color: var(--muted);"><span style="width: 7px; height: 7px; border-radius: 999px; border: 1px solid var(--line2); box-sizing: border-box;"></span>Team</span></div><span style="flex-grow: 1;"></span><span class="note" style="margin-right: 12px;">Innotrack</span><span class="bg sm" style="color: var(--muted);"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"></path></svg>Close</span></div>
+<div style="display: flex; align-items: flex-start; gap: 16px;"><span style="width: 46px; height: 46px; flex-shrink: 0; border-radius: 14px; background: rgb(99 102 241 / .15); display: flex; align-items: center; justify-content: center;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.2"></circle><circle cx="6" cy="18" r="2.2"></circle><circle cx="18" cy="9" r="2.2"></circle><path d="M6 8.2v7.6M18 11.2c0 3-3 4-6 4.3H8"></path></svg></span><div><div style="font-size: 24px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink);">Link the code</div><p style="margin: 7px 0 0; max-width: 700px; font-size: 13.5px; line-height: 1.6; color: var(--dim);">Pick the repositories that belong to Innotrack and say which product each one is part of. Each becomes a project inside that product. Services have no code, so they are not listed here.</p></div></div>
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; min-height: 0;">
+  <div class="card">
+    <div class="ch">
+      <span class="head">GitHub</span><span class="src">connected with a token you pasted &middot; your repositories and organisations</span>
+      <span style="flex-grow: 1;"></span>
+      <div class="in" style="width: 200px; min-height: 26px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"></circle><path d="m20 20-4.2-4.2"></path></svg><span class="ph">Search</span></div>
+    </div>
+    <div style="display: flex; gap: 6px; padding: 0 14px 10px;"><span class="chip on">innotrack</span><span class="chip">your own</span><span class="chip">develtech</span></div>
+    <div class="row"><span class="box on"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.2"></circle><circle cx="6" cy="18" r="2.2"></circle><circle cx="18" cy="9" r="2.2"></circle><path d="M6 8.2v7.6M18 11.2c0 3-3 4-6 4.3H8"></path></svg><div style="flex-grow: 1; min-width: 0;"><div class="t mono" style="font-size: 12px;">innotrack/asset-tracker-api</div><div class="s">Private &middot; updated 2 days ago</div></div><span class="src" style="width: 70px;">C#</span><span class="in" style="min-height: 24px; padding: 2px 8px; font-size: 11.5px; width: 210px; justify-content: space-between;">Asset tracking platform<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></span></div><div class="row"><span class="box on"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.2"></circle><circle cx="6" cy="18" r="2.2"></circle><circle cx="18" cy="9" r="2.2"></circle><path d="M6 8.2v7.6M18 11.2c0 3-3 4-6 4.3H8"></path></svg><div style="flex-grow: 1; min-width: 0;"><div class="t mono" style="font-size: 12px;">innotrack/asset-tracker-web</div><div class="s">Private &middot; updated 2 days ago</div></div><span class="src" style="width: 70px;">TypeScript</span><span class="in" style="min-height: 24px; padding: 2px 8px; font-size: 11.5px; width: 210px; justify-content: space-between;">Asset tracking platform<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></span></div><div class="row"><span class="box on"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.2"></circle><circle cx="6" cy="18" r="2.2"></circle><circle cx="18" cy="9" r="2.2"></circle><path d="M6 8.2v7.6M18 11.2c0 3-3 4-6 4.3H8"></path></svg><div style="flex-grow: 1; min-width: 0;"><div class="t mono" style="font-size: 12px;">innotrack/rfid-gateway</div><div class="s">Private &middot; updated last week</div></div><span class="src" style="width: 70px;">Go</span><span class="in" style="min-height: 24px; padding: 2px 8px; font-size: 11.5px; width: 210px; justify-content: space-between;">Mining equipment tracking<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></span></div><div class="row"><span class="box off"></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.2"></circle><circle cx="6" cy="18" r="2.2"></circle><circle cx="18" cy="9" r="2.2"></circle><path d="M6 8.2v7.6M18 11.2c0 3-3 4-6 4.3H8"></path></svg><div style="flex-grow: 1; min-width: 0;"><div class="t mono" style="font-size: 12px;">innotrack/mobile-scanner</div><div class="s">Private &middot; updated in March</div></div><span class="src" style="width: 70px;">Kotlin</span><span style="width: 210px;"></span></div><div class="row"><span class="box off"></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.2"></circle><circle cx="6" cy="18" r="2.2"></circle><circle cx="18" cy="9" r="2.2"></circle><path d="M6 8.2v7.6M18 11.2c0 3-3 4-6 4.3H8"></path></svg><div style="flex-grow: 1; min-width: 0;"><div class="t mono" style="font-size: 12px;">innotrack/website</div><div class="s">Public &middot; the site at innotrack.co.za</div></div><span class="src" style="width: 70px;">HTML</span><span style="width: 210px;"></span></div>
+    <div class="row" style="background: rgb(251 191 36 / .06);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5v4M12 16.5v4M3.5 12h4M16.5 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"></path></svg><div style="flex-grow: 1; min-width: 0;"><div class="t">mobile-scanner looks like part of Asset tracking platform</div><div class="s">its readme mentions the same API. A guess</div></div><span class="bp sm">Link it</span><span class="bg sm">No</span></div>
+  </div>
+  <div style="display: flex; flex-direction: column; gap: 14px;">
+    <div class="card">
+      <div class="ch"><span class="head">Products and their projects</span></div>
+      <div style="padding: 9px 14px; border-top: 1px solid var(--line);"><div style="display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"></path><path d="M3.5 7 12 11.6 20.5 7M12 11.6v9.9"></path></svg>Asset tracking platform<span class="src" style="margin-left: auto;">2 projects</span></div><div style="display: flex; align-items: center; gap: 7px; padding-left: 22px; height: 22px; font-size: 11.5px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.2"></circle><circle cx="6" cy="18" r="2.2"></circle><circle cx="18" cy="9" r="2.2"></circle><path d="M6 8.2v7.6M18 11.2c0 3-3 4-6 4.3H8"></path></svg><span class="mono" style="color: var(--body);">asset-tracker-api</span></div><div style="display: flex; align-items: center; gap: 7px; padding-left: 22px; height: 22px; font-size: 11.5px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.2"></circle><circle cx="6" cy="18" r="2.2"></circle><circle cx="18" cy="9" r="2.2"></circle><path d="M6 8.2v7.6M18 11.2c0 3-3 4-6 4.3H8"></path></svg><span class="mono" style="color: var(--body);">asset-tracker-web</span></div></div><div style="padding: 9px 14px; border-top: 1px solid var(--line);"><div style="display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"></path><path d="M3.5 7 12 11.6 20.5 7M12 11.6v9.9"></path></svg>Mining equipment tracking<span class="src" style="margin-left: auto;">1 project</span></div><div style="display: flex; align-items: center; gap: 7px; padding-left: 22px; height: 22px; font-size: 11.5px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.2"></circle><circle cx="6" cy="18" r="2.2"></circle><circle cx="18" cy="9" r="2.2"></circle><path d="M6 8.2v7.6M18 11.2c0 3-3 4-6 4.3H8"></path></svg><span class="mono" style="color: var(--body);">rfid-gateway</span></div></div>
+    </div>
+    <div class="card" style="padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;">
+      <span class="head">On this machine</span>
+      <div style="display: flex; flex-direction: column; gap: 5px;"><span class="lab">Clone new ones into</span><div class="in mono"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"></path></svg>C:\code\innotrack</div></div>
+      <span class="note" style="line-height: 1.5;">A repository already cloned somewhere is found and used where it is. How to run and build each one is read from the repository itself.</span>
+    </div>
+    <div class="card" style="padding: 12px 14px; display: flex; flex-direction: column; gap: 6px;">
+      <span class="head">The website</span>
+      <span class="s" style="margin: 0; line-height: 1.5;">innotrack/website is not a product. It can go under Marketing, where the site is looked after.</span>
+      <div style="display: flex; gap: 6px;"><span class="bp sm">Put it in Marketing</span><span class="bg sm">Leave it</span></div>
+    </div>
+  </div>
+</div>
+<div style="display: flex; align-items: center; gap: 10px;"><span class="bp">Next: mail</span><span class="bg">Back</span><span style="flex-grow: 1;"></span><span class="note">Nothing is cloned until you press Next</span></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', page: '#0d1017', panel: '#11141c', raise: '#151923', soft: 'rgb(30 41 59 / 0.4)',
+          line: '#1e293b', line2: '#334155', ink: '#e2e8f0', body: '#cbd5e1', dim: '#94a3b8', muted: '#64748b',
+          faint: '#475569', accent: '#818cf8', ok: '#4ade80', warn: '#fbbf24', err: '#f87171', info: '#38bdf8', viol: '#a78bfa' }
+      : { app: '#e9ebf0', page: '#f6f7f9', panel: '#fdfdfe', raise: '#f0f2f6', soft: 'rgb(203 213 225 / 0.35)',
+          line: '#d9dee7', line2: '#c3cbd8', ink: '#16181d', body: '#333a45', dim: '#5a6472', muted: '#7d8794',
+          faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d', warn: '#b45309', err: '#dc2626', info: '#0369a1', viol: '#6d28d9' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

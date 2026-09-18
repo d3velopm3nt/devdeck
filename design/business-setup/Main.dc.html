@@ -1,0 +1,106 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: #818cf8; } a:hover { color: #a5b4fc; }
+    .mono { font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; }
+    .head { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .note { font-size: 10.5px; color: var(--faint); }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    .ch { display: flex; align-items: center; gap: 8px; padding: 10px 14px; }
+    .row { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-top: 1px solid var(--line); font-size: 12px; }
+    .row.first { border-top: 0; }
+    .t { color: var(--ink); font-size: 12.5px; }
+    .s { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .src { font-size: 10.5px; color: var(--faint); white-space: nowrap; }
+    .bp { display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; border-radius: 4px; border: 1px solid #4f46e5; background: #4f46e5; color: #fff; padding: 4px 10px; font-size: 12px; font-family: inherit; }
+    .bg { display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; border-radius: 4px; border: 1px solid var(--line2); background: var(--soft); color: var(--body); padding: 4px 10px; font-size: 12px; font-family: inherit; }
+    .sm { font-size: 11.5px; padding: 3px 9px; }
+    .in { border-radius: 4px; border: 1px solid var(--line2); background: var(--page); padding: 5px 8px; color: var(--ink); font-size: 12px; box-sizing: border-box; min-height: 28px; display: flex; align-items: center; gap: 6px; }
+    .ph { color: var(--faint); }
+    .lab { font-size: 11px; color: var(--muted); }
+    .chip { border-radius: 999px; border: 1px solid var(--line2); padding: 2px 10px; font-size: 11px; color: var(--dim); white-space: nowrap; }
+    .chip.on { border-color: #6366f1; background: rgb(99 102 241 / .12); color: var(--ink); }
+    .tchip { border-radius: 999px; padding: 0 8px; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; line-height: 1.6; white-space: nowrap; }
+    .biz { background: rgb(129 140 248 / .16); color: var(--accent); }
+    .sug { background: rgb(251 191 36 / .14); color: var(--warn); }
+    .agreed { background: rgb(74 222 128 / .13); color: var(--ok); }
+    .pers { background: rgb(45 212 191 / .15); color: #2dd4bf; }
+    .mini { width: 24px; height: 24px; border-radius: 999px; font-size: 9.5px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: var(--raise); color: var(--dim); }
+    .dot { width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; }
+    .box { width: 15px; height: 15px; border-radius: 3px; box-sizing: border-box; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+    .box.off { border: 1px solid var(--line2); }
+    .box.on { background: #4f46e5; }
+    .rail { display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 8px; border-radius: 8px; font-size: 12px; color: var(--muted); position: relative; }
+    .rail-on { background: var(--raise); color: var(--ink); }
+    .rail-on::before { content: ""; position: absolute; left: -6px; top: 6px; bottom: 6px; width: 2.5px; border-radius: 2px; background: #6366f1; }
+    .tr { display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 6px; border-radius: 6px; font-size: 12.5px; color: var(--body); }
+    .tr.on { background: var(--raise); color: var(--ink); }
+    .tab { border-radius: 6px; padding: 4px 10px; font-size: 12px; color: var(--dim); }
+    .tab.on { background: var(--raise); color: var(--ink); }
+    .role-client { background: rgb(129 140 248 / .16); color: var(--accent); }
+    .role-supplier { background: rgb(56 189 248 / .15); color: var(--info); }
+    .role-adviser { background: rgb(251 191 36 / .15); color: var(--warn); }
+    .role-partnerfirm { background: rgb(167 139 250 / .16); color: var(--viol); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinning { animation: spin 1s linear infinite; }
+  </style>
+</helmet>
+<div style="--app: {{c.app}}; --page: {{c.page}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --soft: {{c.soft}}; --line: {{c.line}}; --line2: {{c.line2}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; --info: {{c.info}}; --viol: {{c.viol}}; width: 1456px; height: 909px; background: var(--page); color: var(--body); display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;">
+  <div style="height: 32px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--panel);"><span style="font-size: 11.5px; color: var(--dim);">DevDeck</span><span style="font-size: 11.5px; color: var(--faint);">File</span><span style="font-size: 11.5px; color: var(--faint);">View</span></div>
+  <div style="flex-grow: 1; display: flex; justify-content: center; padding: 36px 32px 28px; min-height: 0;">
+    <div style="width: 1080px; display: flex; flex-direction: column; gap: 20px; min-height: 0;">
+      <div style="display: flex; align-items: center;"><div style="display: flex; align-items: center; gap: 9px; font-size: 11px;"><span style="display: flex; align-items: center; gap: 6px; padding: 2px 4px; color: var(--ink); font-weight: 600;"><span style="width: 7px; height: 7px; border-radius: 999px; background: #818cf8;"></span>Business</span><span style="width: 20px; height: 1px; background: var(--line2);"></span><span style="display: flex; align-items: center; gap: 6px; padding: 2px 4px; color: var(--muted);"><span style="width: 7px; height: 7px; border-radius: 999px; border: 1px solid var(--line2); box-sizing: border-box;"></span>What it sells</span><span style="width: 20px; height: 1px; background: var(--line2);"></span><span style="display: flex; align-items: center; gap: 6px; padding: 2px 4px; color: var(--muted);"><span style="width: 7px; height: 7px; border-radius: 999px; border: 1px solid var(--line2); box-sizing: border-box;"></span>Code</span><span style="width: 20px; height: 1px; background: var(--line2);"></span><span style="display: flex; align-items: center; gap: 6px; padding: 2px 4px; color: var(--muted);"><span style="width: 7px; height: 7px; border-radius: 999px; border: 1px solid var(--line2); box-sizing: border-box;"></span>Mail</span><span style="width: 20px; height: 1px; background: var(--line2);"></span><span style="display: flex; align-items: center; gap: 6px; padding: 2px 4px; color: var(--muted);"><span style="width: 7px; height: 7px; border-radius: 999px; border: 1px solid var(--line2); box-sizing: border-box;"></span>Learn</span><span style="width: 20px; height: 1px; background: var(--line2);"></span><span style="display: flex; align-items: center; gap: 6px; padding: 2px 4px; color: var(--muted);"><span style="width: 7px; height: 7px; border-radius: 999px; border: 1px solid var(--line2); box-sizing: border-box;"></span>Team</span></div><span style="flex-grow: 1;"></span><span class="note" style="margin-right: 12px;">Innotrack</span><span class="bg sm" style="color: var(--muted);"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"></path></svg>Close</span></div>
+<div style="display: flex; align-items: flex-start; gap: 16px;"><span style="width: 46px; height: 46px; flex-shrink: 0; border-radius: 14px; background: rgb(99 102 241 / .15); display: flex; align-items: center; justify-content: center;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7" width="17" height="12.5" rx="2"></rect><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7M3.5 12.5h17"></path></svg></span><div><div style="font-size: 24px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink);">Add a business</div><p style="margin: 7px 0 0; max-width: 700px; font-size: 13.5px; line-height: 1.6; color: var(--dim);">A new business starts empty. Give it a name and its website, and I will read the site and suggest what the business is. Nothing is kept until you agree to it.</p></div></div>
+<div style="display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 14px;">
+  <div style="display: flex; flex-direction: column; gap: 14px;">
+    <div class="card" style="padding: 14px; display: flex; flex-direction: column; gap: 11px;">
+      <span class="head">The business</span>
+      <div style="display: flex; flex-direction: column; gap: 5px;"><span class="lab">Name</span><div class="in">Innotrack</div></div>
+      <div style="display: flex; flex-direction: column; gap: 5px;"><span class="lab">Website</span><div class="in mono"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M3.5 12h17M12 3.5c2.5 2.4 3.8 5.2 3.8 8.5s-1.3 6.1-3.8 8.5c-2.5-2.4-3.8-5.2-3.8-8.5s1.3-6.1 3.8-8.5z"></path></svg>innotrack.co.za</div></div>
+      <div style="display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--ok);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ok)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>Read, just now</div>
+    </div>
+    <div class="card">
+      <div class="ch"><span class="head">Who runs it</span></div>
+      <div class="row"><span class="mini" style="background: rgb(129 140 248 / .16); color: #818cf8;">YO</span><div style="flex-grow: 1; min-width: 0;"><div class="t">You</div><div class="s">director</div></div></div>
+      <div class="row" style="align-items: flex-start;"><span class="mini"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"></path></svg></span><div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px;"><div class="in"><span class="ph">Your partner&#39;s name</span></div><div class="in mono"><span class="ph">their address</span></div><span class="note">a director too. Kept with the business, not in Your life</span></div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="ch"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M3.5 12h17M12 3.5c2.5 2.4 3.8 5.2 3.8 8.5s-1.3 6.1-3.8 8.5c-2.5-2.4-3.8-5.2-3.8-8.5s1.3-6.1 3.8-8.5z"></path></svg><span class="head">What the website says</span><span style="flex-grow: 1;"></span><span class="src">innotrack.co.za</span></div>
+    <div class="row" style="background: var(--raise); align-items: flex-start;">
+      <div style="flex-grow: 1; min-width: 0;"><div style="font-size: 13.5px; line-height: 1.5; color: var(--ink);">&#8220;RFID Enabled Solutions for Mining &amp; Asset Management&#8221;</div><div class="s">the site&#39;s tagline, and the only line a plain read returns. The rest of the site is drawn by script</div></div><span class="bg sm" style="flex-shrink: 0;">Read it in a browser window</span>
+    </div>
+    <div class="row" style="align-items: flex-start;"><span class="lab" style="width: 92px; flex-shrink: 0; margin-top: 2px;">What it does</span><div style="flex-grow: 1; min-width: 0;"><div class="t">RFID Enabled Solutions for Mining &amp; Asset Management</div><div class="s">the tagline, word for word</div></div><div style="display: flex; gap: 6px; align-items: center; flex-shrink: 0;"><span class="tchip agreed">agreed</span><span class="bg sm" style="color: var(--muted);">Change</span></div></div><div class="row" style="align-items: flex-start;"><span class="lab" style="width: 92px; flex-shrink: 0; margin-top: 2px;">Who it serves</span><div style="flex-grow: 1; min-width: 0;"><div class="t">Mining companies, and businesses that need to track physical assets</div><div class="s">a suggestion from the tagline</div></div><div style="display: flex; gap: 6px; align-items: center; flex-shrink: 0;"><span class="bp sm">Agree</span><span class="bg sm">Change</span></div></div><div class="row" style="align-items: flex-start;"><span class="lab" style="width: 92px; flex-shrink: 0; margin-top: 2px;">Industry</span><div style="flex-grow: 1; min-width: 0;"><div class="t"><span style="display: flex; gap: 6px; flex-wrap: wrap;"><span class="chip on">Mining</span><span class="chip on">Asset management</span><span class="chip">RFID</span></span></div><div class="s">a suggestion from the tagline</div></div><div style="display: flex; gap: 6px; align-items: center; flex-shrink: 0;"><span class="bp sm">Agree</span><span class="bg sm">Change</span></div></div>
+    <div class="row" style="align-items: flex-start;"><span class="lab" style="width: 92px; flex-shrink: 0; margin-top: 6px;">Where</span><div style="flex-grow: 1; min-width: 0;"><div class="in"><span class="ph">City, country</span></div><div class="s">the site does not say</div></div></div>
+  </div>
+</div>
+<div style="display: flex; align-items: center; gap: 10px;"><span class="bp">Next: what it sells</span><span class="bg">Not now</span></div><div style="display: flex; gap: 10px; align-items: flex-start; border-top: 1px solid var(--line); padding-top: 12px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px;"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg><p style="margin: 0; font-size: 11.5px; line-height: 1.6; color: var(--muted);">Nothing from your other businesses or your personal spaces is copied into a new business. It gets its own space, its own mail and its own team.</p></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', page: '#0d1017', panel: '#11141c', raise: '#151923', soft: 'rgb(30 41 59 / 0.4)',
+          line: '#1e293b', line2: '#334155', ink: '#e2e8f0', body: '#cbd5e1', dim: '#94a3b8', muted: '#64748b',
+          faint: '#475569', accent: '#818cf8', ok: '#4ade80', warn: '#fbbf24', err: '#f87171', info: '#38bdf8', viol: '#a78bfa' }
+      : { app: '#e9ebf0', page: '#f6f7f9', panel: '#fdfdfe', raise: '#f0f2f6', soft: 'rgb(203 213 225 / 0.35)',
+          line: '#d9dee7', line2: '#c3cbd8', ink: '#16181d', body: '#333a45', dim: '#5a6472', muted: '#7d8794',
+          faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d', warn: '#b45309', err: '#dc2626', info: '#0369a1', viol: '#6d28d9' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

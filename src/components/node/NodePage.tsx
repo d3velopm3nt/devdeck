@@ -17,6 +17,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { CAPTURE_NODE_TAB } from '../../lib/devCapture'
+import { BusinessTab } from '../business/BusinessTab'
 import type { IDockviewPanelProps } from 'dockview-react'
 import * as ipc from '../../lib/ipc'
 import { useApp } from '../../store'
@@ -38,7 +39,7 @@ import { Git } from '../aiw/AiWorkspace'
 /// some of them greyed out: a folder with no repository has no Git tab at all,
 /// rather than a Git tab that apologises. That is the whole point of the shape
 /// — a client is not a deficient project.
-type Tab = 'thread' | 'known' | 'files' | 'git' | 'services' | 'commands' | 'reminders'
+type Tab = 'team' | 'thread' | 'known' | 'files' | 'git' | 'services' | 'commands' | 'reminders'
 
 /// Git, pointed at this node first.
 ///
@@ -70,6 +71,8 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
   // What is known about this space: kept facts and setup answers, read the
   // way its manager reads them. A tab only when there is something in it.
   const [known, setKnown] = useState<ipc.KnownNote[]>([])
+  // A business made through the business steps opens on its Team tab.
+  const [isBusiness, setIsBusiness] = useState(false)
 
   useEffect(() => {
     void ipc.vaultDir(nodeId).then(setDir).catch(() => setDir(''))
@@ -82,6 +85,14 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
     void refreshBots()
     void a.loadAllWork()
     void ipc.learnNotes(nodeId).then(setKnown).catch(() => setKnown([]))
+    setIsBusiness(false)
+    void ipc
+      .businessGet(nodeId)
+      .then(() => {
+        setIsBusiness(true)
+        if (!CAPTURE_NODE_TAB) setTab('team')
+      })
+      .catch(() => setIsBusiness(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodeId])
 
@@ -116,6 +127,7 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
 
   const isProject = node.kind === 'project'
   const TABS: { id: Tab; label: string; when: boolean; count?: number }[] = [
+    { id: 'team', label: 'Team', when: isBusiness },
     { id: 'thread', label: 'Thread', when: true },
     { id: 'known', label: 'Known', when: known.length > 0, count: known.length },
     { id: 'files', label: 'Files', when: true },
@@ -133,7 +145,13 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
     ...(counts.kids ? [{ text: `${counts.kids} folder${counts.kids === 1 ? '' : 's'}` }] : []),
     ...(counts.cmds ? [{ text: `${counts.cmds} command${counts.cmds === 1 ? '' : 's'}` }] : []),
     ...(counts.svcs ? [{ text: `${counts.svcs} service${counts.svcs === 1 ? '' : 's'}` }] : []),
-    ...(bot ? [{ text: bot.name, tone: 'text-indigo-400' }] : [{ text: 'no bot', dashed: true }]),
+    // A business has a team of roles, shown on its Team tab. Naming one of
+    // them here as "its bot" would say the space has one manager.
+    ...(isBusiness
+      ? []
+      : bot
+        ? [{ text: bot.name, tone: 'text-indigo-400' }]
+        : [{ text: 'no bot', dashed: true }]),
     ...(counts.open ? [{ text: `${counts.open} open item${counts.open === 1 ? '' : 's'}` }] : []),
     ...(isProject
       ? dir
@@ -179,7 +197,8 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-            {bot ? (
+            {/* A business has a team of roles, not one bot: its Team tab says who. */}
+            {bot && !isBusiness ? (
               <button className="btn-ghost text-[11px]" onClick={() => openBot(bot.node_id, bot.name)}>
                 <Icon name="bot" size={12} /> Its bot
               </button>
@@ -237,6 +256,8 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
           </span>
         )}
       </div>
+
+      {tab === 'team' && isBusiness && <BusinessTab nodeId={nodeId} />}
 
       {tab === 'files' && (
         <div className="min-h-0 flex-1 px-5 py-3">

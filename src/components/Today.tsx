@@ -28,6 +28,7 @@ import { useAiw } from '../lib/aiwStore'
 import { aiw, ago } from '../lib/aiw'
 import * as ipc from '../lib/ipc'
 import { Icon } from '../lib/icons'
+import { TodayBusinesses } from './business/TodayBusinesses'
 import { openLife, openNodeThread, openSpace } from '../lib/dock'
 import { findNode, workspaceOf } from '../lib/tree'
 import { DAY_MS, hhmm, startOfDay } from '../lib/calendarWindow'
@@ -281,6 +282,7 @@ export function Today() {
               </button>
               <span className="text-[10.5px] text-faint">the people, kept on this machine</span>
             </div>
+            <TodayBusinesses />
             <Head title="Needs you" note="approvals, questions, a reply" />
             {needs === 0 ? (
               <Card>

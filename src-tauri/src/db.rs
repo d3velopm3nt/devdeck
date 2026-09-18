@@ -583,6 +583,19 @@ pub fn checkpoint_state(app: &tauri::AppHandle) {
 /// alone is the *original* shape, and a test that skips this is testing a
 /// schema no running copy of DevDeck has.
 pub fn migrate(conn: &Connection) {
+    // A learn card for an organisation: what it is to the business, what it
+    // has to do with, which business, and every contact at it.
+    if conn.prepare("SELECT role FROM learn_people LIMIT 1").is_err() {
+        for sql in [
+            "ALTER TABLE learn_people ADD COLUMN role TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE learn_people ADD COLUMN relates TEXT NOT NULL DEFAULT '[]'",
+            "ALTER TABLE learn_people ADD COLUMN business INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE learn_people ADD COLUMN contact_ids TEXT NOT NULL DEFAULT '[]'",
+        ] {
+            let _ = conn.execute(sql, []);
+        }
+    }
+
     // An install records what it agreed to run, rather than looking it up in
     // an index afterwards. Without these, only starter-catalogue entries could
     // become callable servers — anything installed from the registry recorded

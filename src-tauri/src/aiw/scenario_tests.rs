@@ -2600,6 +2600,65 @@ fn a_workspace_with_no_bot_maker_refuses_rather_than_pretending() {
     assert!(e.contains("cannot create bots"), "{e}");
 }
 
+/// The orchestrator cannot be pointed at a coding CLI.
+///
+/// It is an agent in the same list as everyone else, so the settings dropdown
+/// offers it every runner — but it talks rather than works, and a runner gives
+/// it nothing to answer a message with. Refused where the choice is made, with
+/// the reason, rather than as a puzzling failure on the next thing typed.
+///
+/// Checked before the runner's own health, so this holds on a machine that has
+/// the CLI installed and on one that does not.
+#[test]
+fn the_assistant_cannot_be_put_on_a_coding_cli() {
+    let ws = Workspace::new();
+    let e = ws
+        .set_agent_provider(
+            super::assistant::ASSISTANT_ID,
+            super::cli_agent::CLAUDE_CODE,
+            "sonnet",
+        )
+        .expect_err("the orchestrator needs a model");
+    assert!(e.contains("needs a model"), "{e}");
+}
+
+/// A workspace nobody gave a log sink keeps quiet instead of falling over.
+///
+/// Every headless build and every test in this file is in exactly that state,
+/// and a commentary line must never be able to fail the work it describes.
+#[test]
+fn commentary_with_nowhere_to_go_is_not_an_error() {
+    let ws = Workspace::new();
+    ws.log_line("dev-a · claude-code", "stdout", "reading the router".into());
+}
+
+/// And one that was given a sink gets the lines, unchanged.
+///
+/// Worth pinning because the failure is silent in both directions: an
+/// unattached sink looks exactly like a session that said nothing, which is
+/// the same trap as a Tauri window with no capability entry.
+#[test]
+fn a_delegated_sessions_commentary_reaches_the_log() {
+    let ws = Workspace::new();
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let sink = seen.clone();
+    ws.set_log_sink(Box::new(move |name, stream, line| {
+        sink.lock().unwrap().push((name.to_string(), stream.to_string(), line));
+    }));
+
+    ws.log_line("dev-a · claude-code", "stdout", "· Edit".into());
+    ws.log_line("dev-a · claude-code", "stderr", "could not reach the API".into());
+
+    let got = seen.lock().unwrap().clone();
+    assert_eq!(got.len(), 2);
+    assert_eq!(got[0].0, "dev-a · claude-code");
+    assert_eq!(got[0].1, "stdout");
+    assert_eq!(got[0].2, "· Edit");
+    // A failure has to arrive on the stream that reads as a failure, or Logs
+    // shows it in the same colour as everything that went fine.
+    assert_eq!(got[1].1, "stderr");
+}
+
 /// And one that was taught passes the draft through untouched — the summary a
 /// person approved and the bot that gets made have to be the same thing.
 #[test]

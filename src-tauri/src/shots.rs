@@ -319,7 +319,7 @@ pub fn ocr(app: &tauri::AppHandle, path: &Path) -> Option<String> {
 }
 
 /// Log id the Stash system stream uses (see the other negative ids in lib.rs).
-const STASH_LOG_ID: i64 = -500_000;
+use crate::services::STASH_LOG_ID;
 
 #[cfg(windows)]
 fn ocr_inner(path: &Path) -> windows::core::Result<String> {

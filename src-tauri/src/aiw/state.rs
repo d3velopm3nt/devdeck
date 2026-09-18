@@ -315,6 +315,15 @@ pub struct CallRecord {
 /// routines and for the same reason — `aiw` knows nothing about SQLite.
 pub type CallLog = Box<dyn Fn(CallRecord) + Send + Sync>;
 
+/// Where a line of running commentary goes: `(name, stream, line)`, the same
+/// three the log bus takes.
+///
+/// A delegated session happens in another process, and without this the only
+/// sign of it is a transcript nothing renders in full yet. Injected rather
+/// than called directly for the same reason as [`CallLog`] — the log bus needs
+/// an `AppHandle` and `aiw` must not.
+pub type LogSink = Box<dyn Fn(&str, &str, String) + Send + Sync>;
+
 /// Making a routine writes a `schedules` row and a line in a file, neither of
 /// which `aiw` knows anything about. Same arrangement as [`BotMaker`]: the
 /// outer app hands one over, and a build that does not simply cannot.
@@ -357,6 +366,7 @@ pub struct Workspace {
     bot_maker: std::sync::OnceLock<BotMaker>,
     routine_maker: std::sync::OnceLock<RoutineMaker>,
     call_log: std::sync::OnceLock<CallLog>,
+    log_sink: std::sync::OnceLock<LogSink>,
     pub providers: Mutex<ProviderRegistry>,
     pub reconciler: Box<dyn ContextReconciler>,
     projects: Mutex<HashMap<String, Arc<ProjectHandle>>>,
@@ -396,6 +406,7 @@ impl Workspace {
             bot_maker: std::sync::OnceLock::new(),
             routine_maker: std::sync::OnceLock::new(),
             call_log: std::sync::OnceLock::new(),
+            log_sink: std::sync::OnceLock::new(),
             conversations: std::sync::OnceLock::new(),
             personal: Mutex::new(HashMap::new()),
             grants: std::sync::OnceLock::new(),
@@ -773,7 +784,23 @@ impl Workspace {
         provider: &str,
         model: &str,
     ) -> Result<AgentDef, String> {
-        if self.providers.lock().unwrap().get(provider).is_none() {
+        if super::cli_agent::is_cli_runner(provider) {
+            // The orchestrator talks, decides and delegates; it does not go and
+            // work in a repository. Pointing it at a CLI runner would leave it
+            // with no provider to answer a message, so the refusal is here
+            // rather than as a confusing failure on the next thing you type.
+            if agent_id == super::assistant::ASSISTANT_ID {
+                return Err(
+                    "The assistant is the one you talk to, so it needs a model rather than a \
+                     coding CLI. Point a specialist at it instead."
+                        .into(),
+                );
+            }
+            let h = super::cli_agent::health(provider);
+            if !h.configured {
+                return Err(h.detail);
+            }
+        } else if self.providers.lock().unwrap().get(provider).is_none() {
             return Err(format!(
                 "'{provider}' is not configured — set it up under Providers first"
             ));
@@ -1395,6 +1422,21 @@ impl Workspace {
     pub fn log_call(&self, rec: CallRecord) {
         if let Some(f) = self.call_log.get() {
             f(rec);
+        }
+    }
+
+    /// Teach this workspace where running commentary goes.
+    pub fn set_log_sink(&self, f: LogSink) {
+        let _ = self.log_sink.set(f);
+    }
+
+    /// Say something on the log, if anyone is listening.
+    ///
+    /// Best effort, like every other log line: a line that cannot be written
+    /// must never fail the thing it was describing.
+    pub fn log_line(&self, name: &str, stream: &str, line: String) {
+        if let Some(f) = self.log_sink.get() {
+            f(name, stream, line);
         }
     }
 

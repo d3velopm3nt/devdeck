@@ -152,7 +152,7 @@ export interface AppState {
   /** Request the Log viewer to filter its output. `n` bumps so asking for
    *  the same thing twice still refocuses. `search` also drives its text
    *  box — that's how a stacktrace clip jumps you to matching log lines. */
-  logFocus: { name: string; n: number; search?: string } | null
+  logFocus: { serviceId: number | 'all'; n: number; search?: string } | null
   /** App color theme; applied as data-theme on <html>, persisted to settings. */
   theme: Theme
   /** Which rail view the shell is showing. */
@@ -217,7 +217,9 @@ export interface AppState {
   touchRecent: (id: number) => void
   setRecentLimit: (n: number) => Promise<void>
   saveLabels: (list: string[]) => Promise<void>
-  focusServiceLogs: (name: string) => void
+  /** By id, never by name: a service you called "mail" and the mail system
+   *  stream are two sources that share a display name. */
+  focusServiceLogs: (serviceId: number) => void
   /** Reveal the Logs tab filtered to `term` across every source. */
   searchLogs: (term: string) => void
   setTheme: (t: Theme) => Promise<void>
@@ -1359,11 +1361,11 @@ export const useApp = create<AppState>((set, get) => ({
     localStorage.setItem('devdeck.bottom.collapsed', collapsed ? '1' : '0')
     set({ bottomCollapsed: collapsed })
   },
-  focusServiceLogs: (name) =>
-    set((st) => ({ logFocus: { name, n: (st.logFocus?.n ?? 0) + 1 } })),
+  focusServiceLogs: (serviceId) =>
+    set((st) => ({ logFocus: { serviceId, n: (st.logFocus?.n ?? 0) + 1 } })),
   searchLogs: (term) => {
     get().showBottom('logs')
-    set((st) => ({ logFocus: { name: 'all', search: term, n: (st.logFocus?.n ?? 0) + 1 } }))
+    set((st) => ({ logFocus: { serviceId: 'all', search: term, n: (st.logFocus?.n ?? 0) + 1 } }))
   },
 
   // ---- mail ----

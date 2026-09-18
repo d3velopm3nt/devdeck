@@ -34,12 +34,17 @@ const KEEP: i64 = 5_000;
 const CAP: usize = 24_000;
 
 /// The log stream the AI's own failures go to, beside setup, git and the
-/// updater. Negative, like every other system stream.
+/// updater. Declared with every other system stream in `services`.
 ///
 /// The Models tab holds every call in full; this is the other half of the same
 /// idea — when a turn fails, you should not have to know where to look. It
 /// appears in Logs with everything else that went wrong today.
-pub const AI_LOG_ID: i64 = -500_000;
+pub use crate::services::{AI_LOG_ID, RUNNER_LOG_ID};
+
+/// Say something on the delegated-session stream.
+pub fn runner_line(app: &tauri::AppHandle, name: &str, stream: &str, line: String) {
+    crate::services::push_log(app, RUNNER_LOG_ID, name, stream, line);
+}
 
 /// Say something on the AI's log stream. Best effort: a line that cannot be
 /// written must never fail the thing it was describing.

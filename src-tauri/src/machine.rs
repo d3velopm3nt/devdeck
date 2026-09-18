@@ -17,7 +17,7 @@ use crate::services;
 /// Fixed negative log/service id space for install runs (won't collide with
 /// real services, which use their row id, or ephemeral runs, which count down
 /// from -1 — installs sit far below that).
-const INSTALL_LOG_ID: i64 = -100_000;
+use crate::services::INSTALL_LOG_ID;
 
 #[derive(Serialize, Clone)]
 pub struct MachineStatus {

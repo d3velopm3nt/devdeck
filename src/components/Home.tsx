@@ -199,14 +199,31 @@ export function Home() {
         key: `crash-${s.id}`,
         ts: svcStates[s.id]?.started_at ?? 0,
         level: 'error' as const,
+        serviceId: s.id,
         service: s.name,
         line: `Service crashed${svcStates[s.id]?.exit_code != null ? ` (exit ${svcStates[s.id]?.exit_code})` : ''}`,
       }))
-    const logIssues: Array<{ key: string; ts: number; level: LogEntry['level']; service: string; line: string }> = logs
+    const logIssues: Array<{
+      key: string
+      ts: number
+      level: LogEntry['level']
+      serviceId: number
+      service: string
+      line: string
+    }> = logs
       .filter((l) => l.level === 'error' || l.level === 'warn')
       .slice(-30)
       .reverse()
-      .map((l) => ({ key: `log-${l.seq}`, ts: l.ts, level: l.level, service: l.service, line: l.line }))
+      .map((l) => ({
+        key: `log-${l.seq}`,
+        ts: l.ts,
+        level: l.level,
+        // The id, not just the name — clicking through has to land on this
+        // exact source rather than everything that happens to share its name.
+        serviceId: l.service_id,
+        service: l.service,
+        line: l.line,
+      }))
     return [...crashed, ...logIssues].slice(0, 30)
   }, [services, svcStates, logs])
 
@@ -416,7 +433,7 @@ export function Home() {
                     className="flex w-full items-start gap-2 border-b border-line/60 py-1.5 text-left last:border-b-0 hover:bg-hover/40"
                     onClick={() => {
                       showBottom('logs')
-                      focusServiceLogs(i.service)
+                      focusServiceLogs(i.serviceId)
                     }}
                     title={`Show ${i.service} logs`}
                   >

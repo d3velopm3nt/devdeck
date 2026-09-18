@@ -407,7 +407,7 @@ fn app_update_info() -> UpdateInfo {
 }
 
 /// Log id the update bar listens on (see UpdateBar/App.tsx).
-const UPDATE_LOG_ID: i64 = -200_000;
+use crate::services::UPDATE_LOG_ID;
 
 /// Run a child process, streaming both pipes to the update log. Returns
 /// whether it exited successfully.
@@ -831,6 +831,16 @@ pub fn run() {
             {
                 let log = app.handle().clone();
                 aiw_for_setup.set_call_log(Box::new(move |rec| calls::record(&log, rec)));
+            }
+
+            // And where a delegated session's running commentary goes, so work
+            // happening in another process is watchable in Logs rather than
+            // only landing as a transcript after the fact.
+            {
+                let log = app.handle().clone();
+                aiw_for_setup.set_log_sink(Box::new(move |name, stream, line| {
+                    calls::runner_line(&log, name, stream, line)
+                }));
             }
 
             // Give the AI Workspace bus a way out to the UI. The closure lives

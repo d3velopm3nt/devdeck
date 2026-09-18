@@ -866,14 +866,33 @@ impl AgentRuntime {
         };
         let prompt = Self::brief(&agent, &intent, &context, &cmd.stop_at);
 
+        // How a delegated run is watched while it runs. The transcript is the
+        // record and the log is the window: without the second, work happening
+        // in another process shows no sign of itself until it is over.
+        let log_as = format!("{} · {}", agent.name, agent.provider);
+        ws.log_line(
+            &log_as,
+            "system",
+            format!("{} in {}", intent, project.root.display()),
+        );
+
         let sid = session_id.clone();
         let bus_ws = ws.clone();
         let bus_scope = scope.clone();
+        let log_name = log_as.clone();
         let mut turns = 0u32;
         let outcome = super::cli_agent::run(&spec, &project.root, &prompt, &mut |e| {
             if e.kind == "message" {
                 turns += 1;
             }
+            bus_ws.log_line(
+                &log_name,
+                if e.kind == "stderr" { "stderr" } else { "stdout" },
+                match e.kind {
+                    "tool" => format!("· {}", e.text),
+                    _ => e.text.clone(),
+                },
+            );
             bus_ws.update_session(&sid, |s| {
                 s.transcript.push(TranscriptEntry {
                     at: now_iso(),
@@ -896,14 +915,23 @@ impl AgentRuntime {
                 // session rather than dropped: a delegated run spends real
                 // money somewhere you cannot see, and the id is the only way
                 // back into it.
+                let receipt = format!(
+                    "{} session {} · {} turns · ${:.4}",
+                    agent.provider, r.runner_session_id, r.turns, r.cost_usd
+                );
+                ws.log_line(
+                    &log_as,
+                    if r.ok { "system" } else { "stderr" },
+                    format!(
+                        "{} — {receipt}",
+                        if r.ok { "finished" } else { "stopped without finishing" }
+                    ),
+                );
                 ws.update_session(&session_id, |s| {
                     s.transcript.push(TranscriptEntry {
                         at: now_iso(),
                         kind: "runner".into(),
-                        text: format!(
-                            "{} session {} · ${:.4}",
-                            agent.provider, r.runner_session_id, r.cost_usd
-                        ),
+                        text: receipt,
                     });
                 });
                 Work {
@@ -927,14 +955,17 @@ impl AgentRuntime {
             }
             // A runner that could not start is a failed session and says so.
             // The alternative — an empty success — is the update-checker bug.
-            Err(e) => Work {
-                summary: String::new(),
-                turns,
-                refused: 0,
-                files_touched: vec![],
-                failed: Some(e),
-                budget: None,
-            },
+            Err(e) => {
+                ws.log_line(&log_as, "stderr", e.clone());
+                Work {
+                    summary: String::new(),
+                    turns,
+                    refused: 0,
+                    files_touched: vec![],
+                    failed: Some(e),
+                    budget: None,
+                }
+            }
         };
 
         Self::complete(

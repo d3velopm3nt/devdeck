@@ -113,7 +113,7 @@ impl RunnerSpec {
 /// Something the run said, on its way past.
 #[derive(Clone, Debug)]
 pub struct RunEvent {
-    /// `message` · `tool` · `denied` — the kinds a transcript shows.
+    /// `message` · `tool` · `stderr` — the kinds a transcript shows.
     pub kind: &'static str,
     pub text: String,
 }
@@ -278,6 +278,13 @@ pub fn run(
         .unwrap_or_default()
         .trim()
         .to_string();
+
+    // Reported even when the run succeeded. A CLI that warned on its way to a
+    // good result still warned, and swallowing that because the verdict was
+    // green is how a problem stays invisible until it is not one any more.
+    if !stderr.is_empty() {
+        on_event(RunEvent { kind: "stderr", text: stderr.clone() });
+    }
 
     match verdict {
         Some(v) => Ok(v),

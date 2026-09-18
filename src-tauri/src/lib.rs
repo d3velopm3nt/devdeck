@@ -829,6 +829,16 @@ pub fn run() {
                 aiw_for_setup.set_call_log(Box::new(move |rec| calls::record(&log, rec)));
             }
 
+            // And where a delegated session's running commentary goes, so work
+            // happening in another process is watchable in Logs rather than
+            // only landing as a transcript after the fact.
+            {
+                let log = app.handle().clone();
+                aiw_for_setup.set_log_sink(Box::new(move |name, stream, line| {
+                    calls::runner_line(&log, name, stream, line)
+                }));
+            }
+
             // Give the AI Workspace bus a way out to the UI. The closure lives
             // here, in the shell, so the bus itself stays free of Tauri — which
             // is both cleaner layering and what keeps the test binary linkable.

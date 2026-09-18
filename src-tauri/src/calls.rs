@@ -41,6 +41,18 @@ const CAP: usize = 24_000;
 /// appears in Logs with everything else that went wrong today.
 pub const AI_LOG_ID: i64 = -500_000;
 
+/// Delegated sessions — an agent's work being done by an external CLI.
+///
+/// Its own stream rather than the AI one: that stream is for calls DevDeck
+/// made and failures it saw, and this is a running commentary on a process
+/// somewhere else. Mixing them would mean you could not follow either.
+pub const RUNNER_LOG_ID: i64 = -600_000;
+
+/// Say something on the delegated-session stream.
+pub fn runner_line(app: &tauri::AppHandle, name: &str, stream: &str, line: String) {
+    crate::services::push_log(app, RUNNER_LOG_ID, name, stream, line);
+}
+
 /// Say something on the AI's log stream. Best effort: a line that cannot be
 /// written must never fail the thing it was describing.
 pub fn log_line(app: &tauri::AppHandle, stream: &str, line: String) {

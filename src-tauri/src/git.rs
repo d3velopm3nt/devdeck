@@ -16,7 +16,7 @@ use tauri::Emitter;
 
 use crate::services;
 
-const GIT_LOG_ID: i64 = -400_000;
+use crate::services::GIT_LOG_ID;
 
 #[cfg(windows)]
 fn no_window(cmd: &mut Command) {

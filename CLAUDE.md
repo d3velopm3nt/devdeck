@@ -151,8 +151,11 @@ icon swap is one line. Note: **lucide-react has no brand icons** — `Github`
 doesn't exist, we use `GitBranch`.
 
 **Logs.** Everything streams through the log bus: `services::push_log(app, id,
-name, stream, line)`. System streams use negative ids (setup `-300_000`, git
-`-400_000`, update `-200_000`).
+name, stream, line)`. System streams use negative ids, and **all of them are
+declared together in `services.rs`** — never in the module that uses one. They
+were scattered once and three independently picked `-500_000` (AI, stash,
+mail); nothing caught it because both log views filter on the display name, so
+the id nothing reads was free to be wrong. A test asserts they stay distinct.
 
 **Failure honesty.** Never let a failed check look like a success. The update
 checker once mapped "couldn't reach the server" to "up to date" and silently hid

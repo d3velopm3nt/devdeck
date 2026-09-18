@@ -24,7 +24,7 @@ use crate::db::{err, Db};
 use crate::services::push_log;
 
 /// System log stream for mail, alongside setup (-300k) and git (-400k).
-pub const MAIL_LOG_ID: i64 = -500_000;
+pub use crate::services::MAIL_LOG_ID;
 /// Messages pulled per mailbox per sync. A mail client is not an archive
 /// migration tool; older mail stays on the server until you go looking.
 const SYNC_LIMIT: u32 = 200;

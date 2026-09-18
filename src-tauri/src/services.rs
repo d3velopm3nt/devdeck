@@ -61,6 +61,48 @@ pub struct LogEntry {
     pub line: String,
 }
 
+/// The system log streams, all of them, in one place.
+///
+/// A real service's id is its row in the database, so these are negative to
+/// stay out of the way. They used to be declared wherever they were used —
+/// six files each picking a number on its own — and three of them independently
+/// picked -500_000: the AI stream, stash's screenshot watcher, and mail. That
+/// went unnoticed because both log views filter on the display *name*
+/// (`LogViewer.tsx`, `ServiceDetailPage.tsx`), so the id nothing reads was free
+/// to be wrong. Anything that started filtering by id — the obvious thing to
+/// do, and what `push_log`'s signature invites — would have silently merged
+/// three subsystems into one stream.
+///
+/// **A new stream gets its id here, not in the module that uses it.** That is
+/// the whole point of the block: a collision has to be visible to happen.
+pub const INSTALL_LOG_ID: i64 = -100_000;
+pub const UPDATE_LOG_ID: i64 = -200_000;
+pub const SETUP_LOG_ID: i64 = -300_000;
+pub const GIT_LOG_ID: i64 = -400_000;
+pub const AI_LOG_ID: i64 = -500_000;
+/// Delegated sessions — an agent's work being done by an external CLI. Its own
+/// stream rather than the AI one: that is for calls DevDeck made and failures
+/// it saw, and this is commentary on a process somewhere else.
+pub const RUNNER_LOG_ID: i64 = -600_000;
+pub const STASH_LOG_ID: i64 = -700_000;
+pub const MAIL_LOG_ID: i64 = -800_000;
+
+/// Every system stream, so the test below can check they are all different.
+/// Nothing at runtime reads it. Add a stream above and add it here too —
+/// Rust cannot enumerate the constants for us, so an id left out of this list
+/// is simply an id nothing checks.
+#[cfg(test)]
+const SYSTEM_LOG_IDS: &[(i64, &str)] = &[
+    (INSTALL_LOG_ID, "install"),
+    (UPDATE_LOG_ID, "update"),
+    (SETUP_LOG_ID, "setup"),
+    (GIT_LOG_ID, "git"),
+    (AI_LOG_ID, "ai"),
+    (RUNNER_LOG_ID, "runner"),
+    (STASH_LOG_ID, "stash"),
+    (MAIL_LOG_ID, "mail"),
+];
+
 static LOG_SEQ: AtomicI64 = AtomicI64::new(0);
 
 fn now_ms() -> u64 {
@@ -599,4 +641,35 @@ pub fn live_pids(mgr: &ServiceManager) -> Vec<(i64, String, u32)> {
         .filter(|r| r.state.status == SvcStatus::Running)
         .filter_map(|r| r.state.pid.map(|p| (r.state.id, r.state.name.clone(), p)))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Three streams once shared -500_000 — the AI's, stash's and mail's —
+    /// and nothing caught it because both log views filter on the display
+    /// name rather than the id. A duplicate here is a silent merge of two
+    /// subsystems the first time anything keys on the number, so it is worth
+    /// a test rather than a careful reading of a list.
+    #[test]
+    fn every_system_log_stream_has_its_own_id() {
+        let mut seen: HashMap<i64, &str> = HashMap::new();
+        for (id, name) in SYSTEM_LOG_IDS {
+            if let Some(other) = seen.insert(*id, name) {
+                panic!("'{name}' and '{other}' both log to {id}");
+            }
+        }
+        assert_eq!(seen.len(), SYSTEM_LOG_IDS.len());
+    }
+
+    /// A real service's id is its database row, which counts up from 1, and an
+    /// ephemeral run counts down from -1. A system stream that strayed into
+    /// either range would collide with a service rather than another stream.
+    #[test]
+    fn system_streams_stay_clear_of_services_and_ephemeral_runs() {
+        for (id, name) in SYSTEM_LOG_IDS {
+            assert!(*id <= -100_000, "'{name}' at {id} is not far enough below zero");
+        }
+    }
 }

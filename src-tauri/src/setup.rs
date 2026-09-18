@@ -18,7 +18,7 @@ use tauri::Emitter;
 
 use crate::services;
 
-const SETUP_LOG_ID: i64 = -300_000;
+use crate::services::SETUP_LOG_ID;
 
 #[cfg(windows)]
 fn no_window(cmd: &mut Command) {

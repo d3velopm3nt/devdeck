@@ -34,19 +34,12 @@ const KEEP: i64 = 5_000;
 const CAP: usize = 24_000;
 
 /// The log stream the AI's own failures go to, beside setup, git and the
-/// updater. Negative, like every other system stream.
+/// updater. Declared with every other system stream in `services`.
 ///
 /// The Models tab holds every call in full; this is the other half of the same
 /// idea — when a turn fails, you should not have to know where to look. It
 /// appears in Logs with everything else that went wrong today.
-pub const AI_LOG_ID: i64 = -500_000;
-
-/// Delegated sessions — an agent's work being done by an external CLI.
-///
-/// Its own stream rather than the AI one: that stream is for calls DevDeck
-/// made and failures it saw, and this is a running commentary on a process
-/// somewhere else. Mixing them would mean you could not follow either.
-pub const RUNNER_LOG_ID: i64 = -600_000;
+pub use crate::services::{AI_LOG_ID, RUNNER_LOG_ID};
 
 /// Say something on the delegated-session stream.
 pub fn runner_line(app: &tauri::AppHandle, name: &str, stream: &str, line: String) {

@@ -403,7 +403,7 @@ fn app_update_info() -> UpdateInfo {
 }
 
 /// Log id the update bar listens on (see UpdateBar/App.tsx).
-const UPDATE_LOG_ID: i64 = -200_000;
+use crate::services::UPDATE_LOG_ID;
 
 /// Run a child process, streaming both pipes to the update log. Returns
 /// whether it exited successfully.

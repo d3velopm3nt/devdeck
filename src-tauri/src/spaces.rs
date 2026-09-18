@@ -340,7 +340,11 @@ mod tests {
     fn every_starter_is_findable_and_says_what_it_brings() {
         for st in starters() {
             assert!(!st.id.trim().is_empty(), "a starter needs an id");
-            assert!(!st.brings.trim().is_empty(), "{} does not say what it brings", st.id);
+            assert!(
+                !st.brings.trim().is_empty(),
+                "{} does not say what it brings",
+                st.id
+            );
         }
     }
 
@@ -370,7 +374,12 @@ mod tests {
                     st.id,
                     r.every
                 );
-                assert!((0..1440).contains(&r.at_min), "{} drafts {}", st.id, r.at_min);
+                assert!(
+                    (0..1440).contains(&r.at_min),
+                    "{} drafts {}",
+                    st.id,
+                    r.at_min
+                );
                 if r.every == "weekly" {
                     let day: i64 = r.days.parse().unwrap_or(-1);
                     assert!((0..7).contains(&day), "{} drafts day {:?}", st.id, r.days);
@@ -391,7 +400,12 @@ mod tests {
                     st.id,
                     f.name
                 );
-                assert!(!f.why.trim().is_empty(), "{}/{} has no reason", st.id, f.name);
+                assert!(
+                    !f.why.trim().is_empty(),
+                    "{}/{} has no reason",
+                    st.id,
+                    f.name
+                );
             }
         }
     }

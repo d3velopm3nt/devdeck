@@ -344,7 +344,6 @@ impl GrantBook {
     }
 }
 
-
 // ---------------------------------------------------------------------------
 // Where they are kept
 // ---------------------------------------------------------------------------
@@ -619,17 +618,32 @@ mod tests {
     #[test]
     fn an_exact_grant_covers_that_command_and_nothing_near_it() {
         let mut book = GrantBook::default();
-        book.add(grant(Scope::Exact("npm test".into())), Access::Write, &now_iso())
-            .unwrap();
+        book.add(
+            grant(Scope::Exact("npm test".into())),
+            Access::Write,
+            &now_iso(),
+        )
+        .unwrap();
 
         let now = now_iso();
-        assert!(book.find("dev", "terminal", "run", &cmd("npm test"), "p1", &now).is_some());
+        assert!(book
+            .find("dev", "terminal", "run", &cmd("npm test"), "p1", &now)
+            .is_some());
         assert!(
-            book.find("dev", "terminal", "run", &cmd("npm test -- --watch"), "p1", &now).is_none(),
+            book.find(
+                "dev",
+                "terminal",
+                "run",
+                &cmd("npm test -- --watch"),
+                "p1",
+                &now
+            )
+            .is_none(),
             "an exact grant is exact"
         );
         assert!(
-            book.find("dev", "terminal", "run", &cmd("rm -rf ."), "p1", &now).is_none(),
+            book.find("dev", "terminal", "run", &cmd("rm -rf ."), "p1", &now)
+                .is_none(),
             "and covers nothing else at all"
         );
     }
@@ -637,16 +651,38 @@ mod tests {
     #[test]
     fn a_grant_is_for_one_agent_one_tool_one_action_and_one_project() {
         let mut book = GrantBook::default();
-        book.add(grant(Scope::Exact("npm test".into())), Access::Write, &now_iso())
-            .unwrap();
+        book.add(
+            grant(Scope::Exact("npm test".into())),
+            Access::Write,
+            &now_iso(),
+        )
+        .unwrap();
         let now = now_iso();
         let args = cmd("npm test");
 
-        assert!(book.find("dev", "terminal", "run", &args, "p1", &now).is_some());
-        assert!(book.find("qa", "terminal", "run", &args, "p1", &now).is_none(), "other agent");
-        assert!(book.find("dev", "files", "run", &args, "p1", &now).is_none(), "other tool");
-        assert!(book.find("dev", "terminal", "kill", &args, "p1", &now).is_none(), "other action");
-        assert!(book.find("dev", "terminal", "run", &args, "p2", &now).is_none(), "other project");
+        assert!(book
+            .find("dev", "terminal", "run", &args, "p1", &now)
+            .is_some());
+        assert!(
+            book.find("qa", "terminal", "run", &args, "p1", &now)
+                .is_none(),
+            "other agent"
+        );
+        assert!(
+            book.find("dev", "files", "run", &args, "p1", &now)
+                .is_none(),
+            "other tool"
+        );
+        assert!(
+            book.find("dev", "terminal", "kill", &args, "p1", &now)
+                .is_none(),
+            "other action"
+        );
+        assert!(
+            book.find("dev", "terminal", "run", &args, "p2", &now)
+                .is_none(),
+            "other project"
+        );
     }
 
     /// The property the whole feature rests on: a standing permission to change
@@ -665,15 +701,21 @@ mod tests {
     fn a_grant_that_never_ends_or_never_runs_out_is_refused() {
         let mut g = grant(Scope::Exact("npm test".into()));
         g.expires_at = String::new();
-        assert!(validate(&g, Access::Write).unwrap_err().contains("has to expire"));
+        assert!(validate(&g, Access::Write)
+            .unwrap_err()
+            .contains("has to expire"));
 
         let mut g = grant(Scope::Exact("npm test".into()));
         g.max_uses = 0;
-        assert!(validate(&g, Access::Write).unwrap_err().contains("number of uses"));
+        assert!(validate(&g, Access::Write)
+            .unwrap_err()
+            .contains("number of uses"));
 
         let mut g = grant(Scope::Exact("npm test".into()));
         g.max_uses = 100_000;
-        assert!(validate(&g, Access::Write).unwrap_err().contains("too many uses"));
+        assert!(validate(&g, Access::Write)
+            .unwrap_err()
+            .contains("too many uses"));
 
         // And a prefix short enough to match almost anything is not narrow.
         assert!(validate(&grant(Scope::Prefix("n".into())), Access::Write).is_err());
@@ -689,11 +731,14 @@ mod tests {
 
         let now = now_iso();
         for _ in 0..2 {
-            assert!(book.find("dev", "terminal", "run", &cmd("npm test"), "p1", &now).is_some());
+            assert!(book
+                .find("dev", "terminal", "run", &cmd("npm test"), "p1", &now)
+                .is_some());
             book.spend(&g.id, "npm test", &now).unwrap();
         }
         assert!(
-            book.find("dev", "terminal", "run", &cmd("npm test"), "p1", &now).is_none(),
+            book.find("dev", "terminal", "run", &cmd("npm test"), "p1", &now)
+                .is_none(),
             "two uses meant two"
         );
     }
@@ -706,7 +751,9 @@ mod tests {
         book.grants.push(g);
 
         let now = now_iso();
-        assert!(book.find("dev", "terminal", "run", &cmd("npm test"), "p1", &now).is_none());
+        assert!(book
+            .find("dev", "terminal", "run", &cmd("npm test"), "p1", &now)
+            .is_none());
     }
 
     /// An expiry we cannot read must not be treated as "no expiry".
@@ -722,14 +769,24 @@ mod tests {
     fn revoking_keeps_the_receipt() {
         let mut book = GrantBook::default();
         let g = book
-            .add(grant(Scope::Exact("npm test".into())), Access::Write, &now_iso())
+            .add(
+                grant(Scope::Exact("npm test".into())),
+                Access::Write,
+                &now_iso(),
+            )
             .unwrap();
         let now = now_iso();
         book.spend(&g.id, "npm test", &now);
 
         assert!(book.revoke(&g.id, &now));
-        assert!(book.find("dev", "terminal", "run", &cmd("npm test"), "p1", &now).is_none());
-        let kept = book.grants.iter().find(|x| x.id == g.id).expect("still listed");
+        assert!(book
+            .find("dev", "terminal", "run", &cmd("npm test"), "p1", &now)
+            .is_none());
+        let kept = book
+            .grants
+            .iter()
+            .find(|x| x.id == g.id)
+            .expect("still listed");
         assert_eq!(kept.uses, 1, "what it did survives being withdrawn");
         assert_eq!(kept.recent.len(), 1);
 
@@ -740,8 +797,10 @@ mod tests {
     fn saying_always_twice_does_not_double_the_budget() {
         let mut book = GrantBook::default();
         let now = now_iso();
-        book.add(grant(Scope::Exact("npm test".into())), Access::Write, &now).unwrap();
-        book.add(grant(Scope::Exact("npm test".into())), Access::Write, &now).unwrap();
+        book.add(grant(Scope::Exact("npm test".into())), Access::Write, &now)
+            .unwrap();
+        book.add(grant(Scope::Exact("npm test".into())), Access::Write, &now)
+            .unwrap();
         assert_eq!(book.grants.iter().filter(|g| g.live(&now)).count(), 1);
     }
 
@@ -782,7 +841,10 @@ mod tests {
     fn revoke_all_is_the_panic_button() {
         let mut book = GrantBook::default();
         let now = now_iso();
-        for (i, c) in ["npm test", "npm run build", "cargo test"].iter().enumerate() {
+        for (i, c) in ["npm test", "npm run build", "cargo test"]
+            .iter()
+            .enumerate()
+        {
             let mut g = grant(Scope::Exact((*c).into()));
             g.id = format!("g{i}");
             book.add(g, Access::Write, &now).unwrap();
@@ -804,7 +866,8 @@ mod tests {
 
         let now = now_iso();
         assert!(
-            book.find("dev", "git", "status", &serde_json::json!({}), "p1", &now).is_none(),
+            book.find("dev", "git", "status", &serde_json::json!({}), "p1", &now)
+                .is_none(),
             "git.status pins nothing, so an exact grant cannot cover it"
         );
     }

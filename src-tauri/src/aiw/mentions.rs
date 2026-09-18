@@ -36,7 +36,9 @@ pub fn mentions(text: &str) -> Vec<String> {
         }
         let start = i + 1;
         let mut end = start;
-        while end < bytes.len() && (bytes[end].is_alphanumeric() || bytes[end] == '-' || bytes[end] == '_') {
+        while end < bytes.len()
+            && (bytes[end].is_alphanumeric() || bytes[end] == '-' || bytes[end] == '_')
+        {
             end += 1;
         }
         if end > start {

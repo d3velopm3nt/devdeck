@@ -669,7 +669,10 @@ mod tests {
     #[test]
     fn system_streams_stay_clear_of_services_and_ephemeral_runs() {
         for (id, name) in SYSTEM_LOG_IDS {
-            assert!(*id <= -100_000, "'{name}' at {id} is not far enough below zero");
+            assert!(
+                *id <= -100_000,
+                "'{name}' at {id} is not far enough below zero"
+            );
         }
     }
 

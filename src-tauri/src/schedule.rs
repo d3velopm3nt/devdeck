@@ -156,7 +156,8 @@ pub fn row(r: &rusqlite::Row) -> rusqlite::Result<Schedule> {
     })
 }
 
-pub const COLS: &str = "id, name, kind, node_id, every, at_min, at_ms, duration_min, days, payload, \
+pub const COLS: &str =
+    "id, name, kind, node_id, every, at_min, at_ms, duration_min, days, payload, \
                     enabled, catch_up, last_run, last_ok, last_note, remind_min, last_remind, \
                     feature, work_item, manager";
 
@@ -166,7 +167,10 @@ pub const COLS: &str = "id, name, kind, node_id, every, at_min, at_ms, duration_
 
 /// A schedule's most recent due time at or before `now`, or None if it has
 /// never been due. Local time, because "07:00" means seven where you are.
-fn last_due(s: &Schedule, now: chrono::DateTime<chrono::Local>) -> Option<chrono::DateTime<chrono::Local>> {
+fn last_due(
+    s: &Schedule,
+    now: chrono::DateTime<chrono::Local>,
+) -> Option<chrono::DateTime<chrono::Local>> {
     use chrono::{Datelike, Duration, Timelike};
 
     // A moment is due once, when it arrives, and never again. `last_run`
@@ -219,7 +223,10 @@ fn last_due(s: &Schedule, now: chrono::DateTime<chrono::Local>) -> Option<chrono
 }
 
 /// The next time it fires after `now`.
-fn next_due(s: &Schedule, now: chrono::DateTime<chrono::Local>) -> Option<chrono::DateTime<chrono::Local>> {
+fn next_due(
+    s: &Schedule,
+    now: chrono::DateTime<chrono::Local>,
+) -> Option<chrono::DateTime<chrono::Local>> {
     use chrono::{Datelike, Duration, Timelike};
 
     if s.every == "once" {
@@ -349,8 +356,20 @@ pub fn schedule_save(
                  payload=?7, catch_up=?8, at_ms=?9, duration_min=?10, remind_min=?11, \
                  feature=?12, work_item=?13 WHERE id=?14",
                 params![
-                    name, kind, node_id, every, at_min, days, payload, catch_up as i64, at_ms,
-                    duration_min, remind_min, feature, work_item, id
+                    name,
+                    kind,
+                    node_id,
+                    every,
+                    at_min,
+                    days,
+                    payload,
+                    catch_up as i64,
+                    at_ms,
+                    duration_min,
+                    remind_min,
+                    feature,
+                    work_item,
+                    id
                 ],
             )
             .map_err(err)?;
@@ -362,8 +381,19 @@ pub fn schedule_save(
                  catch_up, at_ms, duration_min, remind_min, feature, work_item) \
                  VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
                 params![
-                    name, kind, node_id, every, at_min, days, payload, catch_up as i64, at_ms,
-                    duration_min, remind_min, feature, work_item
+                    name,
+                    kind,
+                    node_id,
+                    every,
+                    at_min,
+                    days,
+                    payload,
+                    catch_up as i64,
+                    at_ms,
+                    duration_min,
+                    remind_min,
+                    feature,
+                    work_item
                 ],
             )
             .map_err(err)?;
@@ -475,9 +505,7 @@ fn run_one(
             //
             // `wake_agent` is called here rather than under the caller's lock
             // because a session can take minutes and takes the database itself.
-            let ran = bot
-                .as_ref()
-                .and_then(|b| crate::bots::wake_agent(app, b));
+            let ran = bot.as_ref().and_then(|b| crate::bots::wake_agent(app, b));
             // The receipt is the log, and the bot's thread is where the
             // receipt goes — the inbox line and the thread line are the same
             // sentence, so a wake reads the same wherever you meet it.
@@ -561,7 +589,9 @@ pub fn on_event(app: &tauri::AppHandle, event_type: &str, project_id: Option<&st
     if !TRIGGERS.contains(&event_type) {
         return;
     }
-    let Some(db) = app.try_state::<Db>() else { return };
+    let Some(db) = app.try_state::<Db>() else {
+        return;
+    };
     let node: Option<i64> = project_id.and_then(|p| p.parse().ok());
     let now = chrono::Local::now().timestamp_millis();
 
@@ -597,7 +627,9 @@ pub fn on_event(app: &tauri::AppHandle, event_type: &str, project_id: Option<&st
         let h = app.clone();
         std::thread::spawn(move || {
             let (report, bot) = {
-                let Some(db) = h.try_state::<Db>() else { return };
+                let Some(db) = h.try_state::<Db>() else {
+                    return;
+                };
                 let conn = db.0.lock().unwrap();
                 // The heartbeat names its manager; the report is about the
                 // space that manager's memory is filed under.
@@ -634,14 +666,22 @@ pub fn tick(app: &tauri::AppHandle, startup: bool) {
         /// found when it looked, and the bot itself. All of it is gathered
         /// under the lock, because running is done without it — a wake that
         /// starts an agent can take minutes and needs the database.
-        Run(Schedule, Option<String>, bool, Option<String>, Option<crate::bots::Bot>),
+        Run(
+            Schedule,
+            Option<String>,
+            bool,
+            Option<String>,
+            Option<crate::bots::Bot>,
+        ),
         Missed(Schedule, i64),
         /// Tell them it is coming: the schedule, the moment it starts, and how
         /// many minutes away that is.
         Warn(Schedule, i64, i64),
     }
 
-    let Some(db) = app.try_state::<Db>() else { return };
+    let Some(db) = app.try_state::<Db>() else {
+        return;
+    };
     let now = chrono::Local::now();
 
     let todo: Vec<Do> = {
@@ -656,7 +696,9 @@ pub fn tick(app: &tauri::AppHandle, startup: bool) {
                 todo.push(Do::Warn(s.clone(), next_ms, away));
             }
 
-            let Some(due) = last_due(&s, now) else { continue };
+            let Some(due) = last_due(&s, now) else {
+                continue;
+            };
             let due_ms = due.timestamp_millis();
             if s.last_run.is_some_and(|r| r >= due_ms) {
                 continue;
@@ -794,7 +836,11 @@ pub fn schedule_run_now(
             } else {
                 crate::bots::bot_on(&conn, &s.manager)
             };
-            (bot.as_ref().and_then(|b| crate::bots::wake_report_for(&conn, b)), bot)
+            (
+                bot.as_ref()
+                    .and_then(|b| crate::bots::wake_report_for(&conn, b)),
+                bot,
+            )
         } else {
             (None, None)
         };
@@ -817,7 +863,10 @@ mod tests {
     use chrono::TimeZone;
 
     fn at(h: u32, m: u32) -> chrono::DateTime<chrono::Local> {
-        chrono::Local.with_ymd_and_hms(2026, 9, 7, h, m, 0).single().unwrap()
+        chrono::Local
+            .with_ymd_and_hms(2026, 9, 7, h, m, 0)
+            .single()
+            .unwrap()
     }
 
     /// A daily reminder at 09:00 that wants ten minutes' warning.

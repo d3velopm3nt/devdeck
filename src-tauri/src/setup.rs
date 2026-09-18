@@ -467,7 +467,11 @@ pub async fn clone_repo(
         .map_err(|e| format!("the clone did not finish: {e}"))?
 }
 
-pub(crate) fn clone_now(app: tauri::AppHandle, url: String, parent: String) -> Result<String, String> {
+pub(crate) fn clone_now(
+    app: tauri::AppHandle,
+    url: String,
+    parent: String,
+) -> Result<String, String> {
     let url = url.trim().to_string();
     if url.is_empty() {
         return Err("Enter a repository URL.".into());

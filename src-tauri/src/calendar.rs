@@ -64,6 +64,7 @@ pub struct Item {
 }
 
 /// A day, a week, a month, a year — the only thing that differs between views.
+#[allow(dead_code)]
 #[derive(Serialize, Clone, Debug, Default)]
 pub struct Window {
     pub from: i64,
@@ -227,7 +228,11 @@ pub fn calendar_range(
                     status: if at > now {
                         "planned".into()
                     } else if s.last_run.is_some_and(|r| (r - at).abs() < 120_000) {
-                        if s.last_ok { "ok".into() } else { "failed".into() }
+                        if s.last_ok {
+                            "ok".into()
+                        } else {
+                            "failed".into()
+                        }
                     } else {
                         "past".into()
                     },
@@ -241,7 +246,11 @@ pub fn calendar_range(
     // -- deadlines, from every space's deck ---------------------------------
     {
         let now = chrono::Local::now().timestamp_millis();
-        for p in ws.project_ids().into_iter().filter_map(|id| ws.project(&id)) {
+        for p in ws
+            .project_ids()
+            .into_iter()
+            .filter_map(|id| ws.project(&id))
+        {
             let deck = p.deck();
             for slug in deck.feature_slugs() {
                 let Ok(work) = deck.work(&slug) else { continue };
@@ -302,7 +311,9 @@ const LEAD_HOURS: i64 = 48;
 
 pub fn check_deadlines(app: &tauri::AppHandle) {
     use tauri::Manager;
-    let Some(db) = app.try_state::<Db>() else { return };
+    let Some(db) = app.try_state::<Db>() else {
+        return;
+    };
     let Some(ws) = app.try_state::<std::sync::Arc<crate::aiw::state::Workspace>>() else {
         return;
     };
@@ -311,7 +322,11 @@ pub fn check_deadlines(app: &tauri::AppHandle) {
     let today = now.format("%Y-%m-%d").to_string();
     let horizon = now_ms + LEAD_HOURS * 3_600_000;
 
-    for p in ws.project_ids().into_iter().filter_map(|id| ws.project(&id)) {
+    for p in ws
+        .project_ids()
+        .into_iter()
+        .filter_map(|id| ws.project(&id))
+    {
         let deck = p.deck();
         for slug in deck.feature_slugs() {
             let Ok(work) = deck.work(&slug) else { continue };
@@ -419,7 +434,11 @@ mod tests {
         let to = at(2026, 9, 13, 23, 59);
         let times = occurrences(&s, from, to);
         assert_eq!(times.len(), 7, "one a day across the week");
-        assert_eq!(times[0], at(2026, 9, 7, 9, 30), "at half nine, not midnight");
+        assert_eq!(
+            times[0],
+            at(2026, 9, 7, 9, 30),
+            "at half nine, not midnight"
+        );
         assert!(times.iter().all(|t| *t >= from && *t <= to));
     }
 

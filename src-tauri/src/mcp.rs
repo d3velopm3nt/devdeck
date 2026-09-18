@@ -122,7 +122,11 @@ impl StdioTransport {
     /// stderr is inherited rather than piped: a server that complains on
     /// startup should be findable in the dev console, and piping it without
     /// draining it fills the pipe and deadlocks the child.
-    pub fn spawn(command: &str, args: &[String], dir: Option<&std::path::Path>) -> Result<Self, String> {
+    pub fn spawn(
+        command: &str,
+        args: &[String],
+        dir: Option<&std::path::Path>,
+    ) -> Result<Self, String> {
         let mut cmd = Command::new(resolve_program(command));
         cmd.args(args)
             .stdin(Stdio::piped())
@@ -162,7 +166,9 @@ impl Transport for StdioTransport {
             .as_mut()
             .ok_or_else(|| "the server's stdin is closed".to_string())?;
         writeln!(stdin, "{line}").map_err(|e| format!("writing to the server: {e}"))?;
-        stdin.flush().map_err(|e| format!("flushing to the server: {e}"))
+        stdin
+            .flush()
+            .map_err(|e| format!("flushing to the server: {e}"))
     }
 
     fn recv(&mut self) -> Result<String, String> {
@@ -243,7 +249,9 @@ impl<T: Transport> Client<T> {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(TIMEOUT_SECS);
         loop {
             if std::time::Instant::now() > deadline {
-                return Err(format!("the server did not answer '{method}' in {TIMEOUT_SECS}s"));
+                return Err(format!(
+                    "the server did not answer '{method}' in {TIMEOUT_SECS}s"
+                ));
             }
             let line = self.transport.recv()?;
             if line.trim().is_empty() {
@@ -376,7 +384,11 @@ pub fn flatten_result(result: &Value) -> Result<String, String> {
         })
         .unwrap_or_default();
 
-    if result.get("isError").and_then(Value::as_bool).unwrap_or(false) {
+    if result
+        .get("isError")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
         return Err(if text.is_empty() {
             "the tool reported an error".to_string()
         } else {
@@ -595,7 +607,9 @@ mod tests {
             Ok(())
         }
         fn recv(&mut self) -> Result<String, String> {
-            self.replies.pop().ok_or_else(|| "nothing left to say".into())
+            self.replies
+                .pop()
+                .ok_or_else(|| "nothing left to say".into())
         }
     }
 
@@ -723,7 +737,10 @@ mod tests {
         assert_eq!(p, "npx");
         assert_eq!(a, vec!["-y", "@modelcontextprotocol/server-fetch"]);
 
-        assert!(split_command("   ").is_none(), "nothing to run is not a program");
+        assert!(
+            split_command("   ").is_none(),
+            "nothing to run is not a program"
+        );
     }
 
     #[test]
@@ -731,7 +748,11 @@ mod tests {
         assert!(is_mcp("mcp.fetch"));
         assert!(!is_mcp("files"));
         assert_eq!(server_of("mcp.fetch"), Some("fetch"));
-        assert_eq!(server_of("mcp."), None, "a prefix with nothing after it names nobody");
+        assert_eq!(
+            server_of("mcp."),
+            None,
+            "a prefix with nothing after it names nobody"
+        );
         assert_eq!(server_of("files"), None);
     }
 }
@@ -824,7 +845,9 @@ process.stdin.on("data", (d) => {
         };
 
         // Starting it is what learns what it offers.
-        let tools = hub.ensure(&spec).expect("the server should start and answer");
+        let tools = hub
+            .ensure(&spec)
+            .expect("the server should start and answer");
         assert_eq!(tools.len(), 2, "{tools:?}");
         assert_eq!(tools[0].name, "shout");
         assert!(!tools[0].read_only, "unhinted is a write");
@@ -832,7 +855,8 @@ process.stdin.on("data", (d) => {
 
         // The pipe stays open across calls: two round trips, one process.
         assert_eq!(
-            hub.call(&spec, "shout", serde_json::json!({"text": "hello"})).unwrap(),
+            hub.call(&spec, "shout", serde_json::json!({"text": "hello"}))
+                .unwrap(),
             "HELLO"
         );
         assert_eq!(
@@ -849,11 +873,16 @@ process.stdin.on("data", (d) => {
         assert!(up[0].pid > 0);
 
         // A tool the server does not offer is refused here rather than sent.
-        let e = hub.call(&spec, "delete-everything", serde_json::json!({})).unwrap_err();
+        let e = hub
+            .call(&spec, "delete-everything", serde_json::json!({}))
+            .unwrap_err();
         assert!(e.contains("no tool called"), "{e}");
 
         assert!(hub.stop("echo"));
-        assert!(hub.statuses().is_empty(), "stopping takes the process with it");
+        assert!(
+            hub.statuses().is_empty(),
+            "stopping takes the process with it"
+        );
         let _ = std::fs::remove_file(&script);
     }
 
@@ -867,7 +896,10 @@ process.stdin.on("data", (d) => {
         };
         let e = hub.ensure(&spec).unwrap_err();
         assert!(e.contains("could not start"), "{e}");
-        assert!(hub.statuses().is_empty(), "and nothing is left half-running");
+        assert!(
+            hub.statuses().is_empty(),
+            "and nothing is left half-running"
+        );
     }
 
     // -- finding the program ------------------------------------------------
@@ -879,8 +911,14 @@ process.stdin.on("data", (d) => {
         assert_eq!(resolve_program("node"), resolve_program("node"));
         assert_eq!(resolve_program("server.exe"), "server.exe");
         assert_eq!(resolve_program("C:/tools/thing.cmd"), "C:/tools/thing.cmd");
-        assert_eq!(resolve_program(r"C:\tools\thing.cmd"), r"C:\tools\thing.cmd");
-        assert_eq!(resolve_program("/usr/local/bin/node"), "/usr/local/bin/node");
+        assert_eq!(
+            resolve_program(r"C:\tools\thing.cmd"),
+            r"C:\tools\thing.cmd"
+        );
+        assert_eq!(
+            resolve_program("/usr/local/bin/node"),
+            "/usr/local/bin/node"
+        );
     }
 
     #[test]
@@ -906,7 +944,10 @@ process.stdin.on("data", (d) => {
             return;
         }
         let resolved = resolve_program("npx");
-        assert_ne!(resolved, "npx", "npx must resolve to a real file on Windows");
+        assert_ne!(
+            resolved, "npx",
+            "npx must resolve to a real file on Windows"
+        );
         assert!(
             std::path::Path::new(&resolved).is_file(),
             "and to one that exists: {resolved}"
@@ -922,8 +963,9 @@ process.stdin.on("data", (d) => {
         if !crate::runners::on_path("node") {
             return;
         }
-        let out = Command::new(resolve_program("npx")).arg("--version").output();
+        let out = Command::new(resolve_program("npx"))
+            .arg("--version")
+            .output();
         assert!(out.is_ok(), "spawning the resolved npx: {:?}", out.err());
     }
-
 }

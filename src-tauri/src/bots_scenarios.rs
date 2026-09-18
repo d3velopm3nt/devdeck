@@ -32,12 +32,16 @@ impl World {
                 params![id, parent, kind, name, rel],
             )
             .unwrap();
-        std::fs::create_dir_all(self.root.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR)))
-            .unwrap();
+        std::fs::create_dir_all(
+            self.root
+                .join(rel.replace('/', std::path::MAIN_SEPARATOR_STR)),
+        )
+        .unwrap();
     }
 
     fn dir(&self, rel: &str) -> PathBuf {
-        self.root.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR))
+        self.root
+            .join(rel.replace('/', std::path::MAIN_SEPARATOR_STR))
     }
 
     fn bot(&self, node_id: i64) -> Bot {
@@ -50,7 +54,10 @@ impl World {
             .into_iter()
             .find(|m| m.home == node_id)
             .expect("a manager for that space");
-        self.root.join(".devdeck").join("team").join(format!("{}.md", m.handle))
+        self.root
+            .join(".devdeck")
+            .join("team")
+            .join(format!("{}.md", m.handle))
     }
 
     /// The heartbeat row for the manager whose memory lives on this node.
@@ -63,7 +70,7 @@ impl World {
     }
 
     fn work(&self, node_id: i64) -> Vec<crate::aiw::deck::WorkItem> {
-        let (deck, dir) = deck_of(&self.conn, node_id).unwrap();
+        let (deck, _dir) = deck_of(&self.conn, node_id).unwrap();
         let only = bot_on_node(&self.conn, node_id)
             .map(|b| b.feature)
             .unwrap_or_default();
@@ -83,7 +90,7 @@ impl World {
     }
 
     fn set_status(&self, node_id: i64, title: &str, status: &str) {
-        let (deck, dir) = deck_of(&self.conn, node_id).unwrap();
+        let (deck, _dir) = deck_of(&self.conn, node_id).unwrap();
         let slug = bot_on_node(&self.conn, node_id).unwrap().feature;
         let mut w = deck.work(&slug).unwrap().meta;
         let item = w
@@ -114,11 +121,7 @@ impl World {
             decided: &doc.meta.tools,
             now_ms,
         };
-        crate::botmind::filter_answered(
-            crate::botmind::derive(&sig),
-            &doc.meta.suggestions,
-            now_ms,
-        )
+        crate::botmind::filter_answered(crate::botmind::derive(&sig), &doc.meta.suggestions, now_ms)
     }
 
     fn has(&self, node_id: i64, id: &str, now_ms: i64) -> bool {
@@ -158,7 +161,13 @@ fn world() -> World {
         _tmp: tmp,
     };
     w.node(1, None, "workspace", "Business", "Business");
-    w.node(2, Some(1), "folder", "Marketing site", "Business/Marketing site");
+    w.node(
+        2,
+        Some(1),
+        "folder",
+        "Marketing site",
+        "Business/Marketing site",
+    );
     w.node(3, Some(1), "folder", "Ops", "Business/Ops");
     w
 }
@@ -189,9 +198,15 @@ fn the_website_bot_from_nothing_to_deleted() {
     .unwrap();
 
     assert_eq!(bot.template, "website");
-    assert!(bot.skills.contains(&"seo".to_string()), "starter skills are written on");
+    assert!(
+        bot.skills.contains(&"seo".to_string()),
+        "starter skills are written on"
+    );
     assert!(!bot.feature.is_empty(), "a plan means a feature");
-    assert!(w.team_file(2).is_file(), "the manager is a file at the vault root");
+    assert!(
+        w.team_file(2).is_file(),
+        "the manager is a file at the vault root"
+    );
     assert!(
         !w.dir("Business/Marketing site").join(FILE).is_file(),
         "and not one in the folder it works on"
@@ -205,7 +220,11 @@ fn the_website_bot_from_nothing_to_deleted() {
     let (sched, _) = w.hb(2).expect("a heartbeat row");
     let catch_up: i64 = w
         .conn
-        .query_row("SELECT catch_up FROM schedules WHERE id = ?1", params![sched], |r| r.get(0))
+        .query_row(
+            "SELECT catch_up FROM schedules WHERE id = ?1",
+            params![sched],
+            |r| r.get(0),
+        )
         .unwrap();
     assert_eq!(catch_up, 1, "a wake reads the space at the instant it runs");
 
@@ -220,7 +239,10 @@ fn the_website_bot_from_nothing_to_deleted() {
         .is_dir());
 
     // -- what it suggests, before it knows anything -----------------------
-    assert!(w.has(2, "interview", NOW), "it has not asked you anything yet");
+    assert!(
+        w.has(2, "interview", NOW),
+        "it has not asked you anything yet"
+    );
     assert!(!w.has(2, "plan", NOW), "it already has steps");
     assert!(!w.has(2, "heartbeat", NOW), "it already wakes");
     assert!(!w.has(2, "blocked", NOW), "nothing is stuck yet");
@@ -239,7 +261,11 @@ fn the_website_bot_from_nothing_to_deleted() {
     }
     let iv = ops::interview(&w.mind, 2).unwrap();
     assert!(iv.done);
-    assert_eq!(ops::beliefs(&w.mind, 2, NOW).unwrap().len(), 6, "each answer became a belief");
+    assert_eq!(
+        ops::beliefs(&w.mind, 2, NOW).unwrap().len(),
+        6,
+        "each answer became a belief"
+    );
     assert!(!w.has(2, "interview", NOW), "it stopped asking");
 
     // -- the work moves ---------------------------------------------------
@@ -265,7 +291,9 @@ fn the_website_bot_from_nothing_to_deleted() {
     // -- it learns a skill ------------------------------------------------
     ops::record_tool(&w.mind, 2, "skill-a11y", "added", THEN).unwrap();
     assert!(
-        !w.suggestions(2, NOW).iter().any(|s| s.tool_id == "skill-a11y"),
+        !w.suggestions(2, NOW)
+            .iter()
+            .any(|s| s.tool_id == "skill-a11y"),
         "a decided tool is not offered again"
     );
 
@@ -282,13 +310,20 @@ fn the_website_bot_from_nothing_to_deleted() {
     // -- deleted ----------------------------------------------------------
     let name = delete_into(&w.conn, &w.mind, 2).unwrap();
     assert_eq!(name, "Marketing site bot");
-    assert!(!w.dir("Business/Marketing site").join(FILE).exists(), "the file goes");
+    assert!(
+        !w.dir("Business/Marketing site").join(FILE).exists(),
+        "the file goes"
+    );
     assert!(w.hb(2).is_none(), "the clock goes");
     assert!(
         ops::beliefs(&w.mind, 2, NOW).unwrap().is_empty(),
         "what it knew about you goes"
     );
-    assert_eq!(w.work(2).len(), 10, "the work items are the project's, and stay");
+    assert_eq!(
+        w.work(2).len(),
+        10,
+        "the work items are the project's, and stay"
+    );
     assert!(
         w.dir("Business/Marketing site").is_dir(),
         "deleting a bot must never look like deleting a space"
@@ -302,8 +337,18 @@ fn the_website_bot_from_nothing_to_deleted() {
 #[test]
 fn a_bot_with_a_goal_and_no_steps_asks_for_a_plan() {
     let w = world();
-    create_into(&w.conn, 3, "blank", "Ops bot", "Get the on-call rota sane", "daily", 420, "", false)
-        .unwrap();
+    create_into(
+        &w.conn,
+        3,
+        "blank",
+        "Ops bot",
+        "Get the on-call rota sane",
+        "daily",
+        420,
+        "",
+        false,
+    )
+    .unwrap();
 
     assert!(w.work(3).is_empty());
     assert!(w.has(3, "plan", NOW), "a goal with nothing under it");
@@ -312,15 +357,25 @@ fn a_bot_with_a_goal_and_no_steps_asks_for_a_plan() {
         "no deck, nothing to report — not an error"
     );
 
-    plan_into(&w.conn, 3, &["Write down who is on call".into(), "Agree the handover".into()])
-        .unwrap();
+    plan_into(
+        &w.conn,
+        3,
+        &[
+            "Write down who is on call".into(),
+            "Agree the handover".into(),
+        ],
+    )
+    .unwrap();
     assert_eq!(w.work(3).len(), 2);
     assert!(!w.has(3, "plan", NOW));
 
     // Applying the same plan twice does not double it.
-    let (_, _, added) =
-        plan_into(&w.conn, 3, &["Write down who is on call".into(), "New third thing".into()])
-            .unwrap();
+    let (_, _, added) = plan_into(
+        &w.conn,
+        3,
+        &["Write down who is on call".into(), "New third thing".into()],
+    )
+    .unwrap();
     assert_eq!(added, 1, "only the new one");
     assert_eq!(w.work(3).len(), 3);
 }
@@ -332,8 +387,10 @@ fn a_bot_with_a_goal_and_no_steps_asks_for_a_plan() {
 #[test]
 fn renaming_a_bot_does_not_lose_its_starter_or_its_plan() {
     let w = world();
-    let made = create_into(&w.conn, 2, "release", "Ops bot", "Ship 1.0", "weekdays", 420, "", true)
-        .unwrap();
+    let made = create_into(
+        &w.conn, 2, "release", "Ops bot", "Ship 1.0", "weekdays", 420, "", true,
+    )
+    .unwrap();
     let feature = made.feature.clone();
     assert!(!feature.is_empty());
 
@@ -377,11 +434,35 @@ fn renaming_a_bot_does_not_lose_its_starter_or_its_plan() {
 #[test]
 fn taking_a_bots_heartbeat_away_removes_the_row() {
     let w = world();
-    create_into(&w.conn, 2, "blank", "Quiet bot", "Just be there", "daily", 420, "", false).unwrap();
+    create_into(
+        &w.conn,
+        2,
+        "blank",
+        "Quiet bot",
+        "Just be there",
+        "daily",
+        420,
+        "",
+        false,
+    )
+    .unwrap();
     assert!(w.hb(2).is_some());
 
-    save_into(&w.conn, 2, "Quiet bot", "Just be there", "", 420, "", "", vec![], "", vec![], "")
-        .unwrap();
+    save_into(
+        &w.conn,
+        2,
+        "Quiet bot",
+        "Just be there",
+        "",
+        420,
+        "",
+        "",
+        vec![],
+        "",
+        vec![],
+        "",
+    )
+    .unwrap();
     assert!(w.hb(2).is_none(), "no routine, no clock");
     assert!(w.has(2, "heartbeat", NOW), "and it says so");
 }
@@ -389,13 +470,35 @@ fn taking_a_bots_heartbeat_away_removes_the_row() {
 #[test]
 fn a_folder_gets_one_bot_and_a_bot_needs_a_goal() {
     let w = world();
-    create_into(&w.conn, 2, "blank", "First", "A goal", "daily", 420, "", false).unwrap();
+    create_into(
+        &w.conn, 2, "blank", "First", "A goal", "daily", 420, "", false,
+    )
+    .unwrap();
 
-    let second = create_into(&w.conn, 2, "blank", "Second", "Another goal", "daily", 420, "", false);
+    let second = create_into(
+        &w.conn,
+        2,
+        "blank",
+        "Second",
+        "Another goal",
+        "daily",
+        420,
+        "",
+        false,
+    );
     assert!(second.unwrap_err().contains("already a manager"));
 
-    let goalless =
-        create_into(&w.conn, 3, "blank", "Nameless purpose", "   ", "daily", 420, "", false);
+    let goalless = create_into(
+        &w.conn,
+        3,
+        "blank",
+        "Nameless purpose",
+        "   ",
+        "daily",
+        420,
+        "",
+        false,
+    );
     assert!(goalless.unwrap_err().contains("needs a goal"));
 
     let nameless = create_into(&w.conn, 3, "blank", "  ", "A goal", "daily", 420, "", false);
@@ -412,12 +515,21 @@ fn correcting_a_belief_keeps_what_it_used_to_say() {
     ops::add_belief(&w.mind, 2, "You care about coverage above all else", THEN).unwrap();
     let id = ops::beliefs(&w.mind, 2, NOW).unwrap()[0].belief.id.clone();
 
-    ops::correct_belief(&w.mind, 2, &id, "You care about coverage only before a release").unwrap();
+    ops::correct_belief(
+        &w.mind,
+        2,
+        &id,
+        "You care about coverage only before a release",
+    )
+    .unwrap();
 
     let b = &ops::beliefs(&w.mind, 2, NOW).unwrap()[0].belief;
     assert_eq!(b.source, "corrected");
     assert_eq!(b.text, "You care about coverage only before a release");
-    assert_eq!(b.was, "You care about coverage above all else", "the old text is kept");
+    assert_eq!(
+        b.was, "You care about coverage above all else",
+        "the old text is kept"
+    );
 
     // Correcting twice does not lose the original.
     ops::correct_belief(&w.mind, 2, &id, "Never mention coverage").unwrap();
@@ -450,7 +562,8 @@ fn ageing_offers_only_what_it_worked_out_itself() {
     w.mind.write(2, &doc).unwrap();
 
     let now = chrono::Utc::now().timestamp_millis();
-    let offered: Vec<String> = ops::beliefs(&w.mind, 2, now).unwrap()
+    let offered: Vec<String> = ops::beliefs(&w.mind, 2, now)
+        .unwrap()
         .into_iter()
         .filter(|v| v.stale)
         .map(|v| v.belief.id)
@@ -479,7 +592,11 @@ fn asking_again_forgets_only_what_the_interview_took() {
     let left = ops::beliefs(&w.mind, 2, NOW).unwrap();
     assert_eq!(left.len(), 1);
     assert_eq!(left[0].belief.text, "Never ping me on a Friday");
-    assert_eq!(ops::interview(&w.mind, 2).unwrap().step, 0, "back to the top");
+    assert_eq!(
+        ops::interview(&w.mind, 2).unwrap().step,
+        0,
+        "back to the top"
+    );
 }
 
 #[test]
@@ -490,8 +607,14 @@ fn a_skipped_question_is_settled_but_still_visible() {
     }
     let iv = ops::interview(&w.mind, 2).unwrap();
     assert!(iv.done, "it stops asking");
-    assert!(iv.answers.iter().all(|a| a.skipped), "and you can see why it knows nothing");
-    assert!(ops::beliefs(&w.mind, 2, NOW).unwrap().is_empty(), "a skip teaches it nothing");
+    assert!(
+        iv.answers.iter().all(|a| a.skipped),
+        "and you can see why it knows nothing"
+    );
+    assert!(
+        ops::beliefs(&w.mind, 2, NOW).unwrap().is_empty(),
+        "a skip teaches it nothing"
+    );
 }
 
 #[test]
@@ -513,13 +636,26 @@ fn changing_an_answer_replaces_the_belief_rather_than_adding_one() {
 #[test]
 fn not_now_comes_back_and_wrong_never_does() {
     let w = world();
-    create_into(&w.conn, 2, "blank", "Ops bot", "Get the rota sane", "daily", 420, "", false)
-        .unwrap();
+    create_into(
+        &w.conn,
+        2,
+        "blank",
+        "Ops bot",
+        "Get the rota sane",
+        "daily",
+        420,
+        "",
+        false,
+    )
+    .unwrap();
     assert!(w.has(2, "plan", NOW));
 
     ops::answer_suggestion(&w.mind, 2, "plan", "snoozed", "", NOW, THEN).unwrap();
     assert!(!w.has(2, "plan", NOW), "put away");
-    assert!(!w.has(2, "plan", NOW + 6 * 86_400_000), "still away after six days");
+    assert!(
+        !w.has(2, "plan", NOW + 6 * 86_400_000),
+        "still away after six days"
+    );
     assert!(w.has(2, "plan", NOW + 8 * 86_400_000), "back after a week");
 
     ops::answer_suggestion(
@@ -532,13 +668,16 @@ fn not_now_comes_back_and_wrong_never_does() {
         THEN,
     )
     .unwrap();
-    assert!(!w.has(2, "plan", NOW + 400 * 86_400_000), "a refusal is forever");
+    assert!(
+        !w.has(2, "plan", NOW + 400 * 86_400_000),
+        "a refusal is forever"
+    );
 
     // And the reason you gave is now something it knows.
     let told = ops::beliefs(&w.mind, 2, NOW).unwrap();
     assert!(
-        told.iter().any(|b| b.belief.text.contains("place to think")
-            && b.belief.source == "corrected"),
+        told.iter()
+            .any(|b| b.belief.text.contains("place to think") && b.belief.source == "corrected"),
         "the whole point of asking for a reason"
     );
 }
@@ -572,7 +711,11 @@ fn a_hand_written_bot_gets_its_clock_and_a_deleted_one_loses_it() {
     let (id, _) = w.hb(3).expect("reconciled");
     let at: i64 = w
         .conn
-        .query_row("SELECT at_min FROM schedules WHERE id = ?1", params![id], |r| r.get(0))
+        .query_row(
+            "SELECT at_min FROM schedules WHERE id = ?1",
+            params![id],
+            |r| r.get(0),
+        )
         .unwrap();
     assert_eq!(at, 390, "06:30, as the file says");
 
@@ -633,7 +776,10 @@ fn a_bot_file_round_trips_everything_it_carries() {
 #[test]
 fn nothing_personal_is_ever_written_into_the_vault() {
     let w = world();
-    create_into(&w.conn, 2, "website", "Site bot", "Ship it", "weekdays", 480, "", true).unwrap();
+    create_into(
+        &w.conn, 2, "website", "Site bot", "Ship it", "weekdays", 480, "", true,
+    )
+    .unwrap();
 
     ops::answer_question(
         &w.mind,
@@ -667,7 +813,8 @@ fn nothing_personal_is_ever_written_into_the_vault() {
     assert!(checked > 5, "the walk actually read files ({checked})");
 
     // And it really was written — somewhere else.
-    assert!(ops::beliefs(&w.mind, 2, NOW).unwrap()
+    assert!(ops::beliefs(&w.mind, 2, NOW)
+        .unwrap()
         .iter()
         .any(|b| b.belief.text.contains("stopped using the last app")));
 }
@@ -679,16 +826,32 @@ fn nothing_personal_is_ever_written_into_the_vault() {
 #[test]
 fn two_bots_keep_their_own_work_and_their_own_memory() {
     let w = world();
-    create_into(&w.conn, 2, "website", "Site bot", "Ship the site", "weekdays", 480, "", true)
-        .unwrap();
-    create_into(&w.conn, 3, "release", "Ops bot", "Ship 1.0", "weekdays", 420, "", true).unwrap();
+    create_into(
+        &w.conn,
+        2,
+        "website",
+        "Site bot",
+        "Ship the site",
+        "weekdays",
+        480,
+        "",
+        true,
+    )
+    .unwrap();
+    create_into(
+        &w.conn, 3, "release", "Ops bot", "Ship 1.0", "weekdays", 420, "", true,
+    )
+    .unwrap();
 
     assert_eq!(w.work(2).len(), 10);
     assert_eq!(w.work(3).len(), 7);
 
     ops::add_belief(&w.mind, 2, "The site launch is in September", THEN).unwrap();
     assert_eq!(ops::beliefs(&w.mind, 2, NOW).unwrap().len(), 1);
-    assert!(ops::beliefs(&w.mind, 3, NOW).unwrap().is_empty(), "not a shared memory");
+    assert!(
+        ops::beliefs(&w.mind, 3, NOW).unwrap().is_empty(),
+        "not a shared memory"
+    );
 
     // Deleting one leaves the other entirely alone.
     delete_into(&w.conn, &w.mind, 2).unwrap();
@@ -708,8 +871,18 @@ fn two_bots_keep_their_own_work_and_their_own_memory() {
 #[test]
 fn a_replacement_bot_adopts_the_work_the_last_one_left() {
     let w = world();
-    create_into(&w.conn, 2, "website", "Site bot", "Ship the site", "weekdays", 480, "", true)
-        .unwrap();
+    create_into(
+        &w.conn,
+        2,
+        "website",
+        "Site bot",
+        "Ship the site",
+        "weekdays",
+        480,
+        "",
+        true,
+    )
+    .unwrap();
     let slug = w.bot(2).feature;
     w.set_status(2, "Build the pages", "done");
 
@@ -717,15 +890,30 @@ fn a_replacement_bot_adopts_the_work_the_last_one_left() {
     assert_eq!(w.work(2).len(), 10, "the work stayed");
 
     // Same goal, so the same slug — this used to fail outright.
-    let again =
-        create_into(&w.conn, 2, "website", "Site bot", "Ship the site", "weekdays", 480, "", true)
-            .unwrap();
-    assert_eq!(again.feature, slug, "it adopted the feature that was already there");
+    let again = create_into(
+        &w.conn,
+        2,
+        "website",
+        "Site bot",
+        "Ship the site",
+        "weekdays",
+        480,
+        "",
+        true,
+    )
+    .unwrap();
+    assert_eq!(
+        again.feature, slug,
+        "it adopted the feature that was already there"
+    );
 
     let work = w.work(2);
     assert_eq!(work.len(), 10, "and did not duplicate a single step");
     assert_eq!(
-        work.iter().find(|i| i.title == "Build the pages").unwrap().status,
+        work.iter()
+            .find(|i| i.title == "Build the pages")
+            .unwrap()
+            .status,
         "done",
         "progress the last bot made is still there"
     );
@@ -743,8 +931,17 @@ fn a_failed_plan_leaves_no_half_made_bot() {
     std::fs::create_dir_all(dir.join(".devdeck")).unwrap();
     std::fs::write(dir.join(".devdeck").join("features"), "not a directory").unwrap();
 
-    let made =
-        create_into(&w.conn, 2, "website", "Site bot", "Ship the site", "weekdays", 480, "", true);
+    let made = create_into(
+        &w.conn,
+        2,
+        "website",
+        "Site bot",
+        "Ship the site",
+        "weekdays",
+        480,
+        "",
+        true,
+    );
     assert!(made.is_err(), "it refused");
     assert!(!dir.join(FILE).exists(), "and left nothing behind");
     assert!(w.hb(2).is_none(), "including no orphaned clock");
@@ -757,7 +954,10 @@ fn a_failed_plan_leaves_no_half_made_bot() {
 #[test]
 fn naming_an_agent_is_written_down_and_survives_a_save() {
     let w = world();
-    create_into(&w.conn, 2, "release", "Ops bot", "Ship 1.0", "weekdays", 420, "", true).unwrap();
+    create_into(
+        &w.conn, 2, "release", "Ops bot", "Ship 1.0", "weekdays", 420, "", true,
+    )
+    .unwrap();
     assert_eq!(w.bot(2).agent, "", "a new bot watches; it does not work");
 
     save_into(
@@ -788,11 +988,24 @@ fn naming_an_agent_is_written_down_and_survives_a_save() {
 
     // And taking it away again puts the bot back to only watching.
     save_into(
-        &w.conn, 2, "Ops bot", "Ship 1.0", "weekdays", 420, "", "", vec![], "", vec![], "",
+        &w.conn,
+        2,
+        "Ops bot",
+        "Ship 1.0",
+        "weekdays",
+        420,
+        "",
+        "",
+        vec![],
+        "",
+        vec![],
+        "",
     )
     .unwrap();
     assert_eq!(w.bot(2).agent, "");
-    assert!(!std::fs::read_to_string(w.team_file(2)).unwrap().contains("agent:"));
+    assert!(!std::fs::read_to_string(w.team_file(2))
+        .unwrap()
+        .contains("agent:"));
 }
 
 /// The half-made feature guard has to cover *both* ways a slug is chosen. The
@@ -803,14 +1016,35 @@ fn naming_an_agent_is_written_down_and_survives_a_save() {
 #[test]
 fn a_bot_that_already_names_a_half_made_feature_is_refused_too() {
     let w = world();
-    create_into(&w.conn, 2, "blank", "Site bot", "Ship the site", "weekdays", 480, "", false)
-        .unwrap();
+    create_into(
+        &w.conn,
+        2,
+        "blank",
+        "Site bot",
+        "Ship the site",
+        "weekdays",
+        480,
+        "",
+        false,
+    )
+    .unwrap();
 
     // A features directory with no feature.md, named by the bot itself.
     let dir = w.dir("Business/Marketing site");
     std::fs::create_dir_all(dir.join(".devdeck").join("features").join("hand-made")).unwrap();
     save_into(
-        &w.conn, 2, "Site bot", "Hand made", "weekdays", 480, "", "", vec![], "", vec![], "",
+        &w.conn,
+        2,
+        "Site bot",
+        "Hand made",
+        "weekdays",
+        480,
+        "",
+        "",
+        vec![],
+        "",
+        vec![],
+        "",
     )
     .unwrap();
     // A half-made feature cannot be *owned* — ownership is a line inside
@@ -819,5 +1053,8 @@ fn a_bot_that_already_names_a_half_made_feature_is_refused_too() {
 
     let err = plan_into(&w.conn, 2, &["A step".into()]).unwrap_err();
     assert!(err.contains("no feature.md"), "{err}");
-    assert!(err.contains("hand-made"), "it names the directory to deal with: {err}");
+    assert!(
+        err.contains("hand-made"),
+        "it names the directory to deal with: {err}"
+    );
 }

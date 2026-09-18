@@ -173,7 +173,9 @@ fn read(dir: &Path) -> Option<Bot> {
         Some(after) => match after.find("\n---") {
             Some(end) => {
                 for line in after[..end].lines() {
-                    let Some((k, v)) = line.split_once(':') else { continue };
+                    let Some((k, v)) = line.split_once(':') else {
+                        continue;
+                    };
                     let v = v.trim().trim_matches('"').to_string();
                     match k.trim() {
                         "name" => b.name = v,
@@ -272,7 +274,8 @@ fn write(dir: &Path, b: &Bot) -> Result<(), String> {
 /// Make a manager's clock agree with its file, for code that saved the file
 /// itself. The same reconciliation a bot's save does.
 pub fn sync_manager_heartbeat(conn: &Connection, handle: &str) -> Result<Option<i64>, String> {
-    let m = crate::managers::get(conn, handle).ok_or_else(|| format!("there is no manager called @{handle}"))?;
+    let m = crate::managers::get(conn, handle)
+        .ok_or_else(|| format!("there is no manager called @{handle}"))?;
     let names: std::collections::HashMap<i64, String> = db::nodes_on(conn)
         .unwrap_or_default()
         .into_iter()
@@ -285,7 +288,15 @@ pub fn sync_manager_heartbeat(conn: &Connection, handle: &str) -> Result<Option<
 /// A rhythm in words: "Weekdays 07:00", "Fridays 16:00".
 pub fn rhythm_words(every: &str, at_min: i64, days: &str) -> String {
     let at = fmt_at(at_min);
-    let names = ["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"];
+    let names = [
+        "Sundays",
+        "Mondays",
+        "Tuesdays",
+        "Wednesdays",
+        "Thursdays",
+        "Fridays",
+        "Saturdays",
+    ];
     match every.trim() {
         "" => String::new(),
         "hourly" => "Every hour".into(),
@@ -407,13 +418,15 @@ fn dir_of(conn: &Connection, node: &db::Node) -> Option<PathBuf> {
     if let Some(code) = db::node_dir(conn, node) {
         if code != deck {
             let (from, to) = (code.join(FILE), deck.join(FILE));
-            if from.is_file() && !to.is_file() {
-                if fs::create_dir_all(&deck).is_ok() && fs::rename(&from, &to).is_ok() {
-                    eprintln!(
-                        "[bots] moved {} out of the repository and into the vault",
-                        from.display()
-                    );
-                }
+            if from.is_file()
+                && !to.is_file()
+                && fs::create_dir_all(&deck).is_ok()
+                && fs::rename(&from, &to).is_ok()
+            {
+                eprintln!(
+                    "[bots] moved {} out of the repository and into the vault",
+                    from.display()
+                );
             }
         }
     }
@@ -435,7 +448,14 @@ pub fn all_bots(conn: &Connection) -> Vec<Bot> {
 
     crate::managers::all(conn)
         .into_iter()
-        .map(|m| from_manager(conn, &m, owned.get(&m.handle).cloned().unwrap_or_default(), &names))
+        .map(|m| {
+            from_manager(
+                conn,
+                &m,
+                owned.get(&m.handle).cloned().unwrap_or_default(),
+                &names,
+            )
+        })
         .collect()
 }
 
@@ -516,7 +536,14 @@ pub fn answers_to(b: &Bot, mention: &str) -> bool {
         return false;
     }
     let slug = |s: &str| s.trim().to_lowercase().replace(' ', "-");
-    let first = |s: &str| s.trim().to_lowercase().split_whitespace().next().unwrap_or("").to_string();
+    let first = |s: &str| {
+        s.trim()
+            .to_lowercase()
+            .split_whitespace()
+            .next()
+            .unwrap_or("")
+            .to_string()
+    };
     b.handle.to_lowercase() == m
         || slug(&b.node_name) == m
         || slug(&b.name) == m
@@ -699,7 +726,11 @@ pub fn set_routine(
                 "Set. {} wakes {} at {} — it is a row on the clock and a line in {}, so editing \
                  either changes it.",
                 b.name.trim(),
-                if b.every == "hourly" { "every hour".into() } else { b.every.clone() },
+                if b.every == "hourly" {
+                    "every hour".into()
+                } else {
+                    b.every.clone()
+                },
                 fmt_at(b.at_min),
                 FILE
             ))
@@ -786,7 +817,9 @@ fn save_into(
     let handle = match &existing_by_home {
         Some(m) => m.handle.clone(),
         None => {
-            let from = db::node_by_id(conn, node_id).map(|n| n.name).unwrap_or_default();
+            let from = db::node_by_id(conn, node_id)
+                .map(|n| n.name)
+                .unwrap_or_default();
             crate::managers::handle_from(if from.trim().is_empty() { name } else { &from })
         }
     };
@@ -805,15 +838,27 @@ fn save_into(
         at_min: at_min.clamp(0, 1439),
         days: days.to_string(),
         body: body.to_string(),
-        skills: skills.into_iter().filter(|s| !s.trim().is_empty()).collect(),
-        template: prior.as_ref().map(|p| p.template.clone()).unwrap_or_default(),
+        skills: skills
+            .into_iter()
+            .filter(|s| !s.trim().is_empty())
+            .collect(),
+        template: prior
+            .as_ref()
+            .map(|p| p.template.clone())
+            .unwrap_or_default(),
         agent: agent.trim().to_string(),
         team,
         wake_intent: wake_intent.trim().to_string(),
-        stop_at: prior.as_ref().map(|p| p.stop_at.clone()).unwrap_or_default(),
+        stop_at: prior
+            .as_ref()
+            .map(|p| p.stop_at.clone())
+            .unwrap_or_default(),
         was: prior.as_ref().map(|p| p.was.clone()).unwrap_or_default(),
         home: prior.as_ref().map(|p| p.home).unwrap_or(node_id),
-        businesses: prior.as_ref().map(|p| p.businesses.clone()).unwrap_or_default(),
+        businesses: prior
+            .as_ref()
+            .map(|p| p.businesses.clone())
+            .unwrap_or_default(),
     };
     crate::managers::save(conn, &m)?;
 
@@ -850,7 +895,17 @@ pub fn bot_save(
     let (bot, created) = {
         let conn = db.0.lock().unwrap();
         save_into(
-            &conn, node_id, &name, &goal, &every, at_min, &days, &body, skills, &agent, team,
+            &conn,
+            node_id,
+            &name,
+            &goal,
+            &every,
+            at_min,
+            &days,
+            &body,
+            skills,
+            &agent,
+            team,
             &wake_intent,
         )?
     };
@@ -858,7 +913,11 @@ pub fn bot_save(
     crate::activity::record(
         &app,
         "bot",
-        format!("{} {}", bot.name, if created { "created" } else { "changed" }),
+        format!(
+            "{} {}",
+            bot.name,
+            if created { "created" } else { "changed" }
+        ),
         bot.goal.clone(),
         true,
         Some(node_id),
@@ -872,14 +931,23 @@ pub fn bot_save(
 /// knew about *you* goes — leaving that behind would mean the next bot on this
 /// folder inheriting a stranger's answers, and a bot quoting an interview you
 /// never gave it is worse than one that knows nothing.
+#[cfg(test)]
 fn delete_into(conn: &Connection, mind: &Mind, node_id: i64) -> Result<String, String> {
     delete_into_for(conn, mind, node_id, None)
 }
 
-fn delete_into_for(conn: &Connection, mind: &Mind, node_id: i64, handle: Option<&str>) -> Result<String, String> {
+fn delete_into_for(
+    conn: &Connection,
+    mind: &Mind,
+    node_id: i64,
+    handle: Option<&str>,
+) -> Result<String, String> {
     let n = db::node_by_id(conn, node_id)?;
     let bot = resolve(conn, node_id, handle);
-    let name = bot.as_ref().map(|b| b.name.clone()).unwrap_or_else(|| n.name.clone());
+    let name = bot
+        .as_ref()
+        .map(|b| b.name.clone())
+        .unwrap_or_else(|| n.name.clone());
     if let Some(b) = &bot {
         crate::managers::delete(conn, &b.handle)?;
         conn.execute(
@@ -951,7 +1019,11 @@ fn deck_of(conn: &Connection, node_id: i64) -> Result<(crate::aiw::deck::Deck, P
 /// that already had features should show you the work that is there, not
 /// pretend the space is empty.
 #[tauri::command]
-pub fn bot_work(db: tauri::State<Db>, node_id: i64, handle: Option<String>) -> Result<Vec<WorkRow>, String> {
+pub fn bot_work(
+    db: tauri::State<Db>,
+    node_id: i64,
+    handle: Option<String>,
+) -> Result<Vec<WorkRow>, String> {
     let conn = db.0.lock().unwrap();
     let (deck, dir) = deck_of(&conn, node_id)?;
     if !deck.exists() {
@@ -985,7 +1057,11 @@ pub fn bot_work(db: tauri::State<Db>, node_id: i64, handle: Option<String>) -> R
             out.push(WorkRow {
                 id: item.id,
                 title: item.title,
-                status: if item.status.is_empty() { "unclaimed".into() } else { item.status },
+                status: if item.status.is_empty() {
+                    "unclaimed".into()
+                } else {
+                    item.status
+                },
                 assignee: item.assignee,
                 feature: slug.clone(),
             });
@@ -1011,7 +1087,11 @@ fn take_feature(deck: &crate::aiw::deck::Deck, slug: &str, handle: &str) -> Resu
 /// This writes into the project's committed context, which is a bigger gesture
 /// than dropping one file in a folder — so it happens on purpose, from a
 /// button, and never as a side effect of creating a bot.
-fn plan_into(conn: &Connection, node_id: i64, steps: &[String]) -> Result<(String, String, usize), String> {
+fn plan_into(
+    conn: &Connection,
+    node_id: i64,
+    steps: &[String],
+) -> Result<(String, String, usize), String> {
     plan_into_for(conn, node_id, None, steps)
 }
 
@@ -1053,7 +1133,11 @@ fn plan_into_for(
             bot.feature
         ));
     } else {
-        let base = if bot.goal.trim().is_empty() { bot.name.clone() } else { bot.goal.clone() };
+        let base = if bot.goal.trim().is_empty() {
+            bot.name.clone()
+        } else {
+            bot.goal.clone()
+        };
         let candidate = crate::aiw::deck::slugify(&base);
         if candidate.is_empty() {
             deck.create_feature(&base, &bot.goal, &[])?
@@ -1091,7 +1175,11 @@ fn plan_into_for(
     for title in steps {
         // Titles are the identity here — applying the same plan twice should
         // not double every line.
-        if work.items.iter().any(|i| i.title.eq_ignore_ascii_case(title)) {
+        if work
+            .items
+            .iter()
+            .any(|i| i.title.eq_ignore_ascii_case(title))
+        {
             continue;
         }
         work.items.push(crate::aiw::deck::WorkItem {
@@ -1180,7 +1268,8 @@ pub fn bot_work_save(
 
     let conn = db.0.lock().unwrap();
     let (deck, _dir) = deck_of(&conn, node_id)?;
-    let mut bot = resolve(&conn, node_id, handle.as_deref()).ok_or("There is no manager for that space.")?;
+    let mut bot =
+        resolve(&conn, node_id, handle.as_deref()).ok_or("There is no manager for that space.")?;
     bot.feature = own_feature(&bot, node_id);
     let n = db::node_by_id(&conn, node_id)?;
     if !deck.exists() {
@@ -1190,7 +1279,11 @@ pub fn bot_work_save(
     let slug = if !bot.feature.is_empty() && deck.feature_dir(&bot.feature).exists() {
         bot.feature.clone()
     } else {
-        let base = if bot.goal.trim().is_empty() { bot.name.clone() } else { bot.goal.clone() };
+        let base = if bot.goal.trim().is_empty() {
+            bot.name.clone()
+        } else {
+            bot.goal.clone()
+        };
         let s = deck.create_feature(&base, &bot.goal, &[])?;
         take_feature(&deck, &s, &bot.handle)?;
         s
@@ -1205,7 +1298,11 @@ pub fn bot_work_save(
             item.assignee = assignee.filter(|a| !a.trim().is_empty());
         }
         None => work.items.push(crate::aiw::deck::WorkItem {
-            id: if id.trim().is_empty() { next_work_id(&work.items) } else { id },
+            id: if id.trim().is_empty() {
+                next_work_id(&work.items)
+            } else {
+                id
+            },
             title,
             status,
             assignee: assignee.filter(|a| !a.trim().is_empty()),
@@ -1225,9 +1322,14 @@ pub fn bot_work_delete(
 ) -> Result<(), String> {
     let conn = db.0.lock().unwrap();
     let (deck, _dir) = deck_of(&conn, node_id)?;
-    let mut bot = resolve(&conn, node_id, handle.as_deref()).ok_or("There is no manager for that space.")?;
+    let mut bot =
+        resolve(&conn, node_id, handle.as_deref()).ok_or("There is no manager for that space.")?;
     bot.feature = own_feature(&bot, node_id);
-    let slug = if bot.feature.is_empty() { return Ok(()) } else { bot.feature };
+    let slug = if bot.feature.is_empty() {
+        return Ok(());
+    } else {
+        bot.feature
+    };
     let mut work = deck.work(&slug)?.meta;
     work.items.retain(|i| i.id != id);
     deck.save_work(&slug, &work)
@@ -1419,7 +1521,9 @@ pub struct BotStanding {
 
 #[tauri::command]
 pub fn bots_standing(db: tauri::State<Db>) -> Vec<BotStanding> {
-    let Ok(conn) = db.0.lock() else { return Vec::new() };
+    let Ok(conn) = db.0.lock() else {
+        return Vec::new();
+    };
     all_bots(&conn)
         .into_iter()
         .map(|b| {
@@ -1438,23 +1542,33 @@ pub fn bots_standing(db: tauri::State<Db>) -> Vec<BotStanding> {
             // spaces, so counting one folder would under-report the moment it
             // owns anything in a second.
             let mut spaces: std::collections::HashSet<i64> = std::collections::HashSet::new();
-            let mut work: Vec<(i64, String)> =
-                b.portfolio.iter().map(|o| (o.node_id, o.feature.clone())).collect();
+            let mut work: Vec<(i64, String)> = b
+                .portfolio
+                .iter()
+                .map(|o| (o.node_id, o.feature.clone()))
+                .collect();
             if work.is_empty() && b.node_id != 0 {
                 // Owning nothing yet: report what is in its home space, which
                 // is what it would adopt.
-                if let Some(dir) =
-                    db::node_by_id(&conn, b.node_id).ok().and_then(|n| dir_of(&conn, &n))
+                if let Some(dir) = db::node_by_id(&conn, b.node_id)
+                    .ok()
+                    .and_then(|n| dir_of(&conn, &n))
                 {
                     let deck = crate::aiw::deck::Deck::new(&dir);
                     if deck.exists() {
-                        work = deck.feature_slugs().into_iter().map(|s| (b.node_id, s)).collect();
+                        work = deck
+                            .feature_slugs()
+                            .into_iter()
+                            .map(|s| (b.node_id, s))
+                            .collect();
                     }
                 }
             }
             for (node_id, slug) in work {
                 spaces.insert(node_id);
-                let Some(dir) = db::node_by_id(&conn, node_id).ok().and_then(|n| dir_of(&conn, &n))
+                let Some(dir) = db::node_by_id(&conn, node_id)
+                    .ok()
+                    .and_then(|n| dir_of(&conn, &n))
                 else {
                     continue;
                 };
@@ -1566,19 +1680,28 @@ pub fn plan_proposal(conn: &Connection, bot: &Bot) -> Vec<String> {
         let business = bot.businesses.first().copied().unwrap_or(bot.node_id);
         return crate::business_team::first_steps(conn, role, business);
     }
-    crate::botcatalog::get(&bot.template).map(|t| t.steps).unwrap_or_default()
+    crate::botcatalog::get(&bot.template)
+        .map(|t| t.steps)
+        .unwrap_or_default()
 }
 
 /// Whether a manager has anything on its plan on its own space.
 pub fn has_plan(conn: &Connection, bot: &Bot) -> bool {
-    let Some(dir) = db::node_by_id(conn, bot.node_id).ok().and_then(|n| dir_of(conn, &n)) else {
+    let Some(dir) = db::node_by_id(conn, bot.node_id)
+        .ok()
+        .and_then(|n| dir_of(conn, &n))
+    else {
         return false;
     };
     let deck = crate::aiw::deck::Deck::new(&dir);
     bot.portfolio
         .iter()
         .filter(|o| o.node_id == bot.node_id)
-        .any(|o| deck.work(&o.feature).map(|w| !w.meta.items.is_empty()).unwrap_or(false))
+        .any(|o| {
+            deck.work(&o.feature)
+                .map(|w| !w.meta.items.is_empty())
+                .unwrap_or(false)
+        })
 }
 
 /// The wake of a manager with nothing on its plan: not a failure, and not
@@ -1603,7 +1726,11 @@ pub fn empty_plan_line(conn: &Connection, bot: &Bot) -> Option<String> {
 
 /// The steps a manager would start with, for its Plan tab.
 #[tauri::command]
-pub fn bot_plan_proposal(db: tauri::State<Db>, node_id: i64, handle: Option<String>) -> Result<Vec<String>, String> {
+pub fn bot_plan_proposal(
+    db: tauri::State<Db>,
+    node_id: i64,
+    handle: Option<String>,
+) -> Result<Vec<String>, String> {
     let conn = db.0.lock().unwrap();
     let Some(bot) = resolve(&conn, node_id, handle.as_deref()) else {
         return Ok(vec![]);
@@ -1708,7 +1835,10 @@ pub fn bot_tools(db: tauri::State<Db>, node_id: i64) -> Result<Vec<ToolView>, St
     // it sees the whole catalog rather than nothing at all.
     let offers: Vec<crate::botcatalog::ToolOffer> = match crate::botcatalog::get(&bot.template) {
         Some(t) if !t.tools.is_empty() => t.tools,
-        _ => crate::botcatalog::all().into_iter().flat_map(|t| t.tools).collect(),
+        _ => crate::botcatalog::all()
+            .into_iter()
+            .flat_map(|t| t.tools)
+            .collect(),
     };
 
     let decided = mind()?.read(node_id)?.meta.tools;
@@ -1803,7 +1933,9 @@ pub fn bot_suggestions(db: tauri::State<Db>, node_id: i64) -> Result<Vec<Suggest
     let (bot, work) = {
         let conn = db.0.lock().unwrap();
         let (deck, dir) = deck_of(&conn, node_id)?;
-        let Some(bot) = read(&dir) else { return Ok(vec![]) };
+        let Some(bot) = read(&dir) else {
+            return Ok(vec![]);
+        };
         let mut items = Vec::new();
         if deck.exists() {
             for slug in deck.feature_slugs() {
@@ -1950,7 +2082,11 @@ The receipts in the thread are the record. A line such as \"claimed by @dev-a\" 
         // only thing a bot may do without a row in the permission matrix, and
         // it writes work items in the deck — never the machine.
         manages_with: vec![crate::aiw::tools::TOOL_WORK.to_string()],
-        agent_id: if acts { bot.agent.trim().to_string() } else { format!("bot:{}", handle_of(bot)) },
+        agent_id: if acts {
+            bot.agent.trim().to_string()
+        } else {
+            format!("bot:{}", handle_of(bot))
+        },
         runs_as: if acts {
             bot.agent.trim().to_string()
         } else {
@@ -2021,7 +2157,12 @@ pub fn thread_post(app: &tauri::AppHandle, bot: &Bot, text: &str) {
     };
     let result = (|| -> Result<(), String> {
         let convs = ws.convs()?;
-        let conv = convs.for_manager(&bot.handle, bot.node_id, &bot.node_id.to_string(), &bot.name)?;
+        let conv = convs.for_manager(
+            &bot.handle,
+            bot.node_id,
+            &bot.node_id.to_string(),
+            &bot.name,
+        )?;
         convs.post_as_bot(&conv.id, text)?;
         // And in the space's own thread, the room its managers share, under
         // its own name: that is where a space's wakes are read together.
@@ -2034,7 +2175,10 @@ pub fn thread_post(app: &tauri::AppHandle, bot: &Bot, text: &str) {
         Ok(())
     })();
     if let Err(e) = result {
-        eprintln!("[bots] {} woke but its thread could not be written: {e}", bot.name);
+        eprintln!(
+            "[bots] {} woke but its thread could not be written: {e}",
+            bot.name
+        );
     }
 }
 
@@ -2074,7 +2218,12 @@ pub fn bot_thread(
         resolve(&conn, node_id, handle.as_deref()).ok_or("There is no manager for that space.")?
     };
     let convs = ws.convs()?;
-    convs.for_manager(&bot.handle, bot.node_id, &bot.node_id.to_string(), &bot.name)
+    convs.for_manager(
+        &bot.handle,
+        bot.node_id,
+        &bot.node_id.to_string(),
+        &bot.name,
+    )
 }
 
 /// Say something to a bot in its own thread, and get its answer.
@@ -2171,7 +2320,9 @@ pub fn colleagues(
             .find(|c| is_chat_of(c.bot_handle.as_deref(), c.bot_node, &c.title, bot))
         {
             for p in thread.participants {
-                let Some(rest) = p.strip_prefix("bot:") else { continue };
+                let Some(rest) = p.strip_prefix("bot:") else {
+                    continue;
+                };
                 match rest.parse::<i64>() {
                     Ok(id) => {
                         if id != bot.node_id && !under.contains(&id) {
@@ -2220,10 +2371,7 @@ pub fn handle_of(b: &Bot) -> String {
     }
 }
 
-pub fn effective_team(
-    ws: &std::sync::Arc<crate::aiw::state::Workspace>,
-    bot: &Bot,
-) -> Vec<String> {
+pub fn effective_team(ws: &std::sync::Arc<crate::aiw::state::Workspace>, bot: &Bot) -> Vec<String> {
     let mut team = bot.team.clone();
     let Ok(convs) = ws.convs() else { return team };
     let Some(thread) = convs
@@ -2351,7 +2499,11 @@ pub fn wake_agent(app: &tauri::AppHandle, bot: &Bot) -> Option<(bool, String)> {
                 out.turns,
                 if out.turns == 1 { "" } else { "s" },
                 out.files_touched.len(),
-                if out.files_touched.len() == 1 { "" } else { "s" },
+                if out.files_touched.len() == 1 {
+                    ""
+                } else {
+                    "s"
+                },
             );
             // A run that was refused everything is not good news wearing a
             // summary. It says how many and what would change it, and it is
@@ -2375,7 +2527,10 @@ pub fn wake_agent(app: &tauri::AppHandle, bot: &Bot) -> Option<(bool, String)> {
         }
         // A failed wake is worth saying. A heartbeat that silently stops
         // working is one you keep believing in.
-        Err(e) => Some((false, format!("{} could not run {agent_name}: {e}", bot.name))),
+        Err(e) => Some((
+            false,
+            format!("{} could not run {agent_name}: {e}", bot.name),
+        )),
     }
 }
 
@@ -2463,13 +2618,39 @@ mod tests {
             node_name: "Innotrack".into(),
             ..Default::default()
         };
-        let bots = vec![on("innotrack-operations", "Operations manager"), on("innotrack-product", "Product manager")];
-        assert_eq!(find_mentioned(&bots, "innotrack-product").unwrap().name, "Product manager");
-        assert_eq!(find_mentioned(&bots, "Innotrack-Product").unwrap().name, "Product manager");
-        assert_eq!(handle_of(&bots[1]), "innotrack-product", "a receipt names the handle that works");
-        assert!(is_chat_of(Some("innotrack-product"), Some(25), "anything", &bots[1]));
-        assert!(!is_chat_of(Some("innotrack-product"), Some(25), "Operations manager", &bots[0]));
-        assert!(is_chat_of(None, Some(25), "Operations manager", &bots[0]), "an older chat, by its name");
+        let bots = vec![
+            on("innotrack-operations", "Operations manager"),
+            on("innotrack-product", "Product manager"),
+        ];
+        assert_eq!(
+            find_mentioned(&bots, "innotrack-product").unwrap().name,
+            "Product manager"
+        );
+        assert_eq!(
+            find_mentioned(&bots, "Innotrack-Product").unwrap().name,
+            "Product manager"
+        );
+        assert_eq!(
+            handle_of(&bots[1]),
+            "innotrack-product",
+            "a receipt names the handle that works"
+        );
+        assert!(is_chat_of(
+            Some("innotrack-product"),
+            Some(25),
+            "anything",
+            &bots[1]
+        ));
+        assert!(!is_chat_of(
+            Some("innotrack-product"),
+            Some(25),
+            "Operations manager",
+            &bots[0]
+        ));
+        assert!(
+            is_chat_of(None, Some(25), "Operations manager", &bots[0]),
+            "an older chat, by its name"
+        );
         assert!(!is_chat_of(None, Some(25), "Operations manager", &bots[1]));
     }
 
@@ -2512,7 +2693,11 @@ mod tests {
         let p = persona(&b);
         assert_eq!(p.agent_id, "dev-a");
         assert_eq!(p.runs_as, "dev-a");
-        assert!(p.system.contains("dev-a, qa"), "the team is named: {}", p.system);
+        assert!(
+            p.system.contains("dev-a, qa"),
+            "the team is named: {}",
+            p.system
+        );
         assert!(!p.system.contains("cannot run tools"));
     }
 

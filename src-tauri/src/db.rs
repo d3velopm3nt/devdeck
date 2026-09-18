@@ -132,8 +132,7 @@ pub fn open() -> Connection {
         .expect("create stash schema");
     conn.execute_batch(CONN_SCHEMA)
         .expect("create connections schema");
-    conn.execute_batch(MAIL_SCHEMA)
-        .expect("create mail schema");
+    conn.execute_batch(MAIL_SCHEMA).expect("create mail schema");
     conn.execute_batch(ACTIVITY_SCHEMA)
         .expect("create activity schema");
     conn.execute_batch(crate::schedule::SCHEMA)
@@ -587,7 +586,10 @@ pub fn migrate(conn: &Connection) {
     // has to do with, which business, and every contact at it.
     // A business's card says what it is (an organisation, or someone on its
     // own team), a team member's title, and the people at an organisation.
-    if conn.prepare("SELECT kind FROM learn_people LIMIT 1").is_err() {
+    if conn
+        .prepare("SELECT kind FROM learn_people LIMIT 1")
+        .is_err()
+    {
         for sql in [
             "ALTER TABLE learn_people ADD COLUMN kind TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE learn_people ADD COLUMN title TEXT NOT NULL DEFAULT ''",
@@ -596,7 +598,10 @@ pub fn migrate(conn: &Connection) {
             let _ = conn.execute(sql, []);
         }
     }
-    if conn.prepare("SELECT role FROM learn_people LIMIT 1").is_err() {
+    if conn
+        .prepare("SELECT role FROM learn_people LIMIT 1")
+        .is_err()
+    {
         for sql in [
             "ALTER TABLE learn_people ADD COLUMN role TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE learn_people ADD COLUMN relates TEXT NOT NULL DEFAULT '[]'",
@@ -611,7 +616,10 @@ pub fn migrate(conn: &Connection) {
     // an index afterwards. Without these, only starter-catalogue entries could
     // become callable servers — anything installed from the registry recorded
     // a row and then silently never appeared in the permission matrix.
-    if conn.prepare("SELECT command FROM community_installed LIMIT 1").is_err() {
+    if conn
+        .prepare("SELECT command FROM community_installed LIMIT 1")
+        .is_err()
+    {
         let _ = conn.execute(
             "ALTER TABLE community_installed ADD COLUMN command TEXT NOT NULL DEFAULT ''",
             [],
@@ -654,7 +662,11 @@ pub fn migrate(conn: &Connection) {
     // Messages are a cache and a sync rebuilds them, so clearing is the cheap
     // correct answer. Done once, marked by a setting, because doing it on every
     // launch would throw away a perfectly good mailbox every time.
-    if setting_get_conn(conn, "mail.refiled_v1").ok().flatten().is_none() {
+    if setting_get_conn(conn, "mail.refiled_v1")
+        .ok()
+        .flatten()
+        .is_none()
+    {
         let _ = conn.execute("DELETE FROM mail_messages", []);
         let _ = setting_set_conn(conn, "mail.refiled_v1", "done");
     }
@@ -663,7 +675,10 @@ pub fn migrate(conn: &Connection) {
     // which is different from having tried and found nothing -- and that
     // difference is the whole reason there is a state rather than a nullable
     // text column.
-    if conn.prepare("SELECT extract_state FROM mail_attachments LIMIT 1").is_err() {
+    if conn
+        .prepare("SELECT extract_state FROM mail_attachments LIMIT 1")
+        .is_err()
+    {
         let _ = conn.execute(
             "ALTER TABLE mail_attachments ADD COLUMN extract_state TEXT NOT NULL DEFAULT ''",
             [],
@@ -678,7 +693,10 @@ pub fn migrate(conn: &Connection) {
     // a fact learned from it, never as a rule -- a business inbox is full of
     // ordinary life, and a guess that is right eight times in ten files two
     // facts in the wrong company where nobody notices.
-    if conn.prepare("SELECT space FROM mail_accounts LIMIT 1").is_err() {
+    if conn
+        .prepare("SELECT space FROM mail_accounts LIMIT 1")
+        .is_err()
+    {
         let _ = conn.execute(
             "ALTER TABLE mail_accounts ADD COLUMN space TEXT NOT NULL DEFAULT ''",
             [],
@@ -689,7 +707,10 @@ pub fn migrate(conn: &Connection) {
     // Existing rows keep the only thing they ever were, which is why the
     // default is 'password' rather than empty: a blank auth would read as
     // "unknown" everywhere and there is nothing unknown about them.
-    if conn.prepare("SELECT auth FROM mail_accounts LIMIT 1").is_err() {
+    if conn
+        .prepare("SELECT auth FROM mail_accounts LIMIT 1")
+        .is_err()
+    {
         let _ = conn.execute(
             "ALTER TABLE mail_accounts ADD COLUMN auth TEXT NOT NULL DEFAULT 'password'",
             [],
@@ -709,7 +730,10 @@ pub fn migrate(conn: &Connection) {
     // A bot's heartbeat belongs to a manager, not to a folder: a manager is a
     // file at the vault root now and can be responsible for several spaces or
     // none.
-    if conn.prepare("SELECT manager FROM schedules LIMIT 1").is_err() {
+    if conn
+        .prepare("SELECT manager FROM schedules LIMIT 1")
+        .is_err()
+    {
         let _ = conn.execute(
             "ALTER TABLE schedules ADD COLUMN manager TEXT NOT NULL DEFAULT ''",
             [],
@@ -717,7 +741,10 @@ pub fn migrate(conn: &Connection) {
     }
 
     // A schedule can warn you before it starts, and can say what it is for.
-    if conn.prepare("SELECT remind_min FROM schedules LIMIT 1").is_err() {
+    if conn
+        .prepare("SELECT remind_min FROM schedules LIMIT 1")
+        .is_err()
+    {
         let _ = conn.execute(
             "ALTER TABLE schedules ADD COLUMN remind_min INTEGER NOT NULL DEFAULT 0",
             [],
@@ -1017,8 +1044,11 @@ pub fn node_update(
     // a container. The UI never asks for a kind directly, so this is only ever
     // set alongside the path that justified it.
     if let Some(kind) = kind {
-        conn.execute("UPDATE nodes SET kind = ?1 WHERE id = ?2", params![kind, id])
-            .map_err(err)?;
+        conn.execute(
+            "UPDATE nodes SET kind = ?1 WHERE id = ?2",
+            params![kind, id],
+        )
+        .map_err(err)?;
     }
     if let Some(name) = name {
         conn.execute(
@@ -1201,7 +1231,9 @@ pub fn node_deck_dir(conn: &Connection, node: &Node) -> Option<PathBuf> {
     if node.rel_path.trim().is_empty() {
         return None;
     }
-    Some(std::path::Path::new(&root).join(node.rel_path.replace('/', std::path::MAIN_SEPARATOR_STR)))
+    Some(
+        std::path::Path::new(&root).join(node.rel_path.replace('/', std::path::MAIN_SEPARATOR_STR)),
+    )
 }
 
 pub fn node_deck_dir_by_id(conn: &Connection, node_id: i64) -> Option<PathBuf> {
@@ -1219,7 +1251,9 @@ pub fn node_dir(conn: &Connection, node: &Node) -> Option<PathBuf> {
     if node.rel_path.trim().is_empty() {
         return None;
     }
-    Some(std::path::Path::new(&root).join(node.rel_path.replace('/', std::path::MAIN_SEPARATOR_STR)))
+    Some(
+        std::path::Path::new(&root).join(node.rel_path.replace('/', std::path::MAIN_SEPARATOR_STR)),
+    )
 }
 
 pub fn node_dir_by_id(conn: &Connection, node_id: i64) -> Option<PathBuf> {
@@ -1606,7 +1640,15 @@ mod node_dir_tests {
         (conn, root)
     }
 
-    fn node(conn: &Connection, id: i64, parent: Option<i64>, kind: &str, name: &str, rel: &str, path: &str) {
+    fn node(
+        conn: &Connection,
+        id: i64,
+        parent: Option<i64>,
+        kind: &str,
+        name: &str,
+        rel: &str,
+        path: &str,
+    ) {
         conn.execute(
             "INSERT INTO nodes (id, parent_id, kind, name, path, rel_path, sort) \
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0)",
@@ -1676,11 +1718,30 @@ mod node_dir_tests {
     fn a_folder_sits_under_the_vault_root_not_under_its_project() {
         let (conn, root) = world();
         node(&conn, 1, None, "workspace", "Innotrack", "Innotrack", "");
-        node(&conn, 2, Some(1), "project", "x-platform", "Innotrack/x-platform", r"C:\repos\x-platform");
-        node(&conn, 3, Some(2), "folder", "notes", "Innotrack/x-platform/notes", "");
+        node(
+            &conn,
+            2,
+            Some(1),
+            "project",
+            "x-platform",
+            "Innotrack/x-platform",
+            r"C:\repos\x-platform",
+        );
+        node(
+            &conn,
+            3,
+            Some(2),
+            "folder",
+            "notes",
+            "Innotrack/x-platform/notes",
+            "",
+        );
 
         // The project works in the repository it names.
-        assert_eq!(node_dir_by_id(&conn, 2), Some(std::path::PathBuf::from(r"C:\repos\x-platform")));
+        assert_eq!(
+            node_dir_by_id(&conn, 2),
+            Some(std::path::PathBuf::from(r"C:\repos\x-platform"))
+        );
 
         // The folder works in its own place in the vault — *not* inside the
         // repository, which is what the old rule produced.
@@ -1701,6 +1762,10 @@ mod node_dir_tests {
         node(&conn, 1, None, "workspace", "Nowhere", "", "");
         assert_eq!(node_dir_by_id(&conn, 1), None);
         assert_eq!(resolve_node_dir(&conn, 1), "");
-        assert_eq!(resolve_node_dir(&conn, 404), "", "and so does a node that is not there");
+        assert_eq!(
+            resolve_node_dir(&conn, 404),
+            "",
+            "and so does a node that is not there"
+        );
     }
 }

@@ -70,6 +70,11 @@ function blankForCapture(): Partial<MailAccount> {
 export function MailAccountEditor() {
   const { mailAccountEditing, mailAccounts, openMailAccountEditor, refreshMailAccounts, syncMail } =
     useApp()
+  // Spaces are the workspaces in the tree. Read straight from the store
+  // rather than fetched: the tree is already loaded by the time a mail
+  // account sheet can be opened. Up here, before the closed sheet returns
+  // early, so the hook runs on every render.
+  const spaces = useApp((s) => s.nodes).filter((n) => n.kind === 'workspace')
 
   const [def, setDef] = useState<MailAccount>(() => ({ ...BLANK, ...blankForCapture() }))
   const [password, setPassword] = useState('')
@@ -186,10 +191,6 @@ export function MailAccountEditor() {
    * anyone makes, and leaving empty boxes there implies the connection is
    * incomplete when it is finished.
    */
-  // Spaces are the workspaces in the tree. Read straight from the store
-  // rather than fetched: the tree is already loaded by the time a mail
-  // account sheet can be opened.
-  const spaces = useApp((s) => s.nodes).filter((n) => n.kind === 'workspace')
 
   const googlePath = def.kind === 'gmail' && googleReady
   const showFields = def.auth !== 'oauth' && (!googlePath || manual)

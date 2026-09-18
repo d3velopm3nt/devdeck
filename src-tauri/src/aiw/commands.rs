@@ -132,7 +132,9 @@ pub fn sync_projects_from_tree(ws: &Arc<Workspace>, conn: &rusqlite::Connection)
         let mut cur = Some(n.id);
         let mut hops = 0;
         while let Some(id) = cur {
-            let Some((parent, label)) = by_id.get(&id) else { break };
+            let Some((parent, label)) = by_id.get(&id) else {
+                break;
+            };
             if label.eq_ignore_ascii_case("Personal") {
                 personal.insert(n.id.to_string(), id.to_string());
                 break;
@@ -665,7 +667,6 @@ pub fn saved_permissions(conn: &rusqlite::Connection) -> Vec<(String, String, St
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_default()
 }
-
 
 // ---------------------------------------------------------------------------
 // Standing grants
@@ -1218,10 +1219,7 @@ pub async fn aiw_models(
 /// "What changed since this session's checkpoint?" — the question an agent asks
 /// when it suspects the ground has moved.
 #[tauri::command]
-pub fn aiw_changed_since(
-    ws: Ws,
-    session_id: String,
-) -> Result<super::context::Changes, String> {
+pub fn aiw_changed_since(ws: Ws, session_id: String) -> Result<super::context::Changes, String> {
     let session = ws
         .session(&session_id)
         .ok_or_else(|| format!("no session '{session_id}'"))?;
@@ -1689,7 +1687,13 @@ fn person_view(d: super::deck::Doc<super::personal::PersonMeta>) -> PersonView {
 /// Everyone on file. Home first.
 #[tauri::command]
 pub fn aiw_people(ws: Ws) -> Result<Vec<PersonView>, String> {
-    Ok(ws.convs()?.store().people().into_iter().map(person_view).collect())
+    Ok(ws
+        .convs()?
+        .store()
+        .people()
+        .into_iter()
+        .map(person_view)
+        .collect())
 }
 
 /// Save one person. An empty id creates; a known id rewrites in place.
@@ -1711,21 +1715,39 @@ pub fn aiw_person_save(ws: Ws, person: PersonView) -> Result<PersonView, String>
     });
     doc.meta.id = person.id;
     doc.meta.name = person.name.trim().to_string();
-    doc.meta.kind = if person.kind.trim().is_empty() { "person".into() } else { person.kind };
+    doc.meta.kind = if person.kind.trim().is_empty() {
+        "person".into()
+    } else {
+        person.kind
+    };
     doc.meta.role = person.role.trim().to_string();
     doc.meta.home = person.home;
     doc.meta.birthday = person.birthday.trim().to_string();
-    doc.meta.emails = person.emails.into_iter().filter(|e| !e.trim().is_empty()).collect();
-    doc.meta.private = person.private.into_iter().filter(|e| !e.trim().is_empty()).collect();
+    doc.meta.emails = person
+        .emails
+        .into_iter()
+        .filter(|e| !e.trim().is_empty())
+        .collect();
+    doc.meta.private = person
+        .private
+        .into_iter()
+        .filter(|e| !e.trim().is_empty())
+        .collect();
     if doc.meta.source.is_empty() {
-        doc.meta.source = if person.source.is_empty() { "you".into() } else { person.source };
+        doc.meta.source = if person.source.is_empty() {
+            "you".into()
+        } else {
+            person.source
+        };
     }
     doc.body = person.notes;
     store.save_person(&doc)?;
     let saved = store
         .people()
         .into_iter()
-        .find(|p| p.meta.name == doc.meta.name && (doc.meta.id.is_empty() || p.meta.id == doc.meta.id))
+        .find(|p| {
+            p.meta.name == doc.meta.name && (doc.meta.id.is_empty() || p.meta.id == doc.meta.id)
+        })
         .ok_or_else(|| "saved, but could not read it back".to_string())?;
     Ok(person_view(saved))
 }

@@ -256,10 +256,7 @@ pub fn get(id: &str) -> Option<Template> {
 /// Every tool any template offers, so a bot built by hand can still be told
 /// what exists.
 pub fn tool_by_id(id: &str) -> Option<ToolOffer> {
-    all()
-        .into_iter()
-        .flat_map(|t| t.tools)
-        .find(|t| t.id == id)
+    all().into_iter().flat_map(|t| t.tools).find(|t| t.id == id)
 }
 
 #[tauri::command]
@@ -285,7 +282,11 @@ mod tests {
         let mut seen = std::collections::HashSet::new();
         for t in all() {
             for tool in t.tools {
-                assert!(seen.insert(tool.id.clone()), "duplicate tool id {}", tool.id);
+                assert!(
+                    seen.insert(tool.id.clone()),
+                    "duplicate tool id {}",
+                    tool.id
+                );
             }
         }
     }

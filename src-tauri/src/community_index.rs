@@ -21,7 +21,7 @@
 //! are different facts and the page shows which one it has.
 
 use rusqlite::{params, Connection};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value;
 
 use crate::community::{Item, KIND_TOOL};
@@ -242,7 +242,10 @@ pub fn parse_github(body: &Value) -> Vec<Item> {
             if full.is_empty() {
                 return None;
             }
-            let stars = r.get("stargazers_count").and_then(Value::as_i64).unwrap_or(0);
+            let stars = r
+                .get("stargazers_count")
+                .and_then(Value::as_i64)
+                .unwrap_or(0);
             Some(Item {
                 id: format!("repo.{full}"),
                 kind: KIND_TOOL.into(),
@@ -293,7 +296,11 @@ pub fn licence_of(spdx: Option<&str>) -> String {
     let up = id.to_ascii_uppercase();
     if up.starts_with("AGPL") || up.starts_with("SSPL") || up.starts_with("BUSL") {
         "restricted".into()
-    } else if up.starts_with("GPL") || up.starts_with("LGPL") || up.starts_with("MPL") || up.starts_with("EPL") {
+    } else if up.starts_with("GPL")
+        || up.starts_with("LGPL")
+        || up.starts_with("MPL")
+        || up.starts_with("EPL")
+    {
         "copyleft".into()
     } else {
         "permissive".into()
@@ -553,7 +560,9 @@ pub fn parse_trending(html: &str, period: &str) -> Vec<Item> {
         let Some(head) = between(article, "<h2 class=\"h3 lh-condensed\">", "</h2>") else {
             continue;
         };
-        let Some(full) = between(head, "href=\"/", "\"") else { continue };
+        let Some(full) = between(head, "href=\"/", "\"") else {
+            continue;
+        };
         let full = full.trim_end_matches('/');
         // Owner/name and nothing else: /sponsors/x and /apps/y are not repos.
         let mut parts = full.split('/');
@@ -708,7 +717,10 @@ pub fn snapshot(conn: &Connection, items: &[Item], at: i64) -> Result<usize, Str
     let mut n = 0;
     for i in items {
         let Some(stars) = stars_on(i) else { continue };
-        let repo = i.source.trim_start_matches("https://github.com/").to_string();
+        let repo = i
+            .source
+            .trim_start_matches("https://github.com/")
+            .to_string();
         if repo.is_empty() {
             continue;
         }
@@ -824,7 +836,7 @@ pub fn growth(conn: &Connection, now: i64) -> Result<Vec<Growth>, String> {
             span_ms: last_at - first_at,
         });
     }
-    out.sort_by(|a, b| b.gained.cmp(&a.gained));
+    out.sort_by_key(|g| std::cmp::Reverse(g.gained));
     Ok(out)
 }
 
@@ -850,7 +862,7 @@ pub fn year_feed(conn: &Connection, now: i64) -> Feed {
     let items = rows
         .iter()
         .filter(|g| g.gained != 0)
-        .filter_map(|g| {
+        .map(|g| {
             let base = known
                 .items
                 .iter()
@@ -864,7 +876,7 @@ pub fn year_feed(conn: &Connection, now: i64) -> Feed {
                     licence: "missing".into(),
                     ..Default::default()
                 });
-            Some(Item {
+            Item {
                 id: format!("year.{}", g.repo),
                 kind: KIND_TOOL.into(),
                 version: String::new(),
@@ -877,7 +889,7 @@ pub fn year_feed(conn: &Connection, now: i64) -> Feed {
                 command: String::new(),
                 tool_id: String::new(),
                 ..base
-            })
+            }
         })
         .collect::<Vec<_>>();
 
@@ -931,7 +943,13 @@ pub fn cached(conn: &Connection, source: &str) -> Feed {
     }
 }
 
-pub fn store(conn: &Connection, source: &str, items: &[Item], at: i64, note: &str) -> Result<(), String> {
+pub fn store(
+    conn: &Connection,
+    source: &str,
+    items: &[Item],
+    at: i64,
+    note: &str,
+) -> Result<(), String> {
     let json = serde_json::to_string(items).map_err(|e| e.to_string())?;
     conn.execute(
         "INSERT OR REPLACE INTO community_index (source, items, fetched_at, note) VALUES (?1,?2,?3,?4)",
@@ -974,7 +992,11 @@ pub struct SortOption {
 }
 
 fn opt(id: &str, label: &str, note: &str) -> SortOption {
-    SortOption { id: id.into(), label: label.into(), note: note.into() }
+    SortOption {
+        id: id.into(),
+        label: label.into(),
+        note: note.into(),
+    }
 }
 
 /// Which sorts to offer for a list of rows.
@@ -1014,7 +1036,8 @@ pub fn sorts_for(items: &[Item]) -> Vec<SortOption> {
 /// look for things they half-remember.
 pub fn matches(i: &Item, q: &str) -> bool {
     let hay = format!("{} {} {} {}", i.name, i.summary, i.author, i.source).to_lowercase();
-    q.split_whitespace().all(|w| hay.contains(&w.to_lowercase()))
+    q.split_whitespace()
+        .all(|w| hay.contains(&w.to_lowercase()))
 }
 
 /// Filter, then order.
@@ -1054,13 +1077,12 @@ pub fn arrange(
             (None, Some(_)) => std::cmp::Ordering::Greater,
             (None, None) => std::cmp::Ordering::Equal,
         }),
-        SORT_NAME => out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase())),
+        SORT_NAME => out.sort_by_key(|a| a.name.to_lowercase()),
         // SORT_SOURCE and anything unrecognised: leave it as the source had it.
         _ => {}
     }
     out
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -1073,7 +1095,10 @@ mod tests {
             "npx -y pretrip-mcp@1.0.1"
         );
         assert_eq!(command_for("npm", "x", "").unwrap(), "npx -y x");
-        assert_eq!(command_for("pypi", "mcp-thing", "2.0").unwrap(), "uvx mcp-thing");
+        assert_eq!(
+            command_for("pypi", "mcp-thing", "2.0").unwrap(),
+            "uvx mcp-thing"
+        );
         // An Install button that would fail on click is worse than no button.
         assert!(command_for("cargo", "thing", "1").is_none());
         assert!(command_for("npm", "  ", "1").is_none());
@@ -1176,7 +1201,11 @@ mod tests {
         .unwrap();
         let items = parse_github(&body);
         assert_eq!(items.len(), 1);
-        assert_eq!(items[0].stars, Some(41_234), "a count is a number, not a decorated string");
+        assert_eq!(
+            items[0].stars,
+            Some(41_234),
+            "a count is a number, not a decorated string"
+        );
         assert_eq!(items[0].licence, "permissive");
         assert!(
             items[0].command.is_empty() && items[0].tool_id.is_empty(),
@@ -1203,7 +1232,10 @@ mod tests {
         let q = github_query();
         assert!(q.contains("topic:mcp"));
         assert!(q.contains("topic:ai-agent"));
-        assert!(q.contains(" OR "), "any of the topics, not all of them: {q}");
+        assert!(
+            q.contains(" OR "),
+            "any of the topics, not all of them: {q}"
+        );
     }
 
     #[test]
@@ -1227,7 +1259,14 @@ mod tests {
             name: "b".into(),
             ..Default::default()
         }];
-        store(&conn, SOURCE_GITHUB, &items, 1_700_000_000_000, "most starred").unwrap();
+        store(
+            &conn,
+            SOURCE_GITHUB,
+            &items,
+            1_700_000_000_000,
+            "most starred",
+        )
+        .unwrap();
 
         let f = cached(&conn, SOURCE_GITHUB);
         assert!(f.ok);
@@ -1280,16 +1319,31 @@ mod tests {
     #[test]
     fn a_trending_page_is_read_into_rows_that_declare_nothing() {
         let items = parse_trending(TRENDING_HTML, "week");
-        assert_eq!(items.len(), 2, "the nav links are not repositories: {items:?}");
+        assert_eq!(
+            items.len(),
+            2,
+            "the nav links are not repositories: {items:?}"
+        );
 
         let a = &items[0];
         assert_eq!(a.name, "ECC");
         assert_eq!(a.author, "affaan-m");
         assert_eq!(a.source, "https://github.com/affaan-m/ECC");
-        assert!(a.summary.contains("Skills & memory"), "entities decoded: {}", a.summary);
+        assert!(
+            a.summary.contains("Skills & memory"),
+            "entities decoded: {}",
+            a.summary
+        );
         assert_eq!(a.version, "JavaScript");
-        assert_eq!(a.gained, Some(1204), "a gain over the week, kept apart from a total");
-        assert_eq!(a.stars, None, "the trending page never says how many a repo has");
+        assert_eq!(
+            a.gained,
+            Some(1204),
+            "a gain over the week, kept apart from a total"
+        );
+        assert_eq!(
+            a.stars, None,
+            "the trending page never says how many a repo has"
+        );
         assert!(
             a.command.is_empty() && a.tool_id.is_empty(),
             "a trending row declares nothing, so there is nothing to install"
@@ -1301,7 +1355,10 @@ mod tests {
         let b = &items[1];
         assert_eq!(b.name, "quiet-tool");
         assert_eq!(b.summary, "No description.");
-        assert_eq!(b.version, "", "no language on this row, and nothing invented for it");
+        assert_eq!(
+            b.version, "",
+            "no language on this row, and nothing invented for it"
+        );
         assert_eq!(b.gained, Some(98));
     }
 
@@ -1320,14 +1377,21 @@ mod tests {
         // that is easy to get wrong.
         let feed = Feed {
             source: SOURCE_TRENDING_WEEK.into(),
-            items: vec![Item { id: "trend.week.a/b".into(), ..Default::default() }],
+            items: vec![Item {
+                id: "trend.week.a/b".into(),
+                ..Default::default()
+            }],
             ok: false,
             fetched_at: 1_700_000_000_000,
             note: "markup changed".into(),
             ..Default::default()
         };
         assert!(!feed.ok);
-        assert_eq!(feed.items.len(), 1, "the last good list survives the failure");
+        assert_eq!(
+            feed.items.len(),
+            1,
+            "the last good list survives the failure"
+        );
         assert!(feed.fetched_at > 0, "and still says when it was last true");
     }
 
@@ -1340,7 +1404,6 @@ mod tests {
         assert_eq!(trending_period("trending-year"), None);
         assert_eq!(trending_period(SOURCE_GITHUB), None);
     }
-
 
     fn star_db() -> Connection {
         let c = Connection::open_in_memory().unwrap();
@@ -1418,8 +1481,15 @@ mod tests {
         let f = year_feed(&c, 1_000_000);
         assert!(f.ok, "empty is not an error");
         assert!(f.items.is_empty());
-        assert_eq!(f.fetched_at, 0, "nothing was measured, so no time is claimed");
-        assert!(f.note.contains("history starts the day you install"), "{}", f.note);
+        assert_eq!(
+            f.fetched_at, 0,
+            "nothing was measured, so no time is claimed"
+        );
+        assert!(
+            f.note.contains("history starts the day you install"),
+            "{}",
+            f.note
+        );
     }
 
     #[test]
@@ -1428,7 +1498,7 @@ mod tests {
         // is allowed to exist beside two lists it does not share a scale with.
         let c = star_db();
         let day = 86_400_000i64;
-        snapshot(&c, &[repo("a/b", 100)], 1 * day).unwrap();
+        snapshot(&c, &[repo("a/b", 100)], day).unwrap();
         snapshot(&c, &[repo("a/b", 260)], 31 * day).unwrap();
 
         let f = year_feed(&c, 40 * day);
@@ -1444,7 +1514,6 @@ mod tests {
         );
     }
 
-
     // -- search, filter, order ---------------------------------------------
 
     fn row(name: &str, licence: &str, kind: &str) -> Item {
@@ -1458,11 +1527,17 @@ mod tests {
     }
 
     fn starred(name: &str, stars: i64) -> Item {
-        Item { stars: Some(stars), ..row(name, "permissive", KIND_TOOL) }
+        Item {
+            stars: Some(stars),
+            ..row(name, "permissive", KIND_TOOL)
+        }
     }
 
     fn growing(name: &str, gained: i64) -> Item {
-        Item { gained: Some(gained), ..row(name, "missing", KIND_TOOL) }
+        Item {
+            gained: Some(gained),
+            ..row(name, "missing", KIND_TOOL)
+        }
     }
 
     #[test]
@@ -1470,7 +1545,10 @@ mod tests {
         // The registry has no star count anywhere in it. Offering "Most
         // starred" over it would produce an order with no meaning, which is
         // worse than not offering the option.
-        let registry = vec![row("a", "permissive", KIND_TOOL), row("b", "copyleft", KIND_TOOL)];
+        let registry = vec![
+            row("a", "permissive", KIND_TOOL),
+            row("b", "copyleft", KIND_TOOL),
+        ];
         let ids: Vec<String> = sorts_for(&registry).into_iter().map(|s| s.id).collect();
         assert_eq!(ids, vec![SORT_SOURCE, SORT_NAME]);
     }
@@ -1486,7 +1564,11 @@ mod tests {
 
     #[test]
     fn the_year_list_can_answer_both_because_it_holds_both() {
-        let year = vec![Item { stars: Some(40_000), gained: Some(900), ..row("a", "permissive", KIND_TOOL) }];
+        let year = vec![Item {
+            stars: Some(40_000),
+            gained: Some(900),
+            ..row("a", "permissive", KIND_TOOL)
+        }];
         let ids: Vec<String> = sorts_for(&year).into_iter().map(|s| s.id).collect();
         assert_eq!(ids, vec![SORT_SOURCE, SORT_STARS, SORT_GROWTH, SORT_NAME]);
     }
@@ -1525,14 +1607,24 @@ mod tests {
         // not comparable. Each sort reads only its own field, so the other
         // row's number cannot leak into the order.
         let items = vec![
-            Item { gained: Some(1204), ..starred("gainer", 2_000) },
-            Item { gained: Some(5), ..starred("giant", 41_234) },
+            Item {
+                gained: Some(1204),
+                ..starred("gainer", 2_000)
+            },
+            Item {
+                gained: Some(5),
+                ..starred("giant", 41_234)
+            },
         ];
-        let by_stars: Vec<String> =
-            arrange(&items, "", &[], false, SORT_STARS).iter().map(|i| i.name.clone()).collect();
+        let by_stars: Vec<String> = arrange(&items, "", &[], false, SORT_STARS)
+            .iter()
+            .map(|i| i.name.clone())
+            .collect();
         assert_eq!(by_stars, vec!["giant", "gainer"]);
-        let by_growth: Vec<String> =
-            arrange(&items, "", &[], false, SORT_GROWTH).iter().map(|i| i.name.clone()).collect();
+        let by_growth: Vec<String> = arrange(&items, "", &[], false, SORT_GROWTH)
+            .iter()
+            .map(|i| i.name.clone())
+            .collect();
         assert_eq!(by_growth, vec!["gainer", "giant"]);
     }
 
@@ -1588,7 +1680,10 @@ mod tests {
         let items = vec![
             row("a", "permissive", KIND_TOOL),
             row("ab", "copyleft", KIND_TOOL),
-            Item { name: "abc".into(), ..row("abc", "permissive", "skill") },
+            Item {
+                name: "abc".into(),
+                ..row("abc", "permissive", "skill")
+            },
         ];
         // kind AND licence AND query, all at once.
         let out = arrange(&items, "a", &["skill".to_string()], true, SORT_SOURCE);
@@ -1602,9 +1697,15 @@ mod tests {
     fn sorting_a_tie_leaves_it_in_the_order_the_source_gave() {
         // A sort should narrow a list, not shuffle it — two rows the sort
         // cannot separate must not swap places between renders.
-        let items = vec![starred("second", 100), starred("first", 100), starred("third", 100)];
-        let names: Vec<String> =
-            arrange(&items, "", &[], false, SORT_STARS).iter().map(|i| i.name.clone()).collect();
+        let items = vec![
+            starred("second", 100),
+            starred("first", 100),
+            starred("third", 100),
+        ];
+        let names: Vec<String> = arrange(&items, "", &[], false, SORT_STARS)
+            .iter()
+            .map(|i| i.name.clone())
+            .collect();
         assert_eq!(names, vec!["second", "first", "third"]);
     }
 
@@ -1614,12 +1715,25 @@ mod tests {
         // `stars`. Without the fallback, a year of star history would read as
         // no history at all the moment this shipped — and would look exactly
         // like "you have not refreshed enough times yet".
-        let old = Item { version: "41234★".into(), ..Default::default() };
+        let old = Item {
+            version: "41234★".into(),
+            ..Default::default()
+        };
         assert_eq!(stars_on(&old), Some(41_234));
-        let new = Item { stars: Some(7), version: String::new(), ..Default::default() };
+        let new = Item {
+            stars: Some(7),
+            version: String::new(),
+            ..Default::default()
+        };
         assert_eq!(stars_on(&new), Some(7));
         // And a row that genuinely has none stays none.
-        assert_eq!(stars_on(&Item { version: "1.0.0".into(), ..Default::default() }), None);
+        assert_eq!(
+            stars_on(&Item {
+                version: "1.0.0".into(),
+                ..Default::default()
+            }),
+            None
+        );
     }
 
     #[test]
@@ -1637,9 +1751,18 @@ mod tests {
         // The other half of the upgrade. Without it, the first launch after
         // this shipped would quietly drop "Fastest growing" from the trending
         // lists until somebody happened to press Refresh.
-        let old = Item { version: "JavaScript · +1,204 stars".into(), ..Default::default() };
+        let old = Item {
+            version: "JavaScript · +1,204 stars".into(),
+            ..Default::default()
+        };
         assert_eq!(gained_on(&old), Some(1204));
-        assert_eq!(gained_on(&Item { version: "+98 stars".into(), ..Default::default() }), Some(98));
+        assert_eq!(
+            gained_on(&Item {
+                version: "+98 stars".into(),
+                ..Default::default()
+            }),
+            Some(98)
+        );
         // And the option is offered off the back of it, which is the point.
         let ids: Vec<String> = sorts_for(&[old]).into_iter().map(|s| s.id).collect();
         assert!(ids.contains(&SORT_GROWTH.to_string()), "{ids:?}");
@@ -1661,5 +1784,4 @@ mod tests {
         assert_eq!(count_in(""), None);
         assert_eq!(count_in("some"), None);
     }
-
 }

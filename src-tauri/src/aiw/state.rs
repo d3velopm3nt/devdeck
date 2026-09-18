@@ -667,9 +667,9 @@ impl Workspace {
             changed += before - projects.len();
         }
         for (id, name, root, deck_root) in wanted {
-            let same = self.project(id).is_some_and(|p| {
-                &p.root == root && &p.deck_root == deck_root && &p.name == name
-            });
+            let same = self
+                .project(id)
+                .is_some_and(|p| &p.root == root && &p.deck_root == deck_root && &p.name == name);
             if same {
                 continue;
             }
@@ -1201,7 +1201,6 @@ impl Workspace {
             .clone()
     }
 
-
     /// Load the team from disk, seeding the built-ins the first time.
     ///
     /// Agents were a hardcoded list, which meant the answer to "add another
@@ -1504,11 +1503,7 @@ impl Workspace {
                     }
                 }
                 Decision::AllowAlways => {
-                    let req = self
-                        .approvals
-                        .pending()
-                        .into_iter()
-                        .find(|r| r.id == id);
+                    let req = self.approvals.pending().into_iter().find(|r| r.id == id);
                     if let Some(r) = req {
                         let args: serde_json::Value =
                             serde_json::from_str(&r.detail).unwrap_or(serde_json::json!({}));

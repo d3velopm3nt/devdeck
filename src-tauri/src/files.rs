@@ -87,7 +87,9 @@ fn chip(rel: &str, features: &[(String, Vec<String>)]) -> Option<String> {
     let mut best: Option<(usize, &str)> = None;
     for (name, areas) in features {
         for a in areas {
-            let hit = path == *a || path.starts_with(&format!("{a}/")) || a.starts_with(&format!("{path}/"));
+            let hit = path == *a
+                || path.starts_with(&format!("{a}/"))
+                || a.starts_with(&format!("{path}/"));
             if hit && best.map(|(n, _)| a.len() > n).unwrap_or(true) {
                 best = Some((a.len(), name));
             }
@@ -150,7 +152,10 @@ pub fn node_files(
 
     let mut dirs: Vec<FileRow> = Vec::new();
     let mut files: Vec<FileRow> = Vec::new();
-    for e in std::fs::read_dir(&here).map_err(|e| e.to_string())?.flatten() {
+    for e in std::fs::read_dir(&here)
+        .map_err(|e| e.to_string())?
+        .flatten()
+    {
         let name = e.file_name().to_string_lossy().to_string();
         if SKIP.contains(&name.as_str()) {
             continue;
@@ -214,7 +219,10 @@ pub fn vault_files(db: tauri::State<Db>, rel: String) -> Result<Vec<FileRow>, St
 
     let mut dirs: Vec<FileRow> = Vec::new();
     let mut files: Vec<FileRow> = Vec::new();
-    for e in std::fs::read_dir(&here).map_err(|e| e.to_string())?.flatten() {
+    for e in std::fs::read_dir(&here)
+        .map_err(|e| e.to_string())?
+        .flatten()
+    {
         let name = e.file_name().to_string_lossy().to_string();
         // `.git` stays out: it is thousands of objects and none of them are
         // anything you came here to read.
@@ -259,7 +267,10 @@ pub fn vault_file_text(db: tauri::State<Db>, rel: String) -> Result<FileText, St
     if rel.contains("..") {
         return Err("that path leaves the vault".into());
     }
-    read_text_at(&root.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR)), &rel)
+    read_text_at(
+        &root.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR)),
+        &rel,
+    )
 }
 
 /// A file's text, with everything the viewer needs to say what it is holding.
@@ -312,7 +323,10 @@ pub fn file_text(
     if rel.contains("..") {
         return Err("that path leaves the node".into());
     }
-    read_text_at(&base.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR)), &rel)
+    read_text_at(
+        &base.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR)),
+        &rel,
+    )
 }
 
 /// One file, read honestly: binary says so, too big says so, and a cut
@@ -382,14 +396,20 @@ mod tests {
 
     fn features() -> Vec<(String, Vec<String>)> {
         vec![
-            ("Offline sync".into(), vec!["src/sync".into(), "docs/sync.md".into()]),
+            (
+                "Offline sync".into(),
+                vec!["src/sync".into(), "docs/sync.md".into()],
+            ),
             ("Billing".into(), vec!["src".into()]),
         ]
     }
 
     #[test]
     fn a_folder_named_by_a_work_item_carries_that_feature() {
-        assert_eq!(chip("src/sync", &features()).as_deref(), Some("Offline sync"));
+        assert_eq!(
+            chip("src/sync", &features()).as_deref(),
+            Some("Offline sync")
+        );
     }
 
     #[test]
@@ -404,7 +424,10 @@ mod tests {
     fn the_more_specific_claim_wins() {
         // Both "src" (Billing) and "src/sync" (Offline sync) match; the longer
         // one is the one that says something.
-        assert_eq!(chip("src/sync", &features()).as_deref(), Some("Offline sync"));
+        assert_eq!(
+            chip("src/sync", &features()).as_deref(),
+            Some("Offline sync")
+        );
         assert_eq!(chip("src/api.ts", &features()).as_deref(), Some("Billing"));
     }
 

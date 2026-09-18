@@ -129,6 +129,7 @@ pub struct LearnExclusion {
 pub struct LearnMessage {
     pub id: i64,
     pub thread_key: String,
+    #[allow(dead_code)]
     pub mailbox: String,
     pub from_name: String,
     pub from_addr: String,
@@ -142,6 +143,7 @@ pub struct LearnMessage {
 /// One attachment's text, as it will be sent.
 #[derive(Clone, Debug, Default)]
 pub struct LearnAttachment {
+    #[allow(dead_code)]
     pub id: i64,
     pub message_id: i64,
     pub filename: String,
@@ -196,6 +198,7 @@ impl Corpus {
     /// Measured by rendering it, not by adding up the parts: the rendered form
     /// carries dates, addresses and thread headings that the parts do not, and
     /// an estimate that ignores them is an estimate of a message nobody sends.
+    #[allow(dead_code)]
     pub fn chars(&self) -> i64 {
         render(self).chars().count() as i64
     }
@@ -225,7 +228,11 @@ impl Corpus {
     /// subjects and signatures did. Counting them here would make the receipt
     /// say "none of which reached the model" about mail that had.
     pub fn held_back(&self) -> i64 {
-        self.excluded.iter().filter(|e| e.kind != "bodies").map(|e| e.count).sum()
+        self.excluded
+            .iter()
+            .filter(|e| e.kind != "bodies")
+            .map(|e| e.count)
+            .sum()
     }
 }
 
@@ -298,8 +305,8 @@ fn estimate_cost(model: &str, input_tokens: i64) -> (f64, String) {
         );
     };
     let output_tokens = (input_tokens / 20).clamp(500, 8_000);
-    let cost = (input_tokens as f64 / 1_000_000.0) * inp
-        + (output_tokens as f64 / 1_000_000.0) * out;
+    let cost =
+        (input_tokens as f64 / 1_000_000.0) * inp + (output_tokens as f64 / 1_000_000.0) * out;
     (
         (cost * 100.0).round() / 100.0,
         format!("at ${inp:.2}/M in and ${out:.2}/M out, assuming a short reply"),
@@ -395,7 +402,11 @@ pub fn message_secret_reason(subject: &str, body: &str) -> Option<&'static str> 
     if let Some(r) = crate::stash::secret_reason(body) {
         return Some(r);
     }
-    let hay = format!("{} {}", subject.to_ascii_lowercase(), body.to_ascii_lowercase());
+    let hay = format!(
+        "{} {}",
+        subject.to_ascii_lowercase(),
+        body.to_ascii_lowercase()
+    );
     const CODE_WORDS: &[&str] = &[
         "verification code",
         "one-time code",
@@ -411,7 +422,11 @@ pub fn message_secret_reason(subject: &str, body: &str) -> Option<&'static str> 
     if CODE_WORDS.iter().any(|w| hay.contains(w)) && has_code_run(body) {
         return Some("this message carries a one-time code");
     }
-    const RESET_WORDS: &[&str] = &["reset your password", "password reset", "set a new password"];
+    const RESET_WORDS: &[&str] = &[
+        "reset your password",
+        "password reset",
+        "set a new password",
+    ];
     if RESET_WORDS.iter().any(|w| hay.contains(w)) {
         return Some("this message carries a password reset link");
     }
@@ -465,15 +480,23 @@ pub fn build_corpus_scoped(
     accounts: &[i64],
     domains: &[String],
 ) -> Result<Corpus, String> {
-    let ranked = crate::mail::rank_correspondents_for(conn, people.max(1).min(100), accounts, domains)?;
+    let ranked =
+        crate::mail::rank_correspondents_for(conn, people.clamp(1, 100), accounts, domains)?;
     let chosen: Vec<crate::mail::Correspondent> = if only.is_empty() {
         ranked
     } else {
-        ranked.into_iter().filter(|c| only.contains(&c.contact_id)).collect()
+        ranked
+            .into_iter()
+            .filter(|c| only.contains(&c.contact_id))
+            .collect()
     };
     if chosen.is_empty() {
         if !accounts.is_empty() {
-            let ids = accounts.iter().map(|a| a.to_string()).collect::<Vec<_>>().join(",");
+            let ids = accounts
+                .iter()
+                .map(|a| a.to_string())
+                .collect::<Vec<_>>()
+                .join(",");
             let sent: i64 = conn
                 .query_row(
                     &format!("SELECT COUNT(*) FROM mail_messages WHERE mailbox='Sent' AND account_id IN ({ids})"),
@@ -496,7 +519,10 @@ pub fn build_corpus_scoped(
         );
     }
 
-    let mut corpus = Corpus { depth, ..Default::default() };
+    let mut corpus = Corpus {
+        depth,
+        ..Default::default()
+    };
 
     // Facts you have already said no to. Carried into the prompt so the same
     // sentence is not offered a second time — which is what "a decline is
@@ -552,7 +578,11 @@ pub fn build_corpus_scoped(
     } else {
         format!(
             " AND account_id IN ({})",
-            accounts.iter().map(|a| a.to_string()).collect::<Vec<_>>().join(",")
+            accounts
+                .iter()
+                .map(|a| a.to_string())
+                .collect::<Vec<_>>()
+                .join(",")
         )
     };
     for c in &chosen {
@@ -645,7 +675,10 @@ pub fn build_corpus_scoped(
             moved = true;
             let cost = m.body.len()
                 + m.subject.len()
-                + atts.get(&m.id).map(|v| v.iter().map(|a| a.text.len()).sum()).unwrap_or(0);
+                + atts
+                    .get(&m.id)
+                    .map(|v| v.iter().map(|a| a.text.len()).sum())
+                    .unwrap_or(0);
             if cost > budget {
                 dropped += 1;
                 continue;
@@ -719,7 +752,8 @@ pub fn build_corpus_scoped(
             why: if domains.is_empty() {
                 "from senders you have never replied to — reciprocity, not volume".into()
             } else {
-                "from senders nobody at the business has written to — reciprocity, not volume".into()
+                "from senders nobody at the business has written to — reciprocity, not volume"
+                    .into()
             },
         });
     }
@@ -729,7 +763,9 @@ pub fn build_corpus_scoped(
     // mailbox, and the number has to be the mailbox's.
     let secret_everywhere: i64 = {
         let mut st = conn
-            .prepare("SELECT subject, body_text FROM mail_messages WHERE mailbox='INBOX' LIMIT 5000")
+            .prepare(
+                "SELECT subject, body_text FROM mail_messages WHERE mailbox='INBOX' LIMIT 5000",
+            )
             .map_err(err)?;
         let rows = st
             .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
@@ -790,7 +826,10 @@ pub fn build_corpus_scoped(
 /// One message's readable attachments, plus a count of the three ways an
 /// attachment can fail to be one.
 type AttStates = (i64, i64, i64);
-fn attachments_for(conn: &Connection, message_id: i64) -> Result<(Vec<LearnAttachment>, AttStates), String> {
+fn attachments_for(
+    conn: &Connection,
+    message_id: i64,
+) -> Result<(Vec<LearnAttachment>, AttStates), String> {
     let mut st = conn
         .prepare(
             "SELECT id, filename, file_path, extract_state
@@ -955,10 +994,28 @@ for a team member.";
 
 /// Free mail: an address here is a person, not an organisation.
 pub const FREE_MAIL: &[&str] = &[
-    "gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com", "msn.com",
-    "yahoo.com", "yahoo.co.uk", "icloud.com", "me.com", "mac.com", "aol.com", "proton.me",
-    "protonmail.com", "gmx.com", "gmx.net", "zoho.com", "mweb.co.za", "telkomsa.net",
-    "vodamail.co.za", "webmail.co.za", "iafrica.com",
+    "gmail.com",
+    "googlemail.com",
+    "outlook.com",
+    "hotmail.com",
+    "live.com",
+    "msn.com",
+    "yahoo.com",
+    "yahoo.co.uk",
+    "icloud.com",
+    "me.com",
+    "mac.com",
+    "aol.com",
+    "proton.me",
+    "protonmail.com",
+    "gmx.com",
+    "gmx.net",
+    "zoho.com",
+    "mweb.co.za",
+    "telkomsa.net",
+    "vodamail.co.za",
+    "webmail.co.za",
+    "iafrica.com",
 ];
 
 /// What a run reads, and for whom. The default is you: every mailbox, one
@@ -989,7 +1046,12 @@ pub struct Unit {
 /// An organisation's name from its domain: `ridgeback-mining.co.za` is
 /// Ridgeback Mining. A guess the card lets you correct.
 pub fn org_name(domain: &str) -> String {
-    let root = domain.trim().trim_start_matches("www.").split('.').next().unwrap_or(domain);
+    let root = domain
+        .trim()
+        .trim_start_matches("www.")
+        .split('.')
+        .next()
+        .unwrap_or(domain);
     root.split(['-', '_'])
         .filter(|w| !w.is_empty())
         .map(|w| {
@@ -1125,7 +1187,10 @@ pub fn parse_contact_line(line: &str) -> Option<ContactSummary> {
     }
     let r: Raw = serde_json::from_str(l).ok()?;
     let email = r.email.trim().to_ascii_lowercase();
-    if !r.kind.trim().eq_ignore_ascii_case("contact") || !email.contains('@') || r.text.trim().is_empty() {
+    if !r.kind.trim().eq_ignore_ascii_case("contact")
+        || !email.contains('@')
+        || r.text.trim().is_empty()
+    {
         return None;
     }
     Some(ContactSummary {
@@ -1154,13 +1219,25 @@ pub fn render(corpus: &Corpus) -> String {
     for p in &corpus.people {
         s.push_str(&format!(
             "- {} <{}>{} — you have had {} from them and sent {} to them; {} threads{}\n",
-            if p.name.trim().is_empty() { &p.email } else { &p.name },
+            if p.name.trim().is_empty() {
+                &p.email
+            } else {
+                &p.name
+            },
             p.email,
-            if p.domain.is_empty() { String::new() } else { format!(" at {}", p.domain) },
+            if p.domain.is_empty() {
+                String::new()
+            } else {
+                format!(" at {}", p.domain)
+            },
             p.received,
             p.sent,
             p.threads,
-            if p.space.is_empty() { String::new() } else { format!(" — mailbox belongs to the {} space", p.space) },
+            if p.space.is_empty() {
+                String::new()
+            } else {
+                format!(" — mailbox belongs to the {} space", p.space)
+            },
         ));
     }
 
@@ -1176,19 +1253,37 @@ pub fn render(corpus: &Corpus) -> String {
     for (_, mut msgs) in by_thread {
         msgs.sort_by_key(|m| m.ts);
         let subject = msgs.last().map(|m| m.subject.as_str()).unwrap_or_default();
-        s.push_str(&format!("\n## {}\n", if subject.is_empty() { "(no subject)" } else { subject }));
+        s.push_str(&format!(
+            "\n## {}\n",
+            if subject.is_empty() {
+                "(no subject)"
+            } else {
+                subject
+            }
+        ));
         for m in msgs {
             let when = chrono::DateTime::from_timestamp_millis(m.ts)
                 .map(|d| d.format("%Y-%m-%d").to_string())
                 .unwrap_or_default();
-            let who = if m.from_name.trim().is_empty() { &m.from_addr } else { &m.from_name };
-            s.push_str(&format!("\n[{when}] {who} <{}> → {}\n", m.from_addr, m.to_addrs));
+            let who = if m.from_name.trim().is_empty() {
+                &m.from_addr
+            } else {
+                &m.from_name
+            };
+            s.push_str(&format!(
+                "\n[{when}] {who} <{}> → {}\n",
+                m.from_addr, m.to_addrs
+            ));
             if !m.body.trim().is_empty() {
                 s.push_str(m.body.trim());
                 s.push('\n');
             }
             for a in corpus.attachments.iter().filter(|a| a.message_id == m.id) {
-                s.push_str(&format!("\n--- attachment: {} ---\n{}\n", a.filename, a.text.trim()));
+                s.push_str(&format!(
+                    "\n--- attachment: {} ---\n{}\n",
+                    a.filename,
+                    a.text.trim()
+                ));
             }
         }
     }
@@ -1254,6 +1349,7 @@ fn is_summary(f: &ProposedFact) -> bool {
 /// summary cannot be kept by accident as a sentence about nothing. It is
 /// shown at the top of the person's card and written to their record when
 /// the card is kept.
+#[cfg(test)]
 pub fn parse_summary_line(line: &str) -> Option<String> {
     let l = line.trim().trim_end_matches(',');
     if !l.starts_with('{') || !l.ends_with('}') {
@@ -1463,7 +1559,8 @@ fn thing_dir(conn: &Connection, node_id: i64) -> Result<std::path::PathBuf, Stri
     if node_id <= 0 {
         return Err("no space chosen for it".into());
     }
-    let node = crate::db::node_by_id(conn, node_id).map_err(|_| "that space is gone".to_string())?;
+    let node =
+        crate::db::node_by_id(conn, node_id).map_err(|_| "that space is gone".to_string())?;
     let dir = crate::db::node_deck_dir(conn, &node)
         .ok_or_else(|| "that space has no folder in the vault".to_string())?;
     Ok(super::deck::Deck::new(dir).knowledge_dir())
@@ -1499,10 +1596,7 @@ fn node_for_space(conn: &Connection, space: &str) -> i64 {
 /// a local Llama stays exactly what you chose. When it does swap, the estimate
 /// says so in words rather than quietly billing you less for something you did
 /// not pick.
-pub fn read_model(
-    chosen: &str,
-    available: &[super::provider::ModelInfo],
-) -> (String, String) {
+pub fn read_model(chosen: &str, available: &[super::provider::ModelInfo]) -> (String, String) {
     let low = chosen.to_ascii_lowercase();
     if !low.contains("opus") {
         return (chosen.to_string(), String::new());
@@ -1520,7 +1614,11 @@ pub fn read_model(
             let id = m.id.to_ascii_lowercase();
             id.split("sonnet").nth(1).map(|s| s == gen).unwrap_or(false)
         })
-        .or_else(|| available.iter().find(|m| m.id.to_ascii_lowercase().contains("sonnet")));
+        .or_else(|| {
+            available
+                .iter()
+                .find(|m| m.id.to_ascii_lowercase().contains("sonnet"))
+        });
     match pick {
         Some(m) => {
             let note = format!(
@@ -1705,7 +1803,11 @@ pub fn run(
                         || (!p.name.is_empty() && a.contains(&p.name.to_ascii_lowercase())))
             });
             let space = person.map(|p| p.space.clone()).unwrap_or_default();
-            let node_id = if f.kind == "thing" { node_for_space(&conn, &space) } else { 0 };
+            let node_id = if f.kind == "thing" {
+                node_for_space(&conn, &space)
+            } else {
+                0
+            };
             let _ = conn.execute(
                 "INSERT INTO learn_facts
                     (run_id, kind, text, source, thread_keys, contact_id, space, node_id,
@@ -1725,7 +1827,10 @@ pub fn run(
             );
         }
 
-        let usage_tokens = reply.usage.map(|u| (u.input + u.output) as i64).unwrap_or(tokens);
+        let usage_tokens = reply
+            .usage
+            .map(|u| (u.input + u.output) as i64)
+            .unwrap_or(tokens);
         let _ = conn.execute(
             "UPDATE learn_runs SET status='done', finished_at=?2, tokens=?3 WHERE id=?1",
             params![run_id, now_millis(), usage_tokens],
@@ -1778,7 +1883,11 @@ pub struct LivePerson {
 fn live_person(p: &LearnPerson) -> LivePerson {
     LivePerson {
         contact_id: p.contact_id,
-        name: if p.name.trim().is_empty() { p.email.clone() } else { p.name.clone() },
+        name: if p.name.trim().is_empty() {
+            p.email.clone()
+        } else {
+            p.name.clone()
+        },
         email: p.email.clone(),
         threads: p.threads,
         messages: p.messages,
@@ -1808,7 +1917,11 @@ fn file_fact(
         // `about` says "her sister" still belongs on that person's card.
         .or_else(|| people.iter().find(|p| p.contact_id == fallback_contact));
     let space = person.map(|p| p.space.clone()).unwrap_or_default();
-    let node_id = if f.kind == "thing" { node_for_space(conn, &space) } else { 0 };
+    let node_id = if f.kind == "thing" {
+        node_for_space(conn, &space)
+    } else {
+        0
+    };
     conn.execute(
         "INSERT INTO learn_facts
             (run_id, kind, text, source, thread_keys, contact_id, space, node_id, status, created_at)
@@ -1827,7 +1940,10 @@ fn file_fact(
     )
     .ok()?;
     let id = conn.last_insert_rowid();
-    facts(conn, run_id, "").ok()?.into_iter().find(|x| x.id == id)
+    facts(conn, run_id, "")
+        .ok()?
+        .into_iter()
+        .find(|x| x.id == id)
 }
 
 /// The run, one person at a time, telling the window as it goes.
@@ -1867,7 +1983,15 @@ pub fn run_live(
     // The whole batch first: it is the receipt, and the plan the screen shows.
     let whole = {
         let conn = db.0.lock().unwrap();
-        build_corpus_scoped(&conn, people, only, depth, fresh, &scope.accounts, &scope.domains)?
+        build_corpus_scoped(
+            &conn,
+            people,
+            only,
+            depth,
+            fresh,
+            &scope.accounts,
+            &scope.domains,
+        )?
     };
     if whole.messages.is_empty() {
         return Err("nothing to read -- every message for these people was held back".into());
@@ -1940,7 +2064,11 @@ pub fn run_live(
         format!(
             "learn run {run_id}: reading {} {}, one at a time, with {model}",
             units.len(),
-            if scope.business > 0 { "organisations" } else { "people" }
+            if scope.business > 0 {
+                "organisations"
+            } else {
+                "people"
+            }
         ),
     );
 
@@ -1965,7 +2093,15 @@ pub fn run_live(
         // every ranked person so a late name in the ranking is still found.
         let part = {
             let conn = db.0.lock().unwrap();
-            build_corpus_scoped(&conn, 100, &unit.ids, depth, fresh, &scope.accounts, &scope.domains)?
+            build_corpus_scoped(
+                &conn,
+                100,
+                &unit.ids,
+                depth,
+                fresh,
+                &scope.accounts,
+                &scope.domains,
+            )?
         };
         if part.messages.is_empty() {
             continue;
@@ -1995,7 +2131,11 @@ pub fn run_live(
             agent_id: super::assistant::ASSISTANT_ID.into(),
             role: "assistant".into(),
             model: model.clone(),
-            system: if scope.business > 0 { BUSINESS_SYSTEM.into() } else { SYSTEM.into() },
+            system: if scope.business > 0 {
+                BUSINESS_SYSTEM.into()
+            } else {
+                SYSTEM.into()
+            },
             context: if scope.business > 0 {
                 let about = if unit.kind == "team" {
                     format!(
@@ -2007,9 +2147,23 @@ pub fn run_live(
                         .people
                         .iter()
                         .filter(|p| unit.ids.contains(&p.contact_id))
-                        .map(|p| format!("- {} <{}>", if p.name.trim().is_empty() { &p.email } else { &p.name }, p.email))
+                        .map(|p| {
+                            format!(
+                                "- {} <{}>",
+                                if p.name.trim().is_empty() {
+                                    &p.email
+                                } else {
+                                    &p.name
+                                },
+                                p.email
+                            )
+                        })
                         .collect();
-                    format!("# Organisation: {}\n\n## People there\n\n{}", unit.live.name, there.join("\n"))
+                    format!(
+                        "# Organisation: {}\n\n## People there\n\n{}",
+                        unit.live.name,
+                        there.join("\n")
+                    )
                 };
                 format!(
                     "# The business\n\n{}\nIts own email domains: {}\nSells: {}\n\n{about}\n\n{prompt}",
@@ -2052,11 +2206,9 @@ pub fn run_live(
             // somebody who is really there, never filed as a fact.
             if let Some(mut c) = parse_contact_line(line) {
                 if scope.business > 0 && unit.kind == "organisation" {
-                    if let Some(p) = whole
-                        .people
-                        .iter()
-                        .find(|p| unit.ids.contains(&p.contact_id) && p.email.eq_ignore_ascii_case(&c.email))
-                    {
+                    if let Some(p) = whole.people.iter().find(|p| {
+                        unit.ids.contains(&p.contact_id) && p.email.eq_ignore_ascii_case(&c.email)
+                    }) {
                         c.contact_id = p.contact_id;
                         if c.name.is_empty() {
                             c.name = p.name.clone();
@@ -2074,7 +2226,11 @@ pub fn run_live(
                         list.push(c);
                         let _ = conn.execute(
                             "UPDATE learn_people SET contacts=?3 WHERE run_id=?1 AND contact_id=?2",
-                            params![run_id, who.contact_id, serde_json::to_string(&list).unwrap_or_else(|_| "[]".into())],
+                            params![
+                                run_id,
+                                who.contact_id,
+                                serde_json::to_string(&list).unwrap_or_else(|_| "[]".into())
+                            ],
                         );
                     }
                 }
@@ -2120,10 +2276,19 @@ pub fn run_live(
                 *role.borrow_mut() = (sum.role, sum.relates);
                 return;
             }
-            let Some(f) = parse_fact_line(line) else { return };
+            let Some(f) = parse_fact_line(line) else {
+                return;
+            };
             let filed = {
                 let conn = db.0.lock().unwrap();
-                let mut filed = file_fact(&conn, run_id, &f, &whole.people, &part.thread_keys(), unit.ids[0]);
+                let mut filed = file_fact(
+                    &conn,
+                    run_id,
+                    &f,
+                    &whole.people,
+                    &part.thread_keys(),
+                    unit.ids[0],
+                );
                 // For a business, what is about an organisation is the
                 // business's to keep, whatever mailbox space it came through.
                 if let Some(ff) = filed.as_mut() {
@@ -2235,7 +2400,11 @@ pub fn run_live(
     crate::activity::record(
         app,
         "mail",
-        if stopped { "Stopped reading your mail".to_string() } else { "Read your mail".to_string() },
+        if stopped {
+            "Stopped reading your mail".to_string()
+        } else {
+            "Read your mail".to_string()
+        },
         format!(
             "{} people, {} fact{} proposed",
             whole.people.len(),
@@ -2252,7 +2421,10 @@ pub fn run_live(
             .find(|r| r.id == run_id)
             .ok_or_else(|| "the receipt is missing".to_string())?
     };
-    let _ = app.emit("learn:done", serde_json::json!({ "run": run, "stopped": stopped }));
+    let _ = app.emit(
+        "learn:done",
+        serde_json::json!({ "run": run, "stopped": stopped }),
+    );
     Ok(run)
 }
 
@@ -2273,12 +2445,7 @@ fn goes_to_a_space(kind: &str, node_id: i64) -> bool {
 /// `text` and `node_id` are passed back in so an edit made on the screen is
 /// what gets stored — the proposal is a draft, and a fact you had to correct
 /// is worth more than one you had to reject.
-pub fn keep(
-    conn: &Connection,
-    id: i64,
-    text: &str,
-    node_id: i64,
-) -> Result<String, String> {
+pub fn keep(conn: &Connection, id: i64, text: &str, node_id: i64) -> Result<String, String> {
     let mut f = facts(conn, 0, "")?
         .into_iter()
         .find(|f| f.id == id)
@@ -2297,14 +2464,19 @@ pub fn keep(
 
     let written = if goes_to_a_space(&f.kind, f.node_id) {
         let dir = thing_dir(conn, f.node_id)?;
-        std::fs::create_dir_all(&dir).map_err(|e| format!("could not open {}: {e}", dir.display()))?;
+        std::fs::create_dir_all(&dir)
+            .map_err(|e| format!("could not open {}: {e}", dir.display()))?;
         let slug = slug(&f.text);
         let path = dir.join(format!("{slug}.md"));
         let body = format!(
             "---\nid: {slug}\nsource: mail\nlearned_at: {}\n---\n\n{}\n\n> {}\n",
             chrono::Local::now().format("%Y-%m-%d"),
             f.text,
-            if f.source.trim().is_empty() { "from your mail" } else { f.source.trim() },
+            if f.source.trim().is_empty() {
+                "from your mail"
+            } else {
+                f.source.trim()
+            },
         );
         std::fs::write(&path, body).map_err(|e| format!("could not write it: {e}"))?;
         path.to_string_lossy().to_string()
@@ -2323,7 +2495,11 @@ pub fn keep(
             body: format!(
                 "{}\n\n> {}\n",
                 f.text,
-                if f.source.trim().is_empty() { "from your mail" } else { f.source.trim() },
+                if f.source.trim().is_empty() {
+                    "from your mail"
+                } else {
+                    f.source.trim()
+                },
             ),
         };
         store
@@ -2423,7 +2599,10 @@ pub async fn learn_estimate(
 
 /// Everybody the run could read about, so "Choose who" has a list.
 #[tauri::command(async)]
-pub fn learn_people(db: tauri::State<Db>, limit: i64) -> Result<Vec<crate::mail::Correspondent>, String> {
+pub fn learn_people(
+    db: tauri::State<Db>,
+    limit: i64,
+) -> Result<Vec<crate::mail::Correspondent>, String> {
     let conn = db.0.lock().unwrap();
     crate::mail::rank_correspondents_pub(&conn, if limit > 0 { limit } else { 50 })
 }
@@ -2491,7 +2670,11 @@ pub fn learn_runs(db: tauri::State<Db>, limit: i64) -> Result<Vec<LearnRun>, Str
 }
 
 #[tauri::command(async)]
-pub fn learn_facts(db: tauri::State<Db>, run_id: i64, status: String) -> Result<Vec<LearnFact>, String> {
+pub fn learn_facts(
+    db: tauri::State<Db>,
+    run_id: i64,
+    status: String,
+) -> Result<Vec<LearnFact>, String> {
     let conn = db.0.lock().unwrap();
     facts(&conn, run_id, &status)
 }
@@ -2525,12 +2708,20 @@ pub fn learn_notes(db: tauri::State<Db>, node_id: i64) -> Result<Vec<KnownNote>,
         Ok(d) => d,
         Err(_) => return Ok(Vec::new()),
     };
-    let deck_dir = dir.parent().and_then(|p| p.parent()).map(|p| p.to_path_buf());
-    let Some(root) = deck_dir else { return Ok(Vec::new()) };
+    let deck_dir = dir
+        .parent()
+        .and_then(|p| p.parent())
+        .map(|p| p.to_path_buf());
+    let Some(root) = deck_dir else {
+        return Ok(Vec::new());
+    };
     Ok(super::deck::Deck::new(root)
         .knowledge()
         .into_iter()
-        .map(|(name, body)| KnownNote { name: name.replace('-', " "), body })
+        .map(|(name, body)| KnownNote {
+            name: name.replace('-', " "),
+            body,
+        })
         .collect())
 }
 
@@ -2636,13 +2827,18 @@ pub struct PersonOutcome {
 }
 
 #[tauri::command(async)]
-pub fn learn_decide_person(db: tauri::State<Db>, decision: PersonDecision) -> Result<PersonOutcome, String> {
+pub fn learn_decide_person(
+    db: tauri::State<Db>,
+    decision: PersonDecision,
+) -> Result<PersonOutcome, String> {
     let out = {
         let conn = db.0.lock().unwrap();
         decide_person(&conn, &decision)?
     };
     // A kept organisation gets its folder under the kind the owner chose.
-    let kept = !decision.keep.is_empty() || !decision.add.is_empty() || !decision.summary.trim().is_empty();
+    let kept = !decision.keep.is_empty()
+        || !decision.add.is_empty()
+        || !decision.summary.trim().is_empty();
     let (folder, label) = match decision.role.as_str() {
         "client" => ("Clients", "Client"),
         "supplier" => ("Suppliers", "Supplier"),
@@ -2702,7 +2898,11 @@ pub fn learn_decide_person(db: tauri::State<Db>, decision: PersonDecision) -> Re
                 title: decision.title.trim().to_string(),
                 summary: decision.summary.trim().to_string(),
             };
-            match meta.team.iter_mut().find(|m| m.email.eq_ignore_ascii_case(&email)) {
+            match meta
+                .team
+                .iter_mut()
+                .find(|m| m.email.eq_ignore_ascii_case(&email))
+            {
                 Some(m) => *m = member,
                 None => meta.team.push(member),
             }
@@ -2714,7 +2914,12 @@ pub fn learn_decide_person(db: tauri::State<Db>, decision: PersonDecision) -> Re
 
 /// Lines you wrote on a card yourself: a proposed row each, with you as
 /// the source, so they are kept the same way as the rest.
-fn add_lines(conn: &Connection, run_id: i64, contact_id: i64, add: &[String]) -> Result<Vec<KeptLine>, String> {
+fn add_lines(
+    conn: &Connection,
+    run_id: i64,
+    contact_id: i64,
+    add: &[String],
+) -> Result<Vec<KeptLine>, String> {
     let mut out = Vec::new();
     for text in add.iter().map(|t| t.trim()).filter(|t| !t.is_empty()) {
         conn.execute(
@@ -2724,7 +2929,11 @@ fn add_lines(conn: &Connection, run_id: i64, contact_id: i64, add: &[String]) ->
             params![run_id, text, contact_id, now_millis()],
         )
         .map_err(err)?;
-        out.push(KeptLine { id: conn.last_insert_rowid(), text: text.to_string(), node_id: 0 });
+        out.push(KeptLine {
+            id: conn.last_insert_rowid(),
+            text: text.to_string(),
+            node_id: 0,
+        });
     }
     Ok(out)
 }
@@ -2748,7 +2957,11 @@ pub fn decide_person(conn: &Connection, d: &PersonDecision) -> Result<PersonOutc
     }
     // The card's own status. A card from before there were cards has no
     // row yet; it gets one now so the decision is remembered.
-    let status = if lines.is_empty() && d.summary.trim().is_empty() { "declined" } else { "kept" };
+    let status = if lines.is_empty() && d.summary.trim().is_empty() {
+        "declined"
+    } else {
+        "kept"
+    };
     if d.run_id > 0 {
         // The summary as you left it, edits included, so the card reads the
         // same next time.
@@ -2757,7 +2970,13 @@ pub fn decide_person(conn: &Connection, d: &PersonDecision) -> Result<PersonOutc
                 "UPDATE learn_people SET status=?3, decided_at=?4,
                         summary = CASE WHEN ?5 = '' THEN summary ELSE ?5 END
                   WHERE run_id=?1 AND contact_id=?2",
-                params![d.run_id, d.contact_id, status, now_millis(), d.summary.trim()],
+                params![
+                    d.run_id,
+                    d.contact_id,
+                    status,
+                    now_millis(),
+                    d.summary.trim()
+                ],
             )
             .map_err(err)?;
         if changed == 0 {
@@ -2794,15 +3013,27 @@ pub fn decide_person(conn: &Connection, d: &PersonDecision) -> Result<PersonOutc
     // organisation: a note in the business's knowledge, read by its team.
     if d.business > 0 {
         let team = d.role == "team";
-        let slug = format!("{}{}", if team { "team-" } else { "" }, crate::managers::handle_from(d.name.trim()));
+        let slug = format!(
+            "{}{}",
+            if team { "team-" } else { "" },
+            crate::managers::handle_from(d.name.trim())
+        );
         let mut people = String::new();
         if !team && !d.contacts.is_empty() {
             people.push_str("\n## People there\n\n");
             for c in &d.contacts {
                 people.push_str(&format!(
                     "- {}{} <{}>: {}\n",
-                    if c.name.trim().is_empty() { c.email.trim() } else { c.name.trim() },
-                    if c.title.trim().is_empty() { String::new() } else { format!(", {}", c.title.trim()) },
+                    if c.name.trim().is_empty() {
+                        c.email.trim()
+                    } else {
+                        c.name.trim()
+                    },
+                    if c.title.trim().is_empty() {
+                        String::new()
+                    } else {
+                        format!(", {}", c.title.trim())
+                    },
                     c.email.trim(),
                     c.text.trim()
                 ));
@@ -2834,7 +3065,11 @@ pub fn decide_person(conn: &Connection, d: &PersonDecision) -> Result<PersonOutc
         },
         body: format!(
             "{summary}\n\n> from your mail with {}\n",
-            if d.email.trim().is_empty() { d.name.trim() } else { d.email.trim() }
+            if d.email.trim().is_empty() {
+                d.name.trim()
+            } else {
+                d.email.trim()
+            }
         ),
     };
     let path = store.save_memory(&doc).map_err(|e| e.to_string())?;
@@ -2858,7 +3093,11 @@ bullet points: the sentences and nothing else.";
 /// Write the summary again from the lines that are kept. One small request;
 /// the lines are what was already read, so nothing new leaves the machine.
 #[tauri::command]
-pub async fn learn_summarise(ws: Ws<'_>, name: String, facts: Vec<String>) -> Result<String, String> {
+pub async fn learn_summarise(
+    ws: Ws<'_>,
+    name: String,
+    facts: Vec<String>,
+) -> Result<String, String> {
     let ws = (*ws).clone();
     tauri::async_runtime::spawn_blocking(move || {
         let (provider_id, _, model, ready, note) = destination_model(&ws);
@@ -2884,7 +3123,10 @@ pub async fn learn_summarise(ws: Ws<'_>, name: String, facts: Vec<String>) -> Re
             role: "assistant".into(),
             model,
             system: SUMMARY_SYSTEM.into(),
-            context: format!("# {name}\n\nWhat is kept about them:\n\n{}\n", lines.join("\n")),
+            context: format!(
+                "# {name}\n\nWhat is kept about them:\n\n{}\n",
+                lines.join("\n")
+            ),
             goal: format!("Sum {name} up in two or three sentences from the facts above."),
             ..Default::default()
         };
@@ -2940,7 +3182,10 @@ pub struct LifeProposal {
     pub why: String,
 }
 
-const PET_WORDS: &[&str] = &["dog", "cat", "puppy", "kitten", "horse", "pony", "bird", "parrot", "rabbit", "hamster", "fish", "goldfish", "pet"];
+const PET_WORDS: &[&str] = &[
+    "dog", "cat", "puppy", "kitten", "horse", "pony", "bird", "parrot", "rabbit", "hamster",
+    "fish", "goldfish", "pet",
+];
 
 /// Parse and tidy what the model sent: a name, a one-word relation, pet or
 /// person worked out from the relation when the model did not say.
@@ -2969,7 +3214,9 @@ pub fn parse_life(reply: &str) -> Vec<LifeProposal> {
             continue;
         }
         let pet = p.kind.trim().eq_ignore_ascii_case("pet")
-            || PET_WORDS.iter().any(|w| p.relation.split_whitespace().any(|r| r == *w));
+            || PET_WORDS
+                .iter()
+                .any(|w| p.relation.split_whitespace().any(|r| r == *w));
         p.kind = if pet { "pet".into() } else { "person".into() };
         if out.iter().any(|q| q.name.eq_ignore_ascii_case(&p.name)) {
             continue;
@@ -2984,7 +3231,10 @@ pub fn parse_life(reply: &str) -> Vec<LifeProposal> {
 /// number of facts kept, so coming back to the step does not ask again
 /// until you have kept more.
 #[tauri::command]
-pub async fn learn_life_proposals(app: tauri::AppHandle, ws: Ws<'_>) -> Result<Vec<LifeProposal>, String> {
+pub async fn learn_life_proposals(
+    app: tauri::AppHandle,
+    ws: Ws<'_>,
+) -> Result<Vec<LifeProposal>, String> {
     let ws = (*ws).clone();
     tauri::async_runtime::spawn_blocking(move || {
         let db = <tauri::AppHandle as tauri::Manager<tauri::Wry>>::state::<Db>(&app);
@@ -3149,7 +3399,8 @@ pub fn review(conn: &Connection, run_id: i64) -> Result<Vec<LearnCard>, String> 
             .map_err(err)?;
         rows.collect::<rusqlite::Result<Vec<_>>>().map_err(err)?
     };
-    let covered: std::collections::HashSet<i64> = cards.iter().map(|c| c.person.contact_id).collect();
+    let covered: std::collections::HashSet<i64> =
+        cards.iter().map(|c| c.person.contact_id).collect();
     let mut orphans: Vec<i64> = Vec::new();
     for f in &all {
         if !covered.contains(&f.contact_id) && !orphans.contains(&f.contact_id) {
@@ -3170,13 +3421,23 @@ pub fn review(conn: &Connection, run_id: i64) -> Result<Vec<LearnCard>, String> 
             (String::new(), String::new())
         };
         let name = if name.trim().is_empty() {
-            if email.is_empty() { "Not about one person".to_string() } else { email.clone() }
+            if email.is_empty() {
+                "Not about one person".to_string()
+            } else {
+                email.clone()
+            }
         } else {
             name
         };
         cards.push(LearnCard {
             run_id,
-            person: LivePerson { contact_id, name, email, threads: 0, messages: 0 },
+            person: LivePerson {
+                contact_id,
+                name,
+                email,
+                threads: 0,
+                messages: 0,
+            },
             summary: String::new(),
             status: String::new(),
             facts: Vec::new(),
@@ -3184,9 +3445,14 @@ pub fn review(conn: &Connection, run_id: i64) -> Result<Vec<LearnCard>, String> 
         });
     }
     for c in &mut cards {
-        c.facts = all.iter().filter(|f| f.contact_id == c.person.contact_id).cloned().collect();
+        c.facts = all
+            .iter()
+            .filter(|f| f.contact_id == c.person.contact_id)
+            .cloned()
+            .collect();
         c.person.threads = {
-            let mut keys: Vec<&String> = c.facts.iter().flat_map(|f| f.thread_keys.iter()).collect();
+            let mut keys: Vec<&String> =
+                c.facts.iter().flat_map(|f| f.thread_keys.iter()).collect();
             keys.sort();
             keys.dedup();
             keys.len() as i64
@@ -3215,7 +3481,9 @@ pub fn review(conn: &Connection, run_id: i64) -> Result<Vec<LearnCard>, String> 
 fn attribute_orphans(conn: &Connection, run_id: i64) -> Result<(), String> {
     let own = crate::mail::own_addresses(conn)?;
     let own_ids: Vec<i64> = {
-        let mut st = conn.prepare("SELECT id, email FROM mail_contacts").map_err(err)?;
+        let mut st = conn
+            .prepare("SELECT id, email FROM mail_contacts")
+            .map_err(err)?;
         let rows = st
             .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))
             .map_err(err)?;
@@ -3230,7 +3498,11 @@ fn attribute_orphans(conn: &Connection, run_id: i64) -> Result<(), String> {
             .map_err(err)?;
         let rows = st
             .query_map(params![run_id], |r| {
-                Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?))
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, i64>(2)?,
+                ))
             })
             .map_err(err)?;
         rows.flatten()
@@ -3249,14 +3521,18 @@ fn attribute_orphans(conn: &Connection, run_id: i64) -> Result<(), String> {
             let keys = read_json::<Vec<String>>(&keys_json);
             let mut tally: std::collections::HashMap<i64, i64> = Default::default();
             if !keys.is_empty() {
-                let marks = std::iter::repeat("?").take(keys.len()).collect::<Vec<_>>().join(",");
+                let marks = std::iter::repeat("?")
+                    .take(keys.len())
+                    .collect::<Vec<_>>()
+                    .join(",");
                 let mut st = conn
                     .prepare(&format!(
                         "SELECT contact_id, COUNT(*) FROM mail_messages
                           WHERE contact_id > 0 AND thread_key IN ({marks}) GROUP BY contact_id"
                     ))
                     .map_err(err)?;
-                let refs: Vec<&dyn rusqlite::ToSql> = keys.iter().map(|k| k as &dyn rusqlite::ToSql).collect();
+                let refs: Vec<&dyn rusqlite::ToSql> =
+                    keys.iter().map(|k| k as &dyn rusqlite::ToSql).collect();
                 let rows = st
                     .query_map(rusqlite::params_from_iter(refs), |r| {
                         Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?))
@@ -3268,7 +3544,11 @@ fn attribute_orphans(conn: &Connection, run_id: i64) -> Result<(), String> {
                     }
                 }
             }
-            let w = tally.into_iter().max_by_key(|(_, n)| *n).map(|(c, _)| c).unwrap_or(0);
+            let w = tally
+                .into_iter()
+                .max_by_key(|(_, n)| *n)
+                .map(|(c, _)| c)
+                .unwrap_or(0);
             by_keys.insert(keys_json, w);
             w
         };
@@ -3323,12 +3603,31 @@ mod tests {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn msg(c: &Connection, acct: i64, uid: i64, mailbox: &str, from: &str, to: &str, subject: &str, body: &str) -> i64 {
+    fn msg(
+        c: &Connection,
+        acct: i64,
+        uid: i64,
+        mailbox: &str,
+        from: &str,
+        to: &str,
+        subject: &str,
+        body: &str,
+    ) -> i64 {
         c.execute(
             "INSERT INTO mail_messages
                 (account_id, uid, mailbox, thread_key, from_addr, to_addrs, subject, body_text, ts)
              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
-            params![acct, uid, mailbox, format!("t{uid}"), from, to, subject, body, 1_700_000_000_000i64 + uid],
+            params![
+                acct,
+                uid,
+                mailbox,
+                format!("t{uid}"),
+                from,
+                to,
+                subject,
+                body,
+                1_700_000_000_000i64 + uid
+            ],
         )
         .unwrap();
         c.last_insert_rowid()
@@ -3343,21 +3642,58 @@ mod tests {
         let a = account(&c, "Develtech");
         contact(&c, "Sarah", "sarah@harbourvine.com");
         contact(&c, "Shop", "noreply@shop.example");
-        msg(&c, a, 1, "INBOX", "sarah@harbourvine.com", "me@example.com", "Terms", "We agreed 30 days.");
-        msg(&c, a, 2, "Sent", "me@example.com", "sarah@harbourvine.com", "Re: Terms", "Understood.");
+        msg(
+            &c,
+            a,
+            1,
+            "INBOX",
+            "sarah@harbourvine.com",
+            "me@example.com",
+            "Terms",
+            "We agreed 30 days.",
+        );
+        msg(
+            &c,
+            a,
+            2,
+            "Sent",
+            "me@example.com",
+            "sarah@harbourvine.com",
+            "Re: Terms",
+            "Understood.",
+        );
         for i in 0..40 {
-            msg(&c, a, 100 + i, "INBOX", "noreply@shop.example", "me@example.com", "Sale", "Buy things");
+            msg(
+                &c,
+                a,
+                100 + i,
+                "INBOX",
+                "noreply@shop.example",
+                "me@example.com",
+                "Sale",
+                "Buy things",
+            );
         }
 
         let corpus = build_corpus(&c, 12, &[], Depth::Full).unwrap();
         assert_eq!(corpus.people.len(), 1, "one of these two is a person");
         assert_eq!(corpus.people[0].email, "sarah@harbourvine.com");
         assert!(
-            corpus.messages.iter().all(|m| !m.from_addr.contains("shop.example")),
+            corpus
+                .messages
+                .iter()
+                .all(|m| !m.from_addr.contains("shop.example")),
             "the shop got into the batch"
         );
-        let strangers = corpus.excluded.iter().find(|e| e.kind == "strangers").unwrap();
-        assert_eq!(strangers.count, 40, "and it is counted, not silently dropped");
+        let strangers = corpus
+            .excluded
+            .iter()
+            .find(|e| e.kind == "strangers")
+            .unwrap();
+        assert_eq!(
+            strangers.count, 40,
+            "and it is counted, not silently dropped"
+        );
     }
 
     /// A one-time code must never reach a model, and skipping the message whole
@@ -3368,17 +3704,43 @@ mod tests {
         let c = mem();
         let a = account(&c, "Personal");
         contact(&c, "Sarah", "sarah@harbourvine.com");
-        msg(&c, a, 1, "INBOX", "sarah@harbourvine.com", "me@example.com", "Terms", "We agreed 30 days.");
-        msg(&c, a, 2, "Sent", "me@example.com", "sarah@harbourvine.com", "Re: Terms", "Understood.");
         msg(
-            &c, a, 3, "INBOX", "sarah@harbourvine.com", "me@example.com",
+            &c,
+            a,
+            1,
+            "INBOX",
+            "sarah@harbourvine.com",
+            "me@example.com",
+            "Terms",
+            "We agreed 30 days.",
+        );
+        msg(
+            &c,
+            a,
+            2,
+            "Sent",
+            "me@example.com",
+            "sarah@harbourvine.com",
+            "Re: Terms",
+            "Understood.",
+        );
+        msg(
+            &c,
+            a,
+            3,
+            "INBOX",
+            "sarah@harbourvine.com",
+            "me@example.com",
             "Your verification code",
             "Your verification code is 448210. It expires in ten minutes.",
         );
 
         let corpus = build_corpus(&c, 12, &[], Depth::Full).unwrap();
         let rendered = render(&corpus);
-        assert!(!rendered.contains("448210"), "the code went into the prompt");
+        assert!(
+            !rendered.contains("448210"),
+            "the code went into the prompt"
+        );
         let skipped = corpus.excluded.iter().find(|e| e.kind == "secret").unwrap();
         assert_eq!(skipped.count, 1);
     }
@@ -3402,8 +3764,26 @@ mod tests {
         let c = mem();
         let a = account(&c, "Develtech");
         contact(&c, "Sarah", "sarah@harbourvine.com");
-        msg(&c, a, 1, "INBOX", "sarah@harbourvine.com", "me@example.com", "Terms", "We agreed 30 days.");
-        msg(&c, a, 2, "Sent", "me@example.com", "sarah@harbourvine.com", "Re: Terms", "Understood.");
+        msg(
+            &c,
+            a,
+            1,
+            "INBOX",
+            "sarah@harbourvine.com",
+            "me@example.com",
+            "Terms",
+            "We agreed 30 days.",
+        );
+        msg(
+            &c,
+            a,
+            2,
+            "Sent",
+            "me@example.com",
+            "sarah@harbourvine.com",
+            "Re: Terms",
+            "Understood.",
+        );
 
         let corpus = build_corpus(&c, 12, &[], Depth::Full).unwrap();
         let est = corpus.estimate("anthropic", "Anthropic", "claude-sonnet-5", true, "");
@@ -3422,7 +3802,10 @@ mod tests {
         assert_eq!(cost, 0.0);
         assert!(note.contains("not costed"), "{note}");
         let (cost, _) = estimate_cost("claude-sonnet-5", 1_000_000);
-        assert!(cost > 3.0, "a million input tokens of Sonnet is at least $3");
+        assert!(
+            cost > 3.0,
+            "a million input tokens of Sonnet is at least $3"
+        );
     }
 
     /// The quoted tail is most of a long thread's bytes and none of its
@@ -3493,8 +3876,18 @@ mod tests {
 {"name":"Tax Plus","relation":""}"#;
         let out = parse_life(reply);
         assert_eq!(out.len(), 2);
-        assert_eq!((out[0].name.as_str(), out[0].relation.as_str(), out[0].kind.as_str()), ("Rachel", "wife", "person"));
-        assert_eq!((out[1].name.as_str(), out[1].kind.as_str()), ("Biscuit", "pet"));
+        assert_eq!(
+            (
+                out[0].name.as_str(),
+                out[0].relation.as_str(),
+                out[0].kind.as_str()
+            ),
+            ("Rachel", "wife", "person")
+        );
+        assert_eq!(
+            (out[1].name.as_str(), out[1].kind.as_str()),
+            ("Biscuit", "pet")
+        );
         assert!(out[1].home);
 
         // Wrapped in prose and an array: still read.
@@ -3513,7 +3906,13 @@ mod tests {
             [],
         )
         .unwrap();
-        let lines = add_lines(&c, 1, 7, &["Anna's birthday is in May".into(), "   ".into()]).unwrap();
+        let lines = add_lines(
+            &c,
+            1,
+            7,
+            &["Anna's birthday is in May".into(), "   ".into()],
+        )
+        .unwrap();
         assert_eq!(lines.len(), 1, "a blank line is not a fact");
         let (text, source, cid): (String, String, i64) = c
             .query_row(
@@ -3539,12 +3938,15 @@ mod tests {
             messages: 3,
             ..Default::default()
         };
-        let units = organisations(&[
-            p(1, "Thandi", "thandi@tagworks-supply.co.za"),
-            p(2, "", "orders@tagworks-supply.co.za"),
-            p(3, "Pieter", "pieter@gmail.com"),
-            p(4, "Lindi", "lindi@ridgeback-mining.co.za"),
-        ], &[]);
+        let units = organisations(
+            &[
+                p(1, "Thandi", "thandi@tagworks-supply.co.za"),
+                p(2, "", "orders@tagworks-supply.co.za"),
+                p(3, "Pieter", "pieter@gmail.com"),
+                p(4, "Lindi", "lindi@ridgeback-mining.co.za"),
+            ],
+            &[],
+        );
         assert_eq!(units.len(), 3);
         assert_eq!(units[0].live.name, "Tagworks Supply");
         assert_eq!(units[0].ids, vec![1, 2]);
@@ -3574,7 +3976,10 @@ mod tests {
             &["innotrack.co.za".to_string()],
         );
         assert_eq!(units.len(), 3, "one firm, two people on the team");
-        assert_eq!(units[0].kind, "organisation", "the organisations come first");
+        assert_eq!(
+            units[0].kind, "organisation",
+            "the organisations come first"
+        );
         assert_eq!(units[0].ids, vec![2, 3]);
         assert_eq!(units[1].kind, "team");
         assert_eq!(units[1].live.name, "Kate");
@@ -3591,7 +3996,10 @@ mod tests {
         assert_eq!(c.email, "lindi@ridgeback-mining.co.za");
         assert_eq!(c.title, "Procurement");
         assert!(parse_contact_line(r#"{"kind":"thing","text":"x","email":"a@b.co"}"#).is_none());
-        let s = parse_org_summary(r#"{"kind":"summary","text":"Runs sales.","role":"Staff","title":"Sales"}"#).unwrap();
+        let s = parse_org_summary(
+            r#"{"kind":"summary","text":"Runs sales.","role":"Staff","title":"Sales"}"#,
+        )
+        .unwrap();
         assert_eq!(s.role, "team");
         assert_eq!(s.title, "Sales");
     }
@@ -3604,8 +4012,12 @@ mod tests {
         .unwrap();
         assert_eq!(s.role, "supplier", "a vendor is a supplier");
         assert_eq!(s.relates, vec!["Mining equipment tracking"]);
-        let unknown = parse_org_summary(r#"{"kind":"summary","text":"Unclear.","role":"friend"}"#).unwrap();
-        assert_eq!(unknown.role, "", "a role nobody recognises is left for the owner");
+        let unknown =
+            parse_org_summary(r#"{"kind":"summary","text":"Unclear.","role":"friend"}"#).unwrap();
+        assert_eq!(
+            unknown.role, "",
+            "a role nobody recognises is left for the owner"
+        );
         assert!(parse_org_summary(r#"{"kind":"thing","text":"x"}"#).is_none());
     }
 
@@ -3657,11 +4069,19 @@ mod tests {
         assert_eq!(cards[0].facts.len(), 3);
         // The orphan is attributed once: written back, not re-derived.
         let n: i64 = c
-            .query_row("SELECT COUNT(*) FROM learn_facts WHERE contact_id = 0", [], |r| r.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM learn_facts WHERE contact_id = 0",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(n, 0);
         assert_eq!(cards[0].person.name, "Anna");
-        assert_eq!(cards[0].facts.len(), 3, "her two, and the one tagged with nobody");
+        assert_eq!(
+            cards[0].facts.len(),
+            3,
+            "her two, and the one tagged with nobody"
+        );
         assert_eq!(cards[0].status, "proposed");
         assert_eq!(cards[0].person.threads, 1);
 
@@ -3684,7 +4104,10 @@ mod tests {
         .unwrap();
         assert_eq!(out.declined, ids.len());
         let cards = review(&c, 1).unwrap();
-        assert_eq!(cards[0].status, "declined", "the card remembers its decision");
+        assert_eq!(
+            cards[0].status, "declined",
+            "the card remembers its decision"
+        );
         assert!(cards[0].facts.iter().all(|f| f.status == "declined"));
     }
 
@@ -3698,7 +4121,10 @@ mod tests {
             parse_summary_line(line).as_deref(),
             Some("Anna is your sister. You plan Sunday lunches.")
         );
-        assert!(parse_fact_line(line).is_none(), "a summary is not filed as a fact");
+        assert!(
+            parse_fact_line(line).is_none(),
+            "a summary is not filed as a fact"
+        );
 
         let fact = r#"{"kind":"you","text":"Anna's son is Josh","about":"Anna"}"#;
         assert!(parse_summary_line(fact).is_none());
@@ -3742,7 +4168,8 @@ mod tests {
     #[test]
     fn a_declined_fact_is_a_row_not_a_note() {
         let c = mem();
-        c.execute("INSERT INTO learn_runs (started_at) VALUES (1)", []).unwrap();
+        c.execute("INSERT INTO learn_runs (started_at) VALUES (1)", [])
+            .unwrap();
         let run_id = c.last_insert_rowid();
         c.execute(
             "INSERT INTO learn_facts (run_id, kind, text, created_at) VALUES (?1,'you','nope',2)",
@@ -3755,7 +4182,10 @@ mod tests {
         let out = facts(&c, run_id, "declined").unwrap();
         assert_eq!(out.len(), 1);
         assert!(out[0].written_to.is_empty(), "a no wrote something");
-        assert!(decline(&c, id + 999).is_err(), "declining nothing is an error");
+        assert!(
+            decline(&c, id + 999).is_err(),
+            "declining nothing is an error"
+        );
     }
 
     /// A `thing` fact goes with its thing when the mailbox names a space.
@@ -3766,13 +4196,17 @@ mod tests {
     fn a_thing_fact_with_no_space_goes_to_the_personal_store() {
         assert!(goes_to_a_space("thing", 3));
         assert!(!goes_to_a_space("thing", 0), "no space named: personal");
-        assert!(!goes_to_a_space("you", 3), "about you: personal, whatever the space");
+        assert!(
+            !goes_to_a_space("you", 3),
+            "about you: personal, whatever the space"
+        );
     }
 
     #[test]
     fn a_fact_you_emptied_is_refused() {
         let c = mem();
-        c.execute("INSERT INTO learn_runs (started_at) VALUES (1)", []).unwrap();
+        c.execute("INSERT INTO learn_runs (started_at) VALUES (1)", [])
+            .unwrap();
         let run_id = c.last_insert_rowid();
         c.execute(
             "INSERT INTO learn_facts (run_id, kind, text, created_at) VALUES (?1,'you','x',2)",
@@ -3784,7 +4218,10 @@ mod tests {
 
     #[test]
     fn a_slug_is_readable_and_never_empty() {
-        assert_eq!(slug("Harbour & Vine pay at 45 days"), "harbour-vine-pay-at-45-days");
+        assert_eq!(
+            slug("Harbour & Vine pay at 45 days"),
+            "harbour-vine-pay-at-45-days"
+        );
         assert!(!slug("!!!").is_empty());
         assert!(slug(&"a".repeat(500)).len() <= 60);
     }
@@ -3804,14 +4241,34 @@ mod tests {
         let c = mem();
         let a = account(&c, "Develtech");
         contact(&c, "Sarah", "sarah@harbourvine.com");
-        msg(&c, a, 1, "INBOX", "sarah@harbourvine.com", "me@example.com", "Terms",
-            "Long body here.\nAnother line.\n\n--\nSarah Whitfield\nHead of Ops, Harbour & Vine");
-        msg(&c, a, 2, "Sent", "me@example.com", "sarah@harbourvine.com", "Re: Terms", "Understood.");
+        msg(
+            &c,
+            a,
+            1,
+            "INBOX",
+            "sarah@harbourvine.com",
+            "me@example.com",
+            "Terms",
+            "Long body here.\nAnother line.\n\n--\nSarah Whitfield\nHead of Ops, Harbour & Vine",
+        );
+        msg(
+            &c,
+            a,
+            2,
+            "Sent",
+            "me@example.com",
+            "sarah@harbourvine.com",
+            "Re: Terms",
+            "Understood.",
+        );
 
         let corpus = build_corpus(&c, 12, &[], Depth::Headers).unwrap();
         assert!(corpus.excluded.iter().any(|e| e.kind == "bodies"));
         let rendered = render(&corpus);
-        assert!(rendered.contains("Head of Ops"), "the signature is the point of this depth");
+        assert!(
+            rendered.contains("Head of Ops"),
+            "the signature is the point of this depth"
+        );
     }
 
     /// The estimate has to measure the string that is posted. Adding up the
@@ -3822,8 +4279,26 @@ mod tests {
         let c = mem();
         let a = account(&c, "Develtech");
         contact(&c, "Sarah", "sarah@harbourvine.com");
-        msg(&c, a, 1, "INBOX", "sarah@harbourvine.com", "me@example.com", "Terms", "Hi");
-        msg(&c, a, 2, "Sent", "me@example.com", "sarah@harbourvine.com", "Re: Terms", "Hi");
+        msg(
+            &c,
+            a,
+            1,
+            "INBOX",
+            "sarah@harbourvine.com",
+            "me@example.com",
+            "Terms",
+            "Hi",
+        );
+        msg(
+            &c,
+            a,
+            2,
+            "Sent",
+            "me@example.com",
+            "sarah@harbourvine.com",
+            "Re: Terms",
+            "Hi",
+        );
 
         let corpus = build_corpus(&c, 12, &[], Depth::Full).unwrap();
         let (prompt, chars, tokens) = corpus.body();
@@ -3846,13 +4321,43 @@ mod tests {
         let c = mem();
         let a = account(&c, "Develtech");
         contact(&c, "Sarah", "sarah@harbourvine.com");
-        msg(&c, a, 1, "INBOX", "sarah@harbourvine.com", "me@example.com", "Terms", "Long body");
-        msg(&c, a, 2, "Sent", "me@example.com", "sarah@harbourvine.com", "Re: Terms", "Hi");
+        msg(
+            &c,
+            a,
+            1,
+            "INBOX",
+            "sarah@harbourvine.com",
+            "me@example.com",
+            "Terms",
+            "Long body",
+        );
+        msg(
+            &c,
+            a,
+            2,
+            "Sent",
+            "me@example.com",
+            "sarah@harbourvine.com",
+            "Re: Terms",
+            "Hi",
+        );
 
         let corpus = build_corpus(&c, 12, &[], Depth::Headers).unwrap();
-        let bodies = corpus.excluded.iter().find(|x| x.kind == "bodies").unwrap().count;
-        assert!(bodies > 0, "the exclusion is still listed, which is the honest part");
-        assert_eq!(corpus.held_back(), 0, "but nothing here failed to reach the model");
+        let bodies = corpus
+            .excluded
+            .iter()
+            .find(|x| x.kind == "bodies")
+            .unwrap()
+            .count;
+        assert!(
+            bodies > 0,
+            "the exclusion is still listed, which is the honest part"
+        );
+        assert_eq!(
+            corpus.held_back(),
+            0,
+            "but nothing here failed to reach the model"
+        );
     }
 
     /// The budget must not be eaten by whoever happens to be first.
@@ -3870,11 +4375,47 @@ mod tests {
         // Enough to blow the ceiling several times over on their own.
         let long = "x".repeat(CHARS_PER_MESSAGE);
         for i in 0..400 {
-            msg(&c, a, 1000 + i, "INBOX", "heavy@example.com", "me@example.com", "Big", &long);
+            msg(
+                &c,
+                a,
+                1000 + i,
+                "INBOX",
+                "heavy@example.com",
+                "me@example.com",
+                "Big",
+                &long,
+            );
         }
-        msg(&c, a, 1, "Sent", "me@example.com", "heavy@example.com", "Re: Big", "ok");
-        msg(&c, a, 2, "INBOX", "quiet@example.com", "me@example.com", "Small", "Hello there");
-        msg(&c, a, 3, "Sent", "me@example.com", "quiet@example.com", "Re: Small", "Hi");
+        msg(
+            &c,
+            a,
+            1,
+            "Sent",
+            "me@example.com",
+            "heavy@example.com",
+            "Re: Big",
+            "ok",
+        );
+        msg(
+            &c,
+            a,
+            2,
+            "INBOX",
+            "quiet@example.com",
+            "me@example.com",
+            "Small",
+            "Hello there",
+        );
+        msg(
+            &c,
+            a,
+            3,
+            "Sent",
+            "me@example.com",
+            "quiet@example.com",
+            "Re: Small",
+            "Hi",
+        );
 
         let corpus = build_corpus(&c, 12, &[], Depth::Full).unwrap();
         assert!(
@@ -3900,9 +4441,28 @@ mod tests {
         let c = mem();
         let a = account(&c, "Develtech");
         contact(&c, "Sarah", "sarah@harbourvine.com");
-        msg(&c, a, 1, "INBOX", "sarah@harbourvine.com", "me@example.com", "Terms", "Hi");
-        msg(&c, a, 2, "Sent", "me@example.com", "sarah@harbourvine.com", "Re: Terms", "Hi");
-        c.execute("INSERT INTO learn_runs (started_at) VALUES (1)", []).unwrap();
+        msg(
+            &c,
+            a,
+            1,
+            "INBOX",
+            "sarah@harbourvine.com",
+            "me@example.com",
+            "Terms",
+            "Hi",
+        );
+        msg(
+            &c,
+            a,
+            2,
+            "Sent",
+            "me@example.com",
+            "sarah@harbourvine.com",
+            "Re: Terms",
+            "Hi",
+        );
+        c.execute("INSERT INTO learn_runs (started_at) VALUES (1)", [])
+            .unwrap();
         let run_id = c.last_insert_rowid();
         c.execute(
             "INSERT INTO learn_facts (run_id, kind, text, status, created_at)
@@ -3924,13 +4484,19 @@ mod tests {
         use super::super::provider::ModelInfo;
         let have = |ids: &[&str]| -> Vec<ModelInfo> {
             ids.iter()
-                .map(|i| ModelInfo { id: (*i).into(), ..Default::default() })
+                .map(|i| ModelInfo {
+                    id: (*i).into(),
+                    ..Default::default()
+                })
                 .collect()
         };
 
         let list = have(&["claude-opus-5", "claude-sonnet-5", "claude-sonnet-4-5"]);
         let (model, why) = read_model("claude-opus-5", &list);
-        assert_eq!(model, "claude-sonnet-5", "the same generation, not last year's");
+        assert_eq!(
+            model, "claude-sonnet-5",
+            "the same generation, not last year's"
+        );
         assert!(!why.is_empty(), "a swap has to be explained, not silent");
 
         // Already the right weight: left alone, and nothing to explain.
@@ -3948,7 +4514,10 @@ mod tests {
         use super::super::provider::ModelInfo;
         let list: Vec<ModelInfo> = ["claude-sonnet-4-5", "claude-sonnet-5"]
             .iter()
-            .map(|i| ModelInfo { id: (*i).into(), ..Default::default() })
+            .map(|i| ModelInfo {
+                id: (*i).into(),
+                ..Default::default()
+            })
             .collect();
         assert_eq!(read_model("claude-opus-5", &list).0, "claude-sonnet-5");
 
@@ -3969,7 +4538,10 @@ mod tests {
     #[test]
     fn a_model_it_does_not_recognise_is_left_exactly_as_chosen() {
         use super::super::provider::ModelInfo;
-        let local = vec![ModelInfo { id: "llama-3.3-70b".into(), ..Default::default() }];
+        let local = vec![ModelInfo {
+            id: "llama-3.3-70b".into(),
+            ..Default::default()
+        }];
 
         // Nothing to step down to: the choice stands rather than failing or
         // silently picking something else off the list.
@@ -3983,7 +4555,10 @@ mod tests {
         assert!(why.is_empty());
 
         // A haiku is already cheaper than a sonnet. Never step up.
-        let list = vec![ModelInfo { id: "claude-sonnet-5".into(), ..Default::default() }];
+        let list = vec![ModelInfo {
+            id: "claude-sonnet-5".into(),
+            ..Default::default()
+        }];
         assert_eq!(read_model("claude-haiku-4-5", &list).0, "claude-haiku-4-5");
     }
 
@@ -3994,17 +4569,46 @@ mod tests {
         let c = mem();
         let a = account(&c, "Develtech");
         contact(&c, "Sarah", "sarah@harbourvine.com");
-        msg(&c, a, 1, "INBOX", "sarah@harbourvine.com", "me@example.com", "Terms", "old");
-        msg(&c, a, 2, "Sent", "me@example.com", "sarah@harbourvine.com", "Re: Terms", "old");
+        msg(
+            &c,
+            a,
+            1,
+            "INBOX",
+            "sarah@harbourvine.com",
+            "me@example.com",
+            "Terms",
+            "old",
+        );
+        msg(
+            &c,
+            a,
+            2,
+            "Sent",
+            "me@example.com",
+            "sarah@harbourvine.com",
+            "Re: Terms",
+            "old",
+        );
         c.execute(
             "INSERT INTO learn_runs (started_at, status, thread_keys) VALUES (?1, 'done', ?2)",
-            params![1_700_000_000_000i64 + 5, serde_json::to_string(&vec!["t1", "t2"]).unwrap()],
+            params![
+                1_700_000_000_000i64 + 5,
+                serde_json::to_string(&vec!["t1", "t2"]).unwrap()
+            ],
         )
         .unwrap();
 
         let corpus = build_corpus(&c, 12, &[], Depth::Full).unwrap();
         assert!(corpus.messages.is_empty(), "everything was read before");
-        assert_eq!(corpus.excluded.iter().find(|x| x.kind == "read").unwrap().count, 2);
+        assert_eq!(
+            corpus
+                .excluded
+                .iter()
+                .find(|x| x.kind == "read")
+                .unwrap()
+                .count,
+            2
+        );
 
         // A reply arrives in one of those threads: that message goes, the old
         // ones still do not.
@@ -4026,10 +4630,46 @@ mod tests {
         let a = account(&c, "Develtech");
         let sarah = contact(&c, "Sarah", "sarah@harbourvine.com");
         contact(&c, "Tom", "tom@innotrack.com");
-        msg(&c, a, 1, "INBOX", "sarah@harbourvine.com", "me@example.com", "Terms", "Hello");
-        msg(&c, a, 2, "Sent", "me@example.com", "sarah@harbourvine.com", "Re: Terms", "Hi");
-        msg(&c, a, 3, "INBOX", "tom@innotrack.com", "me@example.com", "Spec", "Hello");
-        msg(&c, a, 4, "Sent", "me@example.com", "tom@innotrack.com", "Re: Spec", "Hi");
+        msg(
+            &c,
+            a,
+            1,
+            "INBOX",
+            "sarah@harbourvine.com",
+            "me@example.com",
+            "Terms",
+            "Hello",
+        );
+        msg(
+            &c,
+            a,
+            2,
+            "Sent",
+            "me@example.com",
+            "sarah@harbourvine.com",
+            "Re: Terms",
+            "Hi",
+        );
+        msg(
+            &c,
+            a,
+            3,
+            "INBOX",
+            "tom@innotrack.com",
+            "me@example.com",
+            "Spec",
+            "Hello",
+        );
+        msg(
+            &c,
+            a,
+            4,
+            "Sent",
+            "me@example.com",
+            "tom@innotrack.com",
+            "Re: Spec",
+            "Hi",
+        );
 
         let all = build_corpus(&c, 12, &[], Depth::Full).unwrap();
         assert_eq!(all.people.len(), 2);

@@ -102,7 +102,9 @@ fn read_meta(dir: &Path) -> Meta {
         Some(after) => match after.find("\n---") {
             Some(end) => {
                 for line in after[..end].lines() {
-                    let Some((k, v)) = line.split_once(':') else { continue };
+                    let Some((k, v)) = line.split_once(':') else {
+                        continue;
+                    };
                     let v = v.trim().trim_matches('"').to_string();
                     match k.trim() {
                         "label" => m.label = v,
@@ -257,7 +259,9 @@ struct Found {
 }
 
 fn walk(dir: &Path, parent_rel: Option<String>, depth: usize, out: &mut Vec<Found>) {
-    let Ok(entries) = fs::read_dir(dir) else { return };
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
     let mut kids: Vec<_> = entries
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
@@ -615,7 +619,9 @@ fn adopt_existing(conn: &Connection, root: &Path) -> Result<usize, String> {
 
     let rows: Vec<Row> = {
         let mut stmt = conn
-            .prepare("SELECT id, parent_id, name, path FROM nodes WHERE rel_path = '' ORDER BY sort, id")
+            .prepare(
+                "SELECT id, parent_id, name, path FROM nodes WHERE rel_path = '' ORDER BY sort, id",
+            )
             .map_err(err)?;
         let it = stmt
             .query_map([], |r| {
@@ -728,9 +734,11 @@ mod tests {
     }
 
     fn rel_of_id(conn: &Connection, id: i64) -> String {
-        conn.query_row("SELECT rel_path FROM nodes WHERE id = ?1", params![id], |r| {
-            r.get::<_, String>(0)
-        })
+        conn.query_row(
+            "SELECT rel_path FROM nodes WHERE id = ?1",
+            params![id],
+            |r| r.get::<_, String>(0),
+        )
         .unwrap()
     }
 
@@ -759,7 +767,10 @@ mod tests {
 
         // Real folders, with the repo carried into the meta file.
         assert!(root.join("Innotrack/x-platform").is_dir());
-        assert_eq!(read_meta(&root.join("Innotrack/x-platform")).repo, r"C:\code\x");
+        assert_eq!(
+            read_meta(&root.join("Innotrack/x-platform")).repo,
+            r"C:\code\x"
+        );
         assert!(read_meta(&root.join("Innotrack")).repo.is_empty());
     }
 
@@ -772,17 +783,26 @@ mod tests {
         fs::create_dir_all(root.join("Personal/Finance")).unwrap();
         write_meta(
             &root.join("Business/TyreX"),
-            &Meta { label: "Product".into(), ..Default::default() },
+            &Meta {
+                label: "Product".into(),
+                ..Default::default()
+            },
         )
         .unwrap();
         write_meta(
             &root.join("Business/TyreX/tyrex-api"),
-            &Meta { repo: r"C:\code\api".into(), ..Default::default() },
+            &Meta {
+                repo: r"C:\code\api".into(),
+                ..Default::default()
+            },
         )
         .unwrap();
         write_meta(
             &root.join("Personal/Finance"),
-            &Meta { label: "Topic".into(), ..Default::default() },
+            &Meta {
+                label: "Topic".into(),
+                ..Default::default()
+            },
         )
         .unwrap();
 
@@ -801,7 +821,11 @@ mod tests {
         assert_eq!(kind("Business").0, "workspace", "top level is a workspace");
         assert_eq!(kind("Business/TyreX").0, "folder", "no repo, so a folder");
         assert_eq!(kind("Business/TyreX").2.as_deref(), Some("Product"));
-        assert_eq!(kind("Business/TyreX/tyrex-api").0, "project", "a repo makes a project");
+        assert_eq!(
+            kind("Business/TyreX/tyrex-api").0,
+            "project",
+            "a repo makes a project"
+        );
         assert_eq!(
             kind("Business/TyreX/tyrex-api").1.as_deref(),
             Some(r"C:\code\api"),
@@ -906,7 +930,11 @@ pub fn vault_move(db: tauri::State<Db>, new_path: String) -> Result<String, Stri
     if new.starts_with(&old) {
         return Err("That folder is inside the vault. Choose one outside it.".into());
     }
-    if new.exists() && fs::read_dir(&new).map(|mut d| d.next().is_some()).unwrap_or(false) {
+    if new.exists()
+        && fs::read_dir(&new)
+            .map(|mut d| d.next().is_some())
+            .unwrap_or(false)
+    {
         return Err(format!(
             "{} already has something in it. Choose an empty folder, or use Switch to adopt it.",
             new.display()
@@ -917,8 +945,12 @@ pub fn vault_move(db: tauri::State<Db>, new_path: String) -> Result<String, Stri
     // the slow copy worth paying for.
     if fs::rename(&old, &new).is_err() {
         copy_tree(&old, &new)?;
-        fs::remove_dir_all(&old)
-            .map_err(|e| format!("copied to {}, but could not remove the old folder: {e}", new.display()))?;
+        fs::remove_dir_all(&old).map_err(|e| {
+            format!(
+                "copied to {}, but could not remove the old folder: {e}",
+                new.display()
+            )
+        })?;
     }
 
     db::setting_set_conn(&conn, ROOT_KEY, &new.to_string_lossy())?;

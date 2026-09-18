@@ -173,7 +173,13 @@ fn urlencode(s: &str) -> String {
 /// consent ever — so re-connecting an account that was removed would succeed,
 /// store no refresh token, and break silently an hour later when the access
 /// token expired.
-pub fn auth_url(client_id: &str, redirect: &str, challenge: &str, state: &str, hint: &str) -> String {
+pub fn auth_url(
+    client_id: &str,
+    redirect: &str,
+    challenge: &str,
+    state: &str,
+    hint: &str,
+) -> String {
     let mut url = format!(
         "{AUTH_ENDPOINT}?client_id={}&redirect_uri={}&response_type=code&scope={}\
          &code_challenge={}&code_challenge_method=S256&state={}&access_type=offline&prompt=consent",
@@ -251,7 +257,8 @@ fn percent_decode(s: &str) -> String {
     let mut i = 0;
     while i < b.len() {
         if b[i] == b'%' && i + 2 < b.len() {
-            if let Ok(v) = u8::from_str_radix(&format!("{}{}", b[i + 1] as char, b[i + 2] as char), 16)
+            if let Ok(v) =
+                u8::from_str_radix(&format!("{}{}", b[i + 1] as char, b[i + 2] as char), 16)
             {
                 out.push(v);
                 i += 3;
@@ -337,9 +344,11 @@ pub fn wait_for_callback(
                         )
                         .as_bytes(),
                     );
-                    return Err("the sign-in reply did not match the request that started it \
+                    return Err(
+                        "the sign-in reply did not match the request that started it \
                                 — nothing was saved"
-                        .into());
+                            .into(),
+                    );
                 }
                 let _ = stream.write_all(
                     closing_page(
@@ -370,7 +379,8 @@ pub fn wait_for_callback(
             // as a failed sign-in would end the flow before the real callback
             // ever arrived.
             None => {
-                let _ = stream.write_all(closing_page("DevDeck", "Nothing to see here.").as_bytes());
+                let _ =
+                    stream.write_all(closing_page("DevDeck", "Nothing to see here.").as_bytes());
             }
         }
     }
@@ -462,9 +472,11 @@ fn post_token(form: &[(&str, &str)]) -> Result<Tokens, String> {
         return Err(explain_token_error(&reply.error, &reply.error_description));
     }
     if reply.access_token.is_empty() {
-        return Err("Google returned no access token and no error, which should not happen. \
+        return Err(
+            "Google returned no access token and no error, which should not happen. \
                     Nothing was saved."
-            .into());
+                .into(),
+        );
     }
     Ok(Tokens {
         email: email_from_id_token(&reply.id_token),
@@ -501,7 +513,12 @@ pub fn explain_token_error(code: &str, detail: &str) -> String {
     }
 }
 
-pub fn exchange(c: &GoogleClient, code: &str, verifier: &str, redirect: &str) -> Result<Tokens, String> {
+pub fn exchange(
+    c: &GoogleClient,
+    code: &str,
+    verifier: &str,
+    redirect: &str,
+) -> Result<Tokens, String> {
     let mut form: Vec<(&str, &str)> = vec![
         ("client_id", &c.id),
         ("code", code),
@@ -514,10 +531,12 @@ pub fn exchange(c: &GoogleClient, code: &str, verifier: &str, redirect: &str) ->
     }
     let t = post_token(&form)?;
     if t.refresh.is_empty() {
-        return Err("Google did not return a refresh token, so the connection would stop \
+        return Err(
+            "Google did not return a refresh token, so the connection would stop \
                     working within the hour. Remove DevDeck's access under your Google \
                     account's third-party connections and sign in again."
-            .into());
+                .into(),
+        );
     }
     Ok(t)
 }
@@ -619,7 +638,7 @@ pub fn open_in_browser(url: &str) -> Result<(), String> {
             target.as_ptr(),
             std::ptr::null(),
             std::ptr::null(),
-            SW_SHOWNORMAL as i32,
+            SW_SHOWNORMAL,
         )
     };
     if (rc as isize) <= 32 {
@@ -673,8 +692,15 @@ mod tests {
     fn the_challenge_is_the_sha256_of_the_verifier() {
         let p = pkce();
         // RFC 7636 puts the verifier between 43 and 128 characters.
-        assert!(p.verifier.len() >= 43 && p.verifier.len() <= 128, "{}", p.verifier.len());
-        assert_eq!(p.challenge, B64.encode(Sha256::digest(p.verifier.as_bytes())));
+        assert!(
+            p.verifier.len() >= 43 && p.verifier.len() <= 128,
+            "{}",
+            p.verifier.len()
+        );
+        assert_eq!(
+            p.challenge,
+            B64.encode(Sha256::digest(p.verifier.as_bytes()))
+        );
         // base64url, and unpadded — a '+' or '=' here is rejected by Google.
         assert!(!p.challenge.contains('+') && !p.challenge.contains('/'));
         assert!(!p.challenge.contains('='));
@@ -703,7 +729,13 @@ mod tests {
 
     #[test]
     fn an_address_is_passed_as_a_hint_so_the_right_account_is_offered() {
-        let u = auth_url("cid", "http://127.0.0.1:1", "c", "s", " someone@example.com ");
+        let u = auth_url(
+            "cid",
+            "http://127.0.0.1:1",
+            "c",
+            "s",
+            " someone@example.com ",
+        );
         assert!(u.contains("login_hint=someone%40example.com"));
     }
 
@@ -828,8 +860,14 @@ mod tests {
     #[test]
     fn an_expired_grant_names_the_publishing_status_trap() {
         let m = explain_token_error("invalid_grant", "Token has been expired or revoked.");
-        assert!(m.contains("seven days"), "the Testing-status trap must be named");
+        assert!(
+            m.contains("seven days"),
+            "the Testing-status trap must be named"
+        );
         assert!(m.contains("Sign in again"));
-        assert!(m.contains("Token has been expired"), "keep what Google said");
+        assert!(
+            m.contains("Token has been expired"),
+            "keep what Google said"
+        );
     }
 }

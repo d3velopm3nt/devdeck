@@ -192,7 +192,8 @@ mod tests {
     fn a_line_that_is_not_a_row_is_skipped_rather_than_named() {
         // The tabular format is a contract nobody promised. A warning line
         // must not become a model called "Warning:".
-        let out = "NAME    ID    SIZE    MODIFIED\nllama3.2:3b    abc    2.0 GB    now\nonlyonecolumn\n";
+        let out =
+            "NAME    ID    SIZE    MODIFIED\nllama3.2:3b    abc    2.0 GB    now\nonlyonecolumn\n";
         let m = parse_ollama_list(out);
         assert_eq!(m.len(), 1, "{m:?}");
         assert_eq!(m[0].name, "llama3.2:3b");
@@ -200,7 +201,10 @@ mod tests {
 
     #[test]
     fn a_version_is_its_first_line_and_nothing_else() {
-        assert_eq!(first_line("ollama version is 0.5.4\n\nwarning: x"), "ollama version is 0.5.4");
+        assert_eq!(
+            first_line("ollama version is 0.5.4\n\nwarning: x"),
+            "ollama version is 0.5.4"
+        );
         assert_eq!(first_line(""), "");
     }
 }

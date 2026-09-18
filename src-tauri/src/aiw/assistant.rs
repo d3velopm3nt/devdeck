@@ -25,9 +25,9 @@ use std::sync::Arc;
 
 use super::deck::Doc;
 use super::events::{new_id, now_iso, DomainEvent, EventScope, EventType};
+use super::mentions::{self, Handover};
 use super::personal::{MemoryMeta, PersonalStore};
 use super::provider::{AgentAction, AgentRequest, AgentResponse, ChatTurn, Observation};
-use super::mentions::{self, Handover};
 use super::runtime::{AgentRuntime, LiveSession, StartAgentCommand};
 use super::state::Workspace;
 use super::tools::{
@@ -605,6 +605,7 @@ impl Conversations {
     ///
     /// One per bot, by the node it lives on. The title is the bot's name and
     /// stays that way — the first thing said does not rename a bot.
+    #[cfg(test)]
     pub fn for_bot(
         &self,
         node_id: i64,
@@ -651,7 +652,10 @@ impl Conversations {
     ) -> Result<ConversationMeta, String> {
         let _gate = writing();
         let list = self.list();
-        if let Some(existing) = list.iter().find(|c| c.bot_handle.as_deref() == Some(handle)) {
+        if let Some(existing) = list
+            .iter()
+            .find(|c| c.bot_handle.as_deref() == Some(handle))
+        {
             return self.load(&existing.id);
         }
         if let Some(old) = list
@@ -681,27 +685,33 @@ impl Conversations {
     /// Something a manager said on its own in a room it shares, under its
     /// own name rather than the room's.
     pub fn post_as(&self, conv_id: &str, text: &str, by: &str) -> Result<ChatMessage, String> {
-        self.post(conv_id, ChatMessage {
-            at: now_iso(),
-            from: Speaker::Assistant,
-            text: text.trim().to_string(),
-            tool: Some("wake".into()),
-            ok: Some(true),
-            by: Some(by.to_string()),
-        })
+        self.post(
+            conv_id,
+            ChatMessage {
+                at: now_iso(),
+                from: Speaker::Assistant,
+                text: text.trim().to_string(),
+                tool: Some("wake".into()),
+                ok: Some(true),
+                by: Some(by.to_string()),
+            },
+        )
     }
 
     /// Something the bot said on its own — a wake report — appended without a
     /// turn. The receipt is the log, and the thread is where the receipt goes.
     pub fn post_as_bot(&self, conv_id: &str, text: &str) -> Result<ChatMessage, String> {
-        self.post(conv_id, ChatMessage {
-            at: now_iso(),
-            from: Speaker::Assistant,
-            text: text.trim().to_string(),
-            tool: Some("wake".into()),
-            ok: Some(true),
-            by: None,
-        })
+        self.post(
+            conv_id,
+            ChatMessage {
+                at: now_iso(),
+                from: Speaker::Assistant,
+                text: text.trim().to_string(),
+                tool: Some("wake".into()),
+                ok: Some(true),
+                by: None,
+            },
+        )
     }
 
     /// Append one message to a thread nobody is holding open.
@@ -726,11 +736,7 @@ impl Conversations {
     /// carried over from the turn, because those are the fields a turn
     /// changes. The messages are appended rather than replaced, which is what
     /// makes two things writing to one room safe.
-    pub fn append(
-        &self,
-        conv: &ConversationMeta,
-        appended: &[ChatMessage],
-    ) -> Result<(), String> {
+    pub fn append(&self, conv: &ConversationMeta, appended: &[ChatMessage]) -> Result<(), String> {
         let _gate = writing();
         let mut fresh = match self.load(&conv.id) {
             Ok(f) => f,
@@ -786,7 +792,11 @@ impl Conversations {
     pub fn add_participant(&self, conv_id: &str, who: &str) -> Result<bool, String> {
         let _gate = writing();
         let mut conv = self.load(conv_id)?;
-        if conv.participants.iter().any(|p| p.eq_ignore_ascii_case(who)) {
+        if conv
+            .participants
+            .iter()
+            .any(|p| p.eq_ignore_ascii_case(who))
+        {
             return Ok(false);
         }
         conv.participants.push(who.to_string());
@@ -832,11 +842,7 @@ impl Conversations {
                 continue;
             };
             let m = doc.meta;
-            let last = m
-                .messages
-                .iter()
-                .rev()
-                .find(|x| x.from != Speaker::Tool);
+            let last = m.messages.iter().rev().find(|x| x.from != Speaker::Tool);
             out.push(ConversationSummary {
                 preview: last.map(|x| truncate(&x.text, 120)).unwrap_or_default(),
                 preview_by: last.and_then(|x| x.by.clone()),
@@ -921,7 +927,14 @@ impl Assistant {
         let agent = ws
             .agent(ASSISTANT_ID)
             .ok_or_else(|| format!("no '{ASSISTANT_ID}' agent"))?;
-        Self::send_as(ws, convs, conversation_id, text, sink, &Persona::assistant(&agent.system))
+        Self::send_as(
+            ws,
+            convs,
+            conversation_id,
+            text,
+            sink,
+            &Persona::assistant(&agent.system),
+        )
     }
 
     /// One turn, as whoever `persona` says. The assistant and every bot come
@@ -980,7 +993,10 @@ impl Assistant {
         // The first thing said names the conversation. Better than "New
         // conversation" forever, and cheaper than asking a model for a title.
         // A bot's thread is already named after the bot.
-        if echo && conv.messages.is_empty() && conv.bot_node.is_none() && conv.feature.is_none()
+        if echo
+            && conv.messages.is_empty()
+            && conv.bot_node.is_none()
+            && conv.feature.is_none()
             && conv.node.is_none()
         {
             conv.title = truncate(text.trim(), 60);
@@ -1373,7 +1389,8 @@ impl Assistant {
             return Err("the assistant is always awake — just say something".into());
         }
 
-        if let (Some(project_id), Some(feature_id)) = (conv.project_id.clone(), conv.feature.clone())
+        if let (Some(project_id), Some(feature_id)) =
+            (conv.project_id.clone(), conv.feature.clone())
         {
             convs.add_participant(conversation_id, &agent.id)?;
             let cmd = StartAgentCommand {
@@ -1455,10 +1472,16 @@ impl Assistant {
     ) -> Vec<ChatMessage> {
         let mut notes = Vec::new();
         for name in mentions::mentions(text) {
-            if conv.participants.iter().any(|p| p.eq_ignore_ascii_case(&name)) {
+            if conv
+                .participants
+                .iter()
+                .any(|p| p.eq_ignore_ascii_case(&name))
+            {
                 continue;
             }
-            let Some(agent) = ws.agent(&name) else { continue };
+            let Some(agent) = ws.agent(&name) else {
+                continue;
+            };
             conv.participants.push(agent.id.clone());
             let note = ChatMessage::note(
                 &agent.id,
@@ -1555,7 +1578,11 @@ impl Assistant {
                 ),
             });
         }
-        let wanted_agent = if mine { persona.runs_as.clone() } else { h.agent.clone() };
+        let wanted_agent = if mine {
+            persona.runs_as.clone()
+        } else {
+            h.agent.clone()
+        };
         let Some(agent) = ws.agent(&wanted_agent) else {
             return refuse(format!(
                 "Nobody here is called @{wanted_agent}, so nothing moved."
@@ -1582,7 +1609,11 @@ impl Assistant {
         let found = items
             .iter()
             .position(|i| i.id.to_lowercase() == wanted || i.title.to_lowercase() == wanted)
-            .or_else(|| items.iter().position(|i| i.title.to_lowercase().contains(&wanted)));
+            .or_else(|| {
+                items
+                    .iter()
+                    .position(|i| i.title.to_lowercase().contains(&wanted))
+            });
         let item = match found {
             Some(i) => items[i].clone(),
             // A manager saying "take this" about something not on the plan is
@@ -1639,7 +1670,14 @@ impl Assistant {
             Err(e) => return refuse(format!("{} could not take it: {e}", agent.id)),
         };
         delegated.push(live.session_id.clone());
-        Self::drive_and_report_to(ws, convs, live, conv.id.clone(), &agent, Some(persona.clone()));
+        Self::drive_and_report_to(
+            ws,
+            convs,
+            live,
+            conv.id.clone(),
+            &agent,
+            Some(persona.clone()),
+        );
 
         ChatMessage::note(
             &agent.id,
@@ -1695,10 +1733,13 @@ impl Assistant {
         // On their plan. An item already there is not added twice — being told
         // about it again is not a second piece of work.
         let deck = project.deck();
-        let mut work = deck.work(&plan).map(|w| w.meta).unwrap_or(super::deck::WorkMeta {
-            feature: plan.clone(),
-            items: vec![],
-        });
+        let mut work = deck
+            .work(&plan)
+            .map(|w| w.meta)
+            .unwrap_or(super::deck::WorkMeta {
+                feature: plan.clone(),
+                items: vec![],
+            });
         let already = work
             .items
             .iter()
@@ -1731,9 +1772,10 @@ impl Assistant {
 
         // The sender's own copy, if it has one, records where it went.
         let mut mine_note = String::new();
-        if let (Some(project_id), Some(feature)) =
-            (conv.project_id.clone(), conv.feature.clone().or_else(|| persona.plan.clone()))
-        {
+        if let (Some(project_id), Some(feature)) = (
+            conv.project_id.clone(),
+            conv.feature.clone().or_else(|| persona.plan.clone()),
+        ) {
             if let Some(p) = ws.project(&project_id) {
                 let d = p.deck();
                 if let Ok(w) = d.work(&feature) {
@@ -1843,7 +1885,11 @@ impl Assistant {
                     out.turns,
                     if out.turns == 1 { "" } else { "s" },
                     out.files_touched.len(),
-                    if out.files_touched.len() == 1 { "" } else { "s" },
+                    if out.files_touched.len() == 1 {
+                        ""
+                    } else {
+                        "s"
+                    },
                     out.refused,
                     out.summary.trim(),
                 ),
@@ -1859,7 +1905,12 @@ impl Assistant {
             let posted = convs
                 .post(
                     &conv_id,
-                    ChatMessage::note(&who, "session", !line.contains("could not finish"), line.clone()),
+                    ChatMessage::note(
+                        &who,
+                        "session",
+                        !line.contains("could not finish"),
+                        line.clone(),
+                    ),
                 )
                 .map(|_| ());
             if let Err(e) = posted {
@@ -1916,10 +1967,7 @@ impl Assistant {
             let permission = ws.permission_matrix().get(me, &call.tool);
             let manages = persona_manages.iter().any(|t| t == &call.tool);
             if !manages && matches!(permission, super::tools::Permission::None) {
-                return (
-                    false,
-                    format!("'{}' is denied for {me}", call.tool),
-                );
+                return (false, format!("'{}' is denied for {me}", call.tool));
             }
             return match call.tool.as_str() {
                 TOOL_DELEGATE => Self::delegate(ws, convs, conv, call, delegated),
@@ -1944,9 +1992,7 @@ impl Assistant {
         let Some(project) = ws.project(project_id) else {
             return (false, format!("no project '{project_id}'"));
         };
-        let r = project
-            .tools
-            .execute(&ws.bus, me, scope, call, Some(cause));
+        let r = project.tools.execute(&ws.bus, me, scope, call, Some(cause));
         (
             r.ok,
             if r.ok {
@@ -2230,9 +2276,18 @@ impl Assistant {
         plan: Option<&str>,
         call: &ToolCall,
     ) -> (bool, String) {
-        let s = |k: &str| call.args.get(k).and_then(|v| v.as_str()).unwrap_or("").trim();
+        let s = |k: &str| {
+            call.args
+                .get(k)
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+        };
         let Some(project_id) = conv.project_id.as_deref() else {
-            return (false, "a work item belongs to a space — pick one first".into());
+            return (
+                false,
+                "a work item belongs to a space — pick one first".into(),
+            );
         };
         let Some(project) = ws.project(project_id) else {
             return (false, format!("no project '{project_id}'"));
@@ -2241,7 +2296,12 @@ impl Assistant {
             (_, _, f) if !f.is_empty() => f.to_string(),
             (Some(f), _, _) => f.to_string(),
             (None, Some(p), _) => p.to_string(),
-            _ => return (false, "which feature? this thread has none and you manage none".into()),
+            _ => {
+                return (
+                    false,
+                    "which feature? this thread has none and you manage none".into(),
+                )
+            }
         };
         let deck = project.deck();
         match call.action.as_str() {
@@ -2257,7 +2317,11 @@ impl Assistant {
                     },
                     body: String::new(),
                 });
-                let id = format!("w{:02}-{}", work.meta.items.len() + 1, super::deck::slugify(title));
+                let id = format!(
+                    "w{:02}-{}",
+                    work.meta.items.len() + 1,
+                    super::deck::slugify(title)
+                );
                 work.meta.items.push(super::deck::WorkItem {
                     id: id.clone(),
                     title: title.to_string(),
@@ -2275,13 +2339,26 @@ impl Assistant {
                 }
             }
             "list" => match deck.work(&feature) {
-                Ok(w) if w.meta.items.is_empty() => (true, format!("{feature} has no work items yet.")),
+                Ok(w) if w.meta.items.is_empty() => {
+                    (true, format!("{feature} has no work items yet."))
+                }
                 Ok(w) => (
                     true,
                     w.meta
                         .items
                         .iter()
-                        .map(|i| format!("- {} · {} · {}{}", i.id, i.title, i.status, i.assignee.as_deref().map(|a| format!(" · {a}")).unwrap_or_default()))
+                        .map(|i| {
+                            format!(
+                                "- {} · {} · {}{}",
+                                i.id,
+                                i.title,
+                                i.status,
+                                i.assignee
+                                    .as_deref()
+                                    .map(|a| format!(" · {a}"))
+                                    .unwrap_or_default()
+                            )
+                        })
                         .collect::<Vec<_>>()
                         .join("\n"),
                 ),
@@ -2312,7 +2389,10 @@ impl Assistant {
                 let Some(at) = found else {
                     return (
                         false,
-                        format!("nothing on {feature} matches “{}”, so nothing changed", s("title")),
+                        format!(
+                            "nothing on {feature} matches “{}”, so nothing changed",
+                            s("title")
+                        ),
                     );
                 };
                 let was = work.items[at].status.clone();
@@ -2324,9 +2404,10 @@ impl Assistant {
                     work.items[at].assignee = None;
                 }
                 match deck.save_work(&feature, &work) {
-                    Ok(()) if call.action == "done" => {
-                        (true, format!("Marked “{title}” done on {feature} — was {was}."))
-                    }
+                    Ok(()) if call.action == "done" => (
+                        true,
+                        format!("Marked “{title}” done on {feature} — was {was}."),
+                    ),
                     Ok(()) => (
                         true,
                         format!("Let “{title}” go on {feature} — unclaimed again, was {was}."),
@@ -2349,7 +2430,13 @@ impl Assistant {
         if call.action != "save" {
             return (false, format!("unknown skill action '{}'", call.action));
         }
-        let s = |k: &str| call.args.get(k).and_then(|v| v.as_str()).unwrap_or("").trim();
+        let s = |k: &str| {
+            call.args
+                .get(k)
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+        };
         let (name, body) = (s("name"), s("body"));
         if name.is_empty() || body.is_empty() {
             return (false, "a skill needs a name and instructions".into());
@@ -2524,7 +2611,13 @@ impl Assistant {
             if !profile.body.trim().is_empty() {
                 s.push_str(&format!("\n{}\n", profile.body.trim()));
             }
-            add("profile", "About you", "personal store · profile", "personal", s);
+            add(
+                "profile",
+                "About you",
+                "personal store · profile",
+                "personal",
+                s,
+            );
         }
 
         let memories = convs.store().memories();
@@ -2542,7 +2635,13 @@ impl Assistant {
                     truncate(&d.body, 200)
                 ));
             }
-            add("memory", "Remembered", "personal store · memory", "personal", s);
+            add(
+                "memory",
+                "Remembered",
+                "personal store · memory",
+                "personal",
+                s,
+            );
         }
 
         if let Some(pid) = &conv.project_id {
@@ -2558,19 +2657,37 @@ impl Assistant {
                         s.push_str(&format!("- {f}\n"));
                     }
                 }
-                add("project", "Project in focus", ".devdeck · features", "deck", s);
+                add(
+                    "project",
+                    "Project in focus",
+                    ".devdeck · features",
+                    "deck",
+                    s,
+                );
 
                 // Kept facts about the space. Written by the learn run and by
                 // hand; until this line nothing read them back.
                 let known = deck.knowledge();
                 if !known.is_empty() {
-                    let mut s = format!("## Known about {}
-", p.name);
+                    let mut s = format!(
+                        "## Known about {}
+",
+                        p.name
+                    );
                     for (name, body) in known.iter().take(60) {
-                        s.push_str(&format!("- {name}: {}
-", truncate(body, 240)));
+                        s.push_str(&format!(
+                            "- {name}: {}
+",
+                            truncate(body, 240)
+                        ));
                     }
-                    add("knowledge", "Known about this space", ".devdeck · knowledge", "deck", s);
+                    add(
+                        "knowledge",
+                        "Known about this space",
+                        ".devdeck · knowledge",
+                        "deck",
+                        s,
+                    );
                 }
             }
         }
@@ -2619,8 +2736,10 @@ impl Assistant {
                 .into_iter()
                 .map(|t| t.id)
                 .filter(|id| {
-                    !matches!(matrix.get(&persona.agent_id, id), super::tools::Permission::None)
-                        || persona.manages_with.iter().any(|m| m == id)
+                    !matches!(
+                        matrix.get(&persona.agent_id, id),
+                        super::tools::Permission::None
+                    ) || persona.manages_with.iter().any(|m| m == id)
                 })
                 .collect();
             ids.sort();
@@ -2675,7 +2794,9 @@ impl Assistant {
             tool_tokens,
             history_turns: history.len() as u32,
             history_tokens: history_tokens as u32,
-            total_tokens: sent + tool_tokens + history_tokens as u32
+            total_tokens: sent
+                + tool_tokens
+                + history_tokens as u32
                 + super::context::estimate_tokens(&persona.system) as u32,
             parts,
             tools,

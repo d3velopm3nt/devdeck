@@ -37,7 +37,15 @@ pub struct RoleDef {
     pub rhythm: String,
 }
 
-fn role(id: &str, name: &str, job: &str, every: &str, at_min: i64, days: &str, rhythm: &str) -> RoleDef {
+fn role(
+    id: &str,
+    name: &str,
+    job: &str,
+    every: &str,
+    at_min: i64,
+    days: &str,
+    rhythm: &str,
+) -> RoleDef {
     RoleDef {
         id: id.into(),
         name: name.into(),
@@ -137,17 +145,30 @@ pub fn first_steps(conn: &Connection, role: &str, node_id: i64) -> Vec<String> {
         nodes
             .iter()
             .find(|n| n.parent_id == Some(node_id) && n.name.eq_ignore_ascii_case(name))
-            .map(|f| nodes.iter().filter(|n| n.parent_id == Some(f.id)).map(|n| n.name.clone()).collect())
+            .map(|f| {
+                nodes
+                    .iter()
+                    .filter(|n| n.parent_id == Some(f.id))
+                    .map(|n| n.name.clone())
+                    .collect()
+            })
             .unwrap_or_default()
     };
     let meta = business::read(conn, node_id).ok().flatten();
-    let name = meta.as_ref().map(|m| m.name.clone()).filter(|n| !n.is_empty()).unwrap_or_else(|| "the business".into());
+    let name = meta
+        .as_ref()
+        .map(|m| m.name.clone())
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(|| "the business".into());
     let products: Vec<String> = meta
         .as_ref()
         .map(|m| {
             m.items
                 .iter()
-                .filter(|i| i.field == "product" && (i.state == "agreed" || (i.kind == "you" && i.state != "declined")))
+                .filter(|i| {
+                    i.field == "product"
+                        && (i.state == "agreed" || (i.kind == "you" && i.state != "declined"))
+                })
                 .map(|i| i.text.clone())
                 .collect()
         })
@@ -169,7 +190,9 @@ pub fn first_steps(conn: &Connection, role: &str, node_id: i64) -> Vec<String> {
             for p in products.iter().take(3) {
                 out.push(format!("Write down what goes into the next release of {p}"));
             }
-            out.push(format!("Collect what clients have asked {name} for, by product"));
+            out.push(format!(
+                "Collect what clients have asked {name} for, by product"
+            ));
         }
         "operations" => {
             out.push(format!("List what is due this week across {name}"));
@@ -234,7 +257,9 @@ pub struct TeamOffer {
 fn agreed<'a>(meta: &'a BusinessMeta, field: &str) -> Vec<&'a str> {
     meta.items
         .iter()
-        .filter(|i| i.field == field && (i.state == "agreed" || (i.kind == "you" && i.state != "declined")))
+        .filter(|i| {
+            i.field == field && (i.state == "agreed" || (i.kind == "you" && i.state != "declined"))
+        })
         .map(|i| i.text.as_str())
         .collect()
 }
@@ -269,7 +294,10 @@ pub fn suggest(meta: &BusinessMeta, projects: usize, clients: usize) -> Vec<Role
                     if services.is_empty() {
                         "no services to deliver yet".into()
                     } else {
-                        format!("{} to deliver", plural(services.len(), "service", "services"))
+                        format!(
+                            "{} to deliver",
+                            plural(services.len(), "service", "services")
+                        )
                     },
                 ),
                 "product" => (
@@ -278,11 +306,18 @@ pub fn suggest(meta: &BusinessMeta, projects: usize, clients: usize) -> Vec<Role
                     if products.is_empty() {
                         "no products yet".into()
                     } else {
-                        format!("{} to look after", plural(products.len(), "product", "products"))
+                        format!(
+                            "{} to look after",
+                            plural(products.len(), "product", "products")
+                        )
                     },
                 ),
                 "engineering" => (
-                    if projects > 0 { vec![plural(projects, "project", "projects")] } else { vec![] },
+                    if projects > 0 {
+                        vec![plural(projects, "project", "projects")]
+                    } else {
+                        vec![]
+                    },
                     projects > 0,
                     if projects > 0 {
                         format!("{} with code", plural(projects, "project", "projects"))
@@ -306,7 +341,11 @@ pub fn suggest(meta: &BusinessMeta, projects: usize, clients: usize) -> Vec<Role
                         "no clients yet".into()
                     },
                 ),
-                "finance" => (vec!["Money".into()], false, "directors usually keep this at first".into()),
+                "finance" => (
+                    vec!["Money".into()],
+                    false,
+                    "directors usually keep this at first".into(),
+                ),
                 _ => (
                     std::iter::once("Marketing".to_string())
                         .chain((!host.is_empty()).then_some(host.clone()))
@@ -315,7 +354,13 @@ pub fn suggest(meta: &BusinessMeta, projects: usize, clients: usize) -> Vec<Role
                     "directors usually keep this at first".into(),
                 ),
             };
-            RoleOffer { def, covers, on, why, made: String::new() }
+            RoleOffer {
+                def,
+                covers,
+                on,
+                why,
+                made: String::new(),
+            }
         })
         .collect()
 }
@@ -332,9 +377,11 @@ fn count_under(conn: &Connection, business_id: i64, folder: &str, kind: &str) ->
         .into_iter()
         .filter(|id| *id != folder_id)
         .filter(|id| {
-            conn.query_row("SELECT kind FROM nodes WHERE id = ?1", params![id], |r| r.get::<_, String>(0))
-                .map(|k| kind.is_empty() || k == kind)
-                .unwrap_or(false)
+            conn.query_row("SELECT kind FROM nodes WHERE id = ?1", params![id], |r| {
+                r.get::<_, String>(0)
+            })
+            .map(|k| kind.is_empty() || k == kind)
+            .unwrap_or(false)
         })
         .count()
 }
@@ -342,14 +389,17 @@ fn count_under(conn: &Connection, business_id: i64, folder: &str, kind: &str) ->
 fn names_of(conn: &Connection, ids: &[i64]) -> Vec<String> {
     ids.iter()
         .filter_map(|id| {
-            conn.query_row("SELECT name FROM nodes WHERE id = ?1", params![id], |r| r.get::<_, String>(0))
-                .ok()
+            conn.query_row("SELECT name FROM nodes WHERE id = ?1", params![id], |r| {
+                r.get::<_, String>(0)
+            })
+            .ok()
         })
         .collect()
 }
 
 pub fn team_offer(conn: &Connection, node_id: i64) -> Result<TeamOffer, String> {
-    let meta = business::read(conn, node_id)?.ok_or("That space has not been set up as a business.")?;
+    let meta =
+        business::read(conn, node_id)?.ok_or("That space has not been set up as a business.")?;
     let projects = count_under(conn, node_id, "Products", "project");
     let clients = conn
         .query_row(
@@ -388,10 +438,21 @@ pub fn team_offer(conn: &Connection, node_id: i64) -> Result<TeamOffer, String> 
     let directors = meta
         .directors
         .iter()
-        .map(|d| if d.you { "You".to_string() } else { d.name.trim().to_string() })
+        .map(|d| {
+            if d.you {
+                "You".to_string()
+            } else {
+                d.name.trim().to_string()
+            }
+        })
         .filter(|d| !d.is_empty())
         .collect();
-    Ok(TeamOffer { roles, others, members, directors })
+    Ok(TeamOffer {
+        roles,
+        others,
+        members,
+        directors,
+    })
 }
 
 #[tauri::command(async)]
@@ -409,8 +470,14 @@ pub struct TeamMade {
 
 /// Put the chosen roles on the team, and the chosen managers from other
 /// businesses to work here too. Nothing is made for a role the directors keep.
-pub fn make_team(conn: &Connection, node_id: i64, roles: &[String], reuse: &[String]) -> Result<TeamMade, String> {
-    let mut meta = business::read(conn, node_id)?.ok_or("That space has not been set up as a business.")?;
+pub fn make_team(
+    conn: &Connection,
+    node_id: i64,
+    roles: &[String],
+    reuse: &[String],
+) -> Result<TeamMade, String> {
+    let mut meta =
+        business::read(conn, node_id)?.ok_or("That space has not been set up as a business.")?;
     let offer = team_offer(conn, node_id)?;
     let mut out = TeamMade::default();
 
@@ -427,7 +494,11 @@ pub fn make_team(conn: &Connection, node_id: i64, roles: &[String], reuse: &[Str
             "Works for {}. Reports to the directors: {}.\n\nCovers: {}.",
             meta.name,
             offer.directors.join(", "),
-            if r.covers.is_empty() { "nothing yet".to_string() } else { r.covers.join(", ") },
+            if r.covers.is_empty() {
+                "nothing yet".to_string()
+            } else {
+                r.covers.join(", ")
+            },
         );
         let m = crate::managers::Manager {
             handle: handle.clone(),
@@ -450,14 +521,16 @@ pub fn make_team(conn: &Connection, node_id: i64, roles: &[String], reuse: &[Str
         };
         crate::managers::save(conn, &m)?;
         if let Err(e) = crate::bots::sync_manager_heartbeat(conn, &handle) {
-            out.problems.push(format!("{}: its rhythm could not be set: {e}", r.def.name));
+            out.problems
+                .push(format!("{}: its rhythm could not be set: {e}", r.def.name));
         }
         out.made.push(r.def.name.clone());
     }
 
     for handle in reuse {
         let Some(mut m) = crate::managers::get(conn, handle) else {
-            out.problems.push(format!("there is no manager called @{handle}"));
+            out.problems
+                .push(format!("there is no manager called @{handle}"));
             continue;
         };
         if !m.businesses.contains(&node_id) {
@@ -484,7 +557,11 @@ pub fn business_make_team(
     let (made, name) = {
         let conn = db.0.lock().unwrap();
         let name = conn
-            .query_row("SELECT name FROM nodes WHERE id = ?1", params![node_id], |r| r.get::<_, String>(0))
+            .query_row(
+                "SELECT name FROM nodes WHERE id = ?1",
+                params![node_id],
+                |r| r.get::<_, String>(0),
+            )
             .map_err(err)?;
         (make_team(&conn, node_id, &roles, &reuse)?, name)
     };
@@ -495,7 +572,11 @@ pub fn business_make_team(
         format!(
             "{} on the team{}",
             made.made.len() + made.joined.len(),
-            if made.joined.is_empty() { String::new() } else { format!(", {} from other businesses", made.joined.len()) }
+            if made.joined.is_empty() {
+                String::new()
+            } else {
+                format!(", {} from other businesses", made.joined.len())
+            }
         ),
         made.problems.is_empty(),
         Some(node_id),
@@ -536,7 +617,10 @@ pub struct SpaceView {
 pub fn space_view(conn: &Connection, node_id: i64) -> Result<SpaceView, String> {
     let offer = team_offer(conn, node_id)?;
     let mut members = Vec::new();
-    for m in crate::managers::all(conn).into_iter().filter(|m| m.businesses.contains(&node_id)) {
+    for m in crate::managers::all(conn)
+        .into_iter()
+        .filter(|m| m.businesses.contains(&node_id))
+    {
         let last_woke: Option<i64> = conn
             .query_row(
                 "SELECT last_run FROM schedules WHERE kind = 'bot' AND manager = ?1 LIMIT 1",
@@ -546,12 +630,24 @@ pub fn space_view(conn: &Connection, node_id: i64) -> Result<SpaceView, String> 
             .unwrap_or(None);
         let mut open_items = 0usize;
         for (owner_node, slug) in crate::managers::owned_by(conn, &m.handle) {
-            let Some(dir) = crate::db::node_deck_dir_by_id(conn, owner_node) else { continue };
+            let Some(dir) = crate::db::node_deck_dir_by_id(conn, owner_node) else {
+                continue;
+            };
             if let Ok(work) = crate::aiw::deck::Deck::new(dir).work(&slug) {
-                open_items += work.meta.items.iter().filter(|i| i.status != "done").count();
+                open_items += work
+                    .meta
+                    .items
+                    .iter()
+                    .filter(|i| i.status != "done")
+                    .count();
             }
         }
-        let others: Vec<i64> = m.businesses.iter().copied().filter(|b| *b != node_id).collect();
+        let others: Vec<i64> = m
+            .businesses
+            .iter()
+            .copied()
+            .filter(|b| *b != node_id)
+            .collect();
         members.push(MemberView {
             handle: m.handle.clone(),
             name: m.name.clone(),
@@ -582,7 +678,11 @@ pub fn space_view(conn: &Connection, node_id: i64) -> Result<SpaceView, String> 
                 .unwrap_or(0) as usize,
         })
         .collect();
-    Ok(SpaceView { members, keeps, organisations })
+    Ok(SpaceView {
+        members,
+        keeps,
+        organisations,
+    })
 }
 
 #[tauri::command(async)]
@@ -597,7 +697,14 @@ mod tests {
     use crate::business::Suggestion;
 
     fn item(field: &str, text: &str, state: &str) -> Suggestion {
-        Suggestion { id: text.into(), field: field.into(), text: text.into(), kind: "suggestion".into(), state: state.into(), ..Default::default() }
+        Suggestion {
+            id: text.into(),
+            field: field.into(),
+            text: text.into(),
+            kind: "suggestion".into(),
+            state: state.into(),
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -615,19 +722,38 @@ mod tests {
             ..Default::default()
         };
         let roles = suggest(&meta, 3, 2);
-        assert_eq!(roles.len(), catalogue().len(), "one offer per role, however many projects");
+        assert_eq!(
+            roles.len(),
+            catalogue().len(),
+            "one offer per role, however many projects"
+        );
         let get = |id: &str| roles.iter().find(|r| r.def.id == id).unwrap();
         assert!(get("engineering").on);
         assert_eq!(get("engineering").covers, vec!["3 projects"]);
-        assert_eq!(get("product").covers, vec!["Asset tracking platform", "Mining equipment tracking"]);
-        assert!(get("operations").covers.contains(&"Site surveys".to_string()));
-        assert!(!get("operations").covers.contains(&"Still a suggestion".to_string()), "only agreed services");
+        assert_eq!(
+            get("product").covers,
+            vec!["Asset tracking platform", "Mining equipment tracking"]
+        );
+        assert!(get("operations")
+            .covers
+            .contains(&"Site surveys".to_string()));
+        assert!(
+            !get("operations")
+                .covers
+                .contains(&"Still a suggestion".to_string()),
+            "only agreed services"
+        );
         assert!(get("client-success").on);
         assert!(!get("finance").on, "the directors keep finance at first");
-        assert!(get("sales-marketing").covers.contains(&"innotrack.co.za".to_string()));
+        assert!(get("sales-marketing")
+            .covers
+            .contains(&"innotrack.co.za".to_string()));
         assert_eq!(get("engineering").def.stop_at, vec!["before any push"]);
 
         let empty = suggest(&BusinessMeta::default(), 0, 0);
-        assert!(empty.iter().all(|r| !r.on), "nothing to own, nobody suggested");
+        assert!(
+            empty.iter().all(|r| !r.on),
+            "nothing to own, nobody suggested"
+        );
     }
 }

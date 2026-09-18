@@ -240,13 +240,19 @@ fn parse_line(line: &str) -> Line {
                 }
             }
             if !tool.is_empty() {
-                return Line::Event(RunEvent { kind: "tool", text: tool });
+                return Line::Event(RunEvent {
+                    kind: "tool",
+                    text: tool,
+                });
             }
             let text = text.trim().to_string();
             if text.is_empty() {
                 Line::Ignored
             } else {
-                Line::Event(RunEvent { kind: "message", text })
+                Line::Event(RunEvent {
+                    kind: "message",
+                    text,
+                })
             }
         }
         "result" => {
@@ -259,7 +265,10 @@ fn parse_line(line: &str) -> Line {
             // a missing `is_error` is not the same as a successful run, so an
             // absent flag counts as failure rather than as silence.
             let errored = v.get("is_error").and_then(|e| e.as_bool()).unwrap_or(true);
-            let subtype = v.get("subtype").and_then(|s| s.as_str()).unwrap_or_default();
+            let subtype = v
+                .get("subtype")
+                .and_then(|s| s.as_str())
+                .unwrap_or_default();
             Line::Verdict(Box::new(RunOutcome {
                 ok: !errored && subtype == "success",
                 summary: v
@@ -275,7 +284,10 @@ fn parse_line(line: &str) -> Line {
                     .and_then(|s| s.as_str())
                     .unwrap_or_default()
                     .to_string(),
-                cost_usd: v.get("total_cost_usd").and_then(|c| c.as_f64()).unwrap_or(0.0),
+                cost_usd: v
+                    .get("total_cost_usd")
+                    .and_then(|c| c.as_f64())
+                    .unwrap_or(0.0),
             }))
         }
         _ => Line::Ignored,
@@ -337,7 +349,9 @@ pub fn run(
         }
     }
 
-    let status = child.wait().map_err(|e| format!("'{name}' never finished: {e}"))?;
+    let status = child
+        .wait()
+        .map_err(|e| format!("'{name}' never finished: {e}"))?;
     let stderr = errors
         .and_then(|h| h.join().ok())
         .unwrap_or_default()
@@ -348,7 +362,10 @@ pub fn run(
     // good result still warned, and swallowing that because the verdict was
     // green is how a problem stays invisible until it is not one any more.
     if !stderr.is_empty() {
-        on_event(RunEvent { kind: "stderr", text: stderr.clone() });
+        on_event(RunEvent {
+            kind: "stderr",
+            text: stderr.clone(),
+        });
     }
 
     match verdict {
@@ -374,7 +391,10 @@ mod tests {
             unattended: true,
         };
         let args = spec.args("do the thing");
-        let at = args.iter().position(|a| a == "--permission-prompts").unwrap();
+        let at = args
+            .iter()
+            .position(|a| a == "--permission-prompts")
+            .unwrap();
         assert_eq!(args[at + 1], "none");
     }
 
@@ -416,7 +436,9 @@ mod tests {
         let args = spec.args("x");
         let at = args.iter().position(|a| a == "--permission-mode").unwrap();
         assert_eq!(args[at + 1], DEFAULT_PERMISSION_MODE);
-        assert!(!args.iter().any(|a| a.contains("bypass") || a.contains("dangerously")));
+        assert!(!args
+            .iter()
+            .any(|a| a.contains("bypass") || a.contains("dangerously")));
     }
 
     /// The real shape, captured from `claude --output-format stream-json`.

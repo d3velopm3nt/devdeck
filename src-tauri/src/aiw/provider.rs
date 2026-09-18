@@ -320,7 +320,7 @@ impl MockProvider {
                     summary: "nothing to do".into(),
                 }],
                 complete: true,
-            usage: None,
+                usage: None,
             },
         }
     }
@@ -356,7 +356,7 @@ impl MockProvider {
                     summary: "handled".into(),
                 }],
                 complete: true,
-            usage: None,
+                usage: None,
             };
         }
 
@@ -387,7 +387,7 @@ impl MockProvider {
                     }),
                 ))],
                 complete: false,
-            usage: None,
+                usage: None,
             };
         }
 
@@ -405,7 +405,7 @@ impl MockProvider {
                         }),
                     ))],
                     complete: false,
-            usage: None,
+                    usage: None,
                 };
             }
             return AgentResponse {
@@ -442,7 +442,7 @@ impl MockProvider {
                     serde_json::json!({ "query": "sync" }),
                 ))],
                 complete: false,
-            usage: None,
+                usage: None,
             },
             1 => AgentResponse {
                 message: "Offline sites have unreliable clocks, so the server must decide.".into(),
@@ -460,7 +460,7 @@ impl MockProvider {
                     supersedes: None,
                 }],
                 complete: false,
-            usage: None,
+                usage: None,
             },
             _ => AgentResponse {
                 message: "Decision recorded and context updated.".into(),
@@ -479,7 +479,7 @@ impl MockProvider {
                     },
                 ],
                 complete: true,
-            usage: None,
+                usage: None,
             },
         }
     }
@@ -497,7 +497,7 @@ impl MockProvider {
                     serde_json::json!({}),
                 ))],
                 complete: false,
-            usage: None,
+                usage: None,
             },
             (1, true) => AgentResponse {
                 message: "Changing SyncResult so a conflict can be represented.".into(),
@@ -518,7 +518,7 @@ impl MockProvider {
                     },
                 ],
                 complete: false,
-            usage: None,
+                usage: None,
             },
             (1, false) => AgentResponse {
                 message: "Building the sync status badge against SyncResult.".into(),
@@ -532,7 +532,7 @@ impl MockProvider {
                     }),
                 ))],
                 complete: false,
-            usage: None,
+                usage: None,
             },
             _ => AgentResponse {
                 message: "Work complete for this turn.".into(),
@@ -544,7 +544,7 @@ impl MockProvider {
                     },
                 }],
                 complete: true,
-            usage: None,
+                usage: None,
             },
         }
     }
@@ -559,7 +559,7 @@ impl MockProvider {
                     serde_json::json!({}),
                 ))],
                 complete: false,
-            usage: None,
+                usage: None,
             },
             1 => AgentResponse {
                 message: "Running the configured test command.".into(),
@@ -569,7 +569,7 @@ impl MockProvider {
                     serde_json::json!({}),
                 ))],
                 complete: false,
-            usage: None,
+                usage: None,
             },
             _ => AgentResponse {
                 message: "Recording the result.".into(),
@@ -583,7 +583,7 @@ impl MockProvider {
                     ),
                 }],
                 complete: true,
-            usage: None,
+                usage: None,
             },
         }
     }
@@ -598,7 +598,7 @@ impl MockProvider {
                     serde_json::json!({ "path": "packages/sync/types.ts" }),
                 ))],
                 complete: false,
-            usage: None,
+                usage: None,
             },
             _ => {
                 let saw_outcome = req
@@ -619,7 +619,7 @@ impl MockProvider {
                         },
                     }],
                     complete: true,
-            usage: None,
+                    usage: None,
                 }
             }
         }
@@ -731,8 +731,12 @@ impl LLMProvider for MockProvider {
                     if inside && l.starts_with('#') {
                         break;
                     }
-                    let Some(rest) = l.strip_prefix("- ").filter(|_| inside) else { continue };
-                    let Some((name, email)) = rest.split_once(" <") else { continue };
+                    let Some(rest) = l.strip_prefix("- ").filter(|_| inside) else {
+                        continue;
+                    };
+                    let Some((name, email)) = rest.split_once(" <") else {
+                        continue;
+                    };
                     lines.push(serde_json::json!({
                         "kind": "contact",
                         "email": email.trim_end_matches('>').trim(),
@@ -744,7 +748,9 @@ impl LLMProvider for MockProvider {
             }
             for text in [
                 format!("{org} is in the business's mail (scripted by the mock provider)"),
-                format!("The business and {org} have an ongoing thread (scripted by the mock provider)"),
+                format!(
+                    "The business and {org} have an ongoing thread (scripted by the mock provider)"
+                ),
             ] {
                 lines.push(serde_json::json!({
                     "kind": "thing", "text": text,
@@ -752,8 +758,14 @@ impl LLMProvider for MockProvider {
                 }));
             }
             return Ok(AgentResponse {
-                message: lines.iter().map(|v| v.to_string()).collect::<Vec<_>>().join("\n"),
-                actions: vec![AgentAction::Done { summary: "read".into() }],
+                message: lines
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+                actions: vec![AgentAction::Done {
+                    summary: "read".into(),
+                }],
                 complete: true,
                 usage: None,
             });
@@ -761,8 +773,12 @@ impl LLMProvider for MockProvider {
         if request.system.starts_with(super::learn::SYSTEM_MARK) {
             let mut lines = Vec::new();
             for l in request.context.lines() {
-                let Some(rest) = l.strip_prefix("- ") else { continue };
-                let Some((name, _)) = rest.split_once(" <") else { continue };
+                let Some(rest) = l.strip_prefix("- ") else {
+                    continue;
+                };
+                let Some((name, _)) = rest.split_once(" <") else {
+                    continue;
+                };
                 let name = name.trim();
                 if name.is_empty() {
                     continue;
@@ -794,11 +810,15 @@ impl LLMProvider for MockProvider {
                 .iter()
                 .map(|v| v.to_string())
                 .collect::<Vec<_>>()
-                .join("
-");
+                .join(
+                    "
+",
+                );
             return Ok(AgentResponse {
                 message,
-                actions: vec![AgentAction::Done { summary: "read".into() }],
+                actions: vec![AgentAction::Done {
+                    summary: "read".into(),
+                }],
                 complete: true,
                 usage: None,
             });
@@ -808,7 +828,9 @@ impl LLMProvider for MockProvider {
         if request.system.starts_with(super::site::SITE_MARK) {
             return Ok(AgentResponse {
                 message: super::site::mock_reply(&request.context),
-                actions: vec![AgentAction::Done { summary: "read".into() }],
+                actions: vec![AgentAction::Done {
+                    summary: "read".into(),
+                }],
                 complete: true,
                 usage: None,
             });
@@ -830,7 +852,11 @@ impl LLMProvider for MockProvider {
         // A card's summary written again: two sentences from the lines it was
         // given, and a note that they are scripted.
         if request.system.starts_with(super::learn::SUMMARY_MARK) {
-            let n = request.context.lines().filter(|l| l.starts_with("- ")).count();
+            let n = request
+                .context
+                .lines()
+                .filter(|l| l.starts_with("- "))
+                .count();
             return Ok(AgentResponse {
                 message: format!(
                     "Summed up from the {n} line{} you kept (scripted by the mock provider). A real \
@@ -857,7 +883,7 @@ impl LLMProvider for MockProvider {
                     summary: "answered".into(),
                 }],
                 complete: true,
-            usage: None,
+                usage: None,
             });
         }
         let mut response = Self::script(&request.role, request);
@@ -2614,8 +2640,18 @@ Offline sync."
     fn endpoints_speaking_the_same_protocol_coexist() {
         let mut r = ProviderRegistry::new();
         for (id, name, url, model) in [
-            ("nvidia", "NVIDIA NIM", "https://integrate.api.nvidia.com/v1", "nvidia/nemotron-3-super-120b-a12b"),
-            ("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", "anthropic/claude-sonnet-4.5"),
+            (
+                "nvidia",
+                "NVIDIA NIM",
+                "https://integrate.api.nvidia.com/v1",
+                "nvidia/nemotron-3-super-120b-a12b",
+            ),
+            (
+                "openrouter",
+                "OpenRouter",
+                "https://openrouter.ai/api/v1",
+                "anthropic/claude-sonnet-4.5",
+            ),
             ("ollama", "Ollama", "http://localhost:11434/v1", "llama3.1"),
         ] {
             r.register_openai(OpenAICompatibleConfig {
@@ -2851,9 +2887,7 @@ mod wire_tests {
         let paid = models.iter().find(|m| m.id.starts_with("meta/")).unwrap();
         // A millionth of a dollar times a million is not exactly a dime, so
         // this asks the question money actually cares about.
-        let near = |got: Option<f64>, want: f64| {
-            matches!(got, Some(v) if (v - want).abs() < 1e-9)
-        };
+        let near = |got: Option<f64>, want: f64| matches!(got, Some(v) if (v - want).abs() < 1e-9);
         assert!(
             near(paid.input_per_mtok, 0.1),
             "per token became per million: {:?}",

@@ -64,7 +64,9 @@ fn feature_persona(
         crate::bots::managers_on(&conn, node_id)
             .into_iter()
             .find(|b| {
-                b.portfolio.iter().any(|o| o.node_id == node_id && o.feature == feature_id)
+                b.portfolio
+                    .iter()
+                    .any(|o| o.node_id == node_id && o.feature == feature_id)
                     || b.feature.trim() == feature_id
             })
             .map(|b| (crate::bots::persona_in(&conn, ws, &b), b.name.clone()))
@@ -117,7 +119,7 @@ pub fn thread_context(
     let convs = ws.convs()?;
     let conv = convs.load(&conversation_id)?;
     let persona = persona_for_thread(&app, &ws, &conv)?;
-    crate::aiw::assistant::Assistant::context_view(&ws, &convs, &conversation_id, &persona)
+    crate::aiw::assistant::Assistant::context_view(&ws, convs, &conversation_id, &persona)
 }
 
 /// Switch one context part or one tool off, or back on.
@@ -151,7 +153,7 @@ pub fn thread_context_set(
         }
     })?;
     let persona = persona_for_thread(&app, &ws, &conv)?;
-    crate::aiw::assistant::Assistant::context_view(&ws, &convs, &conversation_id, &persona)
+    crate::aiw::assistant::Assistant::context_view(&ws, convs, &conversation_id, &persona)
 }
 
 /// Replace what a context part says. An empty body puts the assembly back.
@@ -173,7 +175,7 @@ pub fn thread_context_edit(
         }
     })?;
     let persona = persona_for_thread(&app, &ws, &conv)?;
-    crate::aiw::assistant::Assistant::context_view(&ws, &convs, &conversation_id, &persona)
+    crate::aiw::assistant::Assistant::context_view(&ws, convs, &conversation_id, &persona)
 }
 
 /// Whoever answers in this room: the bot whose thread it is, the bot managing
@@ -245,7 +247,10 @@ fn pull_in_bots(
                 ),
             );
         }
-        if !named.iter().any(|b: &crate::bots::Bot| b.handle == bot.handle) {
+        if !named
+            .iter()
+            .any(|b: &crate::bots::Bot| b.handle == bot.handle)
+        {
             named.push(bot.clone());
         }
     }
@@ -272,7 +277,9 @@ fn also_answer(
 ) {
     for bot in bots {
         let who = {
-            let Some(db) = app.try_state::<Db>() else { continue };
+            let Some(db) = app.try_state::<Db>() else {
+                continue;
+            };
             let conn = db.0.lock().unwrap();
             crate::bots::persona_in(&conn, ws, &bot)
         };
@@ -285,7 +292,10 @@ fn also_answer(
         };
         let Ok(convs) = ws.convs() else { return };
         if let Err(e) = Assistant::answer_as(ws, convs, conv_id, text, &sink, &who) {
-            eprintln!("[threads] {} was asked something and could not answer: {e}", bot.name);
+            eprintln!(
+                "[threads] {} was asked something and could not answer: {e}",
+                bot.name
+            );
         }
     }
 }
@@ -304,9 +314,13 @@ pub fn answer_as_agents(
     already: &str,
 ) {
     let Ok(convs) = ws.convs() else { return };
-    let Ok(conv) = convs.load(conv_id) else { return };
+    let Ok(conv) = convs.load(conv_id) else {
+        return;
+    };
     for name in crate::aiw::mentions::mentions(text) {
-        let Some(agent) = ws.agent(&name) else { continue };
+        let Some(agent) = ws.agent(&name) else {
+            continue;
+        };
         if agent.id == already || agent.id == crate::aiw::assistant::ASSISTANT_ID {
             continue;
         }
@@ -333,7 +347,11 @@ pub async fn thread_wake(
     // The room's project has to be registered before a session can start in
     // it — the same step every thread command takes.
     if let Ok(conv) = workspace.convs()?.load(&conv_id) {
-        if let Some(n) = conv.project_id.as_deref().and_then(|p| p.parse::<i64>().ok()) {
+        if let Some(n) = conv
+            .project_id
+            .as_deref()
+            .and_then(|p| p.parse::<i64>().ok())
+        {
             register(&app, &workspace, n)?;
         }
     }
@@ -461,13 +479,7 @@ fn headlines(app: &tauri::AppHandle, ws: &Arc<Workspace>, node_id: i64) -> Strin
                     .into_iter()
                     .map(|s| {
                         deck.work(&s)
-                            .map(|w| {
-                                w.meta
-                                    .items
-                                    .iter()
-                                    .filter(|i| i.status != "done")
-                                    .count()
-                            })
+                            .map(|w| w.meta.items.iter().filter(|i| i.status != "done").count())
                             .unwrap_or(0)
                     })
                     .sum::<usize>()
@@ -494,7 +506,10 @@ fn node_persona(
         let conn = db.0.lock().unwrap();
         let mut on = crate::bots::managers_on(&conn, node_id);
         if on.len() == 1 {
-            (on.pop().map(|b| crate::bots::persona_in(&conn, ws, &b)), Vec::new())
+            (
+                on.pop().map(|b| crate::bots::persona_in(&conn, ws, &b)),
+                Vec::new(),
+            )
         } else {
             (None, on)
         }
@@ -528,8 +543,10 @@ fn node_persona(
             p
         }
     };
-    p.system
-        .push_str(&format!("\n\n# {node_name}\n\n{}", headlines(app, ws, node_id)));
+    p.system.push_str(&format!(
+        "\n\n# {node_name}\n\n{}",
+        headlines(app, ws, node_id)
+    ));
     Ok(p)
 }
 
@@ -544,7 +561,9 @@ pub fn node_thread(
     let name = {
         let db = app.try_state::<Db>().ok_or("no database")?;
         let conn = db.0.lock().unwrap();
-        db::node_by_id(&conn, node_id).map_err(|e| e.to_string())?.name
+        db::node_by_id(&conn, node_id)
+            .map_err(|e| e.to_string())?
+            .name
     };
     let conv = ws.convs()?.for_node(node_id, &name)?;
     seat_managers(&app, &workspace, &conv.id, node_id);
@@ -554,7 +573,9 @@ pub fn node_thread(
 /// Every manager working in a space sits in its thread, the room they share,
 /// so each can be seen there and reached with its handle.
 fn seat_managers(app: &tauri::AppHandle, ws: &Arc<Workspace>, conv_id: &str, node_id: i64) {
-    let Some(db) = app.try_state::<Db>() else { return };
+    let Some(db) = app.try_state::<Db>() else {
+        return;
+    };
     let bots = {
         let conn = db.0.lock().unwrap();
         crate::bots::managers_on(&conn, node_id)
@@ -581,7 +602,9 @@ pub async fn node_thread_send(
     let name = {
         let db = app.try_state::<Db>().ok_or("no database")?;
         let conn = db.0.lock().unwrap();
-        db::node_by_id(&conn, node_id).map_err(|e| e.to_string())?.name
+        db::node_by_id(&conn, node_id)
+            .map_err(|e| e.to_string())?
+            .name
     };
     let who = node_persona(&app, &workspace, node_id, &name)?;
     let conv_id = workspace.convs()?.for_node(node_id, &name)?.id;

@@ -137,13 +137,10 @@ pub fn board_from(
     let conflicts = workspace.conflicts.list(None, false);
     let mut out = Vec::new();
     for id in workspace.project_ids() {
-        let Some(project) = workspace.project(&id) else { continue };
-        let node_id: i64 = match id.parse() {
-            Ok(n) => n,
-            // The demo projects are named rather than numbered. They are still
-            // worth showing; they simply have no node behind them.
-            Err(_) => -1,
+        let Some(project) = workspace.project(&id) else {
+            continue;
         };
+        let node_id: i64 = id.parse().unwrap_or(-1);
         let deck = project.deck();
         for slug in deck.feature_slugs() {
             let f = deck.feature(&slug).ok();
@@ -152,9 +149,9 @@ pub fn board_from(
                 .iter()
                 .find(|b| b.node_id == node_id && b.feature.trim() == slug);
             let thread = convs.and_then(|c| {
-                c.list()
-                    .into_iter()
-                    .find(|x| x.feature.as_deref() == Some(&slug) && x.project_id.as_deref() == Some(&id))
+                c.list().into_iter().find(|x| {
+                    x.feature.as_deref() == Some(&slug) && x.project_id.as_deref() == Some(&id)
+                })
             });
             let on_it: Vec<String> = claims
                 .iter()
@@ -199,7 +196,10 @@ pub fn board_from(
                     .iter()
                     .filter(|c| c.project_id == id && c.feature_id.as_deref() == Some(&slug))
                     .count(),
-                last_said: thread.as_ref().map(|t| t.preview.clone()).filter(|p| !p.is_empty()),
+                last_said: thread
+                    .as_ref()
+                    .map(|t| t.preview.clone())
+                    .filter(|p| !p.is_empty()),
                 last_by: thread.as_ref().and_then(|t| t.preview_by.clone()),
                 last_at: thread.as_ref().map(|t| t.updated_at.clone()),
                 participants: thread.map(|t| t.participants).unwrap_or_default(),

@@ -78,7 +78,9 @@ fn now_millis() -> i64 {
 }
 
 fn open_session(conn: &Connection) -> Result<Option<Focus>, String> {
-    let sql = format!("SELECT {COLS} FROM focus_sessions WHERE ended_at IS NULL ORDER BY id DESC LIMIT 1");
+    let sql = format!(
+        "SELECT {COLS} FROM focus_sessions WHERE ended_at IS NULL ORDER BY id DESC LIMIT 1"
+    );
     let mut stmt = conn.prepare(&sql).map_err(err)?;
     let mut rows = stmt.query_map([], row).map_err(err)?;
     match rows.next() {
@@ -182,7 +184,10 @@ pub fn focus_end(app: tauri::AppHandle, db: tauri::State<Db>, held: i64) -> Resu
 
     let mins = ((now_millis() - ended.started_at) / 60_000).max(0);
     let detail = if held > 0 {
-        format!("{mins} min. {held} thing{} waited.", if held == 1 { "" } else { "s" })
+        format!(
+            "{mins} min. {held} thing{} waited.",
+            if held == 1 { "" } else { "s" }
+        )
     } else {
         format!("{mins} min. Nothing needed you.")
     };
@@ -243,8 +248,11 @@ mod tests {
     fn finds_the_open_one() {
         let conn = db();
         let a = start(&conn, "old", 1_000);
-        conn.execute("UPDATE focus_sessions SET ended_at = 2000 WHERE id = ?1", params![a])
-            .unwrap();
+        conn.execute(
+            "UPDATE focus_sessions SET ended_at = 2000 WHERE id = ?1",
+            params![a],
+        )
+        .unwrap();
         let b = start(&conn, "current", 3_000);
 
         let open = open_session(&conn).unwrap().expect("a session");
@@ -267,7 +275,11 @@ mod tests {
         start(&conn, "second", 3_000);
 
         let n: i64 = conn
-            .query_row("SELECT COUNT(*) FROM focus_sessions WHERE ended_at IS NULL", [], |r| r.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM focus_sessions WHERE ended_at IS NULL",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(n, 1);
     }
@@ -277,15 +289,22 @@ mod tests {
     fn recent_excludes_the_live_one() {
         let conn = db();
         let done = start(&conn, "done", 1_000);
-        conn.execute("UPDATE focus_sessions SET ended_at = 2000, held = 4 WHERE id = ?1", params![done])
-            .unwrap();
+        conn.execute(
+            "UPDATE focus_sessions SET ended_at = 2000, held = 4 WHERE id = ?1",
+            params![done],
+        )
+        .unwrap();
         start(&conn, "running", 3_000);
 
         let sql = format!(
             "SELECT {COLS} FROM focus_sessions WHERE ended_at IS NOT NULL ORDER BY ended_at DESC"
         );
         let mut stmt = conn.prepare(&sql).unwrap();
-        let rows: Vec<Focus> = stmt.query_map([], row).unwrap().map(|r| r.unwrap()).collect();
+        let rows: Vec<Focus> = stmt
+            .query_map([], row)
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
 
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].goal, "done");

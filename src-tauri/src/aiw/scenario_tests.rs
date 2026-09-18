@@ -8,12 +8,12 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use super::assistant::{ChatMessage, Colleague, Persona};
 use super::commands::{run_demo, seed_demo};
 use super::context::ContextService;
+use super::events::now_iso;
 use super::events::EventType;
 use super::runtime::{AgentRuntime, StartAgentCommand};
-use super::assistant::{ChatMessage, Colleague, Persona};
-use super::events::now_iso;
 use super::state::Workspace;
 use super::tools::{ToolCall, TOOL_FILES};
 
@@ -261,8 +261,15 @@ fn one_features_context_never_reaches_another() {
     )
     .unwrap();
 
-    let ctx =
-        ContextService::assemble(&deck, &deck.root, "tyrex", "offline-synchronisation", None, &[]).unwrap();
+    let ctx = ContextService::assemble(
+        &deck,
+        &deck.root,
+        "tyrex",
+        "offline-synchronisation",
+        None,
+        &[],
+    )
+    .unwrap();
     let prompt = ctx.to_prompt();
 
     assert!(
@@ -427,8 +434,15 @@ fn the_architects_decision_is_written_to_devdeck_and_reaches_later_context() {
     );
 
     // And a later agent actually receives it.
-    let ctx =
-        ContextService::assemble(&deck, &deck.root, "tyrex", "offline-synchronisation", None, &[]).unwrap();
+    let ctx = ContextService::assemble(
+        &deck,
+        &deck.root,
+        "tyrex",
+        "offline-synchronisation",
+        None,
+        &[],
+    )
+    .unwrap();
     assert!(
         ctx.to_prompt().contains("Server-authoritative"),
         "a recorded decision must reach the next agent's context"
@@ -911,12 +925,18 @@ fn always_allow_covers_that_call_and_only_that_call() {
         .execute(&w.bus, "qa", &scope, &other, None);
     human.join().unwrap();
 
-    assert!(!second.ok, "a grant for one file is not a grant for another");
+    assert!(
+        !second.ok,
+        "a grant for one file is not a grant for another"
+    );
     assert!(
         !tyrex.join("again.txt").exists(),
         "and nothing was written before the refusal"
     );
-    assert!(tyrex.join("approved.txt").exists(), "the granted one did run");
+    assert!(
+        tyrex.join("approved.txt").exists(),
+        "the granted one did run"
+    );
 }
 
 /// A grant is spent, and when it runs out the question comes back.
@@ -936,9 +956,7 @@ fn a_standing_grant_runs_out() {
         max_uses: 1,
         ..Default::default()
     };
-    w.grants()
-        .add(grant, super::tools::Access::Write)
-        .unwrap();
+    w.grants().add(grant, super::tools::Access::Write).unwrap();
 
     let first = w
         .project("tyrex")
@@ -1093,10 +1111,18 @@ fn a_feature_has_exactly_one_thread_however_often_it_is_opened() {
     let c = convs(&t);
 
     let a = c
-        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .for_feature(
+            "tyrex",
+            "offline-synchronisation",
+            "Offline synchronisation",
+        )
         .unwrap();
     let b = c
-        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .for_feature(
+            "tyrex",
+            "offline-synchronisation",
+            "Offline synchronisation",
+        )
         .unwrap();
     assert_eq!(a.id, b.id, "the room is found, not made again");
     assert_eq!(a.feature.as_deref(), Some("offline-synchronisation"));
@@ -1116,7 +1142,11 @@ fn a_mention_pulls_someone_in_and_moves_no_work() {
     w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
     let c = convs(&t);
     let conv = c
-        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .for_feature(
+            "tyrex",
+            "offline-synchronisation",
+            "Offline synchronisation",
+        )
         .unwrap();
 
     let reply = Assistant::send(&w, &c, &conv.id, "@qa what did the suite say?", &quiet).unwrap();
@@ -1153,7 +1183,11 @@ fn handing_work_over_is_refused_when_the_speaker_may_not_delegate() {
         .unwrap();
     let c = convs(&t);
     let conv = c
-        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .for_feature(
+            "tyrex",
+            "offline-synchronisation",
+            "Offline synchronisation",
+        )
         .unwrap();
 
     Assistant::send(&w, &c, &conv.id, "@dev-a take \"Sync status UI\"", &quiet).unwrap();
@@ -1164,12 +1198,13 @@ fn handing_work_over_is_refused_when_the_speaker_may_not_delegate() {
         .iter()
         .find(|m| m.tool.as_deref() == Some("handover"))
         .expect("the attempt is recorded either way");
-    assert_eq!(note.ok, Some(false), "it must not have moved: {}", note.text);
-    assert!(
-        note.text.contains("gate"),
-        "and it says why: {}",
+    assert_eq!(
+        note.ok,
+        Some(false),
+        "it must not have moved: {}",
         note.text
     );
+    assert!(note.text.contains("gate"), "and it says why: {}", note.text);
     assert!(w.claims_for(Some("tyrex"), true).is_empty());
 }
 
@@ -1184,7 +1219,11 @@ fn handing_work_over_moves_the_claim_and_the_agent_reports_back() {
     w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
     let c = convs(&t);
     let conv = c
-        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .for_feature(
+            "tyrex",
+            "offline-synchronisation",
+            "Offline synchronisation",
+        )
         .unwrap();
 
     let reply =
@@ -1247,7 +1286,11 @@ fn a_bot_with_no_agent_can_talk_in_a_room_but_cannot_move_work() {
     w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
     let c = convs(&t);
     let conv = c
-        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .for_feature(
+            "tyrex",
+            "offline-synchronisation",
+            "Offline synchronisation",
+        )
         .unwrap();
 
     // Exactly what `bots::persona` builds for a bot that names no agent: an
@@ -1302,7 +1345,11 @@ fn a_context_part_switched_off_is_not_sent() {
     w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
     let c = convs(&t);
     let conv = c
-        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .for_feature(
+            "tyrex",
+            "offline-synchronisation",
+            "Offline synchronisation",
+        )
         .unwrap();
 
     let before = Assistant::context(&w, &c, &c.load(&conv.id).unwrap());
@@ -1312,7 +1359,9 @@ fn a_context_part_switched_off_is_not_sent() {
     );
     let parts = Assistant::context_parts(&w, &c, &c.load(&conv.id).unwrap());
     assert!(
-        parts.iter().any(|p| p.key == "project" && p.on && p.tokens > 0),
+        parts
+            .iter()
+            .any(|p| p.key == "project" && p.on && p.tokens > 0),
         "and the breakdown names it: {parts:?}"
     );
 
@@ -1341,12 +1390,18 @@ fn an_edited_context_part_is_sent_as_written() {
     w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
     let c = convs(&t);
     let conv = c
-        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .for_feature(
+            "tyrex",
+            "offline-synchronisation",
+            "Offline synchronisation",
+        )
         .unwrap();
 
     c.update_meta(&conv.id, |m| {
-        m.context_edits
-            .insert("project".into(), "## Only this\n\nNothing else matters here.".into());
+        m.context_edits.insert(
+            "project".into(),
+            "## Only this\n\nNothing else matters here.".into(),
+        );
     })
     .unwrap();
 
@@ -1373,7 +1428,11 @@ fn a_tool_switched_off_is_not_offered_in_that_room() {
     w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
     let c = convs(&t);
     let conv = c
-        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .for_feature(
+            "tyrex",
+            "offline-synchronisation",
+            "Offline synchronisation",
+        )
         .unwrap();
 
     let persona = Persona::assistant("You coordinate.");
@@ -1450,7 +1509,11 @@ fn a_failed_turn_still_reports_that_it_ended() {
 
     let c = convs(&t);
     let conv = c
-        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .for_feature(
+            "tyrex",
+            "offline-synchronisation",
+            "Offline synchronisation",
+        )
         .unwrap();
 
     let voice = Persona {
@@ -1512,7 +1575,11 @@ fn a_manager_can_take_an_item_itself() {
     w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
     let c = convs(&t);
     let conv = c
-        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .for_feature(
+            "tyrex",
+            "offline-synchronisation",
+            "Offline synchronisation",
+        )
         .unwrap();
 
     // A bot that runs as dev-a, whose team is somebody else entirely.
@@ -1528,7 +1595,15 @@ fn a_manager_can_take_an_item_itself() {
         home: None,
         talk_only: false,
     };
-    Assistant::send_as(&w, &c, &conv.id, "@me take \"Sync status UI\"", &quiet, &voice).unwrap();
+    Assistant::send_as(
+        &w,
+        &c,
+        &conv.id,
+        "@me take \"Sync status UI\"",
+        &quiet,
+        &voice,
+    )
+    .unwrap();
 
     let saved = c.load(&conv.id).unwrap();
     let note = saved
@@ -1559,7 +1634,11 @@ fn a_manager_can_pass_an_item_to_another_manager() {
     w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
     let c = convs(&t);
     let conv = c
-        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .for_feature(
+            "tyrex",
+            "offline-synchronisation",
+            "Offline synchronisation",
+        )
         .unwrap();
 
     let voice = Persona {
@@ -1642,7 +1721,11 @@ fn passing_to_a_manager_with_no_plan_is_refused_out_loud() {
     w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
     let c = convs(&t);
     let conv = c
-        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .for_feature(
+            "tyrex",
+            "offline-synchronisation",
+            "Offline synchronisation",
+        )
         .unwrap();
 
     let voice = Persona {
@@ -1663,8 +1746,15 @@ fn passing_to_a_manager_with_no_plan_is_refused_out_loud() {
         home: None,
         talk_only: false,
     };
-    Assistant::send_as(&w, &c, &conv.id, "@assetx take \"Retry backoff\"", &quiet, &voice)
-        .unwrap();
+    Assistant::send_as(
+        &w,
+        &c,
+        &conv.id,
+        "@assetx take \"Retry backoff\"",
+        &quiet,
+        &voice,
+    )
+    .unwrap();
 
     let saved = c.load(&conv.id).unwrap();
     let note = saved
@@ -1690,7 +1780,11 @@ fn two_bots_hold_a_conversation_in_one_feature_thread() {
     w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
     let c = convs(&t);
     let conv = c
-        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .for_feature(
+            "tyrex",
+            "offline-synchronisation",
+            "Offline synchronisation",
+        )
         .unwrap();
 
     let bot = |id: &str, name: &str| Persona {
@@ -1767,7 +1861,11 @@ fn a_message_that_arrives_mid_turn_survives_the_reply() {
     w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
     let c = convs(&t);
     let conv = c
-        .for_feature("tyrex", "offline-synchronisation", "Offline synchronisation")
+        .for_feature(
+            "tyrex",
+            "offline-synchronisation",
+            "Offline synchronisation",
+        )
         .unwrap();
 
     // Something lands from elsewhere while the turn below is in flight. The
@@ -1796,7 +1894,11 @@ fn a_message_that_arrives_mid_turn_survives_the_reply() {
             .iter()
             .any(|m| m.by.as_deref() == Some("dev-a")),
         "the receipt that arrived mid-turn is still there: {:?}",
-        saved.messages.iter().map(|m| m.text.clone()).collect::<Vec<_>>()
+        saved
+            .messages
+            .iter()
+            .map(|m| m.text.clone())
+            .collect::<Vec<_>>()
     );
     assert!(
         saved.messages.iter().any(|m| m.from == Speaker::User),
@@ -2255,7 +2357,10 @@ fn a_saved_mcp_grant_is_restored_at_boot_like_any_other() {
     let w = ws();
     w.restore_permissions(&[("assistant".into(), "mcp.memory".into(), "approval".into())]);
     assert!(
-        matches!(w.permission_matrix().get("assistant", "mcp.memory"), Permission::Approval),
+        matches!(
+            w.permission_matrix().get("assistant", "mcp.memory"),
+            Permission::Approval
+        ),
         "the grant is back after a restart, not silently dropped"
     );
 
@@ -2268,7 +2373,10 @@ fn a_saved_mcp_grant_is_restored_at_boot_like_any_other() {
         &w.mcp,
         &w.mcp_servers(),
     );
-    assert!(defs.is_empty(), "no registered server, so nothing is offered: {defs:?}");
+    assert!(
+        defs.is_empty(),
+        "no registered server, so nothing is offered: {defs:?}"
+    );
 }
 
 /// Restoring must actually reach the live tool services, not just the agent
@@ -2358,7 +2466,12 @@ fn syncing_adopts_every_project_and_forgets_the_ones_that_went() {
 
     // Delete one in the Explorer and it must leave here too. A project that
     // lingered would be the split registry all over again.
-    let changed = w.sync_projects(&[("7".into(), "TyreX".into(), tyrex.clone().clone(), tyrex.clone())]);
+    let changed = w.sync_projects(&[(
+        "7".into(),
+        "TyreX".into(),
+        tyrex.clone().clone(),
+        tyrex.clone(),
+    )]);
     assert_eq!(changed, 1, "one eviction, no re-registration");
     assert!(w.project("7").is_some());
     assert!(
@@ -2375,7 +2488,12 @@ fn an_unchanged_project_keeps_its_handle() {
     let (tyrex, _) = seed_demo(&t.0).unwrap();
     let w = ws();
 
-    let wanted = vec![("7".to_string(), "TyreX".to_string(), tyrex.clone(), tyrex.clone())];
+    let wanted = vec![(
+        "7".to_string(),
+        "TyreX".to_string(),
+        tyrex.clone(),
+        tyrex.clone(),
+    )];
     w.sync_projects(&wanted);
     let first = w.project("7").unwrap();
 
@@ -2391,7 +2509,12 @@ fn an_unchanged_project_keeps_its_handle() {
     );
 
     // A rename is a real change and does rebuild.
-    let renamed = vec![("7".to_string(), "Tyre Exchange".to_string(), tyrex.clone(), tyrex)];
+    let renamed = vec![(
+        "7".to_string(),
+        "Tyre Exchange".to_string(),
+        tyrex.clone(),
+        tyrex,
+    )];
     assert_eq!(w.sync_projects(&renamed), 1);
     assert_eq!(w.project("7").unwrap().name, "Tyre Exchange");
 }
@@ -2406,7 +2529,12 @@ fn a_moved_project_gets_a_new_root() {
 
     w.sync_projects(&[("7".into(), "TyreX".into(), tyrex.clone(), tyrex)]);
     assert_eq!(
-        w.sync_projects(&[("7".into(), "TyreX".into(), assetx.clone().clone(), assetx.clone())]),
+        w.sync_projects(&[(
+            "7".into(),
+            "TyreX".into(),
+            assetx.clone().clone(),
+            assetx.clone()
+        )]),
         1
     );
     assert_eq!(w.project("7").unwrap().root, assetx);
@@ -2421,7 +2549,12 @@ fn re_identifying_a_project_keeps_everything_on_disk() {
     let (tyrex, _) = seed_demo(&t.0).unwrap();
     let w = ws();
 
-    w.sync_projects(&[("tyrex".into(), "TyreX".into(), tyrex.clone().clone(), tyrex.clone())]);
+    w.sync_projects(&[(
+        "tyrex".into(),
+        "TyreX".into(),
+        tyrex.clone().clone(),
+        tyrex.clone(),
+    )]);
     let before = w.project("tyrex").unwrap().deck().feature_slugs();
     assert!(!before.is_empty(), "the fixture has features");
 
@@ -2474,7 +2607,10 @@ fn an_unattended_call_is_refused_at_once_rather_than_waiting() {
     // and a person reads it in the log.
     let why = r.error.unwrap();
     assert!(why.contains("nobody to ask"), "unhelpful: {why}");
-    assert!(why.contains("standing grant"), "it does not say what would fix it: {why}");
+    assert!(
+        why.contains("standing grant"),
+        "it does not say what would fix it: {why}"
+    );
 }
 
 /// The other half: a standing grant is exactly what lets an unattended run do
@@ -2520,7 +2656,10 @@ fn an_unattended_run_does_what_it_was_granted_and_nothing_else() {
         .unwrap()
         .tools
         .execute(&w.bus, "qa", &scope, &other, None);
-    assert!(!refused.ok, "a grant for one file is not a grant for another");
+    assert!(
+        !refused.ok,
+        "a grant for one file is not a grant for another"
+    );
     assert!(started.elapsed() < std::time::Duration::from_secs(2));
     assert!(!tyrex.join("elsewhere.txt").exists());
 
@@ -2563,11 +2702,18 @@ fn an_unattended_run_counts_what_it_was_refused() {
         .tools
         .execute(&w.bus, "qa", &scope, &call, None);
     assert!(!first.ok);
-    assert!(first.denied, "a refusal is flagged, not inferred from the message");
+    assert!(
+        first.denied,
+        "a refusal is flagged, not inferred from the message"
+    );
 
     // A failure that is not a refusal is not flagged as one — otherwise the
     // count would quietly include every broken command.
-    let bad = ToolCall::new(TOOL_FILES, "read", serde_json::json!({ "path": "nope.txt" }));
+    let bad = ToolCall::new(
+        TOOL_FILES,
+        "read",
+        serde_json::json!({ "path": "nope.txt" }),
+    );
     w.set_permission("qa", TOOL_FILES, "full").unwrap();
     let missing = w
         .project("tyrex")
@@ -2643,11 +2789,17 @@ fn a_delegated_sessions_commentary_reaches_the_log() {
     let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let sink = seen.clone();
     ws.set_log_sink(Box::new(move |name, stream, line| {
-        sink.lock().unwrap().push((name.to_string(), stream.to_string(), line));
+        sink.lock()
+            .unwrap()
+            .push((name.to_string(), stream.to_string(), line));
     }));
 
     ws.log_line("dev-a · claude-code", "stdout", "· Edit".into());
-    ws.log_line("dev-a · claude-code", "stderr", "could not reach the API".into());
+    ws.log_line(
+        "dev-a · claude-code",
+        "stderr",
+        "could not reach the API".into(),
+    );
 
     let got = seen.lock().unwrap().clone();
     assert_eq!(got.len(), 2);
@@ -2752,7 +2904,10 @@ fn until<T>(what: &str, mut f: impl FnMut() -> Option<T>) -> T {
         if let Some(v) = f() {
             return v;
         }
-        assert!(std::time::Instant::now() < deadline, "never happened: {what}");
+        assert!(
+            std::time::Instant::now() < deadline,
+            "never happened: {what}"
+        );
         std::thread::sleep(std::time::Duration::from_millis(150));
     }
 }
@@ -2789,7 +2944,8 @@ fn a_goal_a_manager_and_its_team_move_work_and_the_board_follows() {
 
     // --- Beat 1: the manager puts one of its team on an item ---------------
     let conv = c.for_feature("7", slug, "Offline synchronisation").unwrap();
-    let reply = Assistant::send(&w, &c, &conv.id, "@dev-a take \"Sync status UI\"", &quiet).unwrap();
+    let reply =
+        Assistant::send(&w, &c, &conv.id, "@dev-a take \"Sync status UI\"", &quiet).unwrap();
     assert_eq!(reply.delegated.len(), 1, "a session started: {reply:?}");
 
     // The board sees the claim, not just the runtime.
@@ -2810,7 +2966,11 @@ fn a_goal_a_manager_and_its_team_move_work_and_the_board_follows() {
             .into_iter()
             .find(|m| m.tool.as_deref() == Some("session"))
     });
-    assert_eq!(receipt.by.as_deref(), Some("dev-a"), "the receipt is signed");
+    assert_eq!(
+        receipt.by.as_deref(),
+        Some("dev-a"),
+        "the receipt is signed"
+    );
 
     // --- Beat 3: a second agent, pulled in for free ------------------------
     let before = c.load(&conv.id).unwrap().messages.len();
@@ -2916,7 +3076,10 @@ fn a_bot_that_needs_a_person_shows_as_waiting_on_the_board() {
     };
 
     let req = wait_for_prompt(&w);
-    assert_eq!(req.agent_id, "dev-a", "the board's claim is about this agent");
+    assert_eq!(
+        req.agent_id, "dev-a",
+        "the board's claim is about this agent"
+    );
 
     // The board is what the Team page draws, so this is the assertion that
     // matters: a person can see they are being waited on without opening the
@@ -2973,13 +3136,24 @@ fn an_mcp_call_from_an_agent_with_no_grant_is_refused_before_anything_starts() {
 
     let p = w.project("7").unwrap();
     let scope = super::events::EventScope::feature("7", "offline-synchronisation");
-    let call = ToolCall::new("mcp.fetch", "fetch", serde_json::json!({"url": "https://example.invalid"}));
+    let call = ToolCall::new(
+        "mcp.fetch",
+        "fetch",
+        serde_json::json!({"url": "https://example.invalid"}),
+    );
 
     let r = p.tools.execute(&w.bus, "dev-a", &scope, &call, None);
     assert!(!r.ok, "no grant, no call");
-    assert!(r.denied, "and it is a refusal, not a failure to run: {:?}", r.error);
     assert!(
-        !r.error.clone().unwrap_or_default().contains("no-such-program"),
+        r.denied,
+        "and it is a refusal, not a failure to run: {:?}",
+        r.error
+    );
+    assert!(
+        !r.error
+            .clone()
+            .unwrap_or_default()
+            .contains("no-such-program"),
         "the matrix answered before anything was spawned: {:?}",
         r.error
     );
@@ -3003,7 +3177,10 @@ fn an_mcp_tool_that_is_not_installed_says_so_rather_than_unknown_tool() {
     assert!(!r.ok);
     let e = r.error.unwrap_or_default();
     assert!(e.contains("not installed"), "{e}");
-    assert!(e.contains("Community"), "and it says where to get it back: {e}");
+    assert!(
+        e.contains("Community"),
+        "and it says where to get it back: {e}"
+    );
 }
 
 #[test]
@@ -3117,7 +3294,11 @@ process.stdin.on("data", (d) => { buf += d; let i;
 
     // 1. Installed, not granted. Refused — and nothing was started.
     let before = p.tools.execute(&w.bus, "dev-a", &scope, &call, None);
-    assert!(before.denied, "installing is not granting: {:?}", before.error);
+    assert!(
+        before.denied,
+        "installing is not granting: {:?}",
+        before.error
+    );
     assert!(
         w.mcp.statuses().is_empty(),
         "and a refusal starts no process"
@@ -3197,7 +3378,12 @@ impl crate::aiw::provider::LLMProvider for AsksForNotes {
             // The wire name the model actually sees: tool id, underscore,
             // action. Asserting a dotted name would have quietly matched
             // nothing and turned this check into a tautology.
-            .push(request.tools.iter().any(|t| t.name == crate::aiw::tools::wire_name("mcp.notes", "remember")));
+            .push(
+                request
+                    .tools
+                    .iter()
+                    .any(|t| t.name == crate::aiw::tools::wire_name("mcp.notes", "remember")),
+            );
         for o in &request.observations {
             self.seen.lock().unwrap().push(format!("{o:?}"));
         }
@@ -3299,7 +3485,8 @@ process.stdin.on("data", (d) => { buf += d; let i;
         seen: seen.clone(),
         offered: offered.clone(),
     }));
-    w.set_agent_provider("dev-a", "scripted", "scripted-1").unwrap();
+    w.set_agent_provider("dev-a", "scripted", "scripted-1")
+        .unwrap();
 
     let cmd = crate::aiw::runtime::StartAgentCommand {
         project_id: "7".into(),
@@ -3344,7 +3531,10 @@ process.stdin.on("data", (d) => { buf += d; let i;
     // The transcript records that a tool ran, by name.
     let session = w.session(&done.session_id).unwrap();
     let text = format!("{:?}", session.transcript);
-    assert!(text.contains("mcp.notes.remember"), "the agent called it: {text}");
+    assert!(
+        text.contains("mcp.notes.remember"),
+        "the agent called it: {text}"
+    );
 
     // And the agent was handed the server's own words back on the next turn,
     // which is what "called by an agent" has to mean to be worth anything.

@@ -263,89 +263,91 @@ fn worth_saying(conn: &rusqlite::Connection, title: &str, detail: &str, at: i64)
 /// doing something useful, and failing to log must never fail the turn.
 pub fn record(app: &tauri::AppHandle, c: crate::aiw::state::CallRecord) {
     use tauri::Manager;
-    let Some(db) = app.try_state::<Db>() else { return };
+    let Some(db) = app.try_state::<Db>() else {
+        return;
+    };
     // What the rest of the app should be told, decided while the lock is held
     // and acted on after it is dropped: `activity::record` takes the same lock,
     // and calling it from in here freezes the window with no error anywhere.
     let mut tell: Option<(String, String, String)> = None;
     {
-    let Ok(conn) = db.0.lock() else { return };
+        let Ok(conn) = db.0.lock() else { return };
 
-    let (prompt, prompt_len) = head(&c.prompt);
-    let (reply, reply_len) = head(&c.reply);
-    let u = c.usage;
-    let res = conn.execute(
-        "INSERT INTO llm_calls (at, speaker, speaker_name, kind, runs_as, provider, model, \
+        let (prompt, prompt_len) = head(&c.prompt);
+        let (reply, reply_len) = head(&c.reply);
+        let u = c.usage;
+        let res = conn.execute(
+            "INSERT INTO llm_calls (at, speaker, speaker_name, kind, runs_as, provider, model, \
          project_id, project_name, feature, conversation, session, turn, ms, ok, error, prompt, \
          prompt_len, reply, reply_len, tools, input_tokens, output_tokens, cache_read_tokens, \
          cache_write_tokens) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,\
          ?18,?19,?20,?21,?22,?23,?24,?25)",
-        params![
-            c.at,
-            c.speaker,
-            c.speaker_name,
-            c.kind,
-            c.runs_as,
-            c.provider,
-            c.model,
-            c.project_id,
-            c.project_name,
-            c.feature,
-            c.conversation,
-            c.session,
-            c.turn as i64,
-            c.ms,
-            c.ok as i64,
-            c.error,
-            prompt,
-            prompt_len,
-            reply,
-            reply_len,
-            c.tools as i64,
-            u.map(|x| x.input as i64),
-            u.map(|x| x.output as i64),
-            u.map(|x| x.cache_read as i64),
-            u.map(|x| x.cache_write as i64),
-        ],
-    );
-    if let Err(e) = res {
-        eprintln!("[calls] could not record a model call: {e}");
-    }
-    // A failed turn goes to the log as well as the table. The table is where
-    // you look when you already suspect the model; the log is where you look
-    // when you only know something went wrong.
-    if !c.ok {
-        log_line(
-            app,
-            "stderr",
-            format!(
-                "{} ({} · {}) failed after {}ms: {}",
-                c.speaker_name, c.provider, c.model, c.ms, c.error
-            ),
+            params![
+                c.at,
+                c.speaker,
+                c.speaker_name,
+                c.kind,
+                c.runs_as,
+                c.provider,
+                c.model,
+                c.project_id,
+                c.project_name,
+                c.feature,
+                c.conversation,
+                c.session,
+                c.turn as i64,
+                c.ms,
+                c.ok as i64,
+                c.error,
+                prompt,
+                prompt_len,
+                reply,
+                reply_len,
+                c.tools as i64,
+                u.map(|x| x.input as i64),
+                u.map(|x| x.output as i64),
+                u.map(|x| x.cache_read as i64),
+                u.map(|x| x.cache_write as i64),
+            ],
         );
-
-        // And it goes where you actually look. A failed turn used to live in
-        // the calls table and the log and nowhere else, so the only way to
-        // find out an agent had stopped was to suspect it first and go
-        // digging. It is an activity now, which means the Inbox shows it in
-        // red, the rail counts it, and Home says so — none of which needed a
-        // new stream, because everything that went wrong already flows
-        // through this one.
-        let title = format!("{} could not finish", c.speaker_name);
-        let detail = if c.feature.is_empty() {
-            format!("{} · {} — {}", c.provider, c.model, c.error)
-        } else {
-            format!("{} · {} · {} — {}", c.feature, c.provider, c.model, c.error)
-        };
-        // One row per problem, not one per retry. A bot whose model is cold
-        // fails on every wake, and an inbox that fills up with the same
-        // sentence is one you stop opening — which is how the next, different
-        // failure gets missed.
-        if worth_saying(&conn, &title, &detail, c.at) {
-            tell = Some((title, detail, c.project_name.clone()));
+        if let Err(e) = res {
+            eprintln!("[calls] could not record a model call: {e}");
         }
-    }
-    let _ = conn.execute(
+        // A failed turn goes to the log as well as the table. The table is where
+        // you look when you already suspect the model; the log is where you look
+        // when you only know something went wrong.
+        if !c.ok {
+            log_line(
+                app,
+                "stderr",
+                format!(
+                    "{} ({} · {}) failed after {}ms: {}",
+                    c.speaker_name, c.provider, c.model, c.ms, c.error
+                ),
+            );
+
+            // And it goes where you actually look. A failed turn used to live in
+            // the calls table and the log and nowhere else, so the only way to
+            // find out an agent had stopped was to suspect it first and go
+            // digging. It is an activity now, which means the Inbox shows it in
+            // red, the rail counts it, and Home says so — none of which needed a
+            // new stream, because everything that went wrong already flows
+            // through this one.
+            let title = format!("{} could not finish", c.speaker_name);
+            let detail = if c.feature.is_empty() {
+                format!("{} · {} — {}", c.provider, c.model, c.error)
+            } else {
+                format!("{} · {} · {} — {}", c.feature, c.provider, c.model, c.error)
+            };
+            // One row per problem, not one per retry. A bot whose model is cold
+            // fails on every wake, and an inbox that fills up with the same
+            // sentence is one you stop opening — which is how the next, different
+            // failure gets missed.
+            if worth_saying(&conn, &title, &detail, c.at) {
+                tell = Some((title, detail, c.project_name.clone()));
+            }
+        }
+        let _ = conn.execute(
         "DELETE FROM llm_calls WHERE id NOT IN (SELECT id FROM llm_calls ORDER BY at DESC LIMIT ?1)",
         params![KEEP],
     );
@@ -369,11 +371,17 @@ pub fn record(app: &tauri::AppHandle, c: crate::aiw::state::CallRecord) {
 pub fn tell_the_missed_failures(app: &tauri::AppHandle) {
     use tauri::Manager;
     const A_DAY: i64 = 24 * 60 * 60_000;
-    let Some(db) = app.try_state::<Db>() else { return };
+    let Some(db) = app.try_state::<Db>() else {
+        return;
+    };
 
     let told: Vec<(String, String, i64)> = {
         let Ok(conn) = db.0.lock() else { return };
-        if crate::db::setting_get_conn(&conn, "calls.told_missed").ok().flatten().is_some() {
+        if crate::db::setting_get_conn(&conn, "calls.told_missed")
+            .ok()
+            .flatten()
+            .is_some()
+        {
             return;
         }
         let now = std::time::SystemTime::now()
@@ -426,7 +434,10 @@ pub fn tell_the_missed_failures(app: &tauri::AppHandle) {
     // No event: this runs at startup, before anything has read the stream, and
     // every reader asks for it on mount.
     if !told.is_empty() {
-        eprintln!("[calls] surfaced {} failure(s) that were never reported", told.len());
+        eprintln!(
+            "[calls] surfaced {} failure(s) that were never reported",
+            told.len()
+        );
     }
 }
 
@@ -596,7 +607,12 @@ mod tests {
     fn a_different_reason_is_a_different_failure() {
         let c = db();
         said(&c, T, D, NOW - 60_000);
-        assert!(worth_saying(&c, T, "openai-compatible · nvidia/nemotron — 401 no key", NOW));
+        assert!(worth_saying(
+            &c,
+            T,
+            "openai-compatible · nvidia/nemotron — 401 no key",
+            NOW
+        ));
     }
 
     #[test]

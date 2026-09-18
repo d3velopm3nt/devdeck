@@ -232,7 +232,9 @@ pub struct InterviewView {
 pub fn interview(mind: &Mind, node_id: i64) -> MindResult<InterviewView> {
     let doc = mind.read(node_id)?;
     let seen: std::collections::HashSet<usize> = doc.meta.answers.iter().map(|a| a.step).collect();
-    let step = (0..SCRIPT.len()).find(|i| !seen.contains(i)).unwrap_or(SCRIPT.len());
+    let step = (0..SCRIPT.len())
+        .find(|i| !seen.contains(i))
+        .unwrap_or(SCRIPT.len());
     Ok(InterviewView {
         script: SCRIPT.iter().map(|s| s.to_string()).collect(),
         answers: doc.meta.answers,
@@ -296,8 +298,12 @@ pub fn answer_question(
 /// another way stays — you did not ask to forget that.
 pub fn reset_interview(mind: &Mind, node_id: i64) -> MindResult<InterviewView> {
     let mut doc = mind.read(node_id)?;
-    let from_interview: Vec<String> =
-        doc.meta.answers.iter().map(|a| format!("a{}", a.step)).collect();
+    let from_interview: Vec<String> = doc
+        .meta
+        .answers
+        .iter()
+        .map(|a| format!("a{}", a.step))
+        .collect();
     doc.meta.answers.clear();
     doc.meta.interview_done = false;
     doc.meta.beliefs.retain(|b| !from_interview.contains(&b.id));
@@ -407,7 +413,13 @@ pub fn drop_stale(mind: &Mind, node_id: i64, now_ms: i64) -> MindResult<usize> {
     Ok(gone)
 }
 
-pub fn record_tool(mind: &Mind, node_id: i64, id: &str, response: &str, now_iso: &str) -> MindResult<()> {
+pub fn record_tool(
+    mind: &Mind,
+    node_id: i64,
+    id: &str,
+    response: &str,
+    now_iso: &str,
+) -> MindResult<()> {
     if response != "added" && response != "declined" {
         return Err("A tool is either added or declined.".into());
     }
@@ -443,7 +455,11 @@ pub fn answer_suggestion(
         response: response.to_string(),
         why: why.trim().to_string(),
         at: now_iso.to_string(),
-        until: if response == "snoozed" { now_ms + 7 * 86_400_000 } else { 0 },
+        until: if response == "snoozed" {
+            now_ms + 7 * 86_400_000
+        } else {
+            0
+        },
     });
 
     if response == "wrong" && !why.trim().is_empty() {
@@ -477,11 +493,11 @@ pub fn stale(b: &Belief, now_ms: i64) -> bool {
     if b.pinned || b.source == "you" || b.source == "corrected" {
         return false;
     }
-    let created = b
-        .last_used
-        .is_empty()
-        .then(|| b.created_at.as_str())
-        .unwrap_or(b.last_used.as_str());
+    let created = if b.last_used.is_empty() {
+        b.created_at.as_str()
+    } else {
+        b.last_used.as_str()
+    };
     let Ok(t) = chrono::DateTime::parse_from_rfc3339(created) else {
         return false;
     };
@@ -537,7 +553,10 @@ pub fn derive(sig: &Signals) -> Vec<Suggestion> {
     if seen < SCRIPT.len() {
         out.push(Suggestion {
             id: "interview".into(),
-            title: format!("Finish telling it about this space — {} left", SCRIPT.len() - seen),
+            title: format!(
+                "Finish telling it about this space — {} left",
+                SCRIPT.len() - seen
+            ),
             evidence: format!(
                 "It has {} of {} answers. Until it has them it is guessing at when to speak up.",
                 sig.answered,
@@ -605,7 +624,10 @@ pub fn derive(sig: &Signals) -> Vec<Suggestion> {
         out.push(Suggestion {
             id: "finished".into(),
             title: "Every step is done".into(),
-            evidence: format!("All {} of them. Time for a new goal, or a rest.", sig.work.len()),
+            evidence: format!(
+                "All {} of them. Time for a new goal, or a rest.",
+                sig.work.len()
+            ),
             kind: "goal".into(),
             tool_id: String::new(),
         });
@@ -830,7 +852,10 @@ mod tests {
 
         let later = filter_answered(all(), &answers, 2_000);
         assert_eq!(later.len(), 1);
-        assert_eq!(later[0].id, "b", "the snooze came back; the refusal did not");
+        assert_eq!(
+            later[0].id, "b",
+            "the snooze came back; the refusal did not"
+        );
     }
 
     /// The rule that keeps memory honest: it may forget what it noticed, never
@@ -920,7 +945,10 @@ mod tests {
         assert!(mind.read(8).unwrap().meta.beliefs.is_empty());
 
         mind.forget(7);
-        assert!(mind.read(7).unwrap().meta.beliefs.is_empty(), "deleting a bot forgets you");
+        assert!(
+            mind.read(7).unwrap().meta.beliefs.is_empty(),
+            "deleting a bot forgets you"
+        );
 
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -959,7 +987,9 @@ beliefs:
         assert!(beliefs(&mind, 9, 0).is_err());
         assert!(interview(&mind, 9).is_err());
         assert!(
-            std::fs::read_to_string(dir.join("mind.md")).unwrap().contains("he said"),
+            std::fs::read_to_string(dir.join("mind.md"))
+                .unwrap()
+                .contains("he said"),
             "the file on disk is untouched"
         );
 

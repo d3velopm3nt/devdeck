@@ -438,10 +438,14 @@ impl ContextService {
             let body = known
                 .iter()
                 .take(60)
-                .map(|(name, body)| format!("- {name}: {}", body.lines().next().unwrap_or_default()))
+                .map(|(name, body)| {
+                    format!("- {name}: {}", body.lines().next().unwrap_or_default())
+                })
                 .collect::<Vec<_>>()
-                .join("
-");
+                .join(
+                    "
+",
+                );
             sections.push(ContextSection {
                 key: "knowledge".into(),
                 title: "What is known about this space".into(),
@@ -839,7 +843,11 @@ mod tests {
         let ctx = ContextService::assemble(&deck, &deck.root, "tyrex", &f, None, &[]).unwrap();
         let known = ctx.section("knowledge").expect("a knowledge section");
         assert!(known.body.contains("pays at 45"), "{}", known.body);
-        assert_eq!(known.inclusion, Inclusion::Inherited, "true for every feature, like a rule");
+        assert_eq!(
+            known.inclusion,
+            Inclusion::Inherited,
+            "true for every feature, like a rule"
+        );
     }
 
     #[test]
@@ -973,7 +981,8 @@ mod tests {
         )
         .unwrap();
 
-        let ctx = ContextService::assemble(&deck, &deck.root, "tyrex", &f, Some("wi-1"), &[]).unwrap();
+        let ctx =
+            ContextService::assemble(&deck, &deck.root, "tyrex", &f, Some("wi-1"), &[]).unwrap();
         let prompt = ctx.to_prompt();
         assert!(prompt.contains("Conflict resolution"));
         assert!(

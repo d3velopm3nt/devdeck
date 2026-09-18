@@ -142,7 +142,9 @@ fn parse(handle: &str, raw: &str) -> Manager {
         Some(after) => match after.find("\n---") {
             Some(end) => {
                 for line in after[..end].lines() {
-                    let Some((k, v)) = line.split_once(':') else { continue };
+                    let Some((k, v)) = line.split_once(':') else {
+                        continue;
+                    };
                     let v = v.trim().trim_matches('"').to_string();
                     match k.trim() {
                         "name" => m.name = v,
@@ -221,7 +223,11 @@ fn serialise(m: &Manager) -> String {
     if !m.businesses.is_empty() {
         out.push_str(&format!(
             "businesses: [{}]\n",
-            m.businesses.iter().map(|b| b.to_string()).collect::<Vec<_>>().join(", ")
+            m.businesses
+                .iter()
+                .map(|b| b.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
         ));
     }
     out.push_str("---\n");
@@ -236,7 +242,9 @@ fn serialise(m: &Manager) -> String {
 /// Everyone, by handle. An unreadable file is skipped rather than fatal: one
 /// bad manager must not empty the team.
 pub fn all(conn: &Connection) -> Vec<Manager> {
-    let Some(d) = dir(conn) else { return Vec::new() };
+    let Some(d) = dir(conn) else {
+        return Vec::new();
+    };
     let Ok(entries) = fs::read_dir(&d) else {
         return Vec::new();
     };
@@ -249,7 +257,7 @@ pub fn all(conn: &Connection) -> Vec<Manager> {
             Some(parse(&handle, &raw))
         })
         .collect();
-    out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    out.sort_by_key(|a| a.name.to_lowercase());
     out
 }
 
@@ -286,13 +294,17 @@ pub fn portfolios(conn: &Connection) -> std::collections::HashMap<String, Vec<(i
     let mut out: std::collections::HashMap<String, Vec<(i64, String)>> =
         std::collections::HashMap::new();
     for n in db::nodes_on(conn).unwrap_or_default() {
-        let Some(deck_dir) = db::node_deck_dir(conn, &n) else { continue };
+        let Some(deck_dir) = db::node_deck_dir(conn, &n) else {
+            continue;
+        };
         let deck = crate::aiw::deck::Deck::new(deck_dir);
         if !deck.exists() {
             continue;
         }
         for slug in deck.feature_slugs() {
-            let Ok(doc) = deck.feature(&slug) else { continue };
+            let Ok(doc) = deck.feature(&slug) else {
+                continue;
+            };
             let owner = doc.meta.owner.trim().to_string();
             if owner.is_empty() {
                 continue;
@@ -346,7 +358,11 @@ pub fn backfill_home(conn: &Connection) -> Vec<String> {
             })
             .map(|n| n.id);
 
-        let home = from_was.or_else(|| owned.get(&m.handle).and_then(|p| p.first().map(|(n, _)| *n)));
+        let home = from_was.or_else(|| {
+            owned
+                .get(&m.handle)
+                .and_then(|p| p.first().map(|(n, _)| *n))
+        });
         let Some(home) = home else { continue };
 
         let mut m = m;
@@ -373,7 +389,7 @@ pub fn migrate_from_bots(conn: &Connection) -> Vec<String> {
     let Some(d) = dir(conn) else { return done };
     // Already a team? Then this has happened, or you have built one by hand.
     // Either way it is not ours to overwrite.
-    if all(conn).len() > 0 {
+    if !all(conn).is_empty() {
         return done;
     }
 
@@ -394,7 +410,11 @@ pub fn migrate_from_bots(conn: &Connection) -> Vec<String> {
             team: b.team.clone(),
             wake_intent: b.wake_intent.clone(),
             stop_at: b.stop_at.clone(),
-            was: format!("{}/{}", b.dir.trim_end_matches(['/', '\\']), crate::bots::FILE),
+            was: format!(
+                "{}/{}",
+                b.dir.trim_end_matches(['/', '\\']),
+                crate::bots::FILE
+            ),
             home: b.node_id,
             businesses: Vec::new(),
         };
@@ -459,7 +479,11 @@ mod tests {
             businesses: vec![3, 21],
         };
         let back = parse("marketing", &serialise(&m));
-        assert_eq!(back.businesses, vec![3, 21], "the businesses it works for survive");
+        assert_eq!(
+            back.businesses,
+            vec![3, 21],
+            "the businesses it works for survive"
+        );
         assert_eq!(back.name, m.name);
         assert_eq!(back.role, m.role);
         assert_eq!(back.goal, m.goal);

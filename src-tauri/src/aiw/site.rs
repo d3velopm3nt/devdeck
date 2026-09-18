@@ -111,7 +111,9 @@ pub fn parse_site_lines(reply: &str, site_text: &str) -> Vec<SiteLine> {
         if !l.starts_with('{') || !l.ends_with('}') {
             continue;
         }
-        let Ok(mut s) = serde_json::from_str::<SiteLine>(l) else { continue };
+        let Ok(mut s) = serde_json::from_str::<SiteLine>(l) else {
+            continue;
+        };
         s.field = s.field.trim().to_ascii_lowercase();
         s.text = s.text.trim().trim_matches('"').trim().to_string();
         s.source = s.source.trim().to_string();
@@ -165,7 +167,9 @@ fn decode_entities(s: &str) -> String {
             "rsquo" | "lsquo" => Some('\''),
             "rdquo" | "ldquo" => Some('"'),
             _ if ent.starts_with("#x") || ent.starts_with("#X") => {
-                u32::from_str_radix(&ent[2..], 16).ok().and_then(char::from_u32)
+                u32::from_str_radix(&ent[2..], 16)
+                    .ok()
+                    .and_then(char::from_u32)
             }
             _ if ent.starts_with('#') => ent[1..].parse::<u32>().ok().and_then(char::from_u32),
             _ => None,
@@ -242,7 +246,9 @@ fn attr(tag: &str, name: &str) -> Option<String> {
                 Some('"') => ('"', &v[1..]),
                 Some('\'') => ('\'', &v[1..]),
                 _ => {
-                    let end = v.find(|c: char| c.is_whitespace() || c == '>').unwrap_or(v.len());
+                    let end = v
+                        .find(|c: char| c.is_whitespace() || c == '>')
+                        .unwrap_or(v.len());
                     return Some(decode_entities(&v[..end]));
                 }
             };
@@ -261,13 +267,21 @@ fn elements<'a>(html: &'a str, lower: &str, tag: &str) -> Vec<(&'a str, &'a str)
     let mut out = Vec::new();
     let mut i = 0;
     while let Some(s) = lower[i..].find(&open).map(|s| s + i) {
-        let next = lower.as_bytes().get(s + open.len()).copied().unwrap_or(b'>');
+        let next = lower
+            .as_bytes()
+            .get(s + open.len())
+            .copied()
+            .unwrap_or(b'>');
         if next.is_ascii_alphanumeric() {
             i = s + open.len();
             continue;
         }
-        let Some(gt) = lower[s..].find('>').map(|g| g + s) else { break };
-        let Some(e) = lower[gt..].find(&close).map(|e| e + gt) else { break };
+        let Some(gt) = lower[s..].find('>').map(|g| g + s) else {
+            break;
+        };
+        let Some(e) = lower[gt..].find(&close).map(|e| e + gt) else {
+            break;
+        };
         out.push((&html[s..=gt], &html[gt + 1..e]));
         i = e + close.len();
     }
@@ -294,9 +308,14 @@ pub fn html_to_text(html: &str, url: &str) -> SiteText {
     let mut description = String::new();
     let mut i = 0;
     while let Some(s) = lower[i..].find("<meta").map(|s| s + i) {
-        let Some(e) = lower[s..].find('>').map(|e| e + s) else { break };
+        let Some(e) = lower[s..].find('>').map(|e| e + s) else {
+            break;
+        };
         let tag = &cleaned[s..=e];
-        let key = attr(tag, "name").or_else(|| attr(tag, "property")).unwrap_or_default().to_ascii_lowercase();
+        let key = attr(tag, "name")
+            .or_else(|| attr(tag, "property"))
+            .unwrap_or_default()
+            .to_ascii_lowercase();
         if (key == "description" || key == "og:description") && description.is_empty() {
             description = collapse(&attr(tag, "content").unwrap_or_default());
         }
@@ -315,12 +334,17 @@ pub fn html_to_text(html: &str, url: &str) -> SiteText {
 
     let mut links = Vec::new();
     for (tag, inner) in elements(&cleaned, &lower, "a") {
-        let Some(href) = attr(tag, "href") else { continue };
+        let Some(href) = attr(tag, "href") else {
+            continue;
+        };
         let text = strip_tags(inner);
         if href.trim().is_empty() {
             continue;
         }
-        links.push(SiteLink { href: absolute(url, href.trim()), text });
+        links.push(SiteLink {
+            href: absolute(url, href.trim()),
+            text,
+        });
     }
 
     let body = match lower.find("<body") {
@@ -329,7 +353,14 @@ pub fn html_to_text(html: &str, url: &str) -> SiteText {
     };
     let text = strip_tags(body);
 
-    SiteText { url: url.to_string(), title, description, headings, text, links }
+    SiteText {
+        url: url.to_string(),
+        title,
+        description,
+        headings,
+        text,
+        links,
+    }
 }
 
 fn absolute(base: &str, href: &str) -> String {
@@ -348,11 +379,19 @@ pub fn is_thin(t: &SiteText) -> bool {
 /// Pages on the same site worth reading after the first: navigation links,
 /// not anchors, files or mail links. At most `max`.
 pub fn same_site_links(t: &SiteText, max: usize) -> Vec<String> {
-    let Ok(base) = reqwest::Url::parse(&t.url) else { return Vec::new() };
-    let host = base.host_str().unwrap_or_default().trim_start_matches("www.").to_string();
+    let Ok(base) = reqwest::Url::parse(&t.url) else {
+        return Vec::new();
+    };
+    let host = base
+        .host_str()
+        .unwrap_or_default()
+        .trim_start_matches("www.")
+        .to_string();
     let mut out: Vec<String> = Vec::new();
     for l in &t.links {
-        let Ok(mut u) = reqwest::Url::parse(&l.href) else { continue };
+        let Ok(mut u) = reqwest::Url::parse(&l.href) else {
+            continue;
+        };
         if !matches!(u.scheme(), "http" | "https") {
             continue;
         }
@@ -361,7 +400,9 @@ pub fn same_site_links(t: &SiteText, max: usize) -> Vec<String> {
         }
         u.set_fragment(None);
         let path = u.path().to_ascii_lowercase();
-        let skip = [".pdf", ".jpg", ".jpeg", ".png", ".gif", ".zip", ".docx", ".xlsx", ".mp4"];
+        let skip = [
+            ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".zip", ".docx", ".xlsx", ".mp4",
+        ];
         if skip.iter().any(|x| path.ends_with(x)) {
             continue;
         }
@@ -406,7 +447,15 @@ pub fn render_context(name: &str, website: &str, pages: &[SiteText]) -> String {
 pub fn all_text(pages: &[SiteText]) -> String {
     pages
         .iter()
-        .map(|p| format!("{} {} {} {}", p.title, p.description, p.headings.join(" "), p.text))
+        .map(|p| {
+            format!(
+                "{} {} {} {}",
+                p.title,
+                p.description,
+                p.headings.join(" "),
+                p.text
+            )
+        })
         .collect::<Vec<_>>()
         .join(" ")
 }
@@ -497,7 +546,11 @@ pub fn mock_reply(context: &str) -> String {
             "kind": "guess", "source": "not stated on the site",
         }));
     }
-    lines.iter().map(|v| v.to_string()).collect::<Vec<_>>().join("\n")
+    lines
+        .iter()
+        .map(|v| v.to_string())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[cfg(test)]
@@ -513,12 +566,18 @@ mod tests {
             <a href="https://other.example/x">Elsewhere</a><a href="/brochure.pdf">PDF</a></nav>
             <h1>Know where it is</h1><p>We fit tags&nbsp;on equipment.</p></body></html>"##;
         let t = html_to_text(html, "https://innotrack.co.za/");
-        assert_eq!(t.title, "INNOTRACK | RFID Enabled Solutions for Mining & Asset Management");
+        assert_eq!(
+            t.title,
+            "INNOTRACK | RFID Enabled Solutions for Mining & Asset Management"
+        );
         assert_eq!(t.description, "Tracking & tagging");
         assert_eq!(t.headings, vec!["Know where it is"]);
         assert!(t.text.contains("We fit tags on equipment."));
         assert!(!t.text.contains("not this"), "script content is not text");
-        assert_eq!(same_site_links(&t, 5), vec!["https://innotrack.co.za/about"]);
+        assert_eq!(
+            same_site_links(&t, 5),
+            vec!["https://innotrack.co.za/about"]
+        );
         assert!(is_thin(&t));
     }
 
@@ -532,10 +591,20 @@ mod tests {
 {"field":"industry","text":"Mining","kind":"suggestion","source":"title"}
 {"field":"industry","text":"mining","kind":"suggestion","source":"title"}"#;
         let out = parse_site_lines(reply, site);
-        assert_eq!(out.len(), 4, "an unknown field and a repeat are dropped: {out:?}");
+        assert_eq!(
+            out.len(),
+            4,
+            "an unknown field and a repeat are dropped: {out:?}"
+        );
         assert_eq!(out[0].kind, "quote", "the site's own words stay a quote");
-        assert_eq!(out[1].kind, "suggestion", "a product name the site never uses is not a quote");
-        assert_eq!(out[2].kind, "guess", "a kind nobody knows is the careful one");
+        assert_eq!(
+            out[1].kind, "suggestion",
+            "a product name the site never uses is not a quote"
+        );
+        assert_eq!(
+            out[2].kind, "guess",
+            "a kind nobody knows is the careful one"
+        );
     }
 
     #[test]
@@ -548,11 +617,20 @@ mod tests {
         let ctx = render_context("Innotrack", "innotrack.co.za", &pages);
         let lines = parse_site_lines(&mock_reply(&ctx), &all_text(&pages));
         let what = lines.iter().find(|l| l.field == "what").unwrap();
-        assert_eq!(what.text, "RFID Enabled Solutions for Mining & Asset Management");
+        assert_eq!(
+            what.text,
+            "RFID Enabled Solutions for Mining & Asset Management"
+        );
         assert_eq!(what.kind, "quote");
-        assert!(lines.iter().any(|l| l.field == "industry" && l.text == "Mining"));
+        assert!(lines
+            .iter()
+            .any(|l| l.field == "industry" && l.text == "Mining"));
         for l in lines.iter().filter(|l| l.kind == "guess") {
-            assert!(l.text.contains("mock provider"), "a mock guess says so: {}", l.text);
+            assert!(
+                l.text.contains("mock provider"),
+                "a mock guess says so: {}",
+                l.text
+            );
         }
     }
 }

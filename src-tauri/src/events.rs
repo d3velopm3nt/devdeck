@@ -67,7 +67,9 @@ fn root() -> PathBuf {
 }
 
 fn path_for(schedule_id: i64, day: &str) -> PathBuf {
-    root().join(schedule_id.to_string()).join(format!("{day}.md"))
+    root()
+        .join(schedule_id.to_string())
+        .join(format!("{day}.md"))
 }
 
 /// `YYYY-MM-DD` for a moment, in local time.
@@ -76,7 +78,11 @@ fn path_for(schedule_id: i64, day: &str) -> PathBuf {
 /// session is Tuesday's even where UTC has already moved on.
 pub fn day_of(at_ms: i64) -> String {
     chrono::DateTime::from_timestamp_millis(at_ms)
-        .map(|d| d.with_timezone(&chrono::Local).format("%Y-%m-%d").to_string())
+        .map(|d| {
+            d.with_timezone(&chrono::Local)
+                .format("%Y-%m-%d")
+                .to_string()
+        })
         .unwrap_or_default()
 }
 

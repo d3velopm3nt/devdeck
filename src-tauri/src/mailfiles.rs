@@ -109,7 +109,12 @@ pub fn path_for(root: &Path, message_id: i64, filename: &str) -> PathBuf {
 }
 
 /// Write the bytes, returning where they went.
-pub fn store(root: &Path, message_id: i64, filename: &str, bytes: &[u8]) -> Result<PathBuf, String> {
+pub fn store(
+    root: &Path,
+    message_id: i64,
+    filename: &str,
+    bytes: &[u8],
+) -> Result<PathBuf, String> {
     let path = path_for(root, message_id, filename);
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)
@@ -164,10 +169,7 @@ pub fn extract(app: &tauri::AppHandle, path: &Path, mime: &str) -> Extracted {
         return Extracted::Unreadable("the file is empty".into());
     }
     if size > MAX_EXTRACT_BYTES {
-        return Extracted::Unreadable(format!(
-            "{} MB is too large to read",
-            size / (1024 * 1024)
-        ));
+        return Extracted::Unreadable(format!("{} MB is too large to read", size / (1024 * 1024)));
     }
 
     let mime = mime.to_ascii_lowercase();

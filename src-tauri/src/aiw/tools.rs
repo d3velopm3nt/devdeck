@@ -14,8 +14,8 @@ use std::process::{Command, Stdio};
 use std::sync::Arc;
 
 use super::approval::{request_for, ApprovalBroker, Outcome};
-use super::grants::GrantStore;
 use super::events::{DomainEvent, EventBus, EventScope, EventType};
+use super::grants::GrantStore;
 
 #[cfg(windows)]
 fn no_window(cmd: &mut Command) {
@@ -742,7 +742,10 @@ pub fn mcp_definitions_for(
                 // Said, not swallowed. A granted server that will not start is
                 // the difference between "you have no such tool" and "your
                 // tool is broken", and the model can only report the first.
-                eprintln!("[mcp] {} is granted to {agent} but would not start: {e}", spec.id);
+                eprintln!(
+                    "[mcp] {} is granted to {agent} but would not start: {e}",
+                    spec.id
+                );
                 continue;
             }
         };
@@ -818,7 +821,11 @@ pub fn parse_tool_call(name: &str, input: &serde_json::Value) -> Result<ToolCall
         }
         // No argument check here: the schema lives on the server, and the
         // server is the one that will say what is missing.
-        return Ok(ToolCall::new(&unwire_tool(&format!("mcp-{server}")), action, input.clone()));
+        return Ok(ToolCall::new(
+            &unwire_tool(&format!("mcp-{server}")),
+            action,
+            input.clone(),
+        ));
     }
 
     let reg = registry();
@@ -980,10 +987,13 @@ impl ToolService {
         crate::mcp::server_of(&call.tool)
             .map(|server| self.mcp.tools(server))
             .and_then(|tools| {
-                tools
-                    .iter()
-                    .find(|t| t.name == call.action)
-                    .map(|t| if t.read_only { Access::Read } else { Access::Write })
+                tools.iter().find(|t| t.name == call.action).map(|t| {
+                    if t.read_only {
+                        Access::Read
+                    } else {
+                        Access::Write
+                    }
+                })
             })
             .unwrap_or(Access::Write)
     }
@@ -1116,8 +1126,7 @@ impl ToolService {
                         false
                     }
                     None => {
-                        let outcome =
-                            self.ask_permission(bus, agent_id, scope, call, &requested);
+                        let outcome = self.ask_permission(bus, agent_id, scope, call, &requested);
                         if !outcome.allows() {
                             denial = Some(outcome.reason(&call.tool));
                         }
@@ -1301,7 +1310,10 @@ impl ToolService {
             // would read as a bug in DevDeck rather than a missing install.
             return ToolResult::failed(
                 call,
-                format!("'{}' is not installed — install it from Community", call.tool),
+                format!(
+                    "'{}' is not installed — install it from Community",
+                    call.tool
+                ),
             );
         };
         match self.mcp.call(spec, &call.action, call.args.clone()) {
@@ -1985,7 +1997,8 @@ mod schema_tests {
         let n = wire_name("mcp.memory", "create_entities");
         assert_eq!(n, "mcp-memory_create_entities");
         assert!(
-            n.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'),
+            n.chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'),
             "{n}"
         );
         assert!(n.len() <= 64, "{n}");
@@ -2015,7 +2028,10 @@ mod schema_tests {
         assert_eq!(wire_tool("files"), "files");
         assert_eq!(unwire_tool("files"), "files");
         let call = parse_tool_call("files_read", &serde_json::json!({"path": "x"})).unwrap();
-        assert_eq!((call.tool.as_str(), call.action.as_str()), ("files", "read"));
+        assert_eq!(
+            (call.tool.as_str(), call.action.as_str()),
+            ("files", "read")
+        );
     }
 
     #[test]
@@ -2024,5 +2040,4 @@ mod schema_tests {
         assert!(parse_tool_call("mcp-_x", &serde_json::json!({})).is_err());
         assert!(parse_tool_call("mcp-memory_x", &serde_json::json!("s")).is_err());
     }
-
 }

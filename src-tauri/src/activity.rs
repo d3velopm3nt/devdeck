@@ -94,8 +94,7 @@ pub fn record_in(
     let title = title.into();
     let detail = detail.into();
     let ts = now_millis();
-    let project_name =
-        project.unwrap_or_else(|| crate::stash::current_context(app).project_name);
+    let project_name = project.unwrap_or_else(|| crate::stash::current_context(app).project_name);
 
     let Some(db) = app.try_state::<Db>() else {
         return;

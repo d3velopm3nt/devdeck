@@ -293,7 +293,9 @@ fn row_to_account(row: &rusqlite::Row) -> rusqlite::Result<MailAccount> {
         created_at: row.get(12)?,
         last_sync: row.get(13)?,
         last_error: row.get(14)?,
-        auth: row.get::<_, String>(15).unwrap_or_else(|_| "password".into()),
+        auth: row
+            .get::<_, String>(15)
+            .unwrap_or_else(|_| "password".into()),
         space: row.get::<_, String>(16).unwrap_or_default(),
         has_password: creds::exists(&target_for(id)),
     })
@@ -423,7 +425,11 @@ pub fn mail_account_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> 
 }
 
 #[tauri::command]
-pub fn mail_account_set_password(id: i64, username: String, password: String) -> Result<(), String> {
+pub fn mail_account_set_password(
+    id: i64,
+    username: String,
+    password: String,
+) -> Result<(), String> {
     if id <= 0 {
         return Err("Save the account before setting its password.".into());
     }
@@ -504,7 +510,7 @@ fn extract_pending(app: &tauri::AppHandle, db: &Db, limit: i64) -> Result<i64, S
         // Extraction happens outside the lock. OCR on a large scan takes
         // seconds, and holding the database for that stalls every other query
         // in the app.
-        let out = crate::mailfiles::extract(&app, &file, &mime);
+        let out = crate::mailfiles::extract(app, &file, &mime);
 
         let (state, note) = match &out {
             crate::mailfiles::Extracted::Text(text) => {
@@ -610,12 +616,16 @@ pub fn mail_correspondents(db: tauri::State<Db>, limit: i64) -> Result<Vec<Corre
 /// The learn run needs exactly this list and must not build its own: two
 /// answers to "who do you actually deal with" is two answers, and the one on
 /// the approval screen has to be the one that gets read.
-pub fn rank_correspondents_pub(conn: &Connection, limit: i64) -> Result<Vec<Correspondent>, String> {
+pub fn rank_correspondents_pub(
+    conn: &Connection,
+    limit: i64,
+) -> Result<Vec<Correspondent>, String> {
     rank_correspondents(conn, limit)
 }
 
 /// The same ranking over some mailboxes only: a business's, when a learn run
 /// is for that business. Empty means every mailbox.
+#[cfg(test)]
 pub fn rank_correspondents_scoped(
     conn: &Connection,
     limit: i64,
@@ -673,11 +683,17 @@ fn rank_correspondents_in(
     let own = own_addresses(conn)?;
     {
         let mut st = conn
-            .prepare("SELECT id, name, email FROM mail_contacts WHERE email <> '' AND kind <> 'bot'")
+            .prepare(
+                "SELECT id, name, email FROM mail_contacts WHERE email <> '' AND kind <> 'bot'",
+            )
             .map_err(err)?;
         let rows = st
             .query_map([], |r| {
-                Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?))
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                ))
             })
             .map_err(err)?;
         for (id, name, email) in rows.flatten() {
@@ -725,7 +741,8 @@ fn rank_correspondents_in(
                 continue;
             }
             let from = from.trim().to_ascii_lowercase();
-            let from_us = own.contains(&from) || domains.iter().any(|d| from.ends_with(&format!("@{d}")));
+            let from_us =
+                own.contains(&from) || domains.iter().any(|d| from.ends_with(&format!("@{d}")));
             if let Some(&i) = by_email.get(&from) {
                 let t = &mut tallies[i];
                 if mailbox == "INBOX" {
@@ -810,7 +827,9 @@ fn rank_correspondents_in(
 
 /// The addresses of your own mailboxes, lowercased.
 pub fn own_addresses(conn: &Connection) -> Result<std::collections::HashSet<String>, String> {
-    let mut st = conn.prepare("SELECT address, username FROM mail_accounts").map_err(err)?;
+    let mut st = conn
+        .prepare("SELECT address, username FROM mail_accounts")
+        .map_err(err)?;
     let rows = st
         .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
         .map_err(err)?;
@@ -845,7 +864,11 @@ fn recipient_addrs(list: &str) -> Vec<String> {
             let addr = addr.trim().trim_matches('"').to_ascii_lowercase();
             // A quoted display name with a comma in it splits into pieces
             // that are not addresses. An address has an @ in it.
-            if addr.contains('@') { Some(addr) } else { None }
+            if addr.contains('@') {
+                Some(addr)
+            } else {
+                None
+            }
         })
         .collect()
 }
@@ -870,7 +893,9 @@ pub struct MailLabel {
 /// nested label. Showing the raw string puts the plumbing in front of the name,
 /// and the plumbing is never the interesting half.
 fn label_name(remote: &str) -> String {
-    let s = remote.trim_start_matches("[Gmail]/").trim_start_matches("INBOX.");
+    let s = remote
+        .trim_start_matches("[Gmail]/")
+        .trim_start_matches("INBOX.");
     let last = s.rsplit(['/', '.']).next().unwrap_or(s);
     if last.trim().is_empty() {
         remote.to_string()
@@ -978,7 +1003,10 @@ fn sync_label_now(app: &tauri::AppHandle, db: &Db, label_id: i64) -> Result<i64,
     } else {
         let hi = mailbox.exists;
         let lo = hi.saturating_sub(SYNC_LIMIT).max(1);
-        say(format!("{remote}: {hi} on the server, taking the newest {}", hi.min(SYNC_LIMIT)));
+        say(format!(
+            "{remote}: {hi} on the server, taking the newest {}",
+            hi.min(SYNC_LIMIT)
+        ));
         fetch_messages(&mut session, false, &format!("{lo}:{hi}"))
     };
     let fetches = fetches.map_err(|e| format!("could not read {remote}: {e}"))?;
@@ -1280,10 +1308,12 @@ fn imap_login(acct: &MailAccount, secret: &str) -> Result<ImapSession, String> {
 /// every sync, send and test. Memory only, deliberately: a token on disk is a
 /// second credential to protect for no gain, since the refresh token can
 /// always mint another.
-static TOKENS: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<i64, crate::gauth::Tokens>>> =
-    std::sync::OnceLock::new();
+static TOKENS: std::sync::OnceLock<
+    std::sync::Mutex<std::collections::HashMap<i64, crate::gauth::Tokens>>,
+> = std::sync::OnceLock::new();
 
-fn token_cache() -> &'static std::sync::Mutex<std::collections::HashMap<i64, crate::gauth::Tokens>> {
+fn token_cache() -> &'static std::sync::Mutex<std::collections::HashMap<i64, crate::gauth::Tokens>>
+{
     TOKENS.get_or_init(Default::default)
 }
 
@@ -1344,7 +1374,11 @@ struct FetchRead {
 /// cPanel host failed every folder that way straight after a good login, which
 /// looks exactly like a wrong password. RFC 3501 section 7 lets a server say
 /// other things during a FETCH, so they are kept as notes instead.
-fn fetch_messages(session: &mut ImapSession, by_uid: bool, range: &str) -> Result<FetchRead, String> {
+fn fetch_messages(
+    session: &mut ImapSession,
+    by_uid: bool,
+    range: &str,
+) -> Result<FetchRead, String> {
     let command = format!(
         "{}FETCH {range} (UID FLAGS INTERNALDATE RFC822)",
         if by_uid { "UID " } else { "" }
@@ -1371,7 +1405,13 @@ fn read_fetches(mut data: &[u8]) -> Result<FetchRead, String> {
         match imap_proto::parse_response(data) {
             Ok((rest, Response::Fetch(_, attrs))) => {
                 data = rest;
-                let mut m = Fetched { uid: 0, seen: false, flagged: false, internal: None, raw: Vec::new() };
+                let mut m = Fetched {
+                    uid: 0,
+                    seen: false,
+                    flagged: false,
+                    internal: None,
+                    raw: Vec::new(),
+                };
                 for a in attrs {
                     match a {
                         AttributeValue::Uid(u) => m.uid = u,
@@ -1380,14 +1420,16 @@ fn read_fetches(mut data: &[u8]) -> Result<FetchRead, String> {
                             m.flagged |= flags.iter().any(|f| f.eq_ignore_ascii_case(r"\Flagged"));
                         }
                         AttributeValue::InternalDate(d) => {
-                            m.internal = chrono::DateTime::parse_from_str(d.trim(), "%d-%b-%Y %H:%M:%S %z")
-                                .ok()
-                                .map(|t| t.timestamp_millis())
+                            m.internal =
+                                chrono::DateTime::parse_from_str(d.trim(), "%d-%b-%Y %H:%M:%S %z")
+                                    .ok()
+                                    .map(|t| t.timestamp_millis())
                         }
-                        AttributeValue::Rfc822(Some(b)) | AttributeValue::BodySection { data: Some(b), .. } => {
+                        AttributeValue::Rfc822(Some(b))
+                        | AttributeValue::BodySection { data: Some(b), .. } => m.raw = b.to_vec(),
+                        AttributeValue::Rfc822Header(Some(b)) if m.raw.is_empty() => {
                             m.raw = b.to_vec()
                         }
-                        AttributeValue::Rfc822Header(Some(b)) if m.raw.is_empty() => m.raw = b.to_vec(),
                         _ => {}
                     }
                 }
@@ -1420,7 +1462,8 @@ fn read_fetches(mut data: &[u8]) -> Result<FetchRead, String> {
         if out.messages.is_empty() {
             return Err(format!("the server's reply could not be read: {line}"));
         }
-        out.other.push(format!("a line that could not be read: {line}"));
+        out.other
+            .push(format!("a line that could not be read: {line}"));
     }
     Ok(out)
 }
@@ -1557,9 +1600,15 @@ fn looks_automated(from: &str, headers: &str) -> bool {
     h.contains("auto-submitted: auto-generated")
         || h.contains("precedence: bulk")
         || h.contains("x-auto-response-suppress")
-        || ["noreply", "no-reply", "donotreply", "notifications@", "mailer-daemon"]
-            .iter()
-            .any(|p| f.contains(p))
+        || [
+            "noreply",
+            "no-reply",
+            "donotreply",
+            "notifications@",
+            "mailer-daemon",
+        ]
+        .iter()
+        .any(|p| f.contains(p))
 }
 
 fn addr_display(list: &[mailparse::MailAddr]) -> (String, String) {
@@ -1577,15 +1626,14 @@ fn addr_display(list: &[mailparse::MailAddr]) -> (String, String) {
 
 fn addr_join(list: &[mailparse::MailAddr]) -> String {
     list.iter()
-        .filter_map(|a| match a {
-            mailparse::MailAddr::Single(s) => Some(s.addr.clone()),
-            mailparse::MailAddr::Group(g) => Some(
-                g.addrs
-                    .iter()
-                    .map(|s| s.addr.clone())
-                    .collect::<Vec<_>>()
-                    .join(", "),
-            ),
+        .map(|a| match a {
+            mailparse::MailAddr::Single(s) => s.addr.clone(),
+            mailparse::MailAddr::Group(g) => g
+                .addrs
+                .iter()
+                .map(|s| s.addr.clone())
+                .collect::<Vec<_>>()
+                .join(", "),
         })
         .collect::<Vec<_>>()
         .join(", ")
@@ -1651,7 +1699,13 @@ fn parse_message(raw: &[u8], fallback_ts: i64) -> Result<Parsed, String> {
     let mut body_text = String::new();
     let mut body_html = String::new();
     let mut attachments = Vec::new();
-    collect_parts(&mail, &mut body_text, &mut body_html, &mut attachments, &mut 0);
+    collect_parts(
+        &mail,
+        &mut body_text,
+        &mut body_html,
+        &mut attachments,
+        &mut 0,
+    );
 
     Ok(Parsed {
         message_id: get("Message-ID"),
@@ -1788,7 +1842,7 @@ fn sync_accounts(app: &tauri::AppHandle, db: &Db, id: i64) -> Result<i64, String
     let mut failures: Vec<String> = Vec::new();
     for acct in accounts {
         push_log(
-            &app,
+            app,
             MAIL_LOG_ID,
             "mail",
             "system",
@@ -1808,7 +1862,7 @@ fn sync_accounts(app: &tauri::AppHandle, db: &Db, id: i64) -> Result<i64, String
                 params![acct.id],
             );
         }
-        match sync_one(&app, &db, &acct) {
+        match sync_one(app, db, &acct) {
             Ok(n) => {
                 total += n;
                 // Scoped, and it matters more than it looks. `activity::record`
@@ -1828,14 +1882,14 @@ fn sync_accounts(app: &tauri::AppHandle, db: &Db, id: i64) -> Result<i64, String
                     );
                 }
                 push_log(
-                    &app,
+                    app,
                     MAIL_LOG_ID,
                     "mail",
                     "system",
                     format!("{}: {n} new or updated", acct.address),
                 );
                 crate::activity::record(
-                    &app,
+                    app,
                     "mail",
                     format!("Synced {}", acct.address),
                     format!("{n} message{}", if n == 1 { "" } else { "s" }),
@@ -1855,14 +1909,14 @@ fn sync_accounts(app: &tauri::AppHandle, db: &Db, id: i64) -> Result<i64, String
                     );
                 }
                 push_log(
-                    &app,
+                    app,
                     MAIL_LOG_ID,
                     "mail",
                     "stderr",
                     format!("{}: {e}", acct.address),
                 );
                 crate::activity::record(
-                    &app,
+                    app,
                     "mail",
                     format!("Sync failed for {}", acct.address),
                     e.clone(),
@@ -1966,7 +2020,10 @@ fn sync_one(app: &tauri::AppHandle, db: &Db, acct: &MailAccount) -> Result<i64, 
             if !attrs.iter().any(|a| {
                 matches!(
                     a.to_ascii_lowercase().as_str(),
-                    r"ll" | r"\junk" | r"	rash" | r"
+                    r"ll"
+                        | r"\junk"
+                        | r"	rash"
+                        | r"
 oselect" | r"lagged" | r"\important"
                 )
             }) {
@@ -2035,7 +2092,13 @@ oselect" | r"lagged" | r"\important"
         let fetches = match fetches {
             Ok(f) => {
                 for note in &f.other {
-                    push_log(app, MAIL_LOG_ID, "mail", "debug", format!("{local}: the server also said {note}"));
+                    push_log(
+                        app,
+                        MAIL_LOG_ID,
+                        "mail",
+                        "debug",
+                        format!("{local}: the server also said {note}"),
+                    );
                 }
                 f
             }
@@ -2108,7 +2171,10 @@ oselect" | r"lagged" | r"\important"
         let conn = db.0.lock().unwrap();
         let _ = conn.execute(
             "UPDATE mail_accounts SET last_error=?1 WHERE id=?2",
-            params![format!("fetched, but skipped {}", folder_errors.join("; ")), acct.id],
+            params![
+                format!("fetched, but skipped {}", folder_errors.join("; ")),
+                acct.id
+            ],
         );
     }
     Ok(stored)
@@ -2277,7 +2343,7 @@ pub fn mail_list(db: tauri::State<Db>, query: MailQuery) -> Result<Vec<MailMessa
         where_sql.push_str(" AND m.mailbox=?");
         args.push(Box::new(label));
     } else {
-    match query.group.as_str() {
+        match query.group.as_str() {
         "unread" => where_sql.push_str(" AND m.mailbox='INBOX' AND m.unread=1"),
         "flagged" => where_sql.push_str(" AND m.flagged=1"),
         "clients" => where_sql
@@ -2356,7 +2422,11 @@ pub fn mail_account_boxes(db: tauri::State<Db>, id: i64) -> Result<Vec<MailBoxCo
         .collect();
     for want in ["INBOX", "Sent", "Drafts"] {
         if !out.iter().any(|b| b.mailbox == want) {
-            out.push(MailBoxCount { mailbox: want.into(), count: 0, last_ts: 0 });
+            out.push(MailBoxCount {
+                mailbox: want.into(),
+                count: 0,
+                last_ts: 0,
+            });
         }
     }
     let rank = |m: &str| match m {
@@ -2366,7 +2436,11 @@ pub fn mail_account_boxes(db: tauri::State<Db>, id: i64) -> Result<Vec<MailBoxCo
         "Archive" => 3,
         _ => 4,
     };
-    out.sort_by(|a, b| rank(&a.mailbox).cmp(&rank(&b.mailbox)).then(a.mailbox.cmp(&b.mailbox)));
+    out.sort_by(|a, b| {
+        rank(&a.mailbox)
+            .cmp(&rank(&b.mailbox))
+            .then(a.mailbox.cmp(&b.mailbox))
+    });
     Ok(out)
 }
 
@@ -2375,9 +2449,7 @@ pub fn mail_account_boxes(db: tauri::State<Db>, id: i64) -> Result<Vec<MailBoxCo
 #[tauri::command(async)]
 pub fn mail_counts(db: tauri::State<Db>) -> Result<MailCounts, String> {
     let conn = db.0.lock().unwrap();
-    let one = |sql: &str| -> i64 {
-        conn.query_row(sql, [], |r| r.get::<_, i64>(0)).unwrap_or(0)
-    };
+    let one = |sql: &str| -> i64 { conn.query_row(sql, [], |r| r.get::<_, i64>(0)).unwrap_or(0) };
     Ok(MailCounts {
         inbox: one("SELECT COUNT(*) FROM mail_messages WHERE mailbox='INBOX'"),
         unread: one("SELECT COUNT(*) FROM mail_messages WHERE mailbox='INBOX' AND unread=1"),
@@ -2386,7 +2458,9 @@ pub fn mail_counts(db: tauri::State<Db>) -> Result<MailCounts, String> {
             "SELECT COUNT(*) FROM mail_messages WHERE mailbox='INBOX' AND contact_id IN \
              (SELECT id FROM mail_contacts WHERE node_id IS NOT NULL)",
         ),
-        projects: one("SELECT COUNT(*) FROM mail_messages WHERE mailbox='INBOX' AND node_id IS NOT NULL"),
+        projects: one(
+            "SELECT COUNT(*) FROM mail_messages WHERE mailbox='INBOX' AND node_id IS NOT NULL",
+        ),
         bots: one("SELECT COUNT(*) FROM mail_messages WHERE mailbox='INBOX' AND is_bot=1"),
         sent: one("SELECT COUNT(*) FROM mail_messages WHERE mailbox='Sent'"),
         drafts: one("SELECT COUNT(*) FROM mail_messages WHERE mailbox='Drafts'"),
@@ -2484,11 +2558,7 @@ pub fn mail_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
 
 /// Link a thread to a project node, so mail, repo and terminal share a subject.
 #[tauri::command]
-pub fn mail_link_node(
-    db: tauri::State<Db>,
-    id: i64,
-    node_id: Option<i64>,
-) -> Result<(), String> {
+pub fn mail_link_node(db: tauri::State<Db>, id: i64, node_id: Option<i64>) -> Result<(), String> {
     let conn = db.0.lock().unwrap();
     let thread_key: String = conn
         .query_row(
@@ -2507,10 +2577,7 @@ pub fn mail_link_node(
 
 // ---------------------------------------------------------------- sending
 
-fn smtp_transport(
-    acct: &MailAccount,
-    password: &str,
-) -> Result<lettre::SmtpTransport, String> {
+fn smtp_transport(acct: &MailAccount, password: &str) -> Result<lettre::SmtpTransport, String> {
     use lettre::transport::smtp::authentication::Credentials;
     if acct.smtp_host.trim().is_empty() {
         return Err("No SMTP host configured.".into());
@@ -2624,14 +2691,14 @@ fn send_message(app: &tauri::AppHandle, db: &Db, req: SendRequest) -> Result<i64
         .map_err(|e| format!("Send failed: {e}"))?;
 
     push_log(
-        &app,
+        app,
         MAIL_LOG_ID,
         "mail",
         "system",
         format!("sent \"{}\" to {}", req.subject, req.to),
     );
     crate::activity::record(
-        &app,
+        app,
         "mail",
         format!("Sent: {}", req.subject),
         format!("to {}", req.to),
@@ -2926,7 +2993,11 @@ pub fn mail_assistant_add(db: tauri::State<Db>, note: AssistantNote) -> Result<i
             note.account_id,
             note.kind,
             note.body,
-            if note.status.is_empty() { "new".into() } else { note.status.clone() },
+            if note.status.is_empty() {
+                "new".into()
+            } else {
+                note.status.clone()
+            },
             now_millis()
         ],
     )
@@ -2935,11 +3006,7 @@ pub fn mail_assistant_add(db: tauri::State<Db>, note: AssistantNote) -> Result<i
 }
 
 #[tauri::command]
-pub fn mail_assistant_status(
-    db: tauri::State<Db>,
-    id: i64,
-    status: String,
-) -> Result<(), String> {
+pub fn mail_assistant_status(db: tauri::State<Db>, id: i64, status: String) -> Result<(), String> {
     let conn = db.0.lock().unwrap();
     conn.execute(
         "UPDATE mail_assistant SET status=?1 WHERE id=?2",
@@ -2976,7 +3043,11 @@ mod tests {
         assert_eq!(read.messages[0].raw, body.to_vec());
         assert_eq!(read.messages[1].uid, 8);
         assert!(!read.messages[1].seen);
-        assert!(read.other.iter().any(|o| o.contains("Still here")), "{:?}", read.other);
+        assert!(
+            read.other.iter().any(|o| o.contains("Still here")),
+            "{:?}",
+            read.other
+        );
     }
 
     #[test]
@@ -3063,7 +3134,10 @@ mod tests {
     /// it put 34,840 messages in front of a sync that should take seconds.
     #[test]
     fn gmail_all_mail_is_never_synced() {
-        assert_eq!(local_mailbox("[Gmail]/All Mail", &[r"\All".to_string()]), None);
+        assert_eq!(
+            local_mailbox("[Gmail]/All Mail", &[r"\All".to_string()]),
+            None
+        );
         assert_eq!(local_mailbox("[Gmail]/Spam", &[r"\Junk".to_string()]), None);
         assert_eq!(local_mailbox("[Gmail]/Bin", &[r"\Trash".to_string()]), None);
     }
@@ -3228,7 +3302,11 @@ Content-Type: multipart/mixed; boundary=\"z\"\r\n\r\n\
     fn an_attachment_is_written_to_disk_and_the_row_points_at_it() {
         let tmp = Tmp::new("written");
         let c = mem();
-        let acct = MailAccount { id: 1, address: "me@develtech.co.za".into(), ..Default::default() };
+        let acct = MailAccount {
+            id: 1,
+            address: "me@develtech.co.za".into(),
+            ..Default::default()
+        };
         c.execute(
             "INSERT INTO mail_accounts (id, name, address) VALUES (1, 'Me', 'me@develtech.co.za')",
             [],
@@ -3249,7 +3327,9 @@ Content-Type: multipart/mixed; boundary=\"z\"\r\n\r\n\
         let on_disk = std::path::Path::new(&path);
         assert!(on_disk.is_file(), "{path} is not a file");
         assert!(
-            std::fs::read_to_string(on_disk).unwrap().contains("work,1400"),
+            std::fs::read_to_string(on_disk)
+                .unwrap()
+                .contains("work,1400"),
             "the bytes that arrived must be the bytes on disk"
         );
 
@@ -3302,8 +3382,12 @@ Content-Type: multipart/mixed; boundary=\"z\"\r\n\r\n\
     }
 
     fn contact_id(c: &Connection, email: &str) -> i64 {
-        c.query_row("SELECT id FROM mail_contacts WHERE email=?1", params![email], |r| r.get(0))
-            .unwrap()
+        c.query_row(
+            "SELECT id FROM mail_contacts WHERE email=?1",
+            params![email],
+            |r| r.get(0),
+        )
+        .unwrap()
     }
 
     /// Clicking an account filters Contacts the way it filters the mail. One
@@ -3324,19 +3408,45 @@ Content-Type: multipart/mixed; boundary=\"z\"\r\n\r\n\
         // guard this contact would "appear" in every mailbox there is.
         contact(&c, "Blank", "");
 
-        msg_in(&c, 1, "INBOX", "mom@family.com", "me@personal.co", "", "m1", 1);
+        msg_in(
+            &c,
+            1,
+            "INBOX",
+            "mom@family.com",
+            "me@personal.co",
+            "",
+            "m1",
+            1,
+        );
         msg_in(&c, 2, "INBOX", "sarah@client.com", "me@biz.co", "", "m2", 2);
         // Tom never wrote to either: he is in one mailbox because you wrote to
         // him, and in the other because he was copied.
         msg_in(&c, 1, "Sent", "me@personal.co", "tom@both.com", "", "m3", 3);
-        msg_in(&c, 2, "INBOX", "sarah@client.com", "me@biz.co", "tom@both.com", "m4", 4);
+        msg_in(
+            &c,
+            2,
+            "INBOX",
+            "sarah@client.com",
+            "me@biz.co",
+            "tom@both.com",
+            "m4",
+            4,
+        );
 
         let names = |acct: Option<i64>| -> Vec<String> {
-            list_contacts(&c, acct).unwrap().into_iter().map(|x| x.name).collect()
+            list_contacts(&c, acct)
+                .unwrap()
+                .into_iter()
+                .map(|x| x.name)
+                .collect()
         };
         assert_eq!(names(None).len(), 4, "unfiltered is everybody");
         assert_eq!(names(Some(1)), vec!["Mom", "Tom"]);
-        assert_eq!(names(Some(2)), vec!["Sarah", "Tom"], "one person, in both mailboxes");
+        assert_eq!(
+            names(Some(2)),
+            vec!["Sarah", "Tom"],
+            "one person, in both mailboxes"
+        );
     }
 
     /// A contact's page lists everything with them, not only what they sent.
@@ -3353,18 +3463,70 @@ Content-Type: multipart/mixed; boundary=\"z\"\r\n\r\n\
         contact(&c, "Sarah", "Sarah@Client.com");
         let sarah = contact_id(&c, "Sarah@Client.com");
 
-        msg_in(&c, 1, "INBOX", "sarah@client.com", "me@d.co", "", "from-her", 10);
-        msg_in(&c, 1, "Sent", "me@d.co", "sarah@client.com", "", "to-her", 20);
-        msg_in(&c, 1, "INBOX", "boss@client.com", "me@d.co", "sarah@client.com", "cc-her", 30);
-        msg_in(&c, 1, "INBOX", "someone@else.com", "me@d.co", "", "not-her", 40);
+        msg_in(
+            &c,
+            1,
+            "INBOX",
+            "sarah@client.com",
+            "me@d.co",
+            "",
+            "from-her",
+            10,
+        );
+        msg_in(
+            &c,
+            1,
+            "Sent",
+            "me@d.co",
+            "sarah@client.com",
+            "",
+            "to-her",
+            20,
+        );
+        msg_in(
+            &c,
+            1,
+            "INBOX",
+            "boss@client.com",
+            "me@d.co",
+            "sarah@client.com",
+            "cc-her",
+            30,
+        );
+        msg_in(
+            &c,
+            1,
+            "INBOX",
+            "someone@else.com",
+            "me@d.co",
+            "",
+            "not-her",
+            40,
+        );
         // The same message again under a Gmail label. One message, one row.
-        msg_in(&c, 1, "Work", "sarah@client.com", "me@d.co", "", "from-her", 10);
+        msg_in(
+            &c,
+            1,
+            "Work",
+            "sarah@client.com",
+            "me@d.co",
+            "",
+            "from-her",
+            10,
+        );
 
         let out = contact_messages(&c, sarah, 50).unwrap();
         let ids: Vec<&str> = out.iter().map(|m| m.message_id.as_str()).collect();
-        assert_eq!(ids, vec!["cc-her", "to-her", "from-her"], "newest first, all three, nobody else");
+        assert_eq!(
+            ids,
+            vec!["cc-her", "to-her", "from-her"],
+            "newest first, all three, nobody else"
+        );
         let kept = out.iter().find(|m| m.message_id == "from-her").unwrap();
-        assert_eq!(kept.mailbox, "INBOX", "the duplicate kept is the one in a real folder");
+        assert_eq!(
+            kept.mailbox, "INBOX",
+            "the duplicate kept is the one in a real folder"
+        );
     }
 
     /// The claim the whole learn run rests on: a mailbox is mostly noise, and
@@ -3383,12 +3545,33 @@ Content-Type: multipart/mixed; boundary=\"z\"\r\n\r\n\
 
         // The noise: hundreds in, never once answered.
         for i in 0..40 {
-            msg(&c, "INBOX", "auto@amazon.com", "me@d.co", &format!("order {i}"), 1000 + i);
+            msg(
+                &c,
+                "INBOX",
+                "auto@amazon.com",
+                "me@d.co",
+                &format!("order {i}"),
+                1000 + i,
+            );
         }
         // The person: fewer messages, and you wrote back.
         for i in 0..3 {
-            msg(&c, "INBOX", "sarah@harbourvine.com", "me@d.co", &format!("invoice {i}"), 2000 + i);
-            msg(&c, "Sent", "me@d.co", "sarah@harbourvine.com", &format!("invoice {i}"), 2100 + i);
+            msg(
+                &c,
+                "INBOX",
+                "sarah@harbourvine.com",
+                "me@d.co",
+                &format!("invoice {i}"),
+                2000 + i,
+            );
+            msg(
+                &c,
+                "Sent",
+                "me@d.co",
+                "sarah@harbourvine.com",
+                &format!("invoice {i}"),
+                2100 + i,
+            );
         }
 
         let out = rank_correspondents(&c, 50).unwrap();
@@ -3419,9 +3602,20 @@ Content-Type: multipart/mixed; boundary=\"z\"\r\n\r\n\
         contact(&c, "Kim", "kim@ridgeback.co.za");
         msg(&c, "INBOX", "kim@ridgeback.co.za", "me@d.co", "quote", 1000);
         // A copy of the reply kept in the inbox, and no Sent folder fetched.
-        msg(&c, "INBOX", "me@d.co", "kim@ridgeback.co.za", "re: quote", 1100);
+        msg(
+            &c,
+            "INBOX",
+            "me@d.co",
+            "kim@ridgeback.co.za",
+            "re: quote",
+            1100,
+        );
         let out = rank_correspondents(&c, 50).unwrap();
-        assert_eq!(out.len(), 1, "you wrote to Kim, so Kim is somebody to learn about");
+        assert_eq!(
+            out.len(),
+            1,
+            "you wrote to Kim, so Kim is somebody to learn about"
+        );
         assert_eq!(out[0].sent, 1);
     }
 
@@ -3437,7 +3631,14 @@ Content-Type: multipart/mixed; boundary=\"z\"\r\n\r\n\
         contact(&c, "Priya", "priya@harbourvine.com");
 
         for i in 0..8 {
-            msg(&c, "Sent", "me@d.co", "tom@innotrack.io", &format!("t{i}"), 100 + i);
+            msg(
+                &c,
+                "Sent",
+                "me@d.co",
+                "tom@innotrack.io",
+                &format!("t{i}"),
+                100 + i,
+            );
         }
         // More recent, but answered once. Recency must not outrank a
         // relationship, or the list becomes "who emailed this week".
@@ -3462,9 +3663,23 @@ Content-Type: multipart/mixed; boundary=\"z\"\r\n\r\n\
         contact(&c, "Me", "me@d.co");
         contact(&c, "Sarah", "sarah@harbourvine.com");
         for i in 0..5 {
-            msg(&c, "Sent", "me@d.co", "me@d.co", &format!("note {i}"), 100 + i);
+            msg(
+                &c,
+                "Sent",
+                "me@d.co",
+                "me@d.co",
+                &format!("note {i}"),
+                100 + i,
+            );
         }
-        msg(&c, "Sent", "me@d.co", "sarah@harbourvine.com", "terms", 5_000);
+        msg(
+            &c,
+            "Sent",
+            "me@d.co",
+            "sarah@harbourvine.com",
+            "terms",
+            5_000,
+        );
 
         let out = rank_correspondents(&c, 50).unwrap();
         assert_eq!(out.len(), 1);
@@ -3475,8 +3690,16 @@ Content-Type: multipart/mixed; boundary=\"z\"\r\n\r\n\
     #[test]
     fn a_ranking_can_be_kept_to_some_mailboxes() {
         let c = mem();
-        c.execute("INSERT INTO mail_accounts (id, name, address) VALUES (1,'Me','me@gmail.com')", []).unwrap();
-        c.execute("INSERT INTO mail_accounts (id, name, address) VALUES (2,'Biz','info@biz.co')", []).unwrap();
+        c.execute(
+            "INSERT INTO mail_accounts (id, name, address) VALUES (1,'Me','me@gmail.com')",
+            [],
+        )
+        .unwrap();
+        c.execute(
+            "INSERT INTO mail_accounts (id, name, address) VALUES (2,'Biz','info@biz.co')",
+            [],
+        )
+        .unwrap();
         contact(&c, "Sister", "sis@gmail.com");
         contact(&c, "Supplier", "orders@tags.co");
         c.execute(
@@ -3499,7 +3722,11 @@ Content-Type: multipart/mixed; boundary=\"z\"\r\n\r\n\
     #[test]
     fn a_client_only_a_partner_answered_is_still_the_business_s() {
         let c = mem();
-        c.execute("INSERT INTO mail_accounts (id, name, address) VALUES (1,'Biz','jj@biz.co')", []).unwrap();
+        c.execute(
+            "INSERT INTO mail_accounts (id, name, address) VALUES (1,'Biz','jj@biz.co')",
+            [],
+        )
+        .unwrap();
         contact(&c, "Kim", "kim@firm.co");
         contact(&c, "Sam", "sam@other.co");
         contact(&c, "Kate", "kate@biz.co");
@@ -3519,13 +3746,25 @@ Content-Type: multipart/mixed; boundary=\"z\"\r\n\r\n\
         .unwrap();
 
         let mine = rank_correspondents(&c, 50).unwrap();
-        assert!(!mine.iter().any(|x| x.email == "kim@firm.co"), "you never wrote to Kim");
-        assert!(mine.iter().any(|x| x.email == "sam@other.co"), "a copy is writing to them");
+        assert!(
+            !mine.iter().any(|x| x.email == "kim@firm.co"),
+            "you never wrote to Kim"
+        );
+        assert!(
+            mine.iter().any(|x| x.email == "sam@other.co"),
+            "a copy is writing to them"
+        );
 
         let biz = rank_correspondents_for(&c, 50, &[1], &["biz.co".to_string()]).unwrap();
-        let kim = biz.iter().find(|x| x.email == "kim@firm.co").expect("the partner wrote to Kim");
+        let kim = biz
+            .iter()
+            .find(|x| x.email == "kim@firm.co")
+            .expect("the partner wrote to Kim");
         assert_eq!(kim.written_by, vec!["kate@biz.co".to_string()]);
-        assert!(biz.iter().any(|x| x.email == "kate@biz.co"), "the partner is on the list, as team");
+        assert!(
+            biz.iter().any(|x| x.email == "kate@biz.co"),
+            "the partner is on the list, as team"
+        );
     }
 
     /// A reply addressed to several people still counts for each of them.

@@ -11,6 +11,15 @@
 //! New capability areas (git, docker, ssh, plugins…) slot in as new
 //! modules with their own commands/events without touching existing ones.
 
+// Design choices rather than mistakes: Tauri commands take many injected
+// arguments, database rows are read into tuples once, and a scheduler job
+// is built rarely enough that its size does not matter.
+#![allow(
+    clippy::too_many_arguments,
+    clippy::type_complexity,
+    clippy::large_enum_variant
+)]
+
 mod activity;
 mod aiw;
 mod botcatalog;
@@ -21,14 +30,14 @@ mod business_clear;
 mod business_code;
 mod business_team;
 mod calendar;
+mod calls;
 mod community;
 mod community_index;
-mod calls;
 mod conn;
 mod creds;
 mod db;
-mod files;
 mod events;
+mod files;
 mod focus;
 mod gauth;
 mod git;
@@ -36,14 +45,14 @@ mod github;
 mod inbox;
 mod legacy;
 mod machine;
-mod mailfiles;
-mod mcp;
 mod mail;
+mod mailfiles;
 mod managers;
+mod mcp;
 mod monitor;
 mod pty;
-mod scan;
 mod runners;
+mod scan;
 mod schedule;
 mod seed;
 mod services;
@@ -153,7 +162,9 @@ fn toggle_widget(app: &tauri::AppHandle) {
 /// timer shows the window anyway if that call never comes. A slow start is a
 /// worse first impression than a broken one is a mystery.
 fn reveal_main(app: &tauri::AppHandle) {
-    let Some(win) = app.get_webview_window("main") else { return };
+    let Some(win) = app.get_webview_window("main") else {
+        return;
+    };
     if win.is_visible().unwrap_or(false) {
         return;
     }

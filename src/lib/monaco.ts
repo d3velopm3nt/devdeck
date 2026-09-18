@@ -71,7 +71,7 @@ let defined = ''
 
 /// Define (or redefine) the theme for the current app theme and return its
 /// name. Cheap enough to call on every mount and on every theme change.
-export function useAppTheme(mode: 'dark' | 'light'): string {
+export function applyAppTheme(mode: 'dark' | 'light'): string {
   const name = `devdeck-${mode}`
   const p = palette()
   const bg = hex(p.page, mode === 'dark' ? '#0d1017' : '#f6f7f9')

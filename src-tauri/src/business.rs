@@ -36,9 +36,15 @@ const ABOUT_NOTE: &str = "about-the-business.md";
 pub const FOLDERS: &[(&str, &str)] = &[
     ("Clients", "Who the business works for."),
     ("Suppliers", "Who it buys from."),
-    ("Advisers", "Accountants, lawyers, and anyone it takes advice from."),
+    (
+        "Advisers",
+        "Accountants, lawyers, and anyone it takes advice from.",
+    ),
     ("Partner firms", "Companies it works alongside."),
-    ("Products", "What it builds. Each product holds its projects."),
+    (
+        "Products",
+        "What it builds. Each product holds its projects.",
+    ),
     ("Services", "Work it does for customers."),
     ("Money", "What is owed, and what is out."),
     ("Marketing", "The website, and what it says."),
@@ -181,12 +187,20 @@ fn record_path(deck: &Deck) -> PathBuf {
 
 pub fn read(conn: &Connection, node_id: i64) -> Result<Option<BusinessMeta>, String> {
     let deck = deck_of(conn, node_id)?;
-    Ok(deck.read_doc_opt::<BusinessMeta>(&record_path(&deck))?.map(|d| d.meta))
+    Ok(deck
+        .read_doc_opt::<BusinessMeta>(&record_path(&deck))?
+        .map(|d| d.meta))
 }
 
 pub fn write(conn: &Connection, node_id: i64, meta: &BusinessMeta) -> Result<(), String> {
     let deck = deck_of(conn, node_id)?;
-    deck.write_doc_at(&record_path(&deck), &Doc { meta: meta.clone(), body: String::new() })?;
+    deck.write_doc_at(
+        &record_path(&deck),
+        &Doc {
+            meta: meta.clone(),
+            body: String::new(),
+        },
+    )?;
     let note = about_note(meta);
     let p = deck.knowledge_dir().join(ABOUT_NOTE);
     if note.trim().is_empty() {
@@ -203,7 +217,10 @@ pub fn about_note(meta: &BusinessMeta) -> String {
     let agreed = |field: &str| -> Vec<&Suggestion> {
         meta.items
             .iter()
-            .filter(|i| i.field == field && (i.state == "agreed" || (i.kind == "you" && i.state != "declined")))
+            .filter(|i| {
+                i.field == field
+                    && (i.state == "agreed" || (i.kind == "you" && i.state != "declined"))
+            })
             .collect()
     };
     let mut s = String::new();
@@ -211,7 +228,10 @@ pub fn about_note(meta: &BusinessMeta) -> String {
         if !v.is_empty() {
             s.push_str(&format!(
                 "{label}: {}\n",
-                v.iter().map(|i| i.text.as_str()).collect::<Vec<_>>().join("; ")
+                v.iter()
+                    .map(|i| i.text.as_str())
+                    .collect::<Vec<_>>()
+                    .join("; ")
             ));
         }
     };
@@ -245,17 +265,25 @@ pub fn about_note(meta: &BusinessMeta) -> String {
 }
 
 fn folders_of(conn: &Connection, node_id: i64) -> Vec<FolderRef> {
-    let Ok(mut st) = conn.prepare("SELECT id, name FROM nodes WHERE parent_id = ?1 ORDER BY sort, name")
+    let Ok(mut st) =
+        conn.prepare("SELECT id, name FROM nodes WHERE parent_id = ?1 ORDER BY sort, name")
     else {
         return Vec::new();
     };
-    st.query_map(params![node_id], |r| Ok(FolderRef { node_id: r.get(0)?, name: r.get(1)? }))
-        .map(|rows| rows.flatten().collect())
-        .unwrap_or_default()
+    st.query_map(params![node_id], |r| {
+        Ok(FolderRef {
+            node_id: r.get(0)?,
+            name: r.get(1)?,
+        })
+    })
+    .map(|rows| rows.flatten().collect())
+    .unwrap_or_default()
 }
 
 fn site_pages(conn: &Connection, node_id: i64) -> Vec<SiteText> {
-    let Ok(deck) = deck_of(conn, node_id) else { return Vec::new() };
+    let Ok(deck) = deck_of(conn, node_id) else {
+        return Vec::new();
+    };
     std::fs::read_to_string(deck.dir().join(SITE_FILE))
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
@@ -276,7 +304,12 @@ fn view(conn: &Connection, node_id: i64) -> Result<BusinessView, String> {
         },
         None => SiteSummary::default(),
     };
-    Ok(BusinessView { node_id, folders: folders_of(conn, node_id), meta, site })
+    Ok(BusinessView {
+        node_id,
+        folders: folders_of(conn, node_id),
+        meta,
+        site,
+    })
 }
 
 /// A website as a fetchable address: `innotrack.co.za` means https.
@@ -331,11 +364,16 @@ pub fn merge_lines(items: &mut Vec<Suggestion>, lines: &[SiteLine]) {
 
 /// The mailboxes that belong to a business: tied to it by name.
 pub fn accounts_of(conn: &Connection, node_id: i64) -> Vec<i64> {
-    let Ok(name) = conn.query_row("SELECT name FROM nodes WHERE id = ?1", params![node_id], |r| r.get::<_, String>(0))
-    else {
+    let Ok(name) = conn.query_row(
+        "SELECT name FROM nodes WHERE id = ?1",
+        params![node_id],
+        |r| r.get::<_, String>(0),
+    ) else {
         return Vec::new();
     };
-    let Ok(mut st) = conn.prepare("SELECT id FROM mail_accounts WHERE space = ?1 COLLATE NOCASE ORDER BY id") else {
+    let Ok(mut st) =
+        conn.prepare("SELECT id FROM mail_accounts WHERE space = ?1 COLLATE NOCASE ORDER BY id")
+    else {
         return Vec::new();
     };
     st.query_map(params![name], |r| r.get::<_, i64>(0))
@@ -352,12 +390,18 @@ pub fn scope_of(conn: &Connection, node_id: i64) -> Result<crate::aiw::learn::Sc
     let meta = read(conn, node_id)?.ok_or("That space has not been set up as a business.")?;
     let accounts = accounts_of(conn, node_id);
     if accounts.is_empty() {
-        return Err(format!("{} has no mailbox yet. Add one in the mail step first.", meta.name));
+        return Err(format!(
+            "{} has no mailbox yet. Add one in the mail step first.",
+            meta.name
+        ));
     }
     let offers = meta
         .items
         .iter()
-        .filter(|i| (i.field == "product" || i.field == "service") && (i.state == "agreed" || (i.kind == "you" && i.state != "declined")))
+        .filter(|i| {
+            (i.field == "product" || i.field == "service")
+                && (i.state == "agreed" || (i.kind == "you" && i.state != "declined"))
+        })
         .map(|i| i.text.clone())
         .collect();
     // Its own domains: the website's, and every mailbox's that is not free
@@ -377,18 +421,41 @@ pub fn scope_of(conn: &Connection, node_id: i64) -> Result<crate::aiw::learn::Sc
         domains.push(site);
     }
     for id in &accounts {
-        if let Ok(addr) = conn.query_row("SELECT address FROM mail_accounts WHERE id = ?1", params![id], |r| r.get::<_, String>(0)) {
-            let d = addr.split('@').nth(1).unwrap_or("").trim().to_ascii_lowercase();
-            if !d.is_empty() && !crate::aiw::learn::FREE_MAIL.contains(&d.as_str()) && !domains.contains(&d) {
+        if let Ok(addr) = conn.query_row(
+            "SELECT address FROM mail_accounts WHERE id = ?1",
+            params![id],
+            |r| r.get::<_, String>(0),
+        ) {
+            let d = addr
+                .split('@')
+                .nth(1)
+                .unwrap_or("")
+                .trim()
+                .to_ascii_lowercase();
+            if !d.is_empty()
+                && !crate::aiw::learn::FREE_MAIL.contains(&d.as_str())
+                && !domains.contains(&d)
+            {
                 domains.push(d);
             }
         }
     }
-    Ok(crate::aiw::learn::Scope { accounts, business: node_id, name: meta.name, offers, domains })
+    Ok(crate::aiw::learn::Scope {
+        accounts,
+        business: node_id,
+        name: meta.name,
+        offers,
+        domains,
+    })
 }
 
 /// Write a note into the business's knowledge, which its managers read.
-pub fn knowledge_note(conn: &Connection, node_id: i64, slug: &str, body: &str) -> Result<String, String> {
+pub fn knowledge_note(
+    conn: &Connection,
+    node_id: i64,
+    slug: &str,
+    body: &str,
+) -> Result<String, String> {
     let deck = deck_of(conn, node_id)?;
     std::fs::create_dir_all(deck.knowledge_dir()).map_err(err)?;
     let p = deck.knowledge_dir().join(format!("{slug}.md"));
@@ -406,12 +473,17 @@ fn fetch_plain(url: &str) -> Result<SiteText, String> {
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) DevDeck")
         .build()
         .map_err(err)?;
-    let res = client.get(url).send().map_err(|e| format!("could not reach {url}: {e}"))?;
+    let res = client
+        .get(url)
+        .send()
+        .map_err(|e| format!("could not reach {url}: {e}"))?;
     if !res.status().is_success() {
         return Err(format!("{url} answered {}", res.status()));
     }
     let final_url = res.url().to_string();
-    let body = res.text().map_err(|e| format!("could not read {url}: {e}"))?;
+    let body = res
+        .text()
+        .map_err(|e| format!("could not read {url}: {e}"))?;
     let body: String = body.chars().take(2_000_000).collect();
     Ok(site::html_to_text(&body, &final_url))
 }
@@ -474,7 +546,9 @@ struct Rendered {
 /// Read a page the way a browser shows it, in a window nobody sees.
 fn read_rendered(app: &tauri::AppHandle, url: &str) -> Result<SiteText, String> {
     use tauri::webview::PageLoadEvent;
-    let target: tauri::Url = url.parse().map_err(|e| format!("{url} is not an address: {e}"))?;
+    let target: tauri::Url = url
+        .parse()
+        .map_err(|e| format!("{url} is not an address: {e}"))?;
     let (tx, rx) = std::sync::mpsc::channel::<String>();
     let tx = std::sync::Mutex::new(tx);
     let label = format!("site-reader-{}", READER_SEQ.fetch_add(1, Ordering::SeqCst));
@@ -505,7 +579,8 @@ fn read_rendered(app: &tauri::AppHandle, url: &str) -> Result<SiteText, String> 
     let got = rx.recv_timeout(std::time::Duration::from_secs(40));
     let _ = window.destroy();
     let raw = got.map_err(|_| format!("{url} did not finish drawing in 40 seconds"))?;
-    let r: Rendered = serde_json::from_str(&raw).map_err(|e| format!("could not read what {url} drew: {e}"))?;
+    let r: Rendered =
+        serde_json::from_str(&raw).map_err(|e| format!("could not read what {url} drew: {e}"))?;
     if !r.error.is_empty() && r.text.is_empty() {
         return Err(format!("{url}: {}", r.error));
     }
@@ -547,7 +622,11 @@ fn read_site_blocking(
         }
     } else {
         let first = fetch_plain(&url)?;
-        let more = if site::is_thin(&first) { Vec::new() } else { site::same_site_links(&first, 3) };
+        let more = if site::is_thin(&first) {
+            Vec::new()
+        } else {
+            site::same_site_links(&first, 3)
+        };
         pages.push(first);
         for l in more {
             if let Ok(t) = fetch_plain(&l) {
@@ -572,14 +651,21 @@ fn read_site_blocking(
         model,
         system: site::SITE_SYSTEM.into(),
         context: site::render_context(&meta.name, &url, &pages),
-        goal: format!("Say what {} is, from its website, one JSON object per line.", meta.name),
+        goal: format!(
+            "Say what {} is, from its website, one JSON object per line.",
+            meta.name
+        ),
         ..Default::default()
     };
     let reply = provider.run(&request)?;
     let lines = site::parse_site_lines(&reply.message, &all);
 
     merge_lines(&mut meta.items, &lines);
-    meta.site_how = if browser { "browser".into() } else { "plain".into() };
+    meta.site_how = if browser {
+        "browser".into()
+    } else {
+        "plain".into()
+    };
     meta.site_read_at = chrono::Local::now().to_rfc3339();
     meta.site_chars = all.chars().count() as i64;
     meta.site_pages = pages.iter().map(|p| p.url.clone()).collect();
@@ -628,7 +714,10 @@ pub fn business_list(db: tauri::State<Db>) -> Result<Vec<BusinessSummary>, Strin
         let count = |m: &BusinessMeta, f: &str| {
             m.items
                 .iter()
-                .filter(|i| i.field == f && (i.state == "agreed" || (i.kind == "you" && i.state != "declined")))
+                .filter(|i| {
+                    i.field == f
+                        && (i.state == "agreed" || (i.kind == "you" && i.state != "declined"))
+                })
                 .count()
         };
         out.push(match meta {
@@ -644,7 +733,13 @@ pub fn business_list(db: tauri::State<Db>) -> Result<Vec<BusinessSummary>, Strin
                 mailboxes,
                 directors: m.directors.len(),
             },
-            None => BusinessSummary { node_id: id, name, set_up: false, mailboxes, ..Default::default() },
+            None => BusinessSummary {
+                node_id: id,
+                name,
+                set_up: false,
+                mailboxes,
+                ..Default::default()
+            },
         });
     }
     Ok(out)
@@ -671,7 +766,14 @@ pub fn business_create(
     for (f, why) in FOLDERS {
         match crate::vault::vault_create(db.clone(), Some(ws.id), f.to_string()) {
             Ok(n) => {
-                let _ = crate::vault::vault_set_meta(db.clone(), n.id, None, None, None, Some(why.to_string()));
+                let _ = crate::vault::vault_set_meta(
+                    db.clone(),
+                    n.id,
+                    None,
+                    None,
+                    None,
+                    Some(why.to_string()),
+                );
             }
             Err(e) => problems.push(format!("{f}: {e}")),
         }
@@ -679,7 +781,11 @@ pub fn business_create(
     let meta = BusinessMeta {
         name: name.clone(),
         website: website.trim().to_string(),
-        directors: vec![Director { name: "You".into(), email: String::new(), you: true }],
+        directors: vec![Director {
+            name: "You".into(),
+            email: String::new(),
+            you: true,
+        }],
         step: "business".into(),
         ..Default::default()
     };
@@ -692,7 +798,11 @@ pub fn business_create(
         &app,
         "space",
         format!("{name} added as a business"),
-        if problems.is_empty() { "its folders are made".to_string() } else { problems.join(" · ") },
+        if problems.is_empty() {
+            "its folders are made".to_string()
+        } else {
+            problems.join(" · ")
+        },
         problems.is_empty(),
         Some(ws.id),
     );
@@ -702,7 +812,11 @@ pub fn business_create(
 /// Save what the screen changed: directors, agreed and declined suggestions,
 /// lines you typed, the step you are on.
 #[tauri::command(async)]
-pub fn business_save(db: tauri::State<Db>, node_id: i64, meta: BusinessMeta) -> Result<BusinessView, String> {
+pub fn business_save(
+    db: tauri::State<Db>,
+    node_id: i64,
+    meta: BusinessMeta,
+) -> Result<BusinessView, String> {
     let conn = db.0.lock().unwrap();
     let prior = read(&conn, node_id)?.ok_or("That space has not been set up as a business.")?;
     let mut meta = meta;
@@ -710,14 +824,19 @@ pub fn business_save(db: tauri::State<Db>, node_id: i64, meta: BusinessMeta) -> 
     // field that would disagree with the tree.
     meta.name = prior.name;
     meta.website = meta.website.trim().to_string();
-    meta.directors.retain(|d| d.you || !d.name.trim().is_empty());
+    meta.directors
+        .retain(|d| d.you || !d.name.trim().is_empty());
     for i in meta.items.iter_mut() {
         if i.id.is_empty() {
             i.id = crate::aiw::events::new_id("sug");
         }
         i.text = i.text.trim().to_string();
         if i.state.is_empty() {
-            i.state = if i.kind == "you" { "agreed".into() } else { "open".into() };
+            i.state = if i.kind == "you" {
+                "agreed".into()
+            } else {
+                "open".into()
+            };
         }
     }
     meta.items.retain(|i| !i.text.is_empty());
@@ -751,7 +870,12 @@ pub fn business_commit_items(db: tauri::State<Db>, node_id: i64) -> Result<Busin
             folders_of(&conn, node_id),
         )
     };
-    let parent_of = |f: &str| folders.iter().find(|x| x.name.eq_ignore_ascii_case(f)).map(|x| x.node_id);
+    let parent_of = |f: &str| {
+        folders
+            .iter()
+            .find(|x| x.name.eq_ignore_ascii_case(f))
+            .map(|x| x.node_id)
+    };
     for i in meta.items.iter_mut() {
         let wanted = i.state == "agreed" || (i.kind == "you" && i.state != "declined");
         let (folder, label) = match i.field.as_str() {
@@ -762,14 +886,18 @@ pub fn business_commit_items(db: tauri::State<Db>, node_id: i64) -> Result<Busin
         if !wanted || i.node_id > 0 {
             continue;
         }
-        let Some(parent) = parent_of(folder) else { continue };
+        let Some(parent) = parent_of(folder) else {
+            continue;
+        };
         let name = folder_name(&i.text);
         if name.is_empty() {
             continue;
         }
         let existing = {
             let conn = db.0.lock().unwrap();
-            folders_of(&conn, parent).into_iter().find(|c| c.name.eq_ignore_ascii_case(&name))
+            folders_of(&conn, parent)
+                .into_iter()
+                .find(|c| c.name.eq_ignore_ascii_case(&name))
         };
         let id = match existing {
             Some(c) => c.node_id,
@@ -788,25 +916,71 @@ mod tests {
     use super::*;
 
     fn line(field: &str, text: &str, kind: &str) -> SiteLine {
-        SiteLine { field: field.into(), text: text.into(), kind: kind.into(), source: "the site".into() }
+        SiteLine {
+            field: field.into(),
+            text: text.into(),
+            kind: kind.into(),
+            source: "the site".into(),
+        }
     }
 
     #[test]
     fn a_new_read_keeps_what_you_decided_and_replaces_what_you_did_not() {
         let mut items = vec![
-            Suggestion { id: "a".into(), field: "what".into(), text: "Tags mines".into(), kind: "quote".into(), state: "agreed".into(), ..Default::default() },
-            Suggestion { id: "b".into(), field: "serves".into(), text: "Old guess".into(), kind: "guess".into(), state: "open".into(), ..Default::default() },
-            Suggestion { id: "c".into(), field: "service".into(), text: "Site surveys".into(), kind: "you".into(), state: "agreed".into(), ..Default::default() },
-            Suggestion { id: "d".into(), field: "product".into(), text: "Not ours".into(), kind: "guess".into(), state: "declined".into(), ..Default::default() },
+            Suggestion {
+                id: "a".into(),
+                field: "what".into(),
+                text: "Tags mines".into(),
+                kind: "quote".into(),
+                state: "agreed".into(),
+                ..Default::default()
+            },
+            Suggestion {
+                id: "b".into(),
+                field: "serves".into(),
+                text: "Old guess".into(),
+                kind: "guess".into(),
+                state: "open".into(),
+                ..Default::default()
+            },
+            Suggestion {
+                id: "c".into(),
+                field: "service".into(),
+                text: "Site surveys".into(),
+                kind: "you".into(),
+                state: "agreed".into(),
+                ..Default::default()
+            },
+            Suggestion {
+                id: "d".into(),
+                field: "product".into(),
+                text: "Not ours".into(),
+                kind: "guess".into(),
+                state: "declined".into(),
+                ..Default::default()
+            },
         ];
         merge_lines(
             &mut items,
-            &[line("what", "tags mines", "quote"), line("serves", "Mines", "suggestion"), line("product", "Not ours", "guess")],
+            &[
+                line("what", "tags mines", "quote"),
+                line("serves", "Mines", "suggestion"),
+                line("product", "Not ours", "guess"),
+            ],
         );
         let texts: Vec<&str> = items.iter().map(|i| i.text.as_str()).collect();
-        assert_eq!(texts, vec!["Tags mines", "Site surveys", "Not ours", "Mines"]);
-        assert!(!texts.contains(&"Old guess"), "an open suggestion from before is replaced");
-        assert_eq!(items[2].state, "declined", "a no stays a no, and is not offered again");
+        assert_eq!(
+            texts,
+            vec!["Tags mines", "Site surveys", "Not ours", "Mines"]
+        );
+        assert!(
+            !texts.contains(&"Old guess"),
+            "an open suggestion from before is replaced"
+        );
+        assert_eq!(
+            items[2].state, "declined",
+            "a no stays a no, and is not offered again"
+        );
     }
 
     #[test]
@@ -814,27 +988,58 @@ mod tests {
         let meta = BusinessMeta {
             name: "Innotrack".into(),
             website: "innotrack.co.za".into(),
-            directors: vec![Director { name: "You".into(), email: String::new(), you: true }],
+            directors: vec![Director {
+                name: "You".into(),
+                email: String::new(),
+                you: true,
+            }],
             items: vec![
-                Suggestion { field: "what".into(), text: "RFID Enabled Solutions".into(), kind: "quote".into(), state: "agreed".into(), ..Default::default() },
-                Suggestion { field: "serves".into(), text: "Mines".into(), kind: "guess".into(), state: "open".into(), ..Default::default() },
-                Suggestion { field: "service".into(), text: "Site surveys".into(), kind: "you".into(), state: "agreed".into(), ..Default::default() },
+                Suggestion {
+                    field: "what".into(),
+                    text: "RFID Enabled Solutions".into(),
+                    kind: "quote".into(),
+                    state: "agreed".into(),
+                    ..Default::default()
+                },
+                Suggestion {
+                    field: "serves".into(),
+                    text: "Mines".into(),
+                    kind: "guess".into(),
+                    state: "open".into(),
+                    ..Default::default()
+                },
+                Suggestion {
+                    field: "service".into(),
+                    text: "Site surveys".into(),
+                    kind: "you".into(),
+                    state: "agreed".into(),
+                    ..Default::default()
+                },
             ],
             ..Default::default()
         };
         let note = about_note(&meta);
         assert!(note.contains("What it does: RFID Enabled Solutions"));
         assert!(note.contains("Services: Site surveys"));
-        assert!(!note.contains("Mines"), "an open guess is not something the business agreed");
+        assert!(
+            !note.contains("Mines"),
+            "an open guess is not something the business agreed"
+        );
         assert!(about_note(&BusinessMeta::default()).is_empty());
     }
 
     #[test]
     fn names_and_addresses_are_made_usable() {
-        assert_eq!(normalise_site("innotrack.co.za/"), "https://innotrack.co.za");
+        assert_eq!(
+            normalise_site("innotrack.co.za/"),
+            "https://innotrack.co.za"
+        );
         assert_eq!(normalise_site("http://x.co"), "http://x.co");
         assert_eq!(normalise_site("  "), "");
-        assert_eq!(folder_name("Tagging / installation: on site"), "Tagging - installation- on site");
+        assert_eq!(
+            folder_name("Tagging / installation: on site"),
+            "Tagging - installation- on site"
+        );
         assert_eq!(folder_name(".hidden"), "hidden");
     }
 
@@ -844,14 +1049,34 @@ mod tests {
             name: "Innotrack".into(),
             website: "innotrack.co.za".into(),
             directors: vec![
-                Director { name: "You".into(), email: String::new(), you: true },
-                Director { name: "Partner".into(), email: "p@innotrack.co.za".into(), you: false },
+                Director {
+                    name: "You".into(),
+                    email: String::new(),
+                    you: true,
+                },
+                Director {
+                    name: "Partner".into(),
+                    email: "p@innotrack.co.za".into(),
+                    you: false,
+                },
             ],
-            items: vec![Suggestion { id: "s1".into(), field: "product".into(), text: "Asset tracking".into(), kind: "suggestion".into(), source: "title".into(), state: "agreed".into(), node_id: 7 }],
+            items: vec![Suggestion {
+                id: "s1".into(),
+                field: "product".into(),
+                text: "Asset tracking".into(),
+                kind: "suggestion".into(),
+                source: "title".into(),
+                state: "agreed".into(),
+                node_id: 7,
+            }],
             step: "sells".into(),
             ..Default::default()
         };
-        let raw = crate::aiw::deck::write_doc(&Doc { meta: meta.clone(), body: String::new() }).unwrap();
+        let raw = crate::aiw::deck::write_doc(&Doc {
+            meta: meta.clone(),
+            body: String::new(),
+        })
+        .unwrap();
         let back: Doc<BusinessMeta> = crate::aiw::deck::parse_doc(&raw).unwrap();
         assert_eq!(back.meta, meta);
     }

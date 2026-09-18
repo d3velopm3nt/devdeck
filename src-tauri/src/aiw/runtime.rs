@@ -86,13 +86,7 @@ pub fn review_point(call: &super::tools::ToolCall, stop_at: &[String]) -> Option
     if stop_at.is_empty() {
         return None;
     }
-    let subject = format!(
-        "{}.{} {}",
-        call.tool,
-        call.action,
-        call.args
-    )
-    .to_lowercase();
+    let subject = format!("{}.{} {}", call.tool, call.action, call.args).to_lowercase();
     const NOISE: &[&str] = &[
         "before", "any", "the", "a", "an", "all", "every", "stop", "at", "on", "to", "not",
         "without", "me", "first", "ask", "for",
@@ -222,7 +216,9 @@ impl AgentRuntime {
         // sandbox and vandalism in a repository other people pull from — it
         // put `packages/sync/types.ts` into this app's own source once. So
         // the mock only runs where nobody else will see the result.
-        if agent.provider == super::provider::MockProvider::ID && crate::git::has_remote(&project.root) {
+        if agent.provider == super::provider::MockProvider::ID
+            && crate::git::has_remote(&project.root)
+        {
             return Err(format!(
                 "{} is on the mock provider, and a scripted session would commit fixture files into {}, which is a shared repository. Point {} at a real provider under Settings, or hand this to an agent that has one.",
                 agent.name,
@@ -887,7 +883,11 @@ impl AgentRuntime {
             }
             bus_ws.log_line(
                 &log_name,
-                if e.kind == "stderr" { "stderr" } else { "stdout" },
+                if e.kind == "stderr" {
+                    "stderr"
+                } else {
+                    "stdout"
+                },
                 match e.kind {
                     "tool" => format!("· {}", e.text),
                     _ => e.text.clone(),
@@ -924,7 +924,11 @@ impl AgentRuntime {
                     if r.ok { "system" } else { "stderr" },
                     format!(
                         "{} — {receipt}",
-                        if r.ok { "finished" } else { "stopped without finishing" }
+                        if r.ok {
+                            "finished"
+                        } else {
+                            "stopped without finishing"
+                        }
                     ),
                 );
                 ws.update_session(&session_id, |s| {
@@ -1253,7 +1257,8 @@ impl AgentRuntime {
             .caused_by(cause),
         );
 
-        let Ok(current) = ContextService::assemble(&deck, &project.root, project_id, feature_id, None, &[])
+        let Ok(current) =
+            ContextService::assemble(&deck, &project.root, project_id, feature_id, None, &[])
         else {
             return;
         };
@@ -1331,7 +1336,11 @@ mod tests {
         );
         // The same rule, reached the other way round.
         assert!(review_point(
-            &call("terminal", "run", serde_json::json!({ "command": "git push origin main" })),
+            &call(
+                "terminal",
+                "run",
+                serde_json::json!({ "command": "git push origin main" })
+            ),
             &rules
         )
         .is_some());
@@ -1340,8 +1349,16 @@ mod tests {
     #[test]
     fn it_leaves_everything_else_alone() {
         let rules = vec!["before any push".to_string()];
-        assert!(review_point(&call("files", "read", serde_json::json!({ "path": "a.txt" })), &rules).is_none());
-        assert!(review_point(&call("git", "commit", serde_json::json!({ "message": "wip" })), &rules).is_none());
+        assert!(review_point(
+            &call("files", "read", serde_json::json!({ "path": "a.txt" })),
+            &rules
+        )
+        .is_none());
+        assert!(review_point(
+            &call("git", "commit", serde_json::json!({ "message": "wip" })),
+            &rules
+        )
+        .is_none());
     }
 
     #[test]

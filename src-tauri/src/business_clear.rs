@@ -69,13 +69,21 @@ pub fn subtree(conn: &Connection, id: i64) -> Vec<i64> {
 /// Whether a repository is inside the folder about to be removed. Compared
 /// case-insensitively with either slash, because Windows paths are both.
 pub fn repo_inside(vault_dir: &str, repo: &str) -> bool {
-    let norm = |s: &str| s.trim().replace('\\', "/").trim_end_matches('/').to_ascii_lowercase();
+    let norm = |s: &str| {
+        s.trim()
+            .replace('\\', "/")
+            .trim_end_matches('/')
+            .to_ascii_lowercase()
+    };
     let (v, r) = (norm(vault_dir), norm(repo));
     !v.is_empty() && !r.is_empty() && (r == v || r.starts_with(&format!("{v}/")))
 }
 
 fn in_list(ids: &[i64]) -> String {
-    ids.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(",")
+    ids.iter()
+        .map(|i| i.to_string())
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 fn space_of(conn: &Connection, node: &db::Node, has_record: bool) -> ClearSpace {
@@ -85,14 +93,25 @@ fn space_of(conn: &Connection, node: &db::Node, has_record: bool) -> ClearSpace 
 
     let mut projects = Vec::new();
     let mut folders = 0usize;
-    if let Ok(mut st) = conn.prepare(&format!("SELECT id, kind, name, COALESCE(path, '') FROM nodes WHERE id IN ({list})")) {
+    if let Ok(mut st) = conn.prepare(&format!(
+        "SELECT id, kind, name, COALESCE(path, '') FROM nodes WHERE id IN ({list})"
+    )) {
         let rows = st.query_map([], |r| {
-            Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?))
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, String>(3)?,
+            ))
         });
         if let Ok(rows) = rows {
             for (id, kind, name, path) in rows.flatten() {
                 match kind.as_str() {
-                    "project" => projects.push(ClearProject { node_id: id, name, repo: path }),
+                    "project" => projects.push(ClearProject {
+                        node_id: id,
+                        name,
+                        repo: path,
+                    }),
                     "folder" => folders += 1,
                     _ => {}
                 }
@@ -122,13 +141,22 @@ fn space_of(conn: &Connection, node: &db::Node, has_record: bool) -> ClearSpace 
         node_id: node.id,
         name: node.name.clone(),
         label: node.label.clone().unwrap_or_default(),
-        suggested: node.label.as_deref().is_some_and(|l| l.eq_ignore_ascii_case(crate::business::LABEL)),
+        suggested: node
+            .label
+            .as_deref()
+            .is_some_and(|l| l.eq_ignore_ascii_case(crate::business::LABEL)),
         folders,
         projects,
         managers,
-        services: count(format!("SELECT COUNT(*) FROM services WHERE project_id IN ({list})")),
-        commands: count(format!("SELECT COUNT(*) FROM commands WHERE project_id IN ({list})")),
-        reminders: count(format!("SELECT COUNT(*) FROM schedules WHERE node_id IN ({list}) AND kind = 'reminder'")),
+        services: count(format!(
+            "SELECT COUNT(*) FROM services WHERE project_id IN ({list})"
+        )),
+        commands: count(format!(
+            "SELECT COUNT(*) FROM commands WHERE project_id IN ({list})"
+        )),
+        reminders: count(format!(
+            "SELECT COUNT(*) FROM schedules WHERE node_id IN ({list}) AND kind = 'reminder'"
+        )),
         vault_dir,
         blocked,
     }
@@ -141,11 +169,19 @@ pub fn preview(conn: &Connection) -> Result<ClearPreview, String> {
     let mut st = conn
         .prepare("SELECT id FROM nodes WHERE parent_id IS NULL AND kind = 'workspace' ORDER BY sort, name")
         .map_err(err)?;
-    let ids: Vec<i64> = st.query_map([], |r| r.get(0)).map_err(err)?.flatten().collect();
+    let ids: Vec<i64> = st
+        .query_map([], |r| r.get(0))
+        .map_err(err)?
+        .flatten()
+        .collect();
     let mut spaces = Vec::new();
     for id in ids {
         let node = db::node_by_id(conn, id)?;
-        if node.label.as_deref().is_some_and(|l| l.eq_ignore_ascii_case("Personal")) {
+        if node
+            .label
+            .as_deref()
+            .is_some_and(|l| l.eq_ignore_ascii_case("Personal"))
+        {
             continue;
         }
         let has_record = crate::business::read(conn, id).ok().flatten().is_some();
@@ -187,11 +223,21 @@ pub fn business_clear(
         let (space, handles) = {
             let conn = db.0.lock().unwrap();
             let node = db::node_by_id(&conn, id)?;
-            if node.label.as_deref().is_some_and(|l| l.eq_ignore_ascii_case("Personal")) {
-                return Err(format!("{} is Personal and is never cleared from here.", node.name));
+            if node
+                .label
+                .as_deref()
+                .is_some_and(|l| l.eq_ignore_ascii_case("Personal"))
+            {
+                return Err(format!(
+                    "{} is Personal and is never cleared from here.",
+                    node.name
+                ));
             }
             if crate::business::read(&conn, id).ok().flatten().is_some() {
-                return Err(format!("{} was set up as a business and is not cleared from here.", node.name));
+                return Err(format!(
+                    "{} was set up as a business and is not cleared from here.",
+                    node.name
+                ));
             }
             let space = space_of(&conn, &node, false);
             let ids = subtree(&conn, id);
@@ -206,8 +252,12 @@ pub fn business_clear(
             done.push(format!("{}: not cleared. {}", space.name, space.blocked));
             continue;
         }
-        if !space.vault_dir.is_empty() && !Path::new(&space.vault_dir).starts_with(vault_root(&db)?) {
-            done.push(format!("{}: not cleared, its folder is outside the vault.", space.name));
+        if !space.vault_dir.is_empty() && !Path::new(&space.vault_dir).starts_with(vault_root(&db)?)
+        {
+            done.push(format!(
+                "{}: not cleared, its folder is outside the vault.",
+                space.name
+            ));
             continue;
         }
         {
@@ -216,12 +266,27 @@ pub fn business_clear(
             let list = in_list(&ids);
             for h in &handles {
                 crate::managers::delete(&conn, h)?;
-                conn.execute("DELETE FROM schedules WHERE kind = 'bot' AND manager = ?1", params![h])
-                    .map_err(err)?;
+                conn.execute(
+                    "DELETE FROM schedules WHERE kind = 'bot' AND manager = ?1",
+                    params![h],
+                )
+                .map_err(err)?;
             }
-            conn.execute(&format!("DELETE FROM schedules WHERE node_id IN ({list})"), []).map_err(err)?;
-            conn.execute(&format!("DELETE FROM services WHERE project_id IN ({list})"), []).map_err(err)?;
-            conn.execute(&format!("DELETE FROM commands WHERE project_id IN ({list})"), []).map_err(err)?;
+            conn.execute(
+                &format!("DELETE FROM schedules WHERE node_id IN ({list})"),
+                [],
+            )
+            .map_err(err)?;
+            conn.execute(
+                &format!("DELETE FROM services WHERE project_id IN ({list})"),
+                [],
+            )
+            .map_err(err)?;
+            conn.execute(
+                &format!("DELETE FROM commands WHERE project_id IN ({list})"),
+                [],
+            )
+            .map_err(err)?;
         }
         crate::vault::vault_delete(db.clone(), id)?;
         done.push(format!(
@@ -235,7 +300,14 @@ pub fn business_clear(
             if handles.len() == 1 { "" } else { "s" },
         ));
     }
-    crate::activity::record(&app, "space", "Cleared old workspaces", done.join(" "), true, None);
+    crate::activity::record(
+        &app,
+        "space",
+        "Cleared old workspaces",
+        done.join(" "),
+        true,
+        None,
+    );
     Ok(done)
 }
 
@@ -253,10 +325,19 @@ mod tests {
 
     #[test]
     fn a_repository_inside_the_folder_is_seen_whatever_the_slashes() {
-        assert!(repo_inside(r"C:\Users\me\DevDeck\Innotrack", "c:/users/me/devdeck/innotrack/x-platform"));
+        assert!(repo_inside(
+            r"C:\Users\me\DevDeck\Innotrack",
+            "c:/users/me/devdeck/innotrack/x-platform"
+        ));
         assert!(repo_inside("C:/v/Innotrack", r"C:\v\Innotrack"));
-        assert!(!repo_inside(r"C:\v\Innotrack", r"C:\code\trackx\x-platform"));
-        assert!(!repo_inside(r"C:\v\Inno", r"C:\v\Innotrack\x"), "a prefix of a name is not a parent");
+        assert!(!repo_inside(
+            r"C:\v\Innotrack",
+            r"C:\code\trackx\x-platform"
+        ));
+        assert!(
+            !repo_inside(r"C:\v\Inno", r"C:\v\Innotrack\x"),
+            "a prefix of a name is not a parent"
+        );
         assert!(!repo_inside("", r"C:\code"));
     }
 

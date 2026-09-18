@@ -396,7 +396,10 @@ impl PersonalStore {
     pub fn people(&self) -> Vec<Doc<PersonMeta>> {
         let mut out = self.read_dir_docs::<PersonMeta>(&self.people_dir());
         out.sort_by(|a, b| {
-            b.meta.home.cmp(&a.meta.home).then_with(|| a.meta.name.cmp(&b.meta.name))
+            b.meta
+                .home
+                .cmp(&a.meta.home)
+                .then_with(|| a.meta.name.cmp(&b.meta.name))
         });
         out
     }
@@ -406,6 +409,7 @@ impl PersonalStore {
     /// Address first, because it is exact; then a whole-name match, because
     /// "Anna" in a fact and "Anna Botha" on file are the same person and a
     /// substring match on "Ann" would say so about Annabel too.
+    #[allow(dead_code)]
     pub fn person_for(&self, hint: &str) -> Option<Doc<PersonMeta>> {
         let h = hint.trim().to_ascii_lowercase();
         if h.is_empty() {

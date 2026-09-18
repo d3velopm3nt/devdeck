@@ -345,8 +345,7 @@ pub fn parse_porcelain(out: &[u8]) -> Vec<GitChange> {
         }
         let untracked = x == '?' && y == '?';
         // Git's own definition: any side reporting U, or AA / DD.
-        let conflict =
-            x == 'U' || y == 'U' || (x == 'A' && y == 'A') || (x == 'D' && y == 'D');
+        let conflict = x == 'U' || y == 'U' || (x == 'A' && y == 'A') || (x == 'D' && y == 'D');
         // A rename or copy is followed by the path it came from.
         let from = if x == 'R' || x == 'C' || y == 'R' || y == 'C' {
             fields
@@ -412,7 +411,13 @@ pub fn git_changes(dir: String) -> Result<Vec<GitChange>, String> {
 /// Run one git command to completion, streaming both streams to the Logs bus.
 /// Returns whether it succeeded.
 fn run_logged(app: &tauri::AppHandle, dir: &Path, name: &str, args: &[&str]) -> bool {
-    services::push_log(app, GIT_LOG_ID, name, "system", format!("git {}", args.join(" ")));
+    services::push_log(
+        app,
+        GIT_LOG_ID,
+        name,
+        "system",
+        format!("git {}", args.join(" ")),
+    );
     let mut cmd = Command::new("git");
     cmd.arg("-C")
         .arg(dir)
@@ -426,7 +431,13 @@ fn run_logged(app: &tauri::AppHandle, dir: &Path, name: &str, args: &[&str]) -> 
     let mut child = match cmd.spawn() {
         Ok(c) => c,
         Err(e) => {
-            services::push_log(app, GIT_LOG_ID, name, "stderr", format!("failed to launch: {e}"));
+            services::push_log(
+                app,
+                GIT_LOG_ID,
+                name,
+                "stderr",
+                format!("failed to launch: {e}"),
+            );
             return false;
         }
     };
@@ -569,7 +580,12 @@ pub fn git_push(app: tauri::AppHandle, dir: String) -> Result<(), String> {
         let ok = if read_status(d).upstream.is_some() {
             run_logged(&app, d, "git push", &["push"])
         } else {
-            run_logged(&app, d, "git push", &["push", "--set-upstream", "origin", "HEAD"])
+            run_logged(
+                &app,
+                d,
+                "git push",
+                &["push", "--set-upstream", "origin", "HEAD"],
+            )
         };
         services::push_log(
             &app,

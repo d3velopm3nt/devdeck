@@ -171,12 +171,7 @@ const IDLE_DAYS: i64 = 3;
 /// misattribution, and the whole point of the licence column is that people
 /// can tell whose work they are installing.
 pub fn catalog() -> Vec<Item> {
-    let devdeck = |id: &str,
-                   kind: &str,
-                   name: &str,
-                   summary: &str,
-                   body: &str|
-     -> Item {
+    let devdeck = |id: &str, kind: &str, name: &str, summary: &str, body: &str| -> Item {
         Item {
             id: id.into(),
             kind: kind.into(),
@@ -304,23 +299,29 @@ pub fn installable(i: &Item) -> Result<(), String> {
     match i.kind.as_str() {
         KIND_SKILL | KIND_AGENT => {
             if i.body.trim().is_empty() {
-                Err("this entry carries no instructions, so installing it would write an empty \
+                Err(
+                    "this entry carries no instructions, so installing it would write an empty \
                      file. That is the manifest problem, not something to guess at."
-                    .into())
+                        .into(),
+                )
             } else {
                 Ok(())
             }
         }
         KIND_TOOL => {
             if i.command.trim().is_empty() {
-                Err("nothing here says how to run it. A repository is not a server declaration \
+                Err(
+                    "nothing here says how to run it. A repository is not a server declaration \
                      — DevDeck would have to guess a command, and a guess is how you end up \
                      running something nobody chose."
-                    .into())
+                        .into(),
+                )
             } else if i.tool_id.trim().is_empty() {
-                Err("this entry has no tool id, so it could not appear in the permission matrix \
+                Err(
+                    "this entry has no tool id, so it could not appear in the permission matrix \
                      and nothing could ever be granted it."
-                    .into())
+                        .into(),
+                )
             } else {
                 Ok(())
             }
@@ -405,7 +406,11 @@ pub struct Repo {
 /// The catalogue wins when both have it: a starter entry carries a body and a
 /// tool id, and an index row with the same id carries neither, so preferring
 /// the index would lose the half that makes it installable.
-pub fn find_item(id: &str, catalog: &[Item], feeds: &[(String, Vec<Item>)]) -> Option<(Item, String)> {
+pub fn find_item(
+    id: &str,
+    catalog: &[Item],
+    feeds: &[(String, Vec<Item>)],
+) -> Option<(Item, String)> {
     if let Some(i) = catalog.iter().find(|i| i.id == id) {
         return Some((i.clone(), "catalog".to_string()));
     }
@@ -540,9 +545,21 @@ pub fn bundles() -> Vec<Bundle> {
                 "skill.conventional-commits".into(),
             ],
             grants: vec![
-                Suggestion { item: "skill.small-diffs".into(), agent: "dev-a".into(), level: String::new() },
-                Suggestion { item: "skill.failure-honesty".into(), agent: "dev-a".into(), level: String::new() },
-                Suggestion { item: "skill.conventional-commits".into(), agent: "dev-a".into(), level: String::new() },
+                Suggestion {
+                    item: "skill.small-diffs".into(),
+                    agent: "dev-a".into(),
+                    level: String::new(),
+                },
+                Suggestion {
+                    item: "skill.failure-honesty".into(),
+                    agent: "dev-a".into(),
+                    level: String::new(),
+                },
+                Suggestion {
+                    item: "skill.conventional-commits".into(),
+                    agent: "dev-a".into(),
+                    level: String::new(),
+                },
             ],
         },
         Bundle {
@@ -551,7 +568,10 @@ pub fn bundles() -> Vec<Bundle> {
             summary: "Two agents that read rather than write: one documents what landed, \
                       one reports what the dependencies cost."
                 .into(),
-            items: vec!["agent.docs-writer".into(), "agent.dependency-auditor".into()],
+            items: vec![
+                "agent.docs-writer".into(),
+                "agent.dependency-auditor".into(),
+            ],
             grants: Vec::new(),
         },
         Bundle {
@@ -564,8 +584,16 @@ pub fn bundles() -> Vec<Bundle> {
             grants: vec![
                 // A server's first grant asks rather than deciding: nobody has
                 // watched this one run yet.
-                Suggestion { item: "tool.mcp-memory".into(), agent: "dev-a".into(), level: "approval".into() },
-                Suggestion { item: "skill.failure-honesty".into(), agent: "dev-a".into(), level: String::new() },
+                Suggestion {
+                    item: "tool.mcp-memory".into(),
+                    agent: "dev-a".into(),
+                    level: "approval".into(),
+                },
+                Suggestion {
+                    item: "skill.failure-honesty".into(),
+                    agent: "dev-a".into(),
+                    level: String::new(),
+                },
             ],
         },
     ]
@@ -684,7 +712,12 @@ pub fn standing(
     agents: &[(String, Vec<String>, Vec<(String, String)>)],
     now_ms: i64,
 ) -> Standing {
-    let reach = reach(&installed.kind, &installed.name, &tool_id_of(&installed), agents);
+    let reach = reach(
+        &installed.kind,
+        &installed.name,
+        &tool_id_of(&installed),
+        agents,
+    );
     let days = days_since(installed.at, now_ms);
     Standing {
         idle: reach.is_empty() && days >= IDLE_DAYS,
@@ -756,7 +789,11 @@ pub fn all(conn: &Connection) -> Result<Vec<Installed>, String> {
                 source: r.get(4)?,
                 licence: r.get(5)?,
                 at: r.get(6)?,
-                files: files.lines().filter(|l| !l.is_empty()).map(String::from).collect(),
+                files: files
+                    .lines()
+                    .filter(|l| !l.is_empty())
+                    .map(String::from)
+                    .collect(),
                 command: r.get(8)?,
                 tool_id: r.get(9)?,
             })
@@ -828,7 +865,13 @@ pub struct Listing {
 fn agent_view(ws: &Arc<Workspace>) -> Vec<(String, Vec<String>, Vec<(String, String)>)> {
     ws.agents()
         .into_iter()
-        .map(|a| (a.id, a.skills, a.permissions.into_iter().collect::<Vec<_>>()))
+        .map(|a| {
+            (
+                a.id,
+                a.skills,
+                a.permissions.into_iter().collect::<Vec<_>>(),
+            )
+        })
         .collect()
 }
 
@@ -882,7 +925,10 @@ pub fn community_installed(db: tauri::State<Db>, ws: Ws) -> Result<Vec<Standing>
     };
     let agents = agent_view(&ws);
     let now = now_ms();
-    Ok(rows.into_iter().map(|r| standing(r, &agents, now)).collect())
+    Ok(rows
+        .into_iter()
+        .map(|r| standing(r, &agents, now))
+        .collect())
 }
 
 /// Install one catalogue entry.
@@ -907,9 +953,8 @@ pub fn community_install(db: tauri::State<Db>, ws: Ws, id: String) -> Result<Sta
                 (f.source, f.items)
             })
             .collect();
-        let (entry, _) = find_item(&id, &catalog(), &feeds).ok_or_else(|| {
-            format!("nothing in the catalogue or any cached index called '{id}'")
-        })?;
+        let (entry, _) = find_item(&id, &catalog(), &feeds)
+            .ok_or_else(|| format!("nothing in the catalogue or any cached index called '{id}'"))?;
         (entry, rows)
     };
 
@@ -1058,7 +1103,11 @@ fn set_tool(
 /// the case-insensitive match to be got wrong.
 fn set_skill(ws: &Arc<Workspace>, agent_id: &str, skill: &str, on: bool) -> Result<(), String> {
     let mut doc = ws.agent_doc(agent_id)?;
-    let has = doc.meta.skills.iter().any(|s| s.eq_ignore_ascii_case(skill));
+    let has = doc
+        .meta
+        .skills
+        .iter()
+        .any(|s| s.eq_ignore_ascii_case(skill));
     if on == has {
         return Ok(());
     }
@@ -1197,7 +1246,14 @@ pub fn community_repo(db: tauri::State<Db>, ws: Ws, id: String) -> Result<Repo, 
                     .get(&item.tool_id)
                     .cloned()
                     .unwrap_or_else(|| "none".into());
-                (a.id, if level.is_empty() { "none".into() } else { level })
+                (
+                    a.id,
+                    if level.is_empty() {
+                        "none".into()
+                    } else {
+                        level
+                    },
+                )
             })
             .collect()
     };
@@ -1218,7 +1274,10 @@ pub fn community_repo(db: tauri::State<Db>, ws: Ws, id: String) -> Result<Repo, 
     let mut err = None;
     if item.kind == KIND_TOOL && installed.is_some() && !item.command.is_empty() {
         let spec = crate::mcp::ServerSpec {
-            id: item.tool_id.trim_start_matches(crate::mcp::PREFIX).to_string(),
+            id: item
+                .tool_id
+                .trim_start_matches(crate::mcp::PREFIX)
+                .to_string(),
             name: item.name.clone(),
             command: item.command.clone(),
         };
@@ -1263,11 +1322,7 @@ pub fn community_bundles(db: tauri::State<Db>, ws: Ws) -> Result<Vec<(Bundle, Pl
 /// step through `community_grant`. A bundle that applied them here would be
 /// the one thing this module exists to prevent, dressed up as convenience.
 #[tauri::command]
-pub fn community_install_bundle(
-    db: tauri::State<Db>,
-    ws: Ws,
-    id: String,
-) -> Result<Plan, String> {
+pub fn community_install_bundle(db: tauri::State<Db>, ws: Ws, id: String) -> Result<Plan, String> {
     let b = bundles()
         .into_iter()
         .find(|b| b.id == id)
@@ -1352,11 +1407,18 @@ pub fn community_grant(
 mod tests {
     use super::*;
 
-    fn agent(id: &str, skills: &[&str], perms: &[(&str, &str)]) -> (String, Vec<String>, Vec<(String, String)>) {
+    fn agent(
+        id: &str,
+        skills: &[&str],
+        perms: &[(&str, &str)],
+    ) -> (String, Vec<String>, Vec<(String, String)>) {
         (
             id.to_string(),
             skills.iter().map(|s| s.to_string()).collect(),
-            perms.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect(),
+            perms
+                .iter()
+                .map(|(a, b)| (a.to_string(), b.to_string()))
+                .collect(),
         )
     }
 
@@ -1375,7 +1437,10 @@ mod tests {
             agent("dev-a", &["failure-honesty"], &[]),
             agent("qa", &["small-diffs"], &[]),
         ];
-        assert_eq!(reach(KIND_SKILL, "failure-honesty", "", &agents), vec!["dev-a"]);
+        assert_eq!(
+            reach(KIND_SKILL, "failure-honesty", "", &agents),
+            vec!["dev-a"]
+        );
     }
 
     #[test]
@@ -1407,9 +1472,17 @@ mod tests {
     #[test]
     fn a_clock_that_went_backwards_is_zero_days_old_not_negative() {
         assert_eq!(days_since(1_000, 1_000), 0);
-        assert_eq!(days_since(5_000, 1_000), 0, "installed in the future reads as today");
+        assert_eq!(
+            days_since(5_000, 1_000),
+            0,
+            "installed in the future reads as today"
+        );
         assert_eq!(days_since(0, 86_400_000), 1);
-        assert_eq!(days_since(0, 86_400_000 - 1), 0, "part of a day is not a day");
+        assert_eq!(
+            days_since(0, 86_400_000 - 1),
+            0,
+            "part of a day is not a day"
+        );
     }
 
     #[test]
@@ -1459,8 +1532,16 @@ mod tests {
         assert!(!all.is_empty());
         for i in &all {
             assert!(!i.id.is_empty() && !i.name.is_empty(), "{i:?}");
-            assert!(!i.summary.is_empty(), "every row says what it is for: {}", i.id);
-            assert!(!i.licence.is_empty(), "licence is shown on every row: {}", i.id);
+            assert!(
+                !i.summary.is_empty(),
+                "every row says what it is for: {}",
+                i.id
+            );
+            assert!(
+                !i.licence.is_empty(),
+                "licence is shown on every row: {}",
+                i.id
+            );
             assert!(!i.source.is_empty(), "and where it came from: {}", i.id);
             match i.kind.as_str() {
                 KIND_SKILL | KIND_AGENT => assert!(
@@ -1510,7 +1591,10 @@ mod tests {
     }
 
     fn have(id: &str) -> Installed {
-        Installed { id: id.into(), ..Default::default() }
+        Installed {
+            id: id.into(),
+            ..Default::default()
+        }
     }
 
     fn who(names: &[&str]) -> Vec<String> {
@@ -1521,25 +1605,44 @@ mod tests {
     fn a_bundle_plan_separates_what_it_would_write_from_what_it_would_offer() {
         // The whole reason a bundle is allowed to exist here: it installs, and
         // it *proposes* grants. Nothing in a plan is applied.
-        let b = bundles().iter().find(|b| b.id == "bundle.memory").unwrap().clone();
+        let b = bundles()
+            .iter()
+            .find(|b| b.id == "bundle.memory")
+            .unwrap()
+            .clone();
         let p = plan(&b, &[], &who(&["dev-a", "qa"]));
 
         assert_eq!(p.to_install.len(), 2, "{:?}", p.to_install);
         assert!(p.already.is_empty());
-        assert!(p.missing.is_empty(), "the starter bundles point at real entries");
+        assert!(
+            p.missing.is_empty(),
+            "the starter bundles point at real entries"
+        );
         assert_eq!(p.grants.len(), 2);
         // A server's first grant asks rather than deciding — nobody has
         // watched this one run yet.
-        let tool = p.grants.iter().find(|g| g.item == "tool.mcp-memory").unwrap();
+        let tool = p
+            .grants
+            .iter()
+            .find(|g| g.item == "tool.mcp-memory")
+            .unwrap();
         assert_eq!(tool.level, "approval");
         // A skill's grant is binary, so it carries no level to misread.
-        let skill = p.grants.iter().find(|g| g.item == "skill.failure-honesty").unwrap();
+        let skill = p
+            .grants
+            .iter()
+            .find(|g| g.item == "skill.failure-honesty")
+            .unwrap();
         assert!(skill.level.is_empty());
     }
 
     #[test]
     fn what_is_already_installed_is_left_alone_rather_than_reinstalled() {
-        let b = bundles().iter().find(|b| b.id == "bundle.memory").unwrap().clone();
+        let b = bundles()
+            .iter()
+            .find(|b| b.id == "bundle.memory")
+            .unwrap()
+            .clone();
         let p = plan(&b, &[have("skill.failure-honesty")], &who(&["dev-a"]));
         assert_eq!(p.already, vec!["skill.failure-honesty"]);
         assert_eq!(p.to_install, vec!["tool.mcp-memory"]);
@@ -1557,14 +1660,26 @@ mod tests {
             summary: String::new(),
             items: vec!["skill.small-diffs".into(), "skill.gone-away".into()],
             grants: vec![
-                Suggestion { item: "skill.gone-away".into(), agent: "dev-a".into(), level: String::new() },
-                Suggestion { item: "skill.small-diffs".into(), agent: "dev-a".into(), level: String::new() },
+                Suggestion {
+                    item: "skill.gone-away".into(),
+                    agent: "dev-a".into(),
+                    level: String::new(),
+                },
+                Suggestion {
+                    item: "skill.small-diffs".into(),
+                    agent: "dev-a".into(),
+                    level: String::new(),
+                },
             ],
         };
         let p = plan(&b, &[], &who(&["dev-a"]));
         assert_eq!(p.missing, vec!["skill.gone-away"]);
         assert_eq!(p.to_install, vec!["skill.small-diffs"]);
-        assert_eq!(p.grants.len(), 1, "no grant for a thing that cannot be installed");
+        assert_eq!(
+            p.grants.len(),
+            1,
+            "no grant for a thing that cannot be installed"
+        );
         assert_eq!(p.grants[0].item, "skill.small-diffs");
     }
 
@@ -1578,8 +1693,16 @@ mod tests {
             summary: String::new(),
             items: vec!["skill.small-diffs".into()],
             grants: vec![
-                Suggestion { item: "skill.small-diffs".into(), agent: "nobody".into(), level: String::new() },
-                Suggestion { item: "skill.small-diffs".into(), agent: "dev-a".into(), level: String::new() },
+                Suggestion {
+                    item: "skill.small-diffs".into(),
+                    agent: "nobody".into(),
+                    level: String::new(),
+                },
+                Suggestion {
+                    item: "skill.small-diffs".into(),
+                    agent: "dev-a".into(),
+                    level: String::new(),
+                },
             ],
         };
         let p = plan(&b, &[], &who(&["dev-a"]));
@@ -1594,7 +1717,11 @@ mod tests {
         // rather than a broken import.
         for b in bundles() {
             assert!(!b.items.is_empty(), "{} has nothing in it", b.id);
-            let p = plan(&b, &[], &who(&["dev-a", "dev-b", "qa", "architect", "reviewer"]));
+            let p = plan(
+                &b,
+                &[],
+                &who(&["dev-a", "dev-b", "qa", "architect", "reviewer"]),
+            );
             assert!(p.missing.is_empty(), "{} names {:?}", b.id, p.missing);
             assert!(
                 p.unknown_agents.is_empty(),
@@ -1605,11 +1732,14 @@ mod tests {
         }
     }
 
-
     // -- one repo, in full -------------------------------------------------
 
     fn idx(id: &str) -> Item {
-        Item { id: id.into(), name: "from an index".into(), ..Default::default() }
+        Item {
+            id: id.into(),
+            name: "from an index".into(),
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -1670,7 +1800,9 @@ mod tests {
         // Quoted, because that is how a path with a space is actually written
         // and how the runner itself parses one.
         assert_eq!(
-            runner_of(r#""C:\Program Files\nodejs\npx.cmd" -y thing"#).unwrap().0,
+            runner_of(r#""C:\Program Files\nodejs\npx.cmd" -y thing"#)
+                .unwrap()
+                .0,
             "npx"
         );
     }
@@ -1706,7 +1838,10 @@ mod tests {
         assert!(not_a_server.contains("instructions"), "{not_a_server}");
 
         let not_installed = tools_note(KIND_TOOL, false, None, 0);
-        assert!(not_installed.contains("once it is installed"), "{not_installed}");
+        assert!(
+            not_installed.contains("once it is installed"),
+            "{not_installed}"
+        );
         assert!(
             not_installed.contains("guessed from a manifest"),
             "and says it is not guessing: {not_installed}"
@@ -1714,11 +1849,20 @@ mod tests {
 
         let broken = tools_note(KIND_TOOL, true, Some("spawn failed: ENOENT"), 0);
         assert!(broken.contains("would not start"), "{broken}");
-        assert!(broken.contains("ENOENT"), "carrying the real reason: {broken}");
+        assert!(
+            broken.contains("ENOENT"),
+            "carrying the real reason: {broken}"
+        );
 
         let genuinely_none = tools_note(KIND_TOOL, true, None, 0);
-        assert!(genuinely_none.contains("declared no tools"), "{genuinely_none}");
-        assert_ne!(genuinely_none, broken, "a server with none is not a server that failed");
+        assert!(
+            genuinely_none.contains("declared no tools"),
+            "{genuinely_none}"
+        );
+        assert_ne!(
+            genuinely_none, broken,
+            "a server with none is not a server that failed"
+        );
     }
 
     #[test]
@@ -1727,7 +1871,6 @@ mod tests {
         // would read as a caveat about the list.
         assert_eq!(tools_note(KIND_TOOL, true, None, 3), "");
     }
-
 
     // -- installing from an index -------------------------------------------
 
@@ -1755,10 +1898,17 @@ mod tests {
         // A GitHub search or trending row declares nothing. Installing it
         // would write a row nothing could ever use, and inventing a command
         // would mean running something nobody chose.
-        let repo = Item { kind: KIND_TOOL.into(), name: "cool-thing".into(), ..Default::default() };
+        let repo = Item {
+            kind: KIND_TOOL.into(),
+            name: "cool-thing".into(),
+            ..Default::default()
+        };
         let why = installable(&repo).unwrap_err();
         assert!(why.contains("how to run it"), "{why}");
-        assert!(why.contains("guess"), "and says why guessing is not the answer: {why}");
+        assert!(
+            why.contains("guess"),
+            "and says why guessing is not the answer: {why}"
+        );
     }
 
     #[test]
@@ -1770,11 +1920,20 @@ mod tests {
 
     #[test]
     fn a_skill_with_no_instructions_would_write_an_empty_file() {
-        let empty = Item { kind: KIND_SKILL.into(), name: "hollow".into(), ..Default::default() };
+        let empty = Item {
+            kind: KIND_SKILL.into(),
+            name: "hollow".into(),
+            ..Default::default()
+        };
         assert!(installable(&empty).is_err());
         // And every starter entry passes, or the catalogue ships broken.
         for i in catalog() {
-            assert!(installable(&i).is_ok(), "{} is not installable: {:?}", i.id, installable(&i));
+            assert!(
+                installable(&i).is_ok(),
+                "{} is not installable: {:?}",
+                i.id,
+                installable(&i)
+            );
         }
     }
 
@@ -1790,7 +1949,7 @@ mod tests {
             ..Default::default()
         };
         let incoming = server("tool.registry.b/notes", "mcp.notes", "npx -y other");
-        let why = collision(&incoming, &[already.clone()]).expect("a collision");
+        let why = collision(&incoming, std::slice::from_ref(&already)).expect("a collision");
         assert!(why.contains("Notes"), "names the one already there: {why}");
         assert!(why.contains("mcp.notes"), "and the id they share: {why}");
 
@@ -1801,8 +1960,16 @@ mod tests {
 
     #[test]
     fn a_skill_never_collides_because_it_holds_no_permission_id() {
-        let skill = Item { id: "skill.a".into(), kind: KIND_SKILL.into(), ..Default::default() };
-        let held = Installed { id: "other".into(), tool_id: "mcp.x".into(), ..Default::default() };
+        let skill = Item {
+            id: "skill.a".into(),
+            kind: KIND_SKILL.into(),
+            ..Default::default()
+        };
+        let held = Installed {
+            id: "other".into(),
+            tool_id: "mcp.x".into(),
+            ..Default::default()
+        };
         assert!(collision(&skill, &[held]).is_none());
     }
 
@@ -1883,5 +2050,4 @@ mod tests {
         assert_eq!(rows[0].id, "skill.x");
         assert_eq!(rows[0].command, "");
     }
-
 }

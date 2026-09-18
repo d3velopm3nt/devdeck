@@ -254,6 +254,11 @@ export interface Bot {
   stop_at: string[]
   schedule_id: number | null
   last_woke: number | null
+  /** Whether its last wake went well, and what it said. */
+  last_ok?: boolean | null
+  last_note?: string
+  /** The businesses it works for, by space id. */
+  businesses?: number[]
 }
 
 export const botsList = () => invoke<Bot[]>('bots_list')
@@ -261,6 +266,7 @@ export const botsList = () => invoke<Bot[]>('bots_list')
 /** Where one bot's plan stands. Counts only — what a number means (amber, red,
  *  quiet) is the interface's decision, not the backend's. */
 export interface BotStanding {
+  handle: string
   node_id: number
   done: number
   total: number
@@ -288,7 +294,7 @@ export const botSave = (b: {
   team: string[]
   wakeIntent: string
 }) => invoke<Bot>('bot_save', b)
-export const botDelete = (nodeId: number) => invoke<void>('bot_delete', { nodeId })
+export const botDelete = (nodeId: number, handle?: string) => invoke<void>('bot_delete', { nodeId, handle })
 
 // The bot's own thread. Same record and same loop as a conversation with the
 // assistant, run in the bot's voice with the bot's permissions — so the shapes
@@ -515,10 +521,11 @@ export const nodeThreadSend = (nodeId: number, text: string) =>
 export const threadWake = (convId: string, agentId: string) =>
   invoke<string>('thread_wake', { convId, agentId })
 
-export const botThread = (nodeId: number) =>
-  invoke<import('./aiw').ConversationMeta>('bot_thread', { nodeId })
-export const botThreadSend = (nodeId: number, text: string) =>
-  invoke<import('./aiw').AssistantReply>('bot_thread_send', { nodeId, text })
+/** A manager's own chat. `handle` picks the manager on a space that has several. */
+export const botThread = (nodeId: number, handle?: string) =>
+  invoke<import('./aiw').ConversationMeta>('bot_thread', { nodeId, handle })
+export const botThreadSend = (nodeId: number, text: string, handle?: string) =>
+  invoke<import('./aiw').AssistantReply>('bot_thread_send', { nodeId, text, handle })
 
 export interface BotWork {
   id: string
@@ -608,18 +615,22 @@ export const botCreate = (b: {
   withPlan: boolean
 }) => invoke<Bot>('bot_create', b)
 
-export const botWork = (nodeId: number) => invoke<BotWork[]>('bot_work', { nodeId })
-export const botPlan = (nodeId: number, steps: string[]) =>
-  invoke<string>('bot_plan', { nodeId, steps })
+export const botWork = (nodeId: number, handle?: string) => invoke<BotWork[]>('bot_work', { nodeId, handle })
+export const botPlan = (nodeId: number, steps: string[], handle?: string) =>
+  invoke<string>('bot_plan', { nodeId, steps, handle })
+/** What a manager with nothing on its plan would start with. */
+export const botPlanProposal = (nodeId: number, handle?: string) =>
+  invoke<string[]>('bot_plan_proposal', { nodeId, handle })
 export const botWorkSave = (w: {
   nodeId: number
+  handle?: string
   id: string
   title: string
   status: string
   assignee: string | null
 }) => invoke<void>('bot_work_save', w)
-export const botWorkDelete = (nodeId: number, id: string) =>
-  invoke<void>('bot_work_delete', { nodeId, id })
+export const botWorkDelete = (nodeId: number, id: string, handle?: string) =>
+  invoke<void>('bot_work_delete', { nodeId, id, handle })
 
 export const botInterview = (nodeId: number) => invoke<Interview>('bot_interview', { nodeId })
 export const botAnswer = (nodeId: number, step: number, answer: string, skipped: boolean) =>
@@ -1468,6 +1479,8 @@ export interface LearnPerson {
   chars: number
   received: number
   sent: number
+  /** Who wrote to them: you, or for a business anyone on its team. */
+  written_by?: string[]
 }
 
 /** Something deliberately left out, with the reason attached. */
@@ -1590,6 +1603,8 @@ export interface PersonDecision {
   business?: number
   role?: string
   relates?: string[]
+  title?: string
+  contacts?: ContactSummary[]
 }
 export interface PersonOutcome {
   kept: number
@@ -1599,6 +1614,14 @@ export interface PersonOutcome {
 export const learnDecidePerson = (decision: PersonDecision) =>
   invoke<PersonOutcome>('learn_decide_person', { decision })
 
+/** One person at an organisation, as the mail shows them. */
+export interface ContactSummary {
+  contact_id: number
+  email: string
+  name: string
+  title: string
+  text: string
+}
 /** A person's card as a run left it: summary, facts, and the decision. */
 export interface LearnCard {
   run_id: number
@@ -1613,6 +1636,12 @@ export interface LearnCard {
   /** proposed | kept | declined */
   status: string
   facts: LearnFact[]
+  /** organisation | person | team, for a business's card. */
+  kind?: string
+  /** For someone on the business's team: what they do there. */
+  title?: string
+  /** The people at an organisation, each with what the mail says of them. */
+  contacts?: ContactSummary[]
 }
 /** The cards of a run, to decide or look at again. `runId` 0 is the latest. */
 export const learnReview = (runId = 0) => invoke<LearnCard[]>('learn_review', { runId })
@@ -1646,6 +1675,8 @@ export interface LivePerson {
 export interface LearnPlanEvent {
   run_id: number
   people: LivePerson[]
+  /** organisation | person | team, one per entry in `people`. */
+  kinds?: string[]
   threads: number
   messages: number
   tokens: number
@@ -1736,6 +1767,13 @@ export const mailAccountTest = (id: number) => invoke<MailTestResult>('mail_acco
 export const mailSync = (id = 0) => invoke<number>('mail_sync', { id })
 export const mailList = (query: MailQuery) => invoke<MailMessage[]>('mail_list', { query })
 export const mailCounts = () => invoke<MailCounts>('mail_counts')
+/** What has been fetched from one account, folder by folder. */
+export interface MailBoxCount {
+  mailbox: string
+  count: number
+  last_ts: number
+}
+export const mailAccountBoxes = (id: number) => invoke<MailBoxCount[]>('mail_account_boxes', { id })
 /** Bodies and attachment metadata, only for the message you opened. */
 export const mailBody = (id: number) => invoke<MailBody>('mail_body', { id })
 export const mailMarkRead = (id: number, read: boolean) =>
@@ -1794,7 +1832,15 @@ export interface Suggestion {
   node_id: number
 }
 
+/** Somebody on the business's own team, as Learn found them and you kept them. */
+export interface TeamMember {
+  name: string
+  email: string
+  title: string
+  summary: string
+}
 export interface BusinessMeta {
+  team?: TeamMember[]
   name: string
   website: string
   directors: Director[]

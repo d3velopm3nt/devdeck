@@ -338,7 +338,7 @@ export function Rail() {
             expanded={expanded}
             onClick={() => {
               touchRecent(n.id)
-              if (bot) openBot(bot.node_id, bot.name)
+              if (bot) openBot(bot.node_id, bot.name, false, bot.handle)
               else openNodeThread(n.id, n.name)
             }}
           />

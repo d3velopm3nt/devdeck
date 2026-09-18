@@ -573,6 +573,10 @@ pub struct Correspondent {
     /// which space a fact about them would be filed under by default.
     pub account_id: i64,
     pub space: String,
+    /// Who wrote to them, lowercased: your own addresses, or anyone at the
+    /// business's domains when the ranking is for a business.
+    #[serde(default)]
+    pub written_by: Vec<String>,
 }
 
 /// Who you actually correspond with, most-reciprocal first.
@@ -617,14 +621,32 @@ pub fn rank_correspondents_scoped(
     limit: i64,
     accounts: &[i64],
 ) -> Result<Vec<Correspondent>, String> {
-    rank_correspondents_in(conn, limit, accounts)
+    rank_correspondents_in(conn, limit, accounts, &[])
+}
+
+/// The same, for a business: mail written by anyone at the business's own
+/// domains counts as the business writing. A client only a partner answers
+/// is still somebody the business deals with, and the partner is on the list
+/// too, as its team.
+pub fn rank_correspondents_for(
+    conn: &Connection,
+    limit: i64,
+    accounts: &[i64],
+    domains: &[String],
+) -> Result<Vec<Correspondent>, String> {
+    rank_correspondents_in(conn, limit, accounts, domains)
 }
 
 fn rank_correspondents(conn: &Connection, limit: i64) -> Result<Vec<Correspondent>, String> {
-    rank_correspondents_in(conn, limit, &[])
+    rank_correspondents_in(conn, limit, &[], &[])
 }
 
-fn rank_correspondents_in(conn: &Connection, limit: i64, accounts: &[i64]) -> Result<Vec<Correspondent>, String> {
+fn rank_correspondents_in(
+    conn: &Connection,
+    limit: i64,
+    accounts: &[i64],
+    domains: &[String],
+) -> Result<Vec<Correspondent>, String> {
     let limit = limit.clamp(1, 500);
 
     // One pass over the messages, not one query per contact. The first
@@ -639,6 +661,8 @@ fn rank_correspondents_in(conn: &Connection, limit: i64, accounts: &[i64]) -> Re
         threads: std::collections::HashSet<String>,
         last_ts: i64,
         account_id: i64,
+        /// Who wrote to them: you, or someone at the business.
+        by: Vec<String>,
     }
     let mut tallies: Vec<Tally> = Vec::new();
     let mut contacts: Vec<(i64, String, String)> = Vec::new();
@@ -669,6 +693,7 @@ fn rank_correspondents_in(conn: &Connection, limit: i64, accounts: &[i64]) -> Re
                 threads: std::collections::HashSet::new(),
                 last_ts: 0,
                 account_id: 0,
+                by: Vec::new(),
             });
         }
     }
@@ -679,7 +704,7 @@ fn rank_correspondents_in(conn: &Connection, limit: i64, accounts: &[i64]) -> Re
     {
         let mut st = conn
             .prepare(
-                "SELECT from_addr, to_addrs, thread_key, mailbox, ts, account_id FROM mail_messages",
+                "SELECT from_addr, to_addrs, thread_key, mailbox, ts, account_id, cc_addrs FROM mail_messages",
             )
             .map_err(err)?;
         let rows = st
@@ -691,14 +716,16 @@ fn rank_correspondents_in(conn: &Connection, limit: i64, accounts: &[i64]) -> Re
                     r.get::<_, String>(3)?,
                     r.get::<_, i64>(4)?,
                     r.get::<_, i64>(5)?,
+                    r.get::<_, Option<String>>(6)?.unwrap_or_default(),
                 ))
             })
             .map_err(err)?;
-        for (from, to, thread, mailbox, ts, account) in rows.flatten() {
+        for (from, to, thread, mailbox, ts, account, cc) in rows.flatten() {
             if !accounts.is_empty() && !accounts.contains(&account) {
                 continue;
             }
             let from = from.trim().to_ascii_lowercase();
+            let from_us = own.contains(&from) || domains.iter().any(|d| from.ends_with(&format!("@{d}")));
             if let Some(&i) = by_email.get(&from) {
                 let t = &mut tallies[i];
                 if mailbox == "INBOX" {
@@ -708,14 +735,20 @@ fn rank_correspondents_in(conn: &Connection, limit: i64, accounts: &[i64]) -> Re
                 t.last_ts = t.last_ts.max(ts);
                 t.account_id = t.account_id.max(account);
             }
-            for addr in recipient_addrs(&to) {
+            // Copied counts: a client on the Cc of a reply was written to.
+            for addr in recipient_addrs(&to).into_iter().chain(recipient_addrs(&cc)) {
                 if addr == from {
                     continue;
                 }
                 if let Some(&i) = by_email.get(&addr) {
                     let t = &mut tallies[i];
-                    if mailbox == "Sent" {
+                    // Written by you wherever it is filed: a copy kept in the
+                    // inbox, or a server whose Sent folder was not fetched.
+                    if mailbox == "Sent" || from_us {
                         t.sent += 1;
+                        if !t.by.contains(&from) {
+                            t.by.push(from.clone());
+                        }
                     }
                     t.threads.insert(thread.clone());
                     t.last_ts = t.last_ts.max(ts);
@@ -738,6 +771,7 @@ fn rank_correspondents_in(conn: &Connection, limit: i64, accounts: &[i64]) -> Re
             last_ts: t.last_ts,
             account_id: t.account_id,
             space: String::new(),
+            written_by: t.by,
         })
         // Never written back means not a correspondent. This one line is what
         // removes the thousand messages nobody wants read.
@@ -940,30 +974,25 @@ fn sync_label_now(app: &tauri::AppHandle, db: &Db, label_id: i64) -> Result<i64,
     }
 
     let fetches = if seen > 0 {
-        session.uid_fetch(format!("{}:*", seen + 1), "(UID FLAGS INTERNALDATE RFC822)")
+        fetch_messages(&mut session, true, &format!("{}:*", seen + 1))
     } else {
         let hi = mailbox.exists;
         let lo = hi.saturating_sub(SYNC_LIMIT).max(1);
         say(format!("{remote}: {hi} on the server, taking the newest {}", hi.min(SYNC_LIMIT)));
-        session.fetch(format!("{lo}:{hi}"), "(UID FLAGS INTERNALDATE RFC822)")
+        fetch_messages(&mut session, false, &format!("{lo}:{hi}"))
     };
     let fetches = fetches.map_err(|e| format!("could not read {remote}: {e}"))?;
 
     let mut stored = 0i64;
-    for f in fetches.iter() {
-        let Some(raw) = f.body().or_else(|| f.header()) else {
-            continue;
-        };
-        let internal = f
-            .internal_date()
-            .map(|d| d.timestamp_millis())
-            .unwrap_or_else(now_millis);
+    for f in fetches.messages.iter() {
+        let raw = f.raw.as_slice();
+        let internal = f.internal.unwrap_or_else(now_millis);
         let Ok(parsed) = parse_message(raw, internal) else {
             continue;
         };
-        let unread = !f.flags().iter().any(|fl| *fl == imap::types::Flag::Seen);
-        let flagged = f.flags().iter().any(|fl| *fl == imap::types::Flag::Flagged);
-        let uid = f.uid.unwrap_or(0) as i64;
+        let unread = !f.seen;
+        let flagged = f.flagged;
+        let uid = f.uid as i64;
 
         let conn = db.0.lock().unwrap();
         if store_message(&conn, &root, &acct, &remote, uid, &parsed, unread, flagged)? {
@@ -1287,6 +1316,113 @@ fn access_token_for(acct: &MailAccount) -> Result<String, String> {
     let access = fresh.access.clone();
     token_cache().lock().unwrap().insert(acct.id, fresh);
     Ok(access)
+}
+
+/// One message as a FETCH handed it over.
+#[derive(Debug)]
+struct Fetched {
+    uid: u32,
+    seen: bool,
+    flagged: bool,
+    internal: Option<i64>,
+    raw: Vec<u8>,
+}
+
+/// What a FETCH returned: the messages, and whatever else the server said
+/// while it was sending them.
+#[derive(Debug, Default)]
+struct FetchRead {
+    messages: Vec<Fetched>,
+    other: Vec<String>,
+}
+
+/// FETCH, with the reply read here rather than by the imap crate.
+///
+/// The crate fails the whole FETCH on any untagged reply in the middle that is
+/// not one of the five it expects, and says only "Encountered unexpected parse
+/// response", throwing away the reply that would explain it. Dovecot on a
+/// cPanel host failed every folder that way straight after a good login, which
+/// looks exactly like a wrong password. RFC 3501 section 7 lets a server say
+/// other things during a FETCH, so they are kept as notes instead.
+fn fetch_messages(session: &mut ImapSession, by_uid: bool, range: &str) -> Result<FetchRead, String> {
+    let command = format!(
+        "{}FETCH {range} (UID FLAGS INTERNALDATE RFC822)",
+        if by_uid { "UID " } else { "" }
+    );
+    let data = session
+        .run_command_and_read_response(&command)
+        .map_err(|e| e.to_string())?;
+    read_fetches(&data)
+}
+
+fn clip_note(s: &str, max: usize) -> String {
+    let s = s.trim();
+    if s.chars().count() <= max {
+        return s.to_string();
+    }
+    format!("{}…", s.chars().take(max).collect::<String>())
+}
+
+fn read_fetches(mut data: &[u8]) -> Result<FetchRead, String> {
+    use imap_proto::{AttributeValue, Response};
+    let mut out = FetchRead::default();
+    let mut unreadable: Option<String> = None;
+    while !data.is_empty() {
+        match imap_proto::parse_response(data) {
+            Ok((rest, Response::Fetch(_, attrs))) => {
+                data = rest;
+                let mut m = Fetched { uid: 0, seen: false, flagged: false, internal: None, raw: Vec::new() };
+                for a in attrs {
+                    match a {
+                        AttributeValue::Uid(u) => m.uid = u,
+                        AttributeValue::Flags(flags) => {
+                            m.seen |= flags.iter().any(|f| f.eq_ignore_ascii_case(r"\Seen"));
+                            m.flagged |= flags.iter().any(|f| f.eq_ignore_ascii_case(r"\Flagged"));
+                        }
+                        AttributeValue::InternalDate(d) => {
+                            m.internal = chrono::DateTime::parse_from_str(d.trim(), "%d-%b-%Y %H:%M:%S %z")
+                                .ok()
+                                .map(|t| t.timestamp_millis())
+                        }
+                        AttributeValue::Rfc822(Some(b)) | AttributeValue::BodySection { data: Some(b), .. } => {
+                            m.raw = b.to_vec()
+                        }
+                        AttributeValue::Rfc822Header(Some(b)) if m.raw.is_empty() => m.raw = b.to_vec(),
+                        _ => {}
+                    }
+                }
+                // A FETCH with no message in it is the server volunteering a
+                // flag change, not a message.
+                if !m.raw.is_empty() {
+                    out.messages.push(m);
+                }
+            }
+            Ok((rest, other)) => {
+                data = rest;
+                out.other.push(clip_note(&format!("{other:?}"), 200));
+            }
+            Err(_) => {
+                // Not a reply anything can read. Keep the start of it, so the
+                // error quotes the server, and carry on from the next line.
+                let end = data
+                    .windows(2)
+                    .position(|w| w == b"\r\n")
+                    .map(|i| i + 2)
+                    .unwrap_or(data.len());
+                if unreadable.is_none() {
+                    unreadable = Some(clip_note(&String::from_utf8_lossy(&data[..end]), 200));
+                }
+                data = &data[end..];
+            }
+        }
+    }
+    if let Some(line) = unreadable {
+        if out.messages.is_empty() {
+            return Err(format!("the server's reply could not be read: {line}"));
+        }
+        out.other.push(format!("a line that could not be read: {line}"));
+    }
+    Ok(out)
 }
 
 /// Whatever this account proves itself with: a password, or a live token.
@@ -1687,7 +1823,7 @@ fn sync_accounts(app: &tauri::AppHandle, db: &Db, id: i64) -> Result<i64, String
                 {
                     let conn = db.0.lock().unwrap();
                     let _ = conn.execute(
-                        "UPDATE mail_accounts SET last_sync=?1, last_error='' WHERE id=?2",
+                        "UPDATE mail_accounts SET last_sync=?1 WHERE id=?2",
                         params![now_millis(), acct.id],
                     );
                 }
@@ -1849,7 +1985,12 @@ oselect" | r"lagged" | r"\important"
         }
         let mailbox = match session.select(&remote) {
             Ok(m) => m,
-            Err(_) => continue,
+            // Said, not skipped in silence: a Sent folder that would not open
+            // left Learn with nobody to read and nothing on screen to say why.
+            Err(e) => {
+                folder_errors.push(format!("{remote}: could not open it: {e}"));
+                continue;
+            }
         };
         if mailbox.exists == 0 {
             continue;
@@ -1879,7 +2020,7 @@ oselect" | r"lagged" | r"\important"
                 "{local}: {} on the server, looking for anything after #{seen}",
                 mailbox.exists
             ));
-            session.uid_fetch(format!("{}:*", seen + 1), "(UID FLAGS INTERNALDATE RFC822)")
+            fetch_messages(&mut session, true, &format!("{}:*", seen + 1))
         } else {
             // Never synced this folder: take the newest SYNC_LIMIT and stop.
             // A mail client is not an archive migration tool.
@@ -1889,10 +2030,15 @@ oselect" | r"lagged" | r"\important"
                 "{local}: {hi} on the server, taking the newest {}",
                 hi.min(SYNC_LIMIT)
             ));
-            session.fetch(format!("{lo}:{hi}"), "(UID FLAGS INTERNALDATE RFC822)")
+            fetch_messages(&mut session, false, &format!("{lo}:{hi}"))
         };
         let fetches = match fetches {
-            Ok(f) => f,
+            Ok(f) => {
+                for note in &f.other {
+                    push_log(app, MAIL_LOG_ID, "mail", "debug", format!("{local}: the server also said {note}"));
+                }
+                f
+            }
             // Skip this folder, keep the others. Aborting the whole account
             // here threw away every message already stored from the folders
             // that worked, and left the account wearing an error about one
@@ -1903,21 +2049,16 @@ oselect" | r"lagged" | r"\important"
             }
         };
 
-        for f in fetches.iter() {
-            let Some(raw) = f.body().or_else(|| f.header()) else {
-                continue;
-            };
-            let internal = f
-                .internal_date()
-                .map(|d| d.timestamp_millis())
-                .unwrap_or_else(now_millis);
+        for f in fetches.messages.iter() {
+            let raw = f.raw.as_slice();
+            let internal = f.internal.unwrap_or_else(now_millis);
             let parsed = match parse_message(raw, internal) {
                 Ok(p) => p,
                 Err(_) => continue,
             };
-            let seen = f.flags().iter().any(|fl| *fl == imap::types::Flag::Seen);
-            let flagged = f.flags().iter().any(|fl| *fl == imap::types::Flag::Flagged);
-            let uid = f.uid.unwrap_or(0) as i64;
+            let seen = f.seen;
+            let flagged = f.flagged;
+            let uid = f.uid as i64;
 
             let fresh = {
                 let conn = db.0.lock().unwrap();
@@ -1958,6 +2099,17 @@ oselect" | r"lagged" | r"\important"
     // one unreadable Archive would mark a perfectly good inbox as broken.
     if !folder_errors.is_empty() && stored == 0 {
         return Err(folder_errors.join("; "));
+    }
+    // Some folders came through and some did not. Not a failed sync, but not
+    // one to report as clean either: the account carries it as a warning.
+    // The error was cleared before this attempt began, so it is only ever
+    // about this one.
+    if !folder_errors.is_empty() {
+        let conn = db.0.lock().unwrap();
+        let _ = conn.execute(
+            "UPDATE mail_accounts SET last_error=?1 WHERE id=?2",
+            params![format!("fetched, but skipped {}", folder_errors.join("; ")), acct.id],
+        );
     }
     Ok(stored)
 }
@@ -2173,6 +2325,49 @@ pub fn mail_list(db: tauri::State<Db>, query: MailQuery) -> Result<Vec<MailMessa
         .query_map(rusqlite::params_from_iter(refs), row_to_msg)
         .map_err(err)?;
     rows.collect::<rusqlite::Result<Vec<_>>>().map_err(err)
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct MailBoxCount {
+    pub mailbox: String,
+    pub count: i64,
+    pub last_ts: i64,
+}
+
+/// What has been fetched from one account, folder by folder. Inbox, Sent and
+/// Drafts are always listed, at nought when nothing came, because an empty
+/// Sent is the thing worth seeing: Learn reads the people you wrote to.
+#[tauri::command(async)]
+pub fn mail_account_boxes(db: tauri::State<Db>, id: i64) -> Result<Vec<MailBoxCount>, String> {
+    let conn = db.0.lock().unwrap();
+    let mut st = conn
+        .prepare("SELECT mailbox, COUNT(*), MAX(ts) FROM mail_messages WHERE account_id=?1 GROUP BY mailbox")
+        .map_err(err)?;
+    let mut out: Vec<MailBoxCount> = st
+        .query_map(params![id], |r| {
+            Ok(MailBoxCount {
+                mailbox: r.get(0)?,
+                count: r.get(1)?,
+                last_ts: r.get::<_, Option<i64>>(2)?.unwrap_or(0),
+            })
+        })
+        .map_err(err)?
+        .flatten()
+        .collect();
+    for want in ["INBOX", "Sent", "Drafts"] {
+        if !out.iter().any(|b| b.mailbox == want) {
+            out.push(MailBoxCount { mailbox: want.into(), count: 0, last_ts: 0 });
+        }
+    }
+    let rank = |m: &str| match m {
+        "INBOX" => 0,
+        "Sent" => 1,
+        "Drafts" => 2,
+        "Archive" => 3,
+        _ => 4,
+    };
+    out.sort_by(|a, b| rank(&a.mailbox).cmp(&rank(&b.mailbox)).then(a.mailbox.cmp(&b.mailbox)));
+    Ok(out)
 }
 
 // Polled by the setup screen. Off the main thread, or a wait for the lock
@@ -2760,6 +2955,36 @@ pub fn mail_assistant_status(
 mod tests {
     use super::*;
 
+    #[test]
+    fn a_fetch_survives_the_server_saying_something_else_in_the_middle() {
+        let body = b"From: a@innotrack.co.za\r\nSubject: hi\r\n\r\nhello\r\n";
+        let mut data = Vec::new();
+        data.extend_from_slice(
+            format!(
+                "* 1 FETCH (UID 7 FLAGS (\\Seen $Forwarded) INTERNALDATE \" 5-Sep-2026 10:11:12 +0200\" RFC822 {{{}}}\r\n",
+                body.len()
+            )
+            .as_bytes(),
+        );
+        data.extend_from_slice(body);
+        data.extend_from_slice(b")\r\n* OK Still here\r\n* 2 FETCH (UID 8 FLAGS () RFC822 {5}\r\nabcde)\r\n* 3 FETCH (FLAGS (\\Flagged))\r\n");
+        let read = read_fetches(&data).unwrap();
+        assert_eq!(read.messages.len(), 2);
+        assert_eq!(read.messages[0].uid, 7);
+        assert!(read.messages[0].seen && !read.messages[0].flagged);
+        assert!(read.messages[0].internal.is_some());
+        assert_eq!(read.messages[0].raw, body.to_vec());
+        assert_eq!(read.messages[1].uid, 8);
+        assert!(!read.messages[1].seen);
+        assert!(read.other.iter().any(|o| o.contains("Still here")), "{:?}", read.other);
+    }
+
+    #[test]
+    fn a_reply_nothing_can_read_is_an_error_that_quotes_it() {
+        let e = read_fetches(b"garbage from the server\r\n").unwrap_err();
+        assert!(e.contains("garbage from the server"), "{e}");
+    }
+
     fn mem() -> Connection {
         let c = Connection::open_in_memory().unwrap();
         c.execute_batch(crate::db::CORE_SCHEMA).unwrap();
@@ -3184,6 +3409,23 @@ Content-Type: multipart/mixed; boundary=\"z\"\r\n\r\n\
     }
 
     #[test]
+    fn mail_you_wrote_counts_wherever_it_is_filed() {
+        let c = mem();
+        c.execute(
+            "INSERT INTO mail_accounts (id, name, address, space) VALUES (1,'Me','me@d.co','Innotrack')",
+            [],
+        )
+        .unwrap();
+        contact(&c, "Kim", "kim@ridgeback.co.za");
+        msg(&c, "INBOX", "kim@ridgeback.co.za", "me@d.co", "quote", 1000);
+        // A copy of the reply kept in the inbox, and no Sent folder fetched.
+        msg(&c, "INBOX", "me@d.co", "kim@ridgeback.co.za", "re: quote", 1100);
+        let out = rank_correspondents(&c, 50).unwrap();
+        assert_eq!(out.len(), 1, "you wrote to Kim, so Kim is somebody to learn about");
+        assert_eq!(out[0].sent, 1);
+    }
+
+    #[test]
     fn the_person_you_answer_most_comes_first() {
         let c = mem();
         c.execute(
@@ -3252,6 +3494,38 @@ Content-Type: multipart/mixed; boundary=\"z\"\r\n\r\n\
         let biz = rank_correspondents_scoped(&c, 50, &[2]).unwrap();
         assert_eq!(biz.len(), 1);
         assert_eq!(biz[0].email, "orders@tags.co");
+    }
+
+    #[test]
+    fn a_client_only_a_partner_answered_is_still_the_business_s() {
+        let c = mem();
+        c.execute("INSERT INTO mail_accounts (id, name, address) VALUES (1,'Biz','jj@biz.co')", []).unwrap();
+        contact(&c, "Kim", "kim@firm.co");
+        contact(&c, "Sam", "sam@other.co");
+        contact(&c, "Kate", "kate@biz.co");
+        // The partner answers the client, copying the mailbox owner.
+        c.execute(
+            "INSERT INTO mail_messages (account_id, uid, mailbox, from_addr, to_addrs, cc_addrs, thread_key, ts)
+             VALUES (1, 1, 'INBOX', 'kate@biz.co', 'Kim <kim@firm.co>', 'jj@biz.co', 'a', 1)",
+            [],
+        )
+        .unwrap();
+        // The owner writes to the partner, and copies somebody.
+        c.execute(
+            "INSERT INTO mail_messages (account_id, uid, mailbox, from_addr, to_addrs, cc_addrs, thread_key, ts)
+             VALUES (1, 2, 'Sent', 'jj@biz.co', 'kate@biz.co', 'sam@other.co', 'b', 2)",
+            [],
+        )
+        .unwrap();
+
+        let mine = rank_correspondents(&c, 50).unwrap();
+        assert!(!mine.iter().any(|x| x.email == "kim@firm.co"), "you never wrote to Kim");
+        assert!(mine.iter().any(|x| x.email == "sam@other.co"), "a copy is writing to them");
+
+        let biz = rank_correspondents_for(&c, 50, &[1], &["biz.co".to_string()]).unwrap();
+        let kim = biz.iter().find(|x| x.email == "kim@firm.co").expect("the partner wrote to Kim");
+        assert_eq!(kim.written_by, vec!["kate@biz.co".to_string()]);
+        assert!(biz.iter().any(|x| x.email == "kate@biz.co"), "the partner is on the list, as team");
     }
 
     /// A reply addressed to several people still counts for each of them.

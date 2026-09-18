@@ -15,10 +15,16 @@ export const openClearBusinesses = () => window.dispatchEvent(new CustomEvent('d
 export function TodayBusinesses() {
   const [list, setList] = useState<ipc.BusinessSummary[] | null>(null)
   useEffect(() => {
-    void ipc
-      .businessList()
-      .then(setList)
-      .catch(() => setList([]))
+    // Again whenever the setup closes, or Carry on would name a step you have
+    // already passed.
+    const load = () =>
+      void ipc
+        .businessList()
+        .then(setList)
+        .catch(() => setList([]))
+    load()
+    window.addEventListener('devdeck:businesses-changed', load)
+    return () => window.removeEventListener('devdeck:businesses-changed', load)
   }, [])
   if (list === null) return null
   const set = list.filter((b) => b.set_up)

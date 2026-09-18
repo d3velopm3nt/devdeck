@@ -396,6 +396,8 @@ export interface ConversationMeta {
   project_id?: string
   /** The bot whose thread this is. */
   bot_node?: number
+  /** The manager whose own chat this is, by handle. */
+  bot_handle?: string
   /** The feature whose room this is. */
   feature?: string
   /** The node whose thread this is. */
@@ -415,6 +417,7 @@ export interface ConversationSummary {
   preview: string
   preview_by?: string
   bot_node?: number
+  bot_handle?: string
   feature?: string
   node?: number
   participants?: string[]

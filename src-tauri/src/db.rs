@@ -585,6 +585,17 @@ pub fn checkpoint_state(app: &tauri::AppHandle) {
 pub fn migrate(conn: &Connection) {
     // A learn card for an organisation: what it is to the business, what it
     // has to do with, which business, and every contact at it.
+    // A business's card says what it is (an organisation, or someone on its
+    // own team), a team member's title, and the people at an organisation.
+    if conn.prepare("SELECT kind FROM learn_people LIMIT 1").is_err() {
+        for sql in [
+            "ALTER TABLE learn_people ADD COLUMN kind TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE learn_people ADD COLUMN title TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE learn_people ADD COLUMN contacts TEXT NOT NULL DEFAULT '[]'",
+        ] {
+            let _ = conn.execute(sql, []);
+        }
+    }
     if conn.prepare("SELECT role FROM learn_people LIMIT 1").is_err() {
         for sql in [
             "ALTER TABLE learn_people ADD COLUMN role TEXT NOT NULL DEFAULT ''",

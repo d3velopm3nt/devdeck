@@ -107,7 +107,7 @@ export function BotSettings({
     )
       return
     setErr('')
-    void ipc.botDelete(bot.node_id).then(onDeleted).catch((e) => setErr(String(e)))
+    void ipc.botDelete(bot.node_id, bot.handle).then(onDeleted).catch((e) => setErr(String(e)))
   }
 
   return (

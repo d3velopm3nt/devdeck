@@ -22,8 +22,9 @@ export function useSpeakers(): (id: string) => string {
       if (!id) return 'Assistant'
       if (id === 'assistant') return 'Assistant'
       if (id.startsWith('bot:')) {
-        const node = Number(id.slice(4))
-        const bot = bots.find((b) => b.node_id === node)
+        const key = id.slice(4)
+        // A handle now; a space's id in threads from before there were handles.
+        const bot = bots.find((b) => b.handle === key) ?? bots.find((b) => String(b.node_id) === key)
         return bot?.name ?? id
       }
       return agents.find((a) => a.id === id)?.name ?? id

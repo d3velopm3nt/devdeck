@@ -105,6 +105,22 @@ pub struct BusinessMeta {
     /// The team step has been finished.
     #[serde(default)]
     pub made: bool,
+    /// The people who are the business, as Learn found them and you kept them.
+    #[serde(default)]
+    pub team: Vec<TeamMember>,
+}
+
+/// Somebody on the business's own team: a partner, a director, staff.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct TeamMember {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub email: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub summary: String,
 }
 
 #[derive(Serialize, Clone, Debug, Default)]
@@ -344,7 +360,31 @@ pub fn scope_of(conn: &Connection, node_id: i64) -> Result<crate::aiw::learn::Sc
         .filter(|i| (i.field == "product" || i.field == "service") && (i.state == "agreed" || (i.kind == "you" && i.state != "declined")))
         .map(|i| i.text.clone())
         .collect();
-    Ok(crate::aiw::learn::Scope { accounts, business: node_id, name: meta.name, offers })
+    // Its own domains: the website's, and every mailbox's that is not free
+    // mail. Somebody writing from one of these is the business, not a client.
+    let mut domains: Vec<String> = Vec::new();
+    let site = meta
+        .website
+        .trim()
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .split('/')
+        .next()
+        .unwrap_or("")
+        .trim_start_matches("www.")
+        .to_ascii_lowercase();
+    if site.contains('.') {
+        domains.push(site);
+    }
+    for id in &accounts {
+        if let Ok(addr) = conn.query_row("SELECT address FROM mail_accounts WHERE id = ?1", params![id], |r| r.get::<_, String>(0)) {
+            let d = addr.split('@').nth(1).unwrap_or("").trim().to_ascii_lowercase();
+            if !d.is_empty() && !crate::aiw::learn::FREE_MAIL.contains(&d.as_str()) && !domains.contains(&d) {
+                domains.push(d);
+            }
+        }
+    }
+    Ok(crate::aiw::learn::Scope { accounts, business: node_id, name: meta.name, offers, domains })
 }
 
 /// Write a note into the business's knowledge, which its managers read.

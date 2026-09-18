@@ -11,6 +11,7 @@ import type { MailAccount } from '../../lib/types'
 import { Icon } from '../../lib/icons'
 import { Err, Header } from '../setup/LearnStep'
 import { Foot } from './BusinessStep'
+import { MailboxRow, type FetchResult } from './MailboxRow'
 import { BizFrame, hostOf, type StepProps } from './shared'
 
 const SHARED = ['info', 'sales', 'accounts', 'admin', 'support', 'hello', 'office', 'enquiries', 'billing']
@@ -25,7 +26,7 @@ export function MailStep({ view, nav, onClose, next }: StepProps) {
   const [smtpPort, setSmtpPort] = useState(465)
   const [other, setOther] = useState(false)
   const [busy, setBusy] = useState(0)
-  const [note, setNote] = useState<Record<number, string>>({})
+  const [result, setResult] = useState<Record<number, FetchResult>>({})
   const [err, setErr] = useState('')
 
   const domain = hostOf(view?.meta.website ?? '').replace(/^www\./, '')
@@ -89,15 +90,23 @@ export function MailStep({ view, nav, onClose, next }: StepProps) {
     }
   }
 
+  const forget = (id: number) =>
+    setResult((cur) => {
+      const rest = { ...cur }
+      delete rest[id]
+      return rest
+    })
+
   const fetchMail = async (a: MailAccount) => {
     setBusy(a.id)
-    setNote((cur) => ({ ...cur, [a.id]: '' }))
+    forget(a.id)
     try {
       const n = await ipc.mailSync(a.id)
-      setNote((cur) => ({ ...cur, [a.id]: `${n} new` }))
+      setResult((cur) => ({ ...cur, [a.id]: { ok: true, text: `${n} new, just now` } }))
       await load()
     } catch (e) {
-      setNote((cur) => ({ ...cur, [a.id]: String(e) }))
+      setResult((cur) => ({ ...cur, [a.id]: { ok: false, text: String(e) } }))
+      await load()
     } finally {
       setBusy(0)
     }
@@ -139,31 +148,19 @@ export function MailStep({ view, nav, onClose, next }: StepProps) {
           <div className="border-t border-line px-4 py-2.5 text-[12px] text-muted">No mailboxes yet.</div>
         )}
         {mine.map((a) => (
-          <div key={a.id} className="flex items-center gap-2.5 border-t border-line px-4 py-2.5">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-raise text-[9.5px] font-semibold text-dim">
-              {localPart(a).slice(0, 2).toUpperCase()}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="truncate font-mono text-[12px] text-ink">{a.address}</div>
-              <div className="truncate text-[11px] text-muted">
-                {SHARED.includes(localPart(a)) ? 'shared' : 'a person'}
-                {a.space.toLowerCase() !== name.toLowerCase() ? ` · not tied to ${name} yet` : ''}
-                {note[a.id] ? ` · ${note[a.id]}` : a.last_error ? ` · ${a.last_error}` : a.last_sync ? ' · fetched' : ''}
-              </div>
-            </div>
-            {a.space.toLowerCase() !== name.toLowerCase() && (
-              <button className="btn-ghost text-[11.5px]" onClick={() => void tie(a)}>
-                Belongs to {name}
-              </button>
-            )}
-            {busy === a.id ? (
-              <Icon name="update" size={13} spin className="text-indigo-400" />
-            ) : (
-              <button className="btn-ghost text-[11.5px]" onClick={() => void fetchMail(a)}>
-                Fetch mail
-              </button>
-            )}
-          </div>
+          <MailboxRow
+            key={a.id}
+            account={a}
+            business={name}
+            kind={SHARED.includes(localPart(a)) ? 'shared' : 'a person'}
+            busy={busy === a.id}
+            disabled={busy !== 0}
+            result={result[a.id]}
+            onFetch={() => void fetchMail(a)}
+            onTie={a.space.toLowerCase() !== name.toLowerCase() ? () => void tie(a) : undefined}
+            onChanged={load}
+            onForget={() => forget(a.id)}
+          />
         ))}
         <div className="flex flex-col gap-2 border-t border-line bg-raise px-4 py-3">
           <div className="grid grid-cols-[minmax(0,1fr)_190px_auto] items-center gap-2">
@@ -212,6 +209,11 @@ export function MailStep({ view, nav, onClose, next }: StepProps) {
             <span className="text-[10.5px] text-faint">host, port and username</span>
           </button>
         )}
+        {err && (
+          <div className="border-t border-line px-4 py-2.5">
+            <Err>{err}</Err>
+          </div>
+        )}
       </div>
 
       <div className="flex items-start gap-2.5 rounded-[10px] border border-line bg-panel px-4 py-3">
@@ -224,7 +226,6 @@ export function MailStep({ view, nav, onClose, next }: StepProps) {
         </div>
       </div>
 
-      {err && <Err>{err}</Err>}
       <div className="flex items-center gap-3">
         <button className="btn-primary text-[12px]" onClick={() => next('learn')}>
           Next: learn

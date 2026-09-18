@@ -449,7 +449,26 @@ fn run_one(
         // all. A heartbeat that reports "all clear" every morning is a
         // heartbeat you learn to scroll past, which costs you the morning it
         // does not.
-        "bot" => {
+        "bot" => 'wake: {
+            // A manager with nothing on its plan and nothing to report says
+            // what it would start with, rather than failing to wake an agent
+            // into no work. Posted once: the same proposal is not repeated
+            // every morning it stays unanswered.
+            let empty = if report.is_none() {
+                bot.as_ref().and_then(|b| {
+                    let db = app.try_state::<Db>()?;
+                    let conn = db.0.lock().ok()?;
+                    crate::bots::empty_plan_line(&conn, b)
+                })
+            } else {
+                None
+            };
+            if let (Some(line), Some(b)) = (empty, bot.as_ref()) {
+                if s.last_note.trim() != line.trim() {
+                    crate::bots::thread_post(app, b, &line);
+                }
+                break 'wake (true, line);
+            }
             // Two things can happen on a wake, and the order matters: read the
             // space first, then run the agent if one is named. Reading never
             // touches anything, so a run that fails still leaves you the report.
@@ -586,7 +605,7 @@ pub fn on_event(app: &tauri::AppHandle, event_type: &str, project_id: Option<&st
                 let report = bot
                     .as_ref()
                     .filter(|b| b.node_id != 0)
-                    .and_then(|b| crate::bots::wake_report(&conn, b.node_id));
+                    .and_then(|b| crate::bots::wake_report_for(&conn, b));
                 (report, bot)
             };
             let (ok, note) = run_one(&h, &s, dir, false, report, bot);
@@ -655,7 +674,7 @@ pub fn tick(app: &tauri::AppHandle, startup: bool) {
                     let report = bot
                         .as_ref()
                         .filter(|b| b.node_id != 0)
-                        .and_then(|b| crate::bots::wake_report(&conn, b.node_id));
+                        .and_then(|b| crate::bots::wake_report_for(&conn, b));
                     (report, bot)
                 } else {
                     (None, None)
@@ -769,13 +788,13 @@ pub fn schedule_run_now(
         let s = conn.query_row(&sql, params![id], row).map_err(err)?;
         let dir = dir_for(&conn, s.node_id);
         let (report, bot) = if s.kind == "bot" {
-            match s.node_id {
-                Some(n) => (
-                    crate::bots::wake_report(&conn, n),
-                    crate::bots::bot_on_node(&conn, n),
-                ),
-                None => (None, None),
-            }
+            // The heartbeat names its manager; an older row only its space.
+            let bot = if s.manager.trim().is_empty() {
+                s.node_id.and_then(|n| crate::bots::bot_on_node(&conn, n))
+            } else {
+                crate::bots::bot_on(&conn, &s.manager)
+            };
+            (bot.as_ref().and_then(|b| crate::bots::wake_report_for(&conn, b)), bot)
         } else {
             (None, None)
         };

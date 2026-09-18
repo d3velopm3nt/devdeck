@@ -1,11 +1,12 @@
-// Step five: learn from the business's mail, one organisation at a time.
+// Step five: learn from the business's mail, who it deals with and who it is.
 //
-// The personal learn run, kept to the business's mailboxes and grouped by
-// the domain people write from: three people at one firm are one card. Each
-// card says what the organisation is to the business, which of its products
-// and services it has to do with, and what is going on. Keep, change or
-// dismiss, then the next. A line about you personally goes to Your life,
-// never to the business.
+// The personal learn run, kept to the business's mailboxes. People who write
+// from the same company domain are one organisation card, with each of them
+// on it and what the mail says of them. People at the business's own domains
+// are its team, a card each. Mail anyone on the team wrote counts, so a
+// client only a partner answers is still found. Keep, change or dismiss,
+// then the next. A line about you personally goes to Your life, never to the
+// business.
 
 import { useEffect, useRef, useState } from 'react'
 import * as ipc from '../../lib/ipc'
@@ -13,9 +14,13 @@ import { Icon } from '../../lib/icons'
 import { Err, Header } from '../setup/LearnStep'
 import { CAPTURE_BUSINESS_AUTO } from '../../lib/devCapture'
 import { Foot } from './BusinessStep'
-import { BizFrame, isAgreed, type StepProps } from './shared'
+import { BizFrame, hostOf, isAgreed, type StepProps } from './shared'
 
 type Phase = 'approve' | 'reading' | 'review'
+
+/** How many people a run reads about. Organisations group several, and the
+ *  team is on the list too, so a business needs more than a person does. */
+const PEOPLE = 30
 
 const ROLES = [
   { id: 'client', label: 'a client' },
@@ -29,6 +34,8 @@ const ROLE_TONE: Record<string, string> = {
   supplier: 'bg-sky-500/15 text-info',
   adviser: 'bg-amber-500/15 text-warn',
   'partner firm': 'bg-violet-500/15 text-viol',
+  team: 'bg-emerald-500/15 text-ok',
+  person: 'bg-raise text-muted',
 }
 
 const FREE = new Set([
@@ -39,12 +46,29 @@ const FREE = new Set([
 ])
 
 const n = (v: number) => v.toLocaleString()
+const localPart = (a: string) => a.split('@')[0] ?? a
+const initials = (s: string) =>
+  s
+    .replace(/@.*/, '')
+    .split(/[\s._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join('')
+
+/** Ridgeback Mining from ridgeback-mining.co.za, as the backend names it. */
+const orgName = (domain: string) =>
+  (domain.replace(/^www\./, '').split('.')[0] ?? domain)
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((w) => w[0]!.toUpperCase() + w.slice(1))
+    .join(' ')
 
 function RoleChip({ role }: { role: string }) {
   if (!role) return null
   return (
     <span
-      className={`rounded-full px-2 text-[9px] font-semibold uppercase leading-[1.6] tracking-wider ${ROLE_TONE[role] ?? 'bg-raise text-muted'}`}
+      className={`shrink-0 rounded-full px-2 text-[9px] font-semibold uppercase leading-[1.6] tracking-wider ${ROLE_TONE[role] ?? 'bg-raise text-muted'}`}
     >
       {role}
     </span>
@@ -59,6 +83,28 @@ interface Card {
   summary: string
   status: string
   facts: ipc.LearnFact[]
+  kind?: string
+  title?: string
+  contacts?: ipc.ContactSummary[]
+}
+
+const isTeam = (c: { kind?: string; role: string }) => c.kind === 'team' || c.role === 'team'
+
+interface Decision {
+  role: string
+  relates: string[]
+  summary: string
+  title: string
+  keep: ipc.KeptLine[]
+  decline: number[]
+}
+
+interface Unit {
+  key: string
+  kind: 'organisation' | 'person' | 'team'
+  name: string
+  people: ipc.LearnPerson[]
+  by: string[]
 }
 
 export function BusinessLearnStep({ view, nav, onClose, next }: StepProps) {
@@ -82,7 +128,7 @@ export function BusinessLearnStep({ view, nav, onClose, next }: StepProps) {
   useEffect(() => {
     if (!nodeId) return
     void ipc
-      .learnEstimate(12, [], 'full', false, nodeId)
+      .learnEstimate(PEOPLE, [], 'full', false, nodeId)
       .then((e) => {
         setEst(e)
         setErr('')
@@ -114,9 +160,10 @@ export function BusinessLearnStep({ view, nav, onClose, next }: StepProps) {
       if (!first) return
       window.setTimeout(() => {
         void decide(first, {
-          role: first.role || 'client',
+          role: isTeam(first) ? 'team' : first.role || 'client',
           relates: first.relates,
           summary: first.summary,
+          title: first.title ?? '',
           keep: first.facts.filter((f) => f.status === 'proposed').map((f) => ({ id: f.id, text: f.text, node_id: f.node_id })),
           decline: [],
         })
@@ -128,15 +175,32 @@ export function BusinessLearnStep({ view, nav, onClose, next }: StepProps) {
   if (!view) return null
   const name = view.meta.name
 
-  const orgs = (() => {
-    const seen = new Map<string, number>()
-    for (const p of est?.people ?? []) {
-      const d = p.email.split('@')[1]?.toLowerCase() ?? ''
-      const key = !d || FREE.has(d) ? `p:${p.contact_id}` : d
-      seen.set(key, (seen.get(key) ?? 0) + 1)
+  // The business's own domains: its website's, and whichever wrote to people.
+  // Only the business's mailboxes are read, so a writer is you or the team.
+  const ours = new Set<string>()
+  const site = hostOf(view.meta.website ?? '').replace(/^www\./, '').toLowerCase()
+  if (site) ours.add(site)
+  for (const p of est?.people ?? []) {
+    for (const w of p.written_by ?? []) {
+      const d = w.split('@')[1]?.toLowerCase()
+      if (d && !FREE.has(d)) ours.add(d)
     }
-    return seen.size
-  })()
+  }
+  const units: Unit[] = []
+  for (const p of est?.people ?? []) {
+    const d = p.email.split('@')[1]?.toLowerCase() ?? ''
+    const kind: Unit['kind'] = d && ours.has(d) ? 'team' : !d || FREE.has(d) ? 'person' : 'organisation'
+    const key = kind === 'organisation' ? d : `p:${p.contact_id}`
+    let u = units.find((x) => x.key === key)
+    if (!u) {
+      u = { key, kind, name: kind === 'organisation' ? orgName(d) : p.name || p.email, people: [], by: [] }
+      units.push(u)
+    }
+    u.people.push(p)
+    for (const w of p.written_by ?? []) if (!u.by.includes(w)) u.by.push(w)
+  }
+  const outside = units.filter((u) => u.kind !== 'team')
+  const team = units.filter((u) => u.kind === 'team')
 
   const loadCards = async (runId: number) => {
     const c = await ipc.learnReview(runId)
@@ -167,7 +231,7 @@ export function BusinessLearnStep({ view, nav, onClose, next }: StepProps) {
       failed: (e) => setErr(`${e.person.name}: ${e.error}`),
     })
     try {
-      await ipc.learnRunLive(12, [], 'full', false, nodeId)
+      await ipc.learnRunLive(PEOPLE, [], 'full', false, nodeId)
     } catch (e) {
       setErr(String(e))
       setPhase('approve')
@@ -177,7 +241,7 @@ export function BusinessLearnStep({ view, nav, onClose, next }: StepProps) {
     }
   }
 
-  const decide = async (c: Card, d: { role: string; relates: string[]; summary: string; keep: ipc.KeptLine[]; decline: number[] }) => {
+  const decide = async (c: Card, d: Decision) => {
     setErr('')
     try {
       await ipc.learnDecidePerson({
@@ -192,6 +256,8 @@ export function BusinessLearnStep({ view, nav, onClose, next }: StepProps) {
         business: nodeId,
         role: d.role,
         relates: d.relates,
+        title: d.title,
+        contacts: c.contacts ?? [],
       })
       setSelected(null)
       await loadCards(c.run_id)
@@ -202,20 +268,24 @@ export function BusinessLearnStep({ view, nav, onClose, next }: StepProps) {
 
   // ---- approve -------------------------------------------------------------
   if (phase === 'approve') {
+    const orgCount = outside.filter((u) => u.kind === 'organisation').length
+    const personCount = outside.length - orgCount
     return (
       <BizFrame step="learn" view={view} nav={nav} onClose={onClose}>
         <Header
           icon="mail"
           title={`Learn from ${name}'s mail`}
-          text={`To learn what each organisation is to ${name}, I read the threads with them, which means sending them to ${est?.provider_name || 'your provider'}. Once, and this is exactly what that is.`}
+          text={`To learn who ${name} deals with and who is on its team, I read the threads with them, which means sending them to ${est?.provider_name || 'your provider'}. Once, and this is exactly what that is.`}
         />
         {est && (
           <div className="rounded-[10px] border border-line bg-panel">
             <div className="flex items-center gap-2 border-b border-line px-4 py-3">
               <span className="text-[13px] font-semibold text-ink">
-                Read {n(est.threads)} threads with {orgs} {orgs === 1 ? 'organisation' : 'organisations'}
+                Read {n(est.threads)} threads: {orgCount} {orgCount === 1 ? 'organisation' : 'organisations'}
+                {personCount > 0 ? `, ${personCount} on their own` : ''}
+                {team.length > 0 ? ` and ${team.length} on ${name}'s team` : ''}
               </span>
-              <span className="ml-auto text-[10.5px] text-faint">only {name}&apos;s mailboxes</span>
+              <span className="ml-auto shrink-0 text-[10.5px] text-faint">only {name}&apos;s mailboxes</span>
             </div>
             <div className="grid grid-cols-2 gap-4 px-4 py-3 text-[12px]">
               <div className="flex flex-col gap-1.5">
@@ -224,7 +294,7 @@ export function BusinessLearnStep({ view, nav, onClose, next }: StepProps) {
                 </span>
                 <span>
                   <b className="text-ink">{n(est.people.length)}</b>{' '}
-                  <span className="text-muted">people you have written back to, at {orgs} organisations</span>
+                  <span className="text-muted">people you or {name}&apos;s team have written to</span>
                 </span>
                 <span>
                   <b className="text-ink">{n(est.tokens)}</b> <span className="text-muted">tokens, estimated</span>
@@ -243,6 +313,28 @@ export function BusinessLearnStep({ view, nav, onClose, next }: StepProps) {
                 ))}
               </div>
             </div>
+            {units.length > 0 && (
+              <div className="border-t border-line px-4 py-3">
+                <div className="mb-1.5 text-[11px] text-muted">Who this reads about, and why</div>
+                <div className="flex max-h-56 flex-col overflow-auto pr-1">
+                  {[...outside, ...team].map((u) => (
+                    <div key={u.key} className="flex items-baseline gap-2 py-1 text-[12px]">
+                      <span className="min-w-0 truncate text-ink">{u.name}</span>
+                      {u.kind !== 'organisation' && <RoleChip role={u.kind} />}
+                      {u.kind === 'organisation' && (
+                        <span className="shrink-0 text-[11px] text-faint">
+                          {u.people.length} {u.people.length === 1 ? 'contact' : 'contacts'}
+                        </span>
+                      )}
+                      <span className="flex-1" />
+                      <span className="min-w-0 truncate text-[11px] text-muted">
+                        written to by {u.by.length ? u.by.map(localPart).join(', ') : 'you'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="flex items-center gap-2 rounded-b-[10px] border-t border-line bg-raise px-4 py-3">
               {est.messages === 0 ? (
                 // Everything was read by an earlier run and nothing new has
@@ -272,8 +364,8 @@ export function BusinessLearnStep({ view, nav, onClose, next }: StepProps) {
           </button>
         </div>
         <Foot>
-          What you keep about an organisation goes to {name}&apos;s space, where its team reads it. A line about you
-          personally goes to Your life, never to the business.
+          What you keep about an organisation goes to {name}&apos;s space, with its people. Someone on the team goes to{' '}
+          {name}&apos;s team. A line about you personally goes to Your life, never to the business.
         </Foot>
       </BizFrame>
     )
@@ -287,9 +379,10 @@ export function BusinessLearnStep({ view, nav, onClose, next }: StepProps) {
       <BizFrame step="learn" view={view} nav={nav} onClose={onClose} wide>
         <div className="flex items-end gap-4">
           <div className="flex-1">
-            <div className="text-[24px] font-semibold tracking-tight text-ink">One organisation at a time</div>
+            <div className="text-[24px] font-semibold tracking-tight text-ink">One at a time</div>
             <p className="mt-1.5 text-[13.5px] leading-relaxed text-dim">
-              Reading each organisation&apos;s threads with {name}. The cards come up when the run is done.
+              Reading each organisation&apos;s threads with {name}, then each person on its team. The cards come up when
+              the run is done.
             </p>
           </div>
           <button
@@ -325,6 +418,7 @@ export function BusinessLearnStep({ view, nav, onClose, next }: StepProps) {
                 <span className="h-[6px] w-[6px] rounded-full border border-faint" />
               )}
               <span className={i <= doneIdx || current === p.contact_id ? 'text-ink' : 'text-muted'}>{p.name}</span>
+              {plan?.kinds?.[i] === 'team' && <RoleChip role="team" />}
               <span className="font-mono text-[10.5px] text-faint">{p.email}</span>
               <span className="flex-1" />
               <span className="text-[11px] text-muted">{p.threads} threads</span>
@@ -340,14 +434,55 @@ export function BusinessLearnStep({ view, nav, onClose, next }: StepProps) {
   // ---- review ------------------------------------------------------------------
   const open = cards.filter((c) => c.status === 'proposed')
   const cur = (selected == null ? null : cards.find((c) => c.person.contact_id === selected)) ?? open[0] ?? cards[0]
+  const orgCards = cards.filter((c) => !isTeam(c))
+  const teamCards = cards.filter(isTeam)
+
+  const listRow = (c: Card) => {
+    const on = cur?.person.contact_id === c.person.contact_id
+    return (
+      <button
+        key={c.person.contact_id}
+        onClick={() => setSelected(c.person.contact_id)}
+        className={`flex w-full items-center gap-2.5 border-t border-line px-3 py-2 text-left text-[12px] ${
+          on ? 'bg-raise' : 'hover:bg-hover'
+        }`}
+      >
+        {c.status === 'kept' ? (
+          <Icon name="check" size={13} className="text-ok" />
+        ) : c.status === 'declined' ? (
+          <Icon name="close" size={13} className="text-faint" />
+        ) : (
+          <span className="flex h-[13px] w-[13px] items-center justify-center">
+            <span className="h-[6px] w-[6px] rounded-full bg-indigo-400" />
+          </span>
+        )}
+        <span className={`min-w-0 flex-1 truncate ${on ? 'font-semibold text-ink' : 'text-body'}`}>{c.person.name}</span>
+        {isTeam(c) ? (
+          c.title ? <span className="max-w-[90px] truncate text-[10.5px] text-dim">{c.title}</span> : null
+        ) : (
+          <RoleChip role={c.role} />
+        )}
+        <span className="w-[56px] shrink-0 text-right text-[10.5px] text-muted">
+          {c.status === 'kept'
+            ? 'kept'
+            : c.status === 'declined'
+              ? 'dismissed'
+              : !isTeam(c) && (c.contacts?.length ?? 0) > 0
+                ? `${c.contacts!.length} ${c.contacts!.length === 1 ? 'person' : 'people'}`
+                : `${c.facts.length} facts`}
+        </span>
+      </button>
+    )
+  }
+
   return (
     <BizFrame step="learn" view={view} nav={nav} onClose={onClose} wide>
       <div className="flex items-end gap-4">
         <div className="flex-1">
-          <div className="text-[24px] font-semibold tracking-tight text-ink">One organisation at a time</div>
+          <div className="text-[24px] font-semibold tracking-tight text-ink">Who {name} deals with, and who it is</div>
           <p className="mt-1.5 text-[13.5px] leading-relaxed text-dim">
-            For each company {name} deals with: what kind it is, what it has to do with the products and services,
-            and what is going on. Keep it, change it, or dismiss it, then the next.
+            Each company {name} deals with, with its people and what each of them is about, and each person on its own
+            team. Keep it, change it, or dismiss it, then the next.
           </p>
         </div>
       </div>
@@ -359,37 +494,29 @@ export function BusinessLearnStep({ view, nav, onClose, next }: StepProps) {
       </div>
       <div className="grid min-h-0 flex-1 grid-cols-[340px_minmax(0,1fr)] gap-4">
         <div className="min-h-0 self-start overflow-auto rounded-[10px] border border-line bg-panel">
-          <div className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted">Organisations</div>
-          {cards.map((c) => {
-            const on = cur?.person.contact_id === c.person.contact_id
-            return (
-              <button
-                key={c.person.contact_id}
-                onClick={() => setSelected(c.person.contact_id)}
-                className={`flex w-full items-center gap-2.5 border-t border-line px-3 py-2 text-left text-[12px] ${
-                  on ? 'bg-raise' : 'hover:bg-hover'
-                }`}
-              >
-                {c.status === 'kept' ? (
-                  <Icon name="check" size={13} className="text-ok" />
-                ) : c.status === 'declined' ? (
-                  <Icon name="close" size={13} className="text-faint" />
-                ) : (
-                  <span className="flex h-[13px] w-[13px] items-center justify-center">
-                    <span className="h-[6px] w-[6px] rounded-full bg-indigo-400" />
-                  </span>
-                )}
-                <span className={`min-w-0 flex-1 truncate ${on ? 'font-semibold text-ink' : 'text-body'}`}>{c.person.name}</span>
-                <RoleChip role={c.role} />
-                <span className="w-[48px] text-right text-[10.5px] text-muted">
-                  {c.status === 'kept' ? 'kept' : c.status === 'declined' ? 'dismissed' : `${c.facts.length} facts`}
-                </span>
-              </button>
-            )
-          })}
+          <div className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
+            Organisations <span className="text-faint">{orgCards.length}</span>
+          </div>
+          {orgCards.map(listRow)}
+          {teamCards.length > 0 && (
+            <>
+              <div className="border-t border-line2 px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
+                {name}&apos;s team <span className="text-faint">{teamCards.length}</span>
+              </div>
+              {teamCards.map(listRow)}
+            </>
+          )}
         </div>
         <div className="flex min-h-0 flex-col gap-3 overflow-auto pr-1">
-          {cur && <OrgCard key={`${cur.run_id}-${cur.person.contact_id}`} card={cur} offers={offers} name={name} onDecide={(d) => void decide(cur, d)} />}
+          {cur && (
+            <OrgCard
+              key={`${cur.run_id}-${cur.person.contact_id}`}
+              card={cur}
+              offers={offers}
+              name={name}
+              onDecide={(d) => void decide(cur, d)}
+            />
+          )}
           {cards.length === 0 && (
             <div className="rounded-[10px] border border-dashed border-line2 px-4 py-3 text-[12px] text-muted">
               Nothing came back to decide.
@@ -423,9 +550,11 @@ function OrgCard({
   card: Card
   offers: string[]
   name: string
-  onDecide: (d: { role: string; relates: string[]; summary: string; keep: ipc.KeptLine[]; decline: number[] }) => void
+  onDecide: (d: Decision) => void
 }) {
-  const [role, setRole] = useState(card.role)
+  const team = isTeam(card)
+  const [role, setRole] = useState(team ? 'team' : card.role)
+  const [title, setTitle] = useState(card.title ?? '')
   const [relates, setRelates] = useState<string[]>(card.relates)
   const [changing, setChanging] = useState(false)
   const [summary, setSummary] = useState(card.summary)
@@ -433,17 +562,19 @@ function OrgCard({
   const decided = card.status === 'kept' || card.status === 'declined'
   const proposed = card.facts.filter((f) => f.status === 'proposed')
   const choices = [...new Set([...offers, ...card.relates])]
+  const contacts = team ? [] : (card.contacts ?? [])
 
   const keepAll = (only?: ipc.LearnFact[]) => {
     const keep = (only ?? proposed).map((f) => ({ id: f.id, text: f.text, node_id: f.node_id }))
     const decline = proposed.filter((f) => !keep.some((k) => k.id === f.id)).map((f) => f.id)
-    onDecide({ role, relates, summary: summary.trim(), keep, decline })
+    onDecide({ role, relates, summary: summary.trim(), title: title.trim(), keep, decline })
   }
 
   return (
     <div className={`flex flex-col gap-3 rounded-[10px] border bg-panel px-4 py-3.5 ${decided ? 'border-line opacity-80' : 'border-indigo-500/40'}`}>
       <div className="flex items-baseline gap-2">
         <span className="text-[15px] font-semibold text-ink">{card.person.name}</span>
+        {team && <RoleChip role="team" />}
         <span className="font-mono text-[11px] text-muted">{card.person.email}</span>
         <span className="flex-1" />
         <span className="text-[11px] text-muted">
@@ -452,24 +583,37 @@ function OrgCard({
         </span>
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="mr-1 text-[11px] text-muted">To {name} they are</span>
-        {ROLES.map((r) => (
-          <button
-            key={r.id}
+      {team ? (
+        <div className="flex items-center gap-2">
+          <span className="shrink-0 text-[11px] text-muted">On {name}&apos;s team as</span>
+          <input
+            className="input min-w-0 flex-1 text-[12px]"
             disabled={decided}
-            className={`rounded-full border px-2.5 py-0.5 text-[11px] ${
-              role === r.id ? 'border-indigo-500 bg-indigo-500/10 text-ink' : 'border-line2 text-dim hover:text-ink'
-            }`}
-            onClick={() => setRole(role === r.id ? '' : r.id)}
-          >
-            {r.label}
-          </button>
-        ))}
-      </div>
+            value={title}
+            placeholder="what they do, for example sales or the other director"
+            onChange={(e) => setTitle(e.target.value)}
+          />
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-[11px] text-muted">To {name} they are</span>
+          {ROLES.map((r) => (
+            <button
+              key={r.id}
+              disabled={decided}
+              className={`rounded-full border px-2.5 py-0.5 text-[11px] ${
+                role === r.id ? 'border-indigo-500 bg-indigo-500/10 text-ink' : 'border-line2 text-dim hover:text-ink'
+              }`}
+              onClick={() => setRole(role === r.id ? '' : r.id)}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      )}
       {choices.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 text-[11px] text-muted">They have to do with</span>
+          <span className="mr-1 text-[11px] text-muted">{team ? 'They work on' : 'They have to do with'}</span>
           {choices.map((o) => {
             const yes = relates.includes(o)
             return (
@@ -497,6 +641,27 @@ function OrgCard({
       ) : summary ? (
         <p className="m-0 text-[13px] leading-relaxed text-ink">{summary}</p>
       ) : null}
+
+      {contacts.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">People there</span>
+          {contacts.map((c) => (
+            <div key={c.email} className="flex gap-2.5 rounded-[8px] border border-line bg-raise px-3 py-2">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-panel text-[9.5px] font-semibold text-dim">
+                {initials(c.name || c.email)}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="text-[12.5px] text-ink">{c.name || c.email}</span>
+                  {c.title && <span className="text-[11px] text-dim">{c.title}</span>}
+                  <span className="font-mono text-[10.5px] text-faint">{c.email}</span>
+                </div>
+                <p className="m-0 mt-0.5 text-[12px] leading-relaxed text-body">{c.text}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {card.facts.length > 0 && (
         <div className="flex flex-col gap-1.5">
@@ -557,13 +722,13 @@ function OrgCard({
               </button>
               <button
                 className="btn-ghost text-[11.5px] text-muted"
-                onClick={() => onDecide({ role, relates, summary: '', keep: [], decline: proposed.map((f) => f.id) })}
+                onClick={() => onDecide({ role, relates, summary: '', title: '', keep: [], decline: proposed.map((f) => f.id) })}
               >
                 Dismiss
               </button>
             </>
           )}
-          {!role && <span className="text-[11px] text-warn">Choose what they are, so they get a folder</span>}
+          {!team && !role && <span className="text-[11px] text-warn">Choose what they are, so they get a folder</span>}
         </div>
       )}
     </div>

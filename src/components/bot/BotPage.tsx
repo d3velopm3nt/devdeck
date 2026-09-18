@@ -39,16 +39,17 @@ const SUGGESTION_ICON: Record<string, IconName> = {
 }
 
 /// As a dock document. The Bots page renders the same thing beside its list.
-export function BotPage({ params, api }: IDockviewPanelProps<{ id: number; ask?: boolean }>) {
+export function BotPage({ params, api }: IDockviewPanelProps<{ id: number; ask?: boolean; handle?: string }>) {
   return (
     <BotDetail
       nodeId={params.id}
+      handle={params.handle}
       ask={params.ask === true}
       // "Ask me the questions" is consumed once rather than living in the
       // panel forever. Dock layouts are saved and restored, so a parameter
       // that stays true means the interview opens every time you come back —
       // the page-you-close behaviour this flag exists to avoid.
-      onAskConsumed={() => api.updateParameters({ id: params.id, ask: false })}
+      onAskConsumed={() => api.updateParameters({ id: params.id, ask: false, handle: params.handle })}
     />
   )
 }
@@ -57,10 +58,13 @@ export function BotPage({ params, api }: IDockviewPanelProps<{ id: number; ask?:
 /// what it may do. Rendered beside the Bots list and as a document.
 export function BotDetail({
   nodeId,
+  handle,
   ask = false,
   onAskConsumed,
 }: {
   nodeId: number
+  /** Which manager, on a space that has several. */
+  handle?: string
   ask?: boolean
   onAskConsumed?: () => void
 }) {
@@ -72,6 +76,7 @@ export function BotDetail({
   const [suggestions, setSuggestions] = useState<ipc.BotSuggestion[] | null>(null)
   const [interview, setInterview] = useState<ipc.Interview | null>(null)
   const [templates, setTemplates] = useState<ipc.BotTemplate[]>([])
+  const [proposal, setProposal] = useState<string[]>([])
   // Opens on the thread. A page that opened on settings was a form with a bot
   // attached; opening on what the bot said is the other way round.
   const [tab, setTab] = useState<Tab>((CAPTURE_BOT_TAB as Tab) || 'chat')
@@ -88,8 +93,9 @@ export function BotDetail({
   // here it would be followed by a write that replaced everything you told it.
   const reload = useCallback(() => {
     setErr('')
-    void ipc.botForNode(nodeId).then(setBot).catch((e) => setErr(String(e)))
-    void ipc.botWork(nodeId).then(setWork).catch((e) => {
+    void (handle ? ipc.botGet(handle) : ipc.botForNode(nodeId)).then(setBot).catch((e) => setErr(String(e)))
+    void ipc.botPlanProposal(nodeId, handle).then(setProposal).catch(() => setProposal([]))
+    void ipc.botWork(nodeId, handle).then(setWork).catch((e) => {
       setWork([])
       setErr(String(e))
     })
@@ -104,7 +110,7 @@ export function BotDetail({
       setErr(String(e))
     })
     void refreshBots()
-  }, [nodeId, refreshBots])
+  }, [nodeId, handle, refreshBots])
 
   useEffect(() => {
     if (ask) onAskConsumed?.()
@@ -122,9 +128,26 @@ export function BotDetail({
 
   const node = findNode(nodes, nodeId)
   const ws = workspaceOf(nodes, node)
-  const template = useMemo(
-    () => templates.find((t) => t.id === bot?.template) ?? null,
-    [templates, bot?.template],
+  const template = useMemo<ipc.BotTemplate | null>(
+    () =>
+      templates.find((t) => t.id === bot?.template) ??
+      // A business role has no starter in the catalogue: what it proposes
+      // from the business stands in for one.
+      (proposal.length
+        ? {
+            id: 'proposal',
+            name: bot?.name ?? 'It',
+            what: '',
+            goal_hint: '',
+            every: '',
+            at_min: 0,
+            steps: proposal,
+            standards: [],
+            skills: [],
+            tools: [],
+          }
+        : null),
+    [templates, bot?.template, bot?.name, proposal],
   )
 
   // Its agents: the AI sessions running on this space. Borrowed, not invented —

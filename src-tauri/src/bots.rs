@@ -133,6 +133,15 @@ pub struct Bot {
     /// The schedule row backing the heartbeat, when there is one.
     pub schedule_id: Option<i64>,
     pub last_woke: Option<i64>,
+    /// Whether its last wake went well, and what it said. None before it has
+    /// woken.
+    #[serde(default)]
+    pub last_ok: Option<bool>,
+    #[serde(default)]
+    pub last_note: String,
+    /// The businesses it works for, by space id.
+    #[serde(default)]
+    pub businesses: Vec<i64>,
 }
 
 // ---------------------------------------------------------------------------
@@ -307,6 +316,23 @@ fn heartbeat(conn: &Connection, handle: &str) -> Option<(i64, Option<i64>)> {
     .ok()
 }
 
+/// How its last wake went, from the clock's own row.
+fn last_wake(conn: &Connection, handle: &str) -> (Option<bool>, String) {
+    conn.query_row(
+        "SELECT last_run, last_ok, last_note FROM schedules WHERE kind = 'bot' AND manager = ?1 LIMIT 1",
+        params![handle],
+        |r| {
+            Ok((
+                r.get::<_, Option<i64>>(0)?,
+                r.get::<_, Option<i64>>(1)?,
+                r.get::<_, Option<String>>(2)?,
+            ))
+        },
+    )
+    .map(|(run, ok, note)| (run.and(ok).map(|v| v != 0), note.unwrap_or_default()))
+    .unwrap_or((None, String::new()))
+}
+
 /// Keep the `schedules` row in step with the file. The file decides; this only
 /// makes the clock agree with it.
 fn sync_heartbeat(conn: &Connection, b: &Bot) -> Result<Option<i64>, String> {
@@ -471,6 +497,9 @@ fn from_manager(
         stop_at: m.stop_at.clone(),
         schedule_id: None,
         last_woke: None,
+        last_ok: None,
+        last_note: String::new(),
+        businesses: m.businesses.clone(),
     }
 }
 
@@ -488,11 +517,59 @@ pub fn answers_to(b: &Bot, mention: &str) -> bool {
     }
     let slug = |s: &str| s.trim().to_lowercase().replace(' ', "-");
     let first = |s: &str| s.trim().to_lowercase().split_whitespace().next().unwrap_or("").to_string();
-    slug(&b.node_name) == m
+    b.handle.to_lowercase() == m
+        || slug(&b.node_name) == m
         || slug(&b.name) == m
         || format!("{}-bot", slug(&b.node_name)) == m
         || first(&b.node_name) == m
         || first(&b.name) == m
+}
+
+/// The bot a mention means. Its handle first: on a space with three managers,
+/// three bots answer to the space's name and only one to each handle.
+pub fn find_mentioned<'a>(bots: &'a [Bot], mention: &str) -> Option<&'a Bot> {
+    let m = mention.trim().to_lowercase();
+    bots.iter()
+        .find(|b| !b.handle.is_empty() && b.handle.to_lowercase() == m)
+        .or_else(|| bots.iter().find(|b| answers_to(b, &m)))
+}
+
+/// Every manager working in a space: the ones whose memory is filed there,
+/// and the ones a business there took on.
+pub fn managers_on(conn: &Connection, node_id: i64) -> Vec<Bot> {
+    if node_id == 0 {
+        return Vec::new();
+    }
+    all_bots(conn)
+        .into_iter()
+        .filter(|b| b.node_id == node_id || b.businesses.contains(&node_id))
+        .collect()
+}
+
+/// A bot by handle when one is given, and otherwise the manager on the node.
+pub fn resolve(conn: &Connection, node_id: i64, handle: Option<&str>) -> Option<Bot> {
+    match handle.map(str::trim).filter(|h| !h.is_empty()) {
+        Some(h) => bot_on(conn, h),
+        None => bot_on_node(conn, node_id),
+    }
+}
+
+/// Whether a thread is this manager's own chat. A chat from before handles
+/// were kept on it is matched by its space and the manager's name.
+pub fn is_chat_of(handle: Option<&str>, node: Option<i64>, title: &str, bot: &Bot) -> bool {
+    match handle {
+        Some(h) => h == bot.handle,
+        None => node == Some(bot.node_id) && title == bot.name,
+    }
+}
+
+/// Its feature on this space, not its first anywhere.
+fn own_feature(bot: &Bot, node_id: i64) -> String {
+    bot.portfolio
+        .iter()
+        .find(|o| o.node_id == node_id)
+        .map(|o| o.feature.clone())
+        .unwrap_or_default()
 }
 
 /// Every bot in the vault. Cheap enough to call on every visit: it is one
@@ -512,6 +589,9 @@ pub fn bots_list(db: tauri::State<Db>) -> Result<Vec<Bot>, String> {
         if let Some((_, last)) = heartbeat(&conn, &b.handle) {
             b.last_woke = last;
         }
+        let (ok, note) = last_wake(&conn, &b.handle);
+        b.last_ok = ok;
+        b.last_note = note;
     }
 
     // A heartbeat whose manager is gone — the file deleted, or a vault pulled
@@ -793,8 +873,12 @@ pub fn bot_save(
 /// folder inheriting a stranger's answers, and a bot quoting an interview you
 /// never gave it is worse than one that knows nothing.
 fn delete_into(conn: &Connection, mind: &Mind, node_id: i64) -> Result<String, String> {
+    delete_into_for(conn, mind, node_id, None)
+}
+
+fn delete_into_for(conn: &Connection, mind: &Mind, node_id: i64, handle: Option<&str>) -> Result<String, String> {
     let n = db::node_by_id(conn, node_id)?;
-    let bot = bot_on_node(conn, node_id);
+    let bot = resolve(conn, node_id, handle);
     let name = bot.as_ref().map(|b| b.name.clone()).unwrap_or_else(|| n.name.clone());
     if let Some(b) = &bot {
         crate::managers::delete(conn, &b.handle)?;
@@ -807,15 +891,24 @@ fn delete_into(conn: &Connection, mind: &Mind, node_id: i64) -> Result<String, S
     // What it owned stays owned by a handle nobody answers to any more, which
     // is the honest state: the work did not go anywhere, and the feature will
     // say so until someone takes it.
-    mind.forget(node_id);
+    // Its memory is filed by space, so it goes only with the space's last
+    // manager.
+    if managers_on(conn, node_id).is_empty() {
+        mind.forget(node_id);
+    }
     Ok(name)
 }
 
 #[tauri::command]
-pub fn bot_delete(app: tauri::AppHandle, db: tauri::State<Db>, node_id: i64) -> Result<(), String> {
+pub fn bot_delete(
+    app: tauri::AppHandle,
+    db: tauri::State<Db>,
+    node_id: i64,
+    handle: Option<String>,
+) -> Result<(), String> {
     let name = {
         let conn = db.0.lock().unwrap();
-        delete_into(&conn, &mind()?, node_id)?
+        delete_into_for(&conn, &mind()?, node_id, handle.as_deref())?
     };
     crate::activity::record(
         &app,
@@ -858,17 +951,33 @@ fn deck_of(conn: &Connection, node_id: i64) -> Result<(crate::aiw::deck::Deck, P
 /// that already had features should show you the work that is there, not
 /// pretend the space is empty.
 #[tauri::command]
-pub fn bot_work(db: tauri::State<Db>, node_id: i64) -> Result<Vec<WorkRow>, String> {
+pub fn bot_work(db: tauri::State<Db>, node_id: i64, handle: Option<String>) -> Result<Vec<WorkRow>, String> {
     let conn = db.0.lock().unwrap();
     let (deck, dir) = deck_of(&conn, node_id)?;
     if !deck.exists() {
         return Ok(vec![]);
     }
+    // A manager's own features on this space. With several managers on one
+    // space, "everything in the deck" would show each the others' work.
+    let mine: Vec<String> = resolve(&conn, node_id, handle.as_deref())
+        .map(|b| {
+            b.portfolio
+                .iter()
+                .filter(|o| o.node_id == node_id)
+                .map(|o| o.feature.clone())
+                .collect()
+        })
+        .unwrap_or_default();
+    let shared = managers_on(&conn, node_id).len() > 1;
     let only = read(&dir).map(|b| b.feature).unwrap_or_default();
 
     let mut out = Vec::new();
     for slug in deck.feature_slugs() {
-        if !only.is_empty() && slug != only {
+        if !mine.is_empty() {
+            if !mine.contains(&slug) {
+                continue;
+            }
+        } else if shared || (!only.is_empty() && slug != only) {
             continue;
         }
         let Ok(work) = deck.work(&slug) else { continue };
@@ -903,9 +1012,19 @@ fn take_feature(deck: &crate::aiw::deck::Deck, slug: &str, handle: &str) -> Resu
 /// than dropping one file in a folder — so it happens on purpose, from a
 /// button, and never as a side effect of creating a bot.
 fn plan_into(conn: &Connection, node_id: i64, steps: &[String]) -> Result<(String, String, usize), String> {
+    plan_into_for(conn, node_id, None, steps)
+}
+
+fn plan_into_for(
+    conn: &Connection,
+    node_id: i64,
+    handle: Option<&str>,
+    steps: &[String],
+) -> Result<(String, String, usize), String> {
     let (deck, _dir) = deck_of(conn, node_id)?;
     let n = db::node_by_id(conn, node_id)?;
-    let bot = bot_on_node(conn, node_id).ok_or("There is no manager for that space.")?;
+    let mut bot = resolve(conn, node_id, handle).ok_or("There is no manager for that space.")?;
+    bot.feature = own_feature(&bot, node_id);
 
     if !deck.exists() {
         deck.init(&node_id.to_string(), &n.name)?;
@@ -938,9 +1057,22 @@ fn plan_into(conn: &Connection, node_id: i64, steps: &[String]) -> Result<(Strin
         let candidate = crate::aiw::deck::slugify(&base);
         if candidate.is_empty() {
             deck.create_feature(&base, &bot.goal, &[])?
-        } else if deck.feature_md(&candidate).is_file() {
-            // A complete feature from a previous bot on this space: adopt it.
+        } else if deck.feature_md(&candidate).is_file()
+            && deck
+                .feature(&candidate)
+                .map(|d| {
+                    d.meta.owner.is_empty()
+                        || d.meta.owner == bot.handle
+                        || crate::managers::get(conn, &d.meta.owner).is_none()
+                })
+                .unwrap_or(true)
+        {
+            // A complete feature from a previous bot on this space, owned by
+            // nobody still here: adopt it.
             candidate
+        } else if deck.feature_md(&candidate).is_file() {
+            // Another manager's. Never taken from them.
+            deck.create_feature(&format!("{base} ({})", bot.name), &bot.goal, &[])?
         } else if deck.feature_dir(&candidate).exists() {
             // A directory with no `feature.md` is a half-made feature, and
             // adopting one produces a plan the agent runtime cannot load. Say
@@ -986,6 +1118,7 @@ pub fn bot_plan(
     db: tauri::State<Db>,
     node_id: i64,
     steps: Vec<String>,
+    handle: Option<String>,
 ) -> Result<String, String> {
     let steps: Vec<String> = steps
         .into_iter()
@@ -998,7 +1131,7 @@ pub fn bot_plan(
 
     let (slug, name, added) = {
         let conn = db.0.lock().unwrap();
-        plan_into(&conn, node_id, &steps)?
+        plan_into_for(&conn, node_id, handle.as_deref(), &steps)?
     };
 
     crate::activity::record(
@@ -1035,6 +1168,7 @@ pub fn bot_work_save(
     title: String,
     status: String,
     assignee: Option<String>,
+    handle: Option<String>,
 ) -> Result<(), String> {
     let title = title.trim().to_string();
     if title.is_empty() {
@@ -1046,7 +1180,8 @@ pub fn bot_work_save(
 
     let conn = db.0.lock().unwrap();
     let (deck, _dir) = deck_of(&conn, node_id)?;
-    let bot = bot_on_node(&conn, node_id).ok_or("There is no manager for that space.")?;
+    let mut bot = resolve(&conn, node_id, handle.as_deref()).ok_or("There is no manager for that space.")?;
+    bot.feature = own_feature(&bot, node_id);
     let n = db::node_by_id(&conn, node_id)?;
     if !deck.exists() {
         deck.init(&node_id.to_string(), &n.name)?;
@@ -1082,10 +1217,16 @@ pub fn bot_work_save(
 }
 
 #[tauri::command]
-pub fn bot_work_delete(db: tauri::State<Db>, node_id: i64, id: String) -> Result<(), String> {
+pub fn bot_work_delete(
+    db: tauri::State<Db>,
+    node_id: i64,
+    id: String,
+    handle: Option<String>,
+) -> Result<(), String> {
     let conn = db.0.lock().unwrap();
     let (deck, _dir) = deck_of(&conn, node_id)?;
-    let bot = bot_on_node(&conn, node_id).ok_or("There is no manager for that space.")?;
+    let mut bot = resolve(&conn, node_id, handle.as_deref()).ok_or("There is no manager for that space.")?;
+    bot.feature = own_feature(&bot, node_id);
     let slug = if bot.feature.is_empty() { return Ok(()) } else { bot.feature };
     let mut work = deck.work(&slug)?.meta;
     work.items.retain(|i| i.id != id);
@@ -1374,6 +1515,102 @@ pub fn wake_report(conn: &Connection, node_id: i64) -> Option<String> {
     Some(parts.join(", "))
 }
 
+/// What one manager's wake has to say: its own work on its space. A space
+/// with one manager reports its whole deck, as it always did.
+pub fn wake_report_for(conn: &Connection, bot: &Bot) -> Option<String> {
+    if bot.node_id == 0 {
+        return None;
+    }
+    let mine: Vec<String> = bot
+        .portfolio
+        .iter()
+        .filter(|o| o.node_id == bot.node_id)
+        .map(|o| o.feature.clone())
+        .collect();
+    if mine.is_empty() {
+        if managers_on(conn, bot.node_id).len() > 1 {
+            return None;
+        }
+        return wake_report(conn, bot.node_id);
+    }
+    let n = db::node_by_id(conn, bot.node_id).ok()?;
+    let deck = crate::aiw::deck::Deck::new(&dir_of(conn, &n)?);
+    let (mut unclaimed, mut blocked) = (0usize, 0usize);
+    for slug in &mine {
+        let Ok(work) = deck.work(slug) else { continue };
+        for item in &work.meta.items {
+            match item.status.as_str() {
+                "unclaimed" | "" => unclaimed += 1,
+                "blocked" => blocked += 1,
+                _ => {}
+            }
+        }
+    }
+    if unclaimed == 0 && blocked == 0 {
+        return None;
+    }
+    let mut parts = Vec::new();
+    if blocked > 0 {
+        parts.push(format!("{blocked} blocked"));
+    }
+    if unclaimed > 0 {
+        parts.push(format!("{unclaimed} waiting to be picked up"));
+    }
+    Some(parts.join(", "))
+}
+
+/// What a manager with nothing on its plan would start with: its role's
+/// first steps, made concrete from the business, or its starter's steps.
+pub fn plan_proposal(conn: &Connection, bot: &Bot) -> Vec<String> {
+    if let Some(role) = bot.template.strip_prefix("role:") {
+        let business = bot.businesses.first().copied().unwrap_or(bot.node_id);
+        return crate::business_team::first_steps(conn, role, business);
+    }
+    crate::botcatalog::get(&bot.template).map(|t| t.steps).unwrap_or_default()
+}
+
+/// Whether a manager has anything on its plan on its own space.
+pub fn has_plan(conn: &Connection, bot: &Bot) -> bool {
+    let Some(dir) = db::node_by_id(conn, bot.node_id).ok().and_then(|n| dir_of(conn, &n)) else {
+        return false;
+    };
+    let deck = crate::aiw::deck::Deck::new(&dir);
+    bot.portfolio
+        .iter()
+        .filter(|o| o.node_id == bot.node_id)
+        .any(|o| deck.work(&o.feature).map(|w| !w.meta.items.is_empty()).unwrap_or(false))
+}
+
+/// The wake of a manager with nothing on its plan: not a failure, and not
+/// silence. It says what it would start with, to add on its Plan tab.
+pub fn empty_plan_line(conn: &Connection, bot: &Bot) -> Option<String> {
+    if bot.node_id == 0 || has_plan(conn, bot) {
+        return None;
+    }
+    let steps = plan_proposal(conn, bot);
+    if steps.is_empty() {
+        return Some(format!(
+            "{} has nothing on its plan yet. Add a first step on its Plan tab, or say here what to work on.",
+            bot.name
+        ));
+    }
+    Some(format!(
+        "{} has nothing on its plan yet. To start, it proposes:\n\n{}\n\nAdd them on its Plan tab, or say here what to change.",
+        bot.name,
+        steps.iter().map(|s| format!("- {s}")).collect::<Vec<_>>().join("\n")
+    ))
+}
+
+/// The steps a manager would start with, for its Plan tab.
+#[tauri::command]
+pub fn bot_plan_proposal(db: tauri::State<Db>, node_id: i64, handle: Option<String>) -> Result<Vec<String>, String> {
+    let conn = db.0.lock().unwrap();
+    let Some(bot) = resolve(&conn, node_id, handle.as_deref()) else {
+        return Ok(vec![]);
+    };
+    Ok(plan_proposal(&conn, &bot))
+}
+
 // ---------------------------------------------------------------------------
 // What it knows about you
 // ---------------------------------------------------------------------------
@@ -1636,6 +1873,9 @@ pub fn bot_on(conn: &Connection, handle: &str) -> Option<Bot> {
         b.schedule_id = Some(id);
         b.last_woke = last;
     }
+    let (ok, note) = last_wake(conn, handle);
+    b.last_ok = ok;
+    b.last_note = note;
     Some(b)
 }
 
@@ -1710,7 +1950,7 @@ The receipts in the thread are the record. A line such as \"claimed by @dev-a\" 
         // only thing a bot may do without a row in the permission matrix, and
         // it writes work items in the deck — never the machine.
         manages_with: vec![crate::aiw::tools::TOOL_WORK.to_string()],
-        agent_id: if acts { bot.agent.trim().to_string() } else { format!("bot:{}", bot.node_id) },
+        agent_id: if acts { bot.agent.trim().to_string() } else { format!("bot:{}", handle_of(bot)) },
         runs_as: if acts {
             bot.agent.trim().to_string()
         } else {
@@ -1781,8 +2021,16 @@ pub fn thread_post(app: &tauri::AppHandle, bot: &Bot, text: &str) {
     };
     let result = (|| -> Result<(), String> {
         let convs = ws.convs()?;
-        let conv = convs.for_bot(bot.node_id, &bot.node_id.to_string(), &bot.name)?;
+        let conv = convs.for_manager(&bot.handle, bot.node_id, &bot.node_id.to_string(), &bot.name)?;
         convs.post_as_bot(&conv.id, text)?;
+        // And in the space's own thread, the room its managers share, under
+        // its own name: that is where a space's wakes are read together.
+        if bot.node_id != 0 {
+            let room = convs.for_node(bot.node_id, &bot.node_name)?;
+            let me = format!("bot:{}", handle_of(bot));
+            let _ = convs.add_participant(&room.id, &me);
+            convs.post_as(&room.id, text, &me)?;
+        }
         Ok(())
     })();
     if let Err(e) = result {
@@ -1819,13 +2067,14 @@ pub fn bot_thread(
     ws: tauri::State<std::sync::Arc<crate::aiw::state::Workspace>>,
     db: tauri::State<Db>,
     node_id: i64,
+    handle: Option<String>,
 ) -> Result<crate::aiw::assistant::ConversationMeta, String> {
     let bot = {
         let conn = db.0.lock().unwrap();
-        bot_on_node(&conn, node_id).ok_or("There is no manager for that space.")?
+        resolve(&conn, node_id, handle.as_deref()).ok_or("There is no manager for that space.")?
     };
     let convs = ws.convs()?;
-    convs.for_bot(node_id, &node_id.to_string(), &bot.name)
+    convs.for_manager(&bot.handle, bot.node_id, &bot.node_id.to_string(), &bot.name)
 }
 
 /// Say something to a bot in its own thread, and get its answer.
@@ -1841,12 +2090,14 @@ pub async fn bot_thread_send(
     db: tauri::State<'_, Db>,
     node_id: i64,
     text: String,
+    handle: Option<String>,
 ) -> Result<crate::aiw::assistant::AssistantReply, String> {
     use tauri::Emitter;
     let bot = {
         let conn = db.0.lock().unwrap();
-        bot_on_node(&conn, node_id).ok_or("There is no manager for that space.")?
+        resolve(&conn, node_id, handle.as_deref()).ok_or("There is no manager for that space.")?
     };
+    let node_id = bot.node_id;
     // The space has to be registered before the bot can read it — the same
     // step a wake takes, for the same reason.
     if ws.project(&node_id.to_string()).is_none() {
@@ -1862,7 +2113,7 @@ pub async fn bot_thread_send(
             let _ = progress.emit("aiw:chat", e);
         };
         let convs = workspace.convs()?;
-        let conv = convs.for_bot(node_id, &node_id.to_string(), &bot.name)?;
+        let conv = convs.for_manager(&bot.handle, node_id, &node_id.to_string(), &bot.name)?;
         let reply = crate::aiw::assistant::Assistant::send_as(
             &workspace, convs, &conv.id, &text, &sink, &who,
         )?;
@@ -1911,14 +2162,23 @@ pub fn colleagues(
         }
     }
 
-    // Plus whoever is in the room.
+    // Plus whoever is in the room: by handle, or by space in an older thread.
+    let mut named: Vec<String> = Vec::new();
     if let Ok(convs) = ws.convs() {
-        if let Some(thread) = convs.list().into_iter().find(|c| c.bot_node == Some(bot.node_id)) {
+        if let Some(thread) = convs
+            .list()
+            .into_iter()
+            .find(|c| is_chat_of(c.bot_handle.as_deref(), c.bot_node, &c.title, bot))
+        {
             for p in thread.participants {
-                if let Some(id) = p.strip_prefix("bot:").and_then(|n| n.parse::<i64>().ok()) {
-                    if id != bot.node_id && !under.contains(&id) {
-                        under.push(id);
+                let Some(rest) = p.strip_prefix("bot:") else { continue };
+                match rest.parse::<i64>() {
+                    Ok(id) => {
+                        if id != bot.node_id && !under.contains(&id) {
+                            under.push(id);
+                        }
                     }
+                    Err(_) => named.push(rest.to_string()),
                 }
             }
         }
@@ -1926,7 +2186,14 @@ pub fn colleagues(
 
     all_bots(conn)
         .into_iter()
-        .filter(|b| under.contains(&b.node_id))
+        // The others on its own space are colleagues too: a business's
+        // managers pass work between themselves.
+        .filter(|b| {
+            b.handle != bot.handle
+                && (under.contains(&b.node_id)
+                    || named.contains(&b.handle)
+                    || (bot.node_id != 0 && b.node_id == bot.node_id))
+        })
         .map(|b| crate::aiw::assistant::Colleague {
             handle: handle_of(&b),
             name: b.name.clone(),
@@ -1942,6 +2209,9 @@ pub fn colleagues(
 /// `answers_to` accepts several spellings; this is the one to print back, so
 /// a receipt names a handle that will work if you copy it.
 pub fn handle_of(b: &Bot) -> String {
+    if !b.handle.trim().is_empty() {
+        return b.handle.clone();
+    }
     let slug = |s: &str| s.trim().to_lowercase().replace(' ', "-");
     if !b.node_name.trim().is_empty() {
         slug(&b.node_name)
@@ -1956,7 +2226,11 @@ pub fn effective_team(
 ) -> Vec<String> {
     let mut team = bot.team.clone();
     let Ok(convs) = ws.convs() else { return team };
-    let Some(thread) = convs.list().into_iter().find(|c| c.bot_node == Some(bot.node_id)) else {
+    let Some(thread) = convs
+        .list()
+        .into_iter()
+        .find(|c| is_chat_of(c.bot_handle.as_deref(), c.bot_node, &c.title, bot))
+    else {
         return team;
     };
     for p in thread.participants {
@@ -2180,6 +2454,25 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    #[test]
+    fn a_mention_reaches_the_manager_with_that_handle_not_the_first_on_its_space() {
+        let on = |handle: &str, name: &str| Bot {
+            handle: handle.into(),
+            name: name.into(),
+            node_id: 25,
+            node_name: "Innotrack".into(),
+            ..Default::default()
+        };
+        let bots = vec![on("innotrack-operations", "Operations manager"), on("innotrack-product", "Product manager")];
+        assert_eq!(find_mentioned(&bots, "innotrack-product").unwrap().name, "Product manager");
+        assert_eq!(find_mentioned(&bots, "Innotrack-Product").unwrap().name, "Product manager");
+        assert_eq!(handle_of(&bots[1]), "innotrack-product", "a receipt names the handle that works");
+        assert!(is_chat_of(Some("innotrack-product"), Some(25), "anything", &bots[1]));
+        assert!(!is_chat_of(Some("innotrack-product"), Some(25), "Operations manager", &bots[0]));
+        assert!(is_chat_of(None, Some(25), "Operations manager", &bots[0]), "an older chat, by its name");
+        assert!(!is_chat_of(None, Some(25), "Operations manager", &bots[1]));
+    }
+
     /// A bot with no agent can talk but not act. That is enforced by giving
     /// it an id the permission matrix has never heard of — the matrix fails
     /// closed — while the assistant's provider does the talking. Naming an
@@ -2194,7 +2487,7 @@ mod tests {
             ..Default::default()
         };
         let p = persona(&b);
-        assert_eq!(p.agent_id, "bot:8", "an id no permission row matches");
+        assert_eq!(p.agent_id, "bot:fitness", "an id no permission row matches");
         assert_eq!(p.runs_as, crate::aiw::assistant::ASSISTANT_ID);
         assert!(p.system.contains("Fitness bot"), "{}", p.system);
         assert!(p.system.contains("Four sessions a week"), "{}", p.system);

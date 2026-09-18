@@ -491,7 +491,7 @@ export function Explorer() {
       const bot = bots.find((b) => b.node_id === node.id)
       items.push(
         bot
-          ? { icon: 'bot', label: `Open ${bot.name}`, onClick: () => openBot(node.id, bot.name) }
+          ? { icon: 'bot', label: `Open ${bot.name}`, onClick: () => openBot(node.id, bot.name, false, bot.handle) }
           : { icon: 'bot', label: 'Give it a bot…', onClick: () => setNewBotFor(node.id) },
       )
       items.push({ icon: 'folder', label: 'New folder', onClick: () => void addFolder(node) })
@@ -1759,7 +1759,7 @@ export function Explorer() {
           onCreated={(b) => {
             setNewBotFor(null)
             void refreshBots()
-            openBot(b.node_id, b.name, true)
+            openBot(b.node_id, b.name, true, b.handle)
           }}
         />
       )}

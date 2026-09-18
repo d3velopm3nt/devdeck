@@ -127,7 +127,7 @@ const components = {
   // sit beside Home while you fill both in.
   life: () => <LifePage />,
   'space-detail': (props: IDockviewPanelProps<{ id: number }>) => <SpaceDetailPage {...props} />,
-  'bot-detail': (props: IDockviewPanelProps<{ id: number; ask?: boolean }>) => <BotPage {...props} />,
+  'bot-detail': (props: IDockviewPanelProps<{ id: number; ask?: boolean; handle?: string }>) => <BotPage {...props} />,
   'service-detail': (props: IDockviewPanelProps<{ id: number }>) => <ServiceDetailPage {...props} />,
   file: (
     props: IDockviewPanelProps<{

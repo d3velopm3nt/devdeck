@@ -4,12 +4,167 @@ Living document — what's shipped, what's designed, what's next. Update it as
 things land so we never have to reconstruct state from memory.
 
 **Current version:** 0.2.9 tagged · 0.2.8 last publicly released
-**Current branch:** `main` (`shell-redesign` merged and can be deleted)
+**Current branch:** `main` · `feat/business-setup` is four commits ahead and
+unmerged, with no pull request open
 
 > ⚠️ **Blocker:** the GitHub repo is currently **private**. That silently breaks
 > auto-update for every install, `scoop install/update devdeck`, and the website's
 > download links — v0.2.9 is tagged but cannot publish, and the scoop bucket is
 > stuck at 0.2.8. Building is unaffected; only distribution is blocked.
+
+---
+
+## The turn — DevDeck manages, it does not type
+
+Decided 18 September 2026. This reframes everything below it, which is why it
+sits at the top rather than in *Designed, not built*.
+
+**The original bet was wrong in one specific way.** The AI Workspace was built
+as though DevDeck needed a coding agent of its own. It does not, and it cannot
+win that race: Claude Code and Codex are funded by frontier labs, they improve
+weekly, and the inner loop — read a file, edit it, run the tests, try again —
+is exactly where all of that money goes. Competing there is a treadmill with a
+moving floor.
+
+What no coding agent has is the thing DevDeck already keeps: every repo's
+branch and ahead/behind, every service and the port it holds, the packages on
+the machine, your mailbox, your clips, the plan in the deck, and what you said
+about it last month. A CLI agent starts every session amnesiac inside one
+directory and forgets by Monday. So:
+
+> DevDeck is the manager. Claude Code and Codex are the workforce. MCP is the
+> toolbox.
+
+It thinks, plans, remembers, decides and verifies. It stops typing the code.
+
+**Most of this is already built, which is why the change is small.** Three
+pieces that would otherwise be the work are already here and working:
+
+- **MCP is done.** `mcp.rs` is a stdio client and Hub (`StdioTransport::spawn`,
+  `Hub::ensure` / `call` / `stop`), registered at `lib.rs:36`, with servers
+  arriving through the community index. It is wired to the matrix end to end —
+  `commands.rs:610` synthesises a row per installed server and `tools.rs:1264`
+  dispatches MCP calls through the same `ToolService::execute` gate as a native
+  tool. The open-source tool ecosystem is already reachable.
+- **The delegate gate is done.** `hand_over` (`assistant.rs:1422`) already
+  decides who may hand work to whom — a bot's team list, or the matrix — and
+  refuses in the thread with a reason. It just resolves to an internal agent.
+- **The handoff file is done.** `ContextService::export_to_agent_file`
+  (`context.rs:1258`) already splices a managed block into `CLAUDE.md` /
+  `AGENTS.md` / `.cursorrules`. DevDeck already knows how to brief a CLI agent.
+
+### What actually changes: the body of one function
+
+`AgentRuntime::begin` (`runtime.rs:178`) is the manager — context assembly,
+checkpoint, session record, claim, work item to in-progress — and it stays
+whole. `AgentRuntime::drive` (`runtime.rs:164`) is the worker, and its body is
+replaced by *spawn a CLI agent in the repo, stream it, wait, summarise*. The
+signature does not move, so all four start paths — `hand_over`,
+`delegate.start`, `thread_wake`, the bot wake — keep working untouched. Outside
+tests and the demo there are only three real call sites (`bots.rs:2032`,
+`commands.rs:477`, `assistant.rs:1778`), and only the last calls `drive`.
+
+**Remove** — these lose their only caller:
+
+- `drive_inner` `runtime.rs:354-901`, the whole provider turn loop, with the
+  turn budgets at `runtime.rs:44-45`
+- `commit_change` `runtime.rs:910` and `reconcile` `runtime.rs:965` — the CLI
+  commits its own work
+- `review_point` `runtime.rs:85` — it intercepts one tool call at a time, and
+  there are no calls left to intercept
+- `AgentAction::Decision | UpdateContext | SymbolChanged` `provider.rs:129` —
+  `assistant.rs:1188` already rejects all three, so they die with the loop
+- the MockProvider role scripts `provider.rs:435-669` (architect, developer,
+  qa, reviewer). `orchestrator` at `provider.rs:334` stays — the chat path uses it
+- `conflict.rs` hooks `on_symbol_changed` / `on_decision` / `on_stale`.
+  `on_file_changed` stays: it is bus-driven from `state.rs:431`
+
+**Change**:
+
+- **`AgentRuntime::drive`** — same signature, new body. This is the pivot.
+- **`export_to_agent_file`** writes to `deck.root`, the vault. Claude Code
+  reads `CLAUDE.md` from the **repository**. So the handoff needs a repo-side
+  write, which collides head-on with the store split. Settled deliberately:
+  write a generated, git-ignored file, never a tracked one. The rule was always
+  *nothing of ours lands in someone's pull request*, not *nothing of ours is
+  ever written near a repo*.
+- **`stop_at`** becomes a session-level gate plus the CLI's own permission
+  mode, since it can no longer stop a call mid-loop. Its only producer is
+  `bots.rs:2019`. It is still not a permission.
+- **`unattended`** (`runtime.rs:66`) today means *deny anything needing
+  approval*. It must now translate into the CLI's non-interactive flags, or
+  refuse to start. **A 3am bot wake that silently launches an interactive CLI
+  and blocks forever is the failure this has to be designed against** — it is
+  the update-checker bug in a new coat: a thing that looks like it is working
+  and is doing nothing.
+- **Session approval** — `approval.rs:292` already carries `session_id`, so
+  gating a whole session is a new call site, not new machinery.
+- **Default grants** — `files.write` `tools.rs:298`, `git.commit` `:329` and
+  `terminal.run` `:375` come out of manager agents. Managers keep `work.*`,
+  `git.status/log/diff`, `process.*`, `knowledge` and MCP.
+
+**Add**:
+
+- **`src-tauri/src/aiw/cli_agent.rs`** — the executor. The spawn pattern is not
+  new work: `services.rs:200` (`spawn_shell`, pump threads, waiter at `:340`)
+  and `mcp.rs:125` already solve child processes on Windows, including the
+  `npx` → `npx.cmd` fix at `mcp.rs:86`.
+- **Runner config** — which CLI, its path, model and permission mode, per node.
+  Mirrors the provider config that already exists.
+- **Outcome reconciliation** — `drive_inner` learned what happened by watching
+  its own tool results. Now it has to be derived from the CLI's stream plus a
+  git diff against the checkpoint.
+- **A real session view.** The only session UI today is `SessionCard`
+  (`AiWorkspace.tsx:793`), which renders `transcript.slice(-4)` — four lines.
+  When the work happens elsewhere the transcript *is* the product. This is the
+  single biggest gap in the plan.
+
+### What this does not touch
+
+The assistant and the bots stay exactly as they are, on DevDeck's own provider
+layer. `Assistant::turn` (`assistant.rs:900`) has always been its own loop and
+never used `AgentRuntime`; a bot *talking* is `Assistant::send_as`, and a bot
+*waking its agent* is the single line `bots.rs:2032`. Threads, the Inbox,
+goals, rhythms, teams, `work.*`, `delegate`, `routine`, `memory`, `skill`, the
+permission matrix, grants, approvals, the deck/personal split and context
+assembly are all manager surface and all stay.
+
+### What it costs, honestly
+
+Two things are genuinely given up. **Per-call approval inside a delegated
+session** — the matrix gates what a tool may do, and a CLI agent executes on
+its own; the gate moves from every call to the session boundary, which is
+coarser and there is no way around it. And **a dependency on two CLIs' output
+formats**, which are not a stable contract and will change under us.
+
+Against that: the treadmill stops, and `drive_inner` — the most expensive code
+in the repository to keep correct — stops needing to be kept correct.
+
+### The pruning rule that falls out of it
+
+*Anything that does not help you decide, dispatch or verify is a candidate to
+freeze or cut.* Applied honestly, `store.ts:48` defines **fifteen** rail views,
+not the seven `CLAUDE.md` claims. Today, Spaces, Team, Inbox, Mail and Settings
+are core. Candidates: Community (`CommunityView.tsx`, 1,742 lines — the largest
+non-core component in the app), Calendar (1,197), Stash (793), Machine (576),
+Connections (324), Analytics (251).
+
+The sharpest one is internal: **AI Workspace is a rail view with no rail
+button**, reachable from six call sites, carrying 1,851 lines and fourteen
+sub-pages — while `team/TeamPage.tsx` (186 lines) renders the Goals / Features
+/ Work / Bots surface that *Bots as teammates* says is the first view. Two UIs
+for one idea. Pick one.
+
+### Open
+
+- Which CLI is the default, and is a missing one a blocked session or a
+  silently degraded one? (It must be the first, on the failure-honesty rule.)
+- Does a delegated session get its own branch, or work on the current one?
+- MCP rows in the matrix are per **server**, not per tool (`commands.rs:610`),
+  so granting a server grants everything it exposes — thin, given that an MCP
+  server's tool descriptions are untrusted text entering an agent's context.
+- Whether the specialist agent definitions survive at all, or whether a
+  delegated session is simply "the CLI, briefed", with no agent identity.
 
 ---
 
@@ -73,9 +228,24 @@ it. Build order:
 Every engineering item that was on this roadmap when the cycle started is
 built. Two things have been added since, both deliberately scoped rather than
 rushed: **user-editable scan rules** (below) and the **accounts / password
-manager** question. Everything else remaining is business and distribution —
-decisions that are the owner's to make rather than things to be implemented
-past. See *Business / distribution*.
+manager** question.
+
+Then the direction changed. **The next cycle is *The turn*** (at the top of
+this document) — replacing the body of `AgentRuntime::drive` so delegated work
+runs in Claude Code or Codex instead of in a loop we maintain. Build order:
+
+1. **`cli_agent.rs` + the new `drive`** — one CLI, one node, run it by hand
+   from `aiw_start_agent` before any bot can reach it
+2. **Outcome reconciliation** — the CLI's stream plus a git diff against the
+   checkpoint, so a session's result lands on the plan
+3. **The session view** — the four-line `SessionCard` is not a session view,
+   and this is where delegated work becomes watchable
+4. **`unattended` and `stop_at`** — last, because an unattended bot wake is the
+   one path that can hang silently at three in the morning
+
+Everything after that is business and distribution — decisions that are the
+owner's to make rather than things to be implemented past. See *Business /
+distribution*.
 
 ### AI Workspace ✅ built (this cycle, on `feat/ai-workspace`)
 
@@ -115,6 +285,13 @@ What is left, in the order it matters:
 2. **The life half** — calendar, mail, notes. Needs no new store; needs new
    tools pointed at the personal one. Deliberately not started: the work half
    had to be real first.
+
+> **Superseded in part by *The turn*.** The specialist half of this — the
+> provider loop that reads and writes code itself — is being replaced by a
+> delegated CLI session. The orchestrator, the store split, approvals, the
+> matrix, streaming and the transports all stand; it is `drive` that goes.
+> Read the top of this document before building anything against
+> `AgentRuntime`.
 
 ### Stash Phase 1 — capture + vault ✅ built
 - [x] `stash_items` table + FTS5 virtual table, migration in `db.rs`
@@ -911,6 +1088,19 @@ the website's download links point at nothing.
   (it shows in Activity, but the assistant will not tell you dev-a finished);
   the Anthropic transport is written against the documented wire format but has
   not been run against the live API
+- **A session has no real view.** `SessionCard` (`AiWorkspace.tsx:793`) renders
+  `transcript.slice(-4)` and that is the whole of it — no full transcript, no
+  turn detail, no way to stop one. Tolerable while the loop was ours; not once
+  the work happens in another process. See *The turn*.
+- **Two zustand stores.** `CLAUDE.md` says one store sliced by concern, but AI
+  state lives in a second one (`src/lib/aiwStore.ts`, 570 lines) while
+  `store.ts` carries the rest. Whichever way it is resolved, the convention and
+  the code should stop disagreeing.
+- **MCP permissions are per server, not per tool.** `commands.rs:610`
+  synthesises one matrix row per installed server, so granting a server grants
+  everything it exposes — and a server's tool *descriptions* are untrusted text
+  that enters an agent's context whatever its permission level. The matrix gates
+  what a server may do, not what it may say.
 - Terminal commands: an old report that commands don't type into the terminal —
   deprioritised, needs reproduction
 - Machine Setup used to re-probe winget/scoop on every remount with no visible

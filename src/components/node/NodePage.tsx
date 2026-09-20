@@ -30,6 +30,7 @@ import { Thread } from '../thread/Thread'
 import { NodeFiles } from './NodeFiles'
 import { NodeReminders } from './NodeReminders'
 import { NodeManagers } from './NodeManagers'
+import { PipelineTab } from '../business/PipelineTab'
 import { NodeAside } from './NodeAside'
 import { NodeRuns } from './NodeRuns'
 import { Git } from '../aiw/AiWorkspace'
@@ -40,7 +41,7 @@ import { Git } from '../aiw/AiWorkspace'
 /// some of them greyed out: a folder with no repository has no Git tab at all,
 /// rather than a Git tab that apologises. That is the whole point of the shape
 /// — a client is not a deficient project.
-type Tab = 'team' | 'thread' | 'known' | 'files' | 'git' | 'services' | 'commands' | 'reminders' | 'managers'
+type Tab = 'team' | 'pipeline' | 'thread' | 'known' | 'files' | 'git' | 'services' | 'commands' | 'reminders' | 'managers'
 
 /// Git, pointed at this node first.
 ///
@@ -132,6 +133,8 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
   const isProject = node.kind === 'project'
   const TABS: { id: Tab; label: string; when: boolean; count?: number }[] = [
     { id: 'team', label: 'Team', when: isBusiness },
+    // Only a business has products to move, so only a business gets a board.
+    { id: 'pipeline', label: 'Pipeline', when: isBusiness },
     { id: 'thread', label: 'Thread', when: true },
     { id: 'known', label: 'Known', when: known.length > 0, count: known.length },
     { id: 'files', label: 'Files', when: true },
@@ -263,6 +266,12 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
       </div>
 
       {tab === 'team' && isBusiness && <BusinessTab nodeId={nodeId} />}
+
+      {tab === 'pipeline' && isBusiness && (
+        <div className="min-h-0 flex-1 overflow-auto px-5 py-3">
+          <PipelineTab nodeId={nodeId} space={node.name} />
+        </div>
+      )}
 
       {tab === 'files' && (
         <div className="min-h-0 flex-1 px-5 py-3">

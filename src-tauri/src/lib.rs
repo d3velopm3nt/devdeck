@@ -1168,6 +1168,8 @@ pub fn run() {
             aiw::learn::learn_summarise,
             aiw::learn::learn_life_proposals,
             business::business_list,
+            business::business_pipeline,
+            business::business_stage_set,
             library::library_list,
             library::library_read,
             library::library_look,

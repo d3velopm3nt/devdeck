@@ -2184,3 +2184,30 @@ export async function onWorker(h: {
   ])
   return () => offs.forEach((off) => off())
 }
+
+/** What a worker did lately that names a product. */
+export interface RunBrief {
+  id: string
+  title: string
+  worker: string
+  status: string
+  when: string
+}
+/** One row of the idea-to-product board: the claim, and the evidence for it. */
+export interface PipeItem {
+  product: string
+  /** idea | validating | building | launched */
+  stage: string
+  /** What has to be true to move on. */
+  next: string
+  updated: string
+  projects: string[]
+  work_open: number
+  work_done: number
+  runs: RunBrief[]
+  notes: string[]
+}
+export const businessPipeline = (nodeId: number) => invoke<PipeItem[]>('business_pipeline', { nodeId })
+/** Move a product, and say what has to be true to move it again. Yours to say. */
+export const businessStageSet = (nodeId: number, product: string, stage: string, next: string) =>
+  invoke<PipeItem[]>('business_stage_set', { nodeId, product, stage, next })

@@ -114,7 +114,31 @@ pub struct BusinessMeta {
     /// The people who are the business, as Learn found them and you kept them.
     #[serde(default)]
     pub team: Vec<TeamMember>,
+    /// Where each product has got to, in your words and on your say-so.
+    #[serde(default)]
+    pub stages: Vec<Stage>,
 }
+
+/// One product's place on the way from an idea to something people pay for.
+///
+/// Moved by you, never by a manager: a stage is a claim about the world, and
+/// nothing in this app is in a position to make it. What the app does is
+/// gather what it can see against the claim — the projects, the open work,
+/// what a worker did lately — so a stage nobody has touched for a month is
+/// visibly a stage nobody has touched for a month.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct Stage {
+    pub product: String,
+    /// idea | validating | building | launched
+    pub stage: String,
+    /// What has to be true to move on.
+    #[serde(default)]
+    pub next: String,
+    #[serde(default)]
+    pub updated: String,
+}
+
+pub const STAGES: [&str; 4] = ["idea", "validating", "building", "launched"];
 
 /// Somebody on the business's own team: a partner, a director, staff.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
@@ -127,6 +151,32 @@ pub struct TeamMember {
     pub title: String,
     #[serde(default)]
     pub summary: String,
+}
+
+/// What a worker did lately that mentions this product.
+#[derive(Serialize, Clone, Debug, Default)]
+pub struct RunBrief {
+    pub id: String,
+    pub title: String,
+    pub worker: String,
+    pub status: String,
+    pub when: String,
+}
+
+/// One row of the board: the claim, and the evidence for it.
+#[derive(Serialize, Clone, Debug, Default)]
+pub struct PipeItem {
+    pub product: String,
+    pub stage: String,
+    pub next: String,
+    pub updated: String,
+    /// Projects under this business whose name carries the product's.
+    pub projects: Vec<String>,
+    pub work_open: i64,
+    pub work_done: i64,
+    pub runs: Vec<RunBrief>,
+    /// Notes in the business's knowledge that name it.
+    pub notes: Vec<String>,
 }
 
 #[derive(Serialize, Clone, Debug, Default)]
@@ -461,6 +511,151 @@ pub fn knowledge_note(
     let p = deck.knowledge_dir().join(format!("{slug}.md"));
     std::fs::write(&p, body).map_err(err)?;
     Ok(p.to_string_lossy().to_string())
+}
+
+/// Everything this space can see about one product, gathered rather than
+/// claimed. Matching is by name: a project called "Sounder API" is Sounder's,
+/// and a run whose job names it is its evidence. Said that way in the screen,
+/// because a guess dressed as a fact is the one thing a board like this must
+/// not do.
+fn evidence(conn: &Connection, node_id: i64, product: &str) -> (Vec<String>, i64, i64, Vec<RunBrief>, Vec<String>) {
+    let key = product.trim().to_lowercase();
+    let nodes = crate::db::nodes_on(conn).unwrap_or_default();
+    let mut under: Vec<i64> = vec![node_id];
+    let mut i = 0;
+    while i < under.len() {
+        let id = under[i];
+        for n in nodes.iter().filter(|n| n.parent_id == Some(id)) {
+            under.push(n.id);
+        }
+        i += 1;
+    }
+    let mine: Vec<&crate::db::Node> = nodes
+        .iter()
+        .filter(|n| n.id != node_id && under.contains(&n.id) && n.name.to_lowercase().contains(&key))
+        .collect();
+
+    let (mut open, mut done) = (0i64, 0i64);
+    for n in &mine {
+        let Some(dir) = crate::db::node_deck_dir(conn, n) else { continue };
+        let deck = crate::aiw::deck::Deck::new(&dir);
+        if !deck.exists() {
+            continue;
+        }
+        for slug in deck.feature_slugs() {
+            let Ok(work) = deck.work(&slug) else { continue };
+            for item in &work.meta.items {
+                if item.status == "done" {
+                    done += 1;
+                } else {
+                    open += 1;
+                }
+            }
+        }
+    }
+
+    let runs: Vec<RunBrief> = crate::workers::all_runs()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|r| {
+            under.contains(&r.node_id)
+                && (r.title.to_lowercase().contains(&key) || r.intent.to_lowercase().contains(&key))
+        })
+        .take(3)
+        .map(|r| RunBrief {
+            id: r.id,
+            title: r.title,
+            worker: r.worker_name,
+            status: r.status,
+            when: r.started_at,
+        })
+        .collect();
+
+    let mut notes = Vec::new();
+    if let Ok(deck) = deck_of(conn, node_id) {
+        if let Ok(entries) = std::fs::read_dir(deck.knowledge_dir()) {
+            for e in entries.flatten() {
+                let p = e.path();
+                if p.extension().and_then(|x| x.to_str()) != Some("md") {
+                    continue;
+                }
+                let name = p.file_stem().and_then(|s| s.to_str()).unwrap_or_default().to_string();
+                let body = std::fs::read_to_string(&p).unwrap_or_default().to_lowercase();
+                if name.to_lowercase().contains(&key) || body.contains(&key) {
+                    notes.push(name.replace('-', " "));
+                }
+            }
+        }
+    }
+    notes.sort();
+    notes.truncate(4);
+    (mine.iter().map(|n| n.name.clone()).collect(), open, done, runs, notes)
+}
+
+/// The board: one row per product it sells, in the order of the way through.
+#[tauri::command(async)]
+pub fn business_pipeline(db: tauri::State<Db>, node_id: i64) -> Result<Vec<PipeItem>, String> {
+    let conn = db.0.lock().unwrap();
+    let meta = read(&conn, node_id)?.ok_or("that space has not been set up as a business.")?;
+    let products: Vec<String> = meta
+        .items
+        .iter()
+        .filter(|i| i.field == "product" && (i.state == "agreed" || (i.kind == "you" && i.state != "declined")))
+        .map(|i| i.text.clone())
+        .collect();
+    let mut out = Vec::new();
+    for product in products {
+        let at = meta.stages.iter().find(|s| s.product.eq_ignore_ascii_case(&product));
+        let (projects, work_open, work_done, runs, notes) = evidence(&conn, node_id, &product);
+        out.push(PipeItem {
+            stage: at.map(|s| s.stage.clone()).unwrap_or_else(|| "idea".into()),
+            next: at.map(|s| s.next.clone()).unwrap_or_default(),
+            updated: at.map(|s| s.updated.clone()).unwrap_or_default(),
+            product,
+            projects,
+            work_open,
+            work_done,
+            runs,
+            notes,
+        });
+    }
+    let rank = |s: &str| STAGES.iter().position(|x| *x == s).unwrap_or(0);
+    out.sort_by(|a, b| rank(&b.stage).cmp(&rank(&a.stage)).then(a.product.cmp(&b.product)));
+    Ok(out)
+}
+
+/// Move one product, and say what has to be true to move it again.
+#[tauri::command(async)]
+pub fn business_stage_set(
+    db: tauri::State<Db>,
+    node_id: i64,
+    product: String,
+    stage: String,
+    next: String,
+) -> Result<Vec<PipeItem>, String> {
+    if !STAGES.contains(&stage.as_str()) {
+        return Err(format!("{stage} is not a stage a product can be at."));
+    }
+    {
+        let conn = db.0.lock().unwrap();
+        let mut meta = read(&conn, node_id)?.ok_or("that space has not been set up as a business.")?;
+        let now = chrono::Local::now().format("%Y-%m-%d").to_string();
+        match meta.stages.iter_mut().find(|s| s.product.eq_ignore_ascii_case(&product)) {
+            Some(s) => {
+                s.stage = stage;
+                s.next = next.trim().to_string();
+                s.updated = now;
+            }
+            None => meta.stages.push(Stage {
+                product: product.clone(),
+                stage,
+                next: next.trim().to_string(),
+                updated: now,
+            }),
+        }
+        write(&conn, node_id, &meta)?;
+    }
+    business_pipeline(db, node_id)
 }
 
 // ---------------------------------------------------------------------------

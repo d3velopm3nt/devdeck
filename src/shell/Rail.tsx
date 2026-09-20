@@ -42,6 +42,9 @@ const TEAM: { id: TeamTab; icon: IconName; label: string }[] = [
 
 /// The places you live in. Ordered by how often a day touches them.
 const WORK: Item[] = [
+  // Beside Team on purpose: managers keep the plan, workers do the job, and
+  // keeping them a rail apart is how you forget you own either.
+  { view: 'workers', icon: 'tool', label: 'Workers' },
   // Time sits with the places you go rather than with the app's own settings:
   // a calendar is a thing you work out of, not a thing you configure.
   { view: 'calendar', icon: 'schedule', label: 'Calendar' },

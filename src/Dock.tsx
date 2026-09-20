@@ -13,6 +13,7 @@ import { NodeConfigPage } from './components/editors/NodeConfigPage'
 import { NodeSetupPage } from './components/editors/NodeSetupPage'
 import { SpaceDetailPage } from './components/SpaceDetailPage'
 import { BotPage } from './components/bot/BotPage'
+import { RunPanel } from './components/workers/RunPage'
 import { CAPTURE_BOT } from './lib/devCapture'
 import { openBot } from './lib/dock'
 import { ServiceDetailPage } from './components/ServiceDetailPage'
@@ -128,6 +129,8 @@ const components = {
   life: () => <LifePage />,
   'space-detail': (props: IDockviewPanelProps<{ id: number }>) => <SpaceDetailPage {...props} />,
   'bot-detail': (props: IDockviewPanelProps<{ id: number; ask?: boolean; handle?: string }>) => <BotPage {...props} />,
+  // A run is watched, then decided on. Both happen in the same document.
+  'run-detail': (props: IDockviewPanelProps<{ id: string }>) => <RunPanel {...props} />,
   'service-detail': (props: IDockviewPanelProps<{ id: number }>) => <ServiceDetailPage {...props} />,
   file: (
     props: IDockviewPanelProps<{

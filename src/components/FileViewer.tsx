@@ -19,6 +19,7 @@ import { Icon } from '../lib/icons'
 import * as ipc from '../lib/ipc'
 import type { FileText } from '../lib/ipc'
 import { languageOf, monaco, applyAppTheme } from '../lib/monaco'
+import { themeById } from '../lib/themes'
 import { useApp } from '../store'
 
 const size = (n: number) =>
@@ -69,7 +70,7 @@ export function FileViewer({
       scrollBeyondLastLine: false,
       renderLineHighlight: 'line',
       smoothScrolling: true,
-      theme: applyAppTheme(theme === 'light' ? 'light' : 'dark'),
+      theme: applyAppTheme(themeById(theme).scheme),
     })
     return () => {
       editor.current?.getModel()?.dispose()
@@ -82,7 +83,7 @@ export function FileViewer({
   // moves the editor with it.
   useEffect(() => {
     if (!editor.current) return
-    monaco.editor.setTheme(applyAppTheme(theme === 'light' ? 'light' : 'dark'))
+    monaco.editor.setTheme(applyAppTheme(themeById(theme).scheme))
   }, [theme])
 
   useEffect(() => {

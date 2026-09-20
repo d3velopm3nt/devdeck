@@ -2032,3 +2032,155 @@ export interface SpaceView {
   organisations: KindCount[]
 }
 export const businessSpace = (nodeId: number) => invoke<SpaceView>('business_space', { nodeId })
+
+// ---------------------------------------------------------------------------
+// The library, the workers, and their runs
+// ---------------------------------------------------------------------------
+
+/** One skill or brief you installed, and where it came from. */
+export interface LibraryItem {
+  id: string
+  /** skill | brief */
+  kind: string
+  name: string
+  what: string
+  repo: string
+  commit: string
+  licence: string
+  path: string
+  added_at: string
+  chars: number
+}
+/** Something a repository holds that the library could hold. */
+export interface LibraryCandidate {
+  id: string
+  kind: string
+  name: string
+  what: string
+  path: string
+  have: boolean
+}
+/** What one look at a repository found. */
+export interface LibrarySource {
+  repo: string
+  commit: string
+  licence: string
+  branch: string
+  items: LibraryCandidate[]
+  /** Said out loud when the list is not the whole truth. */
+  note: string
+}
+export const libraryList = () => invoke<LibraryItem[]>('library_list')
+export const libraryRead = (id: string, kind: string) => invoke<string>('library_read', { id, kind })
+/** Read a public GitHub repository: its licence, its commit, and what it holds. */
+export const libraryLook = (repo: string) => invoke<LibrarySource>('library_look', { repo })
+export const libraryInstall = (source: LibrarySource, ids: string[]) =>
+  invoke<LibraryItem[]>('library_install', { source, ids })
+export const libraryRemove = (id: string, kind: string) => invoke<void>('library_remove', { id, kind })
+
+/** A worker: yours, lent to any space, with the skills you gave it. */
+export interface Worker {
+  handle: string
+  name: string
+  what: string
+  /** A library brief id, or empty. */
+  brief: string
+  skills: string[]
+  runner: string
+  model: string
+  /** folder | branch */
+  writes: string
+  minutes: number
+  usd: number
+  /** Spaces it may work in. Empty means any. */
+  spaces: number[]
+  unattended: boolean
+  created_at: string
+  /** Anything you want said to it every time. */
+  body: string
+}
+/** What starting a worker would mean, before it means it. */
+export interface RunPlan {
+  worker: Omit<Worker, 'body'>
+  node_id: number
+  space: string
+  title: string
+  intent: string
+  folder: string
+  branch: string
+  is_repo: boolean
+  skills: LibraryItem[]
+  brief: LibraryItem | null
+  reads: string[]
+  never: string[]
+  minutes: number
+  usd: number
+  model: string
+  ready: boolean
+  note: string
+}
+export interface RunStep {
+  at: string
+  /** message | tool | stderr | note */
+  kind: string
+  text: string
+}
+export interface RunFile {
+  path: string
+  bytes: number
+}
+/** The receipt for one job. */
+export interface Run {
+  id: string
+  worker: string
+  worker_name: string
+  node_id: number
+  space: string
+  title: string
+  intent: string
+  /** running | done | stopped | failed | kept | discarded */
+  status: string
+  started_at: string
+  ended_at: string
+  folder: string
+  branch: string
+  skills: string[]
+  minutes_limit: number
+  usd_limit: number
+  usd: number
+  seconds: number
+  files: RunFile[]
+  steps: RunStep[]
+  verdict: string
+  ok: boolean
+  decision: string
+}
+export const workersList = () => invoke<Worker[]>('workers_list')
+export const workerSave = (worker: Worker) => invoke<Worker>('worker_save', { worker })
+export const workerDelete = (handle: string) => invoke<void>('worker_delete', { handle })
+/** Workers worth having, minus the ones you already made. */
+export const workerStarters = () => invoke<Worker[]>('worker_starters')
+/** What it would do, where, and under what limits. Nothing starts. */
+export const workerPlan = (handle: string, nodeId: number, title: string, intent: string) =>
+  invoke<RunPlan>('worker_plan', { handle, nodeId, title, intent })
+/** The one yes. Starts a session and returns its receipt straight away. */
+export const workerStart = (handle: string, nodeId: number, title: string, intent: string) =>
+  invoke<Run>('worker_start', { handle, nodeId, title, intent })
+export const workerStop = (id: string) => invoke<void>('worker_stop', { id })
+export const runsList = (nodeId = 0) => invoke<Run[]>('runs_list', { nodeId })
+export const runGet = (id: string) => invoke<Run | null>('run_get', { id })
+/** keep | discard, with whatever you want said about it. */
+export const runDecide = (id: string, decision: string, note = '') =>
+  invoke<Run>('run_decide', { id, decision, note })
+
+/** A run as it happens: every step, then its receipt. */
+export async function onWorker(h: {
+  step?: (e: { run: string; step: RunStep }) => void
+  done?: (e: { run: Run }) => void
+}): Promise<() => void> {
+  const offs = await Promise.all([
+    listen<{ run: string; step: RunStep }>('worker:step', (e) => h.step?.(e.payload)),
+    listen<{ run: Run }>('worker:done', (e) => h.done?.(e.payload)),
+  ])
+  return () => offs.forEach((off) => off())
+}

@@ -82,3 +82,7 @@ export const CAPTURE_CLEAR: boolean = false
 export const CAPTURE_BUSINESS_AUTO: string = ''
 /** On the clearing screen, press the red button. Only on a throwaway profile. Empty in every shipped build. */
 export const CAPTURE_CLEAR_AUTO: boolean = false
+/** Screenshot harness: open the start-a-worker card straight away. */
+export const CAPTURE_START_WORKER: boolean = false
+/** Screenshot harness: open one run as a document, by id. */
+export const CAPTURE_RUN: string = ''

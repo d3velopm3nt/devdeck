@@ -308,6 +308,59 @@ pub fn run(
     prompt: &str,
     on_event: &mut dyn FnMut(RunEvent),
 ) -> Result<RunOutcome, String> {
+    run_watched(spec, cwd, prompt, on_event, &Leash::forever())
+}
+
+/// A hand on the run: stop it now, or at a time.
+///
+/// A delegated session is the one place DevDeck cannot interrupt call by call,
+/// so the two things it can still do — stop it, and not let it run all night —
+/// are the same thing at different distances.
+pub struct Leash {
+    stop: std::sync::atomic::AtomicBool,
+    until: Option<std::time::Instant>,
+}
+
+impl Leash {
+    pub fn forever() -> Self {
+        Self { stop: std::sync::atomic::AtomicBool::new(false), until: None }
+    }
+
+    /// Stops itself after `minutes`. Zero means no limit.
+    pub fn for_minutes(minutes: u64) -> Self {
+        Self {
+            stop: std::sync::atomic::AtomicBool::new(false),
+            until: (minutes > 0)
+                .then(|| std::time::Instant::now() + std::time::Duration::from_secs(minutes * 60)),
+        }
+    }
+
+    /// Ask it to stop. The run ends after the CLI notices, which is quick.
+    pub fn pull(&self) {
+        self.stop.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub fn pulled(&self) -> bool {
+        self.stop.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    fn out_of_time(&self) -> bool {
+        self.until.is_some_and(|t| std::time::Instant::now() >= t)
+    }
+
+    fn done(&self) -> bool {
+        self.pulled() || self.out_of_time()
+    }
+}
+
+/// The same run, with a leash on it.
+pub fn run_watched(
+    spec: &RunnerSpec,
+    cwd: &std::path::Path,
+    prompt: &str,
+    on_event: &mut dyn FnMut(RunEvent),
+    leash: &Leash,
+) -> Result<RunOutcome, String> {
     let name = spec.program_name();
     let program = crate::mcp::resolve_program(name);
     let mut cmd = Command::new(&program);
@@ -325,10 +378,16 @@ pub fn run(
         )
     })?;
 
+    // Taken before the child is shared, so the reader below still owns them.
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+    let child = std::sync::Arc::new(std::sync::Mutex::new(child));
+    let stopped = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+
     // Drained on its own thread rather than read after the wait: a full stderr
     // pipe blocks the child, and a child blocked writing its complaint never
     // reaches the exit we are waiting for.
-    let errors = child.stderr.take().map(|e| {
+    let errors = stderr.map(|e| {
         std::thread::spawn(move || {
             BufReader::new(e)
                 .lines()
@@ -338,8 +397,31 @@ pub fn run(
         })
     });
 
+    // The leash, watched on its own thread: the reader below is blocked on the
+    // CLI's stdout, and a run nobody can stop is exactly what a limit is for.
+    std::thread::scope(|scope| {
+    let watcher = {
+        let child = child.clone();
+        let stopped = stopped.clone();
+        scope.spawn(move || {
+            while !leash.done() {
+                if let Ok(mut c) = child.lock() {
+                    // Finished on its own: nothing to stop.
+                    if matches!(c.try_wait(), Ok(Some(_))) {
+                        return;
+                    }
+                }
+                std::thread::sleep(std::time::Duration::from_millis(250));
+            }
+            stopped.store(true, std::sync::atomic::Ordering::SeqCst);
+            if let Ok(mut c) = child.lock() {
+                let _ = c.kill();
+            }
+        })
+    };
+
     let mut verdict: Option<RunOutcome> = None;
-    if let Some(out) = child.stdout.take() {
+    if let Some(out) = stdout {
         for line in BufReader::new(out).lines().map_while(Result::ok) {
             match parse_line(&line) {
                 Line::Event(e) => on_event(e),
@@ -349,9 +431,13 @@ pub fn run(
         }
     }
 
-    let status = child
-        .wait()
-        .map_err(|e| format!("'{name}' never finished: {e}"))?;
+    let status = {
+        let mut c = child.lock().map_err(|_| "the run's own record was lost".to_string())?;
+        c.wait().map_err(|e| format!("'{name}' never finished: {e}"))?
+    };
+    // The watcher returns on its own once the child is gone.
+    let _ = watcher.join();
+    let cut_short = stopped.load(std::sync::atomic::Ordering::SeqCst);
     let stderr = errors
         .and_then(|h| h.join().ok())
         .unwrap_or_default()
@@ -368,14 +454,32 @@ pub fn run(
         });
     }
 
+    // Stopped on purpose is not a crash, and it is not a success either: the
+    // work that was done stands, and the verdict says it was cut short.
     match verdict {
-        Some(v) => Ok(v),
+        Some(mut v) => {
+            if cut_short {
+                v.ok = false;
+                v.summary = if v.summary.trim().is_empty() {
+                    "Stopped before it finished.".to_string()
+                } else {
+                    format!("{} (stopped before it finished)", v.summary.trim())
+                };
+            }
+            Ok(v)
+        }
+        None if cut_short => Ok(RunOutcome {
+            ok: false,
+            summary: "Stopped before it reported anything.".into(),
+            ..Default::default()
+        }),
         None => Err(if stderr.is_empty() {
             format!("'{name}' exited {status} without reporting a result")
         } else {
             format!("'{name}' exited {status} without reporting a result: {stderr}")
         }),
     }
+    })
 }
 
 #[cfg(test)]

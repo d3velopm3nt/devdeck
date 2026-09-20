@@ -10,6 +10,7 @@ import { avatarLabel, nodeColor } from '../../lib/spaces'
 import { routine } from '../../lib/bots'
 import { openBot } from '../../lib/dock'
 import { openBusiness } from '../business/TodayBusinesses'
+import { startWorker } from '../workers/StartWorker'
 import { BotCreate } from '../bot/BotCreate'
 
 type SpaceNode = Parameters<typeof nodeColor>[0] & { id: number; name: string }
@@ -42,6 +43,9 @@ export function NodeManagers({
             ? `Nobody manages ${node.name} yet.`
             : `${managers.length === 1 ? 'One manager works' : `${managers.length} managers work`} in ${node.name}. Their wakes land in its Thread, each under its own name, and @ reaches one there.`}
         </p>
+        <button className="btn-ghost text-[11.5px]" onClick={() => startWorker({ nodeId: node.id })}>
+          <Icon name="run" size={12} /> Start a worker
+        </button>
         {isBusiness ? (
           <button className="btn-ghost text-[11.5px]" onClick={() => openBusiness({ nodeId: node.id, step: 'team' })}>
             <Icon name="edit" size={12} /> Change the team

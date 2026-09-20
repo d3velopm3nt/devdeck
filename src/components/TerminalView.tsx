@@ -7,11 +7,15 @@ import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import * as ipc from '../lib/ipc'
 import { registerTerm, unregisterTerm } from '../lib/termBus'
-import { useApp, type Theme } from '../store'
+import { useApp } from '../store'
+import { themeById, type ThemeScheme } from '../lib/themes'
 
-// ANSI palettes per app theme. The dark palette is DevDeck's original; the
-// light one keeps the same hue map at readable-on-white weights.
-const XTERM_THEMES: Record<Theme, ITheme> = {
+// ANSI palettes per *scheme*, not per theme: a terminal only needs to know
+// whether it is painting on a dark or a light ground, and one palette per
+// named theme would be six copies of the same hue map. The dark palette is
+// DevDeck's original; the light one keeps those hues at readable-on-white
+// weights.
+const XTERM_THEMES: Record<ThemeScheme, ITheme> = {
   dark: {
     background: '#0d1017',
     foreground: '#d6dbe5',
@@ -56,7 +60,7 @@ export function TerminalView({ ptyId }: { ptyId: number }) {
       fontSize: 13,
       cursorBlink: true,
       scrollback: 8000,
-      theme: XTERM_THEMES[useApp.getState().theme],
+      theme: XTERM_THEMES[themeById(useApp.getState().theme).scheme],
     })
     termRef.current = term
     const fit = new FitAddon()
@@ -100,7 +104,7 @@ export function TerminalView({ ptyId }: { ptyId: number }) {
   // Re-skin live terminals when the app theme flips.
   useEffect(() => {
     const term = termRef.current
-    if (term) term.options.theme = XTERM_THEMES[theme]
+    if (term) term.options.theme = XTERM_THEMES[themeById(theme).scheme]
   }, [theme])
 
   return <div ref={hostRef} className="h-full w-full bg-page pl-2 pt-1" />

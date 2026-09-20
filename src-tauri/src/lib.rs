@@ -44,6 +44,7 @@ mod git;
 mod github;
 mod inbox;
 mod legacy;
+mod library;
 mod machine;
 mod mail;
 mod mailfiles;
@@ -63,6 +64,7 @@ mod stash;
 mod team;
 mod threads;
 mod vault;
+mod workers;
 
 use std::sync::{Arc, Mutex};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
@@ -1166,6 +1168,21 @@ pub fn run() {
             aiw::learn::learn_summarise,
             aiw::learn::learn_life_proposals,
             business::business_list,
+            library::library_list,
+            library::library_read,
+            library::library_look,
+            library::library_install,
+            library::library_remove,
+            workers::workers_list,
+            workers::worker_save,
+            workers::worker_delete,
+            workers::worker_starters,
+            workers::worker_plan,
+            workers::worker_start,
+            workers::worker_stop,
+            workers::runs_list,
+            workers::run_get,
+            workers::run_decide,
             business::business_get,
             business::business_create,
             business::business_save,

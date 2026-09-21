@@ -237,7 +237,7 @@ function SmartActions({ item, onError }: { item: StashItem; onError: (msg: strin
     }
   }
 
-  const acts: Array<{ label: string; icon: string; title: string; onClick: () => void }> = []
+  const acts: Array<{ label: string; icon: IconName; title: string; onClick: () => void }> = []
 
   if (item.item_type === 'json') {
     acts.push({ label: 'Prettify', icon: 'code', title: 'Reformat this clip, indented', onClick: () => void rewrite(prettifyJson)() })

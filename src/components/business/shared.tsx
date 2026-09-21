@@ -6,7 +6,7 @@
 
 import { useState } from 'react'
 import type * as ipc from '../../lib/ipc'
-import { Icon } from '../../lib/icons'
+import { Icon, type IconName } from '../../lib/icons'
 import { Frame } from '../setup/LearnStep'
 import { BUSINESS_STEPS, type BusinessStepId, type SetupNav } from '../setup/steps'
 
@@ -93,7 +93,7 @@ export function ItemRow({
 }: {
   item: ipc.Suggestion
   label?: string
-  icon?: string
+  icon?: IconName
   onChange: (next: ipc.Suggestion | null) => void
 }) {
   const [editing, setEditing] = useState(false)

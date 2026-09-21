@@ -2,7 +2,7 @@
 // title, a scrollable body, and a sticky action bar.
 
 import type { ReactNode } from 'react'
-import { Icon } from '../../lib/icons'
+import { Icon, type IconName } from '../../lib/icons'
 
 /** Props contract for editor pages hosted in the slide-over Sheet. A
  *  structural subset of dockview's panel props, so pages need no host
@@ -24,7 +24,7 @@ export function EditorShell({
   onDelete,
   extraActions,
 }: {
-  icon: string
+  icon: IconName
   kind: string
   title: string
   subtitle?: string

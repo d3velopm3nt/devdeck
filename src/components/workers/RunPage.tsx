@@ -227,7 +227,7 @@ export function RunView({ id }: { id: string }) {
               <div className="flex flex-col gap-1">
                 {run.files.slice(0, 14).map((f) => (
                   <div key={f.path} className="flex items-baseline gap-2">
-                    <Icon name="file" size={11} className="shrink-0 text-muted" />
+                    <Icon name="note" size={11} className="shrink-0 text-muted" />
                     <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-body" title={f.path}>
                       {f.path}
                     </span>

@@ -7,7 +7,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import * as ipc from '../../lib/ipc'
-import { Icon } from '../../lib/icons'
+import { Icon, type IconName } from '../../lib/icons'
 import { Err, Header } from '../setup/LearnStep'
 import { CAPTURE_BUSINESS_AUTO } from '../../lib/devCapture'
 import { BizFrame, ItemRow, hostOf, yours, type StepProps } from './shared'
@@ -352,7 +352,7 @@ export function BusinessStep({ view, setView, nav, onClose, next }: StepProps) {
   )
 }
 
-export function Foot({ children, icon = 'secret' }: { children: React.ReactNode; icon?: string }) {
+export function Foot({ children, icon = 'secret' }: { children: React.ReactNode; icon?: IconName }) {
   return (
     <div className="flex gap-2.5 border-t border-line pt-3">
       <Icon name={icon} size={15} className="mt-0.5 shrink-0 text-muted" />

@@ -29,7 +29,7 @@ import { CAPTURE_ADD, CAPTURE_BROWSE, CAPTURE_EXPAND, CAPTURE_FILE_ROOT, CAPTURE
 import { BotCreate } from './bot/BotCreate'
 import { AddToWorkspace } from './AddToWorkspace'
 import { GitHubImportModal } from './GitHubImportModal'
-import { Icon } from '../lib/icons'
+import { Icon, type IconName } from '../lib/icons'
 
 // The expand/collapse state is remembered across restarts so the tree
 // reopens where you left it — a folder isn't "gone" after a restart, its
@@ -54,7 +54,7 @@ function saveSet<T>(key: string, set: Set<T>) {
   }
 }
 
-const KIND_ICON: Record<NodeKind, string> = {
+const KIND_ICON: Record<NodeKind, IconName> = {
   workspace: 'workspace',
   solution: 'solution',
   project: 'project',
@@ -90,7 +90,7 @@ interface Menu {
 // Category groups shown under a project/folder node. Each is a virtual
 // "folder" that holds the node's commands, services, or profiles.
 type Cat = 'commands' | 'services' | 'profiles'
-const CAT_META: Record<Cat, { label: string; icon: string; color: string }> = {
+const CAT_META: Record<Cat, { label: string; icon: IconName; color: string }> = {
   commands: { label: 'Commands', icon: 'command', color: 'text-info/80' },
   services: { label: 'Services', icon: 'service', color: 'text-warn/80' },
   profiles: { label: 'Profiles', icon: 'profile', color: 'text-viol/80' },
@@ -407,7 +407,7 @@ export function Explorer() {
 
   // The workspace switcher menu: pick a workspace, or manage them.
   const workspaceMenuItems = (): MenuItem[] => [
-    ...workspaces.map((w) => ({
+    ...workspaces.map((w): MenuItem => ({
       icon: w.id === activeWorkspaceId ? 'check' : 'workspace',
       label: w.name,
       onClick: () => setActiveWorkspace(w.id),
@@ -415,10 +415,10 @@ export function Explorer() {
     { separator: true, label: '' },
     { icon: 'add', label: 'New workspace…', onClick: () => void addWorkspace() },
     ...(ws
-      ? [
+      ? ([
           { icon: 'edit', label: 'Rename workspace…', onClick: () => void renameWorkspace(ws) },
           { icon: 'delete', label: 'Delete workspace', danger: true, onClick: () => void del(ws) },
-        ]
+        ] as MenuItem[])
       : []),
   ]
 

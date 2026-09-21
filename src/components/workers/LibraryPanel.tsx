@@ -137,6 +137,20 @@ export function LibraryPanel({
   )
 }
 
+/// What a folder of somebody's repository is, in words you did not have to
+/// learn. `agents/x.md` is a specialist with a job description; a skill is a
+/// how-to a worker can follow. The repository's own spelling is kept in the
+/// corner for when it matters, and nowhere else.
+function kitWords(k: ipc.LibraryKit) {
+  return {
+    what: k.kind === 'brief' ? 'specialists' : 'skills',
+    why:
+      k.kind === 'brief'
+        ? 'A bench your worker picks from — it reads what each one is for and chooses.'
+        : 'Step-by-step guides a worker can follow when a job calls for one.',
+  }
+}
+
 function AddFromGitHub({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
   const [repo, setRepo] = useState(CAPTURE_LIBRARY)
   const [src, setSrc] = useState<ipc.LibrarySource | null>(null)
@@ -145,6 +159,11 @@ function AddFromGitHub({ onClose, onAdded }: { onClose: () => void; onAdded: () 
   const [err, setErr] = useState('')
   const [filter, setFilter] = useState('')
   const [missed, setMissed] = useState<ipc.LibraryAdded | null>(null)
+  // Closed on purpose. Three hundred and sixty-seven tick boxes is not a
+  // choice, it is a spreadsheet — and it was the first thing the window
+  // showed. It is still here for the one time you want a single file.
+  const [browsing, setBrowsing] = useState(false)
+  const [others, setOthers] = useState(false)
 
   const look = async () => {
     setErr('')
@@ -153,6 +172,8 @@ function AddFromGitHub({ onClose, onAdded }: { onClose: () => void; onAdded: () 
       const s = await ipc.libraryLook(repo)
       setSrc(s)
       setPicked(new Set())
+      setBrowsing(false)
+      setOthers(false)
     } catch (e) {
       setErr(String(e))
     } finally {
@@ -186,7 +207,7 @@ function AddFromGitHub({ onClose, onAdded }: { onClose: () => void; onAdded: () 
     }
   }
 
-  // What did not come in is said, not swallowed. A kit is dozens of files over
+  // What did not come in is said, not swallowed. A set is dozens of files over
   // somebody else's network, so a few timing out is ordinary — and a silent
   // "added" that quietly left six out is how a worker ends up missing the one
   // specialist you wanted.
@@ -211,18 +232,51 @@ function AddFromGitHub({ onClose, onAdded }: { onClose: () => void; onAdded: () 
       i.what.toLowerCase().includes(filter.toLowerCase()),
   )
 
+  // A repository's own sets first; the copies it keeps for other editors are
+  // the same thing again, so they wait behind a line rather than doubling the
+  // choice.
+  const main = (src?.kits ?? []).filter((k) => !k.folder.startsWith('.'))
+  const copies = (src?.kits ?? []).filter((k) => k.folder.startsWith('.'))
+
+  const kitCard = (k: ipc.LibraryKit) => {
+    const w = kitWords(k)
+    const all = k.have === k.picks.length
+    return (
+      <div key={k.folder} className="flex items-start gap-3 rounded-[10px] border border-line2 bg-panel px-4 py-3.5">
+        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-500/15">
+          <Icon name={k.kind === 'skill' ? 'note' : 'bot'} size={15} className="text-indigo-300" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline gap-2">
+            <span className="text-[13.5px] font-semibold text-ink">
+              {k.picks.length} {w.what}
+            </span>
+            <span className="truncate font-mono text-[10px] text-faint">{k.folder}/</span>
+          </div>
+          <p className="m-0 mt-0.5 text-[11.5px] leading-relaxed text-muted">{w.why}</p>
+          {k.have > 0 && <div className="mt-1 text-[11px] text-ok">{k.have} of them are already yours</div>}
+        </div>
+        <button
+          className={`${all ? 'btn-ghost' : 'btn-primary'} shrink-0 text-[12px]`}
+          disabled={busy !== '' || all}
+          onClick={() => void addKit(k.folder)}
+        >
+          {all ? 'all yours' : busy === 'install' ? 'Adding…' : `Add all ${k.picks.length}`}
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-8" onClick={onClose}>
       <div
-        className="flex max-h-full w-[860px] flex-col overflow-hidden rounded-xl border border-line bg-page shadow-2xl"
+        className="flex max-h-full w-[760px] flex-col overflow-hidden rounded-xl border border-line bg-page shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="border-b border-line px-5 py-4">
           <div className="text-[15px] font-semibold text-ink">Add from GitHub</div>
-          <p className="mt-1 max-w-[640px] text-[12px] leading-relaxed text-muted">
-            Any repository that keeps skills in <code className="font-mono text-dim">skills/name/SKILL.md</code> or briefs
-            in <code className="font-mono text-dim">agents/name.md</code>. Read one before you add it: it becomes part of
-            what a worker is told.
+          <p className="mt-1 max-w-[600px] text-[12px] leading-relaxed text-muted">
+            Open-source instructions your workers can use. Paste a repository and DevDeck reads what it holds.
           </p>
           <div className="mt-3 flex items-center gap-2">
             <input
@@ -250,101 +304,119 @@ function AddFromGitHub({ onClose, onAdded }: { onClose: () => void; onAdded: () 
                 {src.licence}
               </span>
               <span className="font-mono text-[10.5px] text-faint">{src.commit.slice(0, 7)}</span>
-              <span className="text-muted">
-                {src.items.length} item{src.items.length === 1 ? '' : 's'}
-              </span>
               <span className="flex-1" />
-              <input
-                className="input w-48 py-0.5 text-[11px]"
-                placeholder="Filter"
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-              />
+              <span className="text-faint">pinned to this commit</span>
             </div>
-            {src.note && (
-              <div className="flex items-start gap-2 border-b border-line bg-amber-500/5 px-5 py-2 text-[11px] leading-relaxed text-warn">
-                <Icon name="info" size={12} className="mt-0.5 shrink-0" />
-                {src.note}
-              </div>
-            )}
 
-            {src.kits.length > 0 && (
-              <div className="border-b border-line px-5 py-3">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">Take a folder whole</span>
-                  <span className="text-[11px] text-faint">
-                    a kit is a bench — the worker picks who takes the job, not you
-                  </span>
+            <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
+              {main.length > 0 ? (
+                <>
+                  <div className="mb-2 text-[12px] text-dim">What this repository holds</div>
+                  <div className="flex flex-col gap-2">{main.map(kitCard)}</div>
+                  <p className="mt-2.5 max-w-[640px] text-[11px] leading-relaxed text-faint">
+                    A set goes to the worker that carries it, and it picks who does the job. You will not have read these
+                    files: what holds is the one folder a worker may write in, and the five things no worker ever does.
+                  </p>
+                </>
+              ) : (
+                <div className="rounded-[10px] border border-dashed border-line2 px-4 py-5 text-center text-[12px] text-muted">
+                  Nothing here is grouped into a set. Browse it below to take single files.
                 </div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {src.kits.map((k) => (
-                    <div
-                      key={k.folder}
-                      className="flex items-center gap-2.5 rounded-[9px] border border-line2 bg-panel px-3 py-2"
-                    >
-                      <Icon name={k.kind === 'skill' ? 'book' : 'bot'} size={13} className="shrink-0 text-indigo-300" />
-                      <div className="min-w-0">
-                        <div className="font-mono text-[11.5px] text-ink">{k.folder}/</div>
-                        <div className="text-[10.5px] text-muted">
-                          {k.picks.length} {k.kind === 'skill' ? 'skills' : 'briefs'}
-                          {k.have > 0 && ` · ${k.have} already yours`}
-                        </div>
-                      </div>
+              )}
+
+              {copies.length > 0 && (
+                <div className="mt-4">
+                  <button
+                    className="flex items-center gap-1.5 text-[11.5px] text-muted hover:text-ink"
+                    onClick={() => setOthers((v) => !v)}
+                  >
+                    <Icon name={others ? 'chevron-down' : 'chevron-right'} size={12} />
+                    {copies.length} more sets, kept here for other editors
+                  </button>
+                  {others && <div className="mt-2 flex flex-col gap-2">{copies.map(kitCard)}</div>}
+                </div>
+              )}
+
+              <div className="mt-4 border-t border-line pt-3">
+                <button
+                  className="flex items-center gap-1.5 text-[11.5px] text-muted hover:text-ink"
+                  onClick={() => setBrowsing((v) => !v)}
+                >
+                  <Icon name={browsing ? 'chevron-down' : 'chevron-right'} size={12} />
+                  Browse all {src.items.length} one by one
+                </button>
+
+                {browsing && (
+                  <div className="mt-2 overflow-hidden rounded-[10px] border border-line">
+                    <div className="flex items-center gap-2 border-b border-line bg-raise px-3 py-2">
+                      <input
+                        className="input w-56 py-0.5 text-[11px]"
+                        placeholder="Filter"
+                        value={filter}
+                        onChange={(e) => setFilter(e.target.value)}
+                      />
+                      <span className="flex-1" />
                       <button
-                        className="btn-ghost shrink-0 text-[11px]"
-                        disabled={busy !== '' || k.have === k.picks.length}
-                        onClick={() => void addKit(k.folder)}
+                        className="btn-primary text-[11.5px]"
+                        disabled={picked.size === 0 || busy !== ''}
+                        onClick={() => void install()}
                       >
-                        {k.have === k.picks.length ? 'all yours' : 'Add the lot'}
+                        {busy === 'install' ? 'Adding…' : `Add ${picked.size || ''}`.trim()}
                       </button>
                     </div>
-                  ))}
-                </div>
-                <p className="mt-2 max-w-[700px] text-[11px] leading-relaxed text-faint">
-                  A kit lands in <code className="font-mono text-dim">.claude/agents</code> when a worker carrying it
-                  starts, and Claude Code reads each brief&rsquo;s own description to decide who takes the job. You will not
-                  have read them: the walls that hold are the one folder it may write in, and the never-list.
-                </p>
-              </div>
-            )}
-            <div className="min-h-0 flex-1 overflow-auto">
-              {shown.map((i) => {
-                const on = picked.has(i.id)
-                return (
-                  <label
-                    key={`${i.kind}-${i.id}`}
-                    className={`flex cursor-pointer items-start gap-2.5 border-b border-line px-5 py-2 last:border-b-0 ${
-                      on ? 'bg-indigo-500/[0.06]' : 'hover:bg-hover/40'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      className="mt-[3px]"
-                      checked={on}
-                      disabled={i.have}
-                      onChange={(e) =>
-                        setPicked((cur) => {
-                          const next = new Set(cur)
-                          if (e.target.checked) next.add(i.id)
-                          else next.delete(i.id)
-                          return next
-                        })
-                      }
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-baseline gap-2">
-                        <span className="font-mono text-[11.5px] text-ink">{i.id}</span>
-                        <span className="rounded bg-raise px-1.5 text-[9.5px] uppercase tracking-wider text-muted">{i.kind}</span>
-                        {i.have && <span className="text-[10.5px] text-ok">already yours</span>}
+                    {src.note && (
+                      <div className="flex items-start gap-2 border-b border-line bg-amber-500/5 px-3 py-2 text-[11px] leading-relaxed text-warn">
+                        <Icon name="info" size={12} className="mt-0.5 shrink-0" />
+                        {src.note}
                       </div>
-                      {i.what && <div className="mt-0.5 line-clamp-2 text-[11.5px] leading-relaxed text-muted">{i.what}</div>}
+                    )}
+                    <div className="max-h-[320px] overflow-auto">
+                      {shown.map((i) => {
+                        const on = picked.has(i.id)
+                        return (
+                          <label
+                            key={`${i.kind}-${i.id}`}
+                            className={`flex cursor-pointer items-start gap-2.5 border-b border-line px-3 py-2 last:border-b-0 ${
+                              on ? 'bg-indigo-500/[0.06]' : 'hover:bg-hover/40'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              className="mt-[3px]"
+                              checked={on}
+                              disabled={i.have}
+                              onChange={(e) =>
+                                setPicked((cur) => {
+                                  const next = new Set(cur)
+                                  if (e.target.checked) next.add(i.id)
+                                  else next.delete(i.id)
+                                  return next
+                                })
+                              }
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-baseline gap-2">
+                                <span className="font-mono text-[11.5px] text-ink">{i.id}</span>
+                                <span className="rounded bg-raise px-1.5 text-[9.5px] uppercase tracking-wider text-muted">
+                                  {i.kind === 'brief' ? 'specialist' : 'skill'}
+                                </span>
+                                {i.have && <span className="text-[10.5px] text-ok">already yours</span>}
+                              </div>
+                              {i.what && (
+                                <div className="mt-0.5 line-clamp-2 text-[11.5px] leading-relaxed text-muted">{i.what}</div>
+                              )}
+                            </div>
+                            <span className="shrink-0 font-mono text-[10px] text-faint">{i.path}</span>
+                          </label>
+                        )
+                      })}
+                      {shown.length === 0 && <div className="px-3 py-6 text-center text-[12px] text-muted">Nothing matches.</div>}
                     </div>
-                    <span className="shrink-0 font-mono text-[10px] text-faint">{i.path}</span>
-                  </label>
-                )
-              })}
-              {shown.length === 0 && <div className="px-5 py-6 text-center text-[12px] text-muted">Nothing matches.</div>}
+                  </div>
+                )}
+              </div>
             </div>
+
             {missed && (
               <div className="border-t border-line bg-amber-500/5 px-5 py-3">
                 <div className="flex items-center gap-2 text-[12px] text-warn">
@@ -365,15 +437,9 @@ function AddFromGitHub({ onClose, onAdded }: { onClose: () => void; onAdded: () 
               </div>
             )}
 
-            <div className="flex items-center gap-2 border-t border-line bg-raise px-5 py-3">
-              <button className="btn-primary text-[12px]" disabled={picked.size === 0 || busy !== ''} onClick={() => void install()}>
-                {busy === 'install' ? 'Adding…' : `Add ${picked.size || ''}`.trim()}
-              </button>
-              <span className="text-[11px] text-muted">Pinned to this commit. Updates are offered, never applied on their own.</span>
-              <span className="flex-1" />
-              <span className="flex items-center gap-1.5 text-[11px] text-faint">
-                <Icon name="secret" size={11} /> Hooks, MCP configs and install scripts are never imported
-              </span>
+            <div className="flex items-center gap-2 border-t border-line bg-raise px-5 py-2.5 text-[11px] text-faint">
+              <Icon name="secret" size={11} />
+              Words only — hooks, MCP configs and install scripts are never imported.
             </div>
           </>
         )}

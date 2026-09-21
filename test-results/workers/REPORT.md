@@ -18,6 +18,7 @@ worker run was started for real against the Claude Code CLI on this machine.
 | Suite | Result |
 |---|---|
 | Rust, `cargo test --lib` | **616 passed, 0 failed**, 2 ignored (the two that need the network) |
+| CI gates, all five, locally | clean |
 | Frontend, `npx tsc -b` | clean |
 | Frontend, `npm run lint` | 0 errors |
 | `cargo fmt --all --check` | clean |
@@ -37,6 +38,7 @@ New tests, by what they hold:
   unwatched, and code work gets a branch of its own.
 - `nothing_is_passed_that_the_cli_does_not_have` — replaces a test that
   required an option the CLI does not have (see *What running it found*).
+- `a_file_survives_a_round_trip` now also holds the worker a manager hands to.
 - Two `#[ignore]` tests that go to GitHub on purpose:
   `reads_a_real_repository` and `what_is_on_disk`.
 
@@ -50,7 +52,7 @@ New tests, by what they hold:
 | 4 | **The one yes**: what will happen, what it will not, where, and the limits | `04-start-card.png` — skills, folder, what it reads, 20 minutes or $2.00 |
 | 5 | **A run as a document**: every step, files, spend against the limit, and the decision | `05-run.png` — a real run of Claude Code, and its honest failure |
 | 6 | **Idea to product**, with the evidence beside the claim | `06-pipeline.png` — four stages, "2 not moved in three weeks", the real run showing under Sounder |
-| 7 | **Managers of a space**, their rhythm, plan and last wake | `07-managers.png` — five managers, each with what its last wake said |
+| 7 | **Managers of a space**, their rhythm, plan, last wake, and which worker they hand a job to | `07-managers.png` — five managers, each with what its last wake said and a "hands work to" choice |
 | 8 | **Today**, with the business and the day | `08-today.png` — products, services, mailbox, and the managers' rhythms as the day |
 | 9 | **Themes** | `09-theme-claude.png`, `10-theme-vercel.png`, `10-theme-vscode.png` — six themes, live previews, applied to the whole app |
 
@@ -96,9 +98,12 @@ I did not sign in on your behalf.
 - **Nothing was kept from a real run.** The keep path (which writes a line
   into the space's knowledge) is exercised by `run_decide` in code, but no
   screenshot shows it, because the only real run failed to authenticate.
-- **Managers cannot yet hand work to a worker.** The plumbing is there — a
-  worker can be started from a space, a manager's page and the board — but a
-  manager's wake still only knows about its own agent. That is the next piece.
+- **A manager handing work over has not been seen end to end.** The path is
+  built and tested in code: on waking, a manager with a worker takes the first
+  item nobody has picked up, starts it if that worker has a standing yes, and
+  otherwise says what it would have started and waits. Nothing on the demo
+  profile has a plan with open items *and* a signed-in CLI, so no screenshot
+  shows a wake handing over.
 - **A worker's spend limit is a ceiling, not a brake.** The time limit stops a
   run; the money figure is what the CLI reports when it finishes. A run cannot
   be stopped mid-flight for cost.
@@ -120,3 +125,6 @@ I did not sign in on your behalf.
 3. **Workers → Add from GitHub** with `affaan-m/ECC`, or any repository that
    keeps `skills/<name>/SKILL.md`.
 4. A business space now has a **Pipeline** tab and a **Managers** tab.
+5. On **Managers**, give one manager a worker. Its next wake takes the first
+   open item on its plan: it starts it if that worker has a standing yes, and
+   otherwise waits and says so.

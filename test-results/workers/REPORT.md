@@ -140,8 +140,16 @@ So the bench does not need a router built for it; it needs handing over.
   | `.agents/skills/` | 39 skills |
   | `.kiro/agents/` | 33 briefs |
 
-  One button each. Translations are left out of that strip — seven languages of
-  one bench is six benches nobody can read — and stay in the tick list.
+  One button each. Translations are left out — seven languages of one bench is
+  six benches nobody can read — and stay in the full list.
+
+  Your second look at it said the same thing again: the checkboxes were still
+  the first thing the window showed, which tells you that ticking 367 is what
+  you are meant to do. So the window now **opens on the sets** as cards —
+  *"68 specialists — a bench your worker picks from"*, *"292 skills —
+  step-by-step guides a worker can follow"* — with the folder names small in
+  the corner. The copies a repository keeps for other editors sit behind one
+  line, and the full list behind **Browse all 367 one by one**, closed.
 - A worker carries **one kit**, stored as `affaan-m/ECC:agents`, which is a
   live reference: add to that folder later and every worker carrying it has
   them. `.claude/agents/` is flat, so two kits would collide on a shared name.
@@ -156,6 +164,47 @@ So the bench does not need a router built for it; it needs handing over.
 - **Wake now** on each manager card. Without it, finding out whether a manager
   hands work over meant waiting for tomorrow's rhythm. It runs the identical
   wake path, not a special one.
+
+### Where any of it actually lives
+
+Worth writing down, because it is the first thing anyone asks.
+
+**Your library — one copy, kept with you, never inside a repository:**
+
+```
+%APPDATA%\devdeck\assistant\library\
+  index.md                      what you have, from where, at which commit
+  briefs\code-reviewer.md       one file per specialist
+  skills\brand-voice\SKILL.md   one folder per skill
+```
+
+It sits in the personal store, which refuses to be created inside a git
+repository at all — so nothing imported can reach somebody's pull request.
+
+**The job's folder — copies, written fresh at the start of every run:**
+
+```
+<the space's folder>\.claude\
+  devdeck-brief.md        the job, the walls, the never-list
+  agents\<the kit>.md     where Claude Code looks for a specialist
+  skills\<name>\          the skills that worker was given
+```
+
+**A worker owns no folder.** It is one file —
+`assistant\workers\<handle>.md` — holding a name, a brief, its skills, its
+kit, where it may write, and its limits. The `.claude/` folder belongs to the
+*run*, in the space the job happens in. Where that space is a repository,
+`.claude/agents/` and `.claude/skills/` go into `.git/info/exclude` — the
+local ignore, so an import never shows in a diff and never edits the
+repository's own ignore rules.
+
+And a kit is a **reference, not a snapshot**: `affaan-m/ECC:agents` resolves
+at run time, so adding to that folder later reaches every worker carrying it,
+with nothing duplicated per worker.
+
+Not done: your own `~/.claude` is never touched, so a skill added in DevDeck
+is not there when you run `claude` yourself. Deliberate for now, and a choice
+worth offering rather than a rule.
 
 **The trust step is bigger than ticking six, and is not pretended otherwise.**
 The library still refuses hooks, MCP configs and install scripts. But a brief

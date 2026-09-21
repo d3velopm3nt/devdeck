@@ -43,6 +43,7 @@ mod gauth;
 mod git;
 mod github;
 mod inbox;
+mod installed;
 mod legacy;
 mod library;
 mod machine;
@@ -1177,6 +1178,8 @@ pub fn run() {
             library::library_install,
             library::library_install_kit,
             library::library_kits,
+            installed::machine_installed,
+            installed::machine_take,
             library::library_remove,
             workers::workers_list,
             workers::worker_save,

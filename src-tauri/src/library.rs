@@ -104,6 +104,11 @@ pub fn read_index() -> Result<Index, String> {
     Ok(crate::aiw::deck::parse_doc::<Index>(&raw)?.meta)
 }
 
+/// The index, written for a module that built one itself.
+pub fn write_index_pub(ix: &Index) -> Result<(), String> {
+    write_index(ix)
+}
+
 fn write_index(ix: &Index) -> Result<(), String> {
     let p = index_path()?;
     std::fs::create_dir_all(p.parent().unwrap()).map_err(err)?;
@@ -826,7 +831,11 @@ mod tests {
             .filter(|s| src.items.iter().any(|i| &i.id == s))
             .collect();
         let added = install(&src, &want).expect("install");
-        assert!(added.missed.is_empty(), "did not come in: {:?}", added.missed);
+        assert!(
+            added.missed.is_empty(),
+            "did not come in: {:?}",
+            added.missed
+        );
         for it in &added.items {
             println!(
                 "added {} {} — {} ({} chars)",

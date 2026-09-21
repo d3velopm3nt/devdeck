@@ -1,0 +1,108 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    .mono { font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; }
+    .head { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .note { font-size: 10.5px; color: var(--faint); }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    .ch { display: flex; align-items: center; gap: 8px; padding: 10px 14px; }
+    .row { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-top: 1px solid var(--line); font-size: 12px; }
+    .t { color: var(--ink); font-size: 12.5px; }
+    .s { font-size: 11px; color: var(--muted); margin-top: 2px; line-height: 1.45; }
+    .bp { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; border-radius: 4px; border: 1px solid #4f46e5; background: #4f46e5; color: #fff; padding: 4px 10px; font-size: 12px; }
+    .bg { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; border-radius: 4px; border: 1px solid var(--line2); background: var(--soft); color: var(--body); padding: 4px 10px; font-size: 12px; }
+    .bd { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; border-radius: 4px; border: 1px solid rgb(248 113 113 / .4); background: rgb(248 113 113 / .1); color: var(--err); padding: 4px 10px; font-size: 12px; }
+    .sm { font-size: 11.5px; padding: 3px 9px; }
+    .in { border-radius: 4px; border: 1px solid var(--line2); background: var(--page); padding: 5px 8px; color: var(--ink); font-size: 12px; min-height: 28px; box-sizing: border-box; display: flex; align-items: center; gap: 6px; }
+    .lab { font-size: 11px; color: var(--muted); }
+    .chip { border-radius: 999px; border: 1px solid var(--line2); padding: 1px 8px; font-size: 10.5px; color: var(--dim); white-space: nowrap; }
+    .chip.on { border-color: #6366f1; background: rgb(99 102 241 / .12); color: var(--ink); }
+    .sk { border-radius: 4px; background: rgb(99 102 241 / .1); color: var(--accent); padding: 1px 7px; font-size: 10.5px; white-space: nowrap; font-family: 'Cascadia Mono', Consolas, monospace; }
+    .tchip { border-radius: 999px; padding: 0 8px; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; line-height: 1.6; white-space: nowrap; }
+    .biz { background: rgb(129 140 248 / .16); color: var(--accent); }
+    .okc { background: rgb(74 222 128 / .13); color: var(--ok); }
+    .wc { background: rgb(251 191 36 / .14); color: var(--warn); }
+    .ec { background: rgb(248 113 113 / .14); color: var(--err); }
+    .mini { width: 24px; height: 24px; border-radius: 999px; font-size: 9.5px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: var(--raise); color: var(--dim); }
+    .sq { width: 30px; height: 30px; border-radius: 8px; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: rgb(0 0 0 / .78); background: #4ade80; }
+    .box { width: 14px; height: 14px; border-radius: 3px; box-sizing: border-box; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+    .box.off { border: 1px solid var(--line2); }
+    .box.on { background: #4f46e5; }
+    .rail { display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 9px; border-radius: 8px; font-size: 12px; color: var(--muted); position: relative; }
+    .rail.on { background: var(--raise); color: var(--ink); }
+    .rail.on::before { content: ""; position: absolute; left: -6px; top: 6px; bottom: 6px; width: 2.5px; border-radius: 2px; background: #6366f1; }
+    .tab { border-radius: 6px; padding: 4px 10px; font-size: 12px; color: var(--dim); }
+    .tab.on { background: var(--raise); color: var(--ink); }
+    .yes { color: var(--ok); } .no { color: var(--err); }
+    .li { display: flex; gap: 7px; align-items: flex-start; font-size: 11.5px; line-height: 1.5; color: var(--body); }
+    .md h1 { font-size: 16px; margin: 0 0 6px; color: var(--ink); font-weight: 600; }
+    .md h2 { font-size: 12.5px; margin: 12px 0 4px; color: var(--ink); font-weight: 600; }
+    .md p { margin: 0 0 6px; font-size: 12px; line-height: 1.6; color: var(--body); }
+    .flag { background: rgb(251 191 36 / .14); border-bottom: 1px dashed var(--warn); color: var(--ink); }
+  </style>
+</helmet>
+<div style="--app: {{c.app}}; --page: {{c.page}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --soft: {{c.soft}}; --line: {{c.line}}; --line2: {{c.line2}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; --info: {{c.info}}; --viol: {{c.viol}}; width: 1456px; height: 909px; background: var(--page); color: var(--body); display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;">
+  <div style="height: 32px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--panel);"><span style="font-size: 11.5px; color: var(--dim);">DevDeck</span><span style="font-size: 11.5px; color: var(--faint);">File</span><span style="font-size: 11.5px; color: var(--faint);">View</span><span style="flex-grow: 1;"></span><span class="note">Spaces / Innotrack / a worker</span></div>
+  <div style="flex-grow: 1; display: flex; min-height: 0;">
+    <div style="width: 150px; flex-shrink: 0; border-right: 1px solid var(--line); background: var(--panel); padding: 12px 10px 12px 14px; display: flex; flex-direction: column; gap: 3px;"><div class="rail">Today</div><div class="rail on">Spaces</div><div class="rail">Team</div><div class="rail">Inbox</div><div class="rail">Mail</div><div class="rail">Community</div><div class="rail">Settings</div></div>
+    <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0;">
+    <div style="padding: 14px 24px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 12px; flex-shrink: 0;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--ok)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg><div style="flex-grow: 1;"><div style="font-size: 15px; font-weight: 600; color: var(--ink);">Landing page copy for MineX is back</div><div class="s">14 minutes &middot; $0.86 &middot; 3 files in Innotrack/Marketing/MineX launch &middot; nothing outside it</div></div><span class="tchip wc">yours to decide</span></div>
+    <div style="flex-grow: 1; display: flex; min-height: 0;">
+      <div style="width: 300px; flex-shrink: 0; border-right: 1px solid var(--line); padding: 14px 16px; display: flex; flex-direction: column; gap: 12px;">
+        <div><div class="head" style="margin-bottom: 7px;">What it says it did</div><p style="margin: 0; font-size: 12px; line-height: 1.6; color: var(--body);">Landing page built on one angle: MineX is the only offer that surveys, tags and runs the software. Positioning first, then the page. The LinkedIn plan waits on this angle.</p></div>
+        <div><div class="head" style="margin-bottom: 7px;">Files</div>
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; background: var(--raise);"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"></path><path d="M14 3v5h5"></path></svg><span class="mono" style="font-size: 11.5px; color: var(--ink); flex-grow: 1;">landing-page.md</span><span class="tchip wc">2 flags</span></div>
+            <div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"></path><path d="M14 3v5h5"></path></svg><span class="mono" style="font-size: 11.5px; color: var(--body); flex-grow: 1;">positioning.md</span></div>
+            <div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"></path><path d="M14 3v5h5"></path></svg><span class="mono" style="font-size: 11.5px; color: var(--body); flex-grow: 1;">sources.md</span><span class="note">7 links</span></div>
+          </div>
+        </div>
+        <div class="card" style="padding: 9px 12px; border-color: rgb(251 191 36 / .35);"><div style="display: flex; gap: 7px; align-items: flex-start;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;margin-top: 2px;"><path d="M12 4 2.8 19.5h18.4L12 4z"></path><path d="M12 10v4M12 17h.01"></path></svg><div style="font-size: 11.5px; line-height: 1.5; color: var(--body);"><b style="color: var(--ink); font-weight: 600;">Two claims it could not check</b> are marked in the page. It says where it would look, and does not make them up.</div></div></div>
+        <div style="flex-grow: 1;"></div>
+        <div class="note" style="line-height: 1.5;">Checked by DevDeck, not by Claude Code: files written, where, and against the folder it was given.</div>
+      </div>
+      <div style="flex-grow: 1; min-width: 0; padding: 16px 26px; display: flex; flex-direction: column; gap: 12px; min-height: 0;">
+        <div class="card md" style="padding: 16px 20px; flex-grow: 1; overflow: hidden;">
+          <h1>Know where every machine is, every shift.</h1>
+          <p>MineX tags your fleet, surveys your site and shows you all of it on one map. We install it, so you don&rsquo;t need a team to run it.</p>
+          <h2>Why mines choose MineX</h2>
+          <p><b>We come to site.</b> A survey before a single tag goes on, so readers sit where the machines actually are.</p>
+          <p><b>Tags that survive the pit.</b> Rated for dust, water and <span class="flag">a drop from 2 metres</span>. <span class="note">&larr; not on the site; ask the supplier sheet</span></p>
+          <p><b>One map, every shift.</b> Where each machine is, how long it has stood, and what moved overnight.</p>
+          <h2>Already running</h2>
+          <p><span class="flag">Uptime up 11% in the first quarter</span> at a Limpopo mine. <span class="note">&larr; from a mail to Ridgeback, needs their yes to quote</span></p>
+          <h2>Book a site survey</h2>
+          <p>Meet us at the mining expo on 21 October, or book a survey now.</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;"><span class="bp">Keep it</span><div class="in" style="flex-grow: 1; color: var(--faint);">Ask for changes: &ldquo;shorter hero, and drop the uptime figure until Ridgeback agrees&rdquo;</div><span class="bg">Send back</span><span class="bg" style="color: var(--muted);">Discard</span></div>
+        <div style="display: flex; gap: 10px; align-items: flex-start; border-top: 1px solid var(--line); padding-top: 11px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;margin-top: 1px;"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 11v5M12 8h.01"></path></svg><p style="margin: 0; font-size: 11.5px; line-height: 1.6; color: var(--muted); max-width: 980px;">Keeping marks the item done, leaves the files where they are, and files a line in Innotrack&rsquo;s knowledge so the next worker starts from this angle. Send back continues the same session with what you wrote. Publishing the page is yours: nothing here goes to the website.</p></div>
+      </div>
+    </div></div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', page: '#0d1017', panel: '#11141c', raise: '#151923', soft: 'rgb(30 41 59 / 0.4)',
+          line: '#1e293b', line2: '#334155', ink: '#e2e8f0', body: '#cbd5e1', dim: '#94a3b8', muted: '#64748b',
+          faint: '#475569', accent: '#818cf8', ok: '#4ade80', warn: '#fbbf24', err: '#f87171', info: '#38bdf8', viol: '#a78bfa' }
+      : { app: '#e9ebf0', page: '#f6f7f9', panel: '#fdfdfe', raise: '#f0f2f6', soft: 'rgb(203 213 225 / 0.35)',
+          line: '#d9dee7', line2: '#c3cbd8', ink: '#16181d', body: '#333a45', dim: '#5a6472', muted: '#7d8794',
+          faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d', warn: '#b45309', err: '#dc2626', info: '#0369a1', viol: '#6d28d9' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

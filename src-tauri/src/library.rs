@@ -14,6 +14,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 pub const SKILL: &str = "skill";
 pub const BRIEF: &str = "brief";
@@ -22,6 +23,10 @@ pub const BRIEF: &str = "brief";
 /// library has hundreds; reading every one to draw a list nobody scrolled to
 /// the end of is somebody else's bandwidth and your wait.
 const HEADERS: usize = 90;
+
+/// How many of those it reads at once. Enough to be quick on a big library,
+/// few enough that nobody's server thinks it is being scraped.
+const HANDS: usize = 8;
 
 fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
@@ -274,19 +279,35 @@ pub fn look(input: &str) -> Result<Source, String> {
 
     let have = read_index()?.items;
     let read_headers = found.len().min(HEADERS);
+
+    // Read the headers a few at a time. One at a time is correct and far too
+    // slow: a library of three hundred files spent two minutes on a list
+    // nobody could use yet, which reads as a hung window rather than a read.
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let heads: Vec<Mutex<Option<(String, String)>>> = (0..read_headers).map(|_| Mutex::new(None)).collect();
+    std::thread::scope(|scope| {
+        for _ in 0..HANDS.min(read_headers.max(1)) {
+            scope.spawn(|| loop {
+                let i = next.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                if i >= read_headers {
+                    return;
+                }
+                let (_, _, path) = &found[i];
+                if let Ok(text) = c.get(raw_url(&repo, &commit, path)).send().and_then(|r| r.text()) {
+                    *heads[i].lock().unwrap() = Some(header(&text));
+                }
+            });
+        }
+    });
+
     let mut items: Vec<Candidate> = Vec::with_capacity(found.len());
     for (i, (kind, id, path)) in found.iter().enumerate() {
         let (mut name, mut what) = (id.clone(), String::new());
-        if i < read_headers {
-            if let Ok(res) = c.get(raw_url(&repo, &commit, path)).send() {
-                if let Ok(text) = res.text() {
-                    let (n, w) = header(&text);
-                    if !n.is_empty() {
-                        name = n;
-                    }
-                    what = w;
-                }
+        if let Some((n, w)) = heads.get(i).and_then(|h| h.lock().unwrap().clone()) {
+            if !n.is_empty() {
+                name = n;
             }
+            what = w;
         }
         items.push(Candidate {
             id: id.clone(),
@@ -375,14 +396,23 @@ pub fn library_read(id: String, kind: String) -> Result<String, String> {
     std::fs::read_to_string(item_path(it)?).map_err(err)
 }
 
-#[tauri::command(async)]
-pub fn library_look(repo: String) -> Result<Source, String> {
-    look(&repo)
+/// Off the async runtime, deliberately.
+///
+/// `reqwest::blocking` builds and drops a runtime of its own, which panics
+/// inside an async context — and a panicked command never answers, so the
+/// window sits on "Reading…" for ever. The same trap the mail sync documents.
+#[tauri::command]
+pub async fn library_look(repo: String) -> Result<Source, String> {
+    tauri::async_runtime::spawn_blocking(move || look(&repo))
+        .await
+        .map_err(|e| format!("the read did not finish: {e}"))?
 }
 
-#[tauri::command(async)]
-pub fn library_install(source: Source, ids: Vec<String>) -> Result<Vec<Item>, String> {
-    install(&source, &ids)
+#[tauri::command]
+pub async fn library_install(source: Source, ids: Vec<String>) -> Result<Vec<Item>, String> {
+    tauri::async_runtime::spawn_blocking(move || install(&source, &ids))
+        .await
+        .map_err(|e| format!("the install did not finish: {e}"))?
 }
 
 #[tauri::command(async)]
@@ -425,6 +455,34 @@ mod tests {
         assert_eq!(what, "Build a voice profile from real posts.");
         // No header is not an error: it has no name of its own, and says so.
         assert_eq!(header("# Just a document\n"), (String::new(), String::new()));
+    }
+
+    /// Reads a real repository over the network and installs from it, into
+    /// whatever `DEVDECK_HOME` points at. Ignored by default: the suite must
+    /// not need GitHub to be up, or spend somebody's rate limit on every run.
+    ///
+    ///     cargo test --lib library::tests::reads_a_real_repository -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn reads_a_real_repository() {
+        let repo = std::env::var("LIB_REPO").unwrap_or_else(|_| "affaan-m/ECC".into());
+        let src = look(&repo).expect("a look at the repository");
+        println!("{} @ {} ({})", src.repo, &src.commit[..7], src.licence);
+        println!("{} items, note: {}", src.items.len(), src.note);
+        assert!(!src.commit.is_empty(), "pinned to a commit");
+        assert!(!src.items.is_empty(), "something to hold");
+        let want: Vec<String> = std::env::var("LIB_PICK")
+            .unwrap_or_else(|_| "brand-voice,taste,deep-research,design-system,marketing-agent,code-reviewer".into())
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| src.items.iter().any(|i| &i.id == s))
+            .collect();
+        let added = install(&src, &want).expect("install");
+        for it in &added {
+            println!("added {} {} — {} ({} chars)", it.kind, it.id, it.what, it.chars);
+            assert!(item_path(it).unwrap().is_file(), "{} landed on disk", it.id);
+        }
+        assert_eq!(added.len(), want.len());
     }
 
     #[test]

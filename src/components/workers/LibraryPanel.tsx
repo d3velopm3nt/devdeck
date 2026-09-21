@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react'
 import * as ipc from '../../lib/ipc'
 import { Icon } from '../../lib/icons'
+import { CAPTURE_LIBRARY } from '../../lib/devCapture'
 
 export function LibraryPanel({
   items,
@@ -16,7 +17,7 @@ export function LibraryPanel({
   items: ipc.LibraryItem[]
   reload: () => void
 }) {
-  const [adding, setAdding] = useState(false)
+  const [adding, setAdding] = useState(!!CAPTURE_LIBRARY)
   const [reading, setReading] = useState<{ item: ipc.LibraryItem; text: string } | null>(null)
   const [err, setErr] = useState('')
 
@@ -137,7 +138,7 @@ export function LibraryPanel({
 }
 
 function AddFromGitHub({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
-  const [repo, setRepo] = useState('')
+  const [repo, setRepo] = useState(CAPTURE_LIBRARY)
   const [src, setSrc] = useState<ipc.LibrarySource | null>(null)
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState<'' | 'look' | 'install'>('')
@@ -171,6 +172,12 @@ function AddFromGitHub({ onClose, onAdded }: { onClose: () => void; onAdded: () 
       setBusy('')
     }
   }
+
+  // Screenshot harness: read the repository without a mouse.
+  useEffect(() => {
+    if (CAPTURE_LIBRARY) void look()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const shown = (src?.items ?? []).filter(
     (i) =>

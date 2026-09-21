@@ -1,4 +1,4 @@
-﻿export const CAPTURE_RAIL: string = ''
+﻿export const CAPTURE_RAIL: string = 'workers'
 export const CAPTURE_PAGE = ''
 export const CAPTURE_PROJECT = ''
 export const CAPTURE_FEATURE = ''
@@ -82,7 +82,13 @@ export const CAPTURE_CLEAR: boolean = false
 export const CAPTURE_BUSINESS_AUTO: string = ''
 /** On the clearing screen, press the red button. Only on a throwaway profile. Empty in every shipped build. */
 export const CAPTURE_CLEAR_AUTO: boolean = false
-/** Screenshot harness: open the start-a-worker card straight away. */
-export const CAPTURE_START_WORKER: boolean = false
+/** Screenshot harness: open the start-a-worker card, as `handle|node|title|intent`. */
+export const CAPTURE_START_WORKER: string = ''
+/** Screenshot harness: actually start one, same shape. Spends money: throwaway profiles only. */
+export const CAPTURE_GO: string = ''
+/** Screenshot harness: open the library's Add from GitHub on a repository. */
+export const CAPTURE_LIBRARY: string = 'affaan-m/ECC'
 /** Screenshot harness: open one run as a document, by id. */
 export const CAPTURE_RUN: string = ''
+/** Screenshot harness: open one worker's editor, by handle. */
+export const CAPTURE_WORKER: string = ''

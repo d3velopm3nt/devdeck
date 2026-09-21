@@ -13,6 +13,7 @@ import { avatarLabel } from '../../lib/spaces'
 import { LibraryPanel, useLibrary } from './LibraryPanel'
 import { WorkerEditor } from './WorkerEditor'
 import { startWorker } from './StartWorker'
+import { CAPTURE_WORKER } from '../../lib/devCapture'
 
 export function WorkersPage() {
   const nodes = useApp((s) => s.nodes)
@@ -29,6 +30,13 @@ export function WorkersPage() {
     void ipc.runsList(0).then(setRuns).catch(() => setRuns([]))
   }
   useEffect(reload, [])
+
+  // Screenshot harness: open one worker's editor without a mouse.
+  useEffect(() => {
+    if (!CAPTURE_WORKER) return
+    const w = workers.find((x) => x.handle === CAPTURE_WORKER)
+    if (w) setEditing(w)
+  }, [workers])
 
   const blank: ipc.Worker = {
     handle: '',

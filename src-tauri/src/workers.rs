@@ -886,6 +886,31 @@ mod tests {
         }
     }
 
+    /// What a profile on disk actually holds, for a demo run.
+    ///     cargo test --lib workers::tests::what_is_on_disk -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn what_is_on_disk() {
+        println!("root: {:?}", root());
+        match all_workers() {
+            Ok(w) => {
+                println!("{} workers", w.len());
+                for x in &w {
+                    println!("  {} ({}) skills={:?} writes={}", x.meta.handle, x.meta.name, x.meta.skills, x.meta.writes);
+                }
+            }
+            Err(e) => println!("workers failed: {e}"),
+        }
+        match crate::library::read_index() {
+            Ok(ix) => println!("{} library items: {:?}", ix.items.len(), ix.items.iter().map(|i| &i.id).collect::<Vec<_>>()),
+            Err(e) => println!("library failed: {e}"),
+        }
+        match all_runs() {
+            Ok(r) => println!("{} runs: {:?}", r.len(), r.iter().map(|x| (&x.id, &x.status)).collect::<Vec<_>>()),
+            Err(e) => println!("runs failed: {e}"),
+        }
+    }
+
     #[test]
     fn a_brief_says_the_job_the_folder_and_what_it_must_never_do() {
         let w = Worker {

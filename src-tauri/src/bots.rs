@@ -142,6 +142,10 @@ pub struct Bot {
     /// The businesses it works for, by space id.
     #[serde(default)]
     pub businesses: Vec<i64>,
+    /// The worker it hands a job to, by handle. Empty means it only keeps
+    /// the plan and tells you what it sees.
+    #[serde(default)]
+    pub worker: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -520,6 +524,7 @@ fn from_manager(
         last_ok: None,
         last_note: String::new(),
         businesses: m.businesses.clone(),
+        worker: m.worker.clone(),
     }
 }
 
@@ -855,6 +860,7 @@ fn save_into(
             .unwrap_or_default(),
         was: prior.as_ref().map(|p| p.was.clone()).unwrap_or_default(),
         home: prior.as_ref().map(|p| p.home).unwrap_or(node_id),
+        worker: String::new(),
         businesses: prior
             .as_ref()
             .map(|p| p.businesses.clone())
@@ -965,6 +971,15 @@ fn delete_into_for(
         mind.forget(node_id);
     }
     Ok(name)
+}
+
+/// Say which worker a manager hands its jobs to. Empty takes it back.
+#[tauri::command(async)]
+pub fn bot_set_worker(db: tauri::State<Db>, handle: String, worker: String) -> Result<(), String> {
+    let conn = db.0.lock().unwrap();
+    let mut m = crate::managers::get(&conn, &handle).ok_or("there is no manager by that name.")?;
+    m.worker = worker.trim().to_string();
+    crate::managers::save(&conn, &m)
 }
 
 #[tauri::command]
@@ -1409,6 +1424,7 @@ pub(crate) fn create_into(
         stop_at: vec![],
         was: String::new(),
         home: node_id,
+        worker: String::new(),
         businesses: Vec::new(),
     };
     crate::managers::save(conn, &m)?;

@@ -517,6 +517,7 @@ pub fn make_team(
             stop_at: r.def.stop_at.clone(),
             was: String::new(),
             home: node_id,
+            worker: String::new(),
             businesses: vec![node_id],
         };
         crate::managers::save(conn, &m)?;

@@ -27,6 +27,11 @@ export function NodeManagers({
   const refreshBots = useApp((s) => s.refreshBots)
   const [standing, setStanding] = useState<Record<string, ipc.BotStanding>>({})
   const [creating, setCreating] = useState(false)
+  const [workers, setWorkers] = useState<ipc.Worker[]>([])
+
+  useEffect(() => {
+    void ipc.workersList().then(setWorkers).catch(() => setWorkers([]))
+  }, [])
 
   useEffect(() => {
     void ipc
@@ -92,6 +97,27 @@ export function NodeManagers({
                 <span className="flex items-center gap-1">
                   <Icon name="agent" size={11} /> {m.agent ? `runs ${m.agent}` : 'plans and asks'}
                 </span>
+              </div>
+              {/* A manager manages; a worker does the job. This is the line
+                  between them, and it is one choice. */}
+              <div className="flex items-center gap-2 text-[11px]">
+                <span className="shrink-0 text-muted">Hands work to</span>
+                <select
+                  className="input min-w-0 flex-1 py-0.5 text-[11px]"
+                  value={m.worker ?? ''}
+                  onChange={(e) => {
+                    const worker = e.target.value
+                    void ipc.botSetWorker(m.handle, worker).then(() => void refreshBots())
+                  }}
+                >
+                  <option value="">nobody — it only keeps the plan</option>
+                  {workers.map((w) => (
+                    <option key={w.handle} value={w.handle}>
+                      {w.name}
+                      {w.unattended ? '' : ' (asks first)'}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="rounded-[8px] border border-line bg-raise px-2.5 py-2 text-[11.5px] leading-relaxed">
                 <div className="mb-0.5 text-[10px] uppercase tracking-wider text-faint">

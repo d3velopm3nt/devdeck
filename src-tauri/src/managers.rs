@@ -89,6 +89,10 @@ pub struct Manager {
     /// this is how it is found until then.
     #[serde(default)]
     pub home: i64,
+    /// The worker it hands a job to, by handle, or empty for a manager that
+    /// only keeps the plan. A manager manages; it does not type.
+    #[serde(default)]
+    pub worker: String,
     /// The businesses this manager works for, by space id. A manager can work
     /// for more than one: that is offered on a business's team step, never
     /// assumed. Empty for a manager that is not a business role.
@@ -158,6 +162,7 @@ fn parse(handle: &str, raw: &str) -> Manager {
                         "team" => m.team = list(&v),
                         "wake_intent" => m.wake_intent = v,
                         "stop_at" => m.stop_at = list(&v),
+                        "worker" => m.worker = v,
                         "skills" => m.skills = list(&v),
                         "was" => m.was = v,
                         "home" => m.home = v.parse().unwrap_or(0),
@@ -213,6 +218,9 @@ fn serialise(m: &Manager) -> String {
     }
     if !m.stop_at.is_empty() {
         out.push_str(&format!("stop_at: [{}]\n", m.stop_at.join(", ")));
+    }
+    if !m.worker.trim().is_empty() {
+        out.push_str(&format!("worker: {}\n", m.worker.trim()));
     }
     if !m.was.trim().is_empty() {
         out.push_str(&format!("was: {}\n", m.was.trim()));
@@ -416,6 +424,7 @@ pub fn migrate_from_bots(conn: &Connection) -> Vec<String> {
                 crate::bots::FILE
             ),
             home: b.node_id,
+            worker: String::new(),
             businesses: Vec::new(),
         };
         if fs::create_dir_all(&d).is_err() {
@@ -476,9 +485,14 @@ mod tests {
             stop_at: vec!["before any push".into()],
             was: String::new(),
             home: 0,
+            worker: "scribe".into(),
             businesses: vec![3, 21],
         };
         let back = parse("marketing", &serialise(&m));
+        assert_eq!(
+            back.worker, "scribe",
+            "who it hands a job to travels with it"
+        );
         assert_eq!(
             back.businesses,
             vec![3, 21],

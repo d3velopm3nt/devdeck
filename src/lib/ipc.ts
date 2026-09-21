@@ -259,6 +259,8 @@ export interface Bot {
   last_note?: string
   /** The businesses it works for, by space id. */
   businesses?: number[]
+  /** The worker it hands a job to, by handle. */
+  worker?: string
 }
 
 export const botsList = () => invoke<Bot[]>('bots_list')
@@ -2211,3 +2213,7 @@ export const businessPipeline = (nodeId: number) => invoke<PipeItem[]>('business
 /** Move a product, and say what has to be true to move it again. Yours to say. */
 export const businessStageSet = (nodeId: number, product: string, stage: string, next: string) =>
   invoke<PipeItem[]>('business_stage_set', { nodeId, product, stage, next })
+
+/** Say which worker a manager hands its jobs to. Empty takes it back. */
+export const botSetWorker = (handle: string, worker: string) =>
+  invoke<void>('bot_set_worker', { handle, worker })

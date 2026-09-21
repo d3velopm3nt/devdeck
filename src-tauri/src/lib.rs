@@ -1019,6 +1019,7 @@ pub fn run() {
             bots::bot_for_node,
             bots::bot_save,
             bots::bot_delete,
+            bots::bot_set_worker,
             bots::bot_create,
             bots::bot_plan,
             bots::bot_plan_proposal,

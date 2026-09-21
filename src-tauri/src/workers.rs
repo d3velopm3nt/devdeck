@@ -879,6 +879,70 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
     Ok(run)
 }
 
+/// The first thing on a manager's plan that nobody has picked up.
+///
+/// A manager hands out one job at a time on purpose: a wake that started five
+/// sessions at three in the morning is not a manager, it is a bill.
+pub fn next_open_item(
+    conn: &rusqlite::Connection,
+    bot: &crate::bots::Bot,
+) -> Option<(String, String)> {
+    let n = db::node_by_id(conn, bot.node_id).ok()?;
+    let dir = crate::db::node_deck_dir(conn, &n)?;
+    let deck = crate::aiw::deck::Deck::new(&dir);
+    if !deck.exists() {
+        return None;
+    }
+    let mine: Vec<String> = bot
+        .portfolio
+        .iter()
+        .filter(|o| o.node_id == bot.node_id)
+        .map(|o| o.feature.clone())
+        .collect();
+    for slug in mine {
+        let Ok(work) = deck.work(&slug) else { continue };
+        for item in work.meta.items {
+            if item.status.is_empty() || item.status == "unclaimed" {
+                return Some((item.id, item.title));
+            }
+        }
+    }
+    None
+}
+
+/// What a manager's wake should do about its worker, said in one sentence.
+///
+/// Three outcomes, and the difference between them is consent: it started
+/// one, it wants to start one and is asking, or it has nobody to hand to.
+pub enum Handoff {
+    /// The worker, the job, and the item it came from.
+    Start(String, String, String),
+    /// It would start this, but nothing has said it may while you sleep.
+    Ask(String, String),
+    Nothing,
+}
+
+pub fn handoff(conn: &rusqlite::Connection, bot: &crate::bots::Bot) -> Handoff {
+    if bot.worker.trim().is_empty() {
+        return Handoff::Nothing;
+    }
+    let Some((id, title)) = next_open_item(conn, bot) else {
+        return Handoff::Nothing;
+    };
+    let Ok(Some(w)) = read_worker(bot.worker.trim()) else {
+        return Handoff::Nothing;
+    };
+    let lent = w.meta.spaces.is_empty() || w.meta.spaces.contains(&bot.node_id);
+    if !lent {
+        return Handoff::Nothing;
+    }
+    if w.meta.unattended {
+        Handoff::Start(w.meta.handle, title, id)
+    } else {
+        Handoff::Ask(w.meta.name, title)
+    }
+}
+
 // ---------------------------------------------------------------------------
 // What the window calls
 // ---------------------------------------------------------------------------

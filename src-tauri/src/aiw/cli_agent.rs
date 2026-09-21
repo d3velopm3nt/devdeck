@@ -117,8 +117,10 @@ pub struct RunnerSpec {
     pub model: String,
     /// `--permission-mode`. Empty means [`DEFAULT_PERMISSION_MODE`].
     pub permission_mode: String,
-    /// Nobody is watching. Anything that would prompt is denied instead of
-    /// waiting for an answer that cannot come.
+    /// Nobody is watching. Kept on the spec though no flag carries it today:
+    /// `-p` is already non-interactive, and the next runner added may need to
+    /// be told. Read by the callers that decide whether to start at all.
+    #[allow(dead_code)]
     pub unattended: bool,
 }
 
@@ -162,15 +164,13 @@ impl RunnerSpec {
             a.push("--model".into());
             a.push(self.model.trim().into());
         }
-        if self.unattended {
-            // The whole answer to "what happens at three in the morning".
-            // Without it a permission prompt waits for a host that is not
-            // there, and the session hangs looking exactly like one that is
-            // working. With it, anything that would ask is denied and the run
-            // carries on and finishes.
-            a.push("--permission-prompts".into());
-            a.push("none".into());
-        }
+        // `unattended` used to add `--permission-prompts none`. That option
+        // does not exist in the CLI (2.1.x rejects it outright and exits 1),
+        // and it was not needed: `-p` is already non-interactive, so a call
+        // the permission mode does not cover is refused rather than asked
+        // about. The flag stays on the spec because the question it answers —
+        // "what happens at three in the morning" — is still the right one to
+        // ask of any runner added later.
         a
     }
 }
@@ -323,7 +323,10 @@ pub struct Leash {
 
 impl Leash {
     pub fn forever() -> Self {
-        Self { stop: std::sync::atomic::AtomicBool::new(false), until: None }
+        Self {
+            stop: std::sync::atomic::AtomicBool::new(false),
+            until: None,
+        }
     }
 
     /// Stops itself after `minutes`. Zero means no limit.
@@ -400,85 +403,88 @@ pub fn run_watched(
     // The leash, watched on its own thread: the reader below is blocked on the
     // CLI's stdout, and a run nobody can stop is exactly what a limit is for.
     std::thread::scope(|scope| {
-    let watcher = {
-        let child = child.clone();
-        let stopped = stopped.clone();
-        scope.spawn(move || {
-            while !leash.done() {
-                if let Ok(mut c) = child.lock() {
-                    // Finished on its own: nothing to stop.
-                    if matches!(c.try_wait(), Ok(Some(_))) {
-                        return;
+        let watcher = {
+            let child = child.clone();
+            let stopped = stopped.clone();
+            scope.spawn(move || {
+                while !leash.done() {
+                    if let Ok(mut c) = child.lock() {
+                        // Finished on its own: nothing to stop.
+                        if matches!(c.try_wait(), Ok(Some(_))) {
+                            return;
+                        }
                     }
+                    std::thread::sleep(std::time::Duration::from_millis(250));
                 }
-                std::thread::sleep(std::time::Duration::from_millis(250));
-            }
-            stopped.store(true, std::sync::atomic::Ordering::SeqCst);
-            if let Ok(mut c) = child.lock() {
-                let _ = c.kill();
-            }
-        })
-    };
+                stopped.store(true, std::sync::atomic::Ordering::SeqCst);
+                if let Ok(mut c) = child.lock() {
+                    let _ = c.kill();
+                }
+            })
+        };
 
-    let mut verdict: Option<RunOutcome> = None;
-    if let Some(out) = stdout {
-        for line in BufReader::new(out).lines().map_while(Result::ok) {
-            match parse_line(&line) {
-                Line::Event(e) => on_event(e),
-                Line::Verdict(v) => verdict = Some(*v),
-                Line::Ignored => {}
+        let mut verdict: Option<RunOutcome> = None;
+        if let Some(out) = stdout {
+            for line in BufReader::new(out).lines().map_while(Result::ok) {
+                match parse_line(&line) {
+                    Line::Event(e) => on_event(e),
+                    Line::Verdict(v) => verdict = Some(*v),
+                    Line::Ignored => {}
+                }
             }
         }
-    }
 
-    let status = {
-        let mut c = child.lock().map_err(|_| "the run's own record was lost".to_string())?;
-        c.wait().map_err(|e| format!("'{name}' never finished: {e}"))?
-    };
-    // The watcher returns on its own once the child is gone.
-    let _ = watcher.join();
-    let cut_short = stopped.load(std::sync::atomic::Ordering::SeqCst);
-    let stderr = errors
-        .and_then(|h| h.join().ok())
-        .unwrap_or_default()
-        .trim()
-        .to_string();
+        let status = {
+            let mut c = child
+                .lock()
+                .map_err(|_| "the run's own record was lost".to_string())?;
+            c.wait()
+                .map_err(|e| format!("'{name}' never finished: {e}"))?
+        };
+        // The watcher returns on its own once the child is gone.
+        let _ = watcher.join();
+        let cut_short = stopped.load(std::sync::atomic::Ordering::SeqCst);
+        let stderr = errors
+            .and_then(|h| h.join().ok())
+            .unwrap_or_default()
+            .trim()
+            .to_string();
 
-    // Reported even when the run succeeded. A CLI that warned on its way to a
-    // good result still warned, and swallowing that because the verdict was
-    // green is how a problem stays invisible until it is not one any more.
-    if !stderr.is_empty() {
-        on_event(RunEvent {
-            kind: "stderr",
-            text: stderr.clone(),
-        });
-    }
-
-    // Stopped on purpose is not a crash, and it is not a success either: the
-    // work that was done stands, and the verdict says it was cut short.
-    match verdict {
-        Some(mut v) => {
-            if cut_short {
-                v.ok = false;
-                v.summary = if v.summary.trim().is_empty() {
-                    "Stopped before it finished.".to_string()
-                } else {
-                    format!("{} (stopped before it finished)", v.summary.trim())
-                };
-            }
-            Ok(v)
+        // Reported even when the run succeeded. A CLI that warned on its way to a
+        // good result still warned, and swallowing that because the verdict was
+        // green is how a problem stays invisible until it is not one any more.
+        if !stderr.is_empty() {
+            on_event(RunEvent {
+                kind: "stderr",
+                text: stderr.clone(),
+            });
         }
-        None if cut_short => Ok(RunOutcome {
-            ok: false,
-            summary: "Stopped before it reported anything.".into(),
-            ..Default::default()
-        }),
-        None => Err(if stderr.is_empty() {
-            format!("'{name}' exited {status} without reporting a result")
-        } else {
-            format!("'{name}' exited {status} without reporting a result: {stderr}")
-        }),
-    }
+
+        // Stopped on purpose is not a crash, and it is not a success either: the
+        // work that was done stands, and the verdict says it was cut short.
+        match verdict {
+            Some(mut v) => {
+                if cut_short {
+                    v.ok = false;
+                    v.summary = if v.summary.trim().is_empty() {
+                        "Stopped before it finished.".to_string()
+                    } else {
+                        format!("{} (stopped before it finished)", v.summary.trim())
+                    };
+                }
+                Ok(v)
+            }
+            None if cut_short => Ok(RunOutcome {
+                ok: false,
+                summary: "Stopped before it reported anything.".into(),
+                ..Default::default()
+            }),
+            None => Err(if stderr.is_empty() {
+                format!("'{name}' exited {status} without reporting a result")
+            } else {
+                format!("'{name}' exited {status} without reporting a result: {stderr}")
+            }),
+        }
     })
 }
 
@@ -486,31 +492,35 @@ pub fn run_watched(
 mod tests {
     use super::*;
 
+    /// Nothing is passed that the CLI does not have.
+    ///
+    /// This test used to require `--permission-prompts none` on an unattended
+    /// run. The CLI has no such option: it exits 1 with "unknown option", so
+    /// every unattended run died before it started while the code looked
+    /// careful. `-p` is already non-interactive — a call the permission mode
+    /// does not cover is refused, not asked about — so the answer to "what
+    /// happens at three in the morning" is the mode, not a flag.
     #[test]
-    fn unattended_never_waits_for_an_answer() {
-        let spec = RunnerSpec {
-            program: String::new(),
-            model: String::new(),
-            permission_mode: String::new(),
-            unattended: true,
-        };
-        let args = spec.args("do the thing");
-        let at = args
-            .iter()
-            .position(|a| a == "--permission-prompts")
-            .unwrap();
-        assert_eq!(args[at + 1], "none");
-    }
-
-    #[test]
-    fn an_attended_run_may_still_ask() {
-        let spec = RunnerSpec {
-            program: String::new(),
-            model: String::new(),
-            permission_mode: String::new(),
-            unattended: false,
-        };
-        assert!(!spec.args("x").iter().any(|a| a == "--permission-prompts"));
+    fn nothing_is_passed_that_the_cli_does_not_have() {
+        for unattended in [true, false] {
+            let spec = RunnerSpec {
+                program: String::new(),
+                model: String::new(),
+                permission_mode: String::new(),
+                unattended,
+            };
+            let args = spec.args("do the thing");
+            assert!(
+                !args.iter().any(|a| a == "--permission-prompts"),
+                "the CLI rejects that option outright"
+            );
+            assert!(
+                args.iter().any(|a| a == "-p"),
+                "print mode is what makes it non-interactive"
+            );
+            let at = args.iter().position(|a| a == "--permission-mode").unwrap();
+            assert_eq!(args[at + 1], DEFAULT_PERMISSION_MODE);
+        }
     }
 
     #[test]

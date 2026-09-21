@@ -147,7 +147,9 @@ pub fn header(raw: &str) -> (String, String) {
                 continue;
             }
         }
-        let Some((k, v)) = line.split_once(':') else { continue };
+        let Some((k, v)) = line.split_once(':') else {
+            continue;
+        };
         key = k.trim().to_string();
         let v = v.trim().trim_matches('"').trim_matches('\'').to_string();
         match key.as_str() {
@@ -166,7 +168,7 @@ pub fn classify(path: &str) -> Option<(String, String)> {
     let parts: Vec<&str> = p.split('/').collect();
     if parts.len() >= 2 && parts[parts.len() - 1].eq_ignore_ascii_case("SKILL.md") {
         let folder = parts[parts.len() - 2];
-        let inside = parts.iter().any(|x| *x == "skills");
+        let inside = parts.contains(&"skills");
         if inside && !folder.is_empty() {
             return Some((SKILL.to_string(), folder.to_string()));
         }
@@ -191,9 +193,13 @@ fn client() -> Result<reqwest::blocking::Client, String> {
 }
 
 fn get_json(c: &reqwest::blocking::Client, url: &str) -> Result<serde_json::Value, String> {
-    let res = c.get(url).send().map_err(|e| format!("could not reach GitHub: {e}"))?;
+    let res = c
+        .get(url)
+        .send()
+        .map_err(|e| format!("could not reach GitHub: {e}"))?;
     let status = res.status();
-    if status == reqwest::StatusCode::FORBIDDEN || status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+    if status == reqwest::StatusCode::FORBIDDEN || status == reqwest::StatusCode::TOO_MANY_REQUESTS
+    {
         return Err("GitHub is rate limiting this machine. It allows 60 reads an hour without a token; wait, or paste a token in Settings.".into());
     }
     if status == reqwest::StatusCode::NOT_FOUND {
@@ -202,7 +208,8 @@ fn get_json(c: &reqwest::blocking::Client, url: &str) -> Result<serde_json::Valu
     if !status.is_success() {
         return Err(format!("GitHub answered {status}"));
     }
-    res.json().map_err(|e| format!("GitHub sent something unreadable: {e}"))
+    res.json()
+        .map_err(|e| format!("GitHub sent something unreadable: {e}"))
 }
 
 /// `https://github.com/owner/name`, `owner/name`, with or without `.git`.
@@ -213,7 +220,9 @@ pub fn repo_name(input: &str) -> Option<String> {
         .trim_end_matches(".git")
         .replace("https://", "")
         .replace("http://", "");
-    let t = t.trim_start_matches("www.").trim_start_matches("github.com/");
+    let t = t
+        .trim_start_matches("www.")
+        .trim_start_matches("github.com/");
     let parts: Vec<&str> = t.split('/').filter(|p| !p.is_empty()).collect();
     if parts.len() < 2 {
         return None;
@@ -246,7 +255,10 @@ pub fn look(input: &str) -> Result<Source, String> {
         .unwrap_or("none stated")
         .to_string();
 
-    let head = get_json(&c, &format!("https://api.github.com/repos/{repo}/commits/{branch}"))?;
+    let head = get_json(
+        &c,
+        &format!("https://api.github.com/repos/{repo}/commits/{branch}"),
+    )?;
     let commit = head
         .get("sha")
         .and_then(|s| s.as_str())
@@ -257,7 +269,10 @@ pub fn look(input: &str) -> Result<Source, String> {
         &c,
         &format!("https://api.github.com/repos/{repo}/git/trees/{commit}?recursive=1"),
     )?;
-    let cut = tree.get("truncated").and_then(|t| t.as_bool()).unwrap_or(false);
+    let cut = tree
+        .get("truncated")
+        .and_then(|t| t.as_bool())
+        .unwrap_or(false);
     let files = tree
         .get("tree")
         .and_then(|t| t.as_array())
@@ -268,7 +283,9 @@ pub fn look(input: &str) -> Result<Source, String> {
         if f.get("type").and_then(|t| t.as_str()) != Some("blob") {
             continue;
         }
-        let Some(path) = f.get("path").and_then(|p| p.as_str()) else { continue };
+        let Some(path) = f.get("path").and_then(|p| p.as_str()) else {
+            continue;
+        };
         if let Some((kind, id)) = classify(path) {
             if !found.iter().any(|(_, x, _)| x == &id) {
                 found.push((kind, id, path.to_string()));
@@ -284,7 +301,8 @@ pub fn look(input: &str) -> Result<Source, String> {
     // slow: a library of three hundred files spent two minutes on a list
     // nobody could use yet, which reads as a hung window rather than a read.
     let next = std::sync::atomic::AtomicUsize::new(0);
-    let heads: Vec<Mutex<Option<(String, String)>>> = (0..read_headers).map(|_| Mutex::new(None)).collect();
+    let heads: Vec<Mutex<Option<(String, String)>>> =
+        (0..read_headers).map(|_| Mutex::new(None)).collect();
     std::thread::scope(|scope| {
         for _ in 0..HANDS.min(read_headers.max(1)) {
             scope.spawn(|| loop {
@@ -293,7 +311,11 @@ pub fn look(input: &str) -> Result<Source, String> {
                     return;
                 }
                 let (_, _, path) = &found[i];
-                if let Ok(text) = c.get(raw_url(&repo, &commit, path)).send().and_then(|r| r.text()) {
+                if let Ok(text) = c
+                    .get(raw_url(&repo, &commit, path))
+                    .send()
+                    .and_then(|r| r.text())
+                {
                     *heads[i].lock().unwrap() = Some(header(&text));
                 }
             });
@@ -315,7 +337,9 @@ pub fn look(input: &str) -> Result<Source, String> {
             name,
             what,
             path: path.clone(),
-            have: have.iter().any(|h| &h.id == id && h.repo == repo && h.commit == commit),
+            have: have
+                .iter()
+                .any(|h| &h.id == id && h.repo == repo && h.commit == commit),
         });
     }
 
@@ -334,7 +358,14 @@ pub fn look(input: &str) -> Result<Source, String> {
         note = "Nothing here is a skill or an agent brief. A library needs skills/<name>/SKILL.md or agents/<name>.md — this repository has neither, so there is nothing to read.".into();
     }
 
-    Ok(Source { repo, commit, licence, branch, items, note })
+    Ok(Source {
+        repo,
+        commit,
+        licence,
+        branch,
+        items,
+        note,
+    })
 }
 
 /// Fetch the ones you picked and write them into the library.
@@ -354,7 +385,11 @@ pub fn install(src: &Source, ids: &[String]) -> Result<Vec<Item>, String> {
         let it = Item {
             id: cand.id.clone(),
             kind: cand.kind.clone(),
-            name: if name.is_empty() { cand.id.clone() } else { name },
+            name: if name.is_empty() {
+                cand.id.clone()
+            } else {
+                name
+            },
             what,
             repo: src.repo.clone(),
             commit: src.commit.clone(),
@@ -370,7 +405,8 @@ pub fn install(src: &Source, ids: &[String]) -> Result<Vec<Item>, String> {
         ix.items.push(it.clone());
         added.push(it);
     }
-    ix.items.sort_by(|a, b| a.kind.cmp(&b.kind).then(a.id.cmp(&b.id)));
+    ix.items
+        .sort_by(|a, b| a.kind.cmp(&b.kind).then(a.id.cmp(&b.id)));
     write_index(&ix)?;
     Ok(added)
 }
@@ -418,7 +454,12 @@ pub async fn library_install(source: Source, ids: Vec<String>) -> Result<Vec<Ite
 #[tauri::command(async)]
 pub fn library_remove(id: String, kind: String) -> Result<(), String> {
     let mut ix = read_index()?;
-    if let Some(it) = ix.items.iter().find(|i| i.id == id && i.kind == kind).cloned() {
+    if let Some(it) = ix
+        .items
+        .iter()
+        .find(|i| i.id == id && i.kind == kind)
+        .cloned()
+    {
         let p = item_path(&it)?;
         if it.kind == SKILL {
             let _ = std::fs::remove_dir_all(p.parent().unwrap());
@@ -436,16 +477,32 @@ mod tests {
 
     #[test]
     fn a_skill_folder_and_an_agent_file_are_the_two_things_a_library_holds() {
-        assert_eq!(classify("skills/brand-voice/SKILL.md"), Some((SKILL.into(), "brand-voice".into())));
-        assert_eq!(classify(".claude/skills/taste/SKILL.md"), Some((SKILL.into(), "taste".into())));
-        assert_eq!(classify("agents/marketing-agent.md"), Some((BRIEF.into(), "marketing-agent".into())));
-        assert_eq!(classify(".claude/agents/planner.md"), Some((BRIEF.into(), "planner".into())));
+        assert_eq!(
+            classify("skills/brand-voice/SKILL.md"),
+            Some((SKILL.into(), "brand-voice".into()))
+        );
+        assert_eq!(
+            classify(".claude/skills/taste/SKILL.md"),
+            Some((SKILL.into(), "taste".into()))
+        );
+        assert_eq!(
+            classify("agents/marketing-agent.md"),
+            Some((BRIEF.into(), "marketing-agent".into()))
+        );
+        assert_eq!(
+            classify(".claude/agents/planner.md"),
+            Some((BRIEF.into(), "planner".into()))
+        );
         // Everything that runs, and everything that is prose about the repo.
         assert_eq!(classify("hooks/pre-tool-use.js"), None);
         assert_eq!(classify("install.sh"), None);
         assert_eq!(classify(".mcp.json"), None);
         assert_eq!(classify("agents/README.md"), None);
-        assert_eq!(classify("docs/SKILL.md"), None, "a skill lives under skills/");
+        assert_eq!(
+            classify("docs/SKILL.md"),
+            None,
+            "a skill lives under skills/"
+        );
     }
 
     #[test]
@@ -454,7 +511,10 @@ mod tests {
         assert_eq!(name, "brand-voice");
         assert_eq!(what, "Build a voice profile from real posts.");
         // No header is not an error: it has no name of its own, and says so.
-        assert_eq!(header("# Just a document\n"), (String::new(), String::new()));
+        assert_eq!(
+            header("# Just a document\n"),
+            (String::new(), String::new())
+        );
     }
 
     /// Reads a real repository over the network and installs from it, into
@@ -472,14 +532,19 @@ mod tests {
         assert!(!src.commit.is_empty(), "pinned to a commit");
         assert!(!src.items.is_empty(), "something to hold");
         let want: Vec<String> = std::env::var("LIB_PICK")
-            .unwrap_or_else(|_| "brand-voice,taste,deep-research,design-system,marketing-agent,code-reviewer".into())
+            .unwrap_or_else(|_| {
+                "brand-voice,taste,deep-research,design-system,marketing-agent,code-reviewer".into()
+            })
             .split(',')
             .map(|s| s.trim().to_string())
             .filter(|s| src.items.iter().any(|i| &i.id == s))
             .collect();
         let added = install(&src, &want).expect("install");
         for it in &added {
-            println!("added {} {} — {} ({} chars)", it.kind, it.id, it.what, it.chars);
+            println!(
+                "added {} {} — {} ({} chars)",
+                it.kind, it.id, it.what, it.chars
+            );
             assert!(item_path(it).unwrap().is_file(), "{} landed on disk", it.id);
         }
         assert_eq!(added.len(), want.len());

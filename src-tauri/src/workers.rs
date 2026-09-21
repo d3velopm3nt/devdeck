@@ -173,7 +173,9 @@ pub struct Plan {
 // ---------------------------------------------------------------------------
 
 fn root() -> Result<PathBuf, String> {
-    Ok(crate::aiw::personal::PersonalStore::open()?.root().to_path_buf())
+    Ok(crate::aiw::personal::PersonalStore::open()?
+        .root()
+        .to_path_buf())
 }
 
 fn workers_dir() -> Result<PathBuf, String> {
@@ -191,7 +193,10 @@ pub fn read_worker(handle: &str) -> Result<Option<Worker>, String> {
     }
     let raw = std::fs::read_to_string(&p).map_err(err)?;
     let doc = crate::aiw::deck::parse_doc::<WorkerMeta>(&raw)?;
-    Ok(Some(Worker { meta: doc.meta, body: doc.body }))
+    Ok(Some(Worker {
+        meta: doc.meta,
+        body: doc.body,
+    }))
 }
 
 pub fn all_workers() -> Result<Vec<Worker>, String> {
@@ -205,7 +210,11 @@ pub fn all_workers() -> Result<Vec<Worker>, String> {
         if p.extension().and_then(|x| x.to_str()) != Some("md") {
             continue;
         }
-        let handle = p.file_stem().and_then(|s| s.to_str()).unwrap_or_default().to_string();
+        let handle = p
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or_default()
+            .to_string();
         if let Some(mut w) = read_worker(&handle)? {
             if w.meta.handle.trim().is_empty() {
                 w.meta.handle = handle;
@@ -213,7 +222,7 @@ pub fn all_workers() -> Result<Vec<Worker>, String> {
             out.push(w);
         }
     }
-    out.sort_by(|a, b| a.meta.name.to_lowercase().cmp(&b.meta.name.to_lowercase()));
+    out.sort_by_key(|w| w.meta.name.to_lowercase());
     Ok(out)
 }
 
@@ -247,7 +256,10 @@ pub fn save_worker(w: &Worker) -> Result<Worker, String> {
     }
     let dir = workers_dir()?;
     std::fs::create_dir_all(&dir).map_err(err)?;
-    let doc = Doc { meta: w.meta.clone(), body: w.body.clone() };
+    let doc = Doc {
+        meta: w.meta.clone(),
+        body: w.body.clone(),
+    };
     std::fs::write(
         dir.join(format!("{}.md", w.meta.handle)),
         crate::aiw::deck::write_doc(&doc)?,
@@ -272,7 +284,11 @@ pub fn write_run(r: &Run) -> Result<(), String> {
         meta: r.clone(),
         body: format!("# {}\n\n{}\n", r.title, r.verdict),
     };
-    std::fs::write(dir.join(format!("{}.md", r.id)), crate::aiw::deck::write_doc(&doc)?).map_err(err)
+    std::fs::write(
+        dir.join(format!("{}.md", r.id)),
+        crate::aiw::deck::write_doc(&doc)?,
+    )
+    .map_err(err)
 }
 
 pub fn all_runs() -> Result<Vec<Run>, String> {
@@ -303,7 +319,16 @@ pub fn all_runs() -> Result<Vec<Run>, String> {
 /// fixtures: each says which library skills it wants, and one you have not
 /// installed is offered rather than silently dropped.
 pub fn starters() -> Vec<(WorkerMeta, String, &'static str)> {
-    let w = |handle: &str, name: &str, what: &str, brief: &str, skills: &[&str], writes: &str, mins: i64, usd: f64, body: &str, needs: &'static str| {
+    let w = |handle: &str,
+             name: &str,
+             what: &str,
+             brief: &str,
+             skills: &[&str],
+             writes: &str,
+             mins: i64,
+             usd: f64,
+             body: &str,
+             needs: &'static str| {
         (
             WorkerMeta {
                 handle: handle.into(),
@@ -347,7 +372,10 @@ pub fn starters() -> Vec<(WorkerMeta, String, &'static str)> {
 // Planning a run
 // ---------------------------------------------------------------------------
 
-fn space_dir(conn: &rusqlite::Connection, node_id: i64) -> Result<(String, PathBuf, Option<PathBuf>), String> {
+fn space_dir(
+    conn: &rusqlite::Connection,
+    node_id: i64,
+) -> Result<(String, PathBuf, Option<PathBuf>), String> {
     let n = db::node_by_id(conn, node_id)?;
     let deck = db::node_deck_dir(conn, &n).ok_or("that space has no folder on disk yet.")?;
     let repo = n.path.filter(|p| !p.trim().is_empty()).map(PathBuf::from);
@@ -363,8 +391,12 @@ fn knowledge_titles(dir: &Path) -> Vec<String> {
         .flatten()
         .filter_map(|e| {
             let p = e.path();
-            (p.extension().and_then(|x| x.to_str()) == Some("md"))
-                .then(|| p.file_stem().and_then(|s| s.to_str()).unwrap_or_default().replace('-', " "))
+            (p.extension().and_then(|x| x.to_str()) == Some("md")).then(|| {
+                p.file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or_default()
+                    .replace('-', " ")
+            })
         })
         .collect();
     out.sort();
@@ -372,7 +404,13 @@ fn knowledge_titles(dir: &Path) -> Vec<String> {
     out
 }
 
-pub fn plan(conn: &rusqlite::Connection, handle: &str, node_id: i64, title: &str, intent: &str) -> Result<Plan, String> {
+pub fn plan(
+    conn: &rusqlite::Connection,
+    handle: &str,
+    node_id: i64,
+    title: &str,
+    intent: &str,
+) -> Result<Plan, String> {
     let w = read_worker(handle)?.ok_or("there is no worker by that name.")?;
     let (space, deck, repo) = space_dir(conn, node_id)?;
     let lib = crate::library::read_index()?.items;
@@ -380,7 +418,11 @@ pub fn plan(conn: &rusqlite::Connection, handle: &str, node_id: i64, title: &str
         .meta
         .skills
         .iter()
-        .filter_map(|id| lib.iter().find(|i| &i.id == id && i.kind == crate::library::SKILL).cloned())
+        .filter_map(|id| {
+            lib.iter()
+                .find(|i| &i.id == id && i.kind == crate::library::SKILL)
+                .cloned()
+        })
         .collect();
     let brief = lib
         .iter()
@@ -388,7 +430,11 @@ pub fn plan(conn: &rusqlite::Connection, handle: &str, node_id: i64, title: &str
         .cloned();
 
     let wants_branch = w.meta.writes == "branch";
-    let folder = if wants_branch { repo.clone().unwrap_or_else(|| deck.clone()) } else { deck.clone() };
+    let folder = if wants_branch {
+        repo.clone().unwrap_or_else(|| deck.clone())
+    } else {
+        deck.clone()
+    };
     let missing: Vec<String> = w
         .meta
         .skills
@@ -407,10 +453,16 @@ pub fn plan(conn: &rusqlite::Connection, handle: &str, node_id: i64, title: &str
         note = health.detail.clone();
     } else if !allowed {
         ready = false;
-        note = format!("{} is not lent to {space}. Lend it on the worker's page.", w.meta.name);
+        note = format!(
+            "{} is not lent to {space}. Lend it on the worker's page.",
+            w.meta.name
+        );
     } else if wants_branch && repo.is_none() {
         ready = false;
-        note = format!("{} writes on a branch, and {space} has no repository.", w.meta.name);
+        note = format!(
+            "{} writes on a branch, and {space} has no repository.",
+            w.meta.name
+        );
     } else if !missing.is_empty() {
         note = format!(
             "Not in your library yet, so it will work without: {}.",
@@ -420,7 +472,11 @@ pub fn plan(conn: &rusqlite::Connection, handle: &str, node_id: i64, title: &str
 
     Ok(Plan {
         branch: if wants_branch && repo.is_some() {
-            format!("devdeck/{}-{}", crate::managers::handle_from(title), chrono::Local::now().format("%m%d"))
+            format!(
+                "devdeck/{}-{}",
+                crate::managers::handle_from(title),
+                chrono::Local::now().format("%m%d")
+            )
         } else {
             String::new()
         },
@@ -451,9 +507,15 @@ pub fn plan(conn: &rusqlite::Connection, handle: &str, node_id: i64, title: &str
 pub fn brief_text(p: &Plan, w: &Worker, knowledge: &str) -> String {
     let mut s = String::new();
     if let Some(b) = &p.brief {
-        s.push_str(&format!("# Who you are\n\nYou are {}, working for {}.\n\n", b.name, p.space));
+        s.push_str(&format!(
+            "# Who you are\n\nYou are {}, working for {}.\n\n",
+            b.name, p.space
+        ));
     } else {
-        s.push_str(&format!("# Who you are\n\nYou are {}, working for {}.\n\n", w.meta.name, p.space));
+        s.push_str(&format!(
+            "# Who you are\n\nYou are {}, working for {}.\n\n",
+            w.meta.name, p.space
+        ));
     }
     if !w.body.trim().is_empty() {
         s.push_str(w.body.trim());
@@ -461,9 +523,15 @@ pub fn brief_text(p: &Plan, w: &Worker, knowledge: &str) -> String {
     }
     s.push_str(&format!("# The job\n\n{}\n\n{}\n\n", p.title, p.intent));
     s.push_str("# Where you work\n\n");
-    s.push_str(&format!("Everything you write goes in this folder: {}\n", p.folder));
+    s.push_str(&format!(
+        "Everything you write goes in this folder: {}\n",
+        p.folder
+    ));
     if p.is_repo {
-        s.push_str(&format!("You are on the branch {}. Commit there.\n", p.branch));
+        s.push_str(&format!(
+            "You are on the branch {}. Commit there.\n",
+            p.branch
+        ));
     }
     s.push_str("\n# Never\n\n");
     for n in NEVER {
@@ -541,7 +609,10 @@ fn lay_out_skills(cwd: &Path, ids: &[String]) -> Result<usize, String> {
     if excl.parent().is_some_and(|p| p.is_dir()) {
         let have = std::fs::read_to_string(&excl).unwrap_or_default();
         if !have.contains(".claude/skills") {
-            let _ = std::fs::write(&excl, format!("{have}\n# DevDeck gives a worker its skills here\n.claude/skills/\n"));
+            let _ = std::fs::write(
+                &excl,
+                format!("{have}\n# DevDeck gives a worker its skills here\n.claude/skills/\n"),
+            );
         }
     }
     Ok(n)
@@ -567,18 +638,29 @@ fn start_branch(cwd: &Path, branch: &str) -> Result<(), String> {
             return Ok(());
         }
     }
-    Err(format!("could not make the branch {branch}: {}", msg.trim()))
+    Err(format!(
+        "could not make the branch {branch}: {}",
+        msg.trim()
+    ))
 }
 
 /// What changed in the folder while it worked. Found by looking, not by
 /// believing the run: a session that says it wrote a file and did not is
 /// exactly the kind of thing a receipt exists to catch.
 fn written_since(cwd: &Path, since: std::time::SystemTime) -> Vec<FileOut> {
-    fn walk(dir: &Path, base: &Path, since: std::time::SystemTime, out: &mut Vec<FileOut>, depth: usize) {
+    fn walk(
+        dir: &Path,
+        base: &Path,
+        since: std::time::SystemTime,
+        out: &mut Vec<FileOut>,
+        depth: usize,
+    ) {
         if depth > 6 || out.len() > 200 {
             return;
         }
-        let Ok(entries) = std::fs::read_dir(dir) else { return };
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
         for e in entries.flatten() {
             let p = e.path();
             let name = e.file_name().to_string_lossy().to_string();
@@ -590,7 +672,11 @@ fn written_since(cwd: &Path, since: std::time::SystemTime) -> Vec<FileOut> {
             } else if let Ok(meta) = p.metadata() {
                 if meta.modified().is_ok_and(|m| m >= since) {
                     out.push(FileOut {
-                        path: p.strip_prefix(base).unwrap_or(&p).to_string_lossy().replace('\\', "/"),
+                        path: p
+                            .strip_prefix(base)
+                            .unwrap_or(&p)
+                            .to_string_lossy()
+                            .replace('\\', "/"),
                         bytes: meta.len(),
                     });
                 }
@@ -636,7 +722,11 @@ fn emit(app: &tauri::AppHandle, event: &str, body: serde_json::Value) {
 /// to watch — is in the record this returns immediately.
 pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
     if !p.ready {
-        return Err(if p.note.is_empty() { "that worker cannot start here.".into() } else { p.note.clone() });
+        return Err(if p.note.is_empty() {
+            "that worker cannot start here.".into()
+        } else {
+            p.note.clone()
+        });
     }
     let w = read_worker(&p.worker.handle)?.ok_or("there is no worker by that name.")?;
     let cwd = PathBuf::from(&p.folder);
@@ -653,7 +743,19 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
         start_branch(&cwd, &p.branch)?;
     }
     let laid = lay_out_skills(&cwd, &w.meta.skills)?;
-    let prompt = brief_text(&p, &w, &knowledge_text(&deck_dir));
+    let brief = brief_text(&p, &w, &knowledge_text(&deck_dir));
+    // The brief goes in a file, and the command line stays one plain line.
+    //
+    // Not tidiness: on Windows the CLI is a `.cmd` wrapper, and Rust refuses
+    // to hand a batch file an argument with a newline or a quote in it --
+    // "batch file arguments are invalid", which is how a perfectly good run
+    // dies before it starts. A brief is prose, so it was always going to hit
+    // that. It is better this way regardless: the worker can re-read it, and
+    // the brief stays in the folder as part of the receipt.
+    let brief_path = cwd.join(".claude").join("devdeck-brief.md");
+    std::fs::create_dir_all(brief_path.parent().unwrap()).map_err(err)?;
+    std::fs::write(&brief_path, &brief).map_err(err)?;
+    let prompt = "Read .claude/devdeck-brief.md and do what it says.".to_string();
 
     let run = Run {
         id: new_id(),
@@ -676,8 +778,16 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
             text: format!(
                 "Started in {}{}{}",
                 p.folder,
-                if p.branch.is_empty() { String::new() } else { format!(" on {}", p.branch) },
-                if laid > 0 { format!(", with {laid} skill{}", if laid == 1 { "" } else { "s" }) } else { String::new() }
+                if p.branch.is_empty() {
+                    String::new()
+                } else {
+                    format!(" on {}", p.branch)
+                },
+                if laid > 0 {
+                    format!(", with {laid} skill{}", if laid == 1 { "" } else { "s" })
+                } else {
+                    String::new()
+                }
             ),
         }],
         ..Default::default()
@@ -685,7 +795,10 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
     write_run(&run)?;
 
     let leash = Arc::new(Leash::for_minutes(p.minutes.max(0) as u64));
-    leashes().lock().unwrap().insert(run.id.clone(), leash.clone());
+    leashes()
+        .lock()
+        .unwrap()
+        .insert(run.id.clone(), leash.clone());
 
     let spec = RunnerSpec {
         program: String::new(),
@@ -698,17 +811,31 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
     let started = std::time::SystemTime::now();
     std::thread::spawn(move || {
         let mut last_write = std::time::Instant::now();
-        let outcome = crate::aiw::cli_agent::run_watched(&spec, &cwd, &prompt, &mut |e| {
-            let step = Step { at: now(), kind: e.kind.to_string(), text: e.text.clone() };
-            live.steps.push(step.clone());
-            emit(&app2, "worker:step", serde_json::json!({ "run": live.id, "step": step }));
-            // Written as it goes, so a crash leaves what was said rather than
-            // an empty record of a run that plainly happened.
-            if last_write.elapsed() > std::time::Duration::from_secs(3) {
-                let _ = write_run(&live);
-                last_write = std::time::Instant::now();
-            }
-        }, &leash);
+        let outcome = crate::aiw::cli_agent::run_watched(
+            &spec,
+            &cwd,
+            &prompt,
+            &mut |e| {
+                let step = Step {
+                    at: now(),
+                    kind: e.kind.to_string(),
+                    text: e.text.clone(),
+                };
+                live.steps.push(step.clone());
+                emit(
+                    &app2,
+                    "worker:step",
+                    serde_json::json!({ "run": live.id, "step": step }),
+                );
+                // Written as it goes, so a crash leaves what was said rather than
+                // an empty record of a run that plainly happened.
+                if last_write.elapsed() > std::time::Duration::from_secs(3) {
+                    let _ = write_run(&live);
+                    last_write = std::time::Instant::now();
+                }
+            },
+            &leash,
+        );
 
         live.seconds = started.elapsed().map(|d| d.as_secs() as i64).unwrap_or(0);
         live.ended_at = now();
@@ -739,7 +866,11 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
             &app2,
             "worker",
             format!("{} finished {}", live.worker_name, live.title),
-            if live.verdict.trim().is_empty() { live.status.clone() } else { live.verdict.clone() },
+            if live.verdict.trim().is_empty() {
+                live.status.clone()
+            } else {
+                live.verdict.clone()
+            },
             live.ok,
             Some(live.node_id),
         );
@@ -819,7 +950,11 @@ pub fn worker_stop(id: String) -> Result<(), String> {
 #[tauri::command(async)]
 pub fn runs_list(node_id: i64) -> Result<Vec<Run>, String> {
     let all = all_runs()?;
-    Ok(if node_id > 0 { all.into_iter().filter(|r| r.node_id == node_id).collect() } else { all })
+    Ok(if node_id > 0 {
+        all.into_iter().filter(|r| r.node_id == node_id).collect()
+    } else {
+        all
+    })
 }
 
 #[tauri::command(async)]
@@ -831,7 +966,12 @@ pub fn run_get(id: String) -> Result<Option<Run>, String> {
 /// anything: it writes a line into the space's knowledge, so the next worker
 /// starts from it.
 #[tauri::command(async)]
-pub fn run_decide(db: tauri::State<Db>, id: String, decision: String, note: String) -> Result<Run, String> {
+pub fn run_decide(
+    db: tauri::State<Db>,
+    id: String,
+    decision: String,
+    note: String,
+) -> Result<Run, String> {
     let mut r = read_run(&id)?.ok_or("no run by that id.")?;
     r.decision = note.trim().to_string();
     r.status = match decision.as_str() {
@@ -865,12 +1005,19 @@ mod tests {
 
     fn plan_for(skills: &[&str], is_repo: bool) -> Plan {
         Plan {
-            worker: WorkerMeta { name: "Scribe".into(), ..Default::default() },
+            worker: WorkerMeta {
+                name: "Scribe".into(),
+                ..Default::default()
+            },
             space: "Fathomline".into(),
             title: "Landing page".into(),
             intent: "Write the page.".into(),
             folder: "C:/vault/Fathomline/Marketing".into(),
-            branch: if is_repo { "devdeck/landing-0921".into() } else { String::new() },
+            branch: if is_repo {
+                "devdeck/landing-0921".into()
+            } else {
+                String::new()
+            },
             is_repo,
             skills: skills
                 .iter()
@@ -896,17 +1043,28 @@ mod tests {
             Ok(w) => {
                 println!("{} workers", w.len());
                 for x in &w {
-                    println!("  {} ({}) skills={:?} writes={}", x.meta.handle, x.meta.name, x.meta.skills, x.meta.writes);
+                    println!(
+                        "  {} ({}) skills={:?} writes={}",
+                        x.meta.handle, x.meta.name, x.meta.skills, x.meta.writes
+                    );
                 }
             }
             Err(e) => println!("workers failed: {e}"),
         }
         match crate::library::read_index() {
-            Ok(ix) => println!("{} library items: {:?}", ix.items.len(), ix.items.iter().map(|i| &i.id).collect::<Vec<_>>()),
+            Ok(ix) => println!(
+                "{} library items: {:?}",
+                ix.items.len(),
+                ix.items.iter().map(|i| &i.id).collect::<Vec<_>>()
+            ),
             Err(e) => println!("library failed: {e}"),
         }
         match all_runs() {
-            Ok(r) => println!("{} runs: {:?}", r.len(), r.iter().map(|x| (&x.id, &x.status)).collect::<Vec<_>>()),
+            Ok(r) => println!(
+                "{} runs: {:?}",
+                r.len(),
+                r.iter().map(|x| (&x.id, &x.status)).collect::<Vec<_>>()
+            ),
             Err(e) => println!("runs failed: {e}"),
         }
     }
@@ -914,10 +1072,17 @@ mod tests {
     #[test]
     fn a_brief_says_the_job_the_folder_and_what_it_must_never_do() {
         let w = Worker {
-            meta: WorkerMeta { name: "Scribe".into(), ..Default::default() },
+            meta: WorkerMeta {
+                name: "Scribe".into(),
+                ..Default::default()
+            },
             body: "Mark any claim you could not check.".into(),
         };
-        let text = brief_text(&plan_for(&["brand-voice"], false), &w, "Fathomline sells subsea inspection.");
+        let text = brief_text(
+            &plan_for(&["brand-voice"], false),
+            &w,
+            "Fathomline sells subsea inspection.",
+        );
         assert!(text.contains("You are Scribe, working for Fathomline"));
         assert!(text.contains("Mark any claim you could not check."));
         assert!(text.contains("C:/vault/Fathomline/Marketing"));
@@ -926,12 +1091,21 @@ mod tests {
         for n in NEVER {
             assert!(text.contains(n), "the brief has to say '{n}'");
         }
-        assert!(!text.contains("branch"), "no repository, so no branch is mentioned");
+        assert!(
+            !text.contains("branch"),
+            "no repository, so no branch is mentioned"
+        );
     }
 
     #[test]
     fn work_on_code_is_told_which_branch_it_is_on() {
-        let w = Worker { meta: WorkerMeta { name: "Mechanic".into(), ..Default::default() }, body: String::new() };
+        let w = Worker {
+            meta: WorkerMeta {
+                name: "Mechanic".into(),
+                ..Default::default()
+            },
+            body: String::new(),
+        };
         let text = brief_text(&plan_for(&[], true), &w, "");
         assert!(text.contains("You are on the branch devdeck/landing-0921"));
     }
@@ -939,7 +1113,10 @@ mod tests {
     #[test]
     fn a_worker_is_saved_with_the_limits_it_did_not_name() {
         let w = Worker {
-            meta: WorkerMeta { name: "Taste review".into(), ..Default::default() },
+            meta: WorkerMeta {
+                name: "Taste review".into(),
+                ..Default::default()
+            },
             body: String::new(),
         };
         // Saving is filesystem work; this checks the shaping that happens first.
@@ -947,9 +1124,23 @@ mod tests {
         shaped.meta.handle = crate::managers::handle_from(&w.meta.name);
         assert_eq!(shaped.meta.handle, "taste-review");
         let starters = starters();
-        let mechanic = starters.iter().find(|(m, _, _)| m.handle == "mechanic").expect("a mechanic");
-        assert_eq!(mechanic.0.writes, "branch", "code work gets a branch of its own");
-        assert!(starters.iter().all(|(m, _, _)| m.minutes > 0 && m.usd > 0.0), "every starter has a limit");
-        assert!(starters.iter().all(|(m, _, _)| !m.unattended), "nothing runs unwatched until you say so");
+        let mechanic = starters
+            .iter()
+            .find(|(m, _, _)| m.handle == "mechanic")
+            .expect("a mechanic");
+        assert_eq!(
+            mechanic.0.writes, "branch",
+            "code work gets a branch of its own"
+        );
+        assert!(
+            starters
+                .iter()
+                .all(|(m, _, _)| m.minutes > 0 && m.usd > 0.0),
+            "every starter has a limit"
+        );
+        assert!(
+            starters.iter().all(|(m, _, _)| !m.unattended),
+            "nothing runs unwatched until you say so"
+        );
     }
 }

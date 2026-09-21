@@ -518,7 +518,11 @@ pub fn knowledge_note(
 /// and a run whose job names it is its evidence. Said that way in the screen,
 /// because a guess dressed as a fact is the one thing a board like this must
 /// not do.
-fn evidence(conn: &Connection, node_id: i64, product: &str) -> (Vec<String>, i64, i64, Vec<RunBrief>, Vec<String>) {
+fn evidence(
+    conn: &Connection,
+    node_id: i64,
+    product: &str,
+) -> (Vec<String>, i64, i64, Vec<RunBrief>, Vec<String>) {
     let key = product.trim().to_lowercase();
     let nodes = crate::db::nodes_on(conn).unwrap_or_default();
     let mut under: Vec<i64> = vec![node_id];
@@ -532,12 +536,16 @@ fn evidence(conn: &Connection, node_id: i64, product: &str) -> (Vec<String>, i64
     }
     let mine: Vec<&crate::db::Node> = nodes
         .iter()
-        .filter(|n| n.id != node_id && under.contains(&n.id) && n.name.to_lowercase().contains(&key))
+        .filter(|n| {
+            n.id != node_id && under.contains(&n.id) && n.name.to_lowercase().contains(&key)
+        })
         .collect();
 
     let (mut open, mut done) = (0i64, 0i64);
     for n in &mine {
-        let Some(dir) = crate::db::node_deck_dir(conn, n) else { continue };
+        let Some(dir) = crate::db::node_deck_dir(conn, n) else {
+            continue;
+        };
         let deck = crate::aiw::deck::Deck::new(&dir);
         if !deck.exists() {
             continue;
@@ -579,8 +587,14 @@ fn evidence(conn: &Connection, node_id: i64, product: &str) -> (Vec<String>, i64
                 if p.extension().and_then(|x| x.to_str()) != Some("md") {
                     continue;
                 }
-                let name = p.file_stem().and_then(|s| s.to_str()).unwrap_or_default().to_string();
-                let body = std::fs::read_to_string(&p).unwrap_or_default().to_lowercase();
+                let name = p
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or_default()
+                    .to_string();
+                let body = std::fs::read_to_string(&p)
+                    .unwrap_or_default()
+                    .to_lowercase();
                 if name.to_lowercase().contains(&key) || body.contains(&key) {
                     notes.push(name.replace('-', " "));
                 }
@@ -589,7 +603,13 @@ fn evidence(conn: &Connection, node_id: i64, product: &str) -> (Vec<String>, i64
     }
     notes.sort();
     notes.truncate(4);
-    (mine.iter().map(|n| n.name.clone()).collect(), open, done, runs, notes)
+    (
+        mine.iter().map(|n| n.name.clone()).collect(),
+        open,
+        done,
+        runs,
+        notes,
+    )
 }
 
 /// The board: one row per product it sells, in the order of the way through.
@@ -600,12 +620,18 @@ pub fn business_pipeline(db: tauri::State<Db>, node_id: i64) -> Result<Vec<PipeI
     let products: Vec<String> = meta
         .items
         .iter()
-        .filter(|i| i.field == "product" && (i.state == "agreed" || (i.kind == "you" && i.state != "declined")))
+        .filter(|i| {
+            i.field == "product"
+                && (i.state == "agreed" || (i.kind == "you" && i.state != "declined"))
+        })
         .map(|i| i.text.clone())
         .collect();
     let mut out = Vec::new();
     for product in products {
-        let at = meta.stages.iter().find(|s| s.product.eq_ignore_ascii_case(&product));
+        let at = meta
+            .stages
+            .iter()
+            .find(|s| s.product.eq_ignore_ascii_case(&product));
         let (projects, work_open, work_done, runs, notes) = evidence(&conn, node_id, &product);
         out.push(PipeItem {
             stage: at.map(|s| s.stage.clone()).unwrap_or_else(|| "idea".into()),
@@ -620,7 +646,11 @@ pub fn business_pipeline(db: tauri::State<Db>, node_id: i64) -> Result<Vec<PipeI
         });
     }
     let rank = |s: &str| STAGES.iter().position(|x| *x == s).unwrap_or(0);
-    out.sort_by(|a, b| rank(&b.stage).cmp(&rank(&a.stage)).then(a.product.cmp(&b.product)));
+    out.sort_by(|a, b| {
+        rank(&b.stage)
+            .cmp(&rank(&a.stage))
+            .then(a.product.cmp(&b.product))
+    });
     Ok(out)
 }
 
@@ -638,9 +668,14 @@ pub fn business_stage_set(
     }
     {
         let conn = db.0.lock().unwrap();
-        let mut meta = read(&conn, node_id)?.ok_or("that space has not been set up as a business.")?;
+        let mut meta =
+            read(&conn, node_id)?.ok_or("that space has not been set up as a business.")?;
         let now = chrono::Local::now().format("%Y-%m-%d").to_string();
-        match meta.stages.iter_mut().find(|s| s.product.eq_ignore_ascii_case(&product)) {
+        match meta
+            .stages
+            .iter_mut()
+            .find(|s| s.product.eq_ignore_ascii_case(&product))
+        {
             Some(s) => {
                 s.stage = stage;
                 s.next = next.trim().to_string();

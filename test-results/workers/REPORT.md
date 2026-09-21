@@ -213,6 +213,57 @@ holds is the one folder it may write in and the never-list — and the start car
 says so in those words: *"68 briefs it may call on. It picks; you have not read
 them."*
 
+## Seven experiments, and a wall that was not there
+
+Run against the real CLI (2.1.278) with a real signed-in account, in a scratch
+folder holding a canary skill and a canary subagent. Every line below is a
+measurement, not a reading of the documentation — which in several cases said
+nothing, and in one case said the opposite.
+
+| # | what was run | what happened |
+|---|---|---|
+| A | baseline, exactly what DevDeck did | saw `graphify`, the user's own skill |
+| B | `--setting-sources project` | `graphify` **gone**, the canary beside the job still there |
+| C | `--disallowedTools Bash` | **ran the command anyway**, through another tool with a shell |
+| D | `--allowedTools "Read,Edit,Write"` | **ran it**, using Bash, which was not on the list |
+| E | C plus `--permission-prompts none` | **ran it** |
+| F | `--permission-mode dontAsk` | **ran it** |
+| G | `--tools "Read,Edit,Write,Glob,Grep"` | *"BLOCKED — I have no command-execution tool available"* |
+
+### What this means
+
+**The never-list was never enforced.** Five rules — send, post, pay, push,
+merge — were shown on the start card as though they bounded the run, and a
+comment in `cli_agent.rs` claimed running commands "stays behind the CLI's own
+gate". That comment was never tested and was false: four different flag
+combinations all executed `echo`. A worker could have pushed.
+
+**A deny-list cannot work.** The full built-in set is `Agent, Artifact, Bash,
+Edit, Glob, Grep, ListAgents, PowerShell, Read, ReportFindings, ScheduleWakeup,
+Skill, ToolSearch, Workflow, Write` — two of those are shells, and the next
+release may add a third. Naming what is forbidden is a losing game.
+
+**`--tools` is the wall**, because it decides what exists rather than what is
+permitted. A worker that only drafts now gets `Read, Write, Edit, Glob, Grep,
+Skill, Agent` — `Skill` so the skills you gave it work, `Agent` so its kit can
+be called on — and no shell at all. Work on code gets `Bash` as well, because
+running the tests is the job, and the card says so in those words rather than
+showing a rule that could be walked around.
+
+**Sealing works, and does not mean empty.** `--setting-sources project` keeps
+your own skills out. It does not remove the CLI's 16 built-in skills or its 7
+built-in subagents, and nothing in the interface claims it does.
+
+**Subagent sealing is untested.** `~/.claude/agents/` is empty on this machine,
+so there was nothing to leak and the two runs are identical. Recorded as
+unproven rather than assumed.
+
+**The CLI moved underneath us mid-session.** `--permission-prompts` did not
+exist in 2.1.266 — a test asserted so, in a comment explaining why — and exists
+in 2.1.278. That test has now been wrong in both directions within a day, which
+is the argument for a capability probe: DevDeck should read what the CLI
+supports rather than remember it. Not built yet.
+
 ## Not done, and why
 
 - **Nothing was kept from a real run.** The keep path (which writes a line

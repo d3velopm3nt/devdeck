@@ -859,6 +859,11 @@ impl AgentRuntime {
             model: agent.model.clone(),
             permission_mode: String::new(),
             unattended: cmd.unattended,
+            // The agent runtime is the older path and is watched by a person
+            // in its own window; it keeps the CLI's own tool set and the
+            // person's own setup. Workers are the sealed ones.
+            tools: Vec::new(),
+            sealed: false,
         };
         let prompt = Self::brief(&agent, &intent, &context, &cmd.stop_at);
 

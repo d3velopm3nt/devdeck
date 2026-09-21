@@ -117,11 +117,24 @@ pub struct RunnerSpec {
     pub model: String,
     /// `--permission-mode`. Empty means [`DEFAULT_PERMISSION_MODE`].
     pub permission_mode: String,
-    /// Nobody is watching. Kept on the spec though no flag carries it today:
-    /// `-p` is already non-interactive, and the next runner added may need to
-    /// be told. Read by the callers that decide whether to start at all.
-    #[allow(dead_code)]
+    /// Nobody is watching, so nobody can answer a permission prompt either.
     pub unattended: bool,
+    /// Exactly which built-in tools exist for this session, or empty for all
+    /// of them.
+    ///
+    /// This is the only thing measured to be a wall. `--disallowedTools Bash`
+    /// removes Bash and the session reaches a shell through another tool that
+    /// has one; an allow-list of permissions does not remove a tool either.
+    /// `--tools` decides what exists, and a session given the reading and
+    /// writing set answers "I have no command-execution tool available".
+    pub tools: Vec<String>,
+    /// Keep this session out of the person's own Claude setup.
+    ///
+    /// Measured: with it, a skill of theirs in `~/.claude/skills` is gone from
+    /// the session and the one beside the job is still there. It does not
+    /// remove the CLI's own built-in skills and subagents, and nothing here
+    /// claims it does.
+    pub sealed: bool,
 }
 
 /// What a delegated session may do without being asked.
@@ -129,8 +142,14 @@ pub struct RunnerSpec {
 /// `acceptEdits` and not `bypassPermissions`: a session started to write code
 /// that had to ask before every edit would spend its run asking, and a session
 /// allowed to do anything at all is not something to point at a repository on
-/// a schedule. Editing files is the job; running arbitrary commands is not,
-/// and stays behind the CLI's own gate.
+/// a schedule.
+///
+/// It used to say here that running arbitrary commands "stays behind the CLI's
+/// own gate". That was not true and was never tested: under `acceptEdits`, and
+/// under `dontAsk`, and with Bash named on `--disallowedTools`, a session asked
+/// to run `echo` ran it every time — through Bash, or through another tool
+/// carrying a shell. What a session may run is decided by [`RunnerSpec::tools`]
+/// and by nothing else.
 pub const DEFAULT_PERMISSION_MODE: &str = "acceptEdits";
 
 impl RunnerSpec {
@@ -164,13 +183,24 @@ impl RunnerSpec {
             a.push("--model".into());
             a.push(self.model.trim().into());
         }
-        // `unattended` used to add `--permission-prompts none`. That option
-        // does not exist in the CLI (2.1.x rejects it outright and exits 1),
-        // and it was not needed: `-p` is already non-interactive, so a call
-        // the permission mode does not cover is refused rather than asked
-        // about. The flag stays on the spec because the question it answers —
-        // "what happens at three in the morning" — is still the right one to
-        // ask of any runner added later.
+        // The wall. Named tools and no others, so a worker that has no
+        // business running commands cannot reach one to ask.
+        if !self.tools.is_empty() {
+            a.push("--tools".into());
+            a.push(self.tools.join(","));
+        }
+        // Its own skills, not yours.
+        if self.sealed {
+            a.push("--setting-sources".into());
+            a.push("project".into());
+        }
+        // Nobody is at the keyboard, so nothing may wait for one. This flag
+        // did not exist in 2.1.266 and does in 2.1.278; the CLI moves under
+        // us, which is why what it supports is read rather than remembered.
+        if self.unattended {
+            a.push("--permission-prompts".into());
+            a.push("none".into());
+        }
         a
     }
 }
@@ -492,27 +522,31 @@ pub fn run_watched(
 mod tests {
     use super::*;
 
-    /// Nothing is passed that the CLI does not have.
+    /// What is passed is what this CLI has, and it is read rather than
+    /// remembered.
     ///
-    /// This test used to require `--permission-prompts none` on an unattended
-    /// run. The CLI has no such option: it exits 1 with "unknown option", so
-    /// every unattended run died before it started while the code looked
-    /// careful. `-p` is already non-interactive — a call the permission mode
-    /// does not cover is refused, not asked about — so the answer to "what
-    /// happens at three in the morning" is the mode, not a flag.
+    /// This test has been wrong twice in one day, in both directions. It first
+    /// required `--permission-prompts none`, which 2.1.266 rejected outright,
+    /// so every unattended run died before it started while the code looked
+    /// careful. It was then rewritten to forbid the flag — and 2.1.278 added
+    /// it. The CLI moves underneath us; what it supports belongs in a probe,
+    /// not in a memory.
     #[test]
-    fn nothing_is_passed_that_the_cli_does_not_have() {
+    fn an_unattended_run_lets_nobody_be_asked() {
         for unattended in [true, false] {
             let spec = RunnerSpec {
                 program: String::new(),
                 model: String::new(),
                 permission_mode: String::new(),
                 unattended,
+                tools: Vec::new(),
+                sealed: false,
             };
             let args = spec.args("do the thing");
-            assert!(
-                !args.iter().any(|a| a == "--permission-prompts"),
-                "the CLI rejects that option outright"
+            assert_eq!(
+                args.iter().any(|a| a == "--permission-prompts"),
+                unattended,
+                "nobody is at the keyboard, so nothing may wait for one"
             );
             assert!(
                 args.iter().any(|a| a == "-p"),
@@ -523,6 +557,27 @@ mod tests {
         }
     }
 
+    /// The wall, as measured: `--tools` decides what exists.
+    #[test]
+    fn a_session_is_given_the_tools_it_has_and_no_others() {
+        let spec = RunnerSpec {
+            program: String::new(),
+            model: String::new(),
+            permission_mode: String::new(),
+            unattended: true,
+            tools: vec!["Read".into(), "Write".into()],
+            sealed: true,
+        };
+        let args = spec.args("draft the page");
+        let at = args.iter().position(|a| a == "--tools").unwrap();
+        assert_eq!(args[at + 1], "Read,Write");
+        // Not a deny-list: naming Bash leaves PowerShell, and naming both
+        // leaves whatever the next release adds.
+        assert!(!args.iter().any(|a| a == "--disallowedTools"));
+        let at = args.iter().position(|a| a == "--setting-sources").unwrap();
+        assert_eq!(args[at + 1], "project");
+    }
+
     #[test]
     fn the_prompt_travels_in_argv() {
         let spec = RunnerSpec {
@@ -530,6 +585,8 @@ mod tests {
             model: "opus".into(),
             permission_mode: String::new(),
             unattended: false,
+            tools: Vec::new(),
+            sealed: false,
         };
         let args = spec.args("fix the login bug");
         let p = args.iter().position(|a| a == "-p").unwrap();
@@ -546,6 +603,8 @@ mod tests {
             model: String::new(),
             permission_mode: String::new(),
             unattended: true,
+            tools: Vec::new(),
+            sealed: false,
         };
         let args = spec.args("x");
         let at = args.iter().position(|a| a == "--permission-mode").unwrap();

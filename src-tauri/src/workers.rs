@@ -36,6 +36,40 @@ fn now() -> String {
 /// could send, post, pay or push is not a draughtsman, it is an account.
 pub const NEVER: [&str; 5] = ["send mail", "post anywhere", "spend money", "push", "merge"];
 
+/// Reading, writing, and the two tools that make a worker's own words work:
+/// `Skill` runs a skill it was given, `Agent` calls a specialist off its kit.
+/// Nothing here reaches a shell, a network, or anybody else's account.
+const QUIET: [&str; 7] = ["Read", "Write", "Edit", "Glob", "Grep", "Skill", "Agent"];
+
+/// Exactly which tools a worker's session has, which is the only measured
+/// wall there is.
+///
+/// Seven experiments went into this. Naming Bash on `--disallowedTools` took
+/// Bash away and the session ran `echo` through another tool that carries a
+/// shell; an allow-list of *permissions* left Bash in place and it used it;
+/// `dontAsk` did not stop it either. `--tools` decides what exists, and a
+/// session given this list answers "I have no command-execution tool
+/// available". So a worker that only drafts genuinely cannot push, because
+/// there is nothing in the room that could.
+///
+/// Work on code is the honest exception: running the tests is the job, and a
+/// shell can do anything a shell can do. Such a worker gets Bash, and the
+/// card says so rather than showing it a rule it could walk around.
+pub fn tools_for(w: &WorkerMeta) -> Vec<String> {
+    let mut t: Vec<String> = QUIET.iter().map(|s| s.to_string()).collect();
+    if w.writes == "branch" {
+        t.push("Bash".into());
+    }
+    t
+}
+
+/// Can this worker reach a shell? The one thing the card must not get wrong.
+pub fn has_shell(w: &WorkerMeta) -> bool {
+    tools_for(w)
+        .iter()
+        .any(|t| t == "Bash" || t == "PowerShell")
+}
+
 /// One worker, as its file says it.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct WorkerMeta {
@@ -173,6 +207,13 @@ pub struct Plan {
     /// The kit's own name, kept even when nothing of it is installed.
     #[serde(default)]
     pub kit_id: String,
+    /// Exactly the tools its session will have. Measured to be the wall.
+    #[serde(default)]
+    pub tools: Vec<String>,
+    /// Whether one of those is a shell, which decides whether "never push" is
+    /// a wall or a request. The card must never get this backwards.
+    #[serde(default)]
+    pub shell: bool,
     /// What it will read before it starts: the space's own knowledge.
     pub reads: Vec<String>,
     pub never: Vec<String>,
@@ -505,6 +546,8 @@ pub fn plan(
         brief,
         kit,
         kit_id: w.meta.kit.clone(),
+        tools: tools_for(&w.meta),
+        shell: has_shell(&w.meta),
         never: NEVER.iter().map(|s| s.to_string()).collect(),
         minutes: w.meta.minutes,
         usd: w.meta.usd,
@@ -558,6 +601,11 @@ pub fn brief_text(p: &Plan, w: &Worker, knowledge: &str) -> String {
         s.push_str(&format!("- {n}\n"));
     }
     s.push_str("- write anything outside that folder\n\n");
+    if has_shell(&p.worker) {
+        s.push_str("You can run commands, so the rules above are yours to keep rather than something stopping you. Run the tests; do not push, merge, or send anything.\n\n");
+    } else {
+        s.push_str("You have no way to run a command, on purpose. Do not look for one.\n\n");
+    }
     if !p.skills.is_empty() {
         s.push_str("# Skills you have\n\n");
         for sk in &p.skills {
@@ -891,6 +939,8 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
         model: w.meta.model.clone(),
         permission_mode: String::new(),
         unattended: true,
+        tools: tools_for(&w.meta),
+        sealed: true,
     };
     let app2 = app.clone();
     let mut live = run.clone();

@@ -2148,6 +2148,11 @@ export interface RunPlan {
   /** The bench it carries, if it carries one. */
   kit: LibraryItem[]
   kit_id: string
+  /** Exactly the tools its session will have. */
+  tools: string[]
+  /** Whether one of those is a shell — which decides whether "never push" is
+   *  a wall or a request. */
+  shell: boolean
   reads: string[]
   never: string[]
   minutes: number

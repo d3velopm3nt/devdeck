@@ -111,7 +111,7 @@ fn scan(dir: &Path, source: &str, plugin: &str, out: &mut Vec<Local>) {
     if let Ok(entries) = std::fs::read_dir(&agents) {
         for e in entries.flatten() {
             let f = e.path();
-            if !f.is_file() || f.extension().is_none_or(|x| x != "md") {
+            if !f.is_file() || f.extension().and_then(|x| x.to_str()) != Some("md") {
                 continue;
             }
             let id = f

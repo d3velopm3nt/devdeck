@@ -174,6 +174,24 @@ export function StartWorker({
                       </span>
                     </>
                   )}
+                  <span className="text-muted">Can run</span>
+                  <span className="min-w-0 text-body">
+                    {plan.shell ? (
+                      <>
+                        commands
+                        <span className="ml-1.5 text-[11.5px] text-warn">
+                          — so the never-list below is what it is asked, not what it is stopped from doing
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        nothing
+                        <span className="ml-1.5 text-[11.5px] text-ok">
+                          — it has no shell at all, so it could not push or send if it tried
+                        </span>
+                      </>
+                    )}
+                  </span>
                   <span className="text-muted">Writes in</span>
                   <span className="min-w-0 break-words font-mono text-[11px] text-body">{plan.folder}</span>
                   {plan.is_repo && (

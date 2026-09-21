@@ -1175,6 +1175,8 @@ pub fn run() {
             library::library_read,
             library::library_look,
             library::library_install,
+            library::library_install_kit,
+            library::library_kits,
             library::library_remove,
             workers::workers_list,
             workers::worker_save,

@@ -2069,15 +2069,45 @@ export interface LibrarySource {
   licence: string
   branch: string
   items: LibraryCandidate[]
+  /** The folders it keeps them in. Taking one is one decision. */
+  kits: LibraryKit[]
   /** Said out loud when the list is not the whole truth. */
   note: string
+}
+/** A folder of a repository, offered whole. */
+export interface LibraryKit {
+  folder: string
+  kind: string
+  picks: LibraryCandidate[]
+  /** How many of those are already yours, at this commit. */
+  have: number
+}
+/** A kit as it sits in your library. */
+export interface LibraryKitRef {
+  /** `owner/name:folder` — what a worker stores. */
+  id: string
+  repo: string
+  folder: string
+  kind: string
+  count: number
+}
+/** What one install did, including what it could not do. */
+export interface LibraryAdded {
+  items: LibraryItem[]
+  /** The ones that did not come in, each with its reason. */
+  missed: string[]
 }
 export const libraryList = () => invoke<LibraryItem[]>('library_list')
 export const libraryRead = (id: string, kind: string) => invoke<string>('library_read', { id, kind })
 /** Read a public GitHub repository: its licence, its commit, and what it holds. */
 export const libraryLook = (repo: string) => invoke<LibrarySource>('library_look', { repo })
 export const libraryInstall = (source: LibrarySource, ids: string[]) =>
-  invoke<LibraryItem[]>('library_install', { source, ids })
+  invoke<LibraryAdded>('library_install', { source, ids })
+/** Take one folder of a repository whole. */
+export const libraryInstallKit = (source: LibrarySource, folder: string) =>
+  invoke<LibraryAdded>('library_install_kit', { source, folder })
+/** The kits already in your library, biggest first. */
+export const libraryKits = () => invoke<LibraryKitRef[]>('library_kits')
 export const libraryRemove = (id: string, kind: string) => invoke<void>('library_remove', { id, kind })
 
 /** A worker: yours, lent to any space, with the skills you gave it. */
@@ -2088,6 +2118,8 @@ export interface Worker {
   /** A library brief id, or empty. */
   brief: string
   skills: string[]
+  /** A kit it carries, as `owner/name:folder`, or empty. */
+  kit: string
   runner: string
   model: string
   /** folder | branch */
@@ -2113,6 +2145,9 @@ export interface RunPlan {
   is_repo: boolean
   skills: LibraryItem[]
   brief: LibraryItem | null
+  /** The bench it carries, if it carries one. */
+  kit: LibraryItem[]
+  kit_id: string
   reads: string[]
   never: string[]
   minutes: number

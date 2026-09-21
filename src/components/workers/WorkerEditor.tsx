@@ -3,7 +3,7 @@
 // things no worker ever does are shown but not editable, because a worker
 // that could send, post, pay, push or merge is an account, not a draughtsman.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import * as ipc from '../../lib/ipc'
 import { useApp } from '../../store'
 import { Icon } from '../../lib/icons'
@@ -26,6 +26,10 @@ export function WorkerEditor({
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const [confirmRemove, setConfirmRemove] = useState(false)
+  const [kits, setKits] = useState<ipc.LibraryKitRef[]>([])
+  useEffect(() => {
+    void ipc.libraryKits().then(setKits).catch(() => setKits([]))
+  }, [])
 
   const set = <K extends keyof ipc.Worker>(k: K, v: ipc.Worker[K]) => setW((cur) => ({ ...cur, [k]: v }))
   const skills = library.filter((i) => i.kind === 'skill')
@@ -94,43 +98,57 @@ export function WorkerEditor({
               >
                 the job is the brief
               </button>
-              {briefs.map((b) => (
+            </div>
+            <span />
+            <Pills
+              all={briefs}
+              chosen={w.brief ? [w.brief] : []}
+              onToggle={(id) => set('brief', w.brief === id ? '' : id)}
+              empty="none in the library yet"
+            />
+
+            <span className={`${label} self-start pt-1`}>Kit</span>
+            <div className="flex flex-col gap-1.5">
+              <div className="flex flex-wrap gap-1.5">
                 <button
-                  key={b.id}
-                  title={b.what}
-                  className={`rounded-full border px-2.5 py-0.5 font-mono text-[11px] ${
-                    w.brief === b.id ? 'border-indigo-500 bg-indigo-500/10 text-ink' : 'border-line2 text-dim hover:text-ink'
+                  className={`rounded-full border px-2.5 py-0.5 text-[11px] ${
+                    !w.kit ? 'border-indigo-500 bg-indigo-500/10 text-ink' : 'border-line2 text-dim hover:text-ink'
                   }`}
-                  onClick={() => set('brief', b.id)}
+                  onClick={() => set('kit', '')}
                 >
-                  {b.id}
+                  none
                 </button>
-              ))}
-              {briefs.length === 0 && <span className="text-[11px] text-faint">none in the library yet</span>}
+                {kits.map((k) => (
+                  <button
+                    key={k.id}
+                    title={`${k.count} ${k.kind === 'skill' ? 'skills' : 'briefs'} from ${k.repo}`}
+                    className={`rounded-full border px-2.5 py-0.5 font-mono text-[11px] ${
+                      w.kit === k.id ? 'border-indigo-500 bg-indigo-500/10 text-ink' : 'border-line2 text-dim hover:text-ink'
+                    }`}
+                    onClick={() => set('kit', k.id)}
+                  >
+                    {k.folder}/ · {k.count}
+                  </button>
+                ))}
+                {kits.length === 0 && (
+                  <span className="text-[11px] text-faint">no kits yet — add a folder whole from the library</span>
+                )}
+              </div>
+              {w.kit && (
+                <p className="m-0 max-w-[520px] text-[11px] leading-relaxed text-muted">
+                  It carries this bench into <code className="font-mono text-dim">.claude/agents</code> and picks who takes
+                  the job. You have not read them; the folder limit and the never-list are what hold.
+                </p>
+              )}
             </div>
 
             <span className={`${label} self-start pt-1`}>Skills</span>
-            <div className="flex flex-wrap gap-1.5">
-              {skills.map((s) => (
-                <button
-                  key={s.id}
-                  title={s.what}
-                  className={`rounded-full border px-2.5 py-0.5 font-mono text-[11px] ${
-                    w.skills.includes(s.id)
-                      ? 'border-indigo-500 bg-indigo-500/10 text-ink'
-                      : 'border-line2 text-dim hover:text-ink'
-                  }`}
-                  onClick={() => set('skills', toggle(w.skills, s.id))}
-                >
-                  {s.id}
-                </button>
-              ))}
-              {skills.length === 0 && (
-                <span className="text-[11px] text-faint">
-                  nothing in the library yet — it will work on the job alone
-                </span>
-              )}
-            </div>
+            <Pills
+              all={skills}
+              chosen={w.skills}
+              onToggle={(id) => set('skills', toggle(w.skills, id))}
+              empty="nothing in the library yet — it will work on the job alone"
+            />
 
             <span className={label}>Writes in</span>
             <div className="flex items-center gap-2">
@@ -282,6 +300,68 @@ export function WorkerEditor({
               </button>
             ))}
         </div>
+      </div>
+    </div>
+  )
+}
+
+/// A row of library items to choose from.
+///
+/// It is a filter box and not just pills because a kit puts sixty-eight briefs
+/// in the library at once, and sixty-eight pills is not a choice, it is a
+/// wall. Short lists show whole; long ones show what you searched for.
+function Pills({
+  all,
+  chosen,
+  onToggle,
+  empty,
+}: {
+  all: ipc.LibraryItem[]
+  chosen: string[]
+  onToggle: (id: string) => void
+  empty: string
+}) {
+  const [q, setQ] = useState('')
+  const long = all.length > 14
+  const match = all.filter(
+    (i) => !q.trim() || i.id.toLowerCase().includes(q.toLowerCase()) || i.what.toLowerCase().includes(q.toLowerCase()),
+  )
+  // The chosen ones stay in sight whatever is typed: losing the thing you
+  // picked because you searched for something else reads as having lost it.
+  const shown = [...all.filter((i) => chosen.includes(i.id)), ...match.filter((i) => !chosen.includes(i.id))].slice(
+    0,
+    long && !q.trim() ? 14 : 60,
+  )
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {long && (
+        <input
+          className="input w-56 py-0.5 text-[11px]"
+          placeholder={`Filter ${all.length}…`}
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+      )}
+      <div className="flex flex-wrap gap-1.5">
+        {shown.map((s) => (
+          <button
+            key={s.id}
+            title={s.what}
+            className={`rounded-full border px-2.5 py-0.5 font-mono text-[11px] ${
+              chosen.includes(s.id)
+                ? 'border-indigo-500 bg-indigo-500/10 text-ink'
+                : 'border-line2 text-dim hover:text-ink'
+            }`}
+            onClick={() => onToggle(s.id)}
+          >
+            {s.id}
+          </button>
+        ))}
+        {all.length === 0 && <span className="text-[11px] text-faint">{empty}</span>}
+        {all.length > shown.length && (
+          <span className="self-center text-[11px] text-faint">and {all.length - shown.length} more — filter to find one</span>
+        )}
       </div>
     </div>
   )

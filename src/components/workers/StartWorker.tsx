@@ -163,6 +163,17 @@ export function StartWorker({
                     ))}
                     {plan.skills.length === 0 && <span className="text-[11.5px] text-faint">none</span>}
                   </span>
+                  {plan.kit.length > 0 && (
+                    <>
+                      <span className="text-muted">Kit</span>
+                      <span className="min-w-0 text-body">
+                        <span className="font-mono text-[11.5px] text-viol">{plan.kit_id}</span>
+                        <span className="ml-1.5 text-[11.5px]">
+                          — {plan.kit.length} briefs it may call on. It picks; you have not read them.
+                        </span>
+                      </span>
+                    </>
+                  )}
                   <span className="text-muted">Writes in</span>
                   <span className="min-w-0 break-words font-mono text-[11px] text-body">{plan.folder}</span>
                   {plan.is_repo && (

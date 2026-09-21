@@ -144,6 +144,7 @@ function AddFromGitHub({ onClose, onAdded }: { onClose: () => void; onAdded: () 
   const [busy, setBusy] = useState<'' | 'look' | 'install'>('')
   const [err, setErr] = useState('')
   const [filter, setFilter] = useState('')
+  const [missed, setMissed] = useState<ipc.LibraryAdded | null>(null)
 
   const look = async () => {
     setErr('')
@@ -164,13 +165,37 @@ function AddFromGitHub({ onClose, onAdded }: { onClose: () => void; onAdded: () 
     setErr('')
     setBusy('install')
     try {
-      await ipc.libraryInstall(src, [...picked])
-      onAdded()
+      settle(await ipc.libraryInstall(src, [...picked]))
     } catch (e) {
       setErr(String(e))
     } finally {
       setBusy('')
     }
+  }
+
+  const addKit = async (folder: string) => {
+    if (!src) return
+    setErr('')
+    setBusy('install')
+    try {
+      settle(await ipc.libraryInstallKit(src, folder))
+    } catch (e) {
+      setErr(String(e))
+    } finally {
+      setBusy('')
+    }
+  }
+
+  // What did not come in is said, not swallowed. A kit is dozens of files over
+  // somebody else's network, so a few timing out is ordinary — and a silent
+  // "added" that quietly left six out is how a worker ends up missing the one
+  // specialist you wanted.
+  const settle = (r: ipc.LibraryAdded) => {
+    if (r.missed.length === 0) {
+      onAdded()
+      return
+    }
+    setMissed(r)
   }
 
   // Screenshot harness: read the repository without a mouse.
@@ -242,6 +267,46 @@ function AddFromGitHub({ onClose, onAdded }: { onClose: () => void; onAdded: () 
                 {src.note}
               </div>
             )}
+
+            {src.kits.length > 0 && (
+              <div className="border-b border-line px-5 py-3">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">Take a folder whole</span>
+                  <span className="text-[11px] text-faint">
+                    a kit is a bench — the worker picks who takes the job, not you
+                  </span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {src.kits.map((k) => (
+                    <div
+                      key={k.folder}
+                      className="flex items-center gap-2.5 rounded-[9px] border border-line2 bg-panel px-3 py-2"
+                    >
+                      <Icon name={k.kind === 'skill' ? 'book' : 'bot'} size={13} className="shrink-0 text-indigo-300" />
+                      <div className="min-w-0">
+                        <div className="font-mono text-[11.5px] text-ink">{k.folder}/</div>
+                        <div className="text-[10.5px] text-muted">
+                          {k.picks.length} {k.kind === 'skill' ? 'skills' : 'briefs'}
+                          {k.have > 0 && ` · ${k.have} already yours`}
+                        </div>
+                      </div>
+                      <button
+                        className="btn-ghost shrink-0 text-[11px]"
+                        disabled={busy !== '' || k.have === k.picks.length}
+                        onClick={() => void addKit(k.folder)}
+                      >
+                        {k.have === k.picks.length ? 'all yours' : 'Add the lot'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-2 max-w-[700px] text-[11px] leading-relaxed text-faint">
+                  A kit lands in <code className="font-mono text-dim">.claude/agents</code> when a worker carrying it
+                  starts, and Claude Code reads each brief&rsquo;s own description to decide who takes the job. You will not
+                  have read them: the walls that hold are the one folder it may write in, and the never-list.
+                </p>
+              </div>
+            )}
             <div className="min-h-0 flex-1 overflow-auto">
               {shown.map((i) => {
                 const on = picked.has(i.id)
@@ -280,6 +345,26 @@ function AddFromGitHub({ onClose, onAdded }: { onClose: () => void; onAdded: () 
               })}
               {shown.length === 0 && <div className="px-5 py-6 text-center text-[12px] text-muted">Nothing matches.</div>}
             </div>
+            {missed && (
+              <div className="border-t border-line bg-amber-500/5 px-5 py-3">
+                <div className="flex items-center gap-2 text-[12px] text-warn">
+                  <Icon name="alert" size={13} className="shrink-0" />
+                  {missed.items.length} came in; {missed.missed.length} did not.
+                  <span className="flex-1" />
+                  <button className="btn-ghost text-[11.5px]" onClick={onAdded}>
+                    Keep what arrived
+                  </button>
+                </div>
+                <ul className="mt-1.5 max-h-24 overflow-auto pl-5 text-[11px] leading-relaxed text-muted">
+                  {missed.missed.map((m) => (
+                    <li key={m} className="list-disc font-mono">
+                      {m}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             <div className="flex items-center gap-2 border-t border-line bg-raise px-5 py-3">
               <button className="btn-primary text-[12px]" disabled={picked.size === 0 || busy !== ''} onClick={() => void install()}>
                 {busy === 'install' ? 'Adding…' : `Add ${picked.size || ''}`.trim()}

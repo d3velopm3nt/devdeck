@@ -44,6 +44,7 @@ export function WorkersPage() {
     what: '',
     brief: '',
     skills: [],
+    kit: '',
     runner: 'claude-code',
     model: 'sonnet',
     writes: 'folder',

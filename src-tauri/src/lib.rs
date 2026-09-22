@@ -166,13 +166,30 @@ fn toggle_widget(app: &tauri::AppHandle) {
 /// worse first impression than a broken one is a mystery.
 fn reveal_main(app: &tauri::AppHandle) {
     let Some(win) = app.get_webview_window("main") else {
+        close_splash(app);
         return;
     };
     if win.is_visible().unwrap_or(false) {
+        close_splash(app);
         return;
     }
     let _ = win.show();
     let _ = win.set_focus();
+    // After the show, not before: closing first leaves a moment of nothing on
+    // screen, which reads worse than the splash lingering a frame too long.
+    close_splash(app);
+}
+
+/// Take the splash down, from wherever the app got ready.
+///
+/// Every path that reveals the window calls this, including the safety net
+/// behind a frontend that threw. A splash is the one window that must never
+/// be the last one standing: it has no controls, it sits above everything,
+/// and a stuck one is indistinguishable from a hung app.
+fn close_splash(app: &tauri::AppHandle) {
+    if let Some(s) = app.get_webview_window("splash") {
+        let _ = s.close();
+    }
 }
 
 #[tauri::command]
@@ -836,6 +853,18 @@ pub fn run() {
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_secs(8));
                     reveal_main(&h);
+                });
+            }
+
+            // And the net behind *that*. If the window could not be revealed
+            // at all — no main window, a panic on the way to it — the splash
+            // still goes, because an always-on-top rectangle with no way to
+            // close it is a worse failure than the one that caused it.
+            {
+                let h = app.handle().clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(20));
+                    close_splash(&h);
                 });
             }
 

@@ -92,3 +92,25 @@ export function themeById(id: string | null | undefined): ThemeDef {
     THEMES[0]
   )
 }
+
+/// Where the splash reads its colours from.
+///
+/// The splash paints before anything has opened the database, so it cannot ask
+/// which theme you chose — and a splash that guesses wrong is a white flash in
+/// front of a dark app, every single launch. It shares an origin with the main
+/// window, so the last known palette is left here for it: written whenever the
+/// theme is applied, read synchronously by four lines of script in splash.html.
+///
+/// Browser storage, deliberately. It is a per-machine convenience that can
+/// come back empty — a fresh profile, a cleared store — and the splash falls
+/// back to the default theme, which is what a fresh profile would have used
+/// anyway.
+export const SPLASH_KEY = 'devdeck.splash'
+
+export function rememberForSplash(id: string | null | undefined) {
+  try {
+    localStorage.setItem(SPLASH_KEY, JSON.stringify(themeById(id).swatch))
+  } catch {
+    // A blocked or full store is not a reason to fail applying a theme.
+  }
+}

@@ -5,7 +5,8 @@
   "windows": [
     "main",
     "widget",
-    "toast"
+    "toast",
+    "splash"
   ],
   "permissions": [
     "core:default",

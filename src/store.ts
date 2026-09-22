@@ -5,7 +5,7 @@ import { create } from 'zustand'
 import * as ipc from './lib/ipc'
 import type { GitInfo } from './lib/ipc'
 import type { Layer } from './lib/calendarLayers'
-import { themeById, type ThemeId } from './lib/themes'
+import { rememberForSplash, themeById, type ThemeId } from './lib/themes'
 import { findNode, projectOf, resolveDir, serviceDir, subtreeIds } from './lib/tree'
 import type {
   CommandDef,
@@ -831,6 +831,7 @@ export const useApp = create<AppState>((set, get) => ({
       theme: themeById(savedTheme).id,
     })
     document.documentElement.dataset.theme = themeById(savedTheme).id
+    rememberForSplash(savedTheme)
     await tree
     void get().refreshActivity()
     void get().refreshFocus()
@@ -1342,6 +1343,7 @@ export const useApp = create<AppState>((set, get) => ({
   setTheme: async (t) => {
     set({ theme: t })
     document.documentElement.dataset.theme = t
+    rememberForSplash(t)
     await ipc.settingSet('app_theme', t)
   },
   setRailView: (v) => {

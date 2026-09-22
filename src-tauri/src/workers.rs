@@ -1408,3 +1408,55 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod setup_check {
+    /// What a real profile holds, read back through the app's own code.
+    ///     cargo test --lib workers::setup_check::what_is_set_up -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn what_is_set_up() {
+        match super::all_workers() {
+            Ok(ws) => {
+                println!("{} workers", ws.len());
+                for w in &ws {
+                    println!(
+                        "  {} ({}) writes={} tools={:?} shell={}",
+                        w.meta.handle,
+                        w.meta.name,
+                        w.meta.writes,
+                        super::tools_for(&w.meta),
+                        super::has_shell(&w.meta)
+                    );
+                }
+            }
+            Err(e) => println!("workers failed: {e}"),
+        }
+    }
+
+    /// Does the whole chain resolve before anything is spent?
+    ///     cargo test --lib workers::setup_check::what_the_manager_would_do -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn what_the_manager_would_do() {
+        let db = std::path::Path::new(&std::env::var("APPDATA").unwrap_or_default())
+            .join("devdeck")
+            .join("devdeck.sqlite");
+        let conn = rusqlite::Connection::open(&db).expect("open the database");
+        let Some(bot) = crate::bots::bot_on(&conn, "devdeck-engineering") else {
+            println!("no manager by that handle");
+            return;
+        };
+        println!("manager: {} on node {}", bot.name, bot.node_id);
+        println!("  hands work to: {:?}", bot.worker);
+        match super::next_open_item(&conn, &bot) {
+            Some((id, title)) => println!("  first open item: {id} — {title}"),
+            None => println!("  first open item: NONE (the plan is empty or unreadable)"),
+        }
+        match super::handoff(&conn, &bot) {
+            super::Handoff::Start(w, t, i) => println!("  would START {w} on {i} — {t}"),
+            super::Handoff::Ask(w, t) => println!("  would ASK to put {w} on: {t}"),
+            super::Handoff::Nothing => println!("  would do NOTHING"),
+        }
+    }
+}

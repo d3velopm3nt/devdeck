@@ -142,12 +142,17 @@ export function LibraryPanel({
 /// how-to a worker can follow. The repository's own spelling is kept in the
 /// corner for when it matters, and nowhere else.
 function kitWords(k: ipc.LibraryKit) {
+  const one = k.picks.length === 1
   return {
-    what: k.kind === 'brief' ? 'specialists' : 'skills',
+    what: k.kind === 'brief' ? (one ? 'specialist' : 'specialists') : one ? 'skill' : 'skills',
     why:
       k.kind === 'brief'
-        ? 'A bench your worker picks from — it reads what each one is for and chooses.'
-        : 'Step-by-step guides a worker can follow when a job calls for one.',
+        ? one
+          ? 'A specialist a worker can call on for the job it fits.'
+          : 'A bench your worker picks from — it reads what each one is for and chooses.'
+        : one
+          ? 'A guide a worker can follow when the job calls for it.'
+          : 'Step-by-step guides a worker can follow when a job calls for one.',
   }
 }
 
@@ -254,14 +259,26 @@ function AddFromGitHub({ onClose, onAdded }: { onClose: () => void; onAdded: () 
             <span className="truncate font-mono text-[10px] text-faint">{k.folder}/</span>
           </div>
           <p className="m-0 mt-0.5 text-[11.5px] leading-relaxed text-muted">{w.why}</p>
-          {k.have > 0 && <div className="mt-1 text-[11px] text-ok">{k.have} of them are already yours</div>}
+          {k.have > 0 && (
+            <div className="mt-1 text-[11px] text-ok">
+              {k.picks.length === 1 ? 'already yours' : `${k.have} of them are already yours`}
+            </div>
+          )}
         </div>
         <button
           className={`${all ? 'btn-ghost' : 'btn-primary'} shrink-0 text-[12px]`}
           disabled={busy !== '' || all}
           onClick={() => void addKit(k.folder)}
         >
-          {all ? 'all yours' : busy === 'install' ? 'Adding…' : `Add all ${k.picks.length}`}
+          {all
+            ? k.picks.length === 1
+              ? 'yours'
+              : 'all yours'
+            : busy === 'install'
+              ? 'Adding…'
+              : k.picks.length === 1
+                ? 'Add it'
+                : `Add all ${k.picks.length}`}
         </button>
       </div>
     )

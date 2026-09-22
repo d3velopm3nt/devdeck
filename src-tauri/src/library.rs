@@ -401,13 +401,16 @@ pub fn look(input: &str) -> Result<Source, String> {
             .cmp(&rank(&b.folder))
             .then(b.picks.len().cmp(&a.picks.len()))
     });
-    // A folder of one is not a kit, and a translation of a folder is not
-    // another kit: ECC keeps its skills in seven languages, which would offer
-    // you the same bench seven times over and call six of them something you
-    // cannot read. The per-item list still holds every one of them.
-    kits.retain(|k| {
-        k.picks.len() > 1 && !k.folder.split('/').any(|p| p.eq_ignore_ascii_case("docs"))
-    });
+    // A translation of a folder is not another set: ECC keeps its skills in
+    // seven languages, which would offer the same bench seven times over and
+    // call six of them something you cannot read. The full list still has
+    // every one of them.
+    //
+    // A folder of *one* is still a set, though. That rule was here and it
+    // meant a repository holding a single good skill -- which is most of them
+    // -- was met with "nothing here is grouped into a set", and the one thing
+    // you came for was hidden behind a toggle.
+    kits.retain(|k| !k.folder.split('/').any(|p| p.eq_ignore_ascii_case("docs")));
     kits.truncate(6);
     let read_headers = found.len().min(HEADERS);
 

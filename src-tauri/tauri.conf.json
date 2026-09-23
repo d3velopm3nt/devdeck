@@ -12,6 +12,19 @@
   "app": {
     "windows": [
       {
+        "label": "splash",
+        "title": "DevDeck",
+        "width": 320,
+        "height": 200,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "skipTaskbar": false,
+        "center": true,
+        "visible": true
+      },
+      {
         "label": "main",
         "title": "DevDeck",
         "width": 1440,

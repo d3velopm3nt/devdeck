@@ -827,6 +827,24 @@ pub fn run() {
                 });
             }
 
+            // A run is a child of this process, so one still marked running
+            // is one that did not survive the last stop. Said plainly at
+            // startup rather than left spinning on the page for ever.
+            {
+                let h = app.handle().clone();
+                let said = match workers::close_orphans() {
+                    Ok(0) => None,
+                    Ok(n) => Some((
+                        "stdout",
+                        format!("closed {n} run(s) that did not survive the last stop"),
+                    )),
+                    Err(e) => Some(("stderr", format!("could not close interrupted runs: {e}"))),
+                };
+                if let Some((stream, line)) = said {
+                    services::push_log(&h, services::RUNNER_LOG_ID, "workers", stream, line);
+                }
+            }
+
             // The safety net behind `app_ready`. If the frontend throws before
             // it can call in — a bad import, a bad migration — the window must
             // still appear, because an app you cannot see is an app you cannot

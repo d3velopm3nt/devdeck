@@ -348,6 +348,34 @@ pub fn write_run(r: &Run) -> Result<(), String> {
     .map_err(err)
 }
 
+/// Close the runs that were in flight when the app last stopped.
+///
+/// Nothing survives the process: a run is a child of this app, so a record
+/// still saying `running` at startup describes something that is not. The
+/// first real run left exactly that — no verdict, no end, $0.00, zero seconds
+/// — and would have spun on the page for ever, because the only code that
+/// closes a run is the thread that was watching it, and that thread died with
+/// the app.
+///
+/// It cannot be known *how* they ended, so nothing is invented: the status
+/// says interrupted and the verdict says the app stopped. What the run had
+/// already written stays, because it was written as it went.
+pub fn close_orphans() -> Result<usize, String> {
+    let mut n = 0;
+    for mut r in all_runs()? {
+        if r.status != "running" {
+            continue;
+        }
+        r.status = "interrupted".into();
+        r.ok = false;
+        r.ended_at = now();
+        r.verdict = "DevDeck stopped while this was running, so how it ended is not known. What it had written by then is listed above.".into();
+        write_run(&r)?;
+        n += 1;
+    }
+    Ok(n)
+}
+
 pub fn all_runs() -> Result<Vec<Run>, String> {
     let Ok(entries) = std::fs::read_dir(runs_dir()?) else {
         return Ok(Vec::new());
@@ -752,6 +780,83 @@ fn lay_out_skills(cwd: &Path, ids: &[String]) -> Result<usize, String> {
     Ok(n)
 }
 
+/// The three things DevDeck writes into a working folder, kept out of git.
+///
+/// The brief was missing from this list, so `git status` showed `.claude/` as
+/// untracked and a worker told to commit its work would have committed its own
+/// job description along with it.
+fn keep_ours_out(cwd: &Path) {
+    for what in [
+        ".claude/skills",
+        ".claude/agents",
+        ".claude/devdeck-brief.md",
+    ] {
+        keep_out_of_history(cwd, what);
+    }
+}
+
+/// Where a worker actually works: a worktree of the repository, never the
+/// checkout you have open.
+///
+/// This was `git switch -c` in the repository itself, and the first real run
+/// showed why that cannot stand. The worker edited `tauri.conf.json`, the dev
+/// server watches `src-tauri`, and DevDeck restarted — killing the run it was
+/// supervising, three minutes in. A worktree is a second checkout of the same
+/// repository on its own branch: the worker gets a folder nothing is watching,
+/// your branch stays where you left it, and the commits land in the same
+/// repository so `git switch` reaches them afterwards as usual.
+fn prepare_worktree(repo: &Path, branch: &str, run_id: &str) -> Result<PathBuf, String> {
+    let at = root()?.join("worktrees").join(run_id);
+    if let Some(parent) = at.parent() {
+        std::fs::create_dir_all(parent).map_err(err)?;
+    }
+    let path = at.to_string_lossy().to_string();
+
+    let git = |args: &[&str]| -> Result<std::process::Output, String> {
+        std::process::Command::new("git")
+            .args(args)
+            .current_dir(repo)
+            .output()
+            .map_err(|e| format!("could not run git: {e}"))
+    };
+
+    let out = git(&["worktree", "add", "-b", branch, &path])?;
+    if out.status.success() {
+        return Ok(at);
+    }
+    // A branch of that name already exists — a second run on the same item, or
+    // one you made yourself. Check it out into the worktree rather than
+    // refusing, because refusing here reads as "the worker is broken".
+    let msg = String::from_utf8_lossy(&out.stderr).to_string();
+    if msg.contains("already exists") {
+        let again = git(&["worktree", "add", &path, branch])?;
+        if again.status.success() {
+            return Ok(at);
+        }
+        return Err(format!(
+            "could not put {branch} in a worktree: {}",
+            String::from_utf8_lossy(&again.stderr).trim()
+        ));
+    }
+    Err(format!(
+        "could not make the branch {branch}: {}",
+        msg.trim()
+    ))
+}
+
+/// Give back the worktree, leaving the branch behind.
+///
+/// Called when a run's work is discarded. The branch survives on purpose: the
+/// folder is scaffolding, the commits are the work, and deleting somebody's
+/// commits because they pressed Discard on a draught would be its own bug.
+pub fn release_worktree(repo: &Path, at: &Path) {
+    let _ = std::process::Command::new("git")
+        .args(["worktree", "remove", "--force", &at.to_string_lossy()])
+        .current_dir(repo)
+        .output();
+}
+
+#[allow(dead_code)]
 fn start_branch(cwd: &Path, branch: &str) -> Result<(), String> {
     let out = std::process::Command::new("git")
         .args(["switch", "-c", branch])
@@ -873,10 +978,20 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
         deck
     };
 
-    if p.is_repo && !p.branch.is_empty() {
-        start_branch(&cwd, &p.branch)?;
-    }
+    // Named before the folder is made, because the worktree is named after the
+    // run: one run, one folder, and no way for two to land on each other.
+    let run_id = new_id();
+
+    // Work on code happens in a worktree, so the folder the worker edits is
+    // never the folder you — or a dev server — have open.
+    let repo = cwd.clone();
+    let cwd = if p.is_repo && !p.branch.is_empty() {
+        prepare_worktree(&repo, &p.branch, &run_id)?
+    } else {
+        cwd
+    };
     let laid = lay_out_skills(&cwd, &w.meta.skills)? + lay_out_kit(&cwd, &p.kit)?;
+    keep_ours_out(&cwd);
     let brief = brief_text(&p, &w, &knowledge_text(&deck_dir));
     // The brief goes in a file, and the command line stays one plain line.
     //
@@ -892,7 +1007,7 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
     let prompt = "Read .claude/devdeck-brief.md and do what it says.".to_string();
 
     let run = Run {
-        id: new_id(),
+        id: run_id,
         worker: w.meta.handle.clone(),
         worker_name: w.meta.name.clone(),
         node_id: p.node_id,
@@ -966,6 +1081,12 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
                 // Written as it goes, so a crash leaves what was said rather than
                 // an empty record of a run that plainly happened.
                 if last_write.elapsed() > std::time::Duration::from_secs(3) {
+                    // The files too, not only the steps. This used to be
+                    // collected once, at the end — so a run that died recorded
+                    // one edited file when five had been written, and the only
+                    // way to find the other four was to look in the working
+                    // tree by hand afterwards.
+                    live.files = written_since(&cwd, started);
                     let _ = write_run(&live);
                     last_write = std::time::Instant::now();
                 }
@@ -1196,6 +1317,21 @@ pub fn run_decide(
         );
         let _ = crate::business::knowledge_note(&conn, r.node_id, &slug, &body);
     }
+    // Discarding gives the folder back. The branch stays: the worktree is
+    // scaffolding, the commits are the work, and deleting somebody's commits
+    // because they pressed Discard on a draught would be its own bug.
+    if r.status == "discarded" && !r.branch.is_empty() {
+        let repo = {
+            let conn = db.0.lock().unwrap();
+            db::node_by_id(&conn, r.node_id)
+                .ok()
+                .and_then(|n| n.path)
+                .filter(|p| !p.trim().is_empty())
+        };
+        if let Some(repo) = repo {
+            release_worktree(Path::new(&repo), Path::new(&r.folder));
+        }
+    }
     Ok(r)
 }
 
@@ -1295,6 +1431,57 @@ mod tests {
         );
         assert!(kit_items(&lib, "").is_empty());
         assert!(kit_items(&lib, "affaan-m/ECC:nowhere").is_empty());
+    }
+
+    /// Everything DevDeck puts in a working folder stays out of git.
+    ///
+    /// The brief was missing from this list, so `.claude/` showed as untracked
+    /// and a worker told to commit its work would have committed its own job
+    /// description with it.
+    #[test]
+    fn nothing_devdeck_writes_can_land_in_somebody_s_commit() {
+        let tmp = std::env::temp_dir().join(format!("devdeck-excl-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(tmp.join(".git").join("info")).unwrap();
+
+        keep_ours_out(&tmp);
+
+        let excl = std::fs::read_to_string(tmp.join(".git").join("info").join("exclude")).unwrap();
+        for what in [
+            ".claude/skills",
+            ".claude/agents",
+            ".claude/devdeck-brief.md",
+        ] {
+            assert!(
+                excl.contains(what),
+                "`{what}` is not excluded:
+{excl}"
+            );
+        }
+        // Twice must not double it: a worker runs in the same folder again and
+        // again, and an exclude file that grows every run is a mess you would
+        // eventually have to explain.
+        let before = excl.len();
+        keep_ours_out(&tmp);
+        let after = std::fs::read_to_string(tmp.join(".git").join("info").join("exclude"))
+            .unwrap()
+            .len();
+        assert_eq!(before, after, "the exclude file grew on a second run");
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// A folder with no git in it is left alone rather than given one.
+    #[test]
+    fn a_folder_that_is_not_a_repository_gets_no_git_written_into_it() {
+        let tmp = std::env::temp_dir().join(format!("devdeck-nogit-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        keep_ours_out(&tmp);
+        assert!(
+            !tmp.join(".git").exists(),
+            "it made a .git where there was none"
+        );
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     /// What a profile on disk actually holds, for a demo run.

@@ -264,6 +264,102 @@ in 2.1.278. That test has now been wrong in both directions within a day, which
 is the argument for a capability probe: DevDeck should read what the CLI
 supports rather than remember it. Not built yet.
 
+## The first real run — 23 September, 00:24
+
+Everything before this section is a screenshot of a part. This is the machine
+turning over: a manager woke on its own schedule and a worker did work on a real
+repository. **That had never happened once.** Before tonight the profile held 8
+managers, 0 plans, 0 work items and 0 runs, and five managers had been waking
+daily to say "nothing on my plan yet" into a thread nobody opened.
+
+The task was chosen by you: **add a splash screen to DevDeck desktop**. It was
+first built by hand (branch `splash/by-claude-code`, kept off the working branch
+so the worker could not see it, and the plan file told the worker not to read
+it), then given to DevDeck to do independently.
+
+### What ran
+
+```
+wake 1   FAILED, honestly: "DevDeck engineering could not hand ... over:
+                            Mason writes on a branch, and DevDeck has no repository."
+wake 2   OK:     "DevDeck engineering handed 'Add a splash window ...' to Mason."
+run      run_1a0cb385b30 · branch devdeck/add-a-splash-window-...-0923
+         started 22:24:23Z · last step 22:27:28Z · limit 25 min / $3.00
+         31 steps: Read 12 · Bash 10 · Grep 5 · Glob 1 · Edit 1
+```
+
+The first failure is worth as much as the success. The manager read its plan,
+took the first unclaimed item, picked the worker, checked the job was possible,
+found it was not, and said so in one plain sentence. No crash, no silent skip.
+
+### What it built, and what it chose
+
+Mason read twelve files before writing anything, then wrote five:
+
+| file | what it did |
+|---|---|
+| `src-tauri/tauri.conf.json` | declared the window — undecorated, transparent, centred, `visible: true` while every other window starts hidden |
+| `src-tauri/capabilities/default.json` | added the label — *the trap `CLAUDE.md` warns about* |
+| `src/main.tsx` | routed the window label to a component |
+| `src/index.css` | transparent-window styling, with its own comment explaining why |
+| `src/widget/Splash.tsx` | the splash itself |
+
+**It chose a better design than the hand-written version.** The hand-written one
+is a standalone `public/splash.html` with hardcoded hex colours. Mason used the
+pattern this codebase already had — one bundle, the window label picks the UI,
+exactly as `widget` and `toast` do — with the icon registry and the colour
+tokens. That is what `CLAUDE.md` asks for, and the human version did not do it.
+
+What Mason never reached was closing the window from Rust. Its own comment says
+*"Rust owns its lifetime — it's closed from `reveal_main`"*, which is the right
+design and was still only a sentence when the run died. Its branch therefore
+declares a splash that never goes away: read it, do not run it.
+
+### What killed it
+
+```
+Info File src-tauri\tauri.conf.json changed. Rebuilding application...
+```
+
+`tauri dev` watches `src-tauri`. Mason edited `tauri.conf.json`, **so DevDeck
+restarted and killed the run it was supervising** — at 22:27:28, the exact
+moment of that line. The worker did precisely what it was asked; the setup was
+the problem.
+
+### Four bugs, found only by running it
+
+1. **A run orphaned by a restart stays `running` for ever.** No `ended_at`, no
+   verdict, `$0.00`, `0 seconds` — and the page will show a spinner until the
+   file is deleted by hand. On startup DevDeck cannot know such a run died,
+   which is exactly why it must assume it and mark it interrupted.
+2. **A worker must not edit the checkout the app runs from.** The CLI has
+   `--worktree` for precisely this; DevDeck does not use it.
+3. **The receipt under-reports.** It recorded one edited file; five were
+   written. Steps are appended as they happen and nothing takes a final pass, so
+   a run that dies loses the record of what it did — found only because the
+   files were still in the working tree afterwards.
+4. **`.claude/` is not excluded from git.** `.claude/skills/` and
+   `.claude/agents/` are; the brief DevDeck writes beside them is not, so a
+   worker running `git add .` would commit its own job description.
+
+### And one found before spending anything
+
+A dry run asked the manager what it *would* do and got "NOTHING". The plan had
+been written carefully and put in the right folder, and was invisible: **a
+portfolio is built from features that name their owner, never from a manager
+that names its feature.** The manager file had carried a `feature:` field that
+did nothing, with no warning anywhere — the same shape of fault as a never-list
+that never stopped anything, and as a node's repository path written to the
+database when the vault is the source of truth. Three of those in one day.
+
+### The thing underneath all of it
+
+The plan that made this run possible was written by hand. Nothing in DevDeck
+puts work on a plan. Managers already work out what should be done — they say so
+in their wake — but it lands in a thread and waits for someone to retype it into
+a Plan tab. Until a proposal becomes a plan in one press, the loop only runs
+when somebody sets it up manually.
+
 ## Not done, and why
 
 - **Nothing was kept from a real run.** The keep path (which writes a line

@@ -581,12 +581,8 @@ fn evidence(
 
     let mut notes = Vec::new();
     if let Ok(deck) = deck_of(conn, node_id) {
-        if let Ok(entries) = std::fs::read_dir(deck.knowledge_dir()) {
-            for e in entries.flatten() {
-                let p = e.path();
-                if p.extension().and_then(|x| x.to_str()) != Some("md") {
-                    continue;
-                }
+        {
+            for p in deck.knowledge_files() {
                 let name = p
                     .file_stem()
                     .and_then(|s| s.to_str())

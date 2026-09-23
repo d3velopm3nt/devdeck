@@ -469,20 +469,16 @@ fn space_dir(
 }
 
 fn knowledge_titles(dir: &Path) -> Vec<String> {
-    let k = crate::aiw::deck::Deck::new(dir).knowledge_dir();
-    let Ok(entries) = std::fs::read_dir(k) else {
-        return Vec::new();
-    };
-    let mut out: Vec<String> = entries
-        .flatten()
-        .filter_map(|e| {
-            let p = e.path();
-            (p.extension().and_then(|x| x.to_str()) == Some("md")).then(|| {
+    let mut out: Vec<String> = crate::aiw::deck::Deck::new(dir)
+        .knowledge_files()
+        .into_iter()
+        .filter_map(|p| {
+            Some(
                 p.file_stem()
                     .and_then(|s| s.to_str())
                     .unwrap_or_default()
-                    .replace('-', " ")
-            })
+                    .replace('-', " "),
+            )
         })
         .collect();
     out.sort();
@@ -665,16 +661,12 @@ pub fn brief_text(p: &Plan, w: &Worker, knowledge: &str) -> String {
 }
 
 fn knowledge_text(dir: &Path) -> String {
-    let k = crate::aiw::deck::Deck::new(dir).knowledge_dir();
-    let Ok(entries) = std::fs::read_dir(k) else {
-        return String::new();
-    };
     let mut s = String::new();
-    for e in entries.flatten().take(14) {
-        let p = e.path();
-        if p.extension().and_then(|x| x.to_str()) != Some("md") {
-            continue;
-        }
+    for p in crate::aiw::deck::Deck::new(dir)
+        .knowledge_files()
+        .into_iter()
+        .take(14)
+    {
         if let Ok(text) = std::fs::read_to_string(&p) {
             let body = text.rsplit("---").next().unwrap_or(&text);
             s.push_str(body.trim());
@@ -1618,6 +1610,28 @@ mod setup_check {
                 }
             }
             Err(e) => println!("workers failed: {e}"),
+        }
+    }
+
+    /// Every manager this profile holds, as the window would list them.
+    ///     cargo test --lib workers::setup_check::what_managers_exist -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn what_managers_exist() {
+        let db = std::path::Path::new(&std::env::var("APPDATA").unwrap_or_default())
+            .join("devdeck")
+            .join("devdeck.sqlite");
+        let conn = rusqlite::Connection::open(&db).expect("open the database");
+        let bots = crate::bots::all_bots(&conn);
+        println!("{} managers", bots.len());
+        for b in &bots {
+            println!(
+                "  @{:22} node={:<4} features={} worker={:?}",
+                b.handle,
+                b.node_id,
+                b.portfolio.len(),
+                b.worker
+            );
         }
     }
 

@@ -299,8 +299,40 @@ impl Deck {
     pub fn context_md(&self) -> PathBuf {
         self.dir().join("context.md")
     }
+    /// What this space knows — beside the folders it is about, not hidden.
+    ///
+    /// It used to live in `.devdeck`, with everything else the machine keeps.
+    /// But the knowledge base is the most valuable thing in a vault and the
+    /// only part of it a person would want to read, and a dot-folder is where
+    /// you put things people should not open. It is subjects in folders now —
+    /// `clients/`, `suppliers/`, `people/`, `products/`, `topics/` — one file
+    /// per subject with what is known about it, dated and sourced.
     pub fn knowledge_dir(&self) -> PathBuf {
-        self.dir().join("knowledge")
+        self.root.join("knowledge")
+    }
+
+    /// Every note in the knowledge base, subjects being one folder down now.
+    pub fn knowledge_files(&self) -> Vec<PathBuf> {
+        fn walk(dir: &Path, out: &mut Vec<PathBuf>, depth: usize) {
+            if depth > 2 {
+                return;
+            }
+            let Ok(entries) = fs::read_dir(dir) else {
+                return;
+            };
+            for e in entries.flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    walk(&p, out, depth + 1);
+                } else if p.extension().and_then(|x| x.to_str()) == Some("md") {
+                    out.push(p);
+                }
+            }
+        }
+        let mut out = Vec::new();
+        walk(&self.knowledge_dir(), &mut out, 0);
+        out.sort();
+        out
     }
     pub fn decisions_dir(&self) -> PathBuf {
         self.dir().join("decisions")

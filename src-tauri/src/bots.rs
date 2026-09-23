@@ -1849,7 +1849,7 @@ pub fn work_agree(
         crate::aiw::events::say(
             &app,
             crate::aiw::events::EventType::WorkUpdated,
-            crate::aiw::events::in_space(node_id, Some(&feature)),
+            crate::aiw::events::in_space(node_id, Some(&feature), Some("you")),
             serde_json::json!({ "what": "agreed", "count": n }),
         );
     }
@@ -1881,7 +1881,7 @@ pub fn work_decline(
         crate::aiw::events::say(
             &app,
             crate::aiw::events::EventType::WorkReleased,
-            crate::aiw::events::in_space(node_id, Some(&feature)),
+            crate::aiw::events::in_space(node_id, Some(&feature), Some("you")),
             serde_json::json!({ "what": "declined", "count": n }),
         );
     }

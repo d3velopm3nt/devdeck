@@ -395,9 +395,21 @@ export function Thread({
             In this thread
           </span>
           <Pill id={hostId ?? ''} label={name} host />
-          {(conv.participants ?? []).map((p) => (
-            <Pill key={p} id={p} label={speakers(p)} />
-          ))}
+          {(conv.participants ?? [])
+            // The host is in the room by definition, and is often in the
+            // participant list as well — so it was drawn twice, once as host
+            // and once as a guest, under the same name. A manager can be
+            // named by its handle or by its node, so both spellings count as
+            // the same person here.
+            .filter(
+              (p) =>
+                p !== hostId &&
+                p !== `bot:${conv.bot_handle ?? ''}` &&
+                p !== `bot:${conv.bot_node ?? ''}`,
+            )
+            .map((p) => (
+              <Pill key={p} id={p} label={speakers(p)} />
+            ))}
         </div>
       )}
 

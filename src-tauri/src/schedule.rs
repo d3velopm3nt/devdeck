@@ -508,11 +508,10 @@ fn run_one(
                     crate::aiw::events::say(
                         app,
                         crate::aiw::events::EventType::WorkUpdated,
-                        crate::aiw::events::in_space(b.node_id, None),
+                        crate::aiw::events::in_space(b.node_id, None, Some(&b.name)),
                         serde_json::json!({
                             "what": "proposed",
-                            "manager": b.handle,
-                            "manager_name": b.name,
+                            "count": added.len(),
                             "titles": added,
                         }),
                     );

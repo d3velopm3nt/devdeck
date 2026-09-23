@@ -523,10 +523,16 @@ pub fn say(app: &tauri::AppHandle, kind: EventType, scope: EventScope, payload: 
 
 /// The scope of something that happened in a space, named the way the bus
 /// names things: a node id is a project id here.
-pub fn in_space(node_id: i64, feature: Option<&str>) -> EventScope {
+///
+/// `who` matters more than it looks. The feed writes "someone started work"
+/// when nothing names an actor, and the first event this app ever published
+/// said exactly that — the payload knew the worker's name and the line that
+/// renders it does not read payloads.
+pub fn in_space(node_id: i64, feature: Option<&str>, who: Option<&str>) -> EventScope {
     EventScope {
         project_id: Some(node_id.to_string()),
         feature_id: feature.map(|f| f.to_string()),
+        agent_id: who.map(|w| w.to_string()),
         ..Default::default()
     }
 }

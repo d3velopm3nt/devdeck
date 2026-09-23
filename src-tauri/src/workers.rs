@@ -1050,11 +1050,13 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
     crate::aiw::events::say(
         app,
         crate::aiw::events::EventType::AgentStarted,
-        crate::aiw::events::in_space(run.node_id, None),
+        crate::aiw::events::in_space(run.node_id, None, Some(&run.worker_name)),
         serde_json::json!({
             "run": run.id,
-            "worker": run.worker,
-            "worker_name": run.worker_name,
+            // `name` and `summary` are what the feed reads. A payload that
+            // spells them its own way renders as "someone started work".
+            "name": run.worker_name,
+            "summary": run.title,
             "title": run.title,
             "branch": run.branch,
             "folder": run.folder,
@@ -1129,13 +1131,14 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
             } else {
                 crate::aiw::events::EventType::AgentFailed
             },
-            crate::aiw::events::in_space(live.node_id, None),
+            crate::aiw::events::in_space(live.node_id, None, Some(&live.worker_name)),
             serde_json::json!({
                 "run": live.id,
-                "worker_name": live.worker_name,
+                "name": live.worker_name,
+                "summary": live.verdict,
+                "error": live.verdict,
                 "title": live.title,
                 "status": live.status,
-                "verdict": live.verdict,
                 "files": live.files.len(),
                 "seconds": live.seconds,
                 "usd": live.usd,

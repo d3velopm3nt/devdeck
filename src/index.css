@@ -237,12 +237,17 @@ body,
   font-family: 'Segoe UI', system-ui, sans-serif;
 }
 
-/* The capture toast is a transparent, undecorated window: it has to float
-   over whatever app you were typing in, so the page itself must not paint a
-   background behind its rounded card. */
+/* The capture toast and the splash window are transparent, undecorated
+   windows: the toast has to float over whatever app you were typing in, and
+   the splash has to look like a rounded card rather than a grey rectangle
+   while it waits for the main window. Neither page may paint a background
+   behind its own card. */
 html[data-window='toast'],
 html[data-window='toast'] body,
-html[data-window='toast'] #root {
+html[data-window='toast'] #root,
+html[data-window='splash'],
+html[data-window='splash'] body,
+html[data-window='splash'] #root {
   background: transparent;
 }
 

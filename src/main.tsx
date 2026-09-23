@@ -5,6 +5,7 @@ import './index.css'
 import App from './App.tsx'
 import { CommandWidget } from './widget/CommandWidget'
 import { CaptureToast } from './widget/CaptureToast'
+import { Splash } from './widget/Splash'
 import { ErrorBoundary } from './ErrorBoundary'
 
 // The same bundle serves every window; the window label selects the UI.
@@ -15,12 +16,20 @@ try {
   label = 'main'
 }
 
-// The toast floats over other apps, so its page must not paint a background
-// behind the card (see index.css).
-if (label === 'toast') document.documentElement.dataset.window = 'toast'
+// The toast and splash windows float undecorated and transparent, so their
+// page must not paint a background behind the card (see index.css).
+if (label === 'toast' || label === 'splash') document.documentElement.dataset.window = label
 
 const ui =
-  label === 'widget' ? <CommandWidget /> : label === 'toast' ? <CaptureToast /> : <App />
+  label === 'widget' ? (
+    <CommandWidget />
+  ) : label === 'toast' ? (
+    <CaptureToast />
+  ) : label === 'splash' ? (
+    <Splash />
+  ) : (
+    <App />
+  )
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

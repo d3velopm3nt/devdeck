@@ -1047,6 +1047,20 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
         tools: tools_for(&w.meta),
         sealed: true,
     };
+    crate::aiw::events::say(
+        app,
+        crate::aiw::events::EventType::AgentStarted,
+        crate::aiw::events::in_space(run.node_id, None),
+        serde_json::json!({
+            "run": run.id,
+            "worker": run.worker,
+            "worker_name": run.worker_name,
+            "title": run.title,
+            "branch": run.branch,
+            "folder": run.folder,
+        }),
+    );
+
     let app2 = app.clone();
     let mut live = run.clone();
     let started = std::time::SystemTime::now();
@@ -1108,6 +1122,25 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
         }
         let _ = write_run(&live);
         leashes().lock().unwrap().remove(&live.id);
+        crate::aiw::events::say(
+            &app2,
+            if live.ok {
+                crate::aiw::events::EventType::AgentCompleted
+            } else {
+                crate::aiw::events::EventType::AgentFailed
+            },
+            crate::aiw::events::in_space(live.node_id, None),
+            serde_json::json!({
+                "run": live.id,
+                "worker_name": live.worker_name,
+                "title": live.title,
+                "status": live.status,
+                "verdict": live.verdict,
+                "files": live.files.len(),
+                "seconds": live.seconds,
+                "usd": live.usd,
+            }),
+        );
         emit(&app2, "worker:done", serde_json::json!({ "run": live }));
         crate::activity::record(
             &app2,

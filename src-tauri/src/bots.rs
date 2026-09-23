@@ -1821,6 +1821,7 @@ pub fn propose_plan(conn: &Connection, bot: &Bot) -> Result<Vec<String>, String>
 /// exactly as it is, so pressing this twice cannot un-finish something.
 #[tauri::command(async)]
 pub fn work_agree(
+    app: tauri::AppHandle,
     db: tauri::State<Db>,
     node_id: i64,
     feature: String,
@@ -1845,6 +1846,12 @@ pub fn work_agree(
     if n > 0 {
         deck.save_work(&feature, &work.meta)
             .map_err(|e| e.to_string())?;
+        crate::aiw::events::say(
+            &app,
+            crate::aiw::events::EventType::WorkUpdated,
+            crate::aiw::events::in_space(node_id, Some(&feature)),
+            serde_json::json!({ "what": "agreed", "count": n }),
+        );
     }
     Ok(n)
 }
@@ -1852,6 +1859,7 @@ pub fn work_agree(
 /// Say no to what a manager proposed. It drops off the plan entirely.
 #[tauri::command(async)]
 pub fn work_decline(
+    app: tauri::AppHandle,
     db: tauri::State<Db>,
     node_id: i64,
     feature: String,
@@ -1870,6 +1878,12 @@ pub fn work_decline(
     if n > 0 {
         deck.save_work(&feature, &work.meta)
             .map_err(|e| e.to_string())?;
+        crate::aiw::events::say(
+            &app,
+            crate::aiw::events::EventType::WorkReleased,
+            crate::aiw::events::in_space(node_id, Some(&feature)),
+            serde_json::json!({ "what": "declined", "count": n }),
+        );
     }
     Ok(n)
 }

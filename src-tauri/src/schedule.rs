@@ -504,6 +504,19 @@ fn run_one(
                     let conn = db.0.lock().ok()?;
                     crate::bots::propose_plan(&conn, b).ok()
                 });
+                if let Some(added) = wrote.as_deref().filter(|a| !a.is_empty()) {
+                    crate::aiw::events::say(
+                        app,
+                        crate::aiw::events::EventType::WorkUpdated,
+                        crate::aiw::events::in_space(b.node_id, None),
+                        serde_json::json!({
+                            "what": "proposed",
+                            "manager": b.handle,
+                            "manager_name": b.name,
+                            "titles": added,
+                        }),
+                    );
+                }
                 let line = match wrote.as_deref() {
                     Some([]) | None => line,
                     Some(added) => format!(

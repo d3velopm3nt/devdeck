@@ -502,6 +502,35 @@ pub fn new_id(prefix: &str) -> String {
 
 pub type SharedBus = Arc<EventBus>;
 
+/// Say what happened, from anywhere, without holding a Workspace.
+///
+/// The bus has been here since the AI workspace was built and the newest and
+/// most important parts of the app — workers, the scheduler, managers — used
+/// it exactly zero times. They called each other directly and wrote files, so
+/// nothing could react to anything: a run that finished told only the thread
+/// that started it, a manager that appeared needed a restart to be seen, and
+/// the same overdue item wrote a fresh row every morning because nothing knew
+/// it had already said so.
+///
+/// Silent when the workspace is not up yet, which is true during startup and
+/// in tests. Saying what happened must never be the reason something fails.
+pub fn say(app: &tauri::AppHandle, kind: EventType, scope: EventScope, payload: serde_json::Value) {
+    use tauri::Manager;
+    if let Some(ws) = app.try_state::<std::sync::Arc<crate::aiw::state::Workspace>>() {
+        ws.bus.publish(kind, scope, payload);
+    }
+}
+
+/// The scope of something that happened in a space, named the way the bus
+/// names things: a node id is a project id here.
+pub fn in_space(node_id: i64, feature: Option<&str>) -> EventScope {
+    EventScope {
+        project_id: Some(node_id.to_string()),
+        feature_id: feature.map(|f| f.to_string()),
+        ..Default::default()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

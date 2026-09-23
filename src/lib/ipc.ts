@@ -2257,3 +2257,11 @@ export const businessStageSet = (nodeId: number, product: string, stage: string,
 /** Say which worker a manager hands its jobs to. Empty takes it back. */
 export const botSetWorker = (handle: string, worker: string) =>
   invoke<void>('bot_set_worker', { handle, worker })
+
+/** Agree to what a manager proposed, so it becomes work that can start.
+ *  No ids means all of them. Returns how many moved. */
+export const workAgree = (nodeId: number, feature: string, ids: string[] = []) =>
+  invoke<number>('work_agree', { nodeId, feature, ids })
+/** Say no to a proposal. It drops off the plan. */
+export const workDecline = (nodeId: number, feature: string, ids: string[] = []) =>
+  invoke<number>('work_decline', { nodeId, feature, ids })

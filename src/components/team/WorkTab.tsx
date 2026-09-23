@@ -18,11 +18,16 @@ import { useAiw } from '../../lib/aiwStore'
 import type { GoalRow } from '../../lib/aiw'
 import { Icon } from '../../lib/icons'
 import { useSpeakers } from '../thread/speakers'
+import * as ipc from '../../lib/ipc'
 import type { Board } from './TeamPage'
 
 /// Colour per status. Blocked is the only warm one: it is the only status
 /// that is asking you for something.
 function statusDot(status: string): string {
+  // Violet, and its own colour on purpose: a proposal is not work yet. It is
+  // the one status nothing can start from, so it must not look like the ones
+  // that can.
+  if (status === 'proposed') return 'bg-violet-400'
   if (status === 'done') return 'bg-line3'
   if (status === 'blocked') return 'bg-amber-400'
   if (status === 'in-progress') return 'bg-emerald-400'
@@ -41,7 +46,38 @@ export function WorkList({
 }) {
   const a = useAiw()
   const [showDone, setShowDone] = useState(false)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [err, setErr] = useState('')
   const speakers = useSpeakers()
+
+  /// Answer a manager's proposal, for a whole feature at once.
+  ///
+  /// The space comes from the work itself — `project_id` *is* the node id,
+  /// which is how `rowFor` matches on it. This asked the board instead, and
+  /// returned in silence when the board had no row for the feature: a manager
+  /// that had just made its first plan is exactly the case where the board has
+  /// not caught up, so pressing Agree on new work did nothing at all and said
+  /// nothing about why.
+  const answer = async (projectId: string, featureId: string, yes: boolean) => {
+    const nodeId = Number(projectId)
+    if (!nodeId) {
+      setErr(`That work names no space I can find (${projectId}).`)
+      return
+    }
+    setErr('')
+    setBusy(featureId)
+    try {
+      const n = yes
+        ? await ipc.workAgree(nodeId, featureId)
+        : await ipc.workDecline(nodeId, featureId)
+      if (n === 0) setErr('Nothing moved — those were not proposals any more.')
+      await a.loadAllWork()
+    } catch (e) {
+      setErr(String(e))
+    } finally {
+      setBusy(null)
+    }
+  }
 
   useEffect(() => {
     void a.loadAllWork()
@@ -93,6 +129,11 @@ export function WorkList({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-1.5 py-2">
+        {err && (
+          <div className="mx-1.5 mb-2 rounded border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-[11px] text-err">
+            {err}
+          </div>
+        )}
         {a.allWork.length === 0 ? (
           <div className="px-3 py-8 text-center text-[11.5px] leading-relaxed text-muted">
             Nothing here yet, in any space. Work items come from a feature — a bot&rsquo;s plan makes
@@ -131,13 +172,40 @@ export function WorkList({
                   )}
                 </div>
 
+                {/* A manager proposes a set that makes sense together, so the
+                    answer is one press rather than four. Nothing here can be
+                    started until it is given. */}
+                {f.items.some((i) => i.status === 'proposed') && (
+                  <div className="mb-1 flex items-center gap-2 rounded-lg border border-violet-500/25 bg-violet-500/[0.07] px-2.5 py-1.5">
+                    <span className="min-w-0 flex-1 text-[11px] leading-snug text-dim">
+                      {row?.managed_by ?? 'A manager'} suggests{' '}
+                      {f.items.filter((i) => i.status === 'proposed').length}. Nothing starts until
+                      you say so.
+                    </span>
+                    <button
+                      className="btn-primary shrink-0 px-2 py-0.5 text-[11px]"
+                      disabled={busy === f.feature_id}
+                      onClick={() => void answer(f.project_id, f.feature_id, true)}
+                    >
+                      Agree
+                    </button>
+                    <button
+                      className="btn-ghost shrink-0 px-2 py-0.5 text-[11px]"
+                      disabled={busy === f.feature_id}
+                      onClick={() => void answer(f.project_id, f.feature_id, false)}
+                    >
+                      No
+                    </button>
+                  </div>
+                )}
+
                 {f.items.map((i) => {
                   const by = held.get(i.id)
                   return (
                     <button
                       key={i.id}
                       className="flex w-full items-center gap-2 rounded px-2.5 py-1 text-left hover:bg-hover/40"
-                      disabled={!row}
+                      title={row ? 'Open its thread' : 'Its thread is not on the board yet'}
                       onClick={() => row && onPick(key(row))}
                     >
                       <span
@@ -150,7 +218,11 @@ export function WorkList({
                       >
                         {i.title}
                       </span>
-                      {by ? (
+                      {i.status === 'proposed' ? (
+                        <span className="shrink-0 rounded-full bg-violet-500/15 px-1.5 text-[9.5px] font-semibold text-viol">
+                          needs your yes
+                        </span>
+                      ) : by ? (
                         <span className="shrink-0 rounded-full bg-emerald-500/15 px-1.5 text-[9.5px] font-semibold text-ok">
                           {speakers(by)}
                         </span>

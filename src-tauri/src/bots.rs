@@ -1811,6 +1811,69 @@ pub fn propose_plan(conn: &Connection, bot: &Bot) -> Result<Vec<String>, String>
     Ok(added)
 }
 
+/// Agree to what a manager proposed, so it becomes work that can start.
+///
+/// Batch by default, because approving four things one at a time is the
+/// friction this was meant to remove — and because a manager proposes a set
+/// that makes sense together. Passing no ids agrees to all of them.
+///
+/// Only `proposed` items move. Anything already claimed or done is left
+/// exactly as it is, so pressing this twice cannot un-finish something.
+#[tauri::command(async)]
+pub fn work_agree(
+    db: tauri::State<Db>,
+    node_id: i64,
+    feature: String,
+    ids: Vec<String>,
+) -> Result<usize, String> {
+    let conn = db.0.lock().unwrap();
+    let node = db::node_by_id(&conn, node_id).map_err(|_| "that space is gone".to_string())?;
+    let dir = dir_of(&conn, &node).ok_or("that space has no folder in the vault")?;
+    let deck = crate::aiw::deck::Deck::new(&dir);
+    let mut work = deck.work(&feature).map_err(|e| e.to_string())?;
+    let mut n = 0;
+    for item in work.meta.items.iter_mut() {
+        if item.status != PROPOSED {
+            continue;
+        }
+        if !ids.is_empty() && !ids.iter().any(|x| x == &item.id) {
+            continue;
+        }
+        item.status = "unclaimed".into();
+        n += 1;
+    }
+    if n > 0 {
+        deck.save_work(&feature, &work.meta)
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(n)
+}
+
+/// Say no to what a manager proposed. It drops off the plan entirely.
+#[tauri::command(async)]
+pub fn work_decline(
+    db: tauri::State<Db>,
+    node_id: i64,
+    feature: String,
+    ids: Vec<String>,
+) -> Result<usize, String> {
+    let conn = db.0.lock().unwrap();
+    let node = db::node_by_id(&conn, node_id).map_err(|_| "that space is gone".to_string())?;
+    let dir = dir_of(&conn, &node).ok_or("that space has no folder in the vault")?;
+    let deck = crate::aiw::deck::Deck::new(&dir);
+    let mut work = deck.work(&feature).map_err(|e| e.to_string())?;
+    let before = work.meta.items.len();
+    work.meta
+        .items
+        .retain(|i| i.status != PROPOSED || (!ids.is_empty() && !ids.iter().any(|x| x == &i.id)));
+    let n = before - work.meta.items.len();
+    if n > 0 {
+        deck.save_work(&feature, &work.meta)
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(n)
+}
+
 pub fn empty_plan_line(conn: &Connection, bot: &Bot) -> Option<String> {
     if bot.node_id == 0 || has_plan(conn, bot) {
         return None;

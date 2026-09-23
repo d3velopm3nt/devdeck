@@ -1722,6 +1722,95 @@ pub fn has_plan(conn: &Connection, bot: &Bot) -> bool {
 
 /// The wake of a manager with nothing on its plan: not a failure, and not
 /// silence. It says what it would start with, to add on its Plan tab.
+/// A step a manager worked out but nobody has agreed to yet.
+///
+/// Deliberately not `unclaimed`: only unclaimed work can be handed to a
+/// worker, so a proposal cannot start anything until a person says yes. The
+/// manager does the thinking; you do the agreeing.
+pub const PROPOSED: &str = "proposed";
+
+/// Write what a manager proposes onto its plan, as proposals.
+///
+/// This is the step that was missing, and it is why every plan in a real
+/// profile was empty. The manager already worked out what should be done —
+/// that is `plan_proposal`, and it has been right every morning for weeks —
+/// and then the wake only *said* it, in a thread, ending with "add them on
+/// its Plan tab". So the manager did the thinking and asked you to do the
+/// typing, and nobody ever did.
+pub fn propose_plan(conn: &Connection, bot: &Bot) -> Result<Vec<String>, String> {
+    let steps = plan_proposal(conn, bot);
+    if steps.is_empty() || bot.node_id == 0 {
+        return Ok(Vec::new());
+    }
+    let node = db::node_by_id(conn, bot.node_id).map_err(|_| "that space is gone".to_string())?;
+    let dir = dir_of(conn, &node).ok_or("that space has no folder in the vault")?;
+    let deck = crate::aiw::deck::Deck::new(&dir);
+
+    // A manager with no feature gets one named after itself, so "who is
+    // accountable for this" stays answerable from the feature alone.
+    let slug = bot
+        .portfolio
+        .iter()
+        .find(|o| o.node_id == bot.node_id)
+        .map(|o| o.feature.clone())
+        .unwrap_or_else(|| bot.handle.clone());
+
+    if deck.feature(&slug).is_err() {
+        let meta = crate::aiw::deck::FeatureMeta {
+            id: slug.clone(),
+            name: format!("{}'s plan", bot.name),
+            owner: bot.handle.clone(),
+            status: "planned".into(),
+            areas: Vec::new(),
+            goal: Some(bot.goal.clone()).filter(|g| !g.trim().is_empty()),
+            updated: Some(chrono::Local::now().format("%Y-%m-%d").to_string()),
+        };
+        deck.write_doc_at(
+            &deck.feature_md(&slug),
+            &crate::aiw::deck::Doc {
+                meta,
+                body: format!(
+                    "What {} is accountable for. It proposes the work; you agree to it.\n",
+                    bot.name
+                ),
+            },
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    let mut work = deck.work(&slug).map_err(|e| e.to_string())?;
+    let mut added = Vec::new();
+    for title in steps {
+        // Waking again must not say the same thing twice.
+        if work
+            .meta
+            .items
+            .iter()
+            .any(|i| i.title.eq_ignore_ascii_case(title.trim()))
+        {
+            continue;
+        }
+        work.meta.items.push(crate::aiw::deck::WorkItem {
+            id: format!(
+                "w{:02}-{}",
+                work.meta.items.len() + 1,
+                crate::aiw::deck::slugify(&title)
+            ),
+            title: title.trim().to_string(),
+            status: PROPOSED.into(),
+            assignee: None,
+            areas: Vec::new(),
+            due: None,
+        });
+        added.push(title);
+    }
+    if !added.is_empty() {
+        deck.save_work(&slug, &work.meta)
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(added)
+}
+
 pub fn empty_plan_line(conn: &Connection, bot: &Bot) -> Option<String> {
     if bot.node_id == 0 || has_plan(conn, bot) {
         return None;

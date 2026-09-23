@@ -1555,6 +1555,157 @@ fn describe_destination(conn: &Connection, f: &LearnFact) -> String {
 /// repository and differ for every project, and the wrong one writes knowledge
 /// into somebody's repository. That mistake has been made in this codebase
 /// before and is why there are two functions.
+/// Which subject a fact belongs under, and the folder that subject lives in.
+///
+/// A fact is about somebody, and the somebody is nearly always the
+/// organisation whose mail it came from — `angloamerican.com` is Angloamerican,
+/// which is exactly how the organisation files were named when Learn first
+/// wrote them.
+///
+/// This replaces making the *fact* the file. That named a file by truncating
+/// its own sentence to sixty characters, so everything known about one client
+/// ended up in five files and none of them could be read from its own name.
+fn subject_of(conn: &Connection, node_id: i64, f: &LearnFact) -> (String, String) {
+    let email: String = if f.contact_id > 0 {
+        conn.query_row(
+            "SELECT email FROM mail_contacts WHERE id = ?1",
+            params![f.contact_id],
+            |r| r.get(0),
+        )
+        .unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let domain = email.rsplit('@').next().unwrap_or("").to_ascii_lowercase();
+    // A person writing from gmail is a person, not a company called Gmail.
+    const PERSONAL: [&str; 8] = [
+        "gmail.com",
+        "outlook.com",
+        "hotmail.com",
+        "yahoo.com",
+        "icloud.com",
+        "me.com",
+        "proton.me",
+        "protonmail.com",
+    ];
+    let slug = if domain.is_empty() || PERSONAL.contains(&domain.as_str()) {
+        let name: String = if f.contact_id > 0 {
+            conn.query_row(
+                "SELECT name FROM mail_contacts WHERE id = ?1",
+                params![f.contact_id],
+                |r| r.get(0),
+            )
+            .unwrap_or_default()
+        } else {
+            String::new()
+        };
+        if name.trim().is_empty() {
+            return ("topics".into(), "unfiled".into());
+        }
+        return ("people".into(), slug(&name));
+    } else {
+        slug(domain.rsplit('.').nth(1).unwrap_or(&domain))
+    };
+    (folder_for(conn, node_id, &slug), slug)
+}
+
+/// Where a new subject goes, asked of the vault rather than guessed.
+///
+/// If a file for it already exists, that answers it. Otherwise the business's
+/// own folders do: Innotrack keeps Clients and Suppliers, and Fedex is already
+/// a folder under one of them. Only when neither knows does it land in topics,
+/// which is a visible "somebody decide" rather than a wrong filing.
+fn folder_for(conn: &Connection, node_id: i64, slug: &str) -> String {
+    if let Ok(deck) = thing_deck(conn, node_id) {
+        for p in deck.knowledge_files() {
+            if p.file_stem().and_then(|s| s.to_str()) == Some(slug) {
+                if let Some(dir) = p
+                    .parent()
+                    .and_then(|d| d.file_name())
+                    .and_then(|d| d.to_str())
+                {
+                    if dir != "knowledge" {
+                        return dir.to_string();
+                    }
+                }
+            }
+        }
+    }
+    let Ok(node) = crate::db::node_by_id(conn, node_id) else {
+        return "topics".into();
+    };
+    let root = node.parent_id.unwrap_or(node.id);
+    for n in crate::db::nodes_on(conn).unwrap_or_default() {
+        if crate::managers::handle_from(&n.name) != slug {
+            continue;
+        }
+        if let Some(parent) = n
+            .parent_id
+            .and_then(|p| crate::db::node_by_id(conn, p).ok())
+        {
+            if parent.id != root && parent.parent_id.is_some() || parent.parent_id.is_some() {
+                return parent.name.to_ascii_lowercase();
+            }
+        }
+    }
+    "topics".into()
+}
+
+/// Put one fact into its subject's file, newest first.
+///
+/// The same shape the whole base uses: a dated line saying where it came from,
+/// under `## What we know`. Appending rather than replacing is the point — a
+/// subject accumulates, and the file is the accumulation.
+fn add_to_subject(
+    deck: &super::deck::Deck,
+    folder: &str,
+    slug: &str,
+    f: &LearnFact,
+) -> Result<std::path::PathBuf, String> {
+    let dir = deck.knowledge_dir().join(folder);
+    std::fs::create_dir_all(&dir).map_err(|e| format!("could not open {}: {e}", dir.display()))?;
+    let path = dir.join(format!("{slug}.md"));
+    let when = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let whence = if f.source.trim().is_empty() {
+        "from your mail"
+    } else {
+        f.source.trim()
+    };
+    let line = format!(
+        "- {when} · mail — {}\n  <sub>{whence}</sub>\n",
+        f.text.trim()
+    );
+
+    let existing = std::fs::read_to_string(&path).unwrap_or_default();
+    let next = if existing.trim().is_empty() {
+        format!(
+            "---\nid: {slug}\nkind: {folder}\nupdated: {when}\n---\n\n# {}\n\n## What we know\n\n{line}",
+            slug.replace('-', " "),
+        )
+    } else if let Some(at) = existing.find("## What we know") {
+        let cut = existing[at..]
+            .find("\n\n")
+            .map(|i| at + i + 2)
+            .unwrap_or(existing.len());
+        format!("{}{line}{}", &existing[..cut], &existing[cut..])
+    } else {
+        format!("{}\n\n## What we know\n\n{line}", existing.trim_end())
+    };
+    std::fs::write(&path, next).map_err(|e| format!("could not write it: {e}"))?;
+    Ok(path)
+}
+
+fn thing_deck(conn: &Connection, node_id: i64) -> Result<super::deck::Deck, String> {
+    if node_id <= 0 {
+        return Err("no space chosen for it".into());
+    }
+    let node =
+        crate::db::node_by_id(conn, node_id).map_err(|_| "that space is gone".to_string())?;
+    let dir = crate::db::node_deck_dir(conn, &node)
+        .ok_or_else(|| "that space has no folder in the vault".to_string())?;
+    Ok(super::deck::Deck::new(dir))
+}
+
 fn thing_dir(conn: &Connection, node_id: i64) -> Result<std::path::PathBuf, String> {
     if node_id <= 0 {
         return Err("no space chosen for it".into());
@@ -2463,23 +2614,15 @@ pub fn keep(conn: &Connection, id: i64, text: &str, node_id: i64) -> Result<Stri
     }
 
     let written = if goes_to_a_space(&f.kind, f.node_id) {
-        let dir = thing_dir(conn, f.node_id)?;
-        std::fs::create_dir_all(&dir)
-            .map_err(|e| format!("could not open {}: {e}", dir.display()))?;
-        let slug = slug(&f.text);
-        let path = dir.join(format!("{slug}.md"));
-        let body = format!(
-            "---\nid: {slug}\nsource: mail\nlearned_at: {}\n---\n\n{}\n\n> {}\n",
-            chrono::Local::now().format("%Y-%m-%d"),
-            f.text,
-            if f.source.trim().is_empty() {
-                "from your mail"
-            } else {
-                f.source.trim()
-            },
-        );
-        std::fs::write(&path, body).map_err(|e| format!("could not write it: {e}"))?;
-        path.to_string_lossy().to_string()
+        // Into the subject it is about, rather than a file of its own. What
+        // used to happen here is why one client's story ended up spread over
+        // five files, each named after the first sixty characters of its own
+        // sentence.
+        let deck = thing_deck(conn, f.node_id)?;
+        let (folder, slug) = subject_of(conn, f.node_id, &f);
+        add_to_subject(&deck, &folder, &slug, &f)?
+            .to_string_lossy()
+            .to_string()
     } else {
         // Personal, and the store refuses to open inside a repository, so this
         // path cannot end in a commit even if a node were pointed at one.
@@ -3572,6 +3715,91 @@ pub fn learn_review(db: tauri::State<Db>, run_id: i64) -> Result<Vec<LearnCard>,
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn fact(text: &str, source: &str) -> LearnFact {
+        LearnFact {
+            text: text.into(),
+            source: source.into(),
+            ..Default::default()
+        }
+    }
+
+    /// A subject accumulates. Two facts about Fedex are one file with two
+    /// lines in it, not two files named after their own sentences.
+    #[test]
+    fn a_second_fact_joins_the_first_instead_of_starting_another_file() {
+        let tmp = std::env::temp_dir().join(format!("devdeck-subj-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let deck = super::super::deck::Deck::new(&tmp);
+
+        let first = add_to_subject(
+            &deck,
+            "suppliers",
+            "fedex",
+            &fact("The SAD 500 named the wrong importer.", "FedEx thread"),
+        )
+        .unwrap();
+        add_to_subject(
+            &deck,
+            "suppliers",
+            "fedex",
+            &fact("Customs says the VAT number does not exist.", "VOC email"),
+        )
+        .unwrap();
+
+        let files = deck.knowledge_files();
+        assert_eq!(files.len(), 1, "one subject, one file: {files:?}");
+        let text = std::fs::read_to_string(&first).unwrap();
+        assert!(text.contains("The SAD 500 named the wrong importer."));
+        assert!(text.contains("Customs says the VAT number does not exist."));
+        assert_eq!(
+            text.matches("## What we know").count(),
+            1,
+            "one section, not two"
+        );
+        // Newest first, so the file opens on what just happened.
+        let newer = text.find("Customs says").unwrap();
+        let older = text.find("The SAD 500").unwrap();
+        assert!(newer < older, "the newer fact should be on top:\n{text}");
+        assert!(
+            text.contains("<sub>VOC email</sub>"),
+            "it keeps where it came from"
+        );
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// A subject file somebody already wrote keeps its own words.
+    #[test]
+    fn an_existing_subject_keeps_its_summary_and_its_people() {
+        let tmp = std::env::temp_dir().join(format!("devdeck-keep-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let dir = tmp.join("knowledge").join("clients");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("angloamerican.md"),
+            "---\nid: angloamerican\nkind: client\n---\n\n# Angloamerican\n\nA client of Innotrack.\n\n## People there\n\n- Onkutlwile Khutswane\n",
+        )
+        .unwrap();
+        let deck = super::super::deck::Deck::new(&tmp);
+
+        add_to_subject(
+            &deck,
+            "clients",
+            "angloamerican",
+            &fact("They are down to one working printer.", "her email"),
+        )
+        .unwrap();
+
+        let text = std::fs::read_to_string(dir.join("angloamerican.md")).unwrap();
+        assert!(
+            text.contains("A client of Innotrack."),
+            "the summary survived"
+        );
+        assert!(text.contains("Onkutlwile Khutswane"), "the people survived");
+        assert!(text.contains("They are down to one working printer."));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 
     fn mem() -> Connection {
         let c = Connection::open_in_memory().unwrap();

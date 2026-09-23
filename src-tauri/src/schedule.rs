@@ -494,6 +494,35 @@ fn run_one(
                 None
             };
             if let (Some(line), Some(b)) = (empty, bot.as_ref()) {
+                // Written onto the plan, not just said. The manager had been
+                // working out the right answer every morning and ending with
+                // "add them on its Plan tab" — so the thinking was done and
+                // the typing was yours, and nobody ever did it. They land as
+                // proposals, which nothing can start, so agreeing is still
+                // entirely your move.
+                let wrote = app.try_state::<Db>().and_then(|db| {
+                    let conn = db.0.lock().ok()?;
+                    crate::bots::propose_plan(&conn, b).ok()
+                });
+                let line = match wrote.as_deref() {
+                    Some([]) | None => line,
+                    Some(added) => format!(
+                        "{} put {} thing{} on its plan for you to agree to:
+
+{}",
+                        b.name,
+                        added.len(),
+                        if added.len() == 1 { "" } else { "s" },
+                        added
+                            .iter()
+                            .map(|t| format!("- {t}"))
+                            .collect::<Vec<_>>()
+                            .join(
+                                "
+"
+                            )
+                    ),
+                };
                 if s.last_note.trim() != line.trim() {
                     crate::bots::thread_post(app, b, &line);
                 }

@@ -472,13 +472,11 @@ fn knowledge_titles(dir: &Path) -> Vec<String> {
     let mut out: Vec<String> = crate::aiw::deck::Deck::new(dir)
         .knowledge_files()
         .into_iter()
-        .filter_map(|p| {
-            Some(
-                p.file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or_default()
-                    .replace('-', " "),
-            )
+        .map(|p| {
+            p.file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or_default()
+                .replace('-', " ")
         })
         .collect();
     out.sort();
@@ -1632,6 +1630,30 @@ mod setup_check {
                 b.portfolio.len(),
                 b.worker
             );
+        }
+    }
+
+    /// What a manager would put on an empty plan, without writing it.
+    ///     cargo test --lib workers::setup_check::what_would_be_proposed -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn what_would_be_proposed() {
+        let db = std::path::Path::new(&std::env::var("APPDATA").unwrap_or_default())
+            .join("devdeck")
+            .join("devdeck.sqlite");
+        let conn = rusqlite::Connection::open(&db).expect("open the database");
+        for bot in crate::bots::all_bots(&conn) {
+            let has = crate::bots::has_plan(&conn, &bot);
+            let steps = crate::bots::plan_proposal(&conn, &bot);
+            println!(
+                "@{:22} plan={} proposes {}",
+                bot.handle,
+                if has { "yes" } else { "EMPTY" },
+                steps.len()
+            );
+            for s in &steps {
+                println!("      - {s}");
+            }
         }
     }
 

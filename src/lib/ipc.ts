@@ -2265,3 +2265,24 @@ export const workAgree = (nodeId: number, feature: string, ids: string[] = []) =
 /** Say no to a proposal. It drops off the plan. */
 export const workDecline = (nodeId: number, feature: string, ids: string[] = []) =>
   invoke<number>('work_decline', { nodeId, feature, ids })
+
+/** One kept event, in the same shape the live bus sends. */
+export interface KeptEvent {
+  id: string
+  seq: number
+  type: string
+  category: string
+  timestamp: string
+  /** Which run of the app saw it. */
+  session: string
+  project_id?: string
+  feature_id?: string
+  agent_id?: string
+  payload: Record<string, unknown>
+}
+/** What has happened, newest first. `thisSession` is the only division of
+ *  history anyone asks for: since I opened this, or ever. */
+export const eventsHistory = (thisSession: boolean, projectId?: string, limit?: number) =>
+  invoke<KeptEvent[]>('events_history', { thisSession, projectId, limit })
+/** [all, this session] */
+export const eventsCount = () => invoke<[number, number]>('events_count')

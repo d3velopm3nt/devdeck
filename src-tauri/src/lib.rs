@@ -36,6 +36,7 @@ mod community_index;
 mod conn;
 mod creds;
 mod db;
+mod eventlog;
 mod events;
 mod files;
 mod focus;
@@ -830,6 +831,12 @@ pub fn run() {
             // A run is a child of this process, so one still marked running
             // is one that did not survive the last stop. Said plainly at
             // startup rather than left spinning on the page for ever.
+            if let Some(db) = app.try_state::<db::Db>() {
+                if let Ok(conn) = db.0.lock() {
+                    let _ = eventlog::trim(&conn);
+                }
+            }
+
             {
                 let h = app.handle().clone();
                 let said = match workers::close_orphans() {
@@ -883,6 +890,13 @@ pub fn run() {
                 .bus
                 .attach_sink(move |ev| {
                     let _ = emit_handle.emit("aiw:event", ev.clone());
+                    // And kept, so the answer to "what did it do on Tuesday"
+                    // is not "the app has been restarted since".
+                    if let Some(db) = emit_handle.try_state::<db::Db>() {
+                        if let Ok(conn) = db.0.lock() {
+                            eventlog::keep(&conn, ev);
+                        }
+                    }
                     // A routine can be a rhythm or a thing that happens.
                     // Tests failing on master is the example everyone gives,
                     // and it is not a time of day.
@@ -1039,6 +1053,8 @@ pub fn run() {
             bots::bot_save,
             bots::bot_delete,
             bots::bot_set_worker,
+            eventlog::events_history,
+            eventlog::events_count,
             bots::work_agree,
             bots::work_decline,
             bots::bot_create,

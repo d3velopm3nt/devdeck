@@ -114,10 +114,13 @@ runs in progress, proposals waiting on you, and managers that could not act.
 
 ## 5. Known faults, still open
 
-- **Events are not being kept for recent runs.** Two runs finished tonight,
-  the room filled, the plan moved, and the table did not grow. `keep` now says
-  when a write fails, which is what will name it — but the cause is not yet
-  known. **This is the first thing to look at.**
+- ~~Events are not being kept for recent runs.~~ **Found and fixed.** The
+  event id was a process-local counter starting at 1 every launch, so
+  `ev_00000007` named one event today and a different one tomorrow; the log
+  stores by id with `INSERT OR IGNORE`, so every event of a later run whose
+  number an earlier run had used was discarded without a word. Three silences
+  in a row hid it — the sink dropped quietly, `keep` swallowed its error, and
+  `IGNORE` is quiet by design. Ids now carry the run's start time.
 - **A live run blocks a rebuild.** The asker is `devdeck.exe --ask-server`, so
   while a worker runs, the binary is held open.
 - **Editing `src-tauri` kills a running worker**, because `tauri dev` restarts

@@ -199,11 +199,40 @@ and restarts the app, which orphans the run. I did this to myself twice
 tonight. It is the supervisor problem from the other side, and it deserves a
 guard.
 
+**A repository with no git identity is found the expensive way.** The goal
+tracker had none, so a worker wrote the code, ran the tests, was allowed to
+commit, and the commit failed on `git: no author identity`. Mason diagnosed it
+exactly — *"it failed because git has no author identity configured"* — but
+only after a run and a bill. DevDeck vouches for the worktree now; it should
+also refuse to hand out branch work in a repository that cannot be committed
+to, before anything is spent.
+
 **My stand-in was stricter than you would have been.** Its first version
 refused `git ls-files; git log; git status; git branch` because it read the
 whole line and matched nothing, when every part of it is a read. Fixed by
 judging each part, but worth saying: a test whose stand-in is unfair measures
 the stand-in.
+
+---
+
+## Found after the runs, from the evidence they left
+
+**Events had stopped being kept, and nothing said so.** Two runs finished, the
+rooms filled, the plans moved, and the table did not grow. The ids gave it
+away:
+
+    s1790213276054  n=353  first=ev_00000003  last=ev_00000364
+    s1790216942339  n=2    first=ev_00000001  last=ev_00000002
+    s1790288463371  n=1    first=ev_00000006  last=ev_00000006
+
+Three runs of the app, each numbering from 1 again, each landing only in the
+gaps the first happened to leave. The id was a process-local counter, and the
+log stores by id with `INSERT OR IGNORE`.
+
+Worth saying why it took so long: **three silences in a row.** The sink dropped
+an event without a word; `keep` swallowed the write error; and `IGNORE` is
+quiet by design. Two of those are loud now, and the third is correct once ids
+are unique — which they are, carrying the run's start time.
 
 ---
 

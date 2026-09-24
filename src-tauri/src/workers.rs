@@ -580,9 +580,11 @@ Not verified and not finished. Kept so the branch could be released."
 
     release_worktree(repo, at);
     if dirty {
-        format!("What it had written was committed to {branch} so the branch could be used again.")
+        format!(
+            "What it had not committed was committed to {branch}, so the branch could be used again."
+        )
     } else {
-        format!("It had written nothing, so {branch} was released.")
+        format!("Nothing was left uncommitted, so {branch} was released.")
     }
 }
 
@@ -1535,6 +1537,24 @@ Answer here. If nobody does within {} seconds it stops and keeps the question.",
         let _ = write_run(&live);
         leashes().lock().unwrap().remove(&live.id);
 
+        // Put the branch back, whatever happened.
+        //
+        // A finished run used to keep its worktree for ever, so its item could
+        // never be handed out again: the goal tracker's `w1` was committed,
+        // released by the plan, and then refused with "already used by
+        // worktree" on the very next wake. Everything of value is on the
+        // branch by now — anything uncommitted is committed first, and the
+        // worktree is only kept when that fails.
+        let freed = salvage_worktree(&live);
+        if !freed.is_empty() {
+            live.verdict = format!(
+                "{}
+
+{freed}",
+                live.verdict.trim()
+            );
+        }
+
         // A run that did not finish well leaves the item where somebody else
         // can pick it up, rather than marking it done or leaving it claimed by
         // a worker that has stopped. "done" here means the run ended cleanly,
@@ -2123,7 +2143,10 @@ mod tests {
             !holds(&repo).contains("wt"),
             "the worktree was not released"
         );
-        assert!(said.contains("nothing"), "said: {said}");
+        assert!(
+            said.contains("Nothing was left uncommitted"),
+            "said: {said}"
+        );
         let _ = std::fs::remove_dir_all(at.parent().unwrap());
     }
 

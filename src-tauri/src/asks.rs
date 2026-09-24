@@ -396,8 +396,11 @@ mod tests {
             std::thread::spawn(move || ask_and_wait(&r, &ask, std::time::Duration::from_secs(5)));
 
         // The app's side: wait for it to show up, then say yes.
+        // Patient on purpose: this runs alongside six hundred other tests, and
+        // four seconds of waiting was enough on an idle machine and not enough
+        // on a busy one. A test that fails under load teaches you to ignore it.
         let mut seen = Vec::new();
-        for _ in 0..40 {
+        for _ in 0..200 {
             seen = unanswered(&run);
             if !seen.is_empty() {
                 break;

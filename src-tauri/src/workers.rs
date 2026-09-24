@@ -158,9 +158,21 @@ pub struct Run {
     pub feature: String,
     #[serde(default)]
     pub item: String,
+    /// Where the process actually ran. For a branch worker this is its
+    /// worktree; `folder` stays the repository, because that is where the
+    /// git commands that clean up after it have to be run from. Two fields
+    /// because they are two different places, and one field pretending to be
+    /// both is what put the wrong path in the worker's own brief.
+    #[serde(default)]
+    pub at: String,
     pub title: String,
     pub intent: String,
-    /// running | done | stopped | failed | kept | discarded
+    /// running | done | blocked | stopped | failed | interrupted | kept | discarded
+    ///
+    /// `blocked` is its own state on purpose: the run ended because something
+    /// it reached for was refused. That is neither success nor a fault in the
+    /// worker, and it is the one state where answering a question makes the
+    /// work continue rather than start again.
     pub status: String,
     pub started_at: String,
     #[serde(default)]
@@ -786,7 +798,15 @@ pub fn plan(
 /// Assembled here rather than left to the runner because this is the only
 /// place that knows all of it: who it is, the job, where it may write, what it
 /// must never do, and what the space already knows.
-pub fn brief_text(p: &Plan, w: &Worker, knowledge: &str) -> String {
+/// `at` is where the process will actually run, which for a branch worker is
+/// its worktree and **not** `p.folder`. Those were the same sentence for a
+/// while: the brief told the worker everything it wrote went in the live
+/// repository, while its working directory was the worktree. Nothing caught
+/// it, because a relative path landed in the right place anyway — but an
+/// absolute one built from that sentence would have written straight into the
+/// working tree the app itself was being built in, which is how a worker
+/// killed its own supervisor once already.
+pub fn brief_text(p: &Plan, w: &Worker, at: &Path, knowledge: &str) -> String {
     let mut s = String::new();
     if let Some(b) = &p.brief {
         s.push_str(&format!(
@@ -806,8 +826,8 @@ pub fn brief_text(p: &Plan, w: &Worker, knowledge: &str) -> String {
     s.push_str(&format!("# The job\n\n{}\n\n{}\n\n", p.title, p.intent));
     s.push_str("# Where you work\n\n");
     s.push_str(&format!(
-        "Everything you write goes in this folder: {}\n",
-        p.folder
+        "You are already in the folder you work in: {}\n\nEverything you write goes there, by a path relative to it. Never an absolute path, and never outside it.\n",
+        at.display()
     ));
     if p.is_repo {
         s.push_str(&format!(
@@ -1179,7 +1199,7 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
     };
     let laid = lay_out_skills(&cwd, &w.meta.skills)? + lay_out_kit(&cwd, &p.kit)?;
     keep_ours_out(&cwd);
-    let brief = brief_text(&p, &w, &knowledge_text(&deck_dir));
+    let brief = brief_text(&p, &w, &cwd, &knowledge_text(&deck_dir));
     // The brief goes in a file, and the command line stays one plain line.
     //
     // Not tidiness: on Windows the CLI is a `.cmd` wrapper, and Rust refuses
@@ -1201,6 +1221,7 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
         space: p.space.clone(),
         feature: p.feature.clone(),
         item: p.item.clone(),
+        at: cwd.to_string_lossy().to_string(),
         title: p.title.clone(),
         intent: p.intent.clone(),
         status: "running".into(),
@@ -1275,7 +1296,8 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
             "summary": run.title,
             "title": run.title,
             "branch": run.branch,
-            "folder": run.folder,
+            // Where it is actually running, not the repository it came from.
+            "folder": run.at,
         }),
     );
 
@@ -1321,16 +1343,36 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
         live.files = written_since(&cwd, started);
         match outcome {
             Ok(o) => {
-                live.ok = o.ok;
                 live.usd = o.cost_usd;
                 live.verdict = o.summary;
+                // A run that was refused something it reached for did not
+                // finish, whatever its own last turn reported. Mason ended a
+                // run "done, ok" on 24 Sep having written three files and run
+                // no check at all, because every shell call was denied and
+                // the CLI still considers its own turn a success. Calling
+                // that done is the failure-honesty rule broken in our own
+                // codebase, so the refusals decide, not the summary.
                 live.status = if leash.pulled() {
                     "stopped".into()
+                } else if o.refused > 0 {
+                    "blocked".into()
                 } else if o.ok {
                     "done".into()
                 } else {
                     "failed".into()
                 };
+                live.ok = live.status == "done";
+                if o.refused > 0 {
+                    live.verdict = format!(
+                        "Stopped short: {} call{} it needed {} refused. What it had written is on the branch, unverified.
+
+{}",
+                        o.refused,
+                        if o.refused == 1 { "" } else { "s" },
+                        if o.refused == 1 { "was" } else { "were" },
+                        live.verdict.trim()
+                    );
+                }
             }
             Err(e) => {
                 live.ok = false;
@@ -1364,6 +1406,7 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
                 live.worker_name,
                 match live.status.as_str() {
                     "done" => "finished",
+                    "blocked" => "was blocked on",
                     "stopped" => "was stopped on",
                     _ => "could not finish",
                 },
@@ -1710,7 +1753,7 @@ mod tests {
                 ..Default::default()
             })
             .collect();
-        let text = brief_text(&p, &w, "");
+        let text = brief_text(&p, &w, Path::new("/tmp/wt"), "");
         assert!(text.contains("68 briefs in .claude/agents"));
         assert!(text.contains("affaan-m/ECC:agents"));
         assert!(
@@ -1935,11 +1978,23 @@ mod tests {
         let text = brief_text(
             &plan_for(&["brand-voice"], false),
             &w,
+            Path::new("/tmp/wt"),
             "Fathomline sells subsea inspection.",
         );
         assert!(text.contains("You are Scribe, working for Fathomline"));
         assert!(text.contains("Mark any claim you could not check."));
-        assert!(text.contains("C:/vault/Fathomline/Marketing"));
+        // Where the run will actually be, which is not necessarily the folder
+        // the plan was built from: a branch worker runs in a worktree. The
+        // brief said the plan's folder for a while, so a worker reading it
+        // literally was told to write into the live working tree.
+        assert!(
+            text.contains("/tmp/wt"),
+            "the brief names where the run will actually be"
+        );
+        assert!(
+            text.contains("relative to it"),
+            "and says paths are relative to it"
+        );
         assert!(text.contains("brand-voice"));
         assert!(text.contains("Fathomline sells subsea inspection."));
         for n in NEVER {
@@ -1960,7 +2015,7 @@ mod tests {
             },
             body: String::new(),
         };
-        let text = brief_text(&plan_for(&[], true), &w, "");
+        let text = brief_text(&plan_for(&[], true), &w, Path::new("/tmp/wt"), "");
         assert!(text.contains("You are on the branch devdeck/landing-0921"));
     }
 

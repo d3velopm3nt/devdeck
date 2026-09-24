@@ -650,7 +650,7 @@ fn run_one(
 /// Narrow on purpose. A routine that woke on `tool.executed` would fire a
 /// hundred times an hour and wake more agents, which would fire it again — a
 /// broad listener is not a feature, it is a loop with a nice name.
-const TRIGGERS: &[&str] = &[
+pub const TRIGGERS: &[&str] = &[
     "test.failed",
     "test.completed",
     "git.commit.created",

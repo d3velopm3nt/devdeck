@@ -837,6 +837,10 @@ pub fn run() {
                 }
             }
 
+            // The log's own connection, on its own thread. Started before the
+            // sink is attached, so the first event of the run is kept too.
+            eventlog::start_writer();
+
             {
                 let h = app.handle().clone();
                 let said = match workers::close_orphans() {
@@ -890,21 +894,28 @@ pub fn run() {
                 .bus
                 .attach_sink(move |ev| {
                     let _ = emit_handle.emit("aiw:event", ev.clone());
+
+                    // Nothing below this line may touch the database on this
+                    // thread. The sink runs wherever the event was published,
+                    // and a publisher is usually a command already holding the
+                    // database lock — so a lock here is a deadlock, and a
+                    // `try_lock` here is a routine that silently never fires.
+                    //
                     // And kept, so the answer to "what did it do on Tuesday"
                     // is not "the app has been restarted since".
-                    if let Some(db) = emit_handle.try_state::<db::Db>() {
-                        if let Ok(conn) = db.0.lock() {
-                            eventlog::keep(&conn, ev);
-                        }
-                    }
+                    eventlog::post(ev);
+
                     // A routine can be a rhythm or a thing that happens.
                     // Tests failing on master is the example everyone gives,
                     // and it is not a time of day.
-                    crate::schedule::on_event(
-                        &emit_handle,
-                        &ev.kind,
-                        ev.scope.project_id.as_deref(),
-                    );
+                    if crate::schedule::TRIGGERS.contains(&ev.kind.as_str()) {
+                        let h = emit_handle.clone();
+                        let kind = ev.kind.clone();
+                        let project = ev.scope.project_id.clone();
+                        std::thread::spawn(move || {
+                            crate::schedule::on_event(&h, &kind, project.as_deref());
+                        });
+                    }
                 });
 
             monitor::spawn(app.handle().clone());

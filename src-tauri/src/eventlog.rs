@@ -17,6 +17,7 @@
 
 use rusqlite::params;
 use serde::Serialize;
+use std::sync::mpsc::{channel, Sender};
 use std::sync::OnceLock;
 
 use crate::db::{err, Db};
@@ -79,6 +80,60 @@ pub struct Kept {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub agent_id: Option<String>,
     pub payload: serde_json::Value,
+}
+
+/// The log writes on a thread of its own, and that is a correctness rule
+/// rather than a performance one.
+///
+/// `Bus::emit` runs its sink on whichever thread published the event, and
+/// most publishers are Tauri commands that are already holding the database
+/// mutex when they publish. A sink that locks that same mutex therefore
+/// waits for a lock its own thread is holding — `std::sync::Mutex` is not
+/// reentrant — so the command never returns, the window stops responding,
+/// and nothing anywhere reports a fault. Pressing Agree on a proposal did
+/// exactly this.
+///
+/// Asking every future call site to publish outside the lock would be a rule
+/// nobody can see being broken, so the log takes itself off the caller's
+/// thread instead and keeps its own connection. Two connections are safe
+/// here because the database runs in WAL mode.
+static POST: OnceLock<Sender<crate::aiw::events::DomainEvent>> = OnceLock::new();
+
+/// Open the log's own connection and start draining. Called once, at startup.
+pub fn start_writer() {
+    POST.get_or_init(|| {
+        let (tx, rx) = channel::<crate::aiw::events::DomainEvent>();
+        std::thread::spawn(move || {
+            let Ok(conn) = rusqlite::Connection::open(crate::db::db_path()) else {
+                // No history, but the app is otherwise unharmed — which is the
+                // whole point of the log being off to one side.
+                return;
+            };
+            let _ = conn.busy_timeout(std::time::Duration::from_secs(5));
+            let _ = conn.execute_batch(SCHEMA);
+            drain(&conn, rx);
+        });
+        tx
+    });
+}
+
+/// Write everything that arrives until the channel closes. Split out from the
+/// thread so the off-thread path is something a test can actually run.
+fn drain(
+    conn: &rusqlite::Connection,
+    rx: std::sync::mpsc::Receiver<crate::aiw::events::DomainEvent>,
+) {
+    for ev in rx {
+        keep(conn, &ev);
+    }
+}
+
+/// Hand an event to the writer. Never blocks the thing that happened, and
+/// never touches the connection the caller may be holding.
+pub fn post(ev: &crate::aiw::events::DomainEvent) {
+    if let Some(tx) = POST.get() {
+        let _ = tx.send(ev.clone());
+    }
 }
 
 /// Write one down. Never fails loudly: losing an event must not break the
@@ -251,5 +306,39 @@ mod tests {
         assert_eq!(kind, "agent.started");
         assert_eq!(who.as_deref(), Some("Mason"));
         assert!(payload.contains("Mason"));
+    }
+
+    /// The reason the writer exists: an event handed over while the caller
+    /// holds a lock must still be written, by somebody else, without the
+    /// caller waiting. Before this, the sink locked the database on the
+    /// publisher's thread — and every publisher that already held that lock
+    /// froze the app outright.
+    #[test]
+    fn an_event_posted_under_a_lock_is_written_by_another_thread() {
+        let (tx, rx) = channel::<crate::aiw::events::DomainEvent>();
+        let held = std::sync::Arc::new(std::sync::Mutex::new(db()));
+        let writer = {
+            let held = held.clone();
+            std::thread::spawn(move || {
+                let conn = held.lock().unwrap();
+                drain(&conn, rx);
+            })
+        };
+
+        // Wait until the writer owns the lock, then post while it is held.
+        while held.try_lock().is_ok() {
+            std::thread::yield_now();
+        }
+        tx.send(an_event("e3", 1)).unwrap();
+        tx.send(an_event("e4", 2)).unwrap();
+        drop(tx);
+        writer.join().unwrap();
+
+        let n: i64 = held
+            .lock()
+            .unwrap()
+            .query_row("SELECT COUNT(*) FROM events", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 2);
     }
 }

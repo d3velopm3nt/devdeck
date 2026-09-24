@@ -22,6 +22,7 @@
 
 mod activity;
 mod aiw;
+mod asks;
 mod botcatalog;
 mod botmind;
 mod bots;
@@ -572,6 +573,21 @@ fn app_update(app: tauri::AppHandle) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Before anything else: this binary is also the thing a worker's CLI
+    // spawns to ask whether it may do something. It has to answer that on
+    // stdin/stdout without a window, a database or a Tauri runtime, so the
+    // check comes first and the process ends when the pipe closes.
+    //
+    // The app asking itself is why there is no helper to install and nothing
+    // to keep in step with a release: `std::env::current_exe` is always the
+    // build that started the run.
+    let argv: Vec<String> = std::env::args().collect();
+    if let Some(i) = argv.iter().position(|a| a == "--ask-server") {
+        let run = argv.get(i + 1).cloned().unwrap_or_default();
+        asks::serve(&run);
+        return;
+    }
+
     // Open SQLite and read the startup settings *before* building the app, so
     // every piece of state can be handed to `Builder::manage` instead of to
     // `setup`.
@@ -1229,6 +1245,8 @@ pub fn run() {
             installed::machine_take,
             library::library_remove,
             workers::workers_list,
+            workers::worker_asks,
+            workers::worker_answer,
             workers::worker_save,
             workers::worker_delete,
             workers::worker_starters,

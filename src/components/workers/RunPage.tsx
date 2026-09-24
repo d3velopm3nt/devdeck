@@ -24,6 +24,9 @@ export function RunView({ id }: { id: string }) {
   const [note, setNote] = useState('')
   const [err, setErr] = useState('')
   const [tick, setTick] = useState(0)
+  // What it has stopped to ask. A worker sitting on one of these is burning
+  // its clock, so this is the only thing on the page that is urgent.
+  const [asks, setAsks] = useState<ipc.Ask[]>([])
   const bottom = useRef<HTMLDivElement>(null)
 
   const load = useCallback(() => {
@@ -40,6 +43,14 @@ export function RunView({ id }: { id: string }) {
 
   useEffect(load, [load])
 
+  const loadAsks = useCallback(() => {
+    void ipc
+      .workerAsks(id)
+      .then(setAsks)
+      .catch(() => setAsks([]))
+  }, [id])
+  useEffect(loadAsks, [loadAsks])
+
   // Live while it runs: steps as they arrive, and the receipt when it lands.
   useEffect(() => {
     let off: (() => void) | undefined
@@ -53,6 +64,11 @@ export function RunView({ id }: { id: string }) {
           if (e.run.id !== id) return
           setRun(e.run)
           setLive(e.run.steps)
+          setAsks([])
+        },
+        asking: (e) => {
+          if (e.run !== id) return
+          setAsks((cur) => (cur.some((a) => a.id === e.ask.id) ? cur : [...cur, e.ask]))
         },
       })
       .then((f) => (off = f))
@@ -91,6 +107,27 @@ export function RunView({ id }: { id: string }) {
   const tone =
     running ? 'text-indigo-400' : run.status === 'kept' ? 'text-ok' : run.ok ? 'text-ok' : 'text-warn'
 
+  // What it is asking for, in the words it used. Never a paraphrase of ours:
+  // approving a summary of a command is not approving the command.
+  const asked = (a: ipc.Ask): string => {
+    for (const k of ['command', 'file_path', 'path', 'url', 'pattern', 'prompt']) {
+      const v = a.input?.[k]
+      if (typeof v === 'string' && v.trim()) return v.trim()
+    }
+    return JSON.stringify(a.input ?? {})
+  }
+
+  const answer = async (a: ipc.Ask, allow: boolean) => {
+    setErr('')
+    try {
+      await ipc.workerAnswer(run.id, a.id, allow, allow ? '' : note)
+      setAsks((cur) => cur.filter((x) => x.id !== a.id))
+      setNote('')
+    } catch (e) {
+      setErr(String(e))
+    }
+  }
+
   const decide = async (what: 'keep' | 'discard') => {
     setErr('')
     try {
@@ -102,6 +139,41 @@ export function RunView({ id }: { id: string }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-page">
+      {/* Above everything, because the run is stopped until this is answered
+          and its minutes and its budget are still running down. */}
+      {asks.map((a) => (
+        <div
+          key={a.id}
+          className="flex shrink-0 items-start gap-3 border-b border-line bg-amber-500/[0.06] px-5 py-3"
+        >
+          <Icon name="alert" size={15} className="mt-px shrink-0 text-warn" />
+          <div className="min-w-0 flex-1">
+            <div className="text-[12.5px] font-semibold text-ink">
+              {run.worker_name} is asking to use {a.tool}
+            </div>
+            <div className="mt-1 overflow-x-auto rounded border border-line2 bg-raise px-2.5 py-1.5 font-mono text-[11.5px] text-body">
+              {asked(a)}
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button className="btn btn-primary text-[12px]" onClick={() => void answer(a, true)}>
+                Yes
+              </button>
+              <button className="btn text-[12px]" onClick={() => void answer(a, false)}>
+                No
+              </button>
+              <input
+                className="input h-7 min-w-[220px] flex-1 px-2 py-0 text-[12px]"
+                placeholder="Why not — it is told this, in your words"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+              />
+            </div>
+            <div className="mt-1.5 text-[10.5px] text-faint">
+              It waits 90 seconds. After that it stops and the question keeps waiting here.
+            </div>
+          </div>
+        </div>
+      ))}
       <div className="flex shrink-0 items-center gap-3 border-b border-line px-5 py-3">
         <Icon
           name={running ? 'spinner' : run.status === 'kept' ? 'check' : run.ok ? 'check' : 'alert'}

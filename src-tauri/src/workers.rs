@@ -1259,13 +1259,35 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
         .unwrap()
         .insert(run.id.clone(), leash.clone());
 
+    // Somewhere to send a question. Written into the worktree beside the
+    // brief, so it travels with the run and dies with it. If it cannot be
+    // written the run still starts — with nobody to ask, which is the old
+    // behaviour and is now said out loud rather than assumed.
+    let (ask_config, ask_tool) = match crate::asks::write_config(&cwd, &run.id) {
+        Ok(path) => (path.to_string_lossy().to_string(), crate::asks::tool_id()),
+        Err(e) => {
+            crate::services::push_log(
+                app,
+                crate::services::RUNNER_LOG_ID,
+                "workers",
+                "stderr",
+                format!(
+                    "{} starts with nobody to ask: {e}. Anything needing permission will be refused.",
+                    w.meta.name
+                ),
+            );
+            (String::new(), String::new())
+        }
+    };
+
     let spec = RunnerSpec {
         program: String::new(),
         model: w.meta.model.clone(),
         permission_mode: String::new(),
-        unattended: true,
         tools: tools_for(&w.meta),
         sealed: true,
+        ask_config,
+        ask_tool,
     };
     // The plan first, so a screen reading the plan and a screen reading the
     // bus never disagree about whether this item is being worked on.
@@ -1306,6 +1328,9 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
     let started = std::time::SystemTime::now();
     std::thread::spawn(move || {
         let mut last_write = std::time::Instant::now();
+        // Questions already put to the room, so a question is asked once
+        // however many times the loop comes round while it waits.
+        let mut announced: std::collections::HashSet<String> = std::collections::HashSet::new();
         let outcome = crate::aiw::cli_agent::run_watched(
             &spec,
             &cwd,
@@ -1333,6 +1358,52 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
                     live.files = written_since(&cwd, started);
                     let _ = write_run(&live);
                     last_write = std::time::Instant::now();
+
+                    // And anything it has stopped to ask. The worker is
+                    // sitting on that question right now with its clock
+                    // running, so this is the one thing in the loop that is
+                    // urgent rather than tidy.
+                    for ask in crate::asks::unanswered(&live.id) {
+                        if !announced.insert(ask.id.clone()) {
+                            continue;
+                        }
+                        say_in_room(
+                            &app2,
+                            &live,
+                            &format!(
+                                "{} is asking. It wants to use {} and cannot without a yes:
+
+{}
+
+Answer here. If nobody does within {} seconds it stops and keeps the question.",
+                                live.worker_name,
+                                ask.tool,
+                                crate::asks::one_line(&ask),
+                                crate::asks::WAIT.as_secs(),
+                            ),
+                        );
+                        crate::aiw::events::say(
+                            &app2,
+                            crate::aiw::events::EventType::ToolApprovalRequested,
+                            crate::aiw::events::in_space(
+                                live.node_id,
+                                Some(&live.feature),
+                                Some(&live.worker_name),
+                            ),
+                            serde_json::json!({
+                                "name": live.worker_name,
+                                "summary": crate::asks::one_line(&ask),
+                                "tool": ask.tool,
+                                "ask": ask.id,
+                                "run": live.id,
+                            }),
+                        );
+                        emit(
+                            &app2,
+                            "worker:asking",
+                            serde_json::json!({ "run": live.id, "ask": ask }),
+                        );
+                    }
                 }
             },
             &leash,
@@ -1541,6 +1612,51 @@ pub fn handoff(conn: &rusqlite::Connection, bot: &crate::bots::Bot) -> Handoff {
 // ---------------------------------------------------------------------------
 // What the window calls
 // ---------------------------------------------------------------------------
+
+/// Everything a run is waiting to be told.
+#[tauri::command(async)]
+pub fn worker_asks(run: String) -> Result<Vec<crate::asks::Ask>, String> {
+    Ok(crate::asks::unanswered(&run))
+}
+
+/// Answer one. The worker is sitting on this with its clock running, so the
+/// reply is a file write and nothing else: no session to find, no process to
+/// signal, and it works just as well if the app has been restarted since.
+#[tauri::command(async)]
+pub fn worker_answer(
+    app: tauri::AppHandle,
+    run: String,
+    ask: String,
+    allow: bool,
+    note: String,
+) -> Result<(), String> {
+    crate::asks::answer(&run, &ask, allow, &note)?;
+    if let Ok(Some(r)) = read_run(&run) {
+        say_in_room(
+            &app,
+            &r,
+            &if allow {
+                format!("You said yes. {} carries on.", r.worker_name)
+            } else if note.trim().is_empty() {
+                format!("You said no. {} stops there.", r.worker_name)
+            } else {
+                format!("You said no: {}", note.trim())
+            },
+        );
+        crate::aiw::events::say(
+            &app,
+            crate::aiw::events::EventType::ToolApprovalResolved,
+            crate::aiw::events::in_space(r.node_id, Some(&r.feature), Some("you")),
+            serde_json::json!({
+                "name": "you",
+                "summary": if allow { "allowed" } else { "refused" },
+                "ask": ask,
+                "run": run,
+            }),
+        );
+    }
+    Ok(())
+}
 
 #[tauri::command(async)]
 pub fn workers_list() -> Result<Vec<Worker>, String> {

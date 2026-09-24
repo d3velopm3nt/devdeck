@@ -2213,6 +2213,21 @@ export const workerPlan = (handle: string, nodeId: number, title: string, intent
 export const workerStart = (handle: string, nodeId: number, title: string, intent: string) =>
   invoke<Run>('worker_start', { handle, nodeId, title, intent })
 export const workerStop = (id: string) => invoke<void>('worker_stop', { id })
+
+/// A question a worker has stopped on. It is sitting on this right now with
+/// its clock running, which is why answering is one call and no session.
+export type Ask = {
+  id: string
+  run: string
+  tool: string
+  input: Record<string, unknown>
+  at: string
+}
+
+export const workerAsks = (run: string) => invoke<Ask[]>('worker_asks', { run })
+
+export const workerAnswer = (run: string, ask: string, allow: boolean, note = '') =>
+  invoke<void>('worker_answer', { run, ask, allow, note })
 export const runsList = (nodeId = 0) => invoke<Run[]>('runs_list', { nodeId })
 export const runGet = (id: string) => invoke<Run | null>('run_get', { id })
 /** keep | discard, with whatever you want said about it. */
@@ -2223,10 +2238,12 @@ export const runDecide = (id: string, decision: string, note = '') =>
 export async function onWorker(h: {
   step?: (e: { run: string; step: RunStep }) => void
   done?: (e: { run: Run }) => void
+  asking?: (e: { run: string; ask: Ask }) => void
 }): Promise<() => void> {
   const offs = await Promise.all([
     listen<{ run: string; step: RunStep }>('worker:step', (e) => h.step?.(e.payload)),
     listen<{ run: Run }>('worker:done', (e) => h.done?.(e.payload)),
+    listen<{ run: string; ask: Ask }>('worker:asking', (e) => h.asking?.(e.payload)),
   ])
   return () => offs.forEach((off) => off())
 }

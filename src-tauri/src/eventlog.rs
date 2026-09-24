@@ -131,8 +131,23 @@ fn drain(
 /// Hand an event to the writer. Never blocks the thing that happened, and
 /// never touches the connection the caller may be holding.
 pub fn post(ev: &crate::aiw::events::DomainEvent) {
-    if let Some(tx) = POST.get() {
-        let _ = tx.send(ev.clone());
+    match POST.get() {
+        Some(tx) => {
+            if tx.send(ev.clone()).is_err() {
+                // The writer thread is gone, so every event from here on is
+                // being dropped. Silence would make the history look merely
+                // empty rather than broken, which is the whole failure this
+                // module was added to stop.
+                eprintln!(
+                    "[eventlog] the writer has stopped; {} and everything after it is not being kept",
+                    ev.kind
+                );
+            }
+        }
+        None => eprintln!(
+            "[eventlog] {} was published before the writer started and is not kept",
+            ev.kind
+        ),
     }
 }
 

@@ -117,8 +117,12 @@ pub struct RunnerSpec {
     pub model: String,
     /// `--permission-mode`. Empty means [`DEFAULT_PERMISSION_MODE`].
     pub permission_mode: String,
-    /// Nobody is watching, so nobody can answer a permission prompt either.
-    pub unattended: bool,
+    /// An MCP config naming the tool that answers permission requests, and
+    /// the tool's full id. Empty means nobody can be asked, and then anything
+    /// that would prompt is denied outright — which is a real case (a dry
+    /// run), not a default.
+    pub ask_config: String,
+    pub ask_tool: String,
     /// Exactly which built-in tools exist for this session, or empty for all
     /// of them.
     ///
@@ -194,10 +198,24 @@ impl RunnerSpec {
             a.push("--setting-sources".into());
             a.push("project".into());
         }
-        // Nobody is at the keyboard, so nothing may wait for one. This flag
-        // did not exist in 2.1.266 and does in 2.1.278; the CLI moves under
-        // us, which is why what it supports is read rather than remembered.
-        if self.unattended {
+        // Where a permission request goes.
+        //
+        // With an asker, to us: the CLI calls our tool, the question lands in
+        // the feature's room, and a person answers it there. Without one,
+        // nobody can be asked and anything that would prompt is denied — the
+        // old behaviour, now an explicit case rather than what always
+        // happened. Measured against 2.1.278 on 24 Sep 2026: the request
+        // arrives as an ordinary `tools/call` and the verdict goes back as
+        // the tool's own result. See `asks`.
+        if !self.ask_tool.trim().is_empty() && !self.ask_config.trim().is_empty() {
+            a.push("--mcp-config".into());
+            a.push(self.ask_config.clone());
+            a.push("--strict-mcp-config".into());
+            a.push("--permission-prompts".into());
+            a.push("host".into());
+            a.push("--permission-prompt-tool".into());
+            a.push(self.ask_tool.clone());
+        } else {
             a.push("--permission-prompts".into());
             a.push("none".into());
         }
@@ -522,39 +540,78 @@ pub fn run_watched(
 mod tests {
     use super::*;
 
-    /// What is passed is what this CLI has, and it is read rather than
-    /// remembered.
+    /// Where a permission request goes, as measured rather than remembered.
     ///
-    /// This test has been wrong twice in one day, in both directions. It first
-    /// required `--permission-prompts none`, which 2.1.266 rejected outright,
-    /// so every unattended run died before it started while the code looked
-    /// careful. It was then rewritten to forbid the flag — and 2.1.278 added
-    /// it. The CLI moves underneath us; what it supports belongs in a probe,
-    /// not in a memory.
+    /// This has now been wrong three times in one day, in three directions.
+    /// It first required `--permission-prompts none`, which 2.1.266 rejected
+    /// outright, so every unattended run died before it started while the
+    /// code looked careful. It was rewritten to forbid the flag — and 2.1.278
+    /// added it. Then it pinned "unattended means nobody can be asked", which
+    /// is what made `writes: branch` a promise the wall could not keep: a
+    /// worker had a shell on its list and every call to it was refused before
+    /// a person heard about it.
+    ///
+    /// The rule now: an asker means the question comes to us, watched or not.
+    /// Only with nobody to ask is anything that would prompt denied.
     #[test]
-    fn an_unattended_run_lets_nobody_be_asked() {
-        for unattended in [true, false] {
+    fn a_question_goes_to_the_asker_when_there_is_one() {
+        {
             let spec = RunnerSpec {
                 program: String::new(),
                 model: String::new(),
                 permission_mode: String::new(),
-                unattended,
                 tools: Vec::new(),
                 sealed: false,
+                ask_config: "C:/tmp/ask.json".into(),
+                ask_tool: "mcp__devdeck__approve".into(),
             };
             let args = spec.args("do the thing");
+            let at = args
+                .iter()
+                .position(|a| a == "--permission-prompts")
+                .expect("somebody has to be named");
             assert_eq!(
-                args.iter().any(|a| a == "--permission-prompts"),
-                unattended,
-                "nobody is at the keyboard, so nothing may wait for one"
+                args[at + 1],
+                "host",
+                "with an asker the question comes to us, watched or not"
             );
+            let tool = args
+                .iter()
+                .position(|a| a == "--permission-prompt-tool")
+                .expect("and it says which tool answers");
+            assert_eq!(args[tool + 1], "mcp__devdeck__approve");
             assert!(
-                args.iter().any(|a| a == "-p"),
-                "print mode is what makes it non-interactive"
+                args.iter().any(|a| a == "--strict-mcp-config"),
+                "the worker's own config and nobody else's"
             );
-            let at = args.iter().position(|a| a == "--permission-mode").unwrap();
-            assert_eq!(args[at + 1], DEFAULT_PERMISSION_MODE);
         }
+    }
+
+    /// And with nobody to ask, the old behaviour — now an explicit case.
+    #[test]
+    fn with_nobody_to_ask_anything_that_would_prompt_is_denied() {
+        let spec = RunnerSpec {
+            program: String::new(),
+            model: String::new(),
+            permission_mode: String::new(),
+            tools: Vec::new(),
+            sealed: false,
+            ask_config: String::new(),
+            ask_tool: String::new(),
+        };
+        let args = spec.args("do the thing");
+        let at = args
+            .iter()
+            .position(|a| a == "--permission-prompts")
+            .unwrap();
+        assert_eq!(args[at + 1], "none");
+        assert!(
+            !args.iter().any(|a| a == "--permission-prompt-tool"),
+            "naming a tool nobody implemented is how the CLI errors out"
+        );
+        assert!(args.iter().any(|a| a == "-p"));
+        let m = args.iter().position(|a| a == "--permission-mode").unwrap();
+        assert_eq!(args[m + 1], DEFAULT_PERMISSION_MODE);
     }
 
     /// The wall, as measured: `--tools` decides what exists.
@@ -564,9 +621,10 @@ mod tests {
             program: String::new(),
             model: String::new(),
             permission_mode: String::new(),
-            unattended: true,
             tools: vec!["Read".into(), "Write".into()],
             sealed: true,
+            ask_config: String::new(),
+            ask_tool: String::new(),
         };
         let args = spec.args("draft the page");
         let at = args.iter().position(|a| a == "--tools").unwrap();
@@ -584,9 +642,10 @@ mod tests {
             program: String::new(),
             model: "opus".into(),
             permission_mode: String::new(),
-            unattended: false,
             tools: Vec::new(),
             sealed: false,
+            ask_config: String::new(),
+            ask_tool: String::new(),
         };
         let args = spec.args("fix the login bug");
         let p = args.iter().position(|a| a == "-p").unwrap();
@@ -602,9 +661,10 @@ mod tests {
             program: String::new(),
             model: String::new(),
             permission_mode: String::new(),
-            unattended: true,
             tools: Vec::new(),
             sealed: false,
+            ask_config: String::new(),
+            ask_tool: String::new(),
         };
         let args = spec.args("x");
         let at = args.iter().position(|a| a == "--permission-mode").unwrap();

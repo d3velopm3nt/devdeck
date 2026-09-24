@@ -3343,11 +3343,19 @@ Content-Type: multipart/mixed; boundary=\"z\"\r\n\r\n\
 
     /// Insert one message straight into the table, so a ranking test does not
     /// have to build a MIME document to say "this arrived".
+    ///
+    /// The uid counts rather than rolls dice. It used to be
+    /// `abs(random() % 100000)`, and two messages in one test occasionally
+    /// drew the same number, broke the uniqueness the mailbox relies on, and
+    /// failed here on an `unwrap` — rarely enough to look like something else
+    /// each time. A test that fails once a week teaches you to ignore it.
     fn msg(c: &Connection, mailbox: &str, from: &str, to: &str, thread: &str, ts: i64) {
+        static NEXT: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(1);
+        let uid = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         c.execute(
             "INSERT INTO mail_messages (account_id, uid, mailbox, from_addr, to_addrs, thread_key, ts)
-             VALUES (1, abs(random() % 100000), ?1, ?2, ?3, ?4, ?5)",
-            params![mailbox, from, to, thread, ts],
+             VALUES (1, ?6, ?1, ?2, ?3, ?4, ?5)",
+            params![mailbox, from, to, thread, ts, uid],
         )
         .unwrap();
     }

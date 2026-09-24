@@ -1486,22 +1486,42 @@ Answer here. If nobody does within {} seconds it stops and keeps the question.",
                 // codebase, so the refusals decide, not the summary.
                 live.status = if leash.pulled() {
                     "stopped".into()
-                } else if o.refused > 0 {
-                    "blocked".into()
                 } else if o.ok {
                     "done".into()
+                } else if o.refused > 0 {
+                    // Refused something it needed and could not go on. Not a
+                    // fault in the worker, and the one state where answering
+                    // the question makes the work continue rather than start
+                    // over.
+                    "blocked".into()
                 } else {
                     "failed".into()
                 };
                 live.ok = live.status == "done";
+                // A refusal is worth recording either way, but only a refusal
+                // that ended the run is what stopped it.
+                //
+                // This rule was `refused > 0` alone for an hour, and it was
+                // wrong: on 25 Sep a run was told no to one `cat > file`
+                // heredoc, wrote the file another way, ran seven passing
+                // tests, committed, and was still recorded "stopped short …
+                // unverified". Saying a finished run failed is the same fault
+                // as saying a failed run finished, pointing the other way.
                 if o.refused > 0 {
+                    let n = o.refused;
+                    let plural = if n == 1 { "" } else { "s" };
+                    let head = if live.ok {
+                        format!("Finished, with {n} call{plural} refused along the way.")
+                    } else {
+                        format!(
+                            "Stopped short: {n} call{plural} it needed {} refused. What it had written is on the branch, unverified.",
+                            if n == 1 { "was" } else { "were" }
+                        )
+                    };
                     live.verdict = format!(
-                        "Stopped short: {} call{} it needed {} refused. What it had written is on the branch, unverified.
+                        "{head}
 
 {}",
-                        o.refused,
-                        if o.refused == 1 { "" } else { "s" },
-                        if o.refused == 1 { "was" } else { "were" },
                         live.verdict.trim()
                     );
                 }

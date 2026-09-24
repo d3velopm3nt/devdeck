@@ -157,7 +157,7 @@ pub fn keep(conn: &rusqlite::Connection, e: &crate::aiw::events::DomainEvent) {
     let at = chrono::DateTime::parse_from_rfc3339(&e.timestamp)
         .map(|t| t.timestamp_millis())
         .unwrap_or_else(|_| chrono::Utc::now().timestamp_millis());
-    let _ = conn.execute(
+    let wrote = conn.execute(
         "INSERT OR IGNORE INTO events
             (id, seq, session, kind, category, at, project_id, feature_id, agent_id, payload)
          VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
@@ -174,6 +174,15 @@ pub fn keep(conn: &rusqlite::Connection, e: &crate::aiw::events::DomainEvent) {
             serde_json::to_string(&e.payload).unwrap_or_else(|_| "{}".into()),
         ],
     );
+    // Losing an event must not break the thing that happened — but it must
+    // not be silent either. This swallowed its error for a day, and the only
+    // sign was a history that looked merely quiet: two runs finished on the
+    // night of 24 Sep, the room filled, the plan moved, and the events table
+    // did not grow. An empty log and a broken log read the same until one of
+    // them says so.
+    if let Err(why) = wrote {
+        eprintln!("[eventlog] {} was not kept: {why}", e.kind);
+    }
 }
 
 /// Drop the oldest once there are far too many. Called rarely — on startup —

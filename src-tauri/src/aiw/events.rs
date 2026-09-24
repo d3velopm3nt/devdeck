@@ -32,6 +32,30 @@ const EVENT_BUFFER_LIMIT: usize = 5_000;
 
 static EVENT_SEQ: AtomicU64 = AtomicU64::new(1);
 
+/// Something that tells this run of the app apart from the last one.
+///
+/// The counter above starts at 1 every launch, so `ev_00000007` meant a
+/// different event on Tuesday than it does today. That was survivable while
+/// events lived only in memory and fatal the moment they were kept: the event
+/// log stores them by id with `INSERT OR IGNORE`, so every event of the second
+/// run whose number the first run had already used was discarded without a
+/// word. Two runs finished on the night of 24 Sep, the rooms filled, the plans
+/// moved, and the table did not grow.
+///
+/// An id has to be unique to be an id. The run's start time makes it so, and
+/// the dedup that `INSERT OR IGNORE` is actually for — the same event handed
+/// over twice — still works.
+fn run_tag() -> &'static str {
+    static TAG: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    TAG.get_or_init(|| {
+        let ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        format!("{ms:x}")
+    })
+}
+
 /// Every event type the workspace knows about.
 ///
 /// A string enum rather than free-form strings: a typo in a subscriber filter
@@ -262,7 +286,7 @@ impl DomainEvent {
     pub fn new(kind: EventType, scope: EventScope, payload: serde_json::Value) -> Self {
         let seq = EVENT_SEQ.fetch_add(1, Ordering::SeqCst);
         Self {
-            id: format!("ev_{seq:08}"),
+            id: format!("ev_{}_{seq:06}", run_tag()),
             seq,
             kind: kind.as_str().to_string(),
             category: kind.category().to_string(),
@@ -541,6 +565,43 @@ pub fn in_space(node_id: i64, feature: Option<&str>, who: Option<&str>) -> Event
 mod tests {
     use super::*;
     use std::sync::atomic::AtomicUsize;
+
+    /// An id has to be unique to be an id.
+    ///
+    /// It used to be this process's own counter, so `ev_00000007` named one
+    /// event today and a different one tomorrow. That was survivable while
+    /// events lived only in memory, and fatal once they were kept: the log
+    /// stores them by id with `INSERT OR IGNORE`, so on the night of 24 Sep
+    /// two runs finished, the rooms filled, the plans moved, and the events
+    /// table did not grow by a single row.
+    #[test]
+    fn an_event_id_is_not_just_a_counter() {
+        let a = DomainEvent::new(
+            EventType::AgentStarted,
+            EventScope::default(),
+            serde_json::json!({}),
+        );
+        let b = DomainEvent::new(
+            EventType::AgentStarted,
+            EventScope::default(),
+            serde_json::json!({}),
+        );
+        assert_ne!(a.id, b.id, "two events are two events");
+
+        let tag =
+            a.id.strip_prefix("ev_")
+                .and_then(|r| r.split('_').next())
+                .unwrap_or_default();
+        assert!(
+            !tag.is_empty() && tag.chars().all(|c| c.is_ascii_hexdigit()),
+            "an id carries something that tells this run from the last: {}",
+            a.id
+        );
+        assert!(
+            b.id.contains(tag),
+            "and it is the same for every event of one run"
+        );
+    }
 
     #[test]
     fn subscribers_only_see_the_kinds_they_asked_for() {

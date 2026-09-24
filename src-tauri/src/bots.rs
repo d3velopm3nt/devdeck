@@ -2586,6 +2586,64 @@ pub fn effective_team(ws: &std::sync::Arc<crate::aiw::state::Workspace>, bot: &B
 /// timeout. That matters more than it sounds: an agent making ten uncovered
 /// calls would otherwise take ten timeouts to finish failing, in the middle of
 /// the night, holding up every other schedule behind it.
+/// Why this agent cannot be woken, or `None` if it can.
+///
+/// Read from the agent's own file and the registry, never guessed: an agent
+/// naming something that is not a provider at all is a different fault from
+/// one naming a provider with no credentials, and saying which is the whole
+/// point of refusing rather than running.
+fn provider_trouble(
+    ws: &std::sync::Arc<crate::aiw::state::Workspace>,
+    agent: &str,
+) -> Option<String> {
+    let file = ws.agent(agent)?;
+    let known: Vec<String> = ws
+        .providers
+        .lock()
+        .ok()?
+        .list()
+        .into_iter()
+        .map(|(i, _, _)| i)
+        .collect();
+    provider_trouble_for(agent, file.provider.trim(), &known)
+}
+
+/// The decision itself, with nothing to build to ask it.
+///
+/// Split out because the three faults read alike from a distance and have to
+/// be told apart in words: nothing named, a mock, and a provider that simply
+/// is not there. `dev-a` on this machine names `scripted`, which has never
+/// existed, and the only sign was a wake that said "unknown provider
+/// 'scripted'" after it had already started.
+fn provider_trouble_for(agent: &str, provider: &str, known: &[String]) -> Option<String> {
+    if provider.is_empty() {
+        return Some(format!(
+            "{agent} does not name a provider, so there is nothing to ask. Set one on its page."
+        ));
+    }
+    if provider == crate::aiw::provider::MockProvider::ID {
+        return Some(format!(
+            "{agent} is on the mock, which answers from a script and writes nothing. Point it at a real provider before waking it."
+        ));
+    }
+    // A CLI runner is a different kind of engine: it is not in the registry
+    // and has no key of its own.
+    if crate::aiw::cli_agent::is_cli_runner(provider) {
+        return None;
+    }
+    if !known.iter().any(|k| k == provider) {
+        return Some(format!(
+            "{agent} names the provider '{provider}', which does not exist. What is set up: {}.",
+            if known.is_empty() {
+                "nothing yet".to_string()
+            } else {
+                known.join(", ")
+            }
+        ));
+    }
+    None
+}
+
 pub fn wake_agent(app: &tauri::AppHandle, bot: &Bot) -> Option<(bool, String)> {
     use tauri::Manager;
 
@@ -2613,6 +2671,18 @@ pub fn wake_agent(app: &tauri::AppHandle, bot: &Bot) -> Option<(bool, String)> {
             },
         ));
     }
+    // What it is pointed at has to be able to do the work.
+    //
+    // Three failures used to look identical from here: an agent on a mock ran
+    // and produced nothing, an agent naming a provider that does not exist
+    // ("unknown provider 'scripted'") died mid-wake, and an agent on a real
+    // provider with no key failed on its first call. All three cost a wake and
+    // said little. They are now refused before anything is spent, and the
+    // refusal names the agent, the provider and what to do.
+    if let Some(why) = provider_trouble(&workspace, bot.agent.trim()) {
+        return Some((false, why));
+    }
+
     // Make sure the Assistant knows this space before asking it to work there.
     //
     // The startup catch-up tick runs before the frontend has had a chance to
@@ -2789,6 +2859,36 @@ mod tests {
         assert_eq!(back.team, vec!["dev-a".to_string(), "qa".to_string()]);
         assert_eq!(back.agent, "dev-a");
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A wake is refused before anything is spent, and the refusal says which
+    /// of the three faults it is. All three used to look the same from the
+    /// outside: a wake that cost money and did nothing.
+    #[test]
+    fn a_manager_will_not_wake_an_agent_that_cannot_do_the_work() {
+        let real = vec!["anthropic".to_string(), "openai-compatible".to_string()];
+
+        let mock = super::provider_trouble_for("qa", "mock", &real).expect("a mock cannot work");
+        assert!(mock.contains("answers from a script"), "{mock}");
+
+        // The real one on this machine: dev-a names something that has never
+        // been a provider, and the old failure was mid-wake.
+        let gone = super::provider_trouble_for("dev-a", "scripted", &real)
+            .expect("a provider that is not there cannot work");
+        assert!(gone.contains("does not exist"), "{gone}");
+        assert!(gone.contains("anthropic"), "it says what is set up: {gone}");
+
+        let blank = super::provider_trouble_for("qa", "", &real).expect("nothing named");
+        assert!(blank.contains("does not name a provider"), "{blank}");
+
+        assert!(
+            super::provider_trouble_for("dev-b", "anthropic", &real).is_none(),
+            "a real provider that is set up is fine"
+        );
+        assert!(
+            super::provider_trouble_for("mason", "claude-code", &real).is_none(),
+            "a CLI runner is not in the registry and needs no key"
+        );
     }
 
     #[test]

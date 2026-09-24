@@ -16,7 +16,12 @@ import { aiw } from './aiw'
 export type ProviderOption = [string, string]
 
 export function useProviders(): ProviderOption[] {
-  const [list, setList] = useState<ProviderOption[]>([['mock', 'Mock (no AI)']])
+  // Empty until the backend answers. It used to start as the mock, which
+  // meant a dropdown opened on "Mock (no AI)" and anything made in a hurry
+  // was made on a thing that cannot do the work. Nothing is better than a
+  // wrong default here: an empty list is a true statement that no provider
+  // has been set up yet.
+  const [list, setList] = useState<ProviderOption[]>([])
   useEffect(() => {
     let alive = true
     void aiw

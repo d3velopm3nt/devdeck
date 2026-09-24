@@ -797,6 +797,15 @@ pub fn aiw_grant_forget(ws: Ws, id: String) -> Result<(), String> {
 #[tauri::command]
 pub fn aiw_providers(ws: Ws) -> Vec<(String, String, ProviderHealth)> {
     let mut all = ws.providers.lock().unwrap().list();
+    // The mock is not something real work may be pointed at.
+    //
+    // It stays in the codebase — the offline tests are built on it, and
+    // CLAUDE.md is right that it is a provider rather than a bypass. What it
+    // stops being is a *choice*: it was the first entry in this list, so a
+    // manager made without thinking was made on a thing that answers from a
+    // script. Three of the six agents on this machine were, and their wakes
+    // burned turns and touched no files while looking like work.
+    all.retain(|(id, _, _)| id != super::provider::MockProvider::ID);
     // The CLI runners sit in the same list because the question the list
     // answers — "what can this agent be pointed at?" — has one answer, even
     // though a runner is a different kind of engine from a model provider.

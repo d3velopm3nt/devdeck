@@ -859,7 +859,7 @@ pub fn run() {
 
             {
                 let h = app.handle().clone();
-                let said = match workers::close_orphans() {
+                let said = match workers::close_orphans(&h) {
                     Ok(0) => None,
                     Ok(n) => Some((
                         "stdout",

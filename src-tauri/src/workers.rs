@@ -386,7 +386,7 @@ pub fn write_run(r: &Run) -> Result<(), String> {
 /// It cannot be known *how* they ended, so nothing is invented: the status
 /// says interrupted and the verdict says the app stopped. What the run had
 /// already written stays, because it was written as it went.
-pub fn close_orphans() -> Result<usize, String> {
+pub fn close_orphans(app: &tauri::AppHandle) -> Result<usize, String> {
     let mut n = 0;
     for mut r in all_runs()? {
         if r.status != "running" {
@@ -402,6 +402,12 @@ pub fn close_orphans() -> Result<usize, String> {
             r.verdict.push_str(&freed);
         }
         write_run(&r)?;
+        // And the item it was holding. Salvaging the worktree without this
+        // left the work `in-progress` with a worker on it that had stopped —
+        // `w1` on the goal tracker sat that way and no later wake would touch
+        // it, because `next_open_item` only picks up what nobody has claimed.
+        // The same fault as the branch, one layer up.
+        move_item(app, &r, "unclaimed");
         n += 1;
     }
     Ok(n)
@@ -1012,6 +1018,56 @@ fn keep_ours_out(cwd: &Path) {
 /// repository on its own branch: the worker gets a folder nothing is watching,
 /// your branch stays where you left it, and the commits land in the same
 /// repository so `git switch` reaches them afterwards as usual.
+/// Let git work inside a worktree we just made.
+///
+/// A worktree lives in the personal store on `C:`, and its `.git` file points
+/// back at a repository that may be on a drive which records no ownership.
+/// Git then calls the whole thing dubious and refuses every command in it —
+/// which a worker meets as "I wrote the code, ran the tests, and could not
+/// commit", exactly as Mason did on 25 Sep. It offered to work around it with
+/// `-c safe.directory`, was refused, and stopped rather than bypass a safety
+/// check, which is the right instinct and also a dead end.
+///
+/// So the folder we created is the folder we vouch for, one path at a time and
+/// never a wildcard. [`release_worktree`] takes it back out again, so this
+/// does not accumulate an entry per run for ever.
+fn allow_git_here(at: &Path) {
+    let _ = std::process::Command::new("git")
+        .args([
+            "config",
+            "--global",
+            "--add",
+            "safe.directory",
+            &at.to_string_lossy(),
+        ])
+        .output();
+}
+
+fn forget_git_here(at: &Path) {
+    let _ = std::process::Command::new("git")
+        .args([
+            "config",
+            "--global",
+            "--unset-all",
+            "safe.directory",
+            &regex_quote(&at.to_string_lossy()),
+        ])
+        .output();
+}
+
+/// `--unset-all` matches by regular expression, so a Windows path full of
+/// backslashes has to be escaped or it matches nothing and the entry stays.
+fn regex_quote(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() * 2);
+    for c in s.chars() {
+        if r"\.+*?()|[]{}^$".contains(c) {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
+}
+
 fn prepare_worktree(repo: &Path, branch: &str, run_id: &str) -> Result<PathBuf, String> {
     let at = root()?.join("worktrees").join(run_id);
     if let Some(parent) = at.parent() {
@@ -1029,6 +1085,7 @@ fn prepare_worktree(repo: &Path, branch: &str, run_id: &str) -> Result<PathBuf, 
 
     let out = git(&["worktree", "add", "-b", branch, &path])?;
     if out.status.success() {
+        allow_git_here(&at);
         return Ok(at);
     }
     // A branch of that name already exists — a second run on the same item, or
@@ -1038,6 +1095,7 @@ fn prepare_worktree(repo: &Path, branch: &str, run_id: &str) -> Result<PathBuf, 
     if msg.contains("already exists") {
         let again = git(&["worktree", "add", &path, branch])?;
         if again.status.success() {
+            allow_git_here(&at);
             return Ok(at);
         }
         return Err(format!(
@@ -1057,6 +1115,7 @@ fn prepare_worktree(repo: &Path, branch: &str, run_id: &str) -> Result<PathBuf, 
 /// folder is scaffolding, the commits are the work, and deleting somebody's
 /// commits because they pressed Discard on a draught would be its own bug.
 pub fn release_worktree(repo: &Path, at: &Path) {
+    forget_git_here(at);
     let _ = std::process::Command::new("git")
         .args(["worktree", "remove", "--force", &at.to_string_lossy()])
         .current_dir(repo)
@@ -1236,7 +1295,9 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
             kind: "note".into(),
             text: format!(
                 "Started in {}{}{}",
-                p.folder,
+                // Where it actually is. `p.folder` is the repository, which
+                // for a branch worker is not where anything happens.
+                cwd.display(),
                 if p.branch.is_empty() {
                     String::new()
                 } else {

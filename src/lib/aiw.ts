@@ -941,9 +941,12 @@ export const describeEvent = (e: DomainEvent): string => {
         return `You said no to ${p.count} thing${p.count === 1 ? '' : 's'}`
       return `${agent} released its claim`
     case 'work.claimed':
-      return `${agent} claimed “${p.intent ?? ''}”`
+      // `summary` first: it is what every other payload calls the one-line
+      // description, and a feed that reads a key nobody writes renders an
+      // empty pair of quotes rather than saying anything is wrong.
+      return `${agent} started on “${p.summary ?? p.intent ?? ''}”`
     case 'work.completed':
-      return `${agent} released its claim`
+      return `${agent} finished “${p.summary ?? p.intent ?? ''}”`
     case 'tool.executed':
       return `${agent} ran ${p.tool}.${p.action}`
     case 'tool.failed':

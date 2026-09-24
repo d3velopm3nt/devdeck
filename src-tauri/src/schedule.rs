@@ -552,13 +552,13 @@ fn run_one(
                     })
                 };
                 match decision {
-                    Some(crate::workers::Handoff::Start(worker, title, item)) => {
+                    Some(crate::workers::Handoff::Start(worker, feature, item, title)) => {
                         let Some(db) = app.try_state::<Db>() else {
                             break 'wake (false, "the database was not there".into());
                         };
                         let plan = {
                             let conn = db.0.lock().unwrap();
-                            crate::workers::plan(&conn, &worker, b.node_id, &title, &format!(
+                            crate::workers::plan(&conn, &worker, b.node_id, &feature, &item, &title, &format!(
                                 "{title}\n\nThis is item {item} on {}'s plan. Do it, and say what you could not check.",
                                 b.name
                             ))

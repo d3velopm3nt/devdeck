@@ -152,6 +152,12 @@ pub struct Run {
     pub worker_name: String,
     pub node_id: i64,
     pub space: String,
+    /// Which plan this came off, so finishing can move the item and the
+    /// receipt knows which room it belongs in. Empty when started by hand.
+    #[serde(default)]
+    pub feature: String,
+    #[serde(default)]
+    pub item: String,
     pub title: String,
     pub intent: String,
     /// running | done | stopped | failed | kept | discarded
@@ -191,6 +197,14 @@ pub struct Plan {
     pub worker: WorkerMeta,
     pub node_id: i64,
     pub space: String,
+    /// The feature this item belongs to, and the item's id. Empty for a job
+    /// started by hand rather than taken off a plan — which is a real case,
+    /// not a missing value, so everything downstream checks rather than
+    /// assumes.
+    #[serde(default)]
+    pub feature: String,
+    #[serde(default)]
+    pub item: String,
     pub title: String,
     pub intent: String,
     pub folder: String,
@@ -381,6 +395,102 @@ pub fn close_orphans() -> Result<usize, String> {
     Ok(n)
 }
 
+/// Move the item this run came off, and say so on the bus.
+///
+/// Until this existed a worker could do the whole job and the plan would
+/// never hear: Mason wrote three correct files on 24 Sep 2026 and all three
+/// splash items sat `unclaimed` afterwards, which made the run invisible to
+/// every screen that reads the plan rather than the run list.
+///
+/// `assignee` is set as well as `status`, because "in progress" with nobody
+/// named is the state the Work tab already renders as "nobody" — the thing
+/// that made an earlier bug impossible to see.
+fn move_item(app: &tauri::AppHandle, r: &Run, status: &str) {
+    use tauri::Manager;
+    if r.feature.trim().is_empty() || r.item.trim().is_empty() {
+        return; // started by hand, off no plan — nothing to move.
+    }
+    let Some(db) = app.try_state::<Db>() else {
+        return;
+    };
+    let moved = (|| -> Option<bool> {
+        let conn = db.0.lock().ok()?;
+        let n = db::node_by_id(&conn, r.node_id).ok()?;
+        let dir = db::node_deck_dir(&conn, &n)?;
+        let deck = crate::aiw::deck::Deck::new(&dir);
+        let mut work = deck.work(&r.feature).ok()?;
+        let hit = work.meta.items.iter_mut().find(|i| i.id == r.item)?;
+        hit.status = status.to_string();
+        hit.assignee = if status == "done" {
+            None
+        } else {
+            Some(r.worker_name.clone())
+        };
+        deck.save_work(&r.feature, &work.meta).ok()?;
+        Some(true)
+    })();
+    if moved.is_none() {
+        // Never silent: a plan that did not move is the whole bug this
+        // function exists for, and it must not look like success.
+        crate::services::push_log(
+            app,
+            crate::services::RUNNER_LOG_ID,
+            "workers",
+            "stderr",
+            format!(
+                "{} finished {} but item {} on {} could not be moved to {status}",
+                r.worker_name, r.id, r.item, r.feature
+            ),
+        );
+        return;
+    }
+    crate::aiw::events::say(
+        app,
+        if status == "done" {
+            crate::aiw::events::EventType::WorkCompleted
+        } else {
+            crate::aiw::events::EventType::WorkClaimed
+        },
+        crate::aiw::events::in_space(r.node_id, Some(&r.feature), Some(&r.worker_name)),
+        serde_json::json!({
+            "name": r.worker_name,
+            "summary": r.title,
+            "item": r.item,
+            "run": r.id,
+        }),
+    );
+}
+
+/// Say something in the feature's own room.
+///
+/// The room is the feature, not the manager: the manager announced a handoff
+/// into its own thread and the feature's thread — the one you open to see how
+/// the work is going — stayed empty for ever. A run started for an item
+/// reports back where the item lives.
+fn say_in_room(app: &tauri::AppHandle, r: &Run, text: &str) {
+    use tauri::Manager;
+    if r.feature.trim().is_empty() || text.trim().is_empty() {
+        return;
+    }
+    let Some(ws) = app.try_state::<std::sync::Arc<crate::aiw::state::Workspace>>() else {
+        return;
+    };
+    let said = (|| -> Result<(), String> {
+        let convs = ws.convs()?;
+        let conv = convs.for_feature(&r.node_id.to_string(), &r.feature, &r.feature)?;
+        let me = format!("worker:{}", r.worker);
+        let _ = convs.add_participant(&conv.id, &me);
+        convs.post_as(&conv.id, text, &me)?;
+        Ok(())
+    })();
+    if let Err(e) = said {
+        eprintln!(
+            "[workers] {} could not speak in {}: {e}",
+            r.worker_name, r.feature
+        );
+    }
+}
+
 /// Give an interrupted run's branch back, without throwing its work away.
 ///
 /// A run that did not survive the last stop leaves a worktree behind, and git
@@ -566,10 +676,13 @@ fn knowledge_titles(dir: &Path) -> Vec<String> {
     out
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn plan(
     conn: &rusqlite::Connection,
     handle: &str,
     node_id: i64,
+    feature: &str,
+    item: &str,
     title: &str,
     intent: &str,
 ) -> Result<Plan, String> {
@@ -659,6 +772,8 @@ pub fn plan(
         worker: w.meta,
         node_id,
         space,
+        feature: feature.trim().to_string(),
+        item: item.trim().to_string(),
         title: title.trim().to_string(),
         intent: intent.trim().to_string(),
         ready,
@@ -1084,6 +1199,8 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
         worker_name: w.meta.name.clone(),
         node_id: p.node_id,
         space: p.space.clone(),
+        feature: p.feature.clone(),
+        item: p.item.clone(),
         title: p.title.clone(),
         intent: p.intent.clone(),
         status: "running".into(),
@@ -1129,10 +1246,27 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
         tools: tools_for(&w.meta),
         sealed: true,
     };
+    // The plan first, so a screen reading the plan and a screen reading the
+    // bus never disagree about whether this item is being worked on.
+    move_item(app, &run, "in-progress");
+    say_in_room(
+        app,
+        &run,
+        &format!(
+            "{} started on \"{}\".{}",
+            run.worker_name,
+            run.title,
+            if run.branch.is_empty() {
+                String::new()
+            } else {
+                format!(" Working on {}.", run.branch)
+            }
+        ),
+    );
     crate::aiw::events::say(
         app,
         crate::aiw::events::EventType::AgentStarted,
-        crate::aiw::events::in_space(run.node_id, None, Some(&run.worker_name)),
+        crate::aiw::events::in_space(run.node_id, Some(&run.feature), Some(&run.worker_name)),
         serde_json::json!({
             "run": run.id,
             // `name` and `summary` are what the feed reads. A payload that
@@ -1206,6 +1340,43 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
         }
         let _ = write_run(&live);
         leashes().lock().unwrap().remove(&live.id);
+
+        // A run that did not finish well leaves the item where somebody else
+        // can pick it up, rather than marking it done or leaving it claimed by
+        // a worker that has stopped. "done" here means the run ended cleanly,
+        // not that the work was checked — the receipt says which.
+        move_item(
+            &app2,
+            &live,
+            if live.status == "done" {
+                "done"
+            } else {
+                "unclaimed"
+            },
+        );
+        say_in_room(
+            &app2,
+            &live,
+            &format!(
+                "{} {} \"{}\" after {}s{}.
+
+{}",
+                live.worker_name,
+                match live.status.as_str() {
+                    "done" => "finished",
+                    "stopped" => "was stopped on",
+                    _ => "could not finish",
+                },
+                live.title,
+                live.seconds,
+                if live.files.is_empty() {
+                    ", writing nothing".to_string()
+                } else {
+                    format!(", writing {} file(s)", live.files.len())
+                },
+                live.verdict.trim()
+            ),
+        );
         crate::aiw::events::say(
             &app2,
             if live.ok {
@@ -1213,7 +1384,11 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
             } else {
                 crate::aiw::events::EventType::AgentFailed
             },
-            crate::aiw::events::in_space(live.node_id, None, Some(&live.worker_name)),
+            crate::aiw::events::in_space(
+                live.node_id,
+                Some(&live.feature),
+                Some(&live.worker_name),
+            ),
             serde_json::json!({
                 "run": live.id,
                 "name": live.worker_name,
@@ -1248,10 +1423,18 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
 ///
 /// A manager hands out one job at a time on purpose: a wake that started five
 /// sessions at three in the morning is not a manager, it is a bill.
+/// The next thing nobody has picked up, **and the feature it came from**.
+///
+/// The feature used to be dropped on the way out of here, which is the root
+/// of three separate silences: the run's events carried no feature, so they
+/// could not be filtered to the room they belonged to; the item could not be
+/// moved afterwards, because finding it again needs the feature that holds
+/// it; and the worker's report had nowhere to be posted. A worker did the job
+/// and the plan never heard about it.
 pub fn next_open_item(
     conn: &rusqlite::Connection,
     bot: &crate::bots::Bot,
-) -> Option<(String, String)> {
+) -> Option<(String, String, String)> {
     let n = db::node_by_id(conn, bot.node_id).ok()?;
     let dir = crate::db::node_deck_dir(conn, &n)?;
     let deck = crate::aiw::deck::Deck::new(&dir);
@@ -1266,9 +1449,10 @@ pub fn next_open_item(
         .collect();
     for slug in mine {
         let Ok(work) = deck.work(&slug) else { continue };
+        // `slug` is moved by the return below, so the work is read first.
         for item in work.meta.items {
             if item.status.is_empty() || item.status == "unclaimed" {
-                return Some((item.id, item.title));
+                return Some((slug, item.id, item.title));
             }
         }
     }
@@ -1280,8 +1464,11 @@ pub fn next_open_item(
 /// Three outcomes, and the difference between them is consent: it started
 /// one, it wants to start one and is asking, or it has nobody to hand to.
 pub enum Handoff {
-    /// The worker, the job, and the item it came from.
-    Start(String, String, String),
+    /// The worker, the feature, the item's id, and its title. The feature is
+    /// here so that everything downstream — the event's scope, the room the
+    /// receipt goes in, and moving the item when it is done — can find the
+    /// work again without guessing.
+    Start(String, String, String, String),
     /// It would start this, but nothing has said it may while you sleep.
     Ask(String, String),
     Nothing,
@@ -1291,7 +1478,7 @@ pub fn handoff(conn: &rusqlite::Connection, bot: &crate::bots::Bot) -> Handoff {
     if bot.worker.trim().is_empty() {
         return Handoff::Nothing;
     }
-    let Some((id, title)) = next_open_item(conn, bot) else {
+    let Some((feature, id, title)) = next_open_item(conn, bot) else {
         return Handoff::Nothing;
     };
     let Ok(Some(w)) = read_worker(bot.worker.trim()) else {
@@ -1302,7 +1489,7 @@ pub fn handoff(conn: &rusqlite::Connection, bot: &crate::bots::Bot) -> Handoff {
         return Handoff::Nothing;
     }
     if w.meta.unattended {
-        Handoff::Start(w.meta.handle, title, id)
+        Handoff::Start(w.meta.handle, feature, id, title)
     } else {
         Handoff::Ask(w.meta.name, title)
     }
@@ -1347,9 +1534,19 @@ pub fn worker_plan(
     node_id: i64,
     title: String,
     intent: String,
+    feature: Option<String>,
+    item: Option<String>,
 ) -> Result<Plan, String> {
     let conn = db.0.lock().unwrap();
-    plan(&conn, &handle, node_id, &title, &intent)
+    plan(
+        &conn,
+        &handle,
+        node_id,
+        feature.as_deref().unwrap_or_default(),
+        item.as_deref().unwrap_or_default(),
+        &title,
+        &intent,
+    )
 }
 
 #[tauri::command]
@@ -1360,10 +1557,20 @@ pub async fn worker_start(
     node_id: i64,
     title: String,
     intent: String,
+    feature: Option<String>,
+    item: Option<String>,
 ) -> Result<Run, String> {
     let p = {
         let conn = db.0.lock().unwrap();
-        plan(&conn, &handle, node_id, &title, &intent)?
+        plan(
+            &conn,
+            &handle,
+            node_id,
+            feature.as_deref().unwrap_or_default(),
+            item.as_deref().unwrap_or_default(),
+            &title,
+            &intent,
+        )?
     };
     start(&app, &db, p)
 }
@@ -1879,11 +2086,15 @@ mod setup_check {
         println!("manager: {} on node {}", bot.name, bot.node_id);
         println!("  hands work to: {:?}", bot.worker);
         match super::next_open_item(&conn, &bot) {
-            Some((id, title)) => println!("  first open item: {id} — {title}"),
+            Some((feature, id, title)) => {
+                println!("  first open item: {id} on {feature} — {title}")
+            }
             None => println!("  first open item: NONE (the plan is empty or unreadable)"),
         }
         match super::handoff(&conn, &bot) {
-            super::Handoff::Start(w, t, i) => println!("  would START {w} on {i} — {t}"),
+            super::Handoff::Start(w, f, i, t) => {
+                println!("  would START {w} on {i} ({f}) — {t}")
+            }
             super::Handoff::Ask(w, t) => println!("  would ASK to put {w} on: {t}"),
             super::Handoff::Nothing => println!("  would do NOTHING"),
         }

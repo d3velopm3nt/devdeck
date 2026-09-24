@@ -180,6 +180,14 @@ creation and taken back out on release, never a wildcard.
 F:\…\goal-tracker"* while the work was in the worktree — the same lie the
 brief had, one line further down, fixed the same way.
 
+**A finished run kept its worktree for ever.** Found on the wake straight after
+the goal tracker's own success: `w1` was committed as `56bc2f1`, the plan
+released the item, and the very next handoff was refused with "already used by
+worktree". The plan and the branch disagreed about whether the work was
+available, and the plan was the one that was right. Every run puts its branch
+back now, committing anything left over first — the rule the orphan path
+already used, which simply was not the rule for a run that ended normally.
+
 **An interrupted run kept its item.** `close_orphans` salvaged the branch and
 left the work `in-progress` with a stopped worker on it. `w1` sat that way and
 no later wake would touch it, because `next_open_item` only picks up what

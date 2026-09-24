@@ -370,10 +370,92 @@ pub fn close_orphans() -> Result<usize, String> {
         r.ok = false;
         r.ended_at = now();
         r.verdict = "DevDeck stopped while this was running, so how it ended is not known. What it had written by then is listed above.".into();
+        let freed = salvage_worktree(&r);
+        if !freed.is_empty() {
+            r.verdict.push(' ');
+            r.verdict.push_str(&freed);
+        }
         write_run(&r)?;
         n += 1;
     }
     Ok(n)
+}
+
+/// Give an interrupted run's branch back, without throwing its work away.
+///
+/// A run that did not survive the last stop leaves a worktree behind, and git
+/// will not hand that branch to anybody else while it is checked out. Marking
+/// the *run* interrupted — which is all this used to do — left the *item*
+/// poisoned: every later attempt died with "already used by worktree", for
+/// ever, and the message named a path in a folder nobody thinks to look in.
+/// That is exactly what happened to the splash-screen item.
+///
+/// Removing the worktree frees the branch, but `worktree remove --force`
+/// deletes whatever was never committed — which for an interrupted run is all
+/// of it. So the work is committed first, and **the worktree is only removed
+/// if that commit succeeded**. A branch still held is a problem you can see
+/// and fix; work silently deleted is not.
+fn salvage_worktree(r: &Run) -> String {
+    if r.branch.trim().is_empty() || r.folder.trim().is_empty() {
+        return String::new();
+    }
+    let Ok(at) = root().map(|p| p.join("worktrees").join(&r.id)) else {
+        return String::new();
+    };
+    if !at.exists() {
+        return String::new();
+    }
+    salvage_at(
+        std::path::Path::new(&r.folder),
+        &at,
+        &r.worker_name,
+        &r.branch,
+    )
+}
+
+/// The part of [`salvage_worktree`] that does not need to know where the
+/// personal store is, so a test can hand it a real repository in a temp folder
+/// instead of reaching into yours.
+fn salvage_at(repo: &std::path::Path, at: &std::path::Path, worker: &str, branch: &str) -> String {
+    let git = |dir: &std::path::Path, args: &[&str]| {
+        std::process::Command::new("git")
+            .args(args)
+            .current_dir(dir)
+            .output()
+    };
+
+    // Anything to keep? An empty worktree needs no commit, and committing
+    // nothing fails, which would then block the removal below.
+    let dirty = git(at, &["status", "--porcelain"])
+        .map(|o| !String::from_utf8_lossy(&o.stdout).trim().is_empty())
+        .unwrap_or(false);
+
+    if dirty {
+        let _ = git(at, &["add", "-A"]);
+        let msg = format!(
+            "Interrupted: what {worker} had written when DevDeck stopped
+
+Not verified and not finished. Kept so the branch could be released."
+        );
+        let ok = git(at, &["commit", "-m", &msg])
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+        if !ok {
+            // Work we could not save. Say so, and leave the worktree alone.
+            return format!(
+                "Its work could not be committed, so the worktree at {} was left in place and the branch {} is still held.",
+                at.display(),
+                branch
+            );
+        }
+    }
+
+    release_worktree(repo, at);
+    if dirty {
+        format!("What it had written was committed to {branch} so the branch could be used again.")
+    } else {
+        format!("It had written nothing, so {branch} was released.")
+    }
 }
 
 pub fn all_runs() -> Result<Vec<Run>, String> {
@@ -1508,6 +1590,94 @@ mod tests {
             "it made a .git where there was none"
         );
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// Set up a real repository with one commit, and a worktree on a branch
+    /// of its own -- the shape an interrupted run leaves behind.
+    fn a_repo_with_a_worktree(tag: &str) -> (std::path::PathBuf, std::path::PathBuf) {
+        let base = std::env::temp_dir().join(format!("devdeck-salv-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let repo = base.join("repo");
+        std::fs::create_dir_all(&repo).unwrap();
+        let git = |dir: &std::path::Path, args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(dir)
+                .output()
+                .unwrap()
+        };
+        git(&repo, &["init", "-b", "main"]);
+        git(&repo, &["config", "user.email", "t@t"]);
+        git(&repo, &["config", "user.name", "t"]);
+        std::fs::write(repo.join("a.txt"), "one").unwrap();
+        git(&repo, &["add", "-A"]);
+        git(&repo, &["commit", "-m", "first"]);
+        let at = base.join("wt");
+        git(
+            &repo,
+            &["worktree", "add", "-b", "wip", &at.to_string_lossy()],
+        );
+        (repo, at)
+    }
+
+    fn holds(repo: &std::path::Path) -> String {
+        String::from_utf8_lossy(
+            &std::process::Command::new("git")
+                .args(["worktree", "list"])
+                .current_dir(repo)
+                .output()
+                .unwrap()
+                .stdout,
+        )
+        .to_string()
+    }
+
+    /// The bug this exists for: an interrupted run used to keep its branch
+    /// checked out for ever, so every later attempt on that item died with
+    /// "already used by worktree". Releasing it must not be a way to lose
+    /// what the run had written, so it is committed first.
+    #[test]
+    fn an_interrupted_run_gives_its_branch_back_and_keeps_its_work() {
+        let (repo, at) = a_repo_with_a_worktree("dirty");
+        std::fs::write(at.join("new.txt"), "what mason wrote").unwrap();
+
+        let said = salvage_at(&repo, &at, "Mason", "wip");
+
+        assert!(
+            !holds(&repo).contains("wt"),
+            "the worktree was not released"
+        );
+        let log = String::from_utf8_lossy(
+            &std::process::Command::new("git")
+                .args(["log", "--oneline", "wip"])
+                .current_dir(&repo)
+                .output()
+                .unwrap()
+                .stdout,
+        )
+        .to_string();
+        assert!(
+            log.contains("Interrupted"),
+            "the work was not committed: {log}"
+        );
+        assert!(said.contains("committed"), "said: {said}");
+        let _ = std::fs::remove_dir_all(at.parent().unwrap());
+    }
+
+    /// A run that wrote nothing needs no commit -- and committing nothing
+    /// fails, which would leave the branch held for want of anything to save.
+    #[test]
+    fn a_run_that_wrote_nothing_still_gives_the_branch_back() {
+        let (repo, at) = a_repo_with_a_worktree("clean");
+
+        let said = salvage_at(&repo, &at, "Mason", "wip");
+
+        assert!(
+            !holds(&repo).contains("wt"),
+            "the worktree was not released"
+        );
+        assert!(said.contains("nothing"), "said: {said}");
+        let _ = std::fs::remove_dir_all(at.parent().unwrap());
     }
 
     /// What a profile on disk actually holds, for a demo run.

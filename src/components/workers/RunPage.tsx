@@ -79,7 +79,13 @@ export function RunView({ id }: { id: string }) {
   }
 
   const running = run.status === 'running'
-  const seconds = running ? Math.max(0, Math.round((Date.now() - new Date(run.started_at).getTime()) / 1000)) + tick * 0 : run.seconds
+  // `tick` is named so the dependency is honest: this clock re-reads on every
+  // tick, and `+ tick * 0` was a way of saying that which added zero and read
+  // as a mistake. Referencing it plainly says the same thing.
+  void tick
+  const seconds = running
+    ? Math.max(0, Math.round((Date.now() - new Date(run.started_at).getTime()) / 1000))
+    : run.seconds
   const pct = run.minutes_limit > 0 ? Math.min(100, (seconds / (run.minutes_limit * 60)) * 100) : 0
   const spent = run.usd_limit > 0 ? Math.min(100, (run.usd / run.usd_limit) * 100) : 0
   const tone =

@@ -57,6 +57,10 @@ export interface Schedule {
   name: string
   /** reminder | command | agent */
   kind: string
+  /** The manager whose heartbeat this is, by handle. Empty for a plain
+   *  reminder or command. The backend has always sent it; nothing here
+   *  declared it, so every screen had to guess which bot a row was about. */
+  manager: string
   node_id: number | null
   /** daily | weekdays | weekly | hourly | once */
   every: string

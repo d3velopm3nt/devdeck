@@ -23,6 +23,7 @@ import * as ipc from '../lib/ipc'
 import { CAPTURE_NEW_SCHEDULE } from '../lib/devCapture'
 import type { GoalRow } from '../lib/aiw'
 import { useApp } from '../store'
+import { openBot } from '../lib/dock'
 import { Icon, type IconName } from '../lib/icons'
 import { workspaceOf, findNode } from '../lib/tree'
 import type { Activity } from '../lib/types'
@@ -81,7 +82,7 @@ function until(ms: number | null): string {
 }
 
 export function SchedulerPage() {
-  const { nodes, setRailView, refreshActivity } = useApp()
+  const { nodes, refreshActivity } = useApp()
   const [list, setList] = useState<ipc.Schedule[]>([])
   // What the last hand-run did, by schedule. A reminder that worked says
   // nothing at all through the schedules table — its note is empty, because
@@ -347,8 +348,17 @@ export function SchedulerPage() {
                     </button>
                     {s.kind === 'bot' ? (
                       <>
-                        <button className="btn-ghost text-[11px]" onClick={() => setRailView('team')}>
-                          Edit the bot
+                        {/* This went to Team and stopped there, so on a fresh
+                            session you landed on Goals with no idea which bot
+                            you had asked about. It opens that bot. */}
+                        <button
+                          className="btn-ghost text-[11px]"
+                          disabled={!s.manager && s.node_id == null}
+                          onClick={() =>
+                            openBot(s.node_id ?? 0, s.name, false, s.manager || undefined)
+                          }
+                        >
+                          Open the bot
                         </button>
                         <span className="text-[10.5px] text-faint">
                           its routine lives in <code>_bot.md</code>

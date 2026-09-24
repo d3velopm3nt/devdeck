@@ -3,7 +3,6 @@ import { Dock, buildDefaultLayout } from './Dock'
 import { BottomBar } from './components/BottomBar'
 import { InboxPage } from './components/InboxPage'
 import { TeamPage } from './components/team/TeamPage'
-import { BotsPage } from './components/BotsPage'
 import { AnalyticsPage } from './components/AnalyticsPage'
 import { CalendarPage } from './components/CalendarPage'
 import { CalendarSidebar } from './components/CalendarSidebar'
@@ -1085,7 +1084,6 @@ export default function App() {
           {railView === 'machine' && <MachineSetup />}
           {railView === 'inbox' && <InboxPage />}
           {railView === 'team' && <TeamPage />}
-          {railView === 'bots' && <BotsPage />}
           {railView === 'workers' && <WorkersPage />}
           {railView === 'analytics' && <AnalyticsPage />}
           {railView === 'calendar' && <CalendarPage />}

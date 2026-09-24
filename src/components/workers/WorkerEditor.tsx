@@ -251,7 +251,9 @@ export function WorkerEditor({
                 onChange={(e) => set('unattended', e.target.checked)}
               />
               A manager may start it without asking
-              <span className="text-[10.5px] text-faint">off means it waits in your Inbox with the handoff</span>
+              <span className="text-[10.5px] text-faint">
+                off means the manager says what it would have started, in its thread, and waits
+              </span>
             </label>
           </div>
 

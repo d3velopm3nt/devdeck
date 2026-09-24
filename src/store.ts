@@ -59,7 +59,6 @@ export type RailView =
   /// rail's sub-menu, so it is state here rather than inside the page.
   | 'team'
   /// The people: the assistant, the bots, the agents.
-  | 'bots'
   /// The hands: workers you own, the skills they draw on, and their runs.
   | 'workers'
   /// What the AI is costing, across every space.
@@ -502,7 +501,6 @@ const RAIL_VIEWS: readonly RailView[] = [
   'home',
   'inbox',
   'team',
-  'bots',
   'analytics',
   'calendar',
   // Mail and Community were missing, which is exactly the failure the note
@@ -531,10 +529,13 @@ const loadTodayArea = (): number | null => {
 
 const loadRailView = (): RailView => {
   if (CAPTURE_RAIL) return CAPTURE_RAIL as RailView
-  const v = localStorage.getItem(RAIL_KEY) as RailView | null
-  // Bots moved back into Team. The old value still means something, so it is
-  // translated rather than failed — failing it would drop you on Home.
-  if (v === 'bots') return 'team'
+  const saved = localStorage.getItem(RAIL_KEY)
+  // Bots moved back into Team, and 'bots' is no longer a rail view at all —
+  // so this reads the raw string rather than a RailView. Somebody's stored
+  // value still means something, and translating it beats failing it, which
+  // would drop them on Today with no explanation.
+  if (saved === 'bots') return 'team'
+  const v = saved as RailView | null
   // Home became Today. Moved once, not every launch: after this, landing on
   // the dashboard is a choice somebody made and it is kept.
   if (v === 'home' && !localStorage.getItem(TODAY_KEY)) {

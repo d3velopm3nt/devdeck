@@ -193,6 +193,40 @@ left the work `in-progress` with a stopped worker on it. `w1` sat that way and
 no later wake would touch it, because `next_open_item` only picks up what
 nobody has claimed. The same fault as the branch, one layer up.
 
+### The whole loop, verified at the end
+
+One run with every fix in place, watched from the database rather than claimed:
+
+    ev_1a0d5cd1af4_000001  work.claimed    | Mason | goal-store
+    ev_1a0d5cd1af4_000002  agent.started   | Mason | goal-store
+    ev_1a0d5cd1af4_000003  work.completed  | Mason | goal-store
+    ev_1a0d5cd1af4_000004  agent.completed | Mason | goal-store
+
+    run_1a0d5cd0fc3   status: done   ok: true   $0.08
+    worktrees: 1 (main)              — the branch came back
+    w1: done
+
+Four events kept, with ids that carry the run. `work.claimed` and
+`work.completed` had never been recorded from a worker before. The item
+finished, the run called itself `done`, and the branch was released for the
+next piece of work.
+
+---
+
+## Two more, found by the fixes themselves
+
+**A finished run committed DevDeck's own scaffolding to the branch.** Once
+every run put its branch back, the salvage staged everything left in the
+worktree — including `.claude`, our brief and our ask-config. `keep_ours_out`
+existed to stop exactly that and had never once worked, for two reasons that
+each hid the other: `.git` in a worktree is a file rather than a directory, so
+the hand-built path never existed; and git reads `info/exclude` from the
+*common* directory, not the per-worktree one. Measured, then fixed, and the
+test now asks git what it staged rather than reading our own file back.
+
+**The salvage commit said "Interrupted" on runs that finished.** Now it only
+says that when it is true.
+
 ---
 
 ## What is still wrong

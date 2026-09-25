@@ -538,13 +538,24 @@ fn salvage_worktree(r: &Run) -> String {
         &at,
         &r.worker_name,
         &r.branch,
+        if r.status == "interrupted" {
+            "DevDeck stopped while this was running"
+        } else {
+            "The run ended"
+        },
     )
 }
 
 /// The part of [`salvage_worktree`] that does not need to know where the
 /// personal store is, so a test can hand it a real repository in a temp folder
 /// instead of reaching into yours.
-fn salvage_at(repo: &std::path::Path, at: &std::path::Path, worker: &str, branch: &str) -> String {
+fn salvage_at(
+    repo: &std::path::Path,
+    at: &std::path::Path,
+    worker: &str,
+    branch: &str,
+    why: &str,
+) -> String {
     let git = |dir: &std::path::Path, args: &[&str]| {
         std::process::Command::new("git")
             .args(args)
@@ -561,9 +572,9 @@ fn salvage_at(repo: &std::path::Path, at: &std::path::Path, worker: &str, branch
     if dirty {
         let _ = git(at, &["add", "-A"]);
         let msg = format!(
-            "Interrupted: what {worker} had written when DevDeck stopped
+            "{why}: what {worker} had not committed
 
-Not verified and not finished. Kept so the branch could be released."
+Kept so the branch could be used again. Not verified."
         );
         let ok = git(at, &["commit", "-m", &msg])
             .map(|o| o.status.success())
@@ -955,17 +966,50 @@ fn lay_out_kit(cwd: &Path, items: &[crate::library::Item]) -> Result<usize, Stri
 }
 
 /// Keep what DevDeck lays down out of somebody's pull request, the local way.
-fn keep_out_of_history(cwd: &Path, what: &str) {
-    let excl = cwd.join(".git").join("info").join("exclude");
-    if excl.parent().is_some_and(|p| p.is_dir()) {
-        let have = std::fs::read_to_string(&excl).unwrap_or_default();
-        if !have.contains(what) {
-            let _ = std::fs::write(
-                &excl,
-                format!("{have}\n# DevDeck gives a worker its skills here\n{what}/\n"),
-            );
-        }
+/// Where git reads `info/exclude` from, asked rather than assumed.
+///
+/// Two things were wrong here and each hid the other. `.git` in a worktree is
+/// a *file* pointing elsewhere, so building the path by hand and testing
+/// `is_dir()` quietly did nothing — for every worker run ever made. And the
+/// per-worktree git directory is not where git looks: measured against git on
+/// this machine, a pattern in `worktrees/<name>/info/exclude` is ignored and
+/// the same pattern in the common `.git/info/exclude` is honoured. The sign
+/// was DevDeck's own brief and ask-config landing in a commit on the person's
+/// branch on 25 Sep.
+fn git_dir_of(cwd: &Path) -> Option<PathBuf> {
+    let out = std::process::Command::new("git")
+        .args(["rev-parse", "--path-format=absolute", "--git-common-dir"])
+        .current_dir(cwd)
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
     }
+    let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if path.is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(path))
+    }
+}
+
+fn keep_out_of_history(cwd: &Path, what: &str) {
+    let Some(dir) = git_dir_of(cwd) else { return };
+    let info = dir.join("info");
+    if std::fs::create_dir_all(&info).is_err() {
+        return;
+    }
+    let excl = info.join("exclude");
+    let have = std::fs::read_to_string(&excl).unwrap_or_default();
+    if have.lines().any(|l| l.trim() == what) {
+        return;
+    }
+    // Written exactly as given: a trailing slash was appended once, which
+    // turned a file into a directory pattern that matched nothing.
+    let _ = std::fs::write(
+        &excl,
+        format!("{have}\n# DevDeck's own scaffolding for this run\n{what}\n"),
+    );
 }
 
 fn lay_out_skills(cwd: &Path, ids: &[String]) -> Result<usize, String> {
@@ -1001,12 +1045,18 @@ fn lay_out_skills(cwd: &Path, ids: &[String]) -> Result<usize, String> {
 /// untracked and a worker told to commit its work would have committed its own
 /// job description along with it.
 fn keep_ours_out(cwd: &Path) {
-    for what in [
-        ".claude/skills",
-        ".claude/agents",
+    // Named one by one rather than as the whole `.claude` folder, because the
+    // exclude has to be written where git reads it — the *common* directory,
+    // shared by the repository and every worktree — and a blanket rule there
+    // would also hide the person's own `.claude` in their working copy.
+    // These four are unambiguously ours.
+    for ours in [
+        ".claude/skills/",
+        ".claude/agents/",
         ".claude/devdeck-brief.md",
+        ".claude/devdeck-ask.json",
     ] {
-        keep_out_of_history(cwd, what);
+        keep_out_of_history(cwd, ours);
     }
 }
 
@@ -2010,39 +2060,56 @@ mod tests {
 
     /// Everything DevDeck puts in a working folder stays out of git.
     ///
-    /// The brief was missing from this list, so `.claude/` showed as untracked
-    /// and a worker told to commit its work would have committed its own job
-    /// description with it.
+    /// Judged by git rather than by reading the exclude file, because the
+    /// exclude file was written to the wrong place for every worker run ever
+    /// made and reading it back would have agreed with itself. In a worktree
+    /// `.git` is a file, not a directory, so the old hand-built path never
+    /// existed and nothing was ever written — and the sign was DevDeck's own
+    /// brief and ask-config landing in a commit on the person's branch on
+    /// 25 Sep.
     #[test]
     fn nothing_devdeck_writes_can_land_in_somebody_s_commit() {
-        let tmp = std::env::temp_dir().join(format!("devdeck-excl-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&tmp);
-        std::fs::create_dir_all(tmp.join(".git").join("info")).unwrap();
+        let (repo, at) = a_repo_with_a_worktree("excl");
+        std::fs::create_dir_all(at.join(".claude")).unwrap();
+        std::fs::write(at.join(".claude").join("devdeck-brief.md"), "the job").unwrap();
+        std::fs::write(at.join(".claude").join("devdeck-ask.json"), "{}").unwrap();
+        std::fs::write(at.join("theirs.txt"), "the person's own work").unwrap();
 
-        keep_ours_out(&tmp);
+        keep_ours_out(&at);
 
-        let excl = std::fs::read_to_string(tmp.join(".git").join("info").join("exclude")).unwrap();
-        for what in [
-            ".claude/skills",
-            ".claude/agents",
-            ".claude/devdeck-brief.md",
-        ] {
-            assert!(
-                excl.contains(what),
-                "`{what}` is not excluded:
-{excl}"
-            );
-        }
+        let git = |args: &[&str]| {
+            String::from_utf8_lossy(
+                &std::process::Command::new("git")
+                    .args(args)
+                    .current_dir(&at)
+                    .output()
+                    .unwrap()
+                    .stdout,
+            )
+            .to_string()
+        };
+        let _ = git(&["add", "-A"]);
+        let staged = git(&["status", "--porcelain"]);
+        assert!(
+            !staged.contains(".claude"),
+            "DevDeck's own files were staged:
+{staged}"
+        );
+        assert!(
+            staged.contains("theirs.txt"),
+            "and the person's work must still be:
+{staged}"
+        );
+
         // Twice must not double it: a worker runs in the same folder again and
         // again, and an exclude file that grows every run is a mess you would
         // eventually have to explain.
-        let before = excl.len();
-        keep_ours_out(&tmp);
-        let after = std::fs::read_to_string(tmp.join(".git").join("info").join("exclude"))
-            .unwrap()
-            .len();
+        let excl = git_dir_of(&at).unwrap().join("info").join("exclude");
+        let before = std::fs::read_to_string(&excl).unwrap().len();
+        keep_ours_out(&at);
+        let after = std::fs::read_to_string(&excl).unwrap().len();
         assert_eq!(before, after, "the exclude file grew on a second run");
-        let _ = std::fs::remove_dir_all(&tmp);
+        let _ = std::fs::remove_dir_all(repo.parent().unwrap());
     }
 
     /// A folder with no git in it is left alone rather than given one.
@@ -2108,7 +2175,7 @@ mod tests {
         let (repo, at) = a_repo_with_a_worktree("dirty");
         std::fs::write(at.join("new.txt"), "what mason wrote").unwrap();
 
-        let said = salvage_at(&repo, &at, "Mason", "wip");
+        let said = salvage_at(&repo, &at, "Mason", "wip", "The run ended");
 
         assert!(
             !holds(&repo).contains("wt"),
@@ -2124,7 +2191,7 @@ mod tests {
         )
         .to_string();
         assert!(
-            log.contains("Interrupted"),
+            log.contains("The run ended"),
             "the work was not committed: {log}"
         );
         assert!(said.contains("committed"), "said: {said}");
@@ -2137,7 +2204,7 @@ mod tests {
     fn a_run_that_wrote_nothing_still_gives_the_branch_back() {
         let (repo, at) = a_repo_with_a_worktree("clean");
 
-        let said = salvage_at(&repo, &at, "Mason", "wip");
+        let said = salvage_at(&repo, &at, "Mason", "wip", "The run ended");
 
         assert!(
             !holds(&repo).contains("wt"),

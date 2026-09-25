@@ -29,7 +29,7 @@ import { aiw, ago } from '../lib/aiw'
 import * as ipc from '../lib/ipc'
 import { Icon } from '../lib/icons'
 import { TodayBusinesses } from './business/TodayBusinesses'
-import { openLife, openNodeThread, openSpace } from '../lib/dock'
+import { openLife, openNodeThread, openRun, openSpace } from '../lib/dock'
 import { findNode, workspaceOf } from '../lib/tree'
 import { DAY_MS, hhmm, startOfDay } from '../lib/calendarWindow'
 
@@ -82,6 +82,10 @@ export function Today() {
   const { nodes, todayArea, setTodayArea } = app
   const [items, setItems] = useState<ipc.CalendarItem[] | null>(null)
   const [schedules, setSchedules] = useState<ipc.Schedule[]>([])
+  // Worker runs, which this page could not see at all. It said "No bot is
+  // working" while Mason was three minutes into a branch, because it was
+  // reading assistant sessions and a worker is not one.
+  const [runs, setRuns] = useState<ipc.Run[]>([])
 
   // Its own data, and its own live tail. Today is the first thing on screen on
   // a cold start, before the Assistant has been opened — without this it would
@@ -108,6 +112,19 @@ export function Today() {
     void load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load])
+
+  useEffect(() => {
+    const read = () => void ipc.runsList(0).then(setRuns).catch(() => setRuns([]))
+    read()
+    let off: (() => void) | undefined
+    void ipc.onWorker({ done: read, asking: read }).then((f) => (off = f))
+    // A run that starts between events still shows up within the minute.
+    const t = window.setInterval(read, 60_000)
+    return () => {
+      off?.()
+      window.clearInterval(t)
+    }
+  }, [])
 
   // The areas, in tree order. Only workspaces: a chip per client would be a
   // second tree, and the tree is one click away.
@@ -194,6 +211,10 @@ export function Today() {
     .filter(([id]) => inArea(Number(id)))
     .filter(([, g]) => (g?.behind ?? 0) > 0)
   const workingBots = a.sessions.filter((s) => s.status === 'working' || s.status === 'planning')
+  // The two kinds of "working" this page can honestly report: an assistant
+  // session, and a worker in a worktree. It knew about the first only.
+  const workingRuns = runs.filter((r) => r.status === 'running').filter((r) => inArea(r.node_id))
+  const nobodyWorking = workingBots.length === 0 && workingRuns.length === 0
 
   const heading =
     needs === 0
@@ -453,20 +474,30 @@ export function Today() {
           <section>
             <Head title="Ticking over" note="nothing to do here" />
             <Card>
-              {workingBots.length > 0 ? (
-                workingBots.slice(0, 3).map((s) => (
-                  <Row key={s.id} onClick={() => app.setTeamTab('bots')}>
-                    <Dot tone="bg-emerald-400" />
-                    <span className="min-w-0 flex-1 truncate text-[12px] text-body">
-                      {s.agent_id}
-                    </span>
-                    <span className="shrink-0 text-[10.5px] text-muted">{s.status}</span>
-                  </Row>
-                ))
-              ) : (
+              {workingRuns.slice(0, 3).map((r) => (
+                <Row key={r.id} onClick={() => openRun(r.id, r.title)}>
+                  <Dot tone="bg-indigo-400" />
+                  <span className="min-w-0 flex-1 truncate text-[12px] text-body">
+                    {r.worker_name} &middot; {r.title}
+                  </span>
+                  <span className="shrink-0 text-[10.5px] text-muted">
+                    ${r.usd.toFixed(2)} of ${r.usd_limit.toFixed(2)}
+                  </span>
+                </Row>
+              ))}
+              {workingBots.slice(0, 3).map((s) => (
+                <Row key={s.id} onClick={() => app.setTeamTab('bots')}>
+                  <Dot tone="bg-emerald-400" />
+                  <span className="min-w-0 flex-1 truncate text-[12px] text-body">
+                    {s.agent_id}
+                  </span>
+                  <span className="shrink-0 text-[10.5px] text-muted">{s.status}</span>
+                </Row>
+              ))}
+              {nobodyWorking && (
                 <Row>
                   <Dot tone="bg-line2" />
-                  <span className="flex-1 text-[12px] text-muted">No bot is working</span>
+                  <span className="flex-1 text-[12px] text-muted">Nobody is working</span>
                 </Row>
               )}
               {behind.slice(0, 3).map(([id, g]) => (

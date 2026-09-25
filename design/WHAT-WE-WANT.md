@@ -134,10 +134,26 @@ runs in progress, proposals waiting on you, and managers that could not act.
 
 ---
 
-## 6. The rest of the current goal
+## 6. The current goal — done
 
-From `design/a-real-provider/GOAL.md`, not yet done:
+From `design/a-real-provider/GOAL.md`:
 
-- **One reusable modal that sets a provider up** and checks the credentials
-  before it closes, used everywhere a provider is chosen.
-- **The sweep for dead links** and controls that cannot do what they say.
+- ~~No screen offers the mock~~ — out of every list a person picks from, kept
+  for the 641 offline tests.
+- ~~An agent naming a provider that does not exist is refused, not run~~ — and
+  the refusal says which of the three faults it is.
+- ~~One reusable modal that sets a provider up~~ — `ProviderSetup`, on all
+  three places a provider is chosen: the agent editor, the assistant's header
+  and a thread's model bar. It saves the endpoint, asks it for something real,
+  and only closes when that comes back; when it does not, it shows the
+  provider's own words rather than "something went wrong".
+- ~~The sweep for dead links~~ — one real lie found (Today could not see a
+  worker and said "No bot is working" while one ran) and fixed. Everything
+  else checked out: no dangling rail views, no empty handlers, no dead
+  external links.
+- ~~A new space taken from nothing to working code~~ — the goal tracker, 7
+  passing tests, committed as `56bc2f1`. See `TEST-REPORT.md`.
+
+What is left of it is the one thing a person has to do: **press the buttons.**
+A script stood in at the keyboard all night, and Yes/No has still never had a
+human press.

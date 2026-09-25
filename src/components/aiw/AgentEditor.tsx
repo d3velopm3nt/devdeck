@@ -12,6 +12,7 @@ import { Icon } from '../../lib/icons'
 import { useAiw } from '../../lib/aiwStore'
 import { aiw, type AgentFile, type SkillFile } from '../../lib/aiw'
 import { ModelPicker } from './ModelPicker'
+import { ProviderSetup } from './ProviderSetup'
 import { useProviders, withCurrent } from '../../lib/providers'
 
 const PERMISSIONS: Array<[string, string]> = [
@@ -23,7 +24,9 @@ const PERMISSIONS: Array<[string, string]> = [
 
 export function AgentEditor({ id, onClose }: { id: string; onClose: () => void }) {
   const a = useAiw()
-  const providers = useProviders()
+  const [setupNonce, setSetupNonce] = useState(0)
+  const providers = useProviders(setupNonce)
+  const [setupOpen, setSetupOpen] = useState(false)
   const [file, setFile] = useState<AgentFile | null>(null)
   const [skills, setSkills] = useState<SkillFile[]>([])
   const [saving, setSaving] = useState(false)
@@ -69,7 +72,18 @@ export function AgentEditor({ id, onClose }: { id: string; onClose: () => void }
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="relative flex h-full flex-col">
+      {/* Positioned against this panel rather than the window, so it covers
+          the thing it is about. */}
+      <ProviderSetup
+        open={setupOpen}
+        onClose={() => setSetupOpen(false)}
+        onSaved={(id) => {
+          // It proved it works before this ran, so selecting it is safe.
+          setSetupNonce((n) => n + 1)
+          edit({ provider: id, model: '' })
+        }}
+      />
       <div className="flex shrink-0 items-center gap-2 border-b border-line px-5 py-3">
         <button className="btn-ghost text-[11px]" onClick={onClose}>
           <Icon name="chevron-left" size={12} /> Agents
@@ -117,17 +131,33 @@ export function AgentEditor({ id, onClose }: { id: string; onClose: () => void }
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Provider">
-              <select
-                className="input w-full text-[12px]"
-                value={file.provider}
-                onChange={(e) => edit({ provider: e.target.value, model: '' })}
-              >
-                {withCurrent(providers, file.provider).map(([id, label]) => (
-                  <option key={id} value={id}>
-                    {label}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center gap-1.5">
+                <select
+                  className="input w-full text-[12px]"
+                  value={file.provider}
+                  onChange={(e) => edit({ provider: e.target.value, model: '' })}
+                >
+                  {/* An empty list is the honest state when nothing is set up.
+                      It used to open on the mock, so the quickest thing to do
+                      was pick something that cannot do the work. */}
+                  {providers.length === 0 && <option value="">No provider set up yet</option>}
+                  {withCurrent(providers, file.provider).map(([id, label]) => (
+                    <option key={id} value={id}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                {/* Setting one up used to be four clicks away behind a screen
+                    with no rail entry, so it is here, where you find out you
+                    need one. */}
+                <button
+                  className="btn shrink-0 text-[11.5px]"
+                  onClick={() => setSetupOpen(true)}
+                  title="Set up a provider and test it"
+                >
+                  Add
+                </button>
+              </div>
             </Field>
             <Field label="Model">
               <ModelPicker

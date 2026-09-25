@@ -15,7 +15,10 @@ import { aiw } from './aiw'
 /** `[id, label]`, starting from the mock, which is always registered. */
 export type ProviderOption = [string, string]
 
-export function useProviders(): ProviderOption[] {
+/// `reload` is any value that changes when a provider is added, so a
+/// dropdown that was empty a moment ago fills without a round trip through
+/// the whole workspace.
+export function useProviders(reload?: unknown): ProviderOption[] {
   // Empty until the backend answers. It used to start as the mock, which
   // meant a dropdown opened on "Mock (no AI)" and anything made in a hurry
   // was made on a thing that cannot do the work. Nothing is better than a
@@ -35,7 +38,7 @@ export function useProviders(): ProviderOption[] {
     return () => {
       alive = false
     }
-  }, [])
+  }, [reload])
   return list
 }
 

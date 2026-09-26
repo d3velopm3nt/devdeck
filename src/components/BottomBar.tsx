@@ -9,6 +9,7 @@ import { EventStream } from './EventStream'
 import { LlmCalls } from './LlmCalls'
 import { useAiw } from '../lib/aiwStore'
 import { useApp } from '../store'
+import { useLive } from '../liveStore'
 import { Icon } from '../lib/icons'
 
 export type BottomTab = 'logs' | 'processes' | 'events' | 'calls'
@@ -31,7 +32,8 @@ export function BottomBar({
   height: number
   onHeight: (h: number) => void
 }) {
-  const { logs, svcStates } = useApp()
+  const { svcStates } = useApp()
+  const logCount = useLive((s) => s.logs.length)
   const events = useAiw((s) => s.events)
   const drag = useRef<{ startY: number; startH: number } | null>(null)
 
@@ -91,7 +93,7 @@ export function BottomBar({
 
       {/* header: tabs + collapse toggle */}
       <div className="flex items-center gap-1 px-1">
-        <TabBtn id="logs" label="Logs" badge={logs.length} />
+        <TabBtn id="logs" label="Logs" badge={logCount} />
         <TabBtn id="processes" label="Processes" badge={runningCount} />
         {/* The AI Workspace's bus, in the order it happened. Beside the log
             rather than inside the Assistant: when an agent does something

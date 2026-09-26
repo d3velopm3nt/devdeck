@@ -83,11 +83,19 @@ export function TeamPage() {
     // The board moves while you watch it — an agent claims something, a
     // session ends, an approval is raised. Without the live tail this is a
     // snapshot from whenever the page mounted.
-    let stop: (() => void) | undefined
-    void aiw.onEvent(() => void reload()).then((un) => {
-      stop = un
+    // Hold the promise, not the resolved unlisten: cleanup can run before it
+    // resolves, and a listener captured late is never removed.
+    // Debounced: an agent run publishes a burst of events, and a full board
+    // read per event queued dozens of identical IPCs behind each other.
+    let timer: number | undefined
+    const stop = aiw.onEvent(() => {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => void reload(), 300)
     })
-    return () => stop?.()
+    return () => {
+      window.clearTimeout(timer)
+      void stop.then((un) => un())
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

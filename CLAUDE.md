@@ -157,6 +157,17 @@ were scattered once and three independently picked `-500_000` (AI, stash,
 mail); nothing caught it because both log views filter on the display name, so
 the id nothing reads was free to be wrong. A test asserts they stay distinct.
 
+**Performance — two rules that caused most of the lag.**
+1. *High-frequency data never goes in `useApp`.* Most of the shell reads
+   `useApp()` without a selector, so every write re-renders everything. Log
+   lines and process stats live in `src/liveStore.ts` (`useLive`), batched per
+   frame and deduped. New code reads `useApp((s) => s.field)`, not `useApp()`.
+2. *A sync `#[tauri::command] fn` runs on the UI thread.* Anything that spawns
+   a process, walks the disk, touches the network or can wait on the DB lock
+   behind a background thread is `#[tauri::command(async)]` (or `async fn` +
+   `spawn_blocking`). Keep order-sensitive commands (`pty_write`) sync.
+   Don't do slow work while holding `db.0.lock()` — walk/fetch first, then lock.
+
 **Failure honesty.** Never let a failed check look like a success. The update
 checker once mapped "couldn't reach the server" to "up to date" and silently hid
 releases — an explicit `ok` flag fixed it. Same rule everywhere.

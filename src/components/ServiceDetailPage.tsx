@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { IDockviewPanelProps } from 'dockview-react'
 import * as ipc from '../lib/ipc'
 import { useApp } from '../store'
+import { useLive } from '../liveStore'
 import { Icon } from '../lib/icons'
 import { openEditor, openSpace } from '../lib/dock'
 import { findNode, projectOf, serviceDir } from '../lib/tree'
@@ -26,9 +27,11 @@ function InfoCell({ k, children, mono }: { k: string; children: React.ReactNode;
 export function ServiceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
   const serviceId = props.params.id
   const {
-    services, nodes, svcStates, stats, logs, recents,
+    services, nodes, svcStates, recents,
     servicePort, requestStartService, showBottom, focusServiceLogs,
   } = useApp()
+  const stats = useLive((s) => s.stats)
+  const logs = useLive((s) => s.logs)
   const [busy, setBusy] = useState(false)
 
   const [now, setNow] = useState(() => Date.now())

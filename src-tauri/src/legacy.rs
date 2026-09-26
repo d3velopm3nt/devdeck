@@ -74,7 +74,7 @@ pub struct ShellDef {
     pub command: String,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn shells_detect() -> Vec<ShellDef> {
     let mut out = Vec::new();
     let sys_root = std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into());

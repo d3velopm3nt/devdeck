@@ -116,6 +116,12 @@ pub fn open() -> Connection {
         r#"
         PRAGMA journal_mode = WAL;
         PRAGMA foreign_keys = ON;
+        -- WAL makes NORMAL safe from corruption; FULL fsynced on every one of
+        -- the many small commits the background threads make.
+        PRAGMA synchronous = NORMAL;
+        -- Wait for another connection's lock instead of failing at once with
+        -- SQLITE_BUSY (the CLI, a backup tool, a second DevDeck process).
+        PRAGMA busy_timeout = 5000;
         -- Fold the write-ahead log back into devdeck.sqlite often. The default
         -- threshold (1000 pages) is never reached by a database this small, so
         -- without this the main file stays empty on a fresh install and every

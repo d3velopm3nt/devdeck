@@ -1404,8 +1404,12 @@ export function onPtyOutput(cb: (e: PtyOutputEvent) => void): Promise<UnlistenFn
 export function onPtyExit(cb: (e: { id: number }) => void): Promise<UnlistenFn> {
   return listen<{ id: number }>('pty:exit', (e) => cb(e.payload))
 }
+/** Log lines arrive batched (one event per ~50ms from the backend's log bus);
+ *  the callback still sees them one at a time, in order. */
 export function onSvcLog(cb: (e: LogEntry) => void): Promise<UnlistenFn> {
-  return listen<LogEntry>('svc:log', (e) => cb(e.payload))
+  return listen<LogEntry[]>('svc:logs', (e) => {
+    for (const entry of e.payload) cb(entry)
+  })
 }
 export function onSvcStatus(cb: (e: SvcState) => void): Promise<UnlistenFn> {
   return listen<SvcState>('svc:status', (e) => cb(e.payload))

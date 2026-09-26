@@ -181,7 +181,7 @@ fn scoop_installed() -> Vec<String> {
 }
 
 /// What's installed on this machine, for marking the catalog.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn machine_status() -> MachineStatus {
     let winget_available = exists("winget");
     let scoop_available = scoop_present();
@@ -422,7 +422,7 @@ pub fn machine_install_scoop(app: tauri::AppHandle) -> Result<(), String> {
 /// Build a manifest from what's installed, matched against a caller-supplied
 /// catalog (id → source) so we record the right source per package and skip
 /// system noise the catalog doesn't know about.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn machine_snapshot(name: String, known: Vec<InstallItem>) -> Manifest {
     let status = machine_status();
     let mut packages = Vec::new();

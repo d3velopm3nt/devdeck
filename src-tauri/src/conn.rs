@@ -406,7 +406,7 @@ fn execute(def: &ConnDef, sql: &str, timeout: u64) -> QueryResult {
 }
 
 /// Is this connection reachable? Same shape as a service's status.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn conn_test(db: tauri::State<Db>, id: i64) -> Result<QueryResult, String> {
     let conn = db.0.lock().unwrap();
     let def = get_conn(&conn, id)?;
@@ -416,7 +416,7 @@ pub fn conn_test(db: tauri::State<Db>, id: i64) -> Result<QueryResult, String> {
 
 /// Run SQL and return a grid. Every run is recorded, successful or not — a
 /// history you only keep when things go well isn't a history.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn conn_run(
     app: tauri::AppHandle,
     db: tauri::State<Db>,

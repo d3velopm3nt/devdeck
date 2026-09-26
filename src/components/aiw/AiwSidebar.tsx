@@ -54,11 +54,10 @@ export function AiwSidebar() {
   // Load once, and keep the live tail running while this view is mounted.
   useEffect(() => {
     if (!a.ready) void a.bootstrap()
-    let stop: (() => void) | undefined
-    void aiw.onEvent((e) => a.pushEvent(e)).then((un) => {
-      stop = un
-    })
-    return () => stop?.()
+    // Hold the promise, not the resolved unlisten: cleanup can run before it
+    // resolves, and a listener captured late is never removed.
+    const stop = aiw.onEvent((e) => a.pushEvent(e))
+    return () => void stop.then((un) => un())
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

@@ -37,11 +37,10 @@ export function HomeAttention() {
     // And subscribe while Home is open: without the live tail this feed is a
     // snapshot from whenever the page mounted, and an approval raised a minute
     // later would never appear.
-    let stop: (() => void) | undefined
-    void aiw.onEvent((e) => useAiw.getState().pushEvent(e)).then((un) => {
-      stop = un
-    })
-    return () => stop?.()
+    // Hold the promise, not the resolved unlisten: cleanup can run before it
+    // resolves, and a listener captured late is never removed.
+    const stop = aiw.onEvent((e) => useAiw.getState().pushEvent(e))
+    return () => void stop.then((un) => un())
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

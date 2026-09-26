@@ -12,6 +12,7 @@ import { getCurrentWindow, currentMonitor } from '@tauri-apps/api/window'
 import { LogicalPosition } from '@tauri-apps/api/dpi'
 import * as ipc from '../lib/ipc'
 import { useApp } from '../store'
+import { useLive } from '../liveStore'
 import type { StashItem, SvcState, TreeNode } from '../lib/types'
 import { findNode, resolveDir } from '../lib/tree'
 import { widgetOpenTerminal, widgetRunCommand, serviceDir } from './widgetActions'
@@ -166,6 +167,7 @@ const Icon = {
 
 export function CommandWidget() {
   const app = useApp()
+  const stats = useLive((s) => s.stats)
 
   // ---- interactive UI state (mirrors the design's this.state) ----
   const [view, setView] = useState<View>('recent')
@@ -211,7 +213,7 @@ export function CommandWidget() {
     void app.bootstrap()
     const subs = [
       ipc.onSvcStatus((e) => useApp.getState().updateSvcState(e)),
-      ipc.onStats((e) => useApp.getState().setStats(e)),
+      ipc.onStats((e) => void useLive.getState().setStats(e)),
     ]
     void ipc.settingGet('widget_view').then((v) => v && setView(v as View))
     void ipc.settingGet('widget_density').then((v) => v && setDensity(v as Density))
@@ -409,7 +411,7 @@ export function CommandWidget() {
       const proj = model.projOf(n)
       if (proj) push(n, proj.id, proj.name)
     }
-    return app.stats
+    return stats
       .filter((s) => s.kind === 'detected')
       .map((s) => {
         const cwd = s.cwd ?? ''
@@ -436,7 +438,7 @@ export function CommandWidget() {
         }
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [app.stats, app.nodes, model])
+  }, [stats, app.nodes, model])
 
   const detected = detectEnabled ? detectedSessions : []
 
@@ -906,7 +908,8 @@ function ItemRow({ it, d, status, onRun, onToggle, onRestart, onTerminal }: {
   const isService = it.kind === 'service'
   const running = status === 'running'
   // Look up the live port / uptime for services (restores the session-panel info).
-  const { services, stats } = useApp()
+  const { services } = useApp()
+  const stats = useLive((s) => s.stats)
   const svc = isService ? services.find((s) => s.id === it.refId) : undefined
   const stat = isService ? stats.find((s) => s.kind === 'service' && s.id === it.refId) : undefined
   const hp = svc?.health_port ?? null

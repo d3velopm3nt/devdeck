@@ -94,6 +94,8 @@ pub fn pty_create(
         let alive = alive.clone();
         std::thread::spawn(move || {
             let mut buf = [0u8; 8192];
+            // Bytes of a character the last read cut in half.
+            let mut carry: Vec<u8> = Vec::new();
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) | Err(_) => break,
@@ -106,8 +108,11 @@ pub fn pty_create(
                                 sb.drain(..len - SCROLLBACK_LIMIT);
                             }
                         }
-                        let text = String::from_utf8_lossy(&buf[..n]).to_string();
-                        let _ = app.emit("pty:output", PtyOutput { id, data: &text });
+                        carry.extend_from_slice(&buf[..n]);
+                        let text = take_complete_utf8(&mut carry);
+                        if !text.is_empty() {
+                            let _ = app.emit("pty:output", PtyOutput { id, data: &text });
+                        }
                     }
                 }
             }
@@ -226,4 +231,45 @@ pub fn live_pids(ptys: &PtyManager) -> Vec<(u64, u32)> {
         .filter(|s| s.alive.load(Ordering::SeqCst))
         .filter_map(|s| s.pid.map(|p| (s.id, p)))
         .collect()
+}
+
+/// Decode what `pending` holds, leaving behind a trailing character whose
+/// remaining bytes have not arrived yet. Decoding each read on its own turned
+/// every multibyte character that straddled a read boundary into U+FFFD —
+/// box-drawing TUIs and emoji showed up as `�` at random.
+fn take_complete_utf8(pending: &mut Vec<u8>) -> String {
+    let cut = match std::str::from_utf8(pending) {
+        Ok(_) => pending.len(),
+        // Incomplete at the very end: hold those bytes for the next read.
+        Err(e) if e.error_len().is_none() => e.valid_up_to(),
+        // Genuinely invalid bytes will never complete; don't hold them.
+        Err(_) => pending.len(),
+    };
+    let rest = pending.split_off(cut);
+    let text = String::from_utf8_lossy(pending).into_owned();
+    *pending = rest;
+    text
+}
+
+#[cfg(test)]
+mod utf8_tests {
+    use super::take_complete_utf8;
+
+    #[test]
+    fn a_character_split_across_reads_survives() {
+        let bytes = "a─b".as_bytes(); // '─' is three bytes
+        let mut pending = bytes[..2].to_vec(); // 'a' + first byte of '─'
+        assert_eq!(take_complete_utf8(&mut pending), "a");
+        assert_eq!(pending.len(), 1);
+        pending.extend_from_slice(&bytes[2..]);
+        assert_eq!(take_complete_utf8(&mut pending), "─b");
+        assert!(pending.is_empty());
+    }
+
+    #[test]
+    fn invalid_bytes_are_not_held_forever() {
+        let mut pending = vec![b'x', 0xFF, b'y'];
+        assert_eq!(take_complete_utf8(&mut pending), "x\u{FFFD}y");
+        assert!(pending.is_empty());
+    }
 }

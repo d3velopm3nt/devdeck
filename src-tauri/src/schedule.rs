@@ -589,6 +589,17 @@ pub fn on_event(app: &tauri::AppHandle, event_type: &str, project_id: Option<&st
     if !TRIGGERS.contains(&event_type) {
         return;
     }
+    // This runs inside the event bus's sink, and whoever published may be
+    // holding the DB lock — so it must not block here. It used to `try_lock`
+    // and return, which silently dropped the routine whenever the database was
+    // busy. Waiting on a thread of its own keeps both promises.
+    let app = app.clone();
+    let event_type = event_type.to_string();
+    let project_id = project_id.map(str::to_string);
+    std::thread::spawn(move || on_event_blocking(&app, &event_type, project_id.as_deref()));
+}
+
+fn on_event_blocking(app: &tauri::AppHandle, event_type: &str, project_id: Option<&str>) {
     let Some(db) = app.try_state::<Db>() else {
         return;
     };
@@ -596,7 +607,7 @@ pub fn on_event(app: &tauri::AppHandle, event_type: &str, project_id: Option<&st
     let now = chrono::Local::now().timestamp_millis();
 
     let due: Vec<(Schedule, Option<String>)> = {
-        let Ok(conn) = db.0.try_lock() else { return };
+        let conn = db.0.lock().unwrap_or_else(|p| p.into_inner());
         let Ok(all) = all(&conn) else { return };
         let mut out = Vec::new();
         for s in all

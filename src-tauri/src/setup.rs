@@ -272,7 +272,7 @@ pub fn refresh_path() -> Result<(), String> {
 }
 
 /// Detect a project's required tools + bootstrap steps and their current state.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn detect_project_setup(dir: String) -> ProjectSetup {
     let d = Path::new(&dir);
     let mut tools: Vec<RequiredTool> = Vec::new();
@@ -363,7 +363,7 @@ pub fn detect_project_setup(dir: String) -> ProjectSetup {
 
 /// Given one line of a command's output, suggest an installable tool if it
 /// looks like a "command not found" error. Returns null otherwise.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn suggest_install(line: String) -> Option<RequiredTool> {
     let l = line.to_ascii_lowercase();
     // Extract the offending binary name from common shells' phrasings.

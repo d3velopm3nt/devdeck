@@ -61,6 +61,7 @@ import * as ipc from './lib/ipc'
 import { aiw as aiwApi } from './lib/aiw'
 import { routeOutput } from './lib/termBus'
 import { useApp } from './store'
+import { useLive } from './liveStore'
 import { forgetFileListings } from './lib/fileIndex'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { openNodeThread, dockApi, openFile, openTerminalPanel, openEditor, openNodeSetup, openSingleton, openLearnRun, openLife, saveLayout, restoreLayout } from './lib/dock'
@@ -154,6 +155,7 @@ function Menu({
 
 /// Whether the capture harness has already said its piece this session.
 let said = false
+let dataChangedTimer: number | undefined
 let checked = false
 let evented = false
 let entered = false
@@ -539,7 +541,7 @@ export default function App() {
         routeOutput(e.id, '\r\n\x1b[90m[session ended]\x1b[0m\r\n')
       }),
       ipc.onSvcLog((e) => {
-        useApp.getState().appendLog(e)
+        useLive.getState().appendLog(e)
         // A "command not found"-style error on a service line → suggest the
         // tool to install. Cheap prefilter before the IPC round-trip.
         if (
@@ -553,7 +555,8 @@ export default function App() {
       }),
       ipc.onSvcStatus((e) => useApp.getState().updateSvcState(e)),
       ipc.onStats((e) => {
-        useApp.getState().setStats(e)
+        // Unchanged samples are dropped, and so is the work that follows them.
+        if (!useLive.getState().setStats(e)) return
         // Learn each running service's port from the monitor so you never have
         // to type it in.
         useApp.getState().adoptDetectedPorts()
@@ -566,12 +569,17 @@ export default function App() {
       // The widget's setup tour drives create flows in this window.
       ipc.onTourAction((a) => void handleTourAction(a)),
       // When the widget changes data (or vice-versa), refresh.
+      // Debounced: a save fires several of these in a row, and each one used
+      // to start a full vault scan plus a git read per project.
       ipc.onDataChanged(() => {
-        const s = useApp.getState()
-        void s.refreshTree()
-        void s.refreshCommands()
-        void s.refreshServices()
-        void s.refreshProfiles()
+        window.clearTimeout(dataChangedTimer)
+        dataChangedTimer = window.setTimeout(() => {
+          const s = useApp.getState()
+          void s.refreshTree()
+          void s.refreshCommands()
+          void s.refreshServices()
+          void s.refreshProfiles()
+        }, 250)
       }),
       // After a pull finishes, re-read local git status (counts change).
       ipc.onGitDone(() => {

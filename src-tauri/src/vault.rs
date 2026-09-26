@@ -311,9 +311,34 @@ fn kind_of(f: &Found) -> &'static str {
 /// commands and services — across a rescan. Rows whose folder has gone are
 /// deleted, which cascades exactly as deleting the folder should.
 pub fn scan_into(conn: &Connection, root: &Path) -> Result<usize, String> {
+    apply_scan(conn, walk_root(root))
+}
+
+/// The disk half of a scan. Needs no database, so callers can run it before
+/// taking the lock rather than making every other command wait on a walk.
+fn walk_root(root: &Path) -> Vec<Found> {
     let mut found = Vec::new();
     walk(root, None, 0, &mut found);
+    found
+}
 
+/// The database half: one transaction for the whole tree. Row by row, each
+/// UPDATE was its own commit — a WAL append and a sync per node.
+fn apply_scan(conn: &Connection, found: Vec<Found>) -> Result<usize, String> {
+    // A caller already inside a transaction keeps it; nesting BEGIN fails.
+    let own_tx = conn.is_autocommit();
+    if own_tx {
+        conn.execute_batch("BEGIN IMMEDIATE").map_err(err)?;
+    }
+    let out = apply_scan_rows(conn, found);
+    if own_tx {
+        let end = if out.is_ok() { "COMMIT" } else { "ROLLBACK" };
+        conn.execute_batch(end).map_err(err)?;
+    }
+    out
+}
+
+fn apply_scan_rows(conn: &Connection, found: Vec<Found>) -> Result<usize, String> {
     // Existing rows by rel_path, so ids survive.
     let mut existing: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
     {
@@ -391,17 +416,23 @@ pub fn scan_into(conn: &Connection, root: &Path) -> Result<usize, String> {
 }
 
 /// Rescan, and hand back the tree the UI should now show.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_scan(db: tauri::State<Db>) -> Result<Vec<db::Node>, String> {
-    let conn = db.0.lock().unwrap();
-    let Some(root) = db::setting_get_conn(&conn, ROOT_KEY)? else {
+    let root = {
+        let conn = db.0.lock().unwrap();
+        db::setting_get_conn(&conn, ROOT_KEY)?
+    };
+    let Some(root) = root else {
         return Ok(Vec::new());
     };
     if root.trim().is_empty() {
         return Ok(Vec::new());
     }
     let root = PathBuf::from(root);
-    scan_into(&conn, &root)?;
+    // Walk first, lock after: the walk is the slow part and needs no database.
+    let found = walk_root(&root);
+    let conn = db.0.lock().unwrap();
+    apply_scan(&conn, found)?;
 
     // Hand back each node's own folder alongside it. Without this a node with
     // no repository had no working directory at all — no terminal, and commands
@@ -972,7 +1003,7 @@ pub struct SwitchCost {
     pub losing_services: i64,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_switch_cost(db: tauri::State<Db>, path: String) -> Result<SwitchCost, String> {
     let conn = db.0.lock().unwrap();
     let target = PathBuf::from(path.trim());

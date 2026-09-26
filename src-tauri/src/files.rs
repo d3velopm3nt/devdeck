@@ -112,7 +112,7 @@ fn chip(rel: &str, features: &[(String, Vec<String>)]) -> Option<String> {
 /// whose whole point is keeping one. The caller says which; there is no
 /// default that guesses, because one function answering both is the bug that
 /// put `_bot.md` in somebody's repository.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn node_files(
     ws: tauri::State<std::sync::Arc<crate::aiw::state::Workspace>>,
     db: tauri::State<Db>,
@@ -195,7 +195,7 @@ pub fn node_files(
 /// Hidden folders are *not* skipped here. `.devdeck` is the point of the
 /// vault, and hiding it in the one view meant for seeing everything would be
 /// the same mistake as a file manager that hides the folder you came to find.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_files(db: tauri::State<Db>, rel: String) -> Result<Vec<FileRow>, String> {
     let root = {
         let conn = db.0.lock().unwrap();

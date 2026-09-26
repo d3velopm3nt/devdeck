@@ -395,7 +395,7 @@ fn devdeck_via_scoop() -> bool {
 /// Check for the latest release and compare to the running version. Reads the
 /// updater manifest (latest.json) from the release download URL — a plain CDN
 /// URL that isn't subject to GitHub's REST API rate limit — rather than the API.
-#[tauri::command]
+#[tauri::command(async)]
 fn app_update_info() -> UpdateInfo {
     let current = env!("CARGO_PKG_VERSION").to_string();
     let latest = ps_capture(
@@ -750,20 +750,27 @@ pub fn run() {
             // agent asks. Without this an installed server would only wake up
             // after somebody happened to open the Community page, which is a
             // strange thing for a grant to depend on.
-            match (
-                app.try_state::<db::Db>(),
-                app.try_state::<Arc<aiw::state::Workspace>>(),
-            ) {
-                (Some(db), Some(ws)) => match community::sync_servers(&db, &ws) {
-                    // Say how many, because zero is the interesting number and
-                    // it used to be indistinguishable from not having looked.
-                    Ok(()) => eprintln!("[community] {} MCP server(s) registered", ws.mcp_servers().len()),
-                    Err(e) => eprintln!("[community] could not read installed servers: {e}"),
-                },
-                // The silent no-op that was here is exactly the failure this
-                // project has a rule about: if the state is missing, nothing
-                // happened and nothing said so.
-                _ => eprintln!("[community] MCP servers not registered: app state missing at setup"),
+            // Off the path the window is waiting on: it takes the DB lock and
+            // reads installed servers from disk.
+            {
+                let h = app.handle().clone();
+                std::thread::spawn(move || {
+                    match (
+                        h.try_state::<db::Db>(),
+                        h.try_state::<Arc<aiw::state::Workspace>>(),
+                    ) {
+                        (Some(db), Some(ws)) => match community::sync_servers(&db, &ws) {
+                            // Say how many, because zero is the interesting number and
+                            // it used to be indistinguishable from not having looked.
+                            Ok(()) => eprintln!("[community] {} MCP server(s) registered", ws.mcp_servers().len()),
+                            Err(e) => eprintln!("[community] could not read installed servers: {e}"),
+                        },
+                        // The silent no-op that was here is exactly the failure this
+                        // project has a rule about: if the state is missing, nothing
+                        // happened and nothing said so.
+                        _ => eprintln!("[community] MCP servers not registered: app state missing at setup"),
+                    }
+                });
             }
 
             report_google_client();
@@ -880,20 +887,28 @@ pub fn run() {
             // a month still tidies up the moment it opens -- and re-check
             // stored screenshot text against the image guardrail, which
             // shipped after the OCR that filled those rows.
-            if let Some(db) = app.try_state::<db::Db>() {
-                if let Ok(conn) = db.0.lock() {
+            // On a background thread: the OCR pass runs a regex over every
+            // stored screenshot's text, and the window should not wait for it.
+            {
+                let h = app.handle().clone();
+                std::thread::spawn(move || {
+                    let Some(db) = h.try_state::<db::Db>() else { return };
+                    let Ok(conn) = db.0.lock() else { return };
                     let _ = stash::prune(&conn, stash_retention);
-                    match stash::redact_stored_ocr(&conn) {
-                        Ok(n) if n > 0 => services::push_log(
-                            app.handle(),
-                            -500_000,
-                            "stash",
-                            "system",
-                            format!("redacted text read out of {n} screenshot(s) that may show credentials"),
-                        ),
-                        _ => {}
+                    let redacted = stash::redact_stored_ocr(&conn);
+                    drop(conn);
+                    if let Ok(n) = redacted {
+                        if n > 0 {
+                            services::push_log(
+                                &h,
+                                services::STASH_LOG_ID,
+                                "stash",
+                                "system",
+                                format!("redacted text read out of {n} screenshot(s) that may show credentials"),
+                            );
+                        }
                     }
-                }
+                });
             }
 
             let handle = app.handle().clone();

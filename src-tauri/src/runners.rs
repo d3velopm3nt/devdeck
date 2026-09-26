@@ -114,7 +114,7 @@ pub fn first_line(out: &str) -> String {
 }
 
 /// Every runner we know about, and what it says about itself.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn community_runners() -> Vec<Runner> {
     let mut out = Vec::new();
 

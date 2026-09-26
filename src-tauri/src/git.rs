@@ -117,7 +117,7 @@ fn read_status(d: &Path) -> GitInfo {
 
 /// Current branch + ahead/behind for the repo containing `dir`, computed from
 /// local refs only (no network). Cheap enough to call on every tree load.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn git_info(dir: String) -> GitInfo {
     let d = Path::new(&dir);
     if dir.trim().is_empty() || !d.is_dir() {
@@ -165,7 +165,7 @@ fn fetch_now(dir: String) -> GitInfo {
 /// `{ ok }` when finished so the UI can refresh the repo's status. `--ff-only`
 /// never creates a merge commit: if the branch has diverged, it fails loudly
 /// rather than doing something surprising.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn git_pull(app: tauri::AppHandle, dir: String) -> Result<(), String> {
     let d = Path::new(&dir);
     if dir.trim().is_empty() || !d.is_dir() {
@@ -374,7 +374,7 @@ pub fn parse_porcelain(out: &[u8]) -> Vec<GitChange> {
 /// `--untracked-files=all` rather than the default `normal`: `normal` reports
 /// a new directory as one entry, so a fresh folder of twenty files looks like
 /// one change and committing "everything" would be a shot in the dark.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn git_changes(dir: String) -> Result<Vec<GitChange>, String> {
     let d = Path::new(&dir);
     if dir.trim().is_empty() || !d.is_dir() {
@@ -560,7 +560,7 @@ pub fn git_commit(
 
 /// Push the current branch. Separate from committing because "I already
 /// committed and forgot to push" is its own moment.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn git_push(app: tauri::AppHandle, dir: String) -> Result<(), String> {
     let d = Path::new(&dir);
     if dir.trim().is_empty() || !d.is_dir() {

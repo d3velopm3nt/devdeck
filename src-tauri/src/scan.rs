@@ -911,7 +911,7 @@ fn walk(
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn scan_project(dir: String) -> Result<Vec<DetectedCommand>, String> {
     let d = Path::new(&dir);
     if dir.trim().is_empty() || !d.is_dir() {

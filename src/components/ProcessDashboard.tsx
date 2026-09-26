@@ -5,6 +5,7 @@
 
 import { useMemo, useState } from 'react'
 import { useApp } from '../store'
+import { useLive } from '../liveStore'
 import * as ipc from '../lib/ipc'
 import type { ProcStat, SvcStatus } from '../lib/types'
 import { openTerminalPanel, closeTerminalPanel } from '../lib/dock'
@@ -35,7 +36,8 @@ const STATUS_STYLE: Record<string, string> = {
 }
 
 export function ProcessDashboard() {
-  const { services, svcStates, stats, terminals, nodes } = useApp()
+  const { services, svcStates, terminals, nodes } = useApp()
+  const stats = useLive((s) => s.stats)
   const [busy, setBusy] = useState<string | null>(null)
 
   const rows = useMemo<Row[]>(() => {

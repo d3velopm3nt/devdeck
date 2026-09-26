@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import * as ipc from '../lib/ipc'
 import { useApp } from '../store'
+import { useLive } from '../liveStore'
 import { Icon } from '../lib/icons'
 import { openService, openSpace, openTerminalPanel } from '../lib/dock'
 import { findNode, projectOf, subtreeIds } from '../lib/tree'
@@ -120,10 +121,12 @@ const LEVEL_STYLE: Record<string, string> = {
 
 export function Home() {
   const {
-    nodes, services, svcStates, stats, terminals, logs, recents, commands, gitByNode,
+    nodes, services, svcStates, terminals, recents, commands, gitByNode,
     activeWorkspaceId, showBottom, focusServiceLogs, servicePort, requestStartService,
     treeError, treeLoading, retryBootstrap,
   } = useApp()
+  const stats = useLive((s) => s.stats)
+  const logs = useLive((s) => s.logs)
 
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {

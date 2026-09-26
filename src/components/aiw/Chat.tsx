@@ -241,11 +241,10 @@ export function Chat() {
     aiw.personalRoot().then(setRoot).catch(() => setRoot(null))
 
     // Live progress for the reply being produced right now.
-    let stopChat: (() => void) | undefined
-    void aiw.onChat((e) => useAiw.getState().pushChat(e)).then((un) => {
-      stopChat = un
-    })
-    return () => stopChat?.()
+    // Hold the promise, not the resolved unlisten: cleanup can run before it
+    // resolves, and a listener captured late is never removed.
+    const stopChat = aiw.onChat((e) => useAiw.getState().pushChat(e))
+    return () => void stopChat.then((un) => un())
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

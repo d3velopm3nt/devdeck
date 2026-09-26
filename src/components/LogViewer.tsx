@@ -8,6 +8,7 @@ import * as ipc from '../lib/ipc'
 import type { LogLevel } from '../lib/types'
 import { logKind } from '../lib/logIds'
 import { useApp } from '../store'
+import { useLive } from '../liveStore'
 
 const LEVEL_COLOR: Record<LogLevel, string> = {
   error: 'text-err',
@@ -19,7 +20,9 @@ const LEVEL_COLOR: Record<LogLevel, string> = {
 const LEVELS: LogLevel[] = ['error', 'warn', 'info', 'debug']
 
 export function LogViewer() {
-  const { logs, clearLogs, logFocus } = useApp()
+  const logs = useLive((s) => s.logs)
+  const clearLogs = useLive((s) => s.clearLogs)
+  const logFocus = useApp((s) => s.logFocus)
   const [search, setSearch] = useState('')
   // By id, not by name. Names are not unique — a service you called "mail"
   // and the mail system stream would otherwise be one entry showing both.

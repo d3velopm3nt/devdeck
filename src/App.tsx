@@ -61,6 +61,7 @@ import * as ipc from './lib/ipc'
 import { aiw as aiwApi } from './lib/aiw'
 import { routeOutput } from './lib/termBus'
 import { useApp } from './store'
+import { useShallow } from 'zustand/react/shallow'
 import { useLive } from './liveStore'
 import { forgetFileListings } from './lib/fileIndex'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
@@ -162,7 +163,13 @@ let entered = false
 let filed = false
 
 export default function App() {
-  const app = useApp()
+  // A pick, not the whole store: the shell sits above everything, and a
+  // whole-store subscription here re-rendered the entire window (dock
+  // included) on any write anywhere. `selectedNodeId` is picked because the
+  // getters below read it through get(), so App must re-render when it moves.
+  const app = useApp(
+    useShallow((s) => ({ activeWorkspace: s.activeWorkspace, activeWorkspaceId: s.activeWorkspaceId, bootstrap: s.bootstrap, bottomCollapsed: s.bottomCollapsed, bottomTab: s.bottomTab, dismissSetup: s.dismissSetup, gitMonitorEnabled: s.gitMonitorEnabled, gitMonitorIntervalMin: s.gitMonitorIntervalMin, hotkey: s.hotkey, installHint: s.installHint, layouts: s.layouts, mailAccountEditing: s.mailAccountEditing, mailPane: s.mailPane, nodes: s.nodes, openMailAccountEditor: s.openMailAccountEditor, profiles: s.profiles, railView: s.railView, refreshTree: s.refreshTree, selectedNode: s.selectedNode, selectedProject: s.selectedProject, setBottomCollapsed: s.setBottomCollapsed, setBottomTab: s.setBottomTab, setInstallHint: s.setInstallHint, setMailPane: s.setMailPane, setRailView: s.setRailView, setupPrompt: s.setupPrompt, shells: s.shells, showBottom: s.showBottom, svcStates: s.svcStates, terminals: s.terminals, theme: s.theme, selectedNodeId: s.selectedNodeId })),
+  )
   const node = app.selectedNode()
   const nodeDir = resolveDir(app.nodes, node)
   const railView = app.railView

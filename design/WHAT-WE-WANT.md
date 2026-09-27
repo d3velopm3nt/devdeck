@@ -74,6 +74,11 @@ runs in progress, proposals waiting on you, and managers that could not act.
 
 ## 3. Discussed, not yet decided
 
+- **A bridge an agent can drive DevDeck through** — designed 27 Sep in
+  `design/devdeck-mcp/BUILD.md`. An MCP server over the existing tool registry,
+  workers first. It is listed here rather than under *agreed* because three
+  calls are still open, but it is load-bearing for the next three items: the
+  phone, GitHub issues, and triggers all want the same surface.
 - **A phone.** Mirror the spaces, see state and progress, approve from bed,
   give it a voice. The vault stays on the PC. Events are the transport.
 - **Connectors**, configured the way a harness does it: GitHub, Google Drive,

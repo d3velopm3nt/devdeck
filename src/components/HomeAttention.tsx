@@ -17,6 +17,7 @@
 // agent is genuinely stuck, and nothing in the app currently produces a
 // suggestion worth that risk.
 
+import { openSpace } from '../lib/dock'
 import { useEffect } from 'react'
 import { useApp } from '../store'
 import { useAiw } from '../lib/aiwStore'
@@ -56,12 +57,16 @@ export function HomeAttention() {
     return node?.name ?? projectId
   }
 
+  // Lands on the space's own page, where the thread, its decisions and its
+  // conflicts all are. This used to open the AI Workspace, which held a second
+  // copy of each of those.
   const openProject = (projectId?: string) => {
     if (!projectId) return
     const node = app.nodes.find((n) => String(n.id) === projectId)
-    if (node) app.setSelectedNode(node.id)
+    if (!node) return
+    app.setSelectedNode(node.id)
     void a.selectProject(projectId)
-    app.setRailView('aiworkspace')
+    openSpace(node.id, node.name)
   }
 
   return (

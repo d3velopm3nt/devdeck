@@ -326,15 +326,16 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
             <div className="mb-5">
               <h2 className="text-[16px] font-semibold text-ink">Assistant</h2>
               <p className="text-[12px] leading-[1.6] text-muted">
-                Providers, agents, skills, permissions and standing grants — what the team is made
-                of. What it is <em>doing</em> is Team.
+                Who is on the team, what each one may touch, and the kit they carry — on Workers.
+                What the team is <em>doing</em> is Team, and what it has decided is on the space
+                itself, beside its thread.
               </p>
             </div>
             <button
               className="btn-primary text-[12px]"
-              onClick={() => useApp.getState().setRailView('aiworkspace')}
+              onClick={() => useApp.getState().setRailView('workers')}
             >
-              <Icon name="ai" size={12} /> Open the Assistant workspace
+              <Icon name="ai" size={12} /> Open Workers
             </button>
           </>
         )}

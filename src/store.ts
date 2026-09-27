@@ -74,10 +74,6 @@ export type RailView =
   /// because the pairing is the point: Machine installs for you, this
   /// installs for them.
   | 'community'
-  /// The Assistant's own workspace pages — providers, agents, conflicts.
-  /// Reached from Settings rather than from the rail: it is where you
-  /// configure the team, not where you work with it.
-  | 'aiworkspace'
   | 'machine'
   | 'settings'
 export type BottomTab = 'logs' | 'processes' | 'events' | 'calls'
@@ -502,7 +498,6 @@ const RAIL_VIEWS: readonly RailView[] = [
   'stash',
   'connections',
   'community',
-  'aiworkspace',
   'machine',
   'settings',
 ]

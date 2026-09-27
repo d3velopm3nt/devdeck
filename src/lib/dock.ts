@@ -86,8 +86,12 @@ export function openEditor(kind: EditorKind, id: number, _title?: string, projec
 ///
 /// From a pill in a thread, mostly: "dev-a is on the mock provider" is only
 /// useful if changing that is one click away.
+///
+/// It lands on Workers now. The AI Workspace used to be a rail view of its own
+/// with no rail button, holding a second copy of Spaces, the thread and this
+/// roster; the roster is the half that was worth keeping.
 export function openAgentSettings(id: string) {
-  useApp.getState().setRailView('aiworkspace')
+  useApp.getState().setRailView('workers')
   useAiw.getState().openAgent(id)
 }
 

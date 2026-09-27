@@ -22,6 +22,7 @@ import type { IDockviewPanelProps } from 'dockview-react'
 import * as ipc from '../../lib/ipc'
 import { useApp } from '../../store'
 import { useAiw } from '../../lib/aiwStore'
+import { aiw } from '../../lib/aiw'
 import { Icon } from '../../lib/icons'
 import { avatarLabel, nodeColor } from '../../lib/spaces'
 import { findNode, resolveDir, subtreeIds, workspaceOf } from '../../lib/tree'
@@ -33,7 +34,8 @@ import { NodeManagers } from './NodeManagers'
 import { PipelineTab } from '../business/PipelineTab'
 import { NodeAside } from './NodeAside'
 import { NodeRuns } from './NodeRuns'
-import { Git } from '../aiw/AiWorkspace'
+import { DecisionsTab, ConflictsTab } from './NodeRecord'
+import { Git } from '../aiw/SpaceViews'
 
 /// What a node's page can show about it.
 ///
@@ -41,7 +43,19 @@ import { Git } from '../aiw/AiWorkspace'
 /// some of them greyed out: a folder with no repository has no Git tab at all,
 /// rather than a Git tab that apologises. That is the whole point of the shape
 /// — a client is not a deficient project.
-type Tab = 'team' | 'pipeline' | 'thread' | 'known' | 'files' | 'git' | 'services' | 'commands' | 'reminders' | 'managers'
+type Tab =
+  | 'team'
+  | 'pipeline'
+  | 'thread'
+  | 'known'
+  | 'decisions'
+  | 'conflicts'
+  | 'files'
+  | 'git'
+  | 'services'
+  | 'commands'
+  | 'reminders'
+  | 'managers'
 
 /// Git, pointed at this node first.
 ///
@@ -73,6 +87,12 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
   // What is known about this space: kept facts and setup answers, read the
   // way its manager reads them. A tab only when there is something in it.
   const [known, setKnown] = useState<ipc.KnownNote[]>([])
+  // Choices later work must respect, and work that disagrees with other work.
+  // These two used to live on the AI Workspace, which was the only place in
+  // the app that had them; they belong beside the thread, because both are
+  // settled by talking. Counted here only to decide whether the tab exists.
+  const [decisions, setDecisions] = useState(0)
+  const [conflicts, setConflicts] = useState(0)
   // A business made through the business steps opens on its Team tab.
   const [isBusiness, setIsBusiness] = useState(false)
 
@@ -87,6 +107,14 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
     void refreshBots()
     void a.loadAllWork()
     void ipc.learnNotes(nodeId).then(setKnown).catch(() => setKnown([]))
+    void aiw
+      .decisions(String(nodeId))
+      .then((r) => setDecisions(r.length))
+      .catch(() => setDecisions(0))
+    void aiw
+      .conflicts(String(nodeId))
+      .then((r) => setConflicts(r.length))
+      .catch(() => setConflicts(0))
     setIsBusiness(false)
     void ipc
       .businessGet(nodeId)
@@ -137,6 +165,10 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
     { id: 'pipeline', label: 'Pipeline', when: isBusiness },
     { id: 'thread', label: 'Thread', when: true },
     { id: 'known', label: 'Known', when: known.length > 0, count: known.length },
+    // Beside the thread, because both are settled by talking. Shown only when
+    // there is something in them, like every other tab here.
+    { id: 'decisions', label: 'Decisions', when: decisions > 0, count: decisions },
+    { id: 'conflicts', label: 'Conflicts', when: conflicts > 0, count: conflicts },
     { id: 'files', label: 'Files', when: true },
     // Only where there is a repository to be behind. A vault folder has no
     // branch, and a Git tab over it would be a question with no answer.
@@ -319,6 +351,9 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
       {/* The Assistant keeps one selected project, so this page points it at
           its own before drawing Git — the same claim the dock panel makes when
           it becomes active, for the same reason. */}
+      {tab === 'decisions' && <DecisionsTab nodeId={nodeId} />}
+      {tab === 'conflicts' && <ConflictsTab nodeId={nodeId} />}
+
       {tab === 'git' && <GitTab nodeId={nodeId} />}
 
       <div className={tab === 'thread' ? 'flex min-h-0 flex-1 gap-4 px-5 py-3' : 'hidden'}>

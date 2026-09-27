@@ -16,7 +16,7 @@ import { useEffect } from 'react'
 import type { IDockviewPanelProps } from 'dockview'
 import { useAiw } from '../../lib/aiwStore'
 import { Chat } from './Chat'
-import { ContextInspector, Features, Git } from './AiWorkspace'
+import { ContextInspector, Features, Git } from './SpaceViews'
 
 type Params = { projectId: string }
 

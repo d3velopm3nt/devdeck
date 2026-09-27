@@ -35,8 +35,6 @@ import { StashSidebar } from './components/StashSidebar'
 import { StashView } from './components/StashView'
 import { ConnectionsSidebar } from './components/ConnectionsSidebar'
 import { CAPTURE_CHECK, CAPTURE_ENTRY, CAPTURE_OPEN_FILE, CAPTURE_EVENT, CAPTURE_NODE, CAPTURE_RAIL, CAPTURE_MET, CAPTURE_BUSINESS, CAPTURE_CLEAR, CAPTURE_MAIL_ACCOUNT, CAPTURE_LEARN, CAPTURE_MAIL_PANE, CAPTURE_LIFE_PAGE, CAPTURE_MEET_STEP, CAPTURE_SAY, CAPTURE_START_WORKER, CAPTURE_GO } from './lib/devCapture'
-import { AiwSidebar } from './components/aiw/AiwSidebar'
-import { AiWorkspace } from './components/aiw/AiWorkspace'
 import { ConnectionsView } from './components/ConnectionsView'
 import { ConnectionEditor } from './components/ConnectionEditor'
 import { ConfigPage } from './components/ConfigPage'
@@ -1073,11 +1071,6 @@ export default function App() {
             <ConnectionsSidebar />
           </aside>
         )}
-        {railView === 'aiworkspace' && (
-          <aside className="w-[224px] shrink-0 overflow-hidden border-r border-line">
-            <AiwSidebar />
-          </aside>
-        )}
         {railView === 'calendar' && (
           <aside className="w-[236px] shrink-0 overflow-hidden border-r border-line">
             <CalendarSidebar />
@@ -1094,7 +1087,6 @@ export default function App() {
           {railView === 'mail' && (app.mailPane === 'contacts' ? <ContactsView /> : <MailView />)}
           {railView === 'stash' && <StashView />}
           {railView === 'connections' && <ConnectionsView />}
-          {railView === 'aiworkspace' && <AiWorkspace />}
           {railView === 'community' && <CommunityView />}
           {railView === 'machine' && <MachineSetup />}
           {railView === 'inbox' && <InboxPage />}

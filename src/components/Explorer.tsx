@@ -1036,7 +1036,7 @@ export function Explorer() {
             title={r.detail}
             onClick={() => {
               setSelectedNode(node.id)
-              setRailView('aiworkspace')
+              openNodeThread(node.id, node.name)
             }}
           >
             <span className="w-5 shrink-0" />
@@ -1055,7 +1055,7 @@ export function Explorer() {
             title={`${x.agent_name} · ${x.feature_id}`}
             onClick={() => {
               setSelectedNode(node.id)
-              setRailView('aiworkspace')
+              openNodeThread(node.id, node.name)
             }}
           >
             <span className="w-5 shrink-0" />

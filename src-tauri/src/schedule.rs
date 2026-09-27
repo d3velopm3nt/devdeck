@@ -436,6 +436,45 @@ fn dir_for(conn: &Connection, node_id: Option<i64>) -> Option<String> {
 /// Takes no connection on purpose. `activity::record` locks the database
 /// itself, so a caller holding that lock while calling this deadlocks the
 /// thread — which is exactly what the first version of the tick did.
+/// How many scheduled runs may be in flight at once. Each is a thread and,
+/// for a bot, an agent session; the cap is what stops a startup catch-up
+/// with twenty overdue rhythms from starting twenty of them.
+const MAX_RUNS: usize = 4;
+
+/// Slots for in-flight scheduled runs. Acquired under the schedule lock at
+/// claim time, released by the run's own thread when it finishes.
+struct RunSlots {
+    busy: std::sync::atomic::AtomicUsize,
+    cap: usize,
+}
+
+impl RunSlots {
+    const fn new(cap: usize) -> Self {
+        Self {
+            busy: std::sync::atomic::AtomicUsize::new(0),
+            cap,
+        }
+    }
+
+    fn try_acquire(&self) -> bool {
+        use std::sync::atomic::Ordering::SeqCst;
+        self.busy
+            .fetch_update(SeqCst, SeqCst, |n| (n < self.cap).then_some(n + 1))
+            .is_ok()
+    }
+
+    fn release(&self) {
+        self.busy.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    #[cfg(test)]
+    fn in_flight(&self) -> usize {
+        self.busy.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+static RUNS: RunSlots = RunSlots::new(MAX_RUNS);
+
 fn run_one(
     app: &tauri::AppHandle,
     s: &Schedule,
@@ -623,6 +662,13 @@ fn on_event_blocking(app: &tauri::AppHandle, event_type: &str, project_id: Optio
             if s.last_run.is_some_and(|r| now - r < COOLDOWN_MS) {
                 continue;
             }
+            // Same cap as the clock: a burst of events must not become a
+            // burst of agent sessions. An event that finds no slot is dropped
+            // rather than queued — its cooldown is not claimed, so the next
+            // one of its kind fires normally.
+            if !RUNS.try_acquire() {
+                continue;
+            }
             // Claim the cooldown before running, not after.
             let _ = conn.execute(
                 "UPDATE schedules SET last_run=?1 WHERE id=?2",
@@ -639,6 +685,7 @@ fn on_event_blocking(app: &tauri::AppHandle, event_type: &str, project_id: Optio
         std::thread::spawn(move || {
             let (report, bot) = {
                 let Some(db) = h.try_state::<Db>() else {
+                    RUNS.release();
                     return;
                 };
                 let conn = db.0.lock().unwrap();
@@ -652,8 +699,9 @@ fn on_event_blocking(app: &tauri::AppHandle, event_type: &str, project_id: Optio
                 (report, bot)
             };
             let (ok, note) = run_one(&h, &s, dir, false, report, bot);
+            RUNS.release();
             if let Some(db) = h.try_state::<Db>() {
-                let conn = db.0.lock().unwrap();
+                let conn = db.0.lock().unwrap_or_else(|p| p.into_inner());
                 let _ = conn.execute(
                     "UPDATE schedules SET last_ok=?1, last_note=?2 WHERE id=?3",
                     params![ok as i64, note, s.id],
@@ -721,6 +769,18 @@ pub fn tick(app: &tauri::AppHandle, startup: bool) {
             if late && (!s.catch_up || s.kind == "reminder") {
                 todo.push(Do::Missed(s, due_ms));
             } else {
+                // Claim it now, under the lock, because the run happens on a
+                // thread of its own and the next tick arrives in thirty
+                // seconds: without the claim a run still going would look
+                // due again and start twice. When every slot is busy the
+                // schedule stays unclaimed and is picked up by a later tick.
+                if !RUNS.try_acquire() {
+                    continue;
+                }
+                let _ = conn.execute(
+                    "UPDATE schedules SET last_run=?1 WHERE id=?2",
+                    params![now.timestamp_millis(), s.id],
+                );
                 let dir = dir_for(&conn, s.node_id);
                 let (report, bot) = if s.kind == "bot" {
                     let bot = crate::bots::bot_on(&conn, &s.manager);
@@ -740,13 +800,23 @@ pub fn tick(app: &tauri::AppHandle, startup: bool) {
 
     for item in todo {
         match item {
+            // Off this thread. A bot wake that starts an agent takes minutes,
+            // and while it ran here nothing else on the clock — reminders,
+            // deadlines, the next routine — could fire.
             Do::Run(s, dir, late, report, bot) => {
-                let (ok, note) = run_one(app, &s, dir, late, report, bot);
-                let conn = db.0.lock().unwrap();
-                let _ = conn.execute(
-                    "UPDATE schedules SET last_run=?1, last_ok=?2, last_note=?3 WHERE id=?4",
-                    params![now.timestamp_millis(), ok as i64, note, s.id],
-                );
+                let app = app.clone();
+                let ran_at = now.timestamp_millis();
+                std::thread::spawn(move || {
+                    let (ok, note) = run_one(&app, &s, dir, late, report, bot);
+                    RUNS.release();
+                    if let Some(db) = app.try_state::<Db>() {
+                        let conn = db.0.lock().unwrap_or_else(|p| p.into_inner());
+                        let _ = conn.execute(
+                            "UPDATE schedules SET last_run=?1, last_ok=?2, last_note=?3 WHERE id=?4",
+                            params![ran_at, ok as i64, note, s.id],
+                        );
+                    }
+                });
             }
             Do::Warn(s, next_ms, away) => {
                 crate::activity::record(
@@ -978,5 +1048,35 @@ mod tests {
             .unwrap();
         let (next_ms, _) = warning_due(&told, tomorrow).expect("a warning");
         assert_ne!(next_ms, today_ms);
+    }
+}
+
+#[cfg(test)]
+mod run_slots_tests {
+    use super::RunSlots;
+
+    #[test]
+    fn the_cap_holds_and_a_release_frees_a_slot() {
+        let slots = RunSlots::new(2);
+        assert!(slots.try_acquire());
+        assert!(slots.try_acquire());
+        assert!(!slots.try_acquire(), "a third run must wait for a slot");
+        assert_eq!(slots.in_flight(), 2);
+        slots.release();
+        assert!(slots.try_acquire());
+        assert_eq!(slots.in_flight(), 2);
+    }
+
+    #[test]
+    fn slots_are_safe_to_race_for() {
+        let slots = std::sync::Arc::new(RunSlots::new(3));
+        let got: usize = (0..16)
+            .map(|_| {
+                let s = slots.clone();
+                std::thread::spawn(move || usize::from(s.try_acquire()))
+            })
+            .map(|h| h.join().unwrap())
+            .sum();
+        assert_eq!(got, 3, "exactly the cap may win, never more");
     }
 }

@@ -38,6 +38,8 @@ export const once = async () => () => {}
 export type UnlistenFn = () => void
 
 export const getCurrentWindow = () => ({
+  isMaximized: async () => false,
+  onResized: async () => () => {},
   label: 'main',
   listen: async () => () => {},
   onCloseRequested: async () => () => {},

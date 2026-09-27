@@ -798,7 +798,7 @@ export const useApp = create<AppState>((set, get) => ({
       ])
     const svcStates: Record<number, SvcState> = {}
     for (const s of states) svcStates[s.id] = s
-    useLive.setState({ logs })
+    useLive.getState().setLogs(logs)
     set({
       commands,
       services,

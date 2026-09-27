@@ -126,7 +126,12 @@ export function Home() {
     treeError, treeLoading, retryBootstrap,
   } = useApp()
   const stats = useLive((s) => s.stats)
-  const logs = useLive((s) => s.logs)
+  // Summary fields, not the buffer: a log flush that changes none of these
+  // leaves Home alone.
+  const errorCount = useLive((s) => s.errorCount)
+  const warnCount = useLive((s) => s.warnCount)
+  const logIssuesRaw = useLive((s) => s.issues)
+  const lastLogs = useLive((s) => s.tail)
 
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
@@ -171,14 +176,14 @@ export function Home() {
       liveTerms: terminals.filter((t) => t.alive),
       cpu,
       mem,
-      errors: logs.filter((l) => l.level === 'error').length,
-      warns: logs.filter((l) => l.level === 'warn').length,
+      errors: errorCount,
+      warns: warnCount,
       projects: nodes.filter((n) => n.kind === 'project').length,
       folders: nodes.filter((n) => n.kind === 'folder').length,
       workspaces: workspaces.length,
       behind: Object.values(gitByNode).filter((g) => g.behind > 0).length,
     }
-  }, [nodes, services, svcStates, stats, terminals, logs, workspaces, gitByNode])
+  }, [nodes, services, svcStates, stats, terminals, errorCount, warnCount, workspaces, gitByNode])
 
   // Idle services in the active workspace — a short quick-start list.
   const idle = useMemo(() => {
@@ -213,11 +218,7 @@ export function Home() {
       serviceId: number
       service: string
       line: string
-    }> = logs
-      .filter((l) => l.level === 'error' || l.level === 'warn')
-      .slice(-30)
-      .reverse()
-      .map((l) => ({
+    }> = logIssuesRaw.map((l) => ({
         key: `log-${l.seq}`,
         ts: l.ts,
         level: l.level,
@@ -228,7 +229,7 @@ export function Home() {
         line: l.line,
       }))
     return [...crashed, ...logIssues].slice(0, 30)
-  }, [services, svcStates, logs])
+  }, [services, svcStates, logIssuesRaw])
 
   // The real activity stream. This used to be derived from `recents`, which
   // only stores the *last* time something ran — so two runs looked like one
@@ -236,8 +237,6 @@ export function Home() {
 
   const openBrowser = (port: number) =>
     void ipc.openUrl(`http://localhost:${port}`).catch((e) => alert(String(e)))
-
-  const lastLogs = logs.slice(-6)
 
   return (
     <div className="flex h-full flex-col bg-page text-body">

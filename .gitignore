@@ -32,3 +32,6 @@ Thumbs.db
 # .dc.html sources beside them. The sources are the record. The pattern covers
 # design/mail-canvas/devdeck-mail.html, which used to be listed on its own.
 design/*/[a-z]*-*.html
+
+# Staged sidecar: built by scripts/stage-ask.mjs, never committed.
+src-tauri/binaries/

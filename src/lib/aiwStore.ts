@@ -554,13 +554,25 @@ export const useAiw = create<AiwState>((set, get) => ({
   // bound; the full history is always a `refresh()` away.
   pushEvent: (e) => {
     // Approvals are read back from the backend rather than reconstructed from
-    // the event, and before the project filter: the queue is global, and the
-    // backend is the only thing that knows what is still waiting.
+    // the event: the queue is global, and the backend is the only thing that
+    // knows what is still waiting.
     if (e.type === 'tool.approval.requested' || e.type === 'tool.approval.resolved') {
       void get().refreshApprovals()
     }
-    const { projectId, events } = get()
-    if (projectId && e.project_id && e.project_id !== projectId) return
+    const { events } = get()
+    // Deliberately unfiltered: this list is the log, not a view.
+    //
+    // It used to drop any event belonging to another project, which broke the
+    // one reader that is global -- the Events panel in the bottom bar, open
+    // from every screen. Whenever the AI Workspace had a project selected the
+    // panel went silent, and silently: the event was gone before anything
+    // could count it. It re-reads the database on `events.length` changing,
+    // so dropping the event stopped the re-read as well, and switching tabs
+    // remounted the panel and made a day's events appear at once. That is why
+    // the rows only ever showed up after you looked away.
+    //
+    // The screens that are about one project narrow it themselves, in the
+    // render, where the narrowing is visible to whoever reads them next.
     // The same event can arrive twice: once live from the bus and once in the
     // history that refresh() fetches. Without this the feed renders duplicate
     // React keys and silently drops rows.

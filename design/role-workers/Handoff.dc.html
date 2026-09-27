@@ -1,0 +1,119 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    .mono { font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; }
+    .head { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .note { font-size: 10.5px; color: var(--faint); }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    .ch { display: flex; align-items: center; gap: 8px; padding: 10px 14px; }
+    .row { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-top: 1px solid var(--line); font-size: 12px; }
+    .t { color: var(--ink); font-size: 12.5px; }
+    .s { font-size: 11px; color: var(--muted); margin-top: 2px; line-height: 1.45; }
+    .bp { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; border-radius: 4px; border: 1px solid #4f46e5; background: #4f46e5; color: #fff; padding: 4px 10px; font-size: 12px; }
+    .bg { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; border-radius: 4px; border: 1px solid var(--line2); background: var(--soft); color: var(--body); padding: 4px 10px; font-size: 12px; }
+    .bd { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; border-radius: 4px; border: 1px solid rgb(248 113 113 / .4); background: rgb(248 113 113 / .1); color: var(--err); padding: 4px 10px; font-size: 12px; }
+    .sm { font-size: 11.5px; padding: 3px 9px; }
+    .in { border-radius: 4px; border: 1px solid var(--line2); background: var(--page); padding: 5px 8px; color: var(--ink); font-size: 12px; min-height: 28px; box-sizing: border-box; display: flex; align-items: center; gap: 6px; }
+    .lab { font-size: 11px; color: var(--muted); }
+    .chip { border-radius: 999px; border: 1px solid var(--line2); padding: 1px 8px; font-size: 10.5px; color: var(--dim); white-space: nowrap; }
+    .chip.on { border-color: #6366f1; background: rgb(99 102 241 / .12); color: var(--ink); }
+    .sk { border-radius: 4px; background: rgb(99 102 241 / .1); color: var(--accent); padding: 1px 7px; font-size: 10.5px; white-space: nowrap; font-family: 'Cascadia Mono', Consolas, monospace; }
+    .tchip { border-radius: 999px; padding: 0 8px; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; line-height: 1.6; white-space: nowrap; }
+    .biz { background: rgb(129 140 248 / .16); color: var(--accent); }
+    .okc { background: rgb(74 222 128 / .13); color: var(--ok); }
+    .wc { background: rgb(251 191 36 / .14); color: var(--warn); }
+    .ec { background: rgb(248 113 113 / .14); color: var(--err); }
+    .mini { width: 24px; height: 24px; border-radius: 999px; font-size: 9.5px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: var(--raise); color: var(--dim); }
+    .sq { width: 30px; height: 30px; border-radius: 8px; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: rgb(0 0 0 / .78); background: #4ade80; }
+    .box { width: 14px; height: 14px; border-radius: 3px; box-sizing: border-box; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+    .box.off { border: 1px solid var(--line2); }
+    .box.on { background: #4f46e5; }
+    .rail { display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 9px; border-radius: 8px; font-size: 12px; color: var(--muted); position: relative; }
+    .rail.on { background: var(--raise); color: var(--ink); }
+    .rail.on::before { content: ""; position: absolute; left: -6px; top: 6px; bottom: 6px; width: 2.5px; border-radius: 2px; background: #6366f1; }
+    .tab { border-radius: 6px; padding: 4px 10px; font-size: 12px; color: var(--dim); }
+    .tab.on { background: var(--raise); color: var(--ink); }
+    .yes { color: var(--ok); } .no { color: var(--err); }
+    .li { display: flex; gap: 7px; align-items: flex-start; font-size: 11.5px; line-height: 1.5; color: var(--body); }
+    .md h1 { font-size: 16px; margin: 0 0 6px; color: var(--ink); font-weight: 600; }
+    .md h2 { font-size: 12.5px; margin: 12px 0 4px; color: var(--ink); font-weight: 600; }
+    .md p { margin: 0 0 6px; font-size: 12px; line-height: 1.6; color: var(--body); }
+    .flag { background: rgb(251 191 36 / .14); border-bottom: 1px dashed var(--warn); color: var(--ink); }
+  </style>
+</helmet>
+<div style="--app: {{c.app}}; --page: {{c.page}}; --panel: {{c.panel}}; --raise: {{c.raise}}; --soft: {{c.soft}}; --line: {{c.line}}; --line2: {{c.line2}}; --ink: {{c.ink}}; --body: {{c.body}}; --dim: {{c.dim}}; --muted: {{c.muted}}; --faint: {{c.faint}}; --accent: {{c.accent}}; --ok: {{c.ok}}; --warn: {{c.warn}}; --err: {{c.err}}; --info: {{c.info}}; --viol: {{c.viol}}; width: 1456px; height: 909px; background: var(--page); color: var(--body); display: flex; flex-direction: column; box-sizing: border-box; overflow: hidden;">
+  <div style="height: 32px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--panel);"><span style="font-size: 11.5px; color: var(--dim);">DevDeck</span><span style="font-size: 11.5px; color: var(--faint);">File</span><span style="font-size: 11.5px; color: var(--faint);">View</span><span style="flex-grow: 1;"></span><span class="note">Spaces / Innotrack</span></div>
+  <div style="flex-grow: 1; display: flex; min-height: 0;">
+    <div style="width: 150px; flex-shrink: 0; border-right: 1px solid var(--line); background: var(--panel); padding: 12px 10px 12px 14px; display: flex; flex-direction: column; gap: 3px;"><div class="rail">Today</div><div class="rail on">Spaces</div><div class="rail">Team</div><div class="rail">Inbox</div><div class="rail">Mail</div><div class="rail">Community</div><div class="rail">Settings</div></div>
+    <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0;"><div style="padding: 12px 22px 0; border-bottom: 1px solid var(--line); flex-shrink: 0;">
+      <div style="display: flex; align-items: center; gap: 10px;"><span class="sq">IN</span><span style="font-size: 15px; font-weight: 600; color: var(--ink);">Innotrack</span><span class="tchip biz">Business</span><span class="chip">8 folders</span><span class="chip" style="border-style: dashed;">no repository of its own</span></div>
+      <div style="display: flex; gap: 4px; padding: 9px 0 8px;"><span class="tab">Team</span><span class="tab on">Thread</span><span class="tab">Known</span><span class="tab">Files</span><span class="tab">Reminders</span><span class="tab">Managers <span class="note">4</span></span></div>
+    </div>
+    <div style="flex-grow: 1; display: flex; min-height: 0;">
+      <div style="flex-grow: 1; min-width: 0; padding: 12px 22px; display: flex; flex-direction: column; gap: 12px; min-height: 0;">
+        <div style="display: flex; align-items: center; gap: 6px; padding-bottom: 8px; border-bottom: 1px solid var(--line);"><span class="head" style="margin-right: 4px;">In this thread</span><span class="chip">Operations manager</span><span class="chip">Product manager</span><span class="chip on">Sales and marketing</span><span class="chip">Engineering lead</span></div>
+        <div style="display: flex; gap: 10px;"><span class="mini" style="background: rgb(129 140 248 / .2); color: var(--ink);">YO</span><div style="flex-grow: 1; min-width: 0;"><div style="display: flex; align-items: baseline; gap: 7px;"><span style="font-size: 12px; font-weight: 600; color: var(--ink);">You</span><span class="note">09:32</span></div><div style="margin-top: 3px; font-size: 12.5px; line-height: 1.6; color: var(--body);">We&rsquo;re launching MineX at the mining expo on 21 October. <span class="mono" style="color: var(--accent);">@innotrack-sales</span> get the landing page copy and a LinkedIn plan ready, in our voice.</div></div></div>
+        <div style="display: flex; gap: 10px;"><span class="mini" style="background: rgb(74 222 128 / .18); color: var(--ink);">SM</span><div style="flex-grow: 1; min-width: 0;"><div style="display: flex; align-items: baseline; gap: 7px;"><span style="font-size: 12px; font-weight: 600; color: var(--ink);">Sales and marketing</span><span class="tchip biz">manager</span><span class="note">09:32</span></div><div style="margin-top: 3px; font-size: 12.5px; line-height: 1.6; color: var(--body);">Three items on my plan, due 10 October so there is time to change them:<br><span style="color: var(--ink);">1.</span> Landing page copy for MineX &nbsp;<span class="note">a worker, now</span><br><span style="color: var(--ink);">2.</span> LinkedIn plan, four weeks to the expo &nbsp;<span class="note">after 1, it needs the angle</span><br><span style="color: var(--ink);">3.</span> An email to the three mines already on AssetX &nbsp;<span class="note">a draft for you to send</span></div></div></div>
+        <div class="card" style="border-color: rgb(99 102 241 / .45); margin-left: 34px;">
+  <div class="ch" style="border-bottom: 1px solid var(--line);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><rect x="3.5" y="5" width="17" height="14" rx="2"></rect><path d="m7.5 10 3 2.5-3 2.5M13 15h4"></path></svg><span style="font-size: 13px; font-weight: 600; color: var(--ink);">Start a worker on &ldquo;Landing page copy for MineX&rdquo;</span><span style="flex-grow: 1;"></span><span class="tchip wc">needs you</span></div>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0;">
+    <div style="padding: 10px 14px; display: grid; grid-template-columns: 74px 1fr; row-gap: 7px; font-size: 12px; border-right: 1px solid var(--line);">
+      <span class="lab">Worker</span><span style="color: var(--ink);">Claude Code, as <span class="mono">marketing-agent</span></span>
+      <span class="lab">Skills</span><span style="display: flex; flex-wrap: wrap; gap: 4px;"><span class="sk">brand-voice</span><span class="sk">marketing-campaign</span><span class="sk">seo</span></span>
+      <span class="lab">Works in</span><span style="display: flex; align-items: center; gap: 6px; color: var(--ink);"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M3.5 7a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"></path></svg>Innotrack/Marketing/MineX launch<span class="note">no repository</span></span>
+      <span class="lab">Reads</span><span style="color: var(--body);">What Innotrack knows: about the business, MineX, Ridgeback Mining and Sable Minerals. innotrack.co.za.</span>
+      <span class="lab">Stops at</span><span style="color: var(--body);">25 minutes or $2.00, whichever first &middot; <span class="mono">claude-sonnet-5</span></span>
+    </div>
+    <div style="padding: 10px 14px; display: flex; flex-direction: column; gap: 5px;">
+      <span class="head" style="margin-bottom: 2px;">It may</span>
+      <div class="li"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ok)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;margin-top: 2px;"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>Write files in that folder, and only there</div>
+      <div class="li"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ok)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;margin-top: 2px;"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>Search and read the web</div>
+      <span class="head" style="margin: 6px 0 2px;">It will not</span>
+      <div class="li"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--err)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;margin-top: 2px;"><path d="M6 6l12 12M18 6 6 18"></path></svg>Send mail, post anywhere, or spend money</div>
+      <div class="li"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--err)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;margin-top: 2px;"><path d="M6 6l12 12M18 6 6 18"></path></svg>Touch a repository, or anything outside Innotrack</div>
+      <div class="li" style="color: var(--muted);"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;margin-top: 2px;"><rect x="5" y="10.5" width="14" height="10" rx="2"></rect><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"></path></svg>Inside the session Claude Code asks nobody. This is the one yes.</div>
+    </div>
+  </div>
+  <div style="display: flex; align-items: center; gap: 8px; padding: 9px 14px; border-top: 1px solid var(--line); background: var(--raise);"><span class="bp"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M8 5.5v13l10-6.5z"></path></svg>Start</span><span class="bg">Change</span><span class="bg">Not now</span><span style="flex-grow: 1;"></span><label style="display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--dim);"><span class="box off"></span>Let Sales and marketing start drafts like this without asking</label></div>
+</div>
+        <div style="flex-grow: 1;"></div>
+        <div class="in" style="min-height: 38px; color: var(--faint);">Message Innotrack &mdash; @ a manager to reach one</div>
+      </div>
+      <div style="width: 300px; flex-shrink: 0; border-left: 1px solid var(--line); padding: 14px 16px; display: flex; flex-direction: column; gap: 12px;">
+        <span class="head">What a handoff always says</span>
+        <div class="li"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;margin-top: 2px;"><rect x="5" y="8" width="14" height="11" rx="3"></rect><path d="M12 4.5V8M9 13h.01M15 13h.01"></path></svg><span><b style="color: var(--ink); font-weight: 600;">Which role asked</b>, so the receipt says whose work it was.</span></div>
+        <div class="li"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;margin-top: 2px;"><path d="M3.5 7a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"></path></svg><span><b style="color: var(--ink); font-weight: 600;">One folder</b>. A marketing draft needs no repository; code gets a branch of its own.</span></div>
+        <div class="li"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;margin-top: 2px;"><path d="M5 4.5h9a3 3 0 0 1 3 3v12a2.5 2.5 0 0 0-2.5-2.5H5z"></path><path d="M5 4.5v13"></path></svg><span><b style="color: var(--ink); font-weight: 600;">Only the role&rsquo;s skills</b>, copied into a folder Claude Code reads and git ignores.</span></div>
+        <div class="li"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;margin-top: 2px;"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 1.8"></path></svg><span><b style="color: var(--ink); font-weight: 600;">A limit</b> in time and money, and it stops at whichever comes first.</span></div>
+        <div style="flex-grow: 1;"></div>
+        <p style="margin: 0; font-size: 11px; line-height: 1.55; color: var(--faint);">The approval is per session, not per step: once started, Claude Code works on its own inside the folder. That is the trade the turn made, said out loud each time.</p>
+      </div>
+    </div></div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"dark":{"editor":"boolean","default":true}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? true;
+    const c = dark
+      ? { app: '#0b0e14', page: '#0d1017', panel: '#11141c', raise: '#151923', soft: 'rgb(30 41 59 / 0.4)',
+          line: '#1e293b', line2: '#334155', ink: '#e2e8f0', body: '#cbd5e1', dim: '#94a3b8', muted: '#64748b',
+          faint: '#475569', accent: '#818cf8', ok: '#4ade80', warn: '#fbbf24', err: '#f87171', info: '#38bdf8', viol: '#a78bfa' }
+      : { app: '#e9ebf0', page: '#f6f7f9', panel: '#fdfdfe', raise: '#f0f2f6', soft: 'rgb(203 213 225 / 0.35)',
+          line: '#d9dee7', line2: '#c3cbd8', ink: '#16181d', body: '#333a45', dim: '#5a6472', muted: '#7d8794',
+          faint: '#a5aebb', accent: '#4f46e5', ok: '#15803d', warn: '#b45309', err: '#dc2626', info: '#0369a1', viol: '#6d28d9' };
+    return { c };
+  }
+}
+</script>
+</body>
+</html>

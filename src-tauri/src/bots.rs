@@ -142,6 +142,10 @@ pub struct Bot {
     /// The businesses it works for, by space id.
     #[serde(default)]
     pub businesses: Vec<i64>,
+    /// The worker it hands a job to, by handle. Empty means it only keeps
+    /// the plan and tells you what it sees.
+    #[serde(default)]
+    pub worker: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -520,6 +524,7 @@ fn from_manager(
         last_ok: None,
         last_note: String::new(),
         businesses: m.businesses.clone(),
+        worker: m.worker.clone(),
     }
 }
 
@@ -855,6 +860,7 @@ fn save_into(
             .unwrap_or_default(),
         was: prior.as_ref().map(|p| p.was.clone()).unwrap_or_default(),
         home: prior.as_ref().map(|p| p.home).unwrap_or(node_id),
+        worker: String::new(),
         businesses: prior
             .as_ref()
             .map(|p| p.businesses.clone())
@@ -965,6 +971,15 @@ fn delete_into_for(
         mind.forget(node_id);
     }
     Ok(name)
+}
+
+/// Say which worker a manager hands its jobs to. Empty takes it back.
+#[tauri::command(async)]
+pub fn bot_set_worker(db: tauri::State<Db>, handle: String, worker: String) -> Result<(), String> {
+    let conn = db.0.lock().unwrap();
+    let mut m = crate::managers::get(&conn, &handle).ok_or("there is no manager by that name.")?;
+    m.worker = worker.trim().to_string();
+    crate::managers::save(&conn, &m)
 }
 
 #[tauri::command]
@@ -1409,6 +1424,7 @@ pub(crate) fn create_into(
         stop_at: vec![],
         was: String::new(),
         home: node_id,
+        worker: String::new(),
         businesses: Vec::new(),
     };
     crate::managers::save(conn, &m)?;
@@ -1706,6 +1722,172 @@ pub fn has_plan(conn: &Connection, bot: &Bot) -> bool {
 
 /// The wake of a manager with nothing on its plan: not a failure, and not
 /// silence. It says what it would start with, to add on its Plan tab.
+/// A step a manager worked out but nobody has agreed to yet.
+///
+/// Deliberately not `unclaimed`: only unclaimed work can be handed to a
+/// worker, so a proposal cannot start anything until a person says yes. The
+/// manager does the thinking; you do the agreeing.
+pub const PROPOSED: &str = "proposed";
+
+/// Write what a manager proposes onto its plan, as proposals.
+///
+/// This is the step that was missing, and it is why every plan in a real
+/// profile was empty. The manager already worked out what should be done —
+/// that is `plan_proposal`, and it has been right every morning for weeks —
+/// and then the wake only *said* it, in a thread, ending with "add them on
+/// its Plan tab". So the manager did the thinking and asked you to do the
+/// typing, and nobody ever did.
+pub fn propose_plan(conn: &Connection, bot: &Bot) -> Result<Vec<String>, String> {
+    let steps = plan_proposal(conn, bot);
+    if steps.is_empty() || bot.node_id == 0 {
+        return Ok(Vec::new());
+    }
+    let node = db::node_by_id(conn, bot.node_id).map_err(|_| "that space is gone".to_string())?;
+    let dir = dir_of(conn, &node).ok_or("that space has no folder in the vault")?;
+    let deck = crate::aiw::deck::Deck::new(&dir);
+
+    // A manager with no feature gets one named after itself, so "who is
+    // accountable for this" stays answerable from the feature alone.
+    let slug = bot
+        .portfolio
+        .iter()
+        .find(|o| o.node_id == bot.node_id)
+        .map(|o| o.feature.clone())
+        .unwrap_or_else(|| bot.handle.clone());
+
+    if deck.feature(&slug).is_err() {
+        let meta = crate::aiw::deck::FeatureMeta {
+            id: slug.clone(),
+            name: format!("{}'s plan", bot.name),
+            owner: bot.handle.clone(),
+            status: "planned".into(),
+            areas: Vec::new(),
+            goal: Some(bot.goal.clone()).filter(|g| !g.trim().is_empty()),
+            updated: Some(chrono::Local::now().format("%Y-%m-%d").to_string()),
+        };
+        deck.write_doc_at(
+            &deck.feature_md(&slug),
+            &crate::aiw::deck::Doc {
+                meta,
+                body: format!(
+                    "What {} is accountable for. It proposes the work; you agree to it.\n",
+                    bot.name
+                ),
+            },
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    let mut work = deck.work(&slug).map_err(|e| e.to_string())?;
+    let mut added = Vec::new();
+    for title in steps {
+        // Waking again must not say the same thing twice.
+        if work
+            .meta
+            .items
+            .iter()
+            .any(|i| i.title.eq_ignore_ascii_case(title.trim()))
+        {
+            continue;
+        }
+        work.meta.items.push(crate::aiw::deck::WorkItem {
+            id: format!(
+                "w{:02}-{}",
+                work.meta.items.len() + 1,
+                crate::aiw::deck::slugify(&title)
+            ),
+            title: title.trim().to_string(),
+            status: PROPOSED.into(),
+            assignee: None,
+            areas: Vec::new(),
+            due: None,
+        });
+        added.push(title);
+    }
+    if !added.is_empty() {
+        deck.save_work(&slug, &work.meta)
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(added)
+}
+
+/// Agree to what a manager proposed, so it becomes work that can start.
+///
+/// Batch by default, because approving four things one at a time is the
+/// friction this was meant to remove — and because a manager proposes a set
+/// that makes sense together. Passing no ids agrees to all of them.
+///
+/// Only `proposed` items move. Anything already claimed or done is left
+/// exactly as it is, so pressing this twice cannot un-finish something.
+#[tauri::command(async)]
+pub fn work_agree(
+    app: tauri::AppHandle,
+    db: tauri::State<Db>,
+    node_id: i64,
+    feature: String,
+    ids: Vec<String>,
+) -> Result<usize, String> {
+    let conn = db.0.lock().unwrap();
+    let node = db::node_by_id(&conn, node_id).map_err(|_| "that space is gone".to_string())?;
+    let dir = dir_of(&conn, &node).ok_or("that space has no folder in the vault")?;
+    let deck = crate::aiw::deck::Deck::new(&dir);
+    let mut work = deck.work(&feature).map_err(|e| e.to_string())?;
+    let mut n = 0;
+    for item in work.meta.items.iter_mut() {
+        if item.status != PROPOSED {
+            continue;
+        }
+        if !ids.is_empty() && !ids.iter().any(|x| x == &item.id) {
+            continue;
+        }
+        item.status = "unclaimed".into();
+        n += 1;
+    }
+    if n > 0 {
+        deck.save_work(&feature, &work.meta)
+            .map_err(|e| e.to_string())?;
+        crate::aiw::events::say(
+            &app,
+            crate::aiw::events::EventType::WorkUpdated,
+            crate::aiw::events::in_space(node_id, Some(&feature), Some("you")),
+            serde_json::json!({ "what": "agreed", "count": n }),
+        );
+    }
+    Ok(n)
+}
+
+/// Say no to what a manager proposed. It drops off the plan entirely.
+#[tauri::command(async)]
+pub fn work_decline(
+    app: tauri::AppHandle,
+    db: tauri::State<Db>,
+    node_id: i64,
+    feature: String,
+    ids: Vec<String>,
+) -> Result<usize, String> {
+    let conn = db.0.lock().unwrap();
+    let node = db::node_by_id(&conn, node_id).map_err(|_| "that space is gone".to_string())?;
+    let dir = dir_of(&conn, &node).ok_or("that space has no folder in the vault")?;
+    let deck = crate::aiw::deck::Deck::new(&dir);
+    let mut work = deck.work(&feature).map_err(|e| e.to_string())?;
+    let before = work.meta.items.len();
+    work.meta
+        .items
+        .retain(|i| i.status != PROPOSED || (!ids.is_empty() && !ids.iter().any(|x| x == &i.id)));
+    let n = before - work.meta.items.len();
+    if n > 0 {
+        deck.save_work(&feature, &work.meta)
+            .map_err(|e| e.to_string())?;
+        crate::aiw::events::say(
+            &app,
+            crate::aiw::events::EventType::WorkReleased,
+            crate::aiw::events::in_space(node_id, Some(&feature), Some("you")),
+            serde_json::json!({ "what": "declined", "count": n }),
+        );
+    }
+    Ok(n)
+}
+
 pub fn empty_plan_line(conn: &Connection, bot: &Bot) -> Option<String> {
     if bot.node_id == 0 || has_plan(conn, bot) {
         return None;
@@ -2404,6 +2586,64 @@ pub fn effective_team(ws: &std::sync::Arc<crate::aiw::state::Workspace>, bot: &B
 /// timeout. That matters more than it sounds: an agent making ten uncovered
 /// calls would otherwise take ten timeouts to finish failing, in the middle of
 /// the night, holding up every other schedule behind it.
+/// Why this agent cannot be woken, or `None` if it can.
+///
+/// Read from the agent's own file and the registry, never guessed: an agent
+/// naming something that is not a provider at all is a different fault from
+/// one naming a provider with no credentials, and saying which is the whole
+/// point of refusing rather than running.
+fn provider_trouble(
+    ws: &std::sync::Arc<crate::aiw::state::Workspace>,
+    agent: &str,
+) -> Option<String> {
+    let file = ws.agent(agent)?;
+    let known: Vec<String> = ws
+        .providers
+        .lock()
+        .ok()?
+        .list()
+        .into_iter()
+        .map(|(i, _, _)| i)
+        .collect();
+    provider_trouble_for(agent, file.provider.trim(), &known)
+}
+
+/// The decision itself, with nothing to build to ask it.
+///
+/// Split out because the three faults read alike from a distance and have to
+/// be told apart in words: nothing named, a mock, and a provider that simply
+/// is not there. `dev-a` on this machine names `scripted`, which has never
+/// existed, and the only sign was a wake that said "unknown provider
+/// 'scripted'" after it had already started.
+fn provider_trouble_for(agent: &str, provider: &str, known: &[String]) -> Option<String> {
+    if provider.is_empty() {
+        return Some(format!(
+            "{agent} does not name a provider, so there is nothing to ask. Set one on its page."
+        ));
+    }
+    if provider == crate::aiw::provider::MockProvider::ID {
+        return Some(format!(
+            "{agent} is on the mock, which answers from a script and writes nothing. Point it at a real provider before waking it."
+        ));
+    }
+    // A CLI runner is a different kind of engine: it is not in the registry
+    // and has no key of its own.
+    if crate::aiw::cli_agent::is_cli_runner(provider) {
+        return None;
+    }
+    if !known.iter().any(|k| k == provider) {
+        return Some(format!(
+            "{agent} names the provider '{provider}', which does not exist. What is set up: {}.",
+            if known.is_empty() {
+                "nothing yet".to_string()
+            } else {
+                known.join(", ")
+            }
+        ));
+    }
+    None
+}
+
 pub fn wake_agent(app: &tauri::AppHandle, bot: &Bot) -> Option<(bool, String)> {
     use tauri::Manager;
 
@@ -2431,6 +2671,18 @@ pub fn wake_agent(app: &tauri::AppHandle, bot: &Bot) -> Option<(bool, String)> {
             },
         ));
     }
+    // What it is pointed at has to be able to do the work.
+    //
+    // Three failures used to look identical from here: an agent on a mock ran
+    // and produced nothing, an agent naming a provider that does not exist
+    // ("unknown provider 'scripted'") died mid-wake, and an agent on a real
+    // provider with no key failed on its first call. All three cost a wake and
+    // said little. They are now refused before anything is spent, and the
+    // refusal names the agent, the provider and what to do.
+    if let Some(why) = provider_trouble(&workspace, bot.agent.trim()) {
+        return Some((false, why));
+    }
+
     // Make sure the Assistant knows this space before asking it to work there.
     //
     // The startup catch-up tick runs before the frontend has had a chance to
@@ -2607,6 +2859,36 @@ mod tests {
         assert_eq!(back.team, vec!["dev-a".to_string(), "qa".to_string()]);
         assert_eq!(back.agent, "dev-a");
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A wake is refused before anything is spent, and the refusal says which
+    /// of the three faults it is. All three used to look the same from the
+    /// outside: a wake that cost money and did nothing.
+    #[test]
+    fn a_manager_will_not_wake_an_agent_that_cannot_do_the_work() {
+        let real = vec!["anthropic".to_string(), "openai-compatible".to_string()];
+
+        let mock = super::provider_trouble_for("qa", "mock", &real).expect("a mock cannot work");
+        assert!(mock.contains("answers from a script"), "{mock}");
+
+        // The real one on this machine: dev-a names something that has never
+        // been a provider, and the old failure was mid-wake.
+        let gone = super::provider_trouble_for("dev-a", "scripted", &real)
+            .expect("a provider that is not there cannot work");
+        assert!(gone.contains("does not exist"), "{gone}");
+        assert!(gone.contains("anthropic"), "it says what is set up: {gone}");
+
+        let blank = super::provider_trouble_for("qa", "", &real).expect("nothing named");
+        assert!(blank.contains("does not name a provider"), "{blank}");
+
+        assert!(
+            super::provider_trouble_for("dev-b", "anthropic", &real).is_none(),
+            "a real provider that is set up is fine"
+        );
+        assert!(
+            super::provider_trouble_for("mason", "claude-code", &real).is_none(),
+            "a CLI runner is not in the registry and needs no key"
+        );
     }
 
     #[test]

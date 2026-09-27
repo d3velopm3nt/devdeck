@@ -10,6 +10,7 @@ import { avatarLabel, nodeColor } from '../../lib/spaces'
 import { routine } from '../../lib/bots'
 import { openBot } from '../../lib/dock'
 import { openBusiness } from '../business/TodayBusinesses'
+import { startWorker } from '../workers/StartWorker'
 import { BotCreate } from '../bot/BotCreate'
 
 type SpaceNode = Parameters<typeof nodeColor>[0] & { id: number; name: string }
@@ -26,6 +27,12 @@ export function NodeManagers({
   const refreshBots = useApp((s) => s.refreshBots)
   const [standing, setStanding] = useState<Record<string, ipc.BotStanding>>({})
   const [creating, setCreating] = useState(false)
+  const [workers, setWorkers] = useState<ipc.Worker[]>([])
+  const [waking, setWaking] = useState('')
+
+  useEffect(() => {
+    void ipc.workersList().then(setWorkers).catch(() => setWorkers([]))
+  }, [])
 
   useEffect(() => {
     void ipc
@@ -42,6 +49,9 @@ export function NodeManagers({
             ? `Nobody manages ${node.name} yet.`
             : `${managers.length === 1 ? 'One manager works' : `${managers.length} managers work`} in ${node.name}. Their wakes land in its Thread, each under its own name, and @ reaches one there.`}
         </p>
+        <button className="btn-ghost text-[11.5px]" onClick={() => startWorker({ nodeId: node.id })}>
+          <Icon name="run" size={12} /> Start a worker
+        </button>
         {isBusiness ? (
           <button className="btn-ghost text-[11.5px]" onClick={() => openBusiness({ nodeId: node.id, step: 'team' })}>
             <Icon name="edit" size={12} /> Change the team
@@ -89,8 +99,29 @@ export function NodeManagers({
                   <Icon name="agent" size={11} /> {m.agent ? `runs ${m.agent}` : 'plans and asks'}
                 </span>
               </div>
+              {/* A manager manages; a worker does the job. This is the line
+                  between them, and it is one choice. */}
+              <div className="flex items-center gap-2 text-[11px]">
+                <span className="shrink-0 text-muted">Hands work to</span>
+                <select
+                  className="input min-w-0 flex-1 py-0.5 text-[11px]"
+                  value={m.worker ?? ''}
+                  onChange={(e) => {
+                    const worker = e.target.value
+                    void ipc.botSetWorker(m.handle, worker).then(() => void refreshBots())
+                  }}
+                >
+                  <option value="">nobody — it only keeps the plan</option>
+                  {workers.map((w) => (
+                    <option key={w.handle} value={w.handle}>
+                      {w.name}
+                      {w.unattended ? '' : ' (asks first)'}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="rounded-[8px] border border-line bg-raise px-2.5 py-2 text-[11.5px] leading-relaxed">
-                <div className="mb-0.5 text-[10px] uppercase tracking-wider text-faint">
+                <div className="mb-0.5 flex items-center gap-2 text-[10px] uppercase tracking-wider text-faint">
                   {woke
                     ? `Last woke ${woke.toLocaleString(undefined, {
                         weekday: 'short',
@@ -100,6 +131,28 @@ export function NodeManagers({
                         minute: '2-digit',
                       })}`
                     : 'Has not woken yet'}
+                  <span className="flex-1" />
+                  {/* Waiting until tomorrow morning to find out whether a
+                      manager hands its work over is not a thing anyone can
+                      test. This is the same wake, now. */}
+                  <button
+                    className="btn-ghost text-[10.5px] normal-case tracking-normal"
+                    disabled={!m.schedule_id || waking === m.handle}
+                    title={m.schedule_id ? 'Run this manager’s wake now' : 'It has no heartbeat to run'}
+                    onClick={() => {
+                      if (!m.schedule_id) return
+                      setWaking(m.handle)
+                      void ipc
+                        .scheduleRunNow(m.schedule_id)
+                        .catch(() => {})
+                        .finally(() => {
+                          setWaking('')
+                          void refreshBots()
+                        })
+                    }}
+                  >
+                    {waking === m.handle ? 'Waking…' : 'Wake now'}
+                  </button>
                 </div>
                 <div className={`line-clamp-4 whitespace-pre-line ${m.last_ok === false ? 'text-warn' : 'text-body'}`}>
                   {m.last_note || (woke ? 'Nothing to report.' : `First wake: ${routine(m).toLowerCase()}.`)}

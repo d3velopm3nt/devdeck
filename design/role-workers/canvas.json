@@ -1,0 +1,78 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "title": "1 \u00b7 Bring in a skill library: ECC",
+      "x": 0,
+      "y": 0,
+      "w": 1456,
+      "h": 909
+    },
+    {
+      "file": "Toolkit.dc.html",
+      "title": "2 \u00b7 Each role, its worker and its skills",
+      "x": 1576,
+      "y": 0,
+      "w": 1456,
+      "h": 909
+    },
+    {
+      "file": "Handoff.dc.html",
+      "title": "3 \u00b7 A manager hands work to a worker",
+      "x": 3152,
+      "y": 0,
+      "w": 1456,
+      "h": 909
+    },
+    {
+      "file": "Session.dc.html",
+      "title": "4 \u00b7 Watching it work",
+      "x": 0,
+      "y": 1100,
+      "w": 1456,
+      "h": 909
+    },
+    {
+      "file": "Review.dc.html",
+      "title": "5 \u00b7 What came back",
+      "x": 1576,
+      "y": 1100,
+      "w": 1456,
+      "h": 909
+    },
+    {
+      "file": "Overnight.dc.html",
+      "title": "6 \u00b7 While you sleep",
+      "x": 3152,
+      "y": 1100,
+      "w": 1456,
+      "h": 909
+    }
+  ],
+  "annotations": [
+    {
+      "id": "decisions",
+      "x": 0,
+      "y": -330,
+      "w": 520,
+      "text": "Decisions in this design: every business role can hand work to a worker, not only engineering. A worker is Claude Code, briefed as the role, given only that role's skills, working in one folder (a vault folder for drafts, a branch of its own for code). Skills come from DevDeck's library, read from GitHub and added by you; hooks, MCP configs and install scripts never come in; ~/.claude is left alone."
+    },
+    {
+      "id": "gate",
+      "x": 600,
+      "y": -330,
+      "w": 520,
+      "text": "The approval is per session, as the turn decided: the handoff card says what it may and will not do, where, and its time and money limit. A standing yes is per role, per kind of work, per place. Nothing ever sends, posts, pays, pushes or merges. A missing CLI blocks, it never silently skips."
+    },
+    {
+      "id": "open",
+      "x": 1200,
+      "y": -330,
+      "w": 520,
+      "text": "Open: add a Design role to the catalogue? Codex as a second worker? Should a kept draft be copied into knowledge whole, or only a line pointing at it? Per-role budgets, or one for the business?"
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}

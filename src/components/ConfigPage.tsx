@@ -11,6 +11,7 @@ import { Icon } from '../lib/icons'
 import { SchedulerPage } from './SchedulerPage'
 import { GitHubToken } from './GitHubToken'
 import { CAPTURE_SETTINGS_TAB } from '../lib/devCapture'
+import { THEMES, type ThemeSwatch } from '../lib/themes'
 
 /** A labelled checkbox row, the shape the Git section already uses. */
 function Toggle({
@@ -32,6 +33,42 @@ function Toggle({
       />
       {label}
     </label>
+  )
+}
+
+/** A miniature of the app in one theme: title bar, sidebar, a few lines of
+ *  text and the accent button. Built from the theme's four swatch colours
+ *  rather than from the live tokens, because every card has to show a theme
+ *  that is *not* the one currently painted — these inline colours are the one
+ *  place a component is allowed a raw hex. */
+function ThemePreview({ swatch }: { swatch: ThemeSwatch }) {
+  return (
+    <div
+      aria-hidden
+      className="h-[72px] w-full overflow-hidden rounded-md"
+      style={{ background: swatch.app }}
+    >
+      <div className="flex h-4 items-center gap-[3px] px-1.5" style={{ background: swatch.panel }}>
+        {[0.45, 0.3, 0.3].map((o, i) => (
+          <span
+            key={i}
+            className="h-[3px] w-[3px] rounded-full"
+            style={{ background: swatch.ink, opacity: o }}
+          />
+        ))}
+      </div>
+      <div className="flex h-[56px] gap-1.5 p-1.5">
+        <div className="w-1/4 rounded-sm" style={{ background: swatch.panel }} />
+        <div className="flex min-w-0 flex-1 flex-col justify-between">
+          <div className="flex flex-col gap-[3px] pt-[2px]">
+            <span className="h-[3px] w-full rounded-full" style={{ background: swatch.ink, opacity: 0.5 }} />
+            <span className="h-[3px] w-4/5 rounded-full" style={{ background: swatch.ink, opacity: 0.28 }} />
+            <span className="h-[3px] w-3/5 rounded-full" style={{ background: swatch.ink, opacity: 0.28 }} />
+          </div>
+          <span className="h-[11px] w-10 rounded-[3px]" style={{ background: swatch.accent }} />
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -327,29 +364,34 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
           <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
             Appearance
           </h3>
-          <div className="flex gap-2">
-            {(['dark', 'light'] as const).map((t) => (
-              <button
-                key={t}
-                className={`flex items-center gap-2 rounded-lg border px-4 py-2 text-[12.5px] font-medium capitalize transition-colors ${
-                  theme === t
-                    ? 'border-indigo-500 bg-indigo-500/10 text-ink'
-                    : 'border-line2 text-dim hover:border-line3 hover:text-ink'
-                }`}
-                onClick={() => void setTheme(t)}
-              >
-                <span
-                  className="h-4 w-4 rounded-full border"
-                  style={{
-                    background: t === 'dark' ? '#0b0e14' : '#f6f7f9',
-                    borderColor: t === 'dark' ? '#334155' : '#c3cbd8',
-                  }}
-                />
-                {t}
-              </button>
-            ))}
+          <div className="grid max-w-3xl grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-2.5">
+            {THEMES.map((t) => {
+              const on = theme === t.id
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => void setTheme(t.id)}
+                  className={`rounded-lg border p-2 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                    on ? 'border-accent bg-raise' : 'border-line2 bg-panel hover:border-line3'
+                  }`}
+                >
+                  <ThemePreview swatch={t.swatch} />
+                  <div className="mt-2 flex items-start gap-1.5">
+                    <div className="min-w-0 flex-1">
+                      <div className={`truncate text-[12.5px] font-medium ${on ? 'text-ink' : 'text-body'}`}>
+                        {t.label}
+                      </div>
+                      <p className="mt-0.5 text-[11px] leading-snug text-muted">{t.blurb}</p>
+                    </div>
+                    {on && <Icon name="check" size={13} className="mt-0.5 shrink-0 text-accent" />}
+                  </div>
+                </button>
+              )
+            })}
           </div>
-          <p className="mt-1 text-[11px] text-muted">Applies instantly — terminals and panels included.</p>
+          <p className="mt-2 text-[11px] text-muted">Applies instantly — terminals and panels included.</p>
         </section>
           </>
         )}

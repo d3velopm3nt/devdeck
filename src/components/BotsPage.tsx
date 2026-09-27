@@ -181,8 +181,15 @@ export function BotsPage({ compact }: { compact?: boolean } = {}) {
             )
           })}
 
+          {/* Agents are listed, not opened: there is no agent page to go to,
+              and a row that looks clickable and is not is worse than one that
+              plainly is not. They are here because a bot puts them to work and
+              you want to know which of them is busy. */}
           <div className="px-2.5 pb-1 pt-3 text-[9.5px] font-semibold uppercase tracking-[0.07em] text-faint">
             Agents
+            <span className="ml-1.5 font-normal normal-case tracking-normal text-faint">
+              · @ one in a thread to use it
+            </span>
           </div>
           {a.agents
             .filter((ag) => ag.id !== 'assistant')

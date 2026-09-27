@@ -8,6 +8,7 @@ import { Icon } from '../../lib/icons'
 import { useApp } from '../../store'
 import { isAgreed } from './shared'
 import { openBusiness } from './TodayBusinesses'
+import { openBot } from '../../lib/dock'
 
 const initials = (name: string) =>
   name
@@ -81,13 +82,24 @@ export function BusinessTab({ nodeId }: { nodeId: number }) {
       <div className="grid grid-cols-[minmax(0,1fr)_300px] gap-4">
         <div className="flex min-w-0 flex-col gap-4">
           <section>
-            <Head title="The team" note="everyone reports to the directors" />
+            {/* This is the same managers the Managers tab lists, from a
+                different call — but it says two things that one does not:
+                who else a manager works for, and what the directors kept.
+                So it stays, as the reading view, and stops being inert: a
+                row opens its manager, and the note says where the controls
+                are rather than leaving you to hunt for them. */}
+            <Head title="The team" note="open one to read it · Managers tab to wake or assign" />
             <div className="overflow-hidden rounded-lg border border-line bg-panel">
               {space.members.length === 0 && (
                 <div className="px-3 py-2.5 text-[12px] text-muted">Nobody on the team yet. The directors do it all.</div>
               )}
               {space.members.map((m) => (
-                <div key={m.handle} className="flex items-start gap-2.5 border-b border-line px-3 py-2.5 last:border-b-0">
+                <button
+                  key={m.handle}
+                  className="flex w-full items-start gap-2.5 border-b border-line px-3 py-2.5 text-left last:border-b-0 hover:bg-hover/40"
+                  title={`Open ${m.name}`}
+                  onClick={() => openBot(nodeId, m.name, false, m.handle)}
+                >
                   <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-500/15 text-[9.5px] font-semibold text-indigo-400">
                     {initials(m.name)}
                   </span>
@@ -106,7 +118,7 @@ export function BusinessTab({ nodeId }: { nodeId: number }) {
                     <div>{m.rhythm}</div>
                     <div>{ago(m.last_woke)}</div>
                   </div>
-                </div>
+                </button>
               ))}
               {space.keeps.length > 0 && (
                 <div className="border-t border-line bg-raise px-3 py-2 text-[11px] text-muted">

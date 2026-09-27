@@ -928,10 +928,25 @@ export const describeEvent = (e: DomainEvent): string => {
       return `${agent} completed — ${p.summary ?? ''}`
     case 'agent.failed':
       return `${agent} failed — ${p.error ?? ''}`
-    case 'work.claimed':
-      return `${agent} claimed “${p.intent ?? ''}”`
-    case 'work.completed':
+    case 'work.updated':
+      // A manager proposing and a person agreeing are the two halves of the
+      // same decision, so they read as a pair rather than as "work updated".
+      if (p.what === 'proposed')
+        return `${agent} suggests ${p.count} thing${p.count === 1 ? '' : 's'}`
+      if (p.what === 'agreed')
+        return `You agreed to ${p.count} thing${p.count === 1 ? '' : 's'}`
+      return `${agent} changed the plan`
+    case 'work.released':
+      if (p.what === 'declined')
+        return `You said no to ${p.count} thing${p.count === 1 ? '' : 's'}`
       return `${agent} released its claim`
+    case 'work.claimed':
+      // `summary` first: it is what every other payload calls the one-line
+      // description, and a feed that reads a key nobody writes renders an
+      // empty pair of quotes rather than saying anything is wrong.
+      return `${agent} started on “${p.summary ?? p.intent ?? ''}”`
+    case 'work.completed':
+      return `${agent} finished “${p.summary ?? p.intent ?? ''}”`
     case 'tool.executed':
       return `${agent} ran ${p.tool}.${p.action}`
     case 'tool.failed':

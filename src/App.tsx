@@ -3,7 +3,6 @@ import { Dock, buildDefaultLayout } from './Dock'
 import { BottomBar } from './components/BottomBar'
 import { InboxPage } from './components/InboxPage'
 import { TeamPage } from './components/team/TeamPage'
-import { BotsPage } from './components/BotsPage'
 import { AnalyticsPage } from './components/AnalyticsPage'
 import { CalendarPage } from './components/CalendarPage'
 import { CalendarSidebar } from './components/CalendarSidebar'
@@ -13,6 +12,8 @@ import { SetupModal } from './components/SetupModal'
 import { VaultSetup } from './components/VaultSetup'
 import { Meet } from './components/Meet'
 import { BusinessSetup } from './components/business/BusinessSetup'
+import { WorkersPage } from './components/workers/WorkersPage'
+import { StartWorker } from './components/workers/StartWorker'
 import { ClearBusinesses } from './components/business/ClearBusinesses'
 import { Sheet } from './components/Sheet'
 import { UpdateBar, VersionPill, type UpState } from './components/UpdateBar'
@@ -33,23 +34,7 @@ import { ContactsView } from './components/ContactsView'
 import { StashSidebar } from './components/StashSidebar'
 import { StashView } from './components/StashView'
 import { ConnectionsSidebar } from './components/ConnectionsSidebar'
-import {
-  CAPTURE_CHECK,
-  CAPTURE_ENTRY,
-  CAPTURE_OPEN_FILE,
-  CAPTURE_EVENT,
-  CAPTURE_NODE,
-  CAPTURE_RAIL,
-  CAPTURE_MET,
-  CAPTURE_BUSINESS,
-  CAPTURE_CLEAR,
-  CAPTURE_MAIL_ACCOUNT,
-  CAPTURE_LEARN,
-  CAPTURE_MAIL_PANE,
-  CAPTURE_LIFE_PAGE,
-  CAPTURE_MEET_STEP,
-  CAPTURE_SAY,
-} from './lib/devCapture'
+import { CAPTURE_CHECK, CAPTURE_ENTRY, CAPTURE_OPEN_FILE, CAPTURE_EVENT, CAPTURE_NODE, CAPTURE_RAIL, CAPTURE_MET, CAPTURE_BUSINESS, CAPTURE_CLEAR, CAPTURE_MAIL_ACCOUNT, CAPTURE_LEARN, CAPTURE_MAIL_PANE, CAPTURE_LIFE_PAGE, CAPTURE_MEET_STEP, CAPTURE_SAY, CAPTURE_START_WORKER, CAPTURE_GO } from './lib/devCapture'
 import { AiwSidebar } from './components/aiw/AiwSidebar'
 import { AiWorkspace } from './components/aiw/AiWorkspace'
 import { ConnectionsView } from './components/ConnectionsView'
@@ -65,7 +50,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { useLive } from './liveStore'
 import { forgetFileListings } from './lib/fileIndex'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
-import { openNodeThread, dockApi, openFile, openTerminalPanel, openEditor, openNodeSetup, openSingleton, openLearnRun, openLife, saveLayout, restoreLayout } from './lib/dock'
+import { openNodeThread, dockApi, openFile, openTerminalPanel, openEditor, openNodeSetup, openSingleton, openLearnRun, openLife, saveLayout, restoreLayout, openRun } from './lib/dock'
 import { openTerminal, launchProfile } from './lib/runner'
 import { resolveDir } from './lib/tree'
 
@@ -635,14 +620,47 @@ export default function App() {
     return { nodeId: Number(id), step: step || undefined }
   })
   const [clearing, setClearing] = useState(CAPTURE_CLEAR)
+  // Starting a worker is a card over whatever you were doing: it can be asked
+  // for from a space, a manager's page or the Workers page, and none of them
+  // should have to own it.
+  const [starting, setStarting] = useState<{ handle?: string; nodeId?: number; title?: string; intent?: string } | null>(
+    () => {
+      if (!CAPTURE_START_WORKER) return null
+      const [handle, node, title, intent] = CAPTURE_START_WORKER.split('|')
+      return { handle, nodeId: Number(node) || undefined, title, intent }
+    },
+  )
+  // Dev-only: start a real run on a throwaway profile, so a screenshot can
+  // show one happening. Spends money, which is why it is a flag nobody ships.
+  useEffect(() => {
+    if (!CAPTURE_GO) return
+    const [handle, node, title, intent] = CAPTURE_GO.split('|')
+    void import('./lib/ipc').then(async (m) => {
+      try {
+        const run = await m.workerStart(handle!, Number(node), title ?? 'A job', intent ?? '')
+        openRun(run.id, run.title)
+      } catch (e) {
+        console.error('[capture] could not start the worker', e)
+      }
+    })
+  }, [])
   useEffect(() => {
     const onBusiness = (e: Event) => setBusiness(((e as CustomEvent).detail ?? {}) as never)
     const onClear = () => setClearing(true)
+    const onStart = (e: Event) => setStarting(((e as CustomEvent).detail ?? {}) as never)
+    const onRun = (e: Event) => {
+      const d = (e as CustomEvent<{ id: string; title: string }>).detail
+      if (d?.id) openRun(d.id, d.title || 'A run')
+    }
     window.addEventListener('devdeck:business', onBusiness)
     window.addEventListener('devdeck:clear-businesses', onClear)
+    window.addEventListener('devdeck:start-worker', onStart)
+    window.addEventListener('devdeck:open-run', onRun)
     return () => {
       window.removeEventListener('devdeck:business', onBusiness)
       window.removeEventListener('devdeck:clear-businesses', onClear)
+      window.removeEventListener('devdeck:start-worker', onStart)
+      window.removeEventListener('devdeck:open-run', onRun)
     }
   }, [])
   useEffect(() => {
@@ -1081,12 +1099,14 @@ export default function App() {
           {railView === 'machine' && <MachineSetup />}
           {railView === 'inbox' && <InboxPage />}
           {railView === 'team' && <TeamPage />}
-          {railView === 'bots' && <BotsPage />}
+          {railView === 'workers' && <WorkersPage />}
           {railView === 'analytics' && <AnalyticsPage />}
           {railView === 'calendar' && <CalendarPage />}
           {railView === 'settings' && <ConfigPage />}
         </main>
       </div>
+
+      {starting && <StartWorker open={starting} onClose={() => setStarting(null)} />}
 
       {/* Collapsible / resizable bottom bar: Logs + Processes */}
       <BottomBar

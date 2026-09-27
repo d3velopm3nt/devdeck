@@ -15,12 +15,15 @@ import { Icon } from '../../lib/icons'
 import { useAiw } from '../../lib/aiwStore'
 import { aiw } from '../../lib/aiw'
 import { useProviders, withCurrent } from '../../lib/providers'
+import { ProviderSetup } from '../aiw/ProviderSetup'
 import { ModelPicker } from '../aiw/ModelPicker'
 
 export function ModelBar({ agentId }: { agentId: string }) {
   const a = useAiw()
   const agent = a.agents.find((x) => x.id === agentId)
-  const providers = useProviders()
+  const [setupNonce, setSetupNonce] = useState(0)
+  const [setupOpen, setSetupOpen] = useState(false)
+  const providers = useProviders(setupNonce)
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState({ provider: '', model: '' })
   const [saving, setSaving] = useState(false)
@@ -66,6 +69,14 @@ export function ModelBar({ agentId }: { agentId: string }) {
 
   return (
     <div className="relative" ref={box}>
+      <ProviderSetup
+        open={setupOpen}
+        onClose={() => setSetupOpen(false)}
+        onSaved={(id) => {
+          setSetupNonce((n) => n + 1)
+          setDraft({ provider: id, model: '' })
+        }}
+      />
       <button
         className="flex max-w-full items-center gap-1.5 rounded px-1 py-0.5 text-[10.5px] text-faint hover:bg-hover hover:text-dim"
         title="Which provider and model answers in this thread"
@@ -89,11 +100,18 @@ export function ModelBar({ agentId }: { agentId: string }) {
               {agent.name || agent.id} runs on
             </span>
           </div>
+          <button
+            className="btn mb-1 w-full text-[11px]"
+            onClick={() => setSetupOpen(true)}
+          >
+            Set up a provider
+          </button>
           <select
             className="input w-full text-[11.5px]"
             value={draft.provider}
             onChange={(e) => setDraft({ provider: e.target.value, model: '' })}
           >
+            {providers.length === 0 && <option value="">No provider set up yet</option>}
             {withCurrent(providers, draft.provider).map(([id, label]) => (
               <option key={id} value={id}>
                 {label}

@@ -88,7 +88,7 @@ export function BotDetail({
   const [why, setWhy] = useState('')
 
   // Every read reports its own failure. A `mind.md` someone hand-edited into
-  // invalid YAML must never render as "this bot knows nothing" — that is the
+  // invalid YAML must never render as "this manager knows nothing" — that is the
   // update checker's old bug (couldn't reach the server → "up to date"), and
   // here it would be followed by a write that replaced everything you told it.
   const reload = useCallback(() => {
@@ -193,7 +193,7 @@ export function BotDetail({
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 bg-page px-8 text-center">
         <Icon name="bot" size={24} className="text-faint" />
-        <div className="text-[12.5px] text-dim">That bot is gone</div>
+        <div className="text-[12.5px] text-dim">That manager is gone</div>
         <p className="max-w-[380px] text-[11.5px] leading-relaxed text-muted">
           Its folder, its work items and everything else in the space are untouched. You can close
           this tab.
@@ -207,7 +207,7 @@ export function BotDetail({
       <div className="flex h-full flex-col items-center justify-center gap-2 bg-page px-8 text-center">
         <Icon name="bot" size={24} className="text-faint" />
         <div className="text-[12.5px] text-dim">
-          {err ? 'That did not load' : 'No bot in this folder'}
+          {err ? 'That did not load' : 'No manager in this folder'}
         </div>
         {err && <p className="max-w-[420px] text-[11.5px] text-err">{err}</p>}
       </div>

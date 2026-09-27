@@ -244,7 +244,7 @@ export function SchedulerPage() {
                       <span className="truncate font-mono">{s.payload}</span>
                     ) : s.kind === 'bot' ? (
                       <span>
-                        Reads the space, and runs the agent the bot names — if it names one.
+                        Reads the space, and runs the agent the manager names — if it names one.
                       </span>
                     ) : (
                       <span>Tells you. Nothing runs.</span>

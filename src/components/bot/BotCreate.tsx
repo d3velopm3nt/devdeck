@@ -73,7 +73,7 @@ export function BotCreate({
   // you have typed.
   useEffect(() => {
     if (!template) return
-    if (!touchedName) setName(node ? `${node.name} bot` : template.name)
+    if (!touchedName) setName(node ? `${node.name} manager` : template.name)
     setEvery(quiet ? 'weekly' : template.every)
     setAt(quiet ? '18:00' : hhmm(template.at_min))
     setDays(quiet ? ['0'] : [])
@@ -113,7 +113,7 @@ export function BotCreate({
             <Icon name="bot" size={14} />
           </span>
           <div className="min-w-0 flex-1">
-            <div className="text-[13px] font-semibold text-ink">A new bot</div>
+            <div className="text-[13px] font-semibold text-ink">A new manager</div>
             <div className="text-[11px] text-muted">
               It is drafted for you. Change anything before it exists.
             </div>

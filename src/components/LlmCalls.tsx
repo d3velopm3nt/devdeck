@@ -205,7 +205,7 @@ export function LlmCalls() {
         ) : shown.length === 0 ? (
           <div className="px-3 py-6 text-center text-[11.5px] leading-relaxed text-muted">
             {calls.length === 0
-              ? 'No model calls yet. Every turn a bot, an agent or the assistant takes is written down here — what it was asked, what came back, and what it cost.'
+              ? 'No model calls yet. Every turn a manager, an agent or the assistant takes is written down here — what it was asked, what came back, and what it cost.'
               : 'Nothing matches those filters.'}
           </div>
         ) : (

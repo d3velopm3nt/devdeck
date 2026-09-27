@@ -1,7 +1,7 @@
 // Goals — every space, right now, grouped by goal rather than by bot.
 //
 // A bot on two goals appears twice, which is the point: the thing you are
-// trying to move is the goal, and "which bot owns it" is an answer to a
+// trying to move is the goal, and "which manager owns it" is an answer to a
 // different question.
 //
 // Three groups, ranked: **Waiting on you** first because it has a person in

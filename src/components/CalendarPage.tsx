@@ -1043,7 +1043,7 @@ function MonthGrid({
           const isToday = day.toDateString() === today
           const weekend = day.getDay() === 0 || day.getDay() === 6
           const due = list.filter((i) => i.kind === 'deadline')
-          // The machine's routine, counted rather than listed. Three bots
+          // The machine's routine, counted rather than listed. Three managers
           // waking at eight every weekday is three identical lines a day and
           // sixty a month — it buried the two things on here that were
           // actually about you. One line says the same thing and leaves the

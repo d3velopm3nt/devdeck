@@ -130,7 +130,7 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
   const parent = node ? findNode(nodes, node.parent_id) : null
   const ws = workspaceOf(nodes, node)
   // Every manager working here. A business has several; a space with
-  // exactly one still has "its bot".
+  // exactly one still has "its manager".
   const managers = bots.filter((b) => b.node_id === nodeId || (b.businesses ?? []).includes(nodeId))
   const bot = managers.length === 1 ? managers[0] : undefined
   const git = gitByNode[nodeId]
@@ -186,12 +186,12 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
     ...(counts.cmds ? [{ text: `${counts.cmds} command${counts.cmds === 1 ? '' : 's'}` }] : []),
     ...(counts.svcs ? [{ text: `${counts.svcs} service${counts.svcs === 1 ? '' : 's'}` }] : []),
     // A business has a team of roles, shown on its Team tab. Naming one of
-    // them here as "its bot" would say the space has one manager.
+    // them here as "its manager" would say the space has one manager.
     ...(isBusiness
       ? []
       : bot
         ? [{ text: bot.name, tone: 'text-indigo-400' }]
-        : [{ text: 'no bot', dashed: true }]),
+        : [{ text: 'no manager', dashed: true }]),
     ...(counts.open ? [{ text: `${counts.open} open item${counts.open === 1 ? '' : 's'}` }] : []),
     ...(isProject
       ? dir
@@ -240,7 +240,7 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
             {/* A business has a team of roles, not one bot: its Team tab says who. */}
             {bot && !isBusiness ? (
               <button className="btn-ghost text-[11px]" onClick={() => openBot(bot.node_id, bot.name, false, bot.handle)}>
-                <Icon name="bot" size={12} /> Its bot
+                <Icon name="bot" size={12} /> Its manager
               </button>
             ) : null}
             {isProject && (
@@ -382,7 +382,7 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
                 ? `${bot.name} watches this space. Its wakes land here as receipts.`
                 : managers.length > 1
                   ? `${managers.map((m) => m.name).join(', ')} work in this space. Their wakes land here, each under its own name, and @ reaches one.`
-                  : 'Nothing watches this space yet. Ask about it, or give it a bot from its settings.'}
+                  : 'Nothing watches this space yet. Ask about it, or give it a manager from its settings.'}
             </>
           }
         />

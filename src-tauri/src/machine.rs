@@ -556,7 +556,7 @@ fn row_to_pkg(row: &rusqlite::Row) -> rusqlite::Result<MachinePackage> {
 /// included so the UI can offer "restore"; it filters them from the list.
 #[tauri::command]
 pub fn machine_packages_list(db: tauri::State<Db>) -> Result<Vec<MachinePackage>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut stmt = conn
         .prepare("SELECT id, name, source, category, blurb, elevate, custom, hidden, sort FROM machine_packages ORDER BY sort, id")
         .map_err(err)?;
@@ -576,7 +576,7 @@ pub fn machine_packages_seed(
     db: tauri::State<Db>,
     packages: Vec<MachinePackage>,
 ) -> Result<usize, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut added = 0usize;
     for (i, p) in packages.iter().enumerate() {
         let n = conn
@@ -595,7 +595,7 @@ pub fn machine_packages_seed(
 /// simply overwrites its row; it stays put until the user resets it.
 #[tauri::command]
 pub fn machine_package_save(db: tauri::State<Db>, pkg: MachinePackage) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute(
         "INSERT INTO machine_packages (id, name, source, category, blurb, elevate, custom, hidden, sort)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
@@ -615,7 +615,7 @@ pub fn machine_package_save(db: tauri::State<Db>, pkg: MachinePackage) -> Result
 /// hidden (so the seed won't bring them back) and can be restored later.
 #[tauri::command]
 pub fn machine_package_delete(db: tauri::State<Db>, id: String) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let is_custom: bool = conn
         .query_row(
             "SELECT custom FROM machine_packages WHERE id = ?1",

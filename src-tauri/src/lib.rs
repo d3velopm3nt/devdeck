@@ -808,16 +808,14 @@ pub fn run() {
                     // path the window is waiting on.
                     {
                         let moved = match h.try_state::<db::Db>() {
-                            Some(db) => match db.0.lock() {
-                                Ok(conn) => {
-                                    let moved = managers::migrate_from_bots(&conn);
-                                    // The first migration predated `home`, so
-                                    // give it back to anyone missing it.
-                                    managers::backfill_home(&conn);
-                                    moved
-                                }
-                                Err(_) => Vec::new(),
-                            },
+                            Some(db) => {
+                                let conn = db.conn();
+                                let moved = managers::migrate_from_bots(&conn);
+                                // The first migration predated `home`, so
+                                // give it back to anyone missing it.
+                                managers::backfill_home(&conn);
+                                moved
+                            }
                             None => Vec::new(),
                         };
                         if !moved.is_empty() {
@@ -855,7 +853,8 @@ pub fn run() {
             // is one that did not survive the last stop. Said plainly at
             // startup rather than left spinning on the page for ever.
             if let Some(db) = app.try_state::<db::Db>() {
-                if let Ok(conn) = db.0.lock() {
+                {
+        let conn = db.conn();
                     let _ = eventlog::trim(&conn);
                 }
             }
@@ -955,7 +954,7 @@ pub fn run() {
                 let h = app.handle().clone();
                 std::thread::spawn(move || {
                     let Some(db) = h.try_state::<db::Db>() else { return };
-                    let Ok(conn) = db.0.lock() else { return };
+                    let conn = db.conn();
                     let _ = stash::prune(&conn, stash_retention);
                     let redacted = stash::redact_stored_ocr(&conn);
                     drop(conn);

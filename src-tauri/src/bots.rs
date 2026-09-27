@@ -614,7 +614,7 @@ fn own_feature(bot: &Bot, node_id: i64) -> String {
 /// us to design out: a routine that is displayed must be a routine that runs.
 #[tauri::command]
 pub fn bots_list(db: tauri::State<Db>) -> Result<Vec<Bot>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut out = all_bots(&conn);
     for b in out.iter_mut() {
         b.schedule_id = sync_heartbeat(&conn, b)?;
@@ -648,7 +648,7 @@ pub fn bots_list(db: tauri::State<Db>) -> Result<Vec<Bot>, String> {
 
 #[tauri::command]
 pub fn bot_get(db: tauri::State<Db>, handle: String) -> Result<Option<Bot>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     Ok(bot_on(&conn, &handle))
 }
 
@@ -658,7 +658,7 @@ pub fn bot_get(db: tauri::State<Db>, handle: String) -> Result<Option<Bot>, Stri
 /// manager came from it. When ownership drives that page instead, this goes.
 #[tauri::command]
 pub fn bot_for_node(db: tauri::State<Db>, node_id: i64) -> Result<Option<Bot>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     Ok(bot_on_node(&conn, node_id))
 }
 
@@ -899,7 +899,7 @@ pub fn bot_save(
     wake_intent: String,
 ) -> Result<Bot, String> {
     let (bot, created) = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         save_into(
             &conn,
             node_id,
@@ -976,7 +976,7 @@ fn delete_into_for(
 /// Say which worker a manager hands its jobs to. Empty takes it back.
 #[tauri::command(async)]
 pub fn bot_set_worker(db: tauri::State<Db>, handle: String, worker: String) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut m = crate::managers::get(&conn, &handle).ok_or("there is no manager by that name.")?;
     m.worker = worker.trim().to_string();
     crate::managers::save(&conn, &m)
@@ -990,7 +990,7 @@ pub fn bot_delete(
     handle: Option<String>,
 ) -> Result<(), String> {
     let name = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         delete_into_for(&conn, &mind()?, node_id, handle.as_deref())?
     };
     crate::activity::record(
@@ -1039,7 +1039,7 @@ pub fn bot_work(
     node_id: i64,
     handle: Option<String>,
 ) -> Result<Vec<WorkRow>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let (deck, dir) = deck_of(&conn, node_id)?;
     if !deck.exists() {
         return Ok(vec![]);
@@ -1233,7 +1233,7 @@ pub fn bot_plan(
     }
 
     let (slug, name, added) = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         plan_into_for(&conn, node_id, handle.as_deref(), &steps)?
     };
 
@@ -1281,7 +1281,7 @@ pub fn bot_work_save(
         return Err(format!("{status} is not a status a step can be in."));
     }
 
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let (deck, _dir) = deck_of(&conn, node_id)?;
     let mut bot =
         resolve(&conn, node_id, handle.as_deref()).ok_or("There is no manager for that space.")?;
@@ -1335,7 +1335,7 @@ pub fn bot_work_delete(
     id: String,
     handle: Option<String>,
 ) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let (deck, _dir) = deck_of(&conn, node_id)?;
     let mut bot =
         resolve(&conn, node_id, handle.as_deref()).ok_or("There is no manager for that space.")?;
@@ -1480,7 +1480,7 @@ pub fn bot_create(
     with_plan: bool,
 ) -> Result<Bot, String> {
     let bot = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         create_into(
             &conn,
             node_id,
@@ -1537,9 +1537,7 @@ pub struct BotStanding {
 
 #[tauri::command]
 pub fn bots_standing(db: tauri::State<Db>) -> Vec<BotStanding> {
-    let Ok(conn) = db.0.lock() else {
-        return Vec::new();
-    };
+    let conn = db.conn();
     all_bots(&conn)
         .into_iter()
         .map(|b| {
@@ -1827,7 +1825,7 @@ pub fn work_agree(
     feature: String,
     ids: Vec<String>,
 ) -> Result<usize, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let node = db::node_by_id(&conn, node_id).map_err(|_| "that space is gone".to_string())?;
     let dir = dir_of(&conn, &node).ok_or("that space has no folder in the vault")?;
     let deck = crate::aiw::deck::Deck::new(&dir);
@@ -1865,7 +1863,7 @@ pub fn work_decline(
     feature: String,
     ids: Vec<String>,
 ) -> Result<usize, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let node = db::node_by_id(&conn, node_id).map_err(|_| "that space is gone".to_string())?;
     let dir = dir_of(&conn, &node).ok_or("that space has no folder in the vault")?;
     let deck = crate::aiw::deck::Deck::new(&dir);
@@ -1913,7 +1911,7 @@ pub fn bot_plan_proposal(
     node_id: i64,
     handle: Option<String>,
 ) -> Result<Vec<String>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let Some(bot) = resolve(&conn, node_id, handle.as_deref()) else {
         return Ok(vec![]);
     };
@@ -2007,7 +2005,7 @@ pub struct ToolView {
 #[tauri::command]
 pub fn bot_tools(db: tauri::State<Db>, node_id: i64) -> Result<Vec<ToolView>, String> {
     let bot = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let (_, dir) = deck_of(&conn, node_id)?;
         read(&dir)
     };
@@ -2071,7 +2069,7 @@ pub fn bot_tool_decide(
             // third time this exact shape has bitten this codebase (the
             // scheduler's first tick, and `schedule_run_now` before it).
             let name = {
-                let conn = db.0.lock().unwrap();
+                let conn = db.conn();
                 let bot =
                     bot_on_node(&conn, node_id).ok_or("There is no manager for that space.")?;
                 let mut m = crate::managers::get(&conn, &bot.handle)
@@ -2113,7 +2111,7 @@ pub fn bot_tool_decide(
 #[tauri::command]
 pub fn bot_suggestions(db: tauri::State<Db>, node_id: i64) -> Result<Vec<Suggestion>, String> {
     let (bot, work) = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let (deck, dir) = deck_of(&conn, node_id)?;
         let Some(bot) = read(&dir) else {
             return Ok(vec![]);
@@ -2198,7 +2196,7 @@ pub fn bot_on(conn: &Connection, handle: &str) -> Option<Bot> {
 fn repo_of(app: &tauri::AppHandle, node_id: i64) -> Option<PathBuf> {
     use tauri::Manager;
     let db = app.try_state::<Db>()?;
-    let conn = db.0.lock().ok()?;
+    let conn = db.conn();
     let n = db::node_by_id(&conn, node_id).ok()?;
     n.path.filter(|p| !p.trim().is_empty()).map(PathBuf::from)
 }
@@ -2396,7 +2394,7 @@ pub fn bot_thread(
     handle: Option<String>,
 ) -> Result<crate::aiw::assistant::ConversationMeta, String> {
     let bot = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         resolve(&conn, node_id, handle.as_deref()).ok_or("There is no manager for that space.")?
     };
     let convs = ws.convs()?;
@@ -2425,7 +2423,7 @@ pub async fn bot_thread_send(
 ) -> Result<crate::aiw::assistant::AssistantReply, String> {
     use tauri::Emitter;
     let bot = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         resolve(&conn, node_id, handle.as_deref()).ok_or("There is no manager for that space.")?
     };
     let node_id = bot.node_id;

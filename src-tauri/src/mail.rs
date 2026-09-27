@@ -336,7 +336,7 @@ fn row_to_msg(row: &rusqlite::Row) -> rusqlite::Result<MailMessage> {
 
 #[tauri::command]
 pub fn mail_accounts_list(db: tauri::State<Db>) -> Result<Vec<MailAccount>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let sql = format!("SELECT {ACCOUNT_COLS} FROM mail_accounts ORDER BY sort, id");
     let mut st = conn.prepare(&sql).map_err(err)?;
     let rows = st.query_map([], row_to_account).map_err(err)?;
@@ -348,7 +348,7 @@ pub fn mail_account_save(db: tauri::State<Db>, def: MailAccount) -> Result<i64, 
     if def.address.trim().is_empty() {
         return Err("An account needs an email address.".into());
     }
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let id = if def.id <= 0 {
         conn.execute(
             "INSERT INTO mail_accounts
@@ -415,7 +415,7 @@ pub fn mail_account_save(db: tauri::State<Db>, def: MailAccount) -> Result<i64, 
 #[tauri::command]
 pub fn mail_account_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
     {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         // Cached mail and attachments go with it (ON DELETE CASCADE).
         conn.execute("DELETE FROM mail_accounts WHERE id=?1", params![id])
             .map_err(err)?;
@@ -476,7 +476,7 @@ pub async fn mail_extract(app: tauri::AppHandle, limit: i64) -> Result<i64, Stri
 fn extract_pending(app: &tauri::AppHandle, db: &Db, limit: i64) -> Result<i64, String> {
     let limit = limit.clamp(1, 500);
     let todo: Vec<(i64, String, String)> = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let mut st = conn
             .prepare(
                 "SELECT id, file_path, mime FROM mail_attachments
@@ -498,7 +498,7 @@ fn extract_pending(app: &tauri::AppHandle, db: &Db, limit: i64) -> Result<i64, S
         // difference between "reconnect your drive" and "this type is not
         // supported".
         if !file.is_file() {
-            let conn = db.0.lock().unwrap();
+            let conn = db.conn();
             conn.execute(
                 "UPDATE mail_attachments SET extract_state='missing', extract_note=?2 WHERE id=?1",
                 params![id, "the file is not where the row says it is"],
@@ -529,7 +529,7 @@ fn extract_pending(app: &tauri::AppHandle, db: &Db, limit: i64) -> Result<i64, S
             crate::mailfiles::Extracted::Unreadable(why) => ("unreadable", why.clone()),
         };
 
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         conn.execute(
             "UPDATE mail_attachments SET extract_state=?2, extract_note=?3 WHERE id=?1",
             params![id, state, note],
@@ -547,7 +547,7 @@ fn extract_pending(app: &tauri::AppHandle, db: &Db, limit: i64) -> Result<i64, S
 #[tauri::command]
 pub fn mail_attachment_text(db: tauri::State<Db>, id: i64) -> Result<Option<String>, String> {
     let (path, state): (String, String) = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         conn.query_row(
             "SELECT file_path, extract_state FROM mail_attachments WHERE id=?1",
             params![id],
@@ -602,7 +602,7 @@ pub struct Correspondent {
 /// is taken whole.
 #[tauri::command(async)]
 pub fn mail_correspondents(db: tauri::State<Db>, limit: i64) -> Result<Vec<Correspondent>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     rank_correspondents(&conn, limit)
 }
 
@@ -907,7 +907,7 @@ fn label_name(remote: &str) -> String {
 /// Every label on an account, with what we hold for each.
 #[tauri::command]
 pub fn mail_labels(db: tauri::State<Db>, account_id: i64) -> Result<Vec<MailLabel>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut st = conn
         .prepare(
             "SELECT l.id, l.account_id, l.remote, l.name, l.synced_at,
@@ -946,7 +946,7 @@ pub async fn mail_sync_label(app: tauri::AppHandle, label_id: i64) -> Result<i64
 
 fn sync_label_now(app: &tauri::AppHandle, db: &Db, label_id: i64) -> Result<i64, String> {
     let (acct, remote) = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let (account_id, remote): (i64, String) = conn
             .query_row(
                 "SELECT account_id, remote FROM mail_labels WHERE id=?1",
@@ -962,7 +962,7 @@ fn sync_label_now(app: &tauri::AppHandle, db: &Db, label_id: i64) -> Result<i64,
 
     let password = password_for(&acct)?;
     let root = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         crate::mailfiles::root(&conn)
     };
     let mut session = imap_login(&acct, &password)?;
@@ -975,7 +975,7 @@ fn sync_label_now(app: &tauri::AppHandle, db: &Db, label_id: i64) -> Result<i64,
     // carrying three labels is stored under each. That is what a label is:
     // Gmail's own model, not a folder tree pretending to be one.
     let seen: i64 = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         conn.query_row(
             "SELECT COALESCE(MAX(uid), 0) FROM mail_messages WHERE account_id=?1 AND mailbox=?2",
             params![acct.id, remote],
@@ -989,7 +989,7 @@ fn sync_label_now(app: &tauri::AppHandle, db: &Db, label_id: i64) -> Result<i64,
     // the client rather than a folder with nothing in it.
     if mailbox.exists == 0 && seen == 0 {
         let _ = session.logout();
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let _ = conn.execute(
             "UPDATE mail_labels SET synced_at=?1 WHERE id=?2",
             params![now_millis(), label_id],
@@ -1022,7 +1022,7 @@ fn sync_label_now(app: &tauri::AppHandle, db: &Db, label_id: i64) -> Result<i64,
         let flagged = f.flagged;
         let uid = f.uid as i64;
 
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         if store_message(&conn, &root, &acct, &remote, uid, &parsed, unread, flagged)? {
             stored += 1;
         }
@@ -1030,7 +1030,7 @@ fn sync_label_now(app: &tauri::AppHandle, db: &Db, label_id: i64) -> Result<i64,
     let _ = session.logout();
 
     {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let _ = conn.execute(
             "UPDATE mail_labels SET synced_at=?1 WHERE id=?2",
             params![now_millis(), label_id],
@@ -1085,7 +1085,7 @@ pub async fn mail_google_sign_in(
     creds::delete(&target_for(id));
 
     {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         conn.execute(
             "UPDATE mail_accounts SET auth='oauth', last_error='' WHERE id=?1",
             params![id],
@@ -1117,7 +1117,7 @@ pub async fn mail_google_connect(db: tauri::State<'_, Db>) -> Result<MailAccount
     }
 
     let id = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let existing: Option<i64> = conn
             .query_row(
                 "SELECT id FROM mail_accounts WHERE lower(address)=lower(?1)",
@@ -1158,7 +1158,7 @@ pub async fn mail_google_connect(db: tauri::State<'_, Db>) -> Result<MailAccount
     creds::delete(&target_for(id));
     token_cache().lock().unwrap().insert(id, tokens);
 
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     load_account(&conn, id)
 }
 
@@ -1171,7 +1171,7 @@ pub async fn mail_google_connect(db: tauri::State<'_, Db>) -> Result<MailAccount
 pub fn mail_google_sign_out(db: tauri::State<Db>, id: i64) -> Result<(), String> {
     creds::delete(&token_target_for(id));
     token_cache().lock().unwrap().remove(&id);
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute(
         "UPDATE mail_accounts SET auth='password' WHERE id=?1",
         params![id],
@@ -1488,7 +1488,7 @@ pub async fn mail_account_test(app: tauri::AppHandle, id: i64) -> Result<TestRes
 
 fn test_account(db: &Db, id: i64) -> Result<TestResult, String> {
     let acct = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         load_account(&conn, id)?
     };
     let password = password_for(&acct)?;
@@ -1824,7 +1824,7 @@ pub async fn mail_sync(app: tauri::AppHandle, id: i64) -> Result<i64, String> {
 
 fn sync_accounts(app: &tauri::AppHandle, db: &Db, id: i64) -> Result<i64, String> {
     let accounts = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         if id > 0 {
             vec![load_account(&conn, id)?]
         } else {
@@ -1856,7 +1856,7 @@ fn sync_accounts(app: &tauri::AppHandle, db: &Db, id: i64) -> Result<i64, String
         // happened. An error on screen should always describe the most recent
         // attempt, and this makes that true by construction.
         {
-            let conn = db.0.lock().unwrap();
+            let conn = db.conn();
             let _ = conn.execute(
                 "UPDATE mail_accounts SET last_error='' WHERE id=?1",
                 params![acct.id],
@@ -1875,7 +1875,7 @@ fn sync_accounts(app: &tauri::AppHandle, db: &Db, id: i64) -> Result<i64, String
                 // reading "never synced" over a mailbox with three hundred
                 // messages in it.
                 {
-                    let conn = db.0.lock().unwrap();
+                    let conn = db.conn();
                     let _ = conn.execute(
                         "UPDATE mail_accounts SET last_sync=?1 WHERE id=?2",
                         params![now_millis(), acct.id],
@@ -1902,7 +1902,7 @@ fn sync_accounts(app: &tauri::AppHandle, db: &Db, id: i64) -> Result<i64, String
                 // shows it. A sync that quietly does nothing looks identical
                 // to an empty inbox, which is how you miss mail for a week.
                 {
-                    let conn = db.0.lock().unwrap();
+                    let conn = db.conn();
                     let _ = conn.execute(
                         "UPDATE mail_accounts SET last_error=?1 WHERE id=?2",
                         params![e, acct.id],
@@ -1977,7 +1977,7 @@ fn sync_one(app: &tauri::AppHandle, db: &Db, acct: &MailAccount) -> Result<i64, 
     // Read the folder before the network work, under its own short lock, so a
     // slow IMAP session never holds the database open waiting on a socket.
     let root = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         crate::mailfiles::root(&conn)
     };
     say(format!("connecting to {}…", acct.imap_host));
@@ -2027,7 +2027,7 @@ fn sync_one(app: &tauri::AppHandle, db: &Db, acct: &MailAccount) -> Result<i64, 
 oselect" | r"lagged" | r"\important"
                 )
             }) {
-                let conn = db.0.lock().unwrap();
+                let conn = db.conn();
                 let _ = conn.execute(
                     "INSERT INTO mail_labels (account_id, remote, name, seen_at)
                      VALUES (?1,?2,?3,?4)
@@ -2057,7 +2057,7 @@ oselect" | r"lagged" | r"\important"
         // and with full bodies and attachments it took four minutes to learn
         // that nothing had changed.
         let seen: i64 = {
-            let conn = db.0.lock().unwrap();
+            let conn = db.conn();
             conn.query_row(
                 "SELECT COALESCE(MAX(uid), 0) FROM mail_messages
                   WHERE account_id=?1 AND mailbox=?2",
@@ -2124,7 +2124,7 @@ oselect" | r"lagged" | r"\important"
             let uid = f.uid as i64;
 
             let fresh = {
-                let conn = db.0.lock().unwrap();
+                let conn = db.conn();
                 store_message(&conn, &root, acct, local, uid, &parsed, !seen, flagged)?
             };
             if fresh {
@@ -2168,7 +2168,7 @@ oselect" | r"lagged" | r"\important"
     // The error was cleared before this attempt began, so it is only ever
     // about this one.
     if !folder_errors.is_empty() {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let _ = conn.execute(
             "UPDATE mail_accounts SET last_error=?1 WHERE id=?2",
             params![
@@ -2334,7 +2334,7 @@ fn upsert_contact_from_mail(
 
 #[tauri::command]
 pub fn mail_list(db: tauri::State<Db>, query: MailQuery) -> Result<Vec<MailMessage>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut where_sql = String::from("1=1");
     let mut args: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
 
@@ -2405,7 +2405,7 @@ pub struct MailBoxCount {
 /// Sent is the thing worth seeing: Learn reads the people you wrote to.
 #[tauri::command(async)]
 pub fn mail_account_boxes(db: tauri::State<Db>, id: i64) -> Result<Vec<MailBoxCount>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut st = conn
         .prepare("SELECT mailbox, COUNT(*), MAX(ts) FROM mail_messages WHERE account_id=?1 GROUP BY mailbox")
         .map_err(err)?;
@@ -2448,7 +2448,7 @@ pub fn mail_account_boxes(db: tauri::State<Db>, id: i64) -> Result<Vec<MailBoxCo
 // while a run holds it is a frozen window.
 #[tauri::command(async)]
 pub fn mail_counts(db: tauri::State<Db>) -> Result<MailCounts, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let one = |sql: &str| -> i64 { conn.query_row(sql, [], |r| r.get::<_, i64>(0)).unwrap_or(0) };
     Ok(MailCounts {
         inbox: one("SELECT COUNT(*) FROM mail_messages WHERE mailbox='INBOX'"),
@@ -2470,7 +2470,7 @@ pub fn mail_counts(db: tauri::State<Db>) -> Result<MailCounts, String> {
 
 #[tauri::command]
 pub fn mail_body(db: tauri::State<Db>, id: i64) -> Result<MailBody, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let (body_text, body_html, raw_headers) = conn
         .query_row(
             "SELECT body_text, body_html, raw_headers FROM mail_messages WHERE id=?1",
@@ -2514,7 +2514,7 @@ pub fn mail_body(db: tauri::State<Db>, id: i64) -> Result<MailBody, String> {
 
 #[tauri::command]
 pub fn mail_mark_read(db: tauri::State<Db>, id: i64, read: bool) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute(
         "UPDATE mail_messages SET unread=?1 WHERE id=?2",
         params![!read as i64, id],
@@ -2525,7 +2525,7 @@ pub fn mail_mark_read(db: tauri::State<Db>, id: i64, read: bool) -> Result<(), S
 
 #[tauri::command]
 pub fn mail_set_flag(db: tauri::State<Db>, id: i64, flagged: bool) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute(
         "UPDATE mail_messages SET flagged=?1 WHERE id=?2",
         params![flagged as i64, id],
@@ -2539,7 +2539,7 @@ pub fn mail_set_flag(db: tauri::State<Db>, id: i64, flagged: bool) -> Result<(),
 /// on your phone.
 #[tauri::command]
 pub fn mail_archive(db: tauri::State<Db>, id: i64) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute(
         "UPDATE mail_messages SET mailbox='Archive' WHERE id=?1",
         params![id],
@@ -2550,7 +2550,7 @@ pub fn mail_archive(db: tauri::State<Db>, id: i64) -> Result<(), String> {
 
 #[tauri::command]
 pub fn mail_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute("DELETE FROM mail_messages WHERE id=?1", params![id])
         .map_err(err)?;
     Ok(())
@@ -2559,7 +2559,7 @@ pub fn mail_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
 /// Link a thread to a project node, so mail, repo and terminal share a subject.
 #[tauri::command]
 pub fn mail_link_node(db: tauri::State<Db>, id: i64, node_id: Option<i64>) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let thread_key: String = conn
         .query_row(
             "SELECT thread_key FROM mail_messages WHERE id=?1",
@@ -2624,7 +2624,7 @@ fn send_message(app: &tauri::AppHandle, db: &Db, req: SendRequest) -> Result<i64
     use lettre::{Message, Transport};
 
     let acct = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         load_account(&conn, req.account_id)?
     };
     if req.to.trim().is_empty() {
@@ -2708,7 +2708,7 @@ fn send_message(app: &tauri::AppHandle, db: &Db, req: SendRequest) -> Result<i64
 
     // Keep our own copy: the Sent group should show it now, not after the
     // next sync, and some servers never file an SMTP send into Sent at all.
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let ts = now_millis();
     conn.execute(
         "INSERT INTO mail_messages
@@ -2749,7 +2749,7 @@ pub fn mail_contacts_list(
     db: tauri::State<Db>,
     account_id: Option<i64>,
 ) -> Result<Vec<MailContact>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     list_contacts(&conn, account_id)
 }
 
@@ -2817,7 +2817,7 @@ pub fn mail_contact_messages(
     id: i64,
     limit: i64,
 ) -> Result<Vec<MailMessage>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     contact_messages(&conn, id, limit)
 }
 
@@ -2874,7 +2874,7 @@ pub fn mail_contact_save(db: tauri::State<Db>, def: MailContact) -> Result<i64, 
     if def.email.trim().is_empty() {
         return Err("A contact needs an email address.".into());
     }
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let email = def.email.trim().to_ascii_lowercase();
     if def.id <= 0 {
         conn.execute(
@@ -2930,7 +2930,7 @@ pub fn mail_contact_save(db: tauri::State<Db>, def: MailContact) -> Result<i64, 
 
 #[tauri::command]
 pub fn mail_contact_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute("DELETE FROM mail_contacts WHERE id=?1", params![id])
         .map_err(err)?;
     Ok(())
@@ -2943,7 +2943,7 @@ pub fn mail_contact_link(
     id: i64,
     node_id: Option<i64>,
 ) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute(
         "UPDATE mail_contacts SET node_id=?1 WHERE id=?2",
         params![node_id, id],
@@ -2959,7 +2959,7 @@ pub fn mail_assistant_list(
     db: tauri::State<Db>,
     thread_key: String,
 ) -> Result<Vec<AssistantNote>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut st = conn
         .prepare(
             "SELECT id, thread_key, account_id, kind, body, status, created_at
@@ -2984,7 +2984,7 @@ pub fn mail_assistant_list(
 
 #[tauri::command]
 pub fn mail_assistant_add(db: tauri::State<Db>, note: AssistantNote) -> Result<i64, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute(
         "INSERT INTO mail_assistant (thread_key, account_id, kind, body, status, created_at)
          VALUES (?1,?2,?3,?4,?5,?6)",
@@ -3007,7 +3007,7 @@ pub fn mail_assistant_add(db: tauri::State<Db>, note: AssistantNote) -> Result<i
 
 #[tauri::command]
 pub fn mail_assistant_status(db: tauri::State<Db>, id: i64, status: String) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute(
         "UPDATE mail_assistant SET status=?1 WHERE id=?2",
         params![status, id],

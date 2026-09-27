@@ -186,7 +186,7 @@ pub fn calendar_range(
 
     // -- schedules, expanded ------------------------------------------------
     {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let names: std::collections::HashMap<i64, String> = crate::db::nodes_on(&conn)
             .unwrap_or_default()
             .into_iter()
@@ -342,7 +342,7 @@ pub fn check_deadlines(app: &tauri::AppHandle) {
                 }
                 let key = format!("{}:{}:{}", p.id, slug, item.id);
                 {
-                    let Ok(conn) = db.0.lock() else { return };
+                    let conn = db.conn();
                     let said: Option<String> = conn
                         .query_row(
                             "SELECT on_day FROM deadline_pings WHERE item = ?1",

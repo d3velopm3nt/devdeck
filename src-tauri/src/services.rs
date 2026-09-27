@@ -189,7 +189,7 @@ fn spawn_log_flusher(app: tauri::AppHandle) {
 fn peek_enabled(app: &tauri::AppHandle) -> bool {
     app.try_state::<crate::db::Db>()
         .and_then(|db| {
-            db.0.lock().ok().and_then(|c| {
+            Some(db.conn()).and_then(|c| {
                 crate::db::setting_get_conn(&c, "widget_peek")
                     .ok()
                     .flatten()
@@ -491,7 +491,7 @@ fn service_with_dir(conn: &rusqlite::Connection, id: i64) -> Result<ServiceDef, 
 #[tauri::command]
 pub fn svc_start(app: tauri::AppHandle, db: tauri::State<Db>, id: i64) -> Result<SvcState, String> {
     let def = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let _ = db::recent_bump_conn(&conn, "service", id);
         service_with_dir(&conn, id)?
     };
@@ -586,7 +586,7 @@ pub fn svc_restart(
         }
     }
     let def = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         service_with_dir(&conn, id)?
     };
     start_internal(&app, &def, false)?;

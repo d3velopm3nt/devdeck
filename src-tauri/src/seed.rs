@@ -172,7 +172,7 @@ fn insert_node(
 /// "load" affordance instead of creating duplicates.
 #[tauri::command]
 pub fn example_exists(db: tauri::State<Db>) -> Result<bool, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let n: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM nodes WHERE kind = 'workspace' AND name = ?1",
@@ -191,7 +191,7 @@ pub fn seed_example(db: tauri::State<Db>) -> Result<i64, String> {
     write_demo_files(&dir).map_err(|e| format!("could not create {}: {e}", dir.display()))?;
     let base = dir.to_string_lossy().to_string();
 
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
 
     let ws = insert_node(&conn, None, "workspace", WORKSPACE_NAME, None, "", None)
         .map_err(|e| e.to_string())?;

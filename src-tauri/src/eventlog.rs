@@ -214,7 +214,7 @@ pub fn events_history(
     project_id: Option<String>,
     limit: Option<i64>,
 ) -> Result<Vec<Kept>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let limit = limit.unwrap_or(500).clamp(1, 5_000);
     let mut sql = String::from(
         "SELECT id, seq, session, kind, category, at, project_id, feature_id, agent_id, payload
@@ -264,7 +264,7 @@ pub fn events_history(
 /// How much history there is, and how much of it is this run.
 #[tauri::command(async)]
 pub fn events_count(db: tauri::State<Db>) -> Result<(i64, i64), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let all: i64 = conn
         .query_row("SELECT COUNT(*) FROM events", [], |r| r.get(0))
         .map_err(err)?;

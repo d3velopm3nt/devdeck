@@ -611,7 +611,7 @@ fn evidence(
 /// The board: one row per product it sells, in the order of the way through.
 #[tauri::command(async)]
 pub fn business_pipeline(db: tauri::State<Db>, node_id: i64) -> Result<Vec<PipeItem>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let meta = read(&conn, node_id)?.ok_or("that space has not been set up as a business.")?;
     let products: Vec<String> = meta
         .items
@@ -663,7 +663,7 @@ pub fn business_stage_set(
         return Err(format!("{stage} is not a stage a product can be at."));
     }
     {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let mut meta =
             read(&conn, node_id)?.ok_or("that space has not been set up as a business.")?;
         let now = chrono::Local::now().format("%Y-%m-%d").to_string();
@@ -828,7 +828,7 @@ fn read_site_blocking(
 ) -> Result<BusinessView, String> {
     let db = app.state::<Db>();
     let mut meta = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         read(&conn, node_id)?.ok_or("That space has not been set up as a business.")?
     };
     let url = normalise_site(&meta.website);
@@ -896,7 +896,7 @@ fn read_site_blocking(
     meta.site_chars = all.chars().count() as i64;
     meta.site_pages = pages.iter().map(|p| p.url.clone()).collect();
 
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let deck = deck_of(&conn, node_id)?;
     std::fs::create_dir_all(deck.dir()).map_err(err)?;
     std::fs::write(
@@ -915,7 +915,7 @@ fn read_site_blocking(
 /// Every workspace tagged Business, set up or not.
 #[tauri::command(async)]
 pub fn business_list(db: tauri::State<Db>) -> Result<Vec<BusinessSummary>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut st = conn
         .prepare(
             "SELECT id, name FROM nodes WHERE parent_id IS NULL AND kind = 'workspace'
@@ -973,7 +973,7 @@ pub fn business_list(db: tauri::State<Db>) -> Result<Vec<BusinessSummary>, Strin
 
 #[tauri::command(async)]
 pub fn business_get(db: tauri::State<Db>, node_id: i64) -> Result<BusinessView, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     view(&conn, node_id)
 }
 
@@ -1016,7 +1016,7 @@ pub fn business_create(
         ..Default::default()
     };
     let v = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         write(&conn, ws.id, &meta)?;
         view(&conn, ws.id)?
     };
@@ -1043,7 +1043,7 @@ pub fn business_save(
     node_id: i64,
     meta: BusinessMeta,
 ) -> Result<BusinessView, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let prior = read(&conn, node_id)?.ok_or("That space has not been set up as a business.")?;
     let mut meta = meta;
     // The name is the folder's; renaming happens in Spaces, not by editing a
@@ -1090,7 +1090,7 @@ pub async fn business_read_site(
 #[tauri::command(async)]
 pub fn business_commit_items(db: tauri::State<Db>, node_id: i64) -> Result<BusinessView, String> {
     let (mut meta, folders) = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         (
             read(&conn, node_id)?.ok_or("That space has not been set up as a business.")?,
             folders_of(&conn, node_id),
@@ -1120,7 +1120,7 @@ pub fn business_commit_items(db: tauri::State<Db>, node_id: i64) -> Result<Busin
             continue;
         }
         let existing = {
-            let conn = db.0.lock().unwrap();
+            let conn = db.conn();
             folders_of(&conn, parent)
                 .into_iter()
                 .find(|c| c.name.eq_ignore_ascii_case(&name))
@@ -1132,7 +1132,7 @@ pub fn business_commit_items(db: tauri::State<Db>, node_id: i64) -> Result<Busin
         let _ = crate::vault::vault_set_meta(db.clone(), id, Some(label.into()), None, None, None);
         i.node_id = id;
     }
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     write(&conn, node_id, &meta)?;
     view(&conn, node_id)
 }

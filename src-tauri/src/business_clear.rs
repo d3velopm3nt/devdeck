@@ -197,7 +197,7 @@ pub fn preview(conn: &Connection) -> Result<ClearPreview, String> {
 
 #[tauri::command(async)]
 pub fn business_clear_preview(db: tauri::State<Db>) -> Result<ClearPreview, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     preview(&conn)
 }
 
@@ -221,7 +221,7 @@ pub fn business_clear(
     let mut done = Vec::new();
     for id in node_ids {
         let (space, handles) = {
-            let conn = db.0.lock().unwrap();
+            let conn = db.conn();
             let node = db::node_by_id(&conn, id)?;
             if node
                 .label
@@ -261,7 +261,7 @@ pub fn business_clear(
             continue;
         }
         {
-            let conn = db.0.lock().unwrap();
+            let conn = db.conn();
             let ids = subtree(&conn, id);
             let list = in_list(&ids);
             for h in &handles {
@@ -312,7 +312,7 @@ pub fn business_clear(
 }
 
 fn vault_root(db: &tauri::State<Db>) -> Result<std::path::PathBuf, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     db::setting_get_conn(&conn, "vault_root")?
         .filter(|s| !s.trim().is_empty())
         .map(std::path::PathBuf::from)

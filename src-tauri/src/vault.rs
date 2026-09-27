@@ -150,7 +150,7 @@ fn write_meta(dir: &Path, m: &Meta) -> Result<(), String> {
 /// Where the vault lives, or None until the user has chosen.
 #[tauri::command]
 pub fn vault_root(db: tauri::State<Db>) -> Result<Option<String>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let v = db::setting_get_conn(&conn, ROOT_KEY)?;
     Ok(v.filter(|s| !s.trim().is_empty()))
 }
@@ -183,7 +183,7 @@ pub struct Legacy {
 
 #[tauri::command]
 pub fn vault_legacy(db: tauri::State<Db>) -> Result<Legacy, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let one = |sql: &str| conn.query_row(sql, [], |r| r.get::<_, i64>(0)).unwrap_or(0);
     Ok(Legacy {
         nodes: one("SELECT COUNT(*) FROM nodes WHERE rel_path = ''"),
@@ -228,7 +228,7 @@ pub fn vault_set_root(
         let _ = cmd.status();
     }
 
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
 
     // Rows from before the vault have no folder behind them, and leaving them
     // that way is never right — they would sit in the tree pointing at nothing.
@@ -419,7 +419,7 @@ fn apply_scan_rows(conn: &Connection, found: Vec<Found>) -> Result<usize, String
 #[tauri::command(async)]
 pub fn vault_scan(db: tauri::State<Db>) -> Result<Vec<db::Node>, String> {
     let root = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         db::setting_get_conn(&conn, ROOT_KEY)?
     };
     let Some(root) = root else {
@@ -431,7 +431,7 @@ pub fn vault_scan(db: tauri::State<Db>) -> Result<Vec<db::Node>, String> {
     let root = PathBuf::from(root);
     // Walk first, lock after: the walk is the slow part and needs no database.
     let found = walk_root(&root);
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     apply_scan(&conn, found)?;
 
     // Hand back each node's own folder alongside it. Without this a node with
@@ -477,7 +477,7 @@ pub fn vault_create(
     parent_id: Option<i64>,
     name: String,
 ) -> Result<db::Node, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let root = root_of(&conn)?;
     let name = valid_name(&name)?;
 
@@ -513,7 +513,7 @@ pub fn vault_create(
 /// Rename a node — which renames its folder, since the folder is the node.
 #[tauri::command]
 pub fn vault_rename(db: tauri::State<Db>, id: i64, name: String) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let root = root_of(&conn)?;
     let name = valid_name(&name)?;
     let rel = rel_of(&conn, id)?;
@@ -556,7 +556,7 @@ pub fn vault_set_meta(
     color: Option<String>,
     body: Option<String>,
 ) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let root = root_of(&conn)?;
     let rel = rel_of(&conn, id)?;
     let dir = root.join(&rel);
@@ -582,7 +582,7 @@ pub fn vault_set_meta(
 /// Read a node's meta file, for the page that edits it.
 #[tauri::command]
 pub fn vault_meta(db: tauri::State<Db>, id: i64) -> Result<Meta, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let root = root_of(&conn)?;
     let rel = rel_of(&conn, id)?;
     Ok(read_meta(&root.join(rel)))
@@ -591,7 +591,7 @@ pub fn vault_meta(db: tauri::State<Db>, id: i64) -> Result<Meta, String> {
 /// Delete a node's folder, and everything in it.
 #[tauri::command]
 pub fn vault_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let root = root_of(&conn)?;
     let rel = rel_of(&conn, id)?;
     let dir = root.join(&rel);
@@ -606,7 +606,7 @@ pub fn vault_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
 /// and for anything that needs somewhere to write context.
 #[tauri::command]
 pub fn vault_dir(db: tauri::State<Db>, id: i64) -> Result<String, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let root = root_of(&conn)?;
     let rel = rel_of(&conn, id)?;
     Ok(root.join(rel).to_string_lossy().to_string())
@@ -948,7 +948,7 @@ fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
 /// which means nothing loses its commands or services either.
 #[tauri::command]
 pub fn vault_move(db: tauri::State<Db>, new_path: String) -> Result<String, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let old = root_of(&conn)?;
     let new = PathBuf::from(new_path.trim());
     if new.as_os_str().is_empty() {
@@ -1005,7 +1005,7 @@ pub struct SwitchCost {
 
 #[tauri::command(async)]
 pub fn vault_switch_cost(db: tauri::State<Db>, path: String) -> Result<SwitchCost, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let target = PathBuf::from(path.trim());
     if !target.is_dir() {
         return Err("That folder does not exist.".into());
@@ -1052,7 +1052,7 @@ pub fn vault_switch_cost(db: tauri::State<Db>, path: String) -> Result<SwitchCos
 /// what is there.
 #[tauri::command]
 pub fn vault_switch(db: tauri::State<Db>, path: String) -> Result<String, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let target = PathBuf::from(path.trim());
     if !target.is_dir() {
         return Err("That folder does not exist.".into());

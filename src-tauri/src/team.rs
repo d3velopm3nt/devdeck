@@ -89,7 +89,7 @@ pub fn team_board(app: tauri::AppHandle, ws: Ws) -> Result<Vec<GoalRow>, String>
     // Everything from the database, under one lock.
     let (names, parents, bots) = {
         let db = app.try_state::<Db>().ok_or("no database")?;
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let nodes = db::nodes_on(&conn).map_err(|e| e.to_string())?;
         let names: std::collections::HashMap<i64, String> =
             nodes.iter().map(|n| (n.id, n.name.clone())).collect();

@@ -38,7 +38,7 @@ fn register(app: &tauri::AppHandle, ws: &Arc<Workspace>, node_id: i64) -> Result
         return Ok(());
     }
     let db = app.try_state::<Db>().ok_or("no database")?;
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let node = db::node_by_id(&conn, node_id).map_err(|e| e.to_string())?;
     let deck_root = db::node_deck_dir(&conn, &node).ok_or("that node has no folder yet")?;
     let code_root = db::node_dir(&conn, &node).unwrap_or_else(|| deck_root.clone());
@@ -60,7 +60,7 @@ fn feature_persona(
 ) -> Result<(Persona, Option<String>), String> {
     let managing = {
         let db = app.try_state::<Db>().ok_or("no database")?;
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         crate::bots::managers_on(&conn, node_id)
             .into_iter()
             .find(|b| {
@@ -187,7 +187,7 @@ fn persona_for_thread(
 ) -> Result<Persona, String> {
     if let Some(node_id) = conv.bot_node.or(conv.node) {
         let db = app.try_state::<Db>().ok_or("no database")?;
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         // A manager's own chat answers as that manager. A space's thread
         // answers as its manager only when it has exactly one.
         let bot = match (&conv.bot_handle, conv.bot_node) {
@@ -226,7 +226,7 @@ fn pull_in_bots(
         return Vec::new();
     };
     let bots = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         crate::bots::all_bots(&conn)
     };
     let Ok(convs) = ws.convs() else {
@@ -280,7 +280,7 @@ fn also_answer(
             let Some(db) = app.try_state::<Db>() else {
                 continue;
             };
-            let conn = db.0.lock().unwrap();
+            let conn = db.conn();
             crate::bots::persona_in(&conn, ws, &bot)
         };
         if who.agent_id == already {
@@ -443,7 +443,7 @@ fn headlines(app: &tauri::AppHandle, ws: &Arc<Workspace>, node_id: i64) -> Strin
         return String::new();
     };
     let (children, repo) = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let all = db::nodes_on(&conn).unwrap_or_default();
         let repo = all
             .iter()
@@ -503,7 +503,7 @@ fn node_persona(
 ) -> Result<Persona, String> {
     let (bot, several) = {
         let db = app.try_state::<Db>().ok_or("no database")?;
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let mut on = crate::bots::managers_on(&conn, node_id);
         if on.len() == 1 {
             (
@@ -560,7 +560,7 @@ pub fn node_thread(
     register(&app, &workspace, node_id)?;
     let name = {
         let db = app.try_state::<Db>().ok_or("no database")?;
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         db::node_by_id(&conn, node_id)
             .map_err(|e| e.to_string())?
             .name
@@ -577,7 +577,7 @@ fn seat_managers(app: &tauri::AppHandle, ws: &Arc<Workspace>, conv_id: &str, nod
         return;
     };
     let bots = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         crate::bots::managers_on(&conn, node_id)
     };
     // One manager is the room's host already, not a guest in it.
@@ -601,7 +601,7 @@ pub async fn node_thread_send(
     register(&app, &workspace, node_id)?;
     let name = {
         let db = app.try_state::<Db>().ok_or("no database")?;
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         db::node_by_id(&conn, node_id)
             .map_err(|e| e.to_string())?
             .name

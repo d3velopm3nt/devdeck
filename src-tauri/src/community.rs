@@ -880,7 +880,7 @@ fn agent_view(ws: &Arc<Workspace>) -> Vec<(String, Vec<String>, Vec<(String, Str
 /// startup, where nothing else would.
 pub fn sync_servers(db: &Db, ws: &Arc<Workspace>) -> Result<(), String> {
     let rows = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         all(&conn)?
     };
     ws.set_mcp_servers(servers(&rows));
@@ -898,7 +898,7 @@ fn now_ms() -> i64 {
 #[tauri::command]
 pub fn community_catalog(db: tauri::State<Db>, ws: Ws) -> Result<Vec<Listing>, String> {
     let installed = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         all(&conn)?
     };
     let agents = agent_view(&ws);
@@ -920,7 +920,7 @@ pub fn community_catalog(db: tauri::State<Db>, ws: Ws) -> Result<Vec<Listing>, S
 #[tauri::command]
 pub fn community_installed(db: tauri::State<Db>, ws: Ws) -> Result<Vec<Standing>, String> {
     let rows = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         all(&conn)?
     };
     let agents = agent_view(&ws);
@@ -944,7 +944,7 @@ pub fn community_install(db: tauri::State<Db>, ws: Ws, id: String) -> Result<Sta
     // entry can be installed from Discover. It used to look only in the
     // starter catalogue, which made the whole index read-only.
     let (entry, rows) = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let rows = all(&conn)?;
         let feeds: Vec<(String, Vec<Item>)> = crate::community_index::SOURCES
             .iter()
@@ -1014,7 +1014,7 @@ pub fn community_install(db: tauri::State<Db>, ws: Ws, id: String) -> Result<Sta
         tool_id: entry.tool_id.clone(),
     };
     {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         record(&conn, &row)?;
     }
     sync_servers(&db, &ws)?;
@@ -1030,7 +1030,7 @@ pub fn community_install(db: tauri::State<Db>, ws: Ws, id: String) -> Result<Sta
 #[tauri::command]
 pub fn community_uninstall(db: tauri::State<Db>, ws: Ws, id: String) -> Result<(), String> {
     let row = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         all(&conn)?.into_iter().find(|i| i.id == id)
     };
     let Some(row) = row else { return Ok(()) };
@@ -1061,7 +1061,7 @@ pub fn community_uninstall(db: tauri::State<Db>, ws: Ws, id: String) -> Result<(
     }
 
     {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         forget(&conn, &id)?;
     }
     // A server whose install is gone must stop being reachable *and* stop
@@ -1092,7 +1092,7 @@ fn set_tool(
 ) -> Result<(), String> {
     ws.set_permission(agent_id, tool, level)?;
     let json = serde_json::to_string(&ws.permission_grants()).map_err(|e| e.to_string())?;
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     crate::db::setting_set_conn(&conn, crate::aiw::commands::PERMISSIONS_KEY, &json)
 }
 
@@ -1125,7 +1125,7 @@ fn set_skill(ws: &Arc<Workspace>, agent_id: &str, skill: &str, on: bool) -> Resu
 /// that refetched on every visit would be unusable at ten searches a minute.
 #[tauri::command]
 pub fn community_index(db: tauri::State<Db>) -> Vec<crate::community_index::Feed> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut feeds: Vec<_> = crate::community_index::SOURCES
         .iter()
         .map(|s| crate::community_index::describe(crate::community_index::cached(&conn, s)))
@@ -1171,7 +1171,7 @@ fn refresh_index_now(
             .map(|s| s.to_string())
             .collect(),
     };
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut feeds: Vec<_> = wanted
         .iter()
         .map(|s| crate::community_index::describe(crate::community_index::refresh(&conn, s)))
@@ -1196,7 +1196,7 @@ pub fn community_arrange(
     permissive: bool,
     sort: String,
 ) -> Vec<Item> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let items = if source == "catalog" {
         catalog()
     } else if source == crate::community_index::SOURCE_YEAR {
@@ -1216,7 +1216,7 @@ pub fn community_arrange(
 #[tauri::command]
 pub fn community_repo(db: tauri::State<Db>, ws: Ws, id: String) -> Result<Repo, String> {
     let (rows, feeds) = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let rows = all(&conn)?;
         let feeds: Vec<(String, Vec<Item>)> = crate::community_index::SOURCES
             .iter()
@@ -1303,7 +1303,7 @@ pub fn community_repo(db: tauri::State<Db>, ws: Ws, id: String) -> Result<Repo, 
 #[tauri::command]
 pub fn community_bundles(db: tauri::State<Db>, ws: Ws) -> Result<Vec<(Bundle, Plan)>, String> {
     let rows = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         all(&conn)?
     };
     let agents: Vec<String> = ws.agents().into_iter().map(|a| a.id).collect();
@@ -1336,7 +1336,7 @@ pub fn community_install_bundle(db: tauri::State<Db>, ws: Ws, id: String) -> Res
     }
 
     let rows = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         all(&conn)?
     };
     let agents: Vec<String> = ws.agents().into_iter().map(|a| a.id).collect();
@@ -1378,7 +1378,7 @@ pub fn community_grant(
     on: bool,
 ) -> Result<(), String> {
     let installed = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         all(&conn)?.into_iter().any(|i| i.id == id)
     };
     if !installed {

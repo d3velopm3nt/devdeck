@@ -93,7 +93,7 @@ fn open_session(conn: &Connection) -> Result<Option<Focus>, String> {
 /// reload — the clock is wall time, not a timer we would have to keep alive.
 #[tauri::command]
 pub fn focus_current(db: tauri::State<Db>) -> Result<Option<Focus>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     open_session(&conn)
 }
 
@@ -115,7 +115,7 @@ pub fn focus_start(
     // takes the same mutex, and holding it across that call is the deadlock
     // the scheduler's first tick shipped with.
     let (stale, started) = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let stale = open_session(&conn)?;
         if let Some(s) = &stale {
             conn.execute(
@@ -170,7 +170,7 @@ pub fn focus_start(
 #[tauri::command]
 pub fn focus_end(app: tauri::AppHandle, db: tauri::State<Db>, held: i64) -> Result<(), String> {
     let ended = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let Some(s) = open_session(&conn)? else {
             return Ok(());
         };
@@ -206,7 +206,7 @@ pub fn focus_end(app: tauri::AppHandle, db: tauri::State<Db>, held: i64) -> Resu
 /// week" without becoming a report nobody asked for.
 #[tauri::command]
 pub fn focus_recent(db: tauri::State<Db>, limit: i64) -> Result<Vec<Focus>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let sql = format!(
         "SELECT {COLS} FROM focus_sessions WHERE ended_at IS NOT NULL ORDER BY ended_at DESC LIMIT ?1"
     );

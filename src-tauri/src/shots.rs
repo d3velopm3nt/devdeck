@@ -417,7 +417,8 @@ fn record_shot(app: &tauri::AppHandle, path: &Path) -> bool {
 
     // The unique index on file_path is the real guard; this just avoids doing
     // OCR work for a file we already have.
-    if let Ok(conn) = db.0.lock() {
+    {
+        let conn = db.conn();
         let known: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM stash_items WHERE file_path = ?1",
@@ -476,7 +477,7 @@ fn record_shot(app: &tauri::AppHandle, path: &Path) -> bool {
     };
 
     let ctx = crate::stash::current_context(app);
-    let Ok(conn) = db.0.lock() else { return false };
+    let conn = db.conn();
     // Date it by the file, not by when we noticed it. Importing a folder of
     // old screenshots must not stamp them all as "just now" and bury
     // everything else in the vault.

@@ -642,7 +642,7 @@ pub fn record(app: &tauri::AppHandle, cap: Captured) -> Option<StashItem> {
     let ctx = state.context();
 
     let db = app.try_state::<Db>()?;
-    let conn = db.0.lock().ok()?;
+    let conn = db.conn();
 
     // Dedupe consecutive identical clips: re-copying the clip that's already
     // on top just floats it back up instead of stacking a second row.
@@ -761,7 +761,8 @@ pub fn record(app: &tauri::AppHandle, cap: Captured) -> Option<StashItem> {
     let last = state.last_prune.load(Ordering::Relaxed);
     if days > 0 && created - last > PRUNE_EVERY_MS {
         state.last_prune.store(created, Ordering::Relaxed);
-        if let Ok(conn) = db.0.lock() {
+        {
+            let conn = db.conn();
             let _ = prune(&conn, days);
         }
     }
@@ -826,7 +827,7 @@ fn types_in_group(group: &str) -> Option<&'static [&'static str]> {
 
 #[tauri::command]
 pub fn stash_list(db: tauri::State<Db>, q: StashQuery) -> Result<Vec<StashItem>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     list_query(&conn, &q)
 }
 
@@ -909,7 +910,7 @@ fn list_query(conn: &rusqlite::Connection, q: &StashQuery) -> Result<Vec<StashIt
 
 #[tauri::command]
 pub fn stash_get(db: tauri::State<Db>, id: i64) -> Result<StashItem, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     item_by_id(&conn, id)
 }
 
@@ -951,7 +952,7 @@ pub struct StashCounts {
 
 #[tauri::command]
 pub fn stash_counts(db: tauri::State<Db>) -> Result<StashCounts, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut counts = StashCounts::default();
 
     let mut stmt = conn
@@ -1034,7 +1035,7 @@ pub fn stash_counts(db: tauri::State<Db>) -> Result<StashCounts, String> {
 /// "open anything" by a crafted argument.
 #[tauri::command]
 pub fn stash_open_file(db: tauri::State<Db>, id: i64) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let path: String = conn
         .query_row(
             "SELECT file_path FROM stash_items WHERE id = ?1",
@@ -1075,7 +1076,7 @@ pub fn stash_image(
     max_width: u32,
     max_height: u32,
 ) -> Result<crate::shots::DetailImage, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let (path, secret, reason): (String, i64, String) = conn
         .query_row(
             "SELECT file_path, is_secret, secret_reason FROM stash_items WHERE id = ?1",
@@ -1177,7 +1178,7 @@ pub fn stash_prune(
     state: tauri::State<std::sync::Arc<StashState>>,
 ) -> Result<usize, String> {
     let days = state.retention_days.load(Ordering::Relaxed);
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let n = prune(&conn, days)?;
     state.last_prune.store(now_millis(), Ordering::Relaxed);
     Ok(n)
@@ -1193,7 +1194,7 @@ pub fn stash_set_retention(
 ) -> Result<usize, String> {
     let days = days.clamp(0, 3650);
     state.retention_days.store(days, Ordering::Relaxed);
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     crate::db::setting_set_conn(&conn, "stash_retention_days", &days.to_string())?;
     let n = prune(&conn, days)?;
     state.last_prune.store(now_millis(), Ordering::Relaxed);
@@ -1226,7 +1227,7 @@ fn tag_counts(conn: &rusqlite::Connection) -> Result<Vec<TagCount>, String> {
 
 #[tauri::command]
 pub fn stash_tags_list(db: tauri::State<Db>) -> Result<Vec<TagCount>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     tag_counts(&conn)
 }
 
@@ -1266,7 +1267,7 @@ pub fn stash_tag_add(
     id: i64,
     names: Vec<String>,
 ) -> Result<Vec<String>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     tag_add(&conn, id, &names)
 }
 
@@ -1295,7 +1296,7 @@ pub fn stash_tag_remove(
     id: i64,
     name: String,
 ) -> Result<Vec<String>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     tag_remove(&conn, id, &name)
 }
 
@@ -1313,7 +1314,7 @@ fn tag_remove(conn: &rusqlite::Connection, id: i64, name: &str) -> Result<Vec<St
 /// Drop a tag from every item at once (from the sidebar).
 #[tauri::command]
 pub fn stash_tag_delete(db: tauri::State<Db>, tag_id: i64) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute("DELETE FROM stash_tags WHERE id = ?1", params![tag_id])
         .map_err(err)?;
     Ok(())
@@ -1385,7 +1386,7 @@ fn reject_if_secret(text: &str) -> Result<(), String> {
 /// everything that hangs off it: type, size, preview, dedupe fingerprint.
 #[tauri::command]
 pub fn stash_update(db: tauri::State<Db>, edit: StashEdit) -> Result<StashItem, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     update_item(&conn, &edit)
 }
 
@@ -1459,7 +1460,7 @@ pub fn stash_create_note(
     content: String,
 ) -> Result<StashItem, String> {
     let ctx = state.context();
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     create_note(&conn, &ctx, &title, &content)
 }
 
@@ -1505,7 +1506,7 @@ fn create_note(
 
 #[tauri::command]
 pub fn stash_pin(db: tauri::State<Db>, id: i64, pinned: bool) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute(
         "UPDATE stash_items SET pinned = ?1 WHERE id = ?2",
         params![pinned as i64, id],
@@ -1516,7 +1517,7 @@ pub fn stash_pin(db: tauri::State<Db>, id: i64, pinned: bool) -> Result<(), Stri
 
 #[tauri::command]
 pub fn stash_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute("DELETE FROM stash_items WHERE id = ?1", params![id])
         .map_err(err)?;
     Ok(())
@@ -1530,7 +1531,7 @@ pub fn stash_mark_used(
     state: tauri::State<std::sync::Arc<StashState>>,
     id: i64,
 ) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute(
         "UPDATE stash_items SET used_count = used_count + 1, last_used_at = ?1 WHERE id = ?2",
         params![now_millis(), id],
@@ -1585,7 +1586,7 @@ pub fn stash_copy(
     state: tauri::State<std::sync::Arc<StashState>>,
     id: i64,
 ) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let text = content_of(&conn, id)?;
     conn.execute(
         "UPDATE stash_items SET used_count = used_count + 1, last_used_at = ?1 WHERE id = ?2",
@@ -1693,7 +1694,7 @@ pub fn stash_set_enabled(
     enabled: bool,
 ) -> Result<(), String> {
     state.enabled.store(enabled, Ordering::Relaxed);
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     crate::db::setting_set_conn(&conn, "stash_capture", if enabled { "1" } else { "0" })
 }
 
@@ -1717,7 +1718,7 @@ pub fn stash_set_option(
         }
         other => return Err(format!("unknown stash option: {other}")),
     };
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     crate::db::setting_set_conn(&conn, setting, if value { "1" } else { "0" })
 }
 

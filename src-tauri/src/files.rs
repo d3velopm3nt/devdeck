@@ -122,7 +122,7 @@ pub fn node_files(
 ) -> Result<Vec<FileRow>, String> {
     let vault = root.as_deref() == Some("vault");
     let root = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let node = db::node_by_id(&conn, node_id)?;
         if vault {
             db::node_deck_dir(&conn, &node)
@@ -198,7 +198,7 @@ pub fn node_files(
 #[tauri::command(async)]
 pub fn vault_files(db: tauri::State<Db>, rel: String) -> Result<Vec<FileRow>, String> {
     let root = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let raw = crate::db::setting_get_conn(&conn, "vault_root")?
             .filter(|s| !s.trim().is_empty())
             .ok_or("No vault folder has been chosen yet.")?;
@@ -258,7 +258,7 @@ pub fn vault_files(db: tauri::State<Db>, rel: String) -> Result<Vec<FileRow>, St
 #[tauri::command]
 pub fn vault_file_text(db: tauri::State<Db>, rel: String) -> Result<FileText, String> {
     let root = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let raw = crate::db::setting_get_conn(&conn, "vault_root")?
             .filter(|s| !s.trim().is_empty())
             .ok_or("No vault folder has been chosen yet.")?;
@@ -311,7 +311,7 @@ pub fn file_text(
 ) -> Result<FileText, String> {
     let vault = root.as_deref() == Some("vault");
     let base = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let node = db::node_by_id(&conn, node_id)?;
         if vault {
             db::node_deck_dir(&conn, &node)

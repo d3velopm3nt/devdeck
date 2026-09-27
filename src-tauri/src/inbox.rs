@@ -55,7 +55,7 @@ fn now_millis() -> i64 {
 /// treats anything absent as unread.
 #[tauri::command]
 pub fn inbox_marks(db: tauri::State<Db>) -> Result<Vec<Mark>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut stmt = conn
         .prepare("SELECT item, read, at FROM inbox_state ORDER BY at DESC LIMIT ?1")
         .map_err(err)?;
@@ -82,7 +82,7 @@ pub fn inbox_mark(db: tauri::State<Db>, items: Vec<String>, read: bool) -> Resul
     if items.is_empty() {
         return Ok(());
     }
-    let mut conn = db.0.lock().unwrap();
+    let mut conn = db.conn();
     let at = now_millis();
     let tx = conn.transaction().map_err(err)?;
     for item in &items {
@@ -110,7 +110,7 @@ pub fn inbox_mark(db: tauri::State<Db>, items: Vec<String>, read: bool) -> Resul
 /// once and stop trusting. Nothing writes it any more.
 #[tauri::command]
 pub fn inbox_floor(db: tauri::State<Db>) -> Result<i64, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     Ok(crate::db::setting_get_conn(&conn, "inbox.floor")
         .ok()
         .flatten()
@@ -123,7 +123,7 @@ pub fn inbox_floor(db: tauri::State<Db>) -> Result<i64, String> {
 /// history, and history does not move.
 #[tauri::command]
 pub fn inbox_floor_seed(db: tauri::State<Db>, at: i64) -> Result<i64, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     if let Some(v) = crate::db::setting_get_conn(&conn, "inbox.floor")
         .ok()
         .flatten()

@@ -457,7 +457,7 @@ pub fn team_offer(conn: &Connection, node_id: i64) -> Result<TeamOffer, String> 
 
 #[tauri::command(async)]
 pub fn business_team(db: tauri::State<Db>, node_id: i64) -> Result<TeamOffer, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     team_offer(&conn, node_id)
 }
 
@@ -556,7 +556,7 @@ pub fn business_make_team(
     reuse: Vec<String>,
 ) -> Result<TeamMade, String> {
     let (made, name) = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let name = conn
             .query_row(
                 "SELECT name FROM nodes WHERE id = ?1",
@@ -688,7 +688,7 @@ pub fn space_view(conn: &Connection, node_id: i64) -> Result<SpaceView, String> 
 
 #[tauri::command(async)]
 pub fn business_space(db: tauri::State<Db>, node_id: i64) -> Result<SpaceView, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     space_view(&conn, node_id)
 }
 

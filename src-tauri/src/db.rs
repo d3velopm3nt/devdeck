@@ -13,6 +13,20 @@ use tauri::Manager;
 
 pub struct Db(pub Mutex<Connection>);
 
+impl Db {
+    /// The connection, whatever happened on the last thread to hold it.
+    ///
+    /// A `Mutex` poisons when a thread panics while holding it, and every
+    /// `lock().unwrap()` after that panics too — so one bad row in a
+    /// background sync used to take down every command that followed until
+    /// the app was restarted. SQLite itself is fine after a panic: the
+    /// transaction that was open rolled back when the guard dropped. So the
+    /// poisoned guard is taken as-is. Use this, not `.0.lock()`.
+    pub fn conn(&self) -> std::sync::MutexGuard<'_, Connection> {
+        self.0.lock().unwrap_or_else(|p| p.into_inner())
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Node {
     pub id: i64,
@@ -577,7 +591,8 @@ pub fn checkpoint(conn: &Connection) {
 /// panic.
 pub fn checkpoint_state(app: &tauri::AppHandle) {
     if let Some(db) = app.try_state::<Db>() {
-        if let Ok(conn) = db.0.lock() {
+        {
+            let conn = db.conn();
             checkpoint(&conn);
         }
     }
@@ -972,7 +987,7 @@ pub fn nodes_on(conn: &Connection) -> Result<Vec<Node>, String> {
 
 #[tauri::command]
 pub fn tree_list(db: tauri::State<Db>) -> Result<Vec<Node>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     nodes_on(&conn)
 }
 
@@ -985,7 +1000,7 @@ pub fn node_create(
     path: Option<String>,
     rel_path: Option<String>,
 ) -> Result<Node, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute(
         "INSERT INTO nodes (parent_id, kind, name, path, rel_path) VALUES (?1, ?2, ?3, ?4, ?5)",
         params![
@@ -1015,7 +1030,7 @@ pub fn node_create(
 /// Set (or clear, with an empty string) a node's display label.
 #[tauri::command]
 pub fn node_set_label(db: tauri::State<Db>, id: i64, label: String) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let v = label.trim();
     conn.execute(
         "UPDATE nodes SET label = ?1 WHERE id = ?2",
@@ -1027,7 +1042,7 @@ pub fn node_set_label(db: tauri::State<Db>, id: i64, label: String) -> Result<()
 
 #[tauri::command]
 pub fn node_rename(db: tauri::State<Db>, id: i64, name: String) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute(
         "UPDATE nodes SET name = ?1 WHERE id = ?2",
         params![name, id],
@@ -1047,7 +1062,7 @@ pub fn node_update(
     color: Option<String>,
     kind: Option<String>,
 ) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     // Kind follows the folder: a node with a path is a project, one without is
     // a container. The UI never asks for a kind directly, so this is only ever
     // set alongside the path that justified it.
@@ -1097,7 +1112,7 @@ pub fn node_update(
 
 #[tauri::command]
 pub fn node_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute("DELETE FROM nodes WHERE id = ?1", params![id])
         .map_err(err)?;
     Ok(())
@@ -1120,7 +1135,7 @@ fn row_to_command(row: &rusqlite::Row) -> rusqlite::Result<CommandDef> {
 
 #[tauri::command]
 pub fn commands_list(db: tauri::State<Db>) -> Result<Vec<CommandDef>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut stmt = conn
         .prepare(
             "SELECT id, project_id, group_name, name, command, cwd, shell, sort
@@ -1137,7 +1152,7 @@ pub fn commands_list(db: tauri::State<Db>) -> Result<Vec<CommandDef>, String> {
 
 #[tauri::command]
 pub fn command_save(db: tauri::State<Db>, cmd: CommandDef) -> Result<i64, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     if cmd.id <= 0 {
         conn.execute(
             "INSERT INTO commands (project_id, group_name, name, command, cwd, shell)
@@ -1166,7 +1181,7 @@ pub fn command_save(db: tauri::State<Db>, cmd: CommandDef) -> Result<i64, String
 
 #[tauri::command]
 pub fn command_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute("DELETE FROM commands WHERE id = ?1", params![id])
         .map_err(err)?;
     Ok(())
@@ -1190,7 +1205,7 @@ fn row_to_service(row: &rusqlite::Row) -> rusqlite::Result<ServiceDef> {
 
 #[tauri::command]
 pub fn services_list(db: tauri::State<Db>) -> Result<Vec<ServiceDef>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut stmt = conn
         .prepare(
             "SELECT id, project_id, name, command, cwd, env, auto_restart, health_port, shell
@@ -1287,7 +1302,7 @@ pub fn service_get(conn: &Connection, id: i64) -> Result<ServiceDef, String> {
 
 #[tauri::command]
 pub fn service_save(db: tauri::State<Db>, svc: ServiceDef) -> Result<i64, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     if svc.id <= 0 {
         conn.execute(
             "INSERT INTO services (project_id, name, command, cwd, env, auto_restart, health_port, shell)
@@ -1328,7 +1343,7 @@ pub fn service_save(db: tauri::State<Db>, svc: ServiceDef) -> Result<i64, String
 
 #[tauri::command]
 pub fn service_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute("DELETE FROM services WHERE id = ?1", params![id])
         .map_err(err)?;
     Ok(())
@@ -1338,7 +1353,7 @@ pub fn service_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
 
 #[tauri::command]
 pub fn profiles_list(db: tauri::State<Db>) -> Result<Vec<ProfileDef>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut stmt = conn
         .prepare("SELECT id, project_id, name, steps FROM profiles ORDER BY id")
         .map_err(err)?;
@@ -1359,7 +1374,7 @@ pub fn profiles_list(db: tauri::State<Db>) -> Result<Vec<ProfileDef>, String> {
 
 #[tauri::command]
 pub fn profile_save(db: tauri::State<Db>, profile: ProfileDef) -> Result<i64, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     if profile.id <= 0 {
         conn.execute(
             "INSERT INTO profiles (project_id, name, steps) VALUES (?1, ?2, ?3)",
@@ -1379,7 +1394,7 @@ pub fn profile_save(db: tauri::State<Db>, profile: ProfileDef) -> Result<i64, St
 
 #[tauri::command]
 pub fn profile_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute("DELETE FROM profiles WHERE id = ?1", params![id])
         .map_err(err)?;
     Ok(())
@@ -1389,7 +1404,7 @@ pub fn profile_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
 
 #[tauri::command]
 pub fn layouts_list(db: tauri::State<Db>) -> Result<Vec<LayoutDef>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut stmt = conn
         .prepare("SELECT id, name, data FROM layouts ORDER BY name")
         .map_err(err)?;
@@ -1409,7 +1424,7 @@ pub fn layouts_list(db: tauri::State<Db>) -> Result<Vec<LayoutDef>, String> {
 
 #[tauri::command]
 pub fn layout_save(db: tauri::State<Db>, name: String, data: String) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute(
         "INSERT INTO layouts (name, data) VALUES (?1, ?2)
          ON CONFLICT(name) DO UPDATE SET data = excluded.data",
@@ -1421,7 +1436,7 @@ pub fn layout_save(db: tauri::State<Db>, name: String, data: String) -> Result<(
 
 #[tauri::command]
 pub fn layout_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute("DELETE FROM layouts WHERE id = ?1", params![id])
         .map_err(err)?;
     Ok(())
@@ -1431,7 +1446,7 @@ pub fn layout_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
 
 #[tauri::command]
 pub fn setting_get(db: tauri::State<Db>, key: String) -> Result<Option<String>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     setting_get_conn(&conn, &key)
 }
 
@@ -1449,7 +1464,7 @@ pub fn setting_get_conn(conn: &Connection, key: &str) -> Result<Option<String>, 
 
 #[tauri::command]
 pub fn setting_set(db: tauri::State<Db>, key: String, value: String) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     setting_set_conn(&conn, &key, &value)
 }
 
@@ -1503,13 +1518,13 @@ pub fn recent_bump_conn(conn: &Connection, kind: &str, ref_id: i64) -> Result<()
 
 #[tauri::command]
 pub fn recent_bump(db: tauri::State<Db>, kind: String, ref_id: i64) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     recent_bump_conn(&conn, &kind, ref_id)
 }
 
 #[tauri::command]
 pub fn recents_list(db: tauri::State<Db>) -> Result<Vec<Recent>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut stmt = conn
         .prepare("SELECT kind, ref_id, ts, count FROM recents ORDER BY ts DESC")
         .map_err(err)?;

@@ -299,7 +299,7 @@ fn all(conn: &Connection) -> Result<Vec<Schedule>, String> {
 
 #[tauri::command]
 pub fn schedules_list(db: tauri::State<Db>) -> Result<Vec<Schedule>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     all(&conn)
 }
 
@@ -348,7 +348,7 @@ pub fn schedule_save(
     } else {
         work_item.unwrap_or_default()
     };
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     match id {
         Some(id) => {
             conn.execute(
@@ -404,7 +404,7 @@ pub fn schedule_save(
 
 #[tauri::command]
 pub fn schedule_enable(db: tauri::State<Db>, id: i64, on: bool) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute(
         "UPDATE schedules SET enabled = ?1 WHERE id = ?2",
         params![on as i64, id],
@@ -415,7 +415,7 @@ pub fn schedule_enable(db: tauri::State<Db>, id: i64, on: bool) -> Result<(), St
 
 #[tauri::command]
 pub fn schedule_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute("DELETE FROM schedules WHERE id = ?1", params![id])
         .map_err(err)?;
     Ok(())
@@ -526,7 +526,7 @@ fn run_one(
             let empty = if report.is_none() {
                 bot.as_ref().and_then(|b| {
                     let db = app.try_state::<Db>()?;
-                    let conn = db.0.lock().ok()?;
+                    let conn = db.conn();
                     crate::bots::empty_plan_line(&conn, b)
                 })
             } else {
@@ -540,7 +540,7 @@ fn run_one(
                 // proposals, which nothing can start, so agreeing is still
                 // entirely your move.
                 let wrote = app.try_state::<Db>().and_then(|db| {
-                    let conn = db.0.lock().ok()?;
+                    let conn = db.conn();
                     crate::bots::propose_plan(&conn, b).ok()
                 });
                 if let Some(added) = wrote.as_deref().filter(|a| !a.is_empty()) {
@@ -585,9 +585,9 @@ fn run_one(
             if let Some(b) = bot.as_ref() {
                 let decision = {
                     let db = app.try_state::<Db>();
-                    db.and_then(|db| {
-                        let conn = db.0.lock().ok()?;
-                        Some(crate::workers::handoff(&conn, b))
+                    db.map(|db| {
+                        let conn = db.conn();
+                        crate::workers::handoff(&conn, b)
                     })
                 };
                 match decision {
@@ -596,7 +596,7 @@ fn run_one(
                             break 'wake (false, "the database was not there".into());
                         };
                         let plan = {
-                            let conn = db.0.lock().unwrap();
+                            let conn = db.conn();
                             crate::workers::plan(&conn, &worker, b.node_id, &feature, &item, &title, &format!(
                                 "{title}\n\nThis is item {item} on {}'s plan. Do it, and say what you could not check.",
                                 b.name
@@ -726,7 +726,7 @@ pub fn on_event(app: &tauri::AppHandle, event_type: &str, project_id: Option<&st
     let now = chrono::Local::now().timestamp_millis();
 
     let due: Vec<(Schedule, Option<String>)> = {
-        let conn = db.0.lock().unwrap_or_else(|p| p.into_inner());
+        let conn = db.conn();
         let Ok(all) = all(&conn) else { return };
         let mut out = Vec::new();
         for s in all
@@ -768,7 +768,7 @@ pub fn on_event(app: &tauri::AppHandle, event_type: &str, project_id: Option<&st
                     RUNS.release();
                     return;
                 };
-                let conn = db.0.lock().unwrap();
+                let conn = db.conn();
                 // The heartbeat names its manager; the report is about the
                 // space that manager's memory is filed under.
                 let bot = crate::bots::bot_on(&conn, &s.manager);
@@ -781,7 +781,7 @@ pub fn on_event(app: &tauri::AppHandle, event_type: &str, project_id: Option<&st
             let (ok, note) = run_one(&h, &s, dir, false, report, bot);
             RUNS.release();
             if let Some(db) = h.try_state::<Db>() {
-                let conn = db.0.lock().unwrap_or_else(|p| p.into_inner());
+                let conn = db.conn();
                 let _ = conn.execute(
                     "UPDATE schedules SET last_ok=?1, last_note=?2 WHERE id=?3",
                     params![ok as i64, note, s.id],
@@ -824,7 +824,7 @@ pub fn tick(app: &tauri::AppHandle, startup: bool) {
     let now = chrono::Local::now();
 
     let todo: Vec<Do> = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let Ok(list) = all(&conn) else { return };
         let mut todo = Vec::new();
         for s in list.into_iter().filter(|s| s.enabled) {
@@ -890,7 +890,7 @@ pub fn tick(app: &tauri::AppHandle, startup: bool) {
                     let (ok, note) = run_one(&app, &s, dir, late, report, bot);
                     RUNS.release();
                     if let Some(db) = app.try_state::<Db>() {
-                        let conn = db.0.lock().unwrap_or_else(|p| p.into_inner());
+                        let conn = db.conn();
                         let _ = conn.execute(
                             "UPDATE schedules SET last_run=?1, last_ok=?2, last_note=?3 WHERE id=?4",
                             params![ran_at, ok as i64, note, s.id],
@@ -919,7 +919,7 @@ pub fn tick(app: &tauri::AppHandle, startup: bool) {
                     true,
                     Some(s.id),
                 );
-                let conn = db.0.lock().unwrap();
+                let conn = db.conn();
                 let _ = conn.execute(
                     "UPDATE schedules SET last_remind = ?1 WHERE id = ?2",
                     params![next_ms, s.id],
@@ -934,7 +934,7 @@ pub fn tick(app: &tauri::AppHandle, startup: bool) {
                     false,
                     Some(s.id),
                 );
-                let conn = db.0.lock().unwrap();
+                let conn = db.conn();
                 let _ = conn.execute(
                     "UPDATE schedules SET last_run=?1, last_ok=0, last_note=?2 WHERE id=?3",
                     params![due_ms, "missed", s.id],
@@ -986,7 +986,7 @@ pub fn schedule_run_now(
     id: i64,
 ) -> Result<RunOutcome, String> {
     let (s, dir, report, bot) = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let sql = format!("SELECT {COLS} FROM schedules WHERE id = ?1");
         let s = conn.query_row(&sql, params![id], row).map_err(err)?;
         let dir = dir_for(&conn, s.node_id);
@@ -1009,7 +1009,7 @@ pub fn schedule_run_now(
     };
     let (ok, note) = run_one(&app, &s, dir, false, report, bot);
     let ran_at = chrono::Local::now().timestamp_millis();
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute(
         "UPDATE schedules SET last_run=?1, last_ok=?2, last_note=?3 WHERE id=?4",
         params![ran_at, ok as i64, note, id],

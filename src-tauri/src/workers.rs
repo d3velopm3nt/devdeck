@@ -432,7 +432,7 @@ fn move_item(app: &tauri::AppHandle, r: &Run, status: &str) {
         return;
     };
     let moved = (|| -> Option<bool> {
-        let conn = db.0.lock().ok()?;
+        let conn = db.conn();
         let n = db::node_by_id(&conn, r.node_id).ok()?;
         let dir = db::node_deck_dir(&conn, &n)?;
         let deck = crate::aiw::deck::Deck::new(&dir);
@@ -1291,7 +1291,7 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
         return Err(format!("{} is not a folder on this machine.", p.folder));
     }
     let deck_dir = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let (_, deck, _) = space_dir(&conn, p.node_id)?;
         deck
     };
@@ -1847,7 +1847,7 @@ pub fn worker_plan(
     feature: Option<String>,
     item: Option<String>,
 ) -> Result<Plan, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     plan(
         &conn,
         &handle,
@@ -1871,7 +1871,7 @@ pub async fn worker_start(
     item: Option<String>,
 ) -> Result<Run, String> {
     let p = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         plan(
             &conn,
             &handle,
@@ -1927,7 +1927,7 @@ pub fn run_decide(
     };
     write_run(&r)?;
     if r.status == "kept" && r.node_id > 0 {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let slug = crate::managers::handle_from(&r.title);
         let body = format!(
             "---\nid: {slug}\nsource: worker\nworker: {}\nrun: {}\n---\n\n# {}\n\n{}\n\n{}\n\n> {} wrote {} file{} in {} on {}\n",
@@ -1947,7 +1947,7 @@ pub fn run_decide(
     // because they pressed Discard on a draught would be its own bug.
     if r.status == "discarded" && !r.branch.is_empty() {
         let repo = {
-            let conn = db.0.lock().unwrap();
+            let conn = db.conn();
             db::node_by_id(&conn, r.node_id)
                 .ok()
                 .and_then(|n| n.path)

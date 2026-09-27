@@ -1691,8 +1691,23 @@ pub fn wake_report_for(conn: &Connection, bot: &Bot) -> Option<String> {
 /// first steps, made concrete from the business, or its starter's steps.
 pub fn plan_proposal(conn: &Connection, bot: &Bot) -> Vec<String> {
     if let Some(role) = bot.template.strip_prefix("role:") {
+        // A role's first steps are written for a **business**: "list the
+        // repositories X depends on", "list dependencies with known
+        // vulnerabilities", "review the open pull requests". On a product
+        // folder they are noise dressed as initiative — Studio, whose goal is
+        // "keep the goal tracker moving", opened its first morning by
+        // proposing a dependency audit of a repository with two files in it.
+        //
+        // So the role's steps are only offered where the role is *about* a
+        // business. Anywhere else this returns nothing, and `empty_plan_line`
+        // says the manager has no plan — which is true, and better than three
+        // confident suggestions about the wrong thing.
         let business = bot.businesses.first().copied().unwrap_or(bot.node_id);
-        return crate::business_team::first_steps(conn, role, business);
+        let is_business = matches!(crate::business::read(conn, bot.node_id), Ok(Some(_)));
+        if is_business {
+            return crate::business_team::first_steps(conn, role, business);
+        }
+        return Vec::new();
     }
     crate::botcatalog::get(&bot.template)
         .map(|t| t.steps)
@@ -2705,7 +2720,7 @@ pub fn wake_agent(app: &tauri::AppHandle, bot: &Bot) -> Option<(bool, String)> {
         return Some((
             false,
             format!(
-                "{} names {} but has no plan yet — an agent needs steps to work on. Give it some                  on the bot's Plan tab.",
+                "{} names {} but has no plan yet — an agent needs steps to work on. Give it some on its Plan tab.",
                 bot.name, bot.agent
             ),
         ));
@@ -3020,5 +3035,38 @@ mod tests {
         assert_eq!(read(&dir).unwrap().every, "");
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A role's first steps are about a business, so they are only offered on
+    /// one.
+    ///
+    /// Studio — goal "keep the goal tracker moving", template
+    /// `role:engineering`, sitting on a product folder — opened its first
+    /// morning by proposing a dependency audit and a pull-request review of a
+    /// repository with two files in it. Confident, irrelevant, and written onto
+    /// the plan for the owner to agree to. Proposing nothing is the better
+    /// failure: `empty_plan_line` then says it has no plan, which is true.
+    #[test]
+    fn a_role_does_not_propose_business_work_on_a_product() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(crate::db::CORE_SCHEMA).unwrap();
+        crate::db::migrate(&conn);
+
+        // Node 61 is a plain folder here: nothing has set it up as a business,
+        // which is exactly the goal tracker's situation.
+        let bot = Bot {
+            handle: "studio".into(),
+            name: "Studio".into(),
+            goal: "Keep the goal tracker moving".into(),
+            template: "role:engineering".into(),
+            node_id: 61,
+            businesses: vec![61],
+            ..Default::default()
+        };
+
+        assert!(
+            plan_proposal(&conn, &bot).is_empty(),
+            "a product folder was offered a business's first steps"
+        );
     }
 }

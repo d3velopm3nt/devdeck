@@ -30,14 +30,14 @@ type Item = { view: RailView; icon: IconName; label: string }
 
 /// Team's views, as the sub-menu under it.
 ///
-/// Bots is here rather than beside Team: who does the work and what the work
+/// Managers is here rather than beside Team: who does the work and what the work
 /// is are two questions about one team, and having them in different corners
 /// of the rail meant a trip through navigation to answer either one.
 const TEAM: { id: TeamTab; icon: IconName; label: string }[] = [
   { id: 'goals', icon: 'project', label: 'Goals' },
   { id: 'features', icon: 'list', label: 'Features' },
   { id: 'work', icon: 'check', label: 'Work' },
-  { id: 'bots', icon: 'bot', label: 'Bots' },
+  { id: 'bots', icon: 'bot', label: 'Managers' },
 ]
 
 /// The places you live in. Ordered by how often a day touches them.
@@ -64,7 +64,7 @@ const TOOLS: Item[] = [
   { view: 'analytics', icon: 'history', label: 'Analytics' },
   { view: 'stash', icon: 'stash', label: 'Stash' },
   // Directly above Machine, and the adjacency is the idea: Machine installs
-  // tools for you, Community installs them for your bots.
+  // tools for you, Community installs them for your managers.
   { view: 'community', icon: 'package', label: 'Community' },
   { view: 'machine', icon: 'machine', label: 'Machine' },
 ]

@@ -643,6 +643,22 @@ impl Conversations {
     /// Adopted: a chat made while a space had one manager was keyed by the
     /// node. The manager it was made for (the title is its name) takes it;
     /// any other manager on the same space gets a chat of its own.
+    /// The room a manager speaks in — which is the **space's** room, not one of
+    /// its own.
+    ///
+    /// It used to open a conversation per manager, so a manager talked in one
+    /// place and the space it works on talked in another, and neither knew about
+    /// the other. You could read "Studio put three things on its plan" on the
+    /// manager's page and find nothing about it on the space's. That is the same
+    /// duplication as the AI Workspace, one layer down, and `design/one-room`
+    /// already says what the answer is: the room is the thread, and the manager
+    /// hands over *in it*.
+    ///
+    /// A space may have several managers, so the handle is stamped on the room
+    /// only when nothing has claimed it yet — `effective_team` reads it, and the
+    /// first claim must not be taken away by the second manager to say
+    /// something. Who said what is carried per message by `post_as`, which is
+    /// the right place for it.
     pub fn for_manager(
         &self,
         handle: &str,
@@ -652,21 +668,40 @@ impl Conversations {
     ) -> Result<ConversationMeta, String> {
         let _gate = writing();
         let list = self.list();
-        if let Some(existing) = list
+
+        // A room already belonging to this manager, from before the split was
+        // closed. Prefer it, so nobody's history moves out from under them.
+        let mine = list
             .iter()
             .find(|c| c.bot_handle.as_deref() == Some(handle))
-        {
-            return self.load(&existing.id);
-        }
-        if let Some(old) = list
+            .map(|c| c.id.clone());
+        // Otherwise the space's own room.
+        let theirs = list
             .iter()
-            .find(|c| c.bot_handle.is_none() && c.bot_node == Some(node_id) && c.title == name)
-        {
-            let mut conv = self.load(&old.id)?;
-            conv.bot_handle = Some(handle.to_string());
-            self.save(&conv)?;
+            .find(|c| c.node == Some(node_id) || c.bot_node == Some(node_id))
+            .map(|c| c.id.clone());
+
+        if let Some(id) = mine.or(theirs) {
+            let mut conv = self.load(&id)?;
+            let mut touched = false;
+            if conv.bot_handle.is_none() {
+                conv.bot_handle = Some(handle.to_string());
+                touched = true;
+            }
+            if conv.bot_node.is_none() {
+                conv.bot_node = Some(node_id);
+                touched = true;
+            }
+            if !conv.participants.iter().any(|p| p == handle) {
+                conv.participants.push(handle.to_string());
+                touched = true;
+            }
+            if touched {
+                self.save(&conv)?;
+            }
             return Ok(conv);
         }
+
         let now = now_iso();
         let meta = ConversationMeta {
             id: new_id("conv"),
@@ -674,8 +709,10 @@ impl Conversations {
             started_at: now.clone(),
             updated_at: now,
             project_id: Some(project_id.to_string()),
+            node: Some(node_id),
             bot_node: Some(node_id),
             bot_handle: Some(handle.to_string()),
+            participants: vec![handle.to_string()],
             ..Default::default()
         };
         self.save(&meta)?;

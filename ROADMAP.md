@@ -3,14 +3,20 @@
 Living document — what's shipped, what's designed, what's next. Update it as
 things land so we never have to reconstruct state from memory.
 
-**Current version:** 0.2.9 tagged · 0.2.8 last publicly released
-**Current branch:** `main` · `feat/business-setup` is four commits ahead and
-unmerged, with no pull request open
+**Current version:** v0.3.1 released · scoop bucket at 0.3.1
+**Current branch:** `main` carries the workers-and-managers arc (merged as
+`20aad66`); `claude/friendly-feynman-mwb9mp` is ahead of it with the lag work,
+the asker binary and the monitor fixes
 
-> ⚠️ **Blocker:** the GitHub repo is currently **private**. That silently breaks
-> auto-update for every install, `scoop install/update devdeck`, and the website's
-> download links — v0.2.9 is tagged but cannot publish, and the scoop bucket is
-> stuck at 0.2.8. Building is unaffected; only distribution is blocked.
+> ✅ **The distribution blocker is gone.** This document led with it for weeks:
+> the repo was private, so auto-update, `scoop update devdeck` and the website's
+> download links were all silently broken. Checked on 27 Sep 2026 and every part
+> of it is now true the other way — the repo is **public**, **v0.3.1** is
+> published, `releases/latest/download/latest.json` answers **HTTP 200**, and
+> `bucket/devdeck.json` points at 0.3.1. It had been fixed for a while and
+> nobody crossed it off, which is its own lesson: a warning nobody re-checks
+> becomes a lie that outranks the truth, because it is the first thing anyone
+> reads.
 
 ---
 
@@ -1054,12 +1060,12 @@ legal consequences, a payment vendor picks a key format, and cutting a release
 publishes to other people's machines. Guessing at any of them and writing code
 around the guess is worse than leaving them open.
 
-The one with a live cost is the first: while the repo is private, every
-existing install silently loses auto-update, `scoop update devdeck` fails, and
-the website's download links point at nothing.
+The one with a live cost used to be the first, and it is paid: the repo is
+public again, so auto-update, scoop and the website's download links all work.
+Everything left here is a decision rather than a cost.
 
-- [ ] **Repo back to public** — blocks auto-update, scoop, and the website download
-      links while private
+- [x] **Repo back to public** — done. Verified 27 Sep 2026: visibility `PUBLIC`,
+      v0.3.1 published, `latest.json` returns HTTP 200, bucket at 0.3.1.
 - [ ] **Licence swap** — MIT → source-available (PolyForm Noncommercial or FSL)
       on future versions. Free for personal use, paid for commercial.
 - [ ] **Pricing page** on the website

@@ -573,14 +573,19 @@ fn app_update(app: tauri::AppHandle) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Before anything else: this binary is also the thing a worker's CLI
-    // spawns to ask whether it may do something. It has to answer that on
-    // stdin/stdout without a window, a database or a Tauri runtime, so the
-    // check comes first and the process ends when the pipe closes.
+    // Before anything else: answer as an asker if we were spawned as one.
     //
-    // The app asking itself is why there is no helper to install and nothing
-    // to keep in step with a release: `std::env::current_exe` is always the
-    // build that started the run.
+    // The asker is its own binary now (`devdeck-ask`), because a run that held
+    // this executable open stopped `cargo` from replacing it — so editing
+    // anything under `src-tauri` either failed the build or restarted the app
+    // underneath a live worker. This path stays for one reason: a run started
+    // by an older build has `devdeck.exe --ask-server <run>` written into its
+    // MCP config, and taking that away would leave that worker unable to ask
+    // anyone anything. Five lines is a cheap way not to break a run in flight.
+    //
+    // It has to answer on stdin/stdout with no window, no database and no Tauri
+    // runtime, so the check comes first and the process ends when the pipe
+    // closes.
     let argv: Vec<String> = std::env::args().collect();
     if let Some(i) = argv.iter().position(|a| a == "--ask-server") {
         let run = argv.get(i + 1).cloned().unwrap_or_default();

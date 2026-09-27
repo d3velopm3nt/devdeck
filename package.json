@@ -25,8 +25,10 @@
     "local-first"
   ],
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
+    "ask": "cargo build -p devdeck-ask --manifest-path src-tauri/Cargo.toml",
+    "ask:release": "cargo build -p devdeck-ask --release --manifest-path src-tauri/Cargo.toml",
+    "dev": "npm run ask && vite",
+    "build": "npm run ask:release && tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
     "tauri": "tauri"

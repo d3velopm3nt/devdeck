@@ -45,11 +45,11 @@ jobs:
         working-directory: src-tauri
 
       - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
         working-directory: src-tauri
 
       - name: Test (Rust)
-        run: cargo test --all-targets
+        run: cargo test --workspace --all-targets
         working-directory: src-tauri
 
       - name: Build app

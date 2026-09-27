@@ -56,7 +56,7 @@ for (const t of pages) {
   let isShell = false
   try {
     isShell = await c.evaluate(`[...document.querySelectorAll('button')].some((b) => b.textContent.trim().startsWith('Logs'))`, false)
-  } catch (e) { isShell = false }
+  } catch { isShell = false }
   if (isShell && !picked) picked = c
   else c.ws.close()
 }

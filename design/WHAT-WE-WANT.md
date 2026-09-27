@@ -121,7 +121,11 @@ runs in progress, proposals waiting on you, and managers that could not act.
   number an earlier run had used was discarded without a word. Three silences
   in a row hid it — the sink dropped quietly, `keep` swallowed its error, and
   `IGNORE` is quiet by design. Ids now carry the run's start time.
-- **A live run blocks a rebuild.** The asker is `devdeck.exe --ask-server`, so
+- ~~**A live run blocks a rebuild.**~~ **Fixed 27 Sep** (L9 in
+  `docs/REVIEW-2026-09.md` §11). The asker is its own binary now, so a blocked
+  worker holds 700 KB that rarely changes instead of the app's own executable.
+  What is left: the release bundle does not yet ship it beside the app.
+  Previously: the asker was `devdeck.exe --ask-server`, so
   while a worker runs, the binary is held open.
 - **Editing `src-tauri` kills a running worker**, because `tauri dev` restarts
   the app. It deserves a guard.

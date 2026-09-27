@@ -81,4 +81,35 @@ Status: `open` · `doing` · `done` · `ask`
 
 | # | item | before → after | gate | note |
 |---|---|---|---|---|
-| 0 | — | — | — | queue rewritten for the night run |
+| 1 | Stale docs | 3 false claims → 0 | n/a | `8d141a3`. The repo had been public for weeks and the roadmap still led with the blocker. |
+| 2 | Bot → manager (what you read) | both words → one | green | `6241298`. Identifiers and `_bot.md` left on purpose: they need a migration. |
+| 3 | Manager speaks in the space's room | 2 rooms → 1 | green | `dce286d`, then corrected — see below. |
+| 4 | Plan from the goal, not the template | 3 irrelevant → 0 | green | `dce286d`. Proved by a real wake. |
+| 5 | Rail in four groups | — | — | **ask**: Tools and Team already fold. The only delta is Dashboard, which the rail deliberately promoted *out* of Tools while §2 wants it absorbed. Conflicting written intents — the owner's call. |
+| 6 | Today absorbs Dashboard + Inbox | — | — | **ask**, same reason. |
+| 7 | L3 whole-store subscriptions | 62 → 62, ratcheted | green | `68a0e83`. ~45 files, one call each; careful per-file work that wants review. The ratchet stops new ones. |
+| 8 | L2 log-array subscriptions | already done | — | `liveStore` derives the counts and tails at flush time (`8997b40`). §2's table is stale about L2 as it was about L1. |
+| 12 | L9b asker in the bundle | absent → sidecar | green | `68a0e83`. Verified `tauri dev` still starts with it declared. |
+
+## What the trial found
+
+Studio woke on the real key and read the repository rather than a template. It
+got the next piece of work exactly right — *"the README promises `goals.js` …
+neither file exists, so `npm test` currently has nothing to run"* — then stopped
+and asked rather than guessing. Three things came out of it:
+
+1. **Two rooms, not one.** The first version of the room fix preferred the
+   *manager's* room over the space's and stamped the handle without stamping the
+   node, so the goal tracker kept "Goal tracker" (11 messages) and "Studio" side
+   by side. Corrected: the space's room wins, and a manager's room becomes the
+   space's when the space has none.
+2. **A manager cannot see its own worker.** Studio's file says `worker: smith`;
+   Studio reported *"there's no Smith anywhere I can see — no agent roster"*.
+   The roster lives in the personal store and is not in the manager's context.
+   **open**
+3. **`work` and `delegate` bounced.** Studio: *"the work/delegate tools are
+   bouncing my calls back in this project."* Its room has `project_id: '61'` and
+   project 61 resolves, so the refusal is past that check. Second-hand evidence
+   only — needs a run that captures the actual refusal. **open**, and it is the
+   same pair `design/devdeck-mcp/BUILD.md` singles out as the
+   assistant-dispatched half of the registry.

@@ -2249,6 +2249,34 @@ The receipts in the thread are the record. A line such as \"claimed by @dev-a\" 
             bot.team.join(", ")
         ));
     }
+    // Its worker, by name and by what it is for.
+    //
+    // This was missing entirely, and a manager cannot hand work to somebody it
+    // has never heard of. Studio — whose file says `worker: smith` — woke, read
+    // the repository, worked out the right next piece of work, and then stopped
+    // at *"there's no Smith anywhere I can see — no agent roster"*. The roster
+    // lives in the personal store and nothing put it in front of the manager.
+    if !bot.worker.trim().is_empty() {
+        match crate::workers::read_worker(bot.worker.trim()) {
+            Ok(Some(w)) => system.push_str(&format!(
+                "\n\nYour worker is {} (@{}) — {} It writes on a branch of its own and never \
+                 pushes. Hand it a piece of work with @{} take \"title\".",
+                w.meta.name,
+                w.meta.handle,
+                w.meta.what.trim(),
+                w.meta.handle,
+            )),
+            // Named but not there: say so rather than leaving the manager to
+            // discover it mid-handover. A name that resolves to nobody is the
+            // failure this whole paragraph exists to prevent.
+            _ => system.push_str(&format!(
+                "\n\nYour file names \"{}\" as your worker, but there is no worker by that name. \
+                 Do not try to hand work to it — say that it is missing and who you would need.",
+                bot.worker.trim()
+            )),
+        }
+    }
+
     system.push_str(
         "\n\nWhat you can actually do, and how:\n\
          - Put someone on an item: write @name take \"title\" in your reply. That starts them \

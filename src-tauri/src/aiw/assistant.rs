@@ -669,19 +669,24 @@ impl Conversations {
         let _gate = writing();
         let list = self.list();
 
-        // A room already belonging to this manager, from before the split was
-        // closed. Prefer it, so nobody's history moves out from under them.
+        // **The space's room wins.** That is the whole point: a manager talks
+        // where the space talks. Preferring the manager's own room instead left
+        // the goal tracker with two — "Goal tracker" with eleven messages, and
+        // "Studio" with Studio's — which is the fault this is meant to remove,
+        // not a migration of it.
+        let theirs = list
+            .iter()
+            .find(|c| c.node == Some(node_id))
+            .map(|c| c.id.clone());
+        // Only if the space has no room of its own does the manager's become
+        // it, stamped with the node below so it *is* the space's room from then
+        // on rather than a second one beside it.
         let mine = list
             .iter()
             .find(|c| c.bot_handle.as_deref() == Some(handle))
             .map(|c| c.id.clone());
-        // Otherwise the space's own room.
-        let theirs = list
-            .iter()
-            .find(|c| c.node == Some(node_id) || c.bot_node == Some(node_id))
-            .map(|c| c.id.clone());
 
-        if let Some(id) = mine.or(theirs) {
+        if let Some(id) = theirs.or(mine) {
             let mut conv = self.load(&id)?;
             let mut touched = false;
             if conv.bot_handle.is_none() {
@@ -690,6 +695,17 @@ impl Conversations {
             }
             if conv.bot_node.is_none() {
                 conv.bot_node = Some(node_id);
+                touched = true;
+            }
+            // Without this the room stays invisible to `for_node`, so the space
+            // opens a second one and the two never meet — which is exactly what
+            // happened the first time this was changed.
+            if conv.node.is_none() {
+                conv.node = Some(node_id);
+                touched = true;
+            }
+            if conv.project_id.is_none() {
+                conv.project_id = Some(project_id.to_string());
                 touched = true;
             }
             if !conv.participants.iter().any(|p| p == handle) {

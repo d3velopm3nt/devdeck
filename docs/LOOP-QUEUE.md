@@ -113,3 +113,31 @@ and asked rather than guessing. Three things came out of it:
    only — needs a run that captures the actual refusal. **open**, and it is the
    same pair `design/devdeck-mcp/BUILD.md` singles out as the
    assistant-dispatched half of the registry.
+
+### The second wake, after the worker fix
+
+Different failure, and a better one. Studio read the repository again — *"the
+tracker's an empty shell right now — README promises `goals.js` and
+`goals.test.js`, and neither exists"* — **made a claim** (`clm_1a0e4e47dd55`, so
+`work`/`delegate` answered this time), and then hit this:
+
+    {"tool":"terminal","action":"run","denied":true,
+     "error":"'terminal' needed approval and this was started by a clock,
+              so there was nobody to ask. Give it a standing grant…"}
+
+for `ls -la .devdeck; find .devdeck -type f | head -50`.
+
+**A manager woken by the clock has no ask channel.** That is the exact problem
+`devdeck-ask` solved for workers this week — a sealed session reaching for a
+shell with nobody to ask — and managers never got it. A worker in this position
+now gets a question in the room and ninety seconds; a manager gets a denial and
+a suggestion that the owner go and write a standing grant. **open**, and it is
+the obvious next piece: the room already exists, the waiting already exists, and
+the manager already speaks there.
+
+Until then the trial stops here on purpose rather than on a fault: it refused to
+act unattended without permission, which is the design working. Granting that
+permission is the owner's to do, not a thing to be arranged around.
+
+Not a bug, checked: the `sessions/…md` "cannot find the path" in the same run is
+the model reading a session record before it was written.

@@ -714,17 +714,11 @@ pub fn on_event(app: &tauri::AppHandle, event_type: &str, project_id: Option<&st
     if !TRIGGERS.contains(&event_type) {
         return;
     }
-    // This runs inside the event bus's sink, and whoever published may be
-    // holding the DB lock — so it must not block here. It used to `try_lock`
-    // and return, which silently dropped the routine whenever the database was
-    // busy. Waiting on a thread of its own keeps both promises.
-    let app = app.clone();
-    let event_type = event_type.to_string();
-    let project_id = project_id.map(str::to_string);
-    std::thread::spawn(move || on_event_blocking(&app, &event_type, project_id.as_deref()));
-}
-
-fn on_event_blocking(app: &tauri::AppHandle, event_type: &str, project_id: Option<&str>) {
+    // Called on a thread of its own (the bus sink in `lib.rs` spawns one),
+    // never on the publisher's, because whoever published may be holding the
+    // DB lock. That is what lets this *wait* for the lock below: it used to
+    // `try_lock` and return, which silently dropped the routine whenever the
+    // database was busy.
     let Some(db) = app.try_state::<Db>() else {
         return;
     };

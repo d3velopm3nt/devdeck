@@ -20,6 +20,7 @@ import { Icon } from '../lib/icons'
 import { useApp } from '../store'
 import { useAiw } from '../lib/aiwStore'
 import { openBot } from '../lib/dock'
+import { BotCreate } from './bot/BotCreate'
 import { nodeColor } from '../lib/spaces'
 import { findNode } from '../lib/tree'
 
@@ -60,6 +61,9 @@ export function HomeBots() {
   const [bots, setBots] = useState<ipc.Bot[] | null>(null)
   const [standing, setStanding] = useState<Record<string, ipc.BotStanding>>({})
   const [err, setErr] = useState('')
+  // The tile said "New bot" and navigated to a second copy of the Bots page
+  // instead of making one. It makes one.
+  const [creating, setCreating] = useState(false)
 
   useEffect(() => {
     void ipc
@@ -220,7 +224,7 @@ export function HomeBots() {
           <button
             className="flex w-[96px] shrink-0 flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-line2 text-faint hover:border-line3 hover:text-dim"
             title="Give a space a bot"
-            onClick={() => useApp.getState().setRailView('bots')}
+            onClick={() => setCreating(true)}
           >
             <Icon name="add" size={20} />
             <span className="text-[10.5px]">New bot</span>
@@ -258,6 +262,16 @@ export function HomeBots() {
           })}
         </div>
       </div>
+
+      {creating && (
+        <BotCreate
+          onClose={() => setCreating(false)}
+          onCreated={(b) => {
+            setCreating(false)
+            openBot(b.node_id, b.name, true, b.handle)
+          }}
+        />
+      )}
     </div>
   )
 }

@@ -13,8 +13,9 @@ import { NodeConfigPage } from './components/editors/NodeConfigPage'
 import { NodeSetupPage } from './components/editors/NodeSetupPage'
 import { SpaceDetailPage } from './components/SpaceDetailPage'
 import { BotPage } from './components/bot/BotPage'
-import { CAPTURE_BOT } from './lib/devCapture'
-import { openBot } from './lib/dock'
+import { RunPanel } from './components/workers/RunPage'
+import { CAPTURE_BOT, CAPTURE_RUN } from './lib/devCapture'
+import { openBot, openRun } from './lib/dock'
 import { ServiceDetailPage } from './components/ServiceDetailPage'
 import { TerminalView } from './components/TerminalView'
 import { TerminalTab } from './components/TerminalTab'
@@ -128,6 +129,8 @@ const components = {
   life: () => <LifePage />,
   'space-detail': (props: IDockviewPanelProps<{ id: number }>) => <SpaceDetailPage {...props} />,
   'bot-detail': (props: IDockviewPanelProps<{ id: number; ask?: boolean; handle?: string }>) => <BotPage {...props} />,
+  // A run is watched, then decided on. Both happen in the same document.
+  'run-detail': (props: IDockviewPanelProps<{ id: string }>) => <RunPanel {...props} />,
   'service-detail': (props: IDockviewPanelProps<{ id: number }>) => <ServiceDetailPage {...props} />,
   file: (
     props: IDockviewPanelProps<{
@@ -185,6 +188,7 @@ export function Dock() {
     // Dev-only: open one bot page straight away, so a screenshot can be taken
     // of a screen this session cannot click its way to. Inert when unset.
     if (CAPTURE_BOT) openBot(Number(CAPTURE_BOT), 'Bot')
+    if (CAPTURE_RUN) openRun(CAPTURE_RUN, 'A run')
 
     // Autosave layout (debounced) so the workspace reopens as you left it.
     let timer: ReturnType<typeof setTimeout> | undefined

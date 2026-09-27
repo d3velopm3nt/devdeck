@@ -296,7 +296,7 @@ export function Icon({
   strokeWidth = 2,
   spin = false,
 }: {
-  name: string
+  name: IconName
   size?: number
   className?: string
   strokeWidth?: number

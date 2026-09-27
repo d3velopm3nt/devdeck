@@ -135,6 +135,11 @@ const PageHead = ({ title, subtitle, right }: { title: string; subtitle: string;
 
 function Overview() {
   const a = useAiw()
+  // The store keeps every project's events so the global Events panel can show
+  // them all; this screen is about one project, so it narrows here.
+  const mine = a.events.filter(
+    (e) => !a.projectId || !e.project_id || e.project_id === a.projectId,
+  )
   const active = a.sessions.filter((s) => s.status === 'working' || s.status === 'planning')
   const open = a.conflicts.filter((c) => !c.resolved)
   const stale = a.sessions.filter((s) => s.stale)
@@ -316,10 +321,10 @@ function Overview() {
               }
             >
               <div className="rounded-md border border-line bg-raise py-1">
-                {a.events.slice(0, 12).map((e) => (
+                {mine.slice(0, 12).map((e) => (
                   <EventRow key={e.id} e={e} />
                 ))}
-                {a.events.length === 0 && (
+                {mine.length === 0 && (
                   <div className="px-3 py-5 text-center text-[11.5px] text-muted">
                     No events yet.
                   </div>
@@ -1560,7 +1565,11 @@ const ACTIVITY_KINDS = ['Agent', 'Task', 'Tool', 'File', 'Git', 'Context', 'Conf
 function Activity() {
   const a = useAiw()
   const [off, setOff] = useState<Record<string, boolean>>({})
-  const shown = a.events.filter((e) => !off[e.category])
+  // This screen is about one project, and the store keeps every project's
+  // events, so the narrowing happens here rather than on the way in.
+  const shown = a.events.filter(
+    (e) => !off[e.category] && (!a.projectId || !e.project_id || e.project_id === a.projectId),
+  )
   return (
     <div className="flex h-full flex-col">
       <PageHead

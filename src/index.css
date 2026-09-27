@@ -2,8 +2,11 @@
 @import 'dockview-core/dist/styles/dockview.css';
 
 /* ---------------------------------------------------------------------------
-   Design tokens. The raw values live on :root (dark is the default theme) and
-   are overridden wholesale by [data-theme='light']. Components never use raw
+   Design tokens. The raw values live on :root (the default DevDeck dark
+   theme) and are overridden *wholesale* by one [data-theme='…'] block per
+   named theme — see src/lib/themes.ts for the list the Settings picker shows.
+   Wholesale is the rule: a block that redefines only some tokens inherits the
+   rest from dark and paints a half-lit app. Components never use raw
    slate/hex colors — they use the token utilities mapped in @theme below
    (bg-app, bg-panel, text-ink, border-line, …), so the whole app re-skins by
    flipping one attribute on <html>.
@@ -68,6 +71,135 @@
   --c-viol: #6d28d9;
 
   color-scheme: light;
+}
+
+/* Claude — warm paper. A near-black ink on an off-white that has yellow in it,
+   with clay for the accent. Status colours are pulled down and warmed so none
+   of them glows on paper. */
+[data-theme='claude'] {
+  --c-app: #f0eee6;
+  --c-page: #faf9f5;
+  --c-panel: #f5f4ee;
+  --c-raise: #ffffff;
+  --c-menu: #ffffff;
+  --c-hover: #e8e4d8;
+  --c-soft: rgb(160 149 128 / 0.18);
+
+  --c-line: #e3dfd2;
+  --c-line2: #d2ccbb;
+  --c-line3: #aca493;
+
+  --c-ink: #1f1e1c;
+  --c-body: #3d3a34;
+  --c-dim: #6b665c;
+  --c-muted: #8c8577;
+  --c-faint: #b3ac9c;
+
+  --c-accent: #c96442;
+  --c-ok: #3c7a52;
+  --c-warn: #9a6318;
+  --c-err: #b3402f;
+  --c-info: #2d6c99;
+  --c-viol: #74589f;
+
+  color-scheme: light;
+}
+
+/* Vercel — black ground, neutral greys, a single blue. Nothing is tinted;
+   every surface is a step on the same grey ramp. */
+[data-theme='vercel'] {
+  --c-app: #000000;
+  --c-page: #0a0a0a;
+  --c-panel: #111111;
+  --c-raise: #171717;
+  --c-menu: #1c1c1c;
+  --c-hover: #262626;
+  --c-soft: rgb(255 255 255 / 0.07);
+
+  --c-line: #242424;
+  --c-line2: #333333;
+  --c-line3: #5c5c5c;
+
+  --c-ink: #ededed;
+  --c-body: #d4d4d4;
+  --c-dim: #a1a1a1;
+  --c-muted: #7a7a7a;
+  --c-faint: #545454;
+
+  /* #0070f3 is the brand blue, but as *text* on black it is too dark to read;
+     this is the same hue lifted until it is. */
+  --c-accent: #3b9eff;
+  --c-ok: #3ecf8e;
+  --c-warn: #f5a623;
+  --c-err: #ff6369;
+  --c-info: #6cb6ff;
+  --c-viol: #bd7dff;
+
+  color-scheme: dark;
+}
+
+/* Vercel light — the same ramp inverted. Pure white surfaces, black ink, and
+   status colours darkened until they hold their own on white. */
+[data-theme='vercel-light'] {
+  --c-app: #f2f2f2;
+  --c-page: #ffffff;
+  --c-panel: #ffffff;
+  --c-raise: #fafafa;
+  --c-menu: #ffffff;
+  --c-hover: #ededed;
+  --c-soft: rgb(0 0 0 / 0.05);
+
+  --c-line: #eaeaea;
+  --c-line2: #d4d4d4;
+  --c-line3: #999999;
+
+  --c-ink: #000000;
+  --c-body: #171717;
+  --c-dim: #666666;
+  --c-muted: #8f8f8f;
+  --c-faint: #b4b4b4;
+
+  --c-accent: #0070f3;
+  --c-ok: #0f7a46;
+  --c-warn: #a35200;
+  --c-err: #d92d20;
+  --c-info: #0058a3;
+  --c-viol: #7828c8;
+
+  color-scheme: light;
+}
+
+/* VS Code Dark+ — #1e1e1e editor, #252526 sidebar, #3c3c3c widgets, #d4d4d4
+   text, and the syntax palette doing duty as the status colours. */
+[data-theme='vscode'] {
+  --c-app: #181818;
+  --c-page: #1e1e1e;
+  --c-panel: #252526;
+  --c-raise: #2d2d30;
+  --c-menu: #3c3c3c;
+  --c-hover: #2a2d2e;
+  --c-soft: rgb(255 255 255 / 0.08);
+
+  --c-line: #2b2b2b;
+  --c-line2: #3c3c3c;
+  --c-line3: #6e6e6e;
+
+  --c-ink: #e7e7e7;
+  --c-body: #d4d4d4;
+  --c-dim: #9d9d9d;
+  --c-muted: #808080;
+  --c-faint: #5a5a5a;
+
+  /* #007acc is the chrome blue — right behind white text, unreadable as text
+     itself, so text gets the editor's own link blue instead. */
+  --c-accent: #4ea1f5;
+  --c-ok: #89d185;
+  --c-warn: #dcb67a;
+  --c-err: #f14c4c;
+  --c-info: #3794ff;
+  --c-viol: #c586c0;
+
+  color-scheme: dark;
 }
 
 @theme inline {

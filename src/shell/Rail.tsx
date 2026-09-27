@@ -42,6 +42,9 @@ const TEAM: { id: TeamTab; icon: IconName; label: string }[] = [
 
 /// The places you live in. Ordered by how often a day touches them.
 const WORK: Item[] = [
+  // Beside Team on purpose: managers keep the plan, workers do the job, and
+  // keeping them a rail apart is how you forget you own either.
+  { view: 'workers', icon: 'tool', label: 'Workers' },
   // Time sits with the places you go rather than with the app's own settings:
   // a calendar is a thing you work out of, not a thing you configure.
   { view: 'calendar', icon: 'schedule', label: 'Calendar' },
@@ -57,9 +60,6 @@ const WORK: Item[] = [
 /// stops being navigation and becomes a list. They are one door now, opening
 /// on a sub-menu — the same shape Team uses, for the same reason.
 const TOOLS: Item[] = [
-  // The old Home. Kept whole: services, terminals and the master log are
-  // still worth a page, just not the first one you see.
-  { view: 'home', icon: 'home', label: 'Dashboard' },
   { view: 'connections', icon: 'database', label: 'Connections' },
   { view: 'analytics', icon: 'history', label: 'Analytics' },
   { view: 'stash', icon: 'stash', label: 'Stash' },
@@ -279,6 +279,18 @@ export function Rail() {
         active={railView === 'today'}
         expanded={expanded}
         onClick={() => setRailView('today')}
+      />
+
+      {/* Directly under Today, because the two answer the same question from
+          opposite ends: Today is what needs you, the Dashboard is what the
+          machine is doing — services, terminals, the master log. It was in the
+          Tools drawer, two clicks from a screen you check constantly. */}
+      <RailButton
+        label="Dashboard"
+        icon="home"
+        active={railView === 'home'}
+        expanded={expanded}
+        onClick={() => setRailView('home')}
       />
 
       <RailButton

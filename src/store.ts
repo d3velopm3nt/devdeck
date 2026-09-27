@@ -5,6 +5,7 @@ import { create } from 'zustand'
 import * as ipc from './lib/ipc'
 import type { GitInfo } from './lib/ipc'
 import type { Layer } from './lib/calendarLayers'
+import { themeById, type ThemeId } from './lib/themes'
 import { findNode, projectOf, resolveDir, serviceDir, subtreeIds } from './lib/tree'
 import type {
   CommandDef,
@@ -58,7 +59,8 @@ export type RailView =
   /// rail's sub-menu, so it is state here rather than inside the page.
   | 'team'
   /// The people: the assistant, the bots, the agents.
-  | 'bots'
+  /// The hands: workers you own, the skills they draw on, and their runs.
+  | 'workers'
   /// What the AI is costing, across every space.
   | 'analytics'
   | 'calendar'
@@ -153,8 +155,9 @@ export interface AppState {
    *  the same thing twice still refocuses. `search` also drives its text
    *  box — that's how a stacktrace clip jumps you to matching log lines. */
   logFocus: { serviceId: number | 'all'; n: number; search?: string } | null
-  /** App color theme; applied as data-theme on <html>, persisted to settings. */
-  theme: Theme
+  /** The chosen theme's id; applied as data-theme on <html>, persisted to
+   *  settings. One of `THEMES` in lib/themes.ts. */
+  theme: ThemeId
   /** Which rail view the shell is showing. */
   railView: RailView
   /** The slide-over editor sheet, or null when closed. */
@@ -222,7 +225,7 @@ export interface AppState {
   focusServiceLogs: (serviceId: number) => void
   /** Reveal the Logs tab filtered to `term` across every source. */
   searchLogs: (term: string) => void
-  setTheme: (t: Theme) => Promise<void>
+  setTheme: (t: ThemeId) => Promise<void>
   setRailView: (v: RailView) => void
   openSheet: (s: SheetState) => void
   closeSheet: () => void
@@ -498,7 +501,6 @@ const RAIL_VIEWS: readonly RailView[] = [
   'home',
   'inbox',
   'team',
-  'bots',
   'analytics',
   'calendar',
   // Mail and Community were missing, which is exactly the failure the note
@@ -527,10 +529,13 @@ const loadTodayArea = (): number | null => {
 
 const loadRailView = (): RailView => {
   if (CAPTURE_RAIL) return CAPTURE_RAIL as RailView
-  const v = localStorage.getItem(RAIL_KEY) as RailView | null
-  // Bots moved back into Team. The old value still means something, so it is
-  // translated rather than failed — failing it would drop you on Home.
-  if (v === 'bots') return 'team'
+  const saved = localStorage.getItem(RAIL_KEY)
+  // Bots moved back into Team, and 'bots' is no longer a rail view at all —
+  // so this reads the raw string rather than a RailView. Somebody's stored
+  // value still means something, and translating it beats failing it, which
+  // would drop them on Today with no explanation.
+  if (saved === 'bots') return 'team'
+  const v = saved as RailView | null
   // Home became Today. Moved once, not every launch: after this, landing on
   // the dashboard is a choice somebody made and it is kept.
   if (v === 'home' && !localStorage.getItem(TODAY_KEY)) {
@@ -822,9 +827,11 @@ export const useApp = create<AppState>((set, get) => ({
       // Default monitoring on; only an explicit '0' disables it.
       gitMonitorEnabled: gitEnabled == null ? true : gitEnabled !== '0',
       gitMonitorIntervalMin: Math.max(1, Number(gitInterval) || 5),
-      theme: savedTheme === 'light' ? 'light' : 'dark',
+      // An id we no longer ship — or one an older build never wrote — falls
+      // back to the default rather than leaving <html> unthemed.
+      theme: themeById(savedTheme).id,
     })
-    document.documentElement.dataset.theme = savedTheme === 'light' ? 'light' : 'dark'
+    document.documentElement.dataset.theme = themeById(savedTheme).id
     await tree
     void get().refreshActivity()
     void get().refreshFocus()

@@ -22,6 +22,7 @@
 
 mod activity;
 mod aiw;
+mod asks;
 mod botcatalog;
 mod botmind;
 mod bots;
@@ -36,6 +37,7 @@ mod community_index;
 mod conn;
 mod creds;
 mod db;
+mod eventlog;
 mod events;
 mod files;
 mod focus;
@@ -43,7 +45,9 @@ mod gauth;
 mod git;
 mod github;
 mod inbox;
+mod installed;
 mod legacy;
+mod library;
 mod machine;
 mod mail;
 mod mailfiles;
@@ -63,6 +67,7 @@ mod stash;
 mod team;
 mod threads;
 mod vault;
+mod workers;
 
 use std::sync::{Arc, Mutex};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
@@ -568,6 +573,21 @@ fn app_update(app: tauri::AppHandle) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Before anything else: this binary is also the thing a worker's CLI
+    // spawns to ask whether it may do something. It has to answer that on
+    // stdin/stdout without a window, a database or a Tauri runtime, so the
+    // check comes first and the process ends when the pipe closes.
+    //
+    // The app asking itself is why there is no helper to install and nothing
+    // to keep in step with a release: `std::env::current_exe` is always the
+    // build that started the run.
+    let argv: Vec<String> = std::env::args().collect();
+    if let Some(i) = argv.iter().position(|a| a == "--ask-server") {
+        let run = argv.get(i + 1).cloned().unwrap_or_default();
+        asks::serve(&run);
+        return;
+    }
+
     // Open SQLite and read the startup settings *before* building the app, so
     // every piece of state can be handed to `Builder::manage` instead of to
     // `setup`.
@@ -824,6 +844,34 @@ pub fn run() {
                 });
             }
 
+            // A run is a child of this process, so one still marked running
+            // is one that did not survive the last stop. Said plainly at
+            // startup rather than left spinning on the page for ever.
+            if let Some(db) = app.try_state::<db::Db>() {
+                if let Ok(conn) = db.0.lock() {
+                    let _ = eventlog::trim(&conn);
+                }
+            }
+
+            // The log's own connection, on its own thread. Started before the
+            // sink is attached, so the first event of the run is kept too.
+            eventlog::start_writer();
+
+            {
+                let h = app.handle().clone();
+                let said = match workers::close_orphans(&h) {
+                    Ok(0) => None,
+                    Ok(n) => Some((
+                        "stdout",
+                        format!("closed {n} run(s) that did not survive the last stop"),
+                    )),
+                    Err(e) => Some(("stderr", format!("could not close interrupted runs: {e}"))),
+                };
+                if let Some((stream, line)) = said {
+                    services::push_log(&h, services::RUNNER_LOG_ID, "workers", stream, line);
+                }
+            }
+
             // The safety net behind `app_ready`. If the frontend throws before
             // it can call in — a bad import, a bad migration — the window must
             // still appear, because an app you cannot see is an app you cannot
@@ -862,14 +910,28 @@ pub fn run() {
                 .bus
                 .attach_sink(move |ev| {
                     let _ = emit_handle.emit("aiw:event", ev.clone());
+
+                    // Nothing below this line may touch the database on this
+                    // thread. The sink runs wherever the event was published,
+                    // and a publisher is usually a command already holding the
+                    // database lock — so a lock here is a deadlock, and a
+                    // `try_lock` here is a routine that silently never fires.
+                    //
+                    // And kept, so the answer to "what did it do on Tuesday"
+                    // is not "the app has been restarted since".
+                    eventlog::post(ev);
+
                     // A routine can be a rhythm or a thing that happens.
                     // Tests failing on master is the example everyone gives,
                     // and it is not a time of day.
-                    crate::schedule::on_event(
-                        &emit_handle,
-                        &ev.kind,
-                        ev.scope.project_id.as_deref(),
-                    );
+                    if crate::schedule::TRIGGERS.contains(&ev.kind.as_str()) {
+                        let h = emit_handle.clone();
+                        let kind = ev.kind.clone();
+                        let project = ev.scope.project_id.clone();
+                        std::thread::spawn(move || {
+                            crate::schedule::on_event(&h, &kind, project.as_deref());
+                        });
+                    }
                 });
 
             monitor::spawn(app.handle().clone());
@@ -1017,6 +1079,11 @@ pub fn run() {
             bots::bot_for_node,
             bots::bot_save,
             bots::bot_delete,
+            bots::bot_set_worker,
+            eventlog::events_history,
+            eventlog::events_count,
+            bots::work_agree,
+            bots::work_decline,
             bots::bot_create,
             bots::bot_plan,
             bots::bot_plan_proposal,
@@ -1166,6 +1233,29 @@ pub fn run() {
             aiw::learn::learn_summarise,
             aiw::learn::learn_life_proposals,
             business::business_list,
+            business::business_pipeline,
+            business::business_stage_set,
+            library::library_list,
+            library::library_read,
+            library::library_look,
+            library::library_install,
+            library::library_install_kit,
+            library::library_kits,
+            installed::machine_installed,
+            installed::machine_take,
+            library::library_remove,
+            workers::workers_list,
+            workers::worker_asks,
+            workers::worker_answer,
+            workers::worker_save,
+            workers::worker_delete,
+            workers::worker_starters,
+            workers::worker_plan,
+            workers::worker_start,
+            workers::worker_stop,
+            workers::runs_list,
+            workers::run_get,
+            workers::run_decide,
             business::business_get,
             business::business_create,
             business::business_save,

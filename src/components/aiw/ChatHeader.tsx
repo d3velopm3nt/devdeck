@@ -12,6 +12,7 @@ import { useAiw } from '../../lib/aiwStore'
 import { aiw } from '../../lib/aiw'
 import { ModelPicker } from './ModelPicker'
 import { useProviders, withCurrent } from '../../lib/providers'
+import { ProviderSetup } from './ProviderSetup'
 
 export function ProviderChip() {
   const a = useAiw()
@@ -20,7 +21,9 @@ export function ProviderChip() {
   const wrap = useRef<HTMLDivElement>(null)
 
   const agent = a.agents.find((x) => x.id === 'assistant')
-  const providers = useProviders()
+  const [setupNonce, setSetupNonce] = useState(0)
+  const [setupOpen, setSetupOpen] = useState(false)
+  const providers = useProviders(setupNonce)
   const [draft, setDraft] = useState({ provider: '', model: '' })
 
   const provider = agent?.provider ?? ''
@@ -57,6 +60,14 @@ export function ProviderChip() {
 
   return (
     <div ref={wrap} className="relative">
+      <ProviderSetup
+        open={setupOpen}
+        onClose={() => setSetupOpen(false)}
+        onSaved={(id) => {
+          setSetupNonce((n) => n + 1)
+          setDraft({ provider: id, model: '' })
+        }}
+      />
       <button
         className={`flex items-center gap-1.5 rounded border px-2 py-1 text-[11px] ${
           mock
@@ -73,12 +84,19 @@ export function ProviderChip() {
 
       {open && (
         <div className="absolute right-0 top-full z-50 mt-1.5 w-[320px] rounded-md border border-line2 bg-menu p-3 shadow-2xl">
-          <div className="text-[11.5px] font-medium text-dim">Provider</div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-[11.5px] font-medium text-dim">Provider</span>
+            <div className="flex-1" />
+            <button className="text-[11px] text-indigo-400" onClick={() => setSetupOpen(true)}>
+              Set one up
+            </button>
+          </div>
           <select
             className="input mt-1 w-full text-[12px]"
             value={draft.provider}
             onChange={(e) => setDraft({ provider: e.target.value, model: '' })}
           >
+            {providers.length === 0 && <option value="">No provider set up yet</option>}
             {withCurrent(providers, draft.provider).map(([id, label]) => (
               <option key={id} value={id}>
                 {label}

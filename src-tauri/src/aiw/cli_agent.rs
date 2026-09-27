@@ -117,9 +117,28 @@ pub struct RunnerSpec {
     pub model: String,
     /// `--permission-mode`. Empty means [`DEFAULT_PERMISSION_MODE`].
     pub permission_mode: String,
-    /// Nobody is watching. Anything that would prompt is denied instead of
-    /// waiting for an answer that cannot come.
-    pub unattended: bool,
+    /// An MCP config naming the tool that answers permission requests, and
+    /// the tool's full id. Empty means nobody can be asked, and then anything
+    /// that would prompt is denied outright — which is a real case (a dry
+    /// run), not a default.
+    pub ask_config: String,
+    pub ask_tool: String,
+    /// Exactly which built-in tools exist for this session, or empty for all
+    /// of them.
+    ///
+    /// This is the only thing measured to be a wall. `--disallowedTools Bash`
+    /// removes Bash and the session reaches a shell through another tool that
+    /// has one; an allow-list of permissions does not remove a tool either.
+    /// `--tools` decides what exists, and a session given the reading and
+    /// writing set answers "I have no command-execution tool available".
+    pub tools: Vec<String>,
+    /// Keep this session out of the person's own Claude setup.
+    ///
+    /// Measured: with it, a skill of theirs in `~/.claude/skills` is gone from
+    /// the session and the one beside the job is still there. It does not
+    /// remove the CLI's own built-in skills and subagents, and nothing here
+    /// claims it does.
+    pub sealed: bool,
 }
 
 /// What a delegated session may do without being asked.
@@ -127,8 +146,14 @@ pub struct RunnerSpec {
 /// `acceptEdits` and not `bypassPermissions`: a session started to write code
 /// that had to ask before every edit would spend its run asking, and a session
 /// allowed to do anything at all is not something to point at a repository on
-/// a schedule. Editing files is the job; running arbitrary commands is not,
-/// and stays behind the CLI's own gate.
+/// a schedule.
+///
+/// It used to say here that running arbitrary commands "stays behind the CLI's
+/// own gate". That was not true and was never tested: under `acceptEdits`, and
+/// under `dontAsk`, and with Bash named on `--disallowedTools`, a session asked
+/// to run `echo` ran it every time — through Bash, or through another tool
+/// carrying a shell. What a session may run is decided by [`RunnerSpec::tools`]
+/// and by nothing else.
 pub const DEFAULT_PERMISSION_MODE: &str = "acceptEdits";
 
 impl RunnerSpec {
@@ -162,12 +187,35 @@ impl RunnerSpec {
             a.push("--model".into());
             a.push(self.model.trim().into());
         }
-        if self.unattended {
-            // The whole answer to "what happens at three in the morning".
-            // Without it a permission prompt waits for a host that is not
-            // there, and the session hangs looking exactly like one that is
-            // working. With it, anything that would ask is denied and the run
-            // carries on and finishes.
+        // The wall. Named tools and no others, so a worker that has no
+        // business running commands cannot reach one to ask.
+        if !self.tools.is_empty() {
+            a.push("--tools".into());
+            a.push(self.tools.join(","));
+        }
+        // Its own skills, not yours.
+        if self.sealed {
+            a.push("--setting-sources".into());
+            a.push("project".into());
+        }
+        // Where a permission request goes.
+        //
+        // With an asker, to us: the CLI calls our tool, the question lands in
+        // the feature's room, and a person answers it there. Without one,
+        // nobody can be asked and anything that would prompt is denied — the
+        // old behaviour, now an explicit case rather than what always
+        // happened. Measured against 2.1.278 on 24 Sep 2026: the request
+        // arrives as an ordinary `tools/call` and the verdict goes back as
+        // the tool's own result. See `asks`.
+        if !self.ask_tool.trim().is_empty() && !self.ask_config.trim().is_empty() {
+            a.push("--mcp-config".into());
+            a.push(self.ask_config.clone());
+            a.push("--strict-mcp-config".into());
+            a.push("--permission-prompts".into());
+            a.push("host".into());
+            a.push("--permission-prompt-tool".into());
+            a.push(self.ask_tool.clone());
+        } else {
             a.push("--permission-prompts".into());
             a.push("none".into());
         }
@@ -308,6 +356,62 @@ pub fn run(
     prompt: &str,
     on_event: &mut dyn FnMut(RunEvent),
 ) -> Result<RunOutcome, String> {
+    run_watched(spec, cwd, prompt, on_event, &Leash::forever())
+}
+
+/// A hand on the run: stop it now, or at a time.
+///
+/// A delegated session is the one place DevDeck cannot interrupt call by call,
+/// so the two things it can still do — stop it, and not let it run all night —
+/// are the same thing at different distances.
+pub struct Leash {
+    stop: std::sync::atomic::AtomicBool,
+    until: Option<std::time::Instant>,
+}
+
+impl Leash {
+    pub fn forever() -> Self {
+        Self {
+            stop: std::sync::atomic::AtomicBool::new(false),
+            until: None,
+        }
+    }
+
+    /// Stops itself after `minutes`. Zero means no limit.
+    pub fn for_minutes(minutes: u64) -> Self {
+        Self {
+            stop: std::sync::atomic::AtomicBool::new(false),
+            until: (minutes > 0)
+                .then(|| std::time::Instant::now() + std::time::Duration::from_secs(minutes * 60)),
+        }
+    }
+
+    /// Ask it to stop. The run ends after the CLI notices, which is quick.
+    pub fn pull(&self) {
+        self.stop.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub fn pulled(&self) -> bool {
+        self.stop.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    fn out_of_time(&self) -> bool {
+        self.until.is_some_and(|t| std::time::Instant::now() >= t)
+    }
+
+    fn done(&self) -> bool {
+        self.pulled() || self.out_of_time()
+    }
+}
+
+/// The same run, with a leash on it.
+pub fn run_watched(
+    spec: &RunnerSpec,
+    cwd: &std::path::Path,
+    prompt: &str,
+    on_event: &mut dyn FnMut(RunEvent),
+    leash: &Leash,
+) -> Result<RunOutcome, String> {
     let name = spec.program_name();
     let program = crate::mcp::resolve_program(name);
     let mut cmd = Command::new(&program);
@@ -325,10 +429,16 @@ pub fn run(
         )
     })?;
 
+    // Taken before the child is shared, so the reader below still owns them.
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+    let child = std::sync::Arc::new(std::sync::Mutex::new(child));
+    let stopped = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+
     // Drained on its own thread rather than read after the wait: a full stderr
     // pipe blocks the child, and a child blocked writing its complaint never
     // reaches the exit we are waiting for.
-    let errors = child.stderr.take().map(|e| {
+    let errors = stderr.map(|e| {
         std::thread::spawn(move || {
             BufReader::new(e)
                 .lines()
@@ -338,57 +448,156 @@ pub fn run(
         })
     });
 
-    let mut verdict: Option<RunOutcome> = None;
-    if let Some(out) = child.stdout.take() {
-        for line in BufReader::new(out).lines().map_while(Result::ok) {
-            match parse_line(&line) {
-                Line::Event(e) => on_event(e),
-                Line::Verdict(v) => verdict = Some(*v),
-                Line::Ignored => {}
+    // The leash, watched on its own thread: the reader below is blocked on the
+    // CLI's stdout, and a run nobody can stop is exactly what a limit is for.
+    std::thread::scope(|scope| {
+        let watcher = {
+            let child = child.clone();
+            let stopped = stopped.clone();
+            scope.spawn(move || {
+                while !leash.done() {
+                    if let Ok(mut c) = child.lock() {
+                        // Finished on its own: nothing to stop.
+                        if matches!(c.try_wait(), Ok(Some(_))) {
+                            return;
+                        }
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(250));
+                }
+                stopped.store(true, std::sync::atomic::Ordering::SeqCst);
+                if let Ok(mut c) = child.lock() {
+                    let _ = c.kill();
+                }
+            })
+        };
+
+        let mut verdict: Option<RunOutcome> = None;
+        if let Some(out) = stdout {
+            for line in BufReader::new(out).lines().map_while(Result::ok) {
+                match parse_line(&line) {
+                    Line::Event(e) => on_event(e),
+                    Line::Verdict(v) => verdict = Some(*v),
+                    Line::Ignored => {}
+                }
             }
         }
-    }
 
-    let status = child
-        .wait()
-        .map_err(|e| format!("'{name}' never finished: {e}"))?;
-    let stderr = errors
-        .and_then(|h| h.join().ok())
-        .unwrap_or_default()
-        .trim()
-        .to_string();
+        let status = {
+            let mut c = child
+                .lock()
+                .map_err(|_| "the run's own record was lost".to_string())?;
+            c.wait()
+                .map_err(|e| format!("'{name}' never finished: {e}"))?
+        };
+        // The watcher returns on its own once the child is gone.
+        let _ = watcher.join();
+        let cut_short = stopped.load(std::sync::atomic::Ordering::SeqCst);
+        let stderr = errors
+            .and_then(|h| h.join().ok())
+            .unwrap_or_default()
+            .trim()
+            .to_string();
 
-    // Reported even when the run succeeded. A CLI that warned on its way to a
-    // good result still warned, and swallowing that because the verdict was
-    // green is how a problem stays invisible until it is not one any more.
-    if !stderr.is_empty() {
-        on_event(RunEvent {
-            kind: "stderr",
-            text: stderr.clone(),
-        });
-    }
+        // Reported even when the run succeeded. A CLI that warned on its way to a
+        // good result still warned, and swallowing that because the verdict was
+        // green is how a problem stays invisible until it is not one any more.
+        if !stderr.is_empty() {
+            on_event(RunEvent {
+                kind: "stderr",
+                text: stderr.clone(),
+            });
+        }
 
-    match verdict {
-        Some(v) => Ok(v),
-        None => Err(if stderr.is_empty() {
-            format!("'{name}' exited {status} without reporting a result")
-        } else {
-            format!("'{name}' exited {status} without reporting a result: {stderr}")
-        }),
-    }
+        // Stopped on purpose is not a crash, and it is not a success either: the
+        // work that was done stands, and the verdict says it was cut short.
+        match verdict {
+            Some(mut v) => {
+                if cut_short {
+                    v.ok = false;
+                    v.summary = if v.summary.trim().is_empty() {
+                        "Stopped before it finished.".to_string()
+                    } else {
+                        format!("{} (stopped before it finished)", v.summary.trim())
+                    };
+                }
+                Ok(v)
+            }
+            None if cut_short => Ok(RunOutcome {
+                ok: false,
+                summary: "Stopped before it reported anything.".into(),
+                ..Default::default()
+            }),
+            None => Err(if stderr.is_empty() {
+                format!("'{name}' exited {status} without reporting a result")
+            } else {
+                format!("'{name}' exited {status} without reporting a result: {stderr}")
+            }),
+        }
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    /// Where a permission request goes, as measured rather than remembered.
+    ///
+    /// This has now been wrong three times in one day, in three directions.
+    /// It first required `--permission-prompts none`, which 2.1.266 rejected
+    /// outright, so every unattended run died before it started while the
+    /// code looked careful. It was rewritten to forbid the flag — and 2.1.278
+    /// added it. Then it pinned "unattended means nobody can be asked", which
+    /// is what made `writes: branch` a promise the wall could not keep: a
+    /// worker had a shell on its list and every call to it was refused before
+    /// a person heard about it.
+    ///
+    /// The rule now: an asker means the question comes to us, watched or not.
+    /// Only with nobody to ask is anything that would prompt denied.
     #[test]
-    fn unattended_never_waits_for_an_answer() {
+    fn a_question_goes_to_the_asker_when_there_is_one() {
+        {
+            let spec = RunnerSpec {
+                program: String::new(),
+                model: String::new(),
+                permission_mode: String::new(),
+                tools: Vec::new(),
+                sealed: false,
+                ask_config: "C:/tmp/ask.json".into(),
+                ask_tool: "mcp__devdeck__approve".into(),
+            };
+            let args = spec.args("do the thing");
+            let at = args
+                .iter()
+                .position(|a| a == "--permission-prompts")
+                .expect("somebody has to be named");
+            assert_eq!(
+                args[at + 1],
+                "host",
+                "with an asker the question comes to us, watched or not"
+            );
+            let tool = args
+                .iter()
+                .position(|a| a == "--permission-prompt-tool")
+                .expect("and it says which tool answers");
+            assert_eq!(args[tool + 1], "mcp__devdeck__approve");
+            assert!(
+                args.iter().any(|a| a == "--strict-mcp-config"),
+                "the worker's own config and nobody else's"
+            );
+        }
+    }
+
+    /// And with nobody to ask, the old behaviour — now an explicit case.
+    #[test]
+    fn with_nobody_to_ask_anything_that_would_prompt_is_denied() {
         let spec = RunnerSpec {
             program: String::new(),
             model: String::new(),
             permission_mode: String::new(),
-            unattended: true,
+            tools: Vec::new(),
+            sealed: false,
+            ask_config: String::new(),
+            ask_tool: String::new(),
         };
         let args = spec.args("do the thing");
         let at = args
@@ -396,17 +605,35 @@ mod tests {
             .position(|a| a == "--permission-prompts")
             .unwrap();
         assert_eq!(args[at + 1], "none");
+        assert!(
+            !args.iter().any(|a| a == "--permission-prompt-tool"),
+            "naming a tool nobody implemented is how the CLI errors out"
+        );
+        assert!(args.iter().any(|a| a == "-p"));
+        let m = args.iter().position(|a| a == "--permission-mode").unwrap();
+        assert_eq!(args[m + 1], DEFAULT_PERMISSION_MODE);
     }
 
+    /// The wall, as measured: `--tools` decides what exists.
     #[test]
-    fn an_attended_run_may_still_ask() {
+    fn a_session_is_given_the_tools_it_has_and_no_others() {
         let spec = RunnerSpec {
             program: String::new(),
             model: String::new(),
             permission_mode: String::new(),
-            unattended: false,
+            tools: vec!["Read".into(), "Write".into()],
+            sealed: true,
+            ask_config: String::new(),
+            ask_tool: String::new(),
         };
-        assert!(!spec.args("x").iter().any(|a| a == "--permission-prompts"));
+        let args = spec.args("draft the page");
+        let at = args.iter().position(|a| a == "--tools").unwrap();
+        assert_eq!(args[at + 1], "Read,Write");
+        // Not a deny-list: naming Bash leaves PowerShell, and naming both
+        // leaves whatever the next release adds.
+        assert!(!args.iter().any(|a| a == "--disallowedTools"));
+        let at = args.iter().position(|a| a == "--setting-sources").unwrap();
+        assert_eq!(args[at + 1], "project");
     }
 
     #[test]
@@ -415,7 +642,10 @@ mod tests {
             program: String::new(),
             model: "opus".into(),
             permission_mode: String::new(),
-            unattended: false,
+            tools: Vec::new(),
+            sealed: false,
+            ask_config: String::new(),
+            ask_tool: String::new(),
         };
         let args = spec.args("fix the login bug");
         let p = args.iter().position(|a| a == "-p").unwrap();
@@ -431,7 +661,10 @@ mod tests {
             program: String::new(),
             model: String::new(),
             permission_mode: String::new(),
-            unattended: true,
+            tools: Vec::new(),
+            sealed: false,
+            ask_config: String::new(),
+            ask_tool: String::new(),
         };
         let args = spec.args("x");
         let at = args.iter().position(|a| a == "--permission-mode").unwrap();

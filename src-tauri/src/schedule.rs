@@ -494,10 +494,96 @@ fn run_one(
                 None
             };
             if let (Some(line), Some(b)) = (empty, bot.as_ref()) {
+                // Written onto the plan, not just said. The manager had been
+                // working out the right answer every morning and ending with
+                // "add them on its Plan tab" — so the thinking was done and
+                // the typing was yours, and nobody ever did it. They land as
+                // proposals, which nothing can start, so agreeing is still
+                // entirely your move.
+                let wrote = app.try_state::<Db>().and_then(|db| {
+                    let conn = db.0.lock().ok()?;
+                    crate::bots::propose_plan(&conn, b).ok()
+                });
+                if let Some(added) = wrote.as_deref().filter(|a| !a.is_empty()) {
+                    crate::aiw::events::say(
+                        app,
+                        crate::aiw::events::EventType::WorkUpdated,
+                        crate::aiw::events::in_space(b.node_id, None, Some(&b.name)),
+                        serde_json::json!({
+                            "what": "proposed",
+                            "count": added.len(),
+                            "titles": added,
+                        }),
+                    );
+                }
+                let line = match wrote.as_deref() {
+                    Some([]) | None => line,
+                    Some(added) => format!(
+                        "{} put {} thing{} on its plan for you to agree to:
+
+{}",
+                        b.name,
+                        added.len(),
+                        if added.len() == 1 { "" } else { "s" },
+                        added
+                            .iter()
+                            .map(|t| format!("- {t}"))
+                            .collect::<Vec<_>>()
+                            .join(
+                                "
+"
+                            )
+                    ),
+                };
                 if s.last_note.trim() != line.trim() {
                     crate::bots::thread_post(app, b, &line);
                 }
                 break 'wake (true, line);
+            }
+            // A manager with a worker hands over the first thing nobody has
+            // picked up — if you have said it may while nobody is watching.
+            // Otherwise it says what it would have started, and waits.
+            if let Some(b) = bot.as_ref() {
+                let decision = {
+                    let db = app.try_state::<Db>();
+                    db.and_then(|db| {
+                        let conn = db.0.lock().ok()?;
+                        Some(crate::workers::handoff(&conn, b))
+                    })
+                };
+                match decision {
+                    Some(crate::workers::Handoff::Start(worker, feature, item, title)) => {
+                        let Some(db) = app.try_state::<Db>() else {
+                            break 'wake (false, "the database was not there".into());
+                        };
+                        let plan = {
+                            let conn = db.0.lock().unwrap();
+                            crate::workers::plan(&conn, &worker, b.node_id, &feature, &item, &title, &format!(
+                                "{title}\n\nThis is item {item} on {}'s plan. Do it, and say what you could not check.",
+                                b.name
+                            ))
+                        };
+                        let line = match plan.and_then(|p| crate::workers::start(app, &db, p)) {
+                            Ok(run) => {
+                                format!("{} handed \"{}\" to {}.", b.name, title, run.worker_name)
+                            }
+                            Err(e) => format!("{} could not hand \"{}\" over: {e}", b.name, title),
+                        };
+                        crate::bots::thread_post(app, b, &line);
+                        break 'wake (!line.contains("could not"), line);
+                    }
+                    Some(crate::workers::Handoff::Ask(worker, title)) => {
+                        let line = format!(
+                            "{} wants to put {worker} on \"{title}\". It has no standing yes, so it is waiting for you.",
+                            b.name
+                        );
+                        if s.last_note.trim() != line.trim() {
+                            crate::bots::thread_post(app, b, &line);
+                        }
+                        break 'wake (true, line);
+                    }
+                    _ => {}
+                }
             }
             // Two things can happen on a wake, and the order matters: read the
             // space first, then run the agent if one is named. Reading never
@@ -564,7 +650,7 @@ fn run_one(
 /// Narrow on purpose. A routine that woke on `tool.executed` would fire a
 /// hundred times an hour and wake more agents, which would fire it again — a
 /// broad listener is not a feature, it is a loop with a nice name.
-const TRIGGERS: &[&str] = &[
+pub const TRIGGERS: &[&str] = &[
     "test.failed",
     "test.completed",
     "git.commit.created",

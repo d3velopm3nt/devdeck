@@ -143,6 +143,8 @@ pub fn open() -> Connection {
         .expect("create deadline-ping schema");
     conn.execute_batch(crate::calls::CHECKS_SCHEMA)
         .expect("create model-check schema");
+    conn.execute_batch(crate::eventlog::SCHEMA)
+        .expect("create events schema");
     conn.execute_batch(crate::inbox::SCHEMA)
         .expect("inbox schema");
     conn.execute_batch(crate::community::SCHEMA)

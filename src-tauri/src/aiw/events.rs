@@ -32,6 +32,30 @@ const EVENT_BUFFER_LIMIT: usize = 5_000;
 
 static EVENT_SEQ: AtomicU64 = AtomicU64::new(1);
 
+/// Something that tells this run of the app apart from the last one.
+///
+/// The counter above starts at 1 every launch, so `ev_00000007` meant a
+/// different event on Tuesday than it does today. That was survivable while
+/// events lived only in memory and fatal the moment they were kept: the event
+/// log stores them by id with `INSERT OR IGNORE`, so every event of the second
+/// run whose number the first run had already used was discarded without a
+/// word. Two runs finished on the night of 24 Sep, the rooms filled, the plans
+/// moved, and the table did not grow.
+///
+/// An id has to be unique to be an id. The run's start time makes it so, and
+/// the dedup that `INSERT OR IGNORE` is actually for — the same event handed
+/// over twice — still works.
+fn run_tag() -> &'static str {
+    static TAG: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    TAG.get_or_init(|| {
+        let ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        format!("{ms:x}")
+    })
+}
+
 /// Every event type the workspace knows about.
 ///
 /// A string enum rather than free-form strings: a typo in a subscriber filter
@@ -262,7 +286,7 @@ impl DomainEvent {
     pub fn new(kind: EventType, scope: EventScope, payload: serde_json::Value) -> Self {
         let seq = EVENT_SEQ.fetch_add(1, Ordering::SeqCst);
         Self {
-            id: format!("ev_{seq:08}"),
+            id: format!("ev_{}_{seq:06}", run_tag()),
             seq,
             kind: kind.as_str().to_string(),
             category: kind.category().to_string(),
@@ -502,10 +526,82 @@ pub fn new_id(prefix: &str) -> String {
 
 pub type SharedBus = Arc<EventBus>;
 
+/// Say what happened, from anywhere, without holding a Workspace.
+///
+/// The bus has been here since the AI workspace was built and the newest and
+/// most important parts of the app — workers, the scheduler, managers — used
+/// it exactly zero times. They called each other directly and wrote files, so
+/// nothing could react to anything: a run that finished told only the thread
+/// that started it, a manager that appeared needed a restart to be seen, and
+/// the same overdue item wrote a fresh row every morning because nothing knew
+/// it had already said so.
+///
+/// Silent when the workspace is not up yet, which is true during startup and
+/// in tests. Saying what happened must never be the reason something fails.
+pub fn say(app: &tauri::AppHandle, kind: EventType, scope: EventScope, payload: serde_json::Value) {
+    use tauri::Manager;
+    if let Some(ws) = app.try_state::<std::sync::Arc<crate::aiw::state::Workspace>>() {
+        ws.bus.publish(kind, scope, payload);
+    }
+}
+
+/// The scope of something that happened in a space, named the way the bus
+/// names things: a node id is a project id here.
+///
+/// `who` matters more than it looks. The feed writes "someone started work"
+/// when nothing names an actor, and the first event this app ever published
+/// said exactly that — the payload knew the worker's name and the line that
+/// renders it does not read payloads.
+pub fn in_space(node_id: i64, feature: Option<&str>, who: Option<&str>) -> EventScope {
+    EventScope {
+        project_id: Some(node_id.to_string()),
+        feature_id: feature.map(|f| f.to_string()),
+        agent_id: who.map(|w| w.to_string()),
+        ..Default::default()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::sync::atomic::AtomicUsize;
+
+    /// An id has to be unique to be an id.
+    ///
+    /// It used to be this process's own counter, so `ev_00000007` named one
+    /// event today and a different one tomorrow. That was survivable while
+    /// events lived only in memory, and fatal once they were kept: the log
+    /// stores them by id with `INSERT OR IGNORE`, so on the night of 24 Sep
+    /// two runs finished, the rooms filled, the plans moved, and the events
+    /// table did not grow by a single row.
+    #[test]
+    fn an_event_id_is_not_just_a_counter() {
+        let a = DomainEvent::new(
+            EventType::AgentStarted,
+            EventScope::default(),
+            serde_json::json!({}),
+        );
+        let b = DomainEvent::new(
+            EventType::AgentStarted,
+            EventScope::default(),
+            serde_json::json!({}),
+        );
+        assert_ne!(a.id, b.id, "two events are two events");
+
+        let tag =
+            a.id.strip_prefix("ev_")
+                .and_then(|r| r.split('_').next())
+                .unwrap_or_default();
+        assert!(
+            !tag.is_empty() && tag.chars().all(|c| c.is_ascii_hexdigit()),
+            "an id carries something that tells this run from the last: {}",
+            a.id
+        );
+        assert!(
+            b.id.contains(tag),
+            "and it is the same for every event of one run"
+        );
+    }
 
     #[test]
     fn subscribers_only_see_the_kinds_they_asked_for() {

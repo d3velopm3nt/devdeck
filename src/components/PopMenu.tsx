@@ -4,10 +4,10 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Icon } from '../lib/icons'
+import { Icon, type IconName } from '../lib/icons'
 
 export interface MenuItem {
-  icon?: string
+  icon?: IconName
   label: string
   onClick?: () => void
   danger?: boolean

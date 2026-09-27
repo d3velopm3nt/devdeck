@@ -332,3 +332,18 @@ export function restoreLayout(data: string): boolean {
     return false
   }
 }
+
+/// One worker's run, as a document: the transcript is the product when the
+/// work happens in another process, so it gets a tab rather than a panel.
+export function openRun(id: string, title: string) {
+  if (!api) return
+  useApp.getState().setRailView('projects')
+  const panel = `run-${id}`
+  const existing = api.getPanel(panel)
+  if (existing) {
+    existing.api.setActive()
+    return
+  }
+  addToMain({ id: panel, component: 'run-detail', title, params: { id } })
+  api.getPanel(panel)?.api.setActive()
+}

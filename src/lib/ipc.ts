@@ -57,6 +57,10 @@ export interface Schedule {
   name: string
   /** reminder | command | agent */
   kind: string
+  /** The manager whose heartbeat this is, by handle. Empty for a plain
+   *  reminder or command. The backend has always sent it; nothing here
+   *  declared it, so every screen had to guess which bot a row was about. */
+  manager: string
   node_id: number | null
   /** daily | weekdays | weekly | hourly | once */
   every: string
@@ -259,6 +263,8 @@ export interface Bot {
   last_note?: string
   /** The businesses it works for, by space id. */
   businesses?: number[]
+  /** The worker it hands a job to, by handle. */
+  worker?: string
 }
 
 export const botsList = () => invoke<Bot[]>('bots_list')
@@ -2032,3 +2038,272 @@ export interface SpaceView {
   organisations: KindCount[]
 }
 export const businessSpace = (nodeId: number) => invoke<SpaceView>('business_space', { nodeId })
+
+// ---------------------------------------------------------------------------
+// The library, the workers, and their runs
+// ---------------------------------------------------------------------------
+
+/** One skill or brief you installed, and where it came from. */
+export interface LibraryItem {
+  id: string
+  /** skill | brief */
+  kind: string
+  name: string
+  what: string
+  repo: string
+  commit: string
+  licence: string
+  path: string
+  added_at: string
+  chars: number
+}
+/** Something a repository holds that the library could hold. */
+export interface LibraryCandidate {
+  id: string
+  kind: string
+  name: string
+  what: string
+  path: string
+  have: boolean
+}
+/** What one look at a repository found. */
+export interface LibrarySource {
+  repo: string
+  commit: string
+  licence: string
+  branch: string
+  items: LibraryCandidate[]
+  /** The folders it keeps them in. Taking one is one decision. */
+  kits: LibraryKit[]
+  /** Said out loud when the list is not the whole truth. */
+  note: string
+}
+/** A folder of a repository, offered whole. */
+export interface LibraryKit {
+  folder: string
+  kind: string
+  picks: LibraryCandidate[]
+  /** How many of those are already yours, at this commit. */
+  have: number
+}
+/** A kit as it sits in your library. */
+export interface LibraryKitRef {
+  /** `owner/name:folder` — what a worker stores. */
+  id: string
+  repo: string
+  folder: string
+  kind: string
+  count: number
+}
+/** What one install did, including what it could not do. */
+export interface LibraryAdded {
+  items: LibraryItem[]
+  /** The ones that did not come in, each with its reason. */
+  missed: string[]
+}
+export const libraryList = () => invoke<LibraryItem[]>('library_list')
+export const libraryRead = (id: string, kind: string) => invoke<string>('library_read', { id, kind })
+/** Read a public GitHub repository: its licence, its commit, and what it holds. */
+export const libraryLook = (repo: string) => invoke<LibrarySource>('library_look', { repo })
+export const libraryInstall = (source: LibrarySource, ids: string[]) =>
+  invoke<LibraryAdded>('library_install', { source, ids })
+/** Take one folder of a repository whole. */
+export const libraryInstallKit = (source: LibrarySource, folder: string) =>
+  invoke<LibraryAdded>('library_install_kit', { source, folder })
+/** The kits already in your library, biggest first. */
+export const libraryKits = () => invoke<LibraryKitRef[]>('library_kits')
+export const libraryRemove = (id: string, kind: string) => invoke<void>('library_remove', { id, kind })
+
+/** A worker: yours, lent to any space, with the skills you gave it. */
+export interface Worker {
+  handle: string
+  name: string
+  what: string
+  /** A library brief id, or empty. */
+  brief: string
+  skills: string[]
+  /** A kit it carries, as `owner/name:folder`, or empty. */
+  kit: string
+  runner: string
+  model: string
+  /** folder | branch */
+  writes: string
+  minutes: number
+  usd: number
+  /** Spaces it may work in. Empty means any. */
+  spaces: number[]
+  unattended: boolean
+  created_at: string
+  /** Anything you want said to it every time. */
+  body: string
+}
+/** What starting a worker would mean, before it means it. */
+export interface RunPlan {
+  worker: Omit<Worker, 'body'>
+  node_id: number
+  space: string
+  title: string
+  intent: string
+  folder: string
+  branch: string
+  is_repo: boolean
+  skills: LibraryItem[]
+  brief: LibraryItem | null
+  /** The bench it carries, if it carries one. */
+  kit: LibraryItem[]
+  kit_id: string
+  /** Exactly the tools its session will have. */
+  tools: string[]
+  /** Whether one of those is a shell — which decides whether "never push" is
+   *  a wall or a request. */
+  shell: boolean
+  reads: string[]
+  never: string[]
+  minutes: number
+  usd: number
+  model: string
+  ready: boolean
+  note: string
+}
+export interface RunStep {
+  at: string
+  /** message | tool | stderr | note */
+  kind: string
+  text: string
+}
+export interface RunFile {
+  path: string
+  bytes: number
+}
+/** The receipt for one job. */
+export interface Run {
+  id: string
+  worker: string
+  worker_name: string
+  node_id: number
+  space: string
+  title: string
+  intent: string
+  /** running | done | stopped | failed | kept | discarded */
+  status: string
+  started_at: string
+  ended_at: string
+  folder: string
+  branch: string
+  skills: string[]
+  minutes_limit: number
+  usd_limit: number
+  usd: number
+  seconds: number
+  files: RunFile[]
+  steps: RunStep[]
+  verdict: string
+  ok: boolean
+  decision: string
+}
+export const workersList = () => invoke<Worker[]>('workers_list')
+export const workerSave = (worker: Worker) => invoke<Worker>('worker_save', { worker })
+export const workerDelete = (handle: string) => invoke<void>('worker_delete', { handle })
+/** Workers worth having, minus the ones you already made. */
+export const workerStarters = () => invoke<Worker[]>('worker_starters')
+/** What it would do, where, and under what limits. Nothing starts. */
+export const workerPlan = (handle: string, nodeId: number, title: string, intent: string) =>
+  invoke<RunPlan>('worker_plan', { handle, nodeId, title, intent })
+/** The one yes. Starts a session and returns its receipt straight away. */
+export const workerStart = (handle: string, nodeId: number, title: string, intent: string) =>
+  invoke<Run>('worker_start', { handle, nodeId, title, intent })
+export const workerStop = (id: string) => invoke<void>('worker_stop', { id })
+
+/// A question a worker has stopped on. It is sitting on this right now with
+/// its clock running, which is why answering is one call and no session.
+export type Ask = {
+  id: string
+  run: string
+  tool: string
+  input: Record<string, unknown>
+  at: string
+}
+
+export const workerAsks = (run: string) => invoke<Ask[]>('worker_asks', { run })
+
+export const workerAnswer = (run: string, ask: string, allow: boolean, note = '') =>
+  invoke<void>('worker_answer', { run, ask, allow, note })
+export const runsList = (nodeId = 0) => invoke<Run[]>('runs_list', { nodeId })
+export const runGet = (id: string) => invoke<Run | null>('run_get', { id })
+/** keep | discard, with whatever you want said about it. */
+export const runDecide = (id: string, decision: string, note = '') =>
+  invoke<Run>('run_decide', { id, decision, note })
+
+/** A run as it happens: every step, then its receipt. */
+export async function onWorker(h: {
+  step?: (e: { run: string; step: RunStep }) => void
+  done?: (e: { run: Run }) => void
+  asking?: (e: { run: string; ask: Ask }) => void
+}): Promise<() => void> {
+  const offs = await Promise.all([
+    listen<{ run: string; step: RunStep }>('worker:step', (e) => h.step?.(e.payload)),
+    listen<{ run: Run }>('worker:done', (e) => h.done?.(e.payload)),
+    listen<{ run: string; ask: Ask }>('worker:asking', (e) => h.asking?.(e.payload)),
+  ])
+  return () => offs.forEach((off) => off())
+}
+
+/** What a worker did lately that names a product. */
+export interface RunBrief {
+  id: string
+  title: string
+  worker: string
+  status: string
+  when: string
+}
+/** One row of the idea-to-product board: the claim, and the evidence for it. */
+export interface PipeItem {
+  product: string
+  /** idea | validating | building | launched */
+  stage: string
+  /** What has to be true to move on. */
+  next: string
+  updated: string
+  projects: string[]
+  work_open: number
+  work_done: number
+  runs: RunBrief[]
+  notes: string[]
+}
+export const businessPipeline = (nodeId: number) => invoke<PipeItem[]>('business_pipeline', { nodeId })
+/** Move a product, and say what has to be true to move it again. Yours to say. */
+export const businessStageSet = (nodeId: number, product: string, stage: string, next: string) =>
+  invoke<PipeItem[]>('business_stage_set', { nodeId, product, stage, next })
+
+/** Say which worker a manager hands its jobs to. Empty takes it back. */
+export const botSetWorker = (handle: string, worker: string) =>
+  invoke<void>('bot_set_worker', { handle, worker })
+
+/** Agree to what a manager proposed, so it becomes work that can start.
+ *  No ids means all of them. Returns how many moved. */
+export const workAgree = (nodeId: number, feature: string, ids: string[] = []) =>
+  invoke<number>('work_agree', { nodeId, feature, ids })
+/** Say no to a proposal. It drops off the plan. */
+export const workDecline = (nodeId: number, feature: string, ids: string[] = []) =>
+  invoke<number>('work_decline', { nodeId, feature, ids })
+
+/** One kept event, in the same shape the live bus sends. */
+export interface KeptEvent {
+  id: string
+  seq: number
+  type: string
+  category: string
+  timestamp: string
+  /** Which run of the app saw it. */
+  session: string
+  project_id?: string
+  feature_id?: string
+  agent_id?: string
+  payload: Record<string, unknown>
+}
+/** What has happened, newest first. `thisSession` is the only division of
+ *  history anyone asks for: since I opened this, or ever. */
+export const eventsHistory = (thisSession: boolean, projectId?: string, limit?: number) =>
+  invoke<KeptEvent[]>('events_history', { thisSession, projectId, limit })
+/** [all, this session] */
+export const eventsCount = () => invoke<[number, number]>('events_count')

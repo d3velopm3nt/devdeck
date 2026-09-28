@@ -506,7 +506,10 @@ impl AgentRuntime {
                     // offer this agent. One list: the model has no idea which
                     // of its callables came from where, and should not.
                     let m = ws.permission_matrix();
-                    let mut t = super::tools::definitions_for(&agent.id, &m);
+                    // Session list, not the assistant's: `delegate`, `memory`,
+                    // `bots`, `routine` and `skill` cannot run here, and
+                    // offering them only buys turns spent being refused.
+                    let mut t = super::tools::session_definitions_for(&agent.id, &m);
                     t.extend(super::tools::mcp_definitions_for(
                         &agent.id,
                         &m,

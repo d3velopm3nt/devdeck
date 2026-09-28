@@ -2360,119 +2360,20 @@ impl Assistant {
             }
         };
         let deck = project.deck();
-        match call.action.as_str() {
-            "add" => {
-                let title = s("title");
-                if title.is_empty() {
-                    return (false, "a work item needs a title".into());
-                }
-                let mut work = deck.work(&feature).unwrap_or_else(|_| Doc {
-                    meta: super::deck::WorkMeta {
-                        feature: feature.clone(),
-                        items: vec![],
-                    },
-                    body: String::new(),
-                });
-                let id = format!(
-                    "w{:02}-{}",
-                    work.meta.items.len() + 1,
-                    super::deck::slugify(title)
-                );
-                work.meta.items.push(super::deck::WorkItem {
-                    id: id.clone(),
-                    title: title.to_string(),
-                    status: "unclaimed".into(),
-                    assignee: None,
-                    areas: Vec::new(),
-                    due: None,
-                });
-                match deck.save_work(&feature, &work.meta) {
-                    Ok(()) => (
-                        true,
-                        format!("Added “{title}” to {feature} as {id}, unclaimed. Hand it to someone with @name take \"{title}\"."),
-                    ),
-                    Err(e) => (false, e),
-                }
-            }
-            "list" => match deck.work(&feature) {
-                Ok(w) if w.meta.items.is_empty() => {
-                    (true, format!("{feature} has no work items yet."))
-                }
-                Ok(w) => (
-                    true,
-                    w.meta
-                        .items
-                        .iter()
-                        .map(|i| {
-                            format!(
-                                "- {} · {} · {}{}",
-                                i.id,
-                                i.title,
-                                i.status,
-                                i.assignee
-                                    .as_deref()
-                                    .map(|a| format!(" · {a}"))
-                                    .unwrap_or_default()
-                            )
-                        })
-                        .collect::<Vec<_>>()
-                        .join("\n"),
+        let (ok, text) = super::tools::work_on_deck(&deck, &feature, call);
+        // A thread is where a hand-over is written, so the receipt says how to
+        // write one. `ToolService` runs the same function inside a session,
+        // where nothing parses that line, and leaves it off.
+        if ok && call.action == "add" {
+            return (
+                true,
+                format!(
+                    "{text} Hand it to someone with @name take \"{}\".",
+                    s("title")
                 ),
-                Err(e) => (false, e),
-            },
-            // Ticking one off and letting one go. Both find the item the same
-            // way `take` does — by id, then by exact title, then by a title
-            // that contains what was said — so a manager can name an item the
-            // way it appears in the thread rather than by its slug.
-            "done" | "drop" => {
-                let wanted = s("title").to_lowercase();
-                if wanted.is_empty() {
-                    return (false, "which item? name it by title or id".into());
-                }
-                let mut work = match deck.work(&feature) {
-                    Ok(w) => w.meta,
-                    Err(e) => return (false, e),
-                };
-                let found = work
-                    .items
-                    .iter()
-                    .position(|i| i.id.to_lowercase() == wanted || i.title.to_lowercase() == wanted)
-                    .or_else(|| {
-                        work.items
-                            .iter()
-                            .position(|i| i.title.to_lowercase().contains(&wanted))
-                    });
-                let Some(at) = found else {
-                    return (
-                        false,
-                        format!(
-                            "nothing on {feature} matches “{}”, so nothing changed",
-                            s("title")
-                        ),
-                    );
-                };
-                let was = work.items[at].status.clone();
-                let title = work.items[at].title.clone();
-                if call.action == "done" {
-                    work.items[at].status = "done".into();
-                } else {
-                    work.items[at].status = "unclaimed".into();
-                    work.items[at].assignee = None;
-                }
-                match deck.save_work(&feature, &work) {
-                    Ok(()) if call.action == "done" => (
-                        true,
-                        format!("Marked “{title}” done on {feature} — was {was}."),
-                    ),
-                    Ok(()) => (
-                        true,
-                        format!("Let “{title}” go on {feature} — unclaimed again, was {was}."),
-                    ),
-                    Err(e) => (false, e),
-                }
-            }
-            other => (false, format!("unknown work action '{other}'")),
+            );
         }
+        (ok, text)
     }
 
     /// Write down how something is done.

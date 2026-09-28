@@ -180,8 +180,9 @@ Four findings, all first-hand:
 
 1. **`work`/`delegate` still bounce**, third confirmation, same words:
    *"handled by the assistant, not by a project's tools."* Studio: *"the item
-   above isn't written into any plan — it exists only in this report."* **open**
-   — this is now the whole gap.
+   above isn't written into any plan — it exists only in this report."*
+   **done**, `0d7200b` — and it turned out `work` was the whole of it. See
+   "The loop closes" below.
 2. **A review point fires on the word, not the act.** `stop_at: [before any
    push]` reduces to the single word `push` in `review_point`
    (`runtime.rs:107`), which is matched against `tool.action + the whole args
@@ -189,7 +190,9 @@ Four findings, all first-hand:
    so `delegate.start` carrying that text, and `memory.save` quoting it, were
    both stopped by a rule about pushing, on calls that said they would not push.
    A review point the model cannot phrase its way past without avoiding the word
-   is not a review point. **open**
+   is not a review point. **done**, `771c646`: it now matches the tool, the
+   action and the *structured* arguments — a path, a branch, an id, and above
+   all `command`, which is itself an act. Prose arguments are left out by name.
 3. **The ask channel fired.** `terminal.run` waited and timed out at ninety
    seconds (11:36:21 → 11:38:00) instead of being refused outright, which is the
    new behaviour working. Nobody was at the keyboard to press it, so whether the
@@ -199,7 +202,41 @@ Four findings, all first-hand:
    `.devdeck` is empty on disk and every read of those paths fails."* That is the
    `node_dir` / `node_deck_dir` split in CLAUDE.md showing up in a third place:
    the index was built against the vault, the agent reads against the repository.
-   **open**
+   **open**, and still said out loud by the fifth wake: *"I can list `.devdeck`
+   paths through search but can't read the feature docs themselves… I was
+   working without the feature brief."* Less urgent now that `work` reads the
+   deck for it, but a manager still cannot read its own feature.md.
+
+## The loop closes — 28 September, wakes five and six
+
+Two wakes, no code between them, and the whole chain ran for the first time.
+
+**Wake five.** Studio read the repository, decided the item, and *wrote it
+down*: `w04-goals-js-add-list-complete-with-tests-under-node-test`, status
+`unclaimed`, on `.devdeck/features/studio/work.md`. It also noticed the three
+template proposals on its own plan — *"they look like they drifted in from
+another context… I've left them alone rather than dropping them, because I
+can't tell from here whether they came from you"* — which is the right instinct
+and the right refusal. And it ended: *"Nothing is done yet; w04 is open."*
+
+**Wake six**, thirty seconds later and before the agent ran at all:
+
+    Studio handed "goals.js: add, list, complete — with tests under node --test" to Smith.
+
+`w04` is now `in-progress`, assignee Smith, and `run_1a0e81f89b3` is building it
+on `devdeck/goals-js-add-list-complete-…-0928`.
+
+That is the design working as written: a wake reads the plan first
+(`workers::handoff` → `next_open_item`), hands over the first unclaimed item,
+and only falls through to a paid agent session when there is nothing to hand
+over. The manager thinks on one wake and its worker builds on the next. Nothing
+about that chain was new — the only broken link was that the thinking had
+nowhere to be written down.
+
+**`delegate` was never the missing piece.** Studio reaching for `delegate.start`
+on Smith was improvisation after `work.add` failed, and it could not have
+worked: Smith is a worker in the personal store, not an agent the delegate tool
+can start. It is no longer offered in a session.
 
 Not a bug, checked: the `sessions/…md` "cannot find the path" in the same run is
 the model reading a session record before it was written.

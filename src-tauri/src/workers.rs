@@ -129,6 +129,27 @@ pub struct WorkerMeta {
     /// May a manager start it while nobody is watching?
     #[serde(default)]
     pub unattended: bool,
+    /// Commands it may run without asking, inside its own worktree.
+    ///
+    /// `unattended` only decides whether it may be *started* while you sleep.
+    /// Once running, a sealed session that reaches for a shell still stops to
+    /// ask — so Smith wrote two good files on the night of 28 September and
+    /// then stood at `npm test` for ninety seconds, three times, with nobody
+    /// at the keyboard. This is the other half: what it may do once it is up.
+    ///
+    /// Named commands, never a blanket yes. The alternative the CLI offers is
+    /// `bypassPermissions`, and `cli_agent` already says of that: "a session
+    /// allowed to do anything at all is not something to point at a repository
+    /// on a schedule."
+    #[serde(default)]
+    pub allow: Vec<String>,
+    /// The day that permission runs out — `YYYY-MM-DD`.
+    ///
+    /// Required for `allow` to mean anything: an expiry nobody checks is a
+    /// note, not a limit, and permission you forgot you gave is the kind that
+    /// surprises you.
+    #[serde(default)]
+    pub allow_until: String,
     #[serde(default)]
     pub created_at: String,
 }
@@ -775,6 +796,11 @@ pub fn starters() -> Vec<(WorkerMeta, String, &'static str)> {
                 usd,
                 spaces: Vec::new(),
                 unattended: false,
+                // A starter grants nothing. Permission to act while nobody is
+                // watching is a thing you give a named worker, deliberately,
+                // not something that arrives with a template.
+                allow: Vec::new(),
+                allow_until: String::new(),
                 created_at: String::new(),
             },
             body.to_string(),
@@ -1511,6 +1537,31 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
             (String::new(), String::new())
         }
     };
+
+    // What it may do once it is up, as against whether it may be started at
+    // all. Both halves are needed for a night to produce work: `unattended`
+    // gets a run going, and this is what stops it standing at `npm test` for
+    // ninety seconds with nobody there.
+    if crate::asks::set_standing(
+        &run.id,
+        &w.meta.handle,
+        &cwd,
+        &w.meta.allow,
+        &w.meta.allow_until,
+    ) {
+        crate::services::push_log(
+            app,
+            crate::services::RUNNER_LOG_ID,
+            "workers",
+            "stdout",
+            format!(
+                "{} may run {} here without asking, until {}.",
+                w.meta.name,
+                w.meta.allow.join(", "),
+                w.meta.allow_until
+            ),
+        );
+    }
 
     let spec = RunnerSpec {
         program: String::new(),
@@ -2725,6 +2776,66 @@ mod setup_check {
     fn uncommitted_work_alone_does_not_condemn_a_run() {
         assert_eq!(super::outcome_status(true, 0, false, true), "done");
         assert_eq!(super::outcome_status(false, 0, false, true), "failed");
+    }
+
+    /// A worker with no `allow:` is granted nothing, and says so by leaving
+    /// nothing behind.
+    ///
+    /// The safe direction matters more here than anywhere else in this file: a
+    /// missing expiry, an empty list, or a worker whose file has never heard of
+    /// this must all mean "ask, exactly as before". Permission is the one thing
+    /// that must never be acquired by accident.
+    #[test]
+    fn permission_to_act_unasked_is_given_and_never_assumed() {
+        let run = format!("run-standing-{}", std::process::id());
+        let Ok(dir) = crate::asks::dir_for(&run) else {
+            return; // no personal store on this machine; nothing to assert.
+        };
+        let at = std::env::temp_dir().join("worktree");
+
+        // Nothing named: nothing written.
+        assert!(!crate::asks::set_standing(
+            &run,
+            "smith",
+            &at,
+            &[],
+            "2026-10-06"
+        ));
+        assert!(devdeck_ask::standing(&dir).is_none());
+
+        // Named, but no expiry: still nothing. A grant without an end is not a
+        // narrower grant, it is a wider one.
+        assert!(!crate::asks::set_standing(
+            &run,
+            "smith",
+            &at,
+            &["npm test".into()],
+            ""
+        ));
+        assert!(devdeck_ask::standing(&dir).is_none());
+
+        // Both: written, with the day read as the end of that day.
+        assert!(crate::asks::set_standing(
+            &run,
+            "smith",
+            &at,
+            &["npm test".into(), "  ".into()],
+            "2099-01-01"
+        ));
+        let s = devdeck_ask::standing(&dir).expect("the grant was not written");
+        assert_eq!(
+            s.commands,
+            vec!["npm test".to_string()],
+            "blanks are not commands"
+        );
+        assert_eq!(s.worker, "smith");
+        assert!(s.expires_at.starts_with("2099-01-01T23:59:59"));
+
+        // And taking it away takes it away.
+        assert!(!crate::asks::set_standing(&run, "smith", &at, &[], ""));
+        assert!(devdeck_ask::standing(&dir).is_none());
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// One branch per goal, so a goal's work accumulates instead of competing.

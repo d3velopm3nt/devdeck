@@ -2124,7 +2124,16 @@ export interface Worker {
   usd: number
   /** Spaces it may work in. Empty means any. */
   spaces: number[]
+  /** May a manager start it while nobody is watching? */
   unattended: boolean
+  /** Commands it may run without asking, inside its own worktree. `unattended`
+   *  only decides whether it may be *started*; this is what it may do once it
+   *  is up, and without it a night's run stops at `npm test` waiting for
+   *  somebody who is asleep. */
+  allow: string[]
+  /** `YYYY-MM-DD`. Required for `allow` to mean anything — an expiry nobody
+   *  checks is a note, not a limit. */
+  allow_until: string
   created_at: string
   /** Anything you want said to it every time. */
   body: string

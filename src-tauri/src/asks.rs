@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 
 // Re-exported so the rest of the app carries on saying `asks::Ask`. Only what
 // is used: anything else lives one name away, in `devdeck_ask` itself.
-pub use devdeck_ask::{one_line, tool_id, Ask, SERVER, WAIT};
+pub use devdeck_ask::{one_line, tool_id, Ask, Standing, SERVER, WAIT};
 
 /// `<personal>/asks/<run>`, made on demand.
 ///
@@ -84,6 +84,46 @@ pub fn asker() -> Result<PathBuf, String> {
 /// The folder is written into the arguments rather than worked out by the
 /// asker, which is what lets that binary know nothing about the personal store
 /// — and therefore nothing about this crate.
+/// Put the permission this run carries where the asker will find it.
+///
+/// Resolved here, before anything starts, because that is the rule the whole
+/// module is built on: what a sealed session may touch is settled before it
+/// runs and written down. The asker stays a small program that reads a file
+/// and has no idea there is an app.
+///
+/// An empty list or an unreadable date leaves nothing behind, so the run asks
+/// for everything exactly as it did before — the safe direction, and the one a
+/// worker with no `allow:` in its file should get.
+pub fn set_standing(run: &str, worker: &str, at: &Path, allow: &[String], until: &str) -> bool {
+    let Ok(dir) = dir_for(run) else { return false };
+    let live = allow.iter().any(|c| !c.trim().is_empty()) && !until.trim().is_empty();
+    if !live {
+        let _ = devdeck_ask::set_standing(&dir, None);
+        return false;
+    }
+    // A day, written as the end of that day, so "until the 6th" includes it.
+    let expires_at = format!("{}T23:59:59{}", until.trim(), local_offset());
+    devdeck_ask::set_standing(
+        &dir,
+        Some(&Standing {
+            worker: worker.to_string(),
+            at: at.to_string_lossy().to_string(),
+            commands: allow
+                .iter()
+                .map(|c| c.trim().to_string())
+                .filter(|c| !c.is_empty())
+                .collect(),
+            expires_at,
+        }),
+    )
+    .is_ok()
+}
+
+/// This machine's UTC offset, as RFC3339 wants it.
+fn local_offset() -> String {
+    chrono::Local::now().format("%:z").to_string()
+}
+
 pub fn write_config(at: &Path, run: &str) -> Result<PathBuf, String> {
     let bin = asker()?;
     let dir = dir_for(run)?;

@@ -52,6 +52,10 @@ export function WorkersPage() {
     usd: 2,
     spaces: [],
     unattended: false,
+    // A new worker is granted nothing. Permission to act while nobody is
+    // watching is given deliberately, never carried in by a blank form.
+    allow: [],
+    allow_until: '',
     created_at: '',
     body: '',
   }

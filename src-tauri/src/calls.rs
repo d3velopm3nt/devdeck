@@ -118,7 +118,7 @@ pub struct ModelCheck {
 }
 
 /// Every verdict for one provider, for badging its list.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn model_checks(db: tauri::State<Db>, provider: String) -> Result<Vec<ModelCheck>, String> {
     let conn = db.conn();
     let mut stmt = conn
@@ -442,7 +442,7 @@ pub fn tell_the_missed_failures(app: &tauri::AppHandle) {
 }
 
 /// The calls, newest first.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn calls_list(db: tauri::State<Db>, limit: Option<i64>) -> Result<Vec<Call>, String> {
     let conn = db.conn();
     let sql = format!("SELECT {COLS} FROM llm_calls ORDER BY at DESC LIMIT ?1");
@@ -494,7 +494,7 @@ pub struct UsageReport {
     pub by_day: Vec<UsageRow>,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn calls_usage(db: tauri::State<Db>, days: Option<i64>) -> Result<UsageReport, String> {
     let conn = db.conn();
     let days = days.unwrap_or(30).clamp(1, 3650);
@@ -554,7 +554,7 @@ pub fn calls_usage(db: tauri::State<Db>, days: Option<i64>) -> Result<UsageRepor
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn calls_clear(db: tauri::State<Db>) -> Result<(), String> {
     let conn = db.conn();
     conn.execute("DELETE FROM llm_calls", []).map_err(err)?;

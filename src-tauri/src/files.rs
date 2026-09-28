@@ -255,7 +255,7 @@ pub fn vault_files(db: tauri::State<Db>, rel: String) -> Result<Vec<FileRow>, St
 }
 
 /// One file anywhere in the vault, as text. Same root, same refusal.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_file_text(db: tauri::State<Db>, rel: String) -> Result<FileText, String> {
     let root = {
         let conn = db.conn();
@@ -302,7 +302,7 @@ const MAX_TEXT: u64 = 2_000_000;
 ///
 /// Same two roots as `node_files`, same refusal to climb out of them: a path
 /// with `..` in it is not a file, it is a way out of the sandbox.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn file_text(
     db: tauri::State<Db>,
     node_id: i64,

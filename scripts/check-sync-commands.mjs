@@ -28,7 +28,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 /// Lower this as commands move off the UI thread. Never raise it.
-const BASELINE = 188
+const BASELINE = 138
 
 /// Sync because being in order matters more than being off-thread.
 const ON_PURPOSE = new Set(['pty_write'])

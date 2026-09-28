@@ -148,7 +148,7 @@ fn write_meta(dir: &Path, m: &Meta) -> Result<(), String> {
 // ---------------------------------------------------------------------------
 
 /// Where the vault lives, or None until the user has chosen.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_root(db: tauri::State<Db>) -> Result<Option<String>, String> {
     let conn = db.conn();
     let v = db::setting_get_conn(&conn, ROOT_KEY)?;
@@ -160,7 +160,7 @@ pub fn vault_root(db: tauri::State<Db>) -> Result<Option<String>, String> {
 /// `~/DevDeck` is chosen for being somewhere a person already backs up and can
 /// find in File Explorer without being told where it is. Nothing enforces it —
 /// it is a default, not a location the app depends on.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_default_root() -> String {
     dirs::home_dir()
         .map(|h| h.join("DevDeck"))
@@ -181,7 +181,7 @@ pub struct Legacy {
     pub services: i64,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_legacy(db: tauri::State<Db>) -> Result<Legacy, String> {
     let conn = db.conn();
     let one = |sql: &str| conn.query_row(sql, [], |r| r.get::<_, i64>(0)).unwrap_or(0);
@@ -198,7 +198,7 @@ pub fn vault_legacy(db: tauri::State<Db>) -> Result<Legacy, String> {
 
 /// Adopt `path` as the vault. Creates it if it does not exist, and optionally
 /// runs `git init` so the whole thing can be pushed somewhere.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_set_root(
     db: tauri::State<Db>,
     path: String,
@@ -471,7 +471,7 @@ fn rel_of(conn: &Connection, id: i64) -> Result<String, String> {
 
 /// Create a folder. `parent_id` of None puts it at the top, where it becomes a
 /// workspace by virtue of its depth.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_create(
     db: tauri::State<Db>,
     parent_id: Option<i64>,
@@ -511,7 +511,7 @@ pub fn vault_create(
 }
 
 /// Rename a node — which renames its folder, since the folder is the node.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_rename(db: tauri::State<Db>, id: i64, name: String) -> Result<(), String> {
     let conn = db.conn();
     let root = root_of(&conn)?;
@@ -547,7 +547,7 @@ pub fn vault_rename(db: tauri::State<Db>, id: i64, name: String) -> Result<(), S
 }
 
 /// Update a node's meta file. Empty strings clear a field.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_set_meta(
     db: tauri::State<Db>,
     id: i64,
@@ -580,7 +580,7 @@ pub fn vault_set_meta(
 }
 
 /// Read a node's meta file, for the page that edits it.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_meta(db: tauri::State<Db>, id: i64) -> Result<Meta, String> {
     let conn = db.conn();
     let root = root_of(&conn)?;
@@ -589,7 +589,7 @@ pub fn vault_meta(db: tauri::State<Db>, id: i64) -> Result<Meta, String> {
 }
 
 /// Delete a node's folder, and everything in it.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
     let conn = db.conn();
     let root = root_of(&conn)?;
@@ -604,7 +604,7 @@ pub fn vault_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
 
 /// The absolute path of a node's own folder — for "Reveal in File Explorer",
 /// and for anything that needs somewhere to write context.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_dir(db: tauri::State<Db>, id: i64) -> Result<String, String> {
     let conn = db.conn();
     let root = root_of(&conn)?;
@@ -946,7 +946,7 @@ fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
 /// This is the safe way to change the root: every folder goes with it, so the
 /// relative paths the index is keyed on still match and nothing loses its id —
 /// which means nothing loses its commands or services either.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_move(db: tauri::State<Db>, new_path: String) -> Result<String, String> {
     let conn = db.conn();
     let old = root_of(&conn)?;
@@ -1050,7 +1050,7 @@ pub fn vault_switch_cost(db: tauri::State<Db>, path: String) -> Result<SwitchCos
 /// Point the vault at a folder that already holds one — a clone of your config
 /// repo on another machine, say. Nothing is moved; the index is rebuilt from
 /// what is there.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_switch(db: tauri::State<Db>, path: String) -> Result<String, String> {
     let conn = db.conn();
     let target = PathBuf::from(path.trim());

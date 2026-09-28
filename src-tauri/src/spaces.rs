@@ -181,7 +181,7 @@ pub fn starters() -> Vec<Starter> {
     ]
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn space_starters() -> Vec<Starter> {
     starters()
 }
@@ -198,7 +198,7 @@ pub struct SpaceCreated {
     pub problems: Vec<String>,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[allow(clippy::too_many_arguments)]
 pub fn space_create(
     app: tauri::AppHandle,

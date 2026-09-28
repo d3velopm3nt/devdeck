@@ -170,7 +170,7 @@ fn insert_node(
 
 /// True when an example workspace is already present, so the UI can hide the
 /// "load" affordance instead of creating duplicates.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn example_exists(db: tauri::State<Db>) -> Result<bool, String> {
     let conn = db.conn();
     let n: i64 = conn
@@ -185,7 +185,7 @@ pub fn example_exists(db: tauri::State<Db>) -> Result<bool, String> {
 
 /// Write the demo project to disk and seed it into the tree. Returns the id of
 /// the created project so the UI can open its space page.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn seed_example(db: tauri::State<Db>) -> Result<i64, String> {
     let dir = demo_dir();
     write_demo_files(&dir).map_err(|e| format!("could not create {}: {e}", dir.display()))?;

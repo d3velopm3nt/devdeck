@@ -166,7 +166,7 @@ pub fn record_in(
 /// It is a rolling history — `record` trims to the most recent rows overall —
 /// so an answer here means "as far back as is kept", never "this is all that
 /// ever happened".
-#[tauri::command]
+#[tauri::command(async)]
 pub fn activity_for(
     db: tauri::State<Db>,
     ref_id: i64,
@@ -202,7 +202,7 @@ pub fn activity_for(
         .collect())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn activity_list(db: tauri::State<Db>, limit: i64) -> Result<Vec<Activity>, String> {
     let conn = db.conn();
     let mut stmt = conn
@@ -230,7 +230,7 @@ pub fn activity_list(db: tauri::State<Db>, limit: i64) -> Result<Vec<Activity>, 
     Ok(rows)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn activity_clear(db: tauri::State<Db>) -> Result<(), String> {
     let conn = db.conn();
     conn.execute("DELETE FROM activity", []).map_err(err)?;
@@ -252,7 +252,7 @@ pub struct ServiceRun {
     pub outcome: String,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn service_runs(
     db: tauri::State<Db>,
     service_id: i64,

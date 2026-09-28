@@ -546,6 +546,46 @@ fn salvage_worktree(r: &Run) -> String {
     )
 }
 
+/// How a run ended, from the four things that are actually known about it.
+///
+/// Its own function because this rule has been wrong three times, each time in
+/// a way that took a real run to notice:
+///
+/// * **`refused > 0` alone meant blocked.** A run on 25 Sep was told no to one
+///   `cat > file` heredoc, wrote the file another way, ran seven passing tests
+///   and committed — and was recorded "stopped short … unverified".
+/// * **`ok` alone meant done.** Mason ended "done, ok" on 24 Sep having written
+///   three files and run no check at all, because every shell call was denied
+///   and the CLI still counts its own turn a success.
+/// * **`ok` alone again.** On 28 Sep Smith wrote `goals.js` and six tests, was
+///   refused `npm test` twice, said outright *"I could not verify the tests
+///   actually pass"* — and was recorded `done, ok: true`. The tests did pass,
+///   checked by hand afterwards, which is not the same as the run knowing it.
+///
+/// What separates the first from the other two is not the summary, which is
+/// prose, but whether the worker **committed**: one adapted and finished, the
+/// others stopped and left everything for the salvage. So the caller asks git,
+/// which cannot be optimistic, and hands the answer here.
+fn outcome_status(ok: bool, refused: usize, stopped: bool, left_uncommitted: bool) -> String {
+    if stopped {
+        return "stopped".into();
+    }
+    // Uncommitted work only demotes a run that was *refused* something. On its
+    // own it means nothing: plenty of good runs are asked to leave the tree
+    // alone. It is the pair that is damning — told no, and stopped with the
+    // work still loose.
+    if ok && !(refused > 0 && left_uncommitted) {
+        return "done".into();
+    }
+    if refused > 0 {
+        // Refused something it needed and could not go on. Not a fault in the
+        // worker, and the one state where answering the question makes the
+        // work continue rather than start over.
+        return "blocked".into();
+    }
+    "failed".into()
+}
+
 /// The part of [`salvage_worktree`] that does not need to know where the
 /// personal store is, so a test can hand it a real repository in a temp folder
 /// instead of reaching into yours.
@@ -1536,19 +1576,32 @@ Answer here. If nobody does within {} seconds it stops and keeps the question.",
                 // the CLI still considers its own turn a success. Calling
                 // that done is the failure-honesty rule broken in our own
                 // codebase, so the refusals decide, not the summary.
-                live.status = if leash.pulled() {
-                    "stopped".into()
-                } else if o.ok {
-                    "done".into()
-                } else if o.refused > 0 {
-                    // Refused something it needed and could not go on. Not a
-                    // fault in the worker, and the one state where answering
-                    // the question makes the work continue rather than start
-                    // over.
-                    "blocked".into()
-                } else {
-                    "failed".into()
+                // Refused, and left its work uncommitted: it did not finish,
+                // whatever its own last turn reported.
+                //
+                // This is the third go at this rule, so the reasoning is worth
+                // keeping. `refused > 0` alone was too blunt — a run told no to
+                // one heredoc on 25 Sep wrote the file another way, ran seven
+                // passing tests, committed, and was still called "stopped
+                // short". Trusting `o.ok` alone is too generous the other way:
+                // on 28 Sep Smith wrote `goals.js` and six tests, was refused
+                // `npm test` twice, said outright *"I could not verify the
+                // tests actually pass"* — and was recorded `done, ok: true`.
+                //
+                // What separates them is not the prose, it is whether the
+                // worker committed. One adapted and finished; the other stopped
+                // and left everything for the salvage. So ask git, which cannot
+                // be optimistic.
+                let left_uncommitted = o.refused > 0 && !live.at.trim().is_empty() && {
+                    std::process::Command::new("git")
+                        .args(["status", "--porcelain"])
+                        .current_dir(&live.at)
+                        .output()
+                        .map(|out| !String::from_utf8_lossy(&out.stdout).trim().is_empty())
+                        .unwrap_or(false)
                 };
+
+                live.status = outcome_status(o.ok, o.refused, leash.pulled(), left_uncommitted);
                 live.ok = live.status == "done";
                 // A refusal is worth recording either way, but only a refusal
                 // that ended the run is what stopped it.
@@ -2440,5 +2493,42 @@ mod setup_check {
             super::Handoff::Ask(w, t) => println!("  would ASK to put {w} on: {t}"),
             super::Handoff::Nothing => println!("  would do NOTHING"),
         }
+    }
+
+    /// The three ways this rule has been wrong, pinned so it cannot be wrong
+    /// that way again.
+    #[test]
+    fn how_a_run_ended_is_decided_by_what_it_committed() {
+        // 25 Sep: refused once, adapted, ran the tests, committed. Finished.
+        assert_eq!(super::outcome_status(true, 1, false, false), "done");
+
+        // 28 Sep: refused twice, wrote the files, could not verify them, left
+        // them for the salvage. Recorded `done, ok: true` at the time, which
+        // is the failure-honesty rule broken in our own codebase.
+        assert_eq!(super::outcome_status(true, 2, false, true), "blocked");
+
+        // 24 Sep: every shell call denied, three files written, no check run.
+        assert_eq!(super::outcome_status(false, 5, false, true), "blocked");
+
+        // The clean cases still read the obvious way.
+        assert_eq!(super::outcome_status(true, 0, false, false), "done");
+        assert_eq!(super::outcome_status(false, 0, false, false), "failed");
+
+        // A leash beats everything: it is the one ending we caused.
+        assert_eq!(super::outcome_status(true, 0, true, false), "stopped");
+        assert_eq!(super::outcome_status(false, 3, true, true), "stopped");
+    }
+
+    /// Uncommitted work on its own says nothing.
+    ///
+    /// Plenty of good runs are asked to leave the tree alone. It is the pair —
+    /// told no, *and* stopped with the work still loose — that means it did not
+    /// finish. Written down because the first draft of this rule demoted on
+    /// uncommitted work alone, which would have called an ordinary read-only
+    /// run a failure.
+    #[test]
+    fn uncommitted_work_alone_does_not_condemn_a_run() {
+        assert_eq!(super::outcome_status(true, 0, false, true), "done");
+        assert_eq!(super::outcome_status(false, 0, false, true), "failed");
     }
 }

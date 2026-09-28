@@ -73,7 +73,7 @@ fn now_millis() -> i64 {
 
 // ---------- CRUD ----------
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn conn_list(db: tauri::State<Db>) -> Result<Vec<ConnDef>, String> {
     let conn = db.conn();
     let mut stmt = conn
@@ -89,7 +89,7 @@ pub fn conn_list(db: tauri::State<Db>) -> Result<Vec<ConnDef>, String> {
     Ok(rows)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn conn_save(db: tauri::State<Db>, def: ConnDef) -> Result<i64, String> {
     let conn = db.conn();
     if def.id <= 0 {
@@ -131,7 +131,7 @@ pub fn conn_save(db: tauri::State<Db>, def: ConnDef) -> Result<i64, String> {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn conn_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
     let conn = db.conn();
     conn.execute("DELETE FROM connections WHERE id = ?1", params![id])
@@ -146,7 +146,7 @@ pub fn conn_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
 
 /// Store a password. It goes to Windows Credential Manager and is never
 /// echoed back — there is deliberately no command to read one out.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn conn_set_password(db: tauri::State<Db>, id: i64, password: String) -> Result<(), String> {
     let conn = db.conn();
     let user: String = conn
@@ -164,7 +164,7 @@ pub fn conn_set_password(db: tauri::State<Db>, id: i64, password: String) -> Res
     creds::set(&creds::target_for(id), &user, &password)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn conn_clear_password(id: i64) -> Result<(), String> {
     creds::delete(&creds::target_for(id));
     Ok(())
@@ -483,7 +483,7 @@ pub struct SavedQuery {
     pub created_at: i64,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn conn_queries_list(db: tauri::State<Db>) -> Result<Vec<SavedQuery>, String> {
     let conn = db.conn();
     let mut stmt = conn
@@ -505,7 +505,7 @@ pub fn conn_queries_list(db: tauri::State<Db>) -> Result<Vec<SavedQuery>, String
     Ok(rows)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn conn_query_save(db: tauri::State<Db>, query: SavedQuery) -> Result<i64, String> {
     let conn = db.conn();
     if query.id <= 0 {
@@ -526,7 +526,7 @@ pub fn conn_query_save(db: tauri::State<Db>, query: SavedQuery) -> Result<i64, S
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn conn_query_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
     let conn = db.conn();
     conn.execute("DELETE FROM conn_queries WHERE id = ?1", params![id])
@@ -546,7 +546,7 @@ pub struct QueryRun {
     pub ran_at: i64,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn conn_runs_list(
     db: tauri::State<Db>,
     connection_id: i64,

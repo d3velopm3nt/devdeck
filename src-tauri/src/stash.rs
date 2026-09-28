@@ -825,7 +825,7 @@ fn types_in_group(group: &str) -> Option<&'static [&'static str]> {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stash_list(db: tauri::State<Db>, q: StashQuery) -> Result<Vec<StashItem>, String> {
     let conn = db.conn();
     list_query(&conn, &q)
@@ -908,7 +908,7 @@ fn list_query(conn: &rusqlite::Connection, q: &StashQuery) -> Result<Vec<StashIt
     Ok(rows)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stash_get(db: tauri::State<Db>, id: i64) -> Result<StashItem, String> {
     let conn = db.conn();
     item_by_id(&conn, id)
@@ -950,7 +950,7 @@ pub struct StashCounts {
     pub tags: Vec<TagCount>,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stash_counts(db: tauri::State<Db>) -> Result<StashCounts, String> {
     let conn = db.conn();
     let mut counts = StashCounts::default();
@@ -1033,7 +1033,7 @@ pub fn stash_counts(db: tauri::State<Db>) -> Result<StashCounts, String> {
 /// Open a screenshot in whatever views images on this machine. Restricted to
 /// paths this vault already links to, so it can't be turned into a generic
 /// "open anything" by a crafted argument.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stash_open_file(db: tauri::State<Db>, id: i64) -> Result<(), String> {
     let conn = db.conn();
     let path: String = conn
@@ -1069,7 +1069,7 @@ pub fn stash_open_file(db: tauri::State<Db>, id: i64) -> Result<(), String> {
 ///
 /// Restricted to paths this vault links to, same as `stash_open_file`, and a
 /// flagged row refuses outright — its picture is the secret.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stash_image(
     db: tauri::State<Db>,
     id: i64,
@@ -1172,7 +1172,7 @@ pub fn prune(conn: &rusqlite::Connection, days: i64) -> Result<usize, String> {
 
 /// Prune using the current setting. Returns the number of clips removed, so
 /// the UI can say what happened instead of silently changing the list.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stash_prune(
     db: tauri::State<Db>,
     state: tauri::State<std::sync::Arc<StashState>>,
@@ -1186,7 +1186,7 @@ pub fn stash_prune(
 
 /// Persist a new retention window and apply it straight away — changing the
 /// number should visibly do the thing, not wait for a restart.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stash_set_retention(
     db: tauri::State<Db>,
     state: tauri::State<std::sync::Arc<StashState>>,
@@ -1225,7 +1225,7 @@ fn tag_counts(conn: &rusqlite::Connection) -> Result<Vec<TagCount>, String> {
     Ok(rows)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stash_tags_list(db: tauri::State<Db>) -> Result<Vec<TagCount>, String> {
     let conn = db.conn();
     tag_counts(&conn)
@@ -1261,7 +1261,7 @@ pub fn parse_tags(input: &str) -> Vec<String> {
 
 /// Attach one or more tags, creating any that don't exist yet. Returns the
 /// item's full tag list so the UI doesn't need a follow-up read.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stash_tag_add(
     db: tauri::State<Db>,
     id: i64,
@@ -1290,7 +1290,7 @@ fn tag_add(conn: &rusqlite::Connection, id: i64, names: &[String]) -> Result<Vec
     tags_of(conn, id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stash_tag_remove(
     db: tauri::State<Db>,
     id: i64,
@@ -1312,7 +1312,7 @@ fn tag_remove(conn: &rusqlite::Connection, id: i64, name: &str) -> Result<Vec<St
 }
 
 /// Drop a tag from every item at once (from the sidebar).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stash_tag_delete(db: tauri::State<Db>, tag_id: i64) -> Result<(), String> {
     let conn = db.conn();
     conn.execute("DELETE FROM stash_tags WHERE id = ?1", params![tag_id])
@@ -1384,7 +1384,7 @@ fn reject_if_secret(text: &str) -> Result<(), String> {
 
 /// Edit a clip's title, content or note. Editing the content re-derives
 /// everything that hangs off it: type, size, preview, dedupe fingerprint.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stash_update(db: tauri::State<Db>, edit: StashEdit) -> Result<StashItem, String> {
     let conn = db.conn();
     update_item(&conn, &edit)
@@ -1452,7 +1452,7 @@ fn update_item(conn: &rusqlite::Connection, edit: &StashEdit) -> Result<StashIte
 }
 
 /// Write a note from scratch — an item that never touched the clipboard.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stash_create_note(
     db: tauri::State<Db>,
     state: tauri::State<std::sync::Arc<StashState>>,
@@ -1504,7 +1504,7 @@ fn create_note(
     item_by_id(conn, id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stash_pin(db: tauri::State<Db>, id: i64, pinned: bool) -> Result<(), String> {
     let conn = db.conn();
     conn.execute(
@@ -1515,7 +1515,7 @@ pub fn stash_pin(db: tauri::State<Db>, id: i64, pinned: bool) -> Result<(), Stri
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stash_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
     let conn = db.conn();
     conn.execute("DELETE FROM stash_items WHERE id = ?1", params![id])
@@ -1525,7 +1525,7 @@ pub fn stash_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
 
 /// Record that a clip was copied back out — bumps its usage and arms the echo
 /// guard so the capture it triggers isn't stored as a new clip.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stash_mark_used(
     db: tauri::State<Db>,
     state: tauri::State<std::sync::Arc<StashState>>,
@@ -1580,7 +1580,7 @@ fn content_of(conn: &rusqlite::Connection, id: i64) -> Result<String, String> {
 /// Put a clip on the clipboard from the backend. More reliable than the
 /// webview's clipboard API, which needs a focused document — and the widget
 /// deliberately doesn't take focus.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stash_copy(
     db: tauri::State<Db>,
     state: tauri::State<std::sync::Arc<StashState>>,
@@ -1606,7 +1606,7 @@ pub fn stash_copy(
 /// Copy, then paste into the app you came from when auto-paste is enabled.
 /// `force` pastes for this one invocation regardless of the setting — that's
 /// ⇧⏎, where you asked for a paste explicitly.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stash_paste(
     db: tauri::State<Db>,
     state: tauri::State<std::sync::Arc<StashState>>,
@@ -1642,13 +1642,13 @@ pub fn remember_target() {
     win::remember_foreground();
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stash_remember_target() {
     remember_target();
 }
 
 /// The frontend pushes the active workspace/project here whenever it changes.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stash_set_context(
     state: tauri::State<std::sync::Arc<StashState>>,
     project_id: Option<i64>,
@@ -1676,7 +1676,7 @@ pub struct StashStatus {
     pub retention_days: i64,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stash_status(state: tauri::State<std::sync::Arc<StashState>>) -> StashStatus {
     StashStatus {
         enabled: state.enabled.load(Ordering::Relaxed),
@@ -1687,7 +1687,7 @@ pub fn stash_status(state: tauri::State<std::sync::Arc<StashState>>) -> StashSta
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stash_set_enabled(
     db: tauri::State<Db>,
     state: tauri::State<std::sync::Arc<StashState>>,
@@ -1700,7 +1700,7 @@ pub fn stash_set_enabled(
 
 /// One setter for the two toggles that only affect presentation/behaviour,
 /// so the Settings page doesn't need a command each.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stash_set_option(
     db: tauri::State<Db>,
     state: tauri::State<std::sync::Arc<StashState>>,

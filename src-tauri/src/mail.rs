@@ -334,7 +334,7 @@ fn row_to_msg(row: &rusqlite::Row) -> rusqlite::Result<MailMessage> {
 
 // ---------------------------------------------------------------- accounts
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mail_accounts_list(db: tauri::State<Db>) -> Result<Vec<MailAccount>, String> {
     let conn = db.conn();
     let sql = format!("SELECT {ACCOUNT_COLS} FROM mail_accounts ORDER BY sort, id");
@@ -343,7 +343,7 @@ pub fn mail_accounts_list(db: tauri::State<Db>) -> Result<Vec<MailAccount>, Stri
     rows.collect::<rusqlite::Result<Vec<_>>>().map_err(err)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mail_account_save(db: tauri::State<Db>, def: MailAccount) -> Result<i64, String> {
     if def.address.trim().is_empty() {
         return Err("An account needs an email address.".into());
@@ -412,7 +412,7 @@ pub fn mail_account_save(db: tauri::State<Db>, def: MailAccount) -> Result<i64, 
     Ok(id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mail_account_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
     {
         let conn = db.conn();
@@ -424,7 +424,7 @@ pub fn mail_account_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> 
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mail_account_set_password(
     id: i64,
     username: String,
@@ -436,7 +436,7 @@ pub fn mail_account_set_password(
     creds::set(&target_for(id), &username, &password)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mail_account_clear_password(id: i64) -> Result<bool, String> {
     Ok(creds::delete(&target_for(id)))
 }
@@ -468,7 +468,7 @@ async fn wait_for_google(hint: String) -> Result<crate::gauth::Tokens, String> {
 /// Every row ends in a state. `pending` never survives a pass, because "we
 /// tried and found nothing" and "nobody has looked" are different facts and
 /// the UI has to be able to tell them apart.
-#[tauri::command]
+#[tauri::command(async)]
 pub async fn mail_extract(app: tauri::AppHandle, limit: i64) -> Result<i64, String> {
     off_thread(app, move |app, db| extract_pending(app, db, limit)).await
 }
@@ -544,7 +544,7 @@ fn extract_pending(app: &tauri::AppHandle, db: &Db, limit: i64) -> Result<i64, S
 ///
 /// Returns nothing for anything withheld. The refusal is not a lookup that
 /// happens to fail: there is no stored text to return, by design.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mail_attachment_text(db: tauri::State<Db>, id: i64) -> Result<Option<String>, String> {
     let (path, state): (String, String) = {
         let conn = db.conn();
@@ -905,7 +905,7 @@ fn label_name(remote: &str) -> String {
 }
 
 /// Every label on an account, with what we hold for each.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mail_labels(db: tauri::State<Db>, account_id: i64) -> Result<Vec<MailLabel>, String> {
     let conn = db.conn();
     let mut st = conn
@@ -939,7 +939,7 @@ pub fn mail_labels(db: tauri::State<Db>, account_id: i64) -> Result<Vec<MailLabe
 /// means syncing the whole mailbox several times over, since a message wears as
 /// many labels as you gave it. So a label costs nothing until you open it, and
 /// then costs one folder.
-#[tauri::command]
+#[tauri::command(async)]
 pub async fn mail_sync_label(app: tauri::AppHandle, label_id: i64) -> Result<i64, String> {
     off_thread(app, move |app, db| sync_label_now(app, db, label_id)).await
 }
@@ -1052,12 +1052,12 @@ fn sync_label_now(app: &tauri::AppHandle, db: &Db, label_id: i64) -> Result<i64,
 ///
 /// Shown in Settings rather than left blank: an empty box does not tell you
 /// where your files already went.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mail_attachments_default() -> String {
     crate::mailfiles::default_root().display().to_string()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mail_google_available() -> bool {
     crate::gauth::client().is_some()
 }
@@ -1067,7 +1067,7 @@ pub fn mail_google_available() -> bool {
 /// Ordered so a failure leaves nothing behind: Google first, the credential
 /// second, the row last. A sign-in that is cancelled at the browser touches
 /// no account at all.
-#[tauri::command]
+#[tauri::command(async)]
 pub async fn mail_google_sign_in(
     db: tauri::State<'_, Db>,
     id: i64,
@@ -1107,7 +1107,7 @@ pub async fn mail_google_sign_in(
 /// Re-connecting an address that already exists updates that row instead of
 /// adding a second one. Two rows for one mailbox would sync it twice and show
 /// every message in duplicate.
-#[tauri::command]
+#[tauri::command(async)]
 pub async fn mail_google_connect(db: tauri::State<'_, Db>) -> Result<MailAccount, String> {
     let tokens = wait_for_google(String::new()).await?;
     let address = tokens.email.trim().to_string();
@@ -1167,7 +1167,7 @@ pub async fn mail_google_connect(db: tauri::State<'_, Db>) -> Result<MailAccount
 /// Only the local copy. Google keeps its own record until you remove DevDeck
 /// under your account's third-party connections, and saying otherwise would be
 /// a claim we cannot honour.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mail_google_sign_out(db: tauri::State<Db>, id: i64) -> Result<(), String> {
     creds::delete(&token_target_for(id));
     token_cache().lock().unwrap().remove(&id);
@@ -1481,7 +1481,7 @@ fn password_for(acct: &MailAccount) -> Result<String, String> {
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub async fn mail_account_test(app: tauri::AppHandle, id: i64) -> Result<TestResult, String> {
     off_thread(app, move |_app, db| test_account(db, id)).await
 }
@@ -1817,7 +1817,7 @@ where
     .map_err(|e| format!("the task did not finish: {e}"))?
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub async fn mail_sync(app: tauri::AppHandle, id: i64) -> Result<i64, String> {
     off_thread(app, move |app, db| sync_accounts(app, db, id)).await
 }
@@ -2332,7 +2332,7 @@ fn upsert_contact_from_mail(
 
 // ---------------------------------------------------------------- reading
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mail_list(db: tauri::State<Db>, query: MailQuery) -> Result<Vec<MailMessage>, String> {
     let conn = db.conn();
     let mut where_sql = String::from("1=1");
@@ -2468,7 +2468,7 @@ pub fn mail_counts(db: tauri::State<Db>) -> Result<MailCounts, String> {
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mail_body(db: tauri::State<Db>, id: i64) -> Result<MailBody, String> {
     let conn = db.conn();
     let (body_text, body_html, raw_headers) = conn
@@ -2512,7 +2512,7 @@ pub fn mail_body(db: tauri::State<Db>, id: i64) -> Result<MailBody, String> {
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mail_mark_read(db: tauri::State<Db>, id: i64, read: bool) -> Result<(), String> {
     let conn = db.conn();
     conn.execute(
@@ -2523,7 +2523,7 @@ pub fn mail_mark_read(db: tauri::State<Db>, id: i64, read: bool) -> Result<(), S
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mail_set_flag(db: tauri::State<Db>, id: i64, flagged: bool) -> Result<(), String> {
     let conn = db.conn();
     conn.execute(
@@ -2537,7 +2537,7 @@ pub fn mail_set_flag(db: tauri::State<Db>, id: i64, flagged: bool) -> Result<(),
 /// Move to Archive locally. The server copy is untouched: DevDeck is not the
 /// only client on this mailbox, and archiving here should not surprise you
 /// on your phone.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mail_archive(db: tauri::State<Db>, id: i64) -> Result<(), String> {
     let conn = db.conn();
     conn.execute(
@@ -2548,7 +2548,7 @@ pub fn mail_archive(db: tauri::State<Db>, id: i64) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mail_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
     let conn = db.conn();
     conn.execute("DELETE FROM mail_messages WHERE id=?1", params![id])
@@ -2557,7 +2557,7 @@ pub fn mail_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
 }
 
 /// Link a thread to a project node, so mail, repo and terminal share a subject.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mail_link_node(db: tauri::State<Db>, id: i64, node_id: Option<i64>) -> Result<(), String> {
     let conn = db.conn();
     let thread_key: String = conn
@@ -2614,7 +2614,7 @@ fn smtp_transport(acct: &MailAccount, password: &str) -> Result<lettre::SmtpTran
         .build())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub async fn mail_send(app: tauri::AppHandle, req: SendRequest) -> Result<i64, String> {
     off_thread(app, move |app, db| send_message(app, db, req)).await
 }
@@ -2744,7 +2744,7 @@ fn send_message(app: &tauri::AppHandle, db: &Db, req: SendRequest) -> Result<i64
 /// address book across a personal inbox and three businesses put family and
 /// suppliers in the same list. A person who appears in two mailboxes shows under
 /// both, and there is still one record of them.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mail_contacts_list(
     db: tauri::State<Db>,
     account_id: Option<i64>,
@@ -2811,7 +2811,7 @@ fn list_contacts(conn: &Connection, account_id: Option<i64>) -> Result<Vec<MailC
 /// A message can be stored more than once -- in the Inbox and again under each
 /// Gmail label it wears -- so duplicates are dropped by Message-ID, keeping the
 /// copy in one of the four real folders so opening it lands somewhere familiar.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mail_contact_messages(
     db: tauri::State<Db>,
     id: i64,
@@ -2869,7 +2869,7 @@ fn contact_messages(conn: &Connection, id: i64, limit: i64) -> Result<Vec<MailMe
     Ok(out)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mail_contact_save(db: tauri::State<Db>, def: MailContact) -> Result<i64, String> {
     if def.email.trim().is_empty() {
         return Err("A contact needs an email address.".into());
@@ -2928,7 +2928,7 @@ pub fn mail_contact_save(db: tauri::State<Db>, def: MailContact) -> Result<i64, 
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mail_contact_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
     let conn = db.conn();
     conn.execute("DELETE FROM mail_contacts WHERE id=?1", params![id])
@@ -2937,7 +2937,7 @@ pub fn mail_contact_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> 
 }
 
 /// Link (or unlink) a contact to a node in the project tree — the client.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mail_contact_link(
     db: tauri::State<Db>,
     id: i64,
@@ -2954,7 +2954,7 @@ pub fn mail_contact_link(
 
 // ---------------------------------------------------------------- assistant
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mail_assistant_list(
     db: tauri::State<Db>,
     thread_key: String,
@@ -2982,7 +2982,7 @@ pub fn mail_assistant_list(
     rows.collect::<rusqlite::Result<Vec<_>>>().map_err(err)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mail_assistant_add(db: tauri::State<Db>, note: AssistantNote) -> Result<i64, String> {
     let conn = db.conn();
     conn.execute(
@@ -3005,7 +3005,7 @@ pub fn mail_assistant_add(db: tauri::State<Db>, note: AssistantNote) -> Result<i
     Ok(conn.last_insert_rowid())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn mail_assistant_status(db: tauri::State<Db>, id: i64, status: String) -> Result<(), String> {
     let conn = db.conn();
     conn.execute(

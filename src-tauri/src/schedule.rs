@@ -979,7 +979,19 @@ pub struct RunOutcome {
 }
 
 /// Run a schedule by hand, ignoring whether it is due.
-#[tauri::command]
+///
+/// **`async`, and that is not a detail.** Both clock paths have spawned a
+/// thread for a long time, for the reason written beside them — a wake that
+/// starts an agent takes minutes and would stop everything else on the clock.
+/// The hand path never got the same treatment, and a sync `#[tauri::command]`
+/// runs on the UI thread: pressing Run now on a manager froze the whole
+/// window for as long as the model took, which on the 28th was five and a half
+/// minutes.
+///
+/// It stays synchronous *to the caller* — the button wants the outcome, and
+/// returning before there is one would be the update checker's bug again. What
+/// changes is which thread waits.
+#[tauri::command(async)]
 pub fn schedule_run_now(
     app: tauri::AppHandle,
     db: tauri::State<Db>,

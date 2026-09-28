@@ -29,7 +29,7 @@
     "ask:release": "node scripts/stage-ask.mjs --release",
     "dev": "npm run ask && vite",
     "build": "npm run ask:release && tsc -b && vite build",
-    "lint": "oxlint && node scripts/check-store-selectors.mjs",
+    "lint": "oxlint && node scripts/check-store-selectors.mjs && node scripts/check-sync-commands.mjs",
     "preview": "vite preview",
     "tauri": "tauri"
   },

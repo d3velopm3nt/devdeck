@@ -163,6 +163,39 @@ pub fn fmt_at(at_min: i64) -> String {
     format!("{:02}:{:02}", at_min / 60, at_min % 60)
 }
 
+/// Frontmatter lines, with a wrapped value joined back onto its key.
+///
+/// These files are written by `serde_yaml`, which folds a long value onto the
+/// next line with two spaces of indent. Both readers of them are line-based and
+/// look for a colon, so a continuation line matched nothing and was dropped in
+/// silence — and the longest thing in a manager's file is its goal.
+///
+/// Studio's file says: "Keep the goal tracker moving — decide the next piece of
+/// work, put Smith on it, have Warden check it, and say plainly what was not
+/// checked." The app held it as "…put Smith on", and had since the file was
+/// written. Warden was never mentioned to Studio, nor was saying what it had not
+/// checked; the board showed the cut sentence; the wake ran on it; and the copy
+/// written onto the feature was cut too, which is how it was noticed.
+///
+/// A list item is indented as well and is not a continuation, so it is left
+/// where it is rather than glued onto the key above it.
+pub fn frontmatter_lines(yaml: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for line in yaml.lines() {
+        let indented = line.starts_with(' ') || line.starts_with('\t');
+        let item = line.trim_start().starts_with('-');
+        if indented && !item && !line.trim().is_empty() {
+            if let Some(last) = out.last_mut() {
+                last.push(' ');
+                last.push_str(line.trim());
+                continue;
+            }
+        }
+        out.push(line.to_string());
+    }
+    out
+}
+
 /// Read `_bot.md`, or None when the folder has no bot. A malformed file is
 /// still a bot — the same forgiveness `_devdeck.md` gets, for the same reason:
 /// someone editing it by hand should not lose it to a typo.
@@ -176,7 +209,7 @@ fn read(dir: &Path) -> Option<Bot> {
     let rest = match raw.strip_prefix("---") {
         Some(after) => match after.find("\n---") {
             Some(end) => {
-                for line in after[..end].lines() {
+                for line in frontmatter_lines(&after[..end]) {
                     let Some((k, v)) = line.split_once(':') else {
                         continue;
                     };
@@ -833,6 +866,14 @@ fn save_into(
     // Fields the editor never sends, and must never lose: which role template
     // it came from, and the review points, which are edited in the file
     // because "not without me" is a sentence rather than a checkbox.
+    //
+    // `worker` belongs on that list and was not on it — it was written back as
+    // an empty string, so saving a manager for any reason at all detached the
+    // worker it hands its work to. Nothing said so: the file simply stopped
+    // saying `worker: smith`, the next wake found nothing to hand over, and the
+    // manager went back to thinking in circles. The whole chain proved this
+    // afternoon — decide, write the item, hand it to Smith — would have been
+    // undone by one edit of the goal.
     let prior = crate::managers::get(conn, &handle);
     let m = crate::managers::Manager {
         handle: handle.clone(),
@@ -860,7 +901,7 @@ fn save_into(
             .unwrap_or_default(),
         was: prior.as_ref().map(|p| p.was.clone()).unwrap_or_default(),
         home: prior.as_ref().map(|p| p.home).unwrap_or(node_id),
-        worker: String::new(),
+        worker: prior.as_ref().map(|p| p.worker.clone()).unwrap_or_default(),
         businesses: prior
             .as_ref()
             .map(|p| p.businesses.clone())
@@ -3213,5 +3254,122 @@ mod tests {
             ..Default::default()
         };
         assert!(!wake_voice(&quiet).contains("worker"));
+    }
+
+    /// A goal too long for one line is still the whole goal.
+    ///
+    /// `serde_yaml` folds a long value onto the next line with two spaces of
+    /// indent. Both readers of these files are line-based and look for a colon,
+    /// so the continuation matched nothing and was dropped without a word.
+    ///
+    /// Studio's file has said, since it was written: "…put Smith on it, have
+    /// Warden check it, and say plainly what was not checked." The app held
+    /// "…put Smith on". Warden was never mentioned to Studio, nor was saying
+    /// what it had not checked — the wake ran on the cut sentence, the board
+    /// showed it, and the copy written onto the feature was cut too.
+    #[test]
+    fn a_goal_that_wraps_is_read_whole() {
+        let yaml = "name: Studio\n\
+                    goal: Keep the goal tracker moving — decide the next piece of work, put Smith on\n  \
+                    it, have Warden check it, and say plainly what was not checked.\n\
+                    worker: smith\n";
+        let lines = frontmatter_lines(yaml);
+
+        let goal = lines
+            .iter()
+            .find_map(|l| l.strip_prefix("goal:"))
+            .expect("no goal line")
+            .trim();
+        assert!(
+            goal.ends_with("say plainly what was not checked."),
+            "the goal was cut: {goal}"
+        );
+        assert!(goal.contains("Warden"), "Warden never reached the manager");
+
+        // The key after the wrapped one is still its own line, not swallowed.
+        assert!(lines.iter().any(|l| l.trim() == "worker: smith"));
+    }
+
+    /// Saving a manager keeps the worker it hands its work to.
+    ///
+    /// `save_into` carefully preserved the role, the template, the review
+    /// points and the businesses — and wrote `worker` back as an empty string.
+    /// So editing a manager for any reason detached its worker, in silence:
+    /// the file stopped saying `worker: smith`, the next wake found nobody to
+    /// hand the plan to, and the manager went back to thinking in circles. The
+    /// whole chain — decide, write the item, hand it to Smith — would have been
+    /// undone by one edit of the goal.
+    #[test]
+    fn saving_a_manager_does_not_detach_its_worker() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(crate::db::CORE_SCHEMA).unwrap();
+        // Saving a manager syncs its heartbeat, so the clock's tables are part
+        // of what a save needs.
+        conn.execute_batch(crate::schedule::SCHEMA).unwrap();
+        crate::db::migrate(&conn);
+
+        conn.execute(
+            "INSERT INTO nodes (id, parent_id, kind, name, path) VALUES (61, NULL, 'project', 'Goal tracker', NULL)",
+            [],
+        )
+        .unwrap();
+
+        let vault = std::env::temp_dir().join(format!("devdeck-keepworker-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&vault);
+        std::fs::create_dir_all(&vault).unwrap();
+        crate::db::setting_set_conn(&conn, "vault_root", &vault.to_string_lossy()).unwrap();
+
+        crate::managers::save(
+            &conn,
+            &crate::managers::Manager {
+                handle: "studio".into(),
+                name: "Studio".into(),
+                goal: "Keep the goal tracker moving".into(),
+                worker: "smith".into(),
+                stop_at: vec!["before any push".into()],
+                home: 61,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        // The editor sends a new goal, and nothing it does not know about.
+        save_into(
+            &conn,
+            61,
+            "Studio",
+            "Keep the goal tracker moving, and stop guessing",
+            "weekdays",
+            420,
+            "",
+            "",
+            vec![],
+            "assistant",
+            vec!["assistant".into()],
+            "",
+        )
+        .unwrap();
+
+        let after = crate::managers::get(&conn, "studio").expect("the manager vanished");
+        assert_eq!(after.worker, "smith", "saving detached the worker");
+        assert_eq!(
+            after.goal,
+            "Keep the goal tracker moving, and stop guessing"
+        );
+        // And the fields that were already kept, stay kept.
+        assert_eq!(after.stop_at, vec!["before any push".to_string()]);
+
+        let _ = std::fs::remove_dir_all(&vault);
+    }
+
+    /// A list item is indented too, and is not a continuation of the key above.
+    #[test]
+    fn a_list_item_is_not_glued_onto_the_key_above_it() {
+        let lines = frontmatter_lines("stop_at:\n  - before any push\nworker: smith\n");
+        assert!(
+            lines.iter().any(|l| l.trim() == "- before any push"),
+            "a list item was folded into its key: {lines:?}"
+        );
+        assert!(lines.iter().any(|l| l.trim() == "worker: smith"));
     }
 }

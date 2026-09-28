@@ -2186,6 +2186,10 @@ export interface Run {
   worker_name: string
   node_id: number
   space: string
+  /** The feature and the work item it was handed, so a run can be shown on the
+   *  thing it is about rather than only in a list of runs. */
+  feature: string
+  item: string
   title: string
   intent: string
   /** running | done | stopped | failed | kept | discarded */

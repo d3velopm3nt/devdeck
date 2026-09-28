@@ -145,7 +145,7 @@ fn parse(handle: &str, raw: &str) -> Manager {
     let rest = match raw.strip_prefix("---") {
         Some(after) => match after.find("\n---") {
             Some(end) => {
-                for line in after[..end].lines() {
+                for line in crate::bots::frontmatter_lines(&after[..end]) {
                     let Some((k, v)) = line.split_once(':') else {
                         continue;
                     };

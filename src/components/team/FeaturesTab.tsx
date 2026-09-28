@@ -1,4 +1,4 @@
-// Features — every feature in every space, as a list beside its thread.
+// Features — every feature in every space, as a list beside the goal it is on.
 //
 // The same rows Goals groups; this one is the flat list, filtered, for when
 // you want to find one rather than be shown what matters. It was a five-column

@@ -155,7 +155,7 @@ export function WorkList({
                     on ? 'bg-hover' : 'hover:bg-hover/50'
                   }`}
                   disabled={!row}
-                  title={row ? 'Open its thread' : 'This feature is not on the board'}
+                  title={row ? 'Open it' : 'This feature is not on the board'}
                   onClick={() => row && onPick(key(row))}
                 >
                   <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-ink">
@@ -205,7 +205,7 @@ export function WorkList({
                     <button
                       key={i.id}
                       className="flex w-full items-center gap-2 rounded px-2.5 py-1 text-left hover:bg-hover/40"
-                      title={row ? 'Open its thread' : 'Its thread is not on the board yet'}
+                      title={row ? 'Open it' : 'It is not on the board yet'}
                       onClick={() => row && onPick(key(row))}
                     >
                       <span

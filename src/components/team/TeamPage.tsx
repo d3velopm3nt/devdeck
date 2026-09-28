@@ -30,7 +30,7 @@ import { Icon } from '../../lib/icons'
 import { GoalsList } from './Goals'
 import { FeaturesList } from './FeaturesTab'
 import { WorkList } from './WorkTab'
-import { FeatureThread } from './FeatureThread'
+import { GoalPage } from './GoalPage'
 import { BotsPage } from '../BotsPage'
 import { CAPTURE_GOAL } from '../../lib/devCapture'
 
@@ -44,7 +44,7 @@ const TABS: { id: TeamTab; label: string }[] = [
 const SAYS: Record<TeamTab, { title: string; sub: string }> = {
   goals: {
     title: 'Goals',
-    sub: 'Every space, right now, grouped by goal. Pick one to open its thread.',
+    sub: 'Every space, right now, grouped by goal. Pick one to open it.',
   },
   features: { title: 'Features', sub: 'Every feature in every space, and who is on it.' },
   work: { title: 'Work', sub: 'Every open item, and who is holding it.' },
@@ -178,12 +178,10 @@ export function TeamPage() {
 
           <div className="min-w-0 flex-1">
             {current ? (
-              <FeatureThread goal={current} />
+              <GoalPage goal={current} board={board} />
             ) : (
               <div className="flex h-full items-center justify-center px-8 text-center text-[12px] text-muted">
-                {board.loaded
-                  ? 'Pick one to open its thread.'
-                  : 'Reading the board…'}
+                {board.loaded ? 'Pick a goal.' : 'Reading the board…'}
               </div>
             )}
           </div>

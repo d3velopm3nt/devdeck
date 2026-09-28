@@ -93,6 +93,65 @@ pub struct StartAgentCommand {
     pub on_behalf_of: Option<String>,
 }
 
+/// Free text the model wrote: an argument that *describes* work rather than
+/// being any part of doing it.
+///
+/// A review point must not read these. Studio wrote itself an item ending
+/// "npm test green on a branch, **no push**" and then tried to hand it to its
+/// worker; `delegate.start` carried that sentence in `intent`, `memory.save`
+/// quoted it in `body`, and a rule reading "before any push" stopped them both.
+/// The rule fired on a promise not to push. A review point you can only get
+/// past by avoiding a word is not a review point, and the failure gets worse
+/// the more carefully a model explains itself.
+const PROSE_ARGS: &[&str] = &[
+    "message",
+    "intent",
+    "text",
+    "summary",
+    "title",
+    "body",
+    "note",
+    "reason",
+    "description",
+    "content",
+    "query",
+    "goal",
+    "why",
+];
+
+/// What a call *does*, in words a rule can be matched against: its tool, its
+/// action, and every structured argument — a path, a branch, an id, and above
+/// all `command`, which is itself an act. Prose is left out.
+fn act_of(call: &super::tools::ToolCall) -> String {
+    fn render(v: &serde_json::Value, out: &mut String) {
+        match v {
+            serde_json::Value::Object(m) => {
+                for (k, val) in m {
+                    if PROSE_ARGS.contains(&k.to_ascii_lowercase().as_str()) {
+                        continue;
+                    }
+                    out.push(' ');
+                    out.push_str(k);
+                    render(val, out);
+                }
+            }
+            serde_json::Value::Array(a) => a.iter().for_each(|val| render(val, out)),
+            serde_json::Value::String(s) => {
+                out.push(' ');
+                out.push_str(s);
+            }
+            serde_json::Value::Null => {}
+            other => {
+                out.push(' ');
+                out.push_str(&other.to_string());
+            }
+        }
+    }
+    let mut s = format!("{}.{}", call.tool, call.action);
+    render(&call.args, &mut s);
+    s.to_lowercase()
+}
+
 /// Whether a call runs into a review point, and which one.
 ///
 /// Deliberately blunt matching on the words in the rule: "before any push"
@@ -100,11 +159,14 @@ pub struct StartAgentCommand {
 /// matched nothing would be worse than no rule at all — you would believe you
 /// had a review point and not have one — so anything that looks like it
 /// applies, does.
+///
+/// Blunt about the *act*, though, and never about the prose around it — see
+/// [`PROSE_ARGS`].
 pub fn review_point(call: &super::tools::ToolCall, stop_at: &[String]) -> Option<String> {
     if stop_at.is_empty() {
         return None;
     }
-    let subject = format!("{}.{} {}", call.tool, call.action, call.args).to_lowercase();
+    let subject = act_of(call);
     const NOISE: &[&str] = &[
         "before", "any", "the", "a", "an", "all", "every", "stop", "at", "on", "to", "not",
         "without", "me", "first", "ask", "for",
@@ -1427,6 +1489,92 @@ mod tests {
     fn a_rule_with_no_words_in_it_matches_nothing() {
         let rules = vec!["before any".to_string(), "  ".to_string()];
         assert!(review_point(&call("git", "push", serde_json::json!({})), &rules).is_none());
+    }
+
+    /// A review point reads what a call does, not what it says about itself.
+    ///
+    /// Studio decided on an item ending "npm test green on a branch, no push",
+    /// then tried to hand it to Smith. `delegate.start` carried that sentence
+    /// as its `intent` and `memory.save` quoted it in `body`, and "before any
+    /// push" stopped them both — a rule about pushing, firing on a promise not
+    /// to push, on two calls that cannot push. Nothing was dispatched and the
+    /// manager could not even leave itself the note.
+    #[test]
+    fn a_review_point_does_not_fire_on_a_sentence_about_the_act() {
+        let rules = vec!["before any push".to_string()];
+
+        let handover = call(
+            "delegate",
+            "start",
+            serde_json::json!({
+                "agent_id": "smith",
+                "feature_id": "studio",
+                "intent": "goals.js add/list/complete with tests. npm test green on a branch, no push."
+            }),
+        );
+        assert!(
+            review_point(&handover, &rules).is_none(),
+            "a handover was stopped by a rule about pushing"
+        );
+
+        let note = call(
+            "memory",
+            "save",
+            serde_json::json!({
+                "title": "Next on the goal tracker",
+                "body": "Smith builds goals.js on a branch. No push."
+            }),
+        );
+        assert!(
+            review_point(&note, &rules).is_none(),
+            "a note is not an act"
+        );
+
+        // What the rule is for still stops: the act itself, and a command that
+        // performs it.
+        assert!(review_point(&call("git", "push", serde_json::json!({})), &rules).is_some());
+        assert!(review_point(
+            &call(
+                "terminal",
+                "run",
+                serde_json::json!({ "command": "git push origin main" })
+            ),
+            &rules
+        )
+        .is_some());
+    }
+
+    /// Structured arguments are part of the act and keep matching — only prose
+    /// is dropped. A rule narrowed until it stops nothing is the other failure.
+    #[test]
+    fn the_arguments_that_are_not_prose_still_count() {
+        let rules = vec!["nothing under bucket".to_string()];
+        assert!(review_point(
+            &call(
+                "files",
+                "write",
+                serde_json::json!({
+                    "path": "bucket/devdeck.json",
+                    "content": "anything at all"
+                })
+            ),
+            &rules
+        )
+        .is_some());
+
+        // And the same words, this time only in the file being written.
+        assert!(
+            review_point(
+                &call(
+                    "files",
+                    "write",
+                    serde_json::json!({ "path": "notes.md", "content": "the bucket is at 0.3.1" })
+                ),
+                &rules
+            )
+            .is_none(),
+            "the contents of a file are not what the file write does"
+        );
     }
 
     fn an_agent() -> super::super::state::AgentDef {

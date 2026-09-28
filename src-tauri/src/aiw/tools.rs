@@ -930,6 +930,14 @@ pub struct ToolService {
     pub grants: Arc<GrantStore>,
     /// Processes started by the process tool, keyed by project.
     pub apps: std::sync::Mutex<HashMap<String, RunningApp>>,
+    /// Sessions where an unattended run asked and nobody answered.
+    ///
+    /// A manager woken by a clock may now ask — see the `unattended` arm in
+    /// `execute` — but it asks *once*. If that question times out, nobody is at
+    /// the keyboard, and every later question in the same run would do nothing
+    /// but stall ninety seconds and cost money on the way to the same "no". One
+    /// probe is enough to learn whether somebody is home.
+    pub nobody_home: std::sync::Mutex<std::collections::HashSet<String>>,
     /// MCP servers installed from Community, and the hub that runs them.
     ///
     /// Held here rather than reached for globally because this is the one
@@ -954,6 +962,7 @@ impl ToolService {
             approvals: Arc::new(ApprovalBroker::immediate_denial()),
             grants: Arc::new(GrantStore::ephemeral()),
             apps: std::sync::Mutex::new(HashMap::new()),
+            nobody_home: std::sync::Mutex::new(std::collections::HashSet::new()),
             mcp: crate::mcp::Hub::new(),
             mcp_servers: Vec::new(),
         }
@@ -1112,11 +1121,23 @@ impl ToolService {
                         );
                         true
                     }
-                    // Nobody is there. Asking would block for the whole
-                    // timeout and then deny anyway, so it denies now and says
-                    // why — a bot's morning wake should not take a quarter of
-                    // an hour to arrive at "no".
-                    None if scope.unattended => {
+                    // Started by a clock — so ask anyway, once.
+                    //
+                    // This used to deny outright, and the reason given was that
+                    // asking "would block for the whole timeout and then deny
+                    // anyway". That was true when there was nowhere for the
+                    // question to appear. It is not true now: the wait is
+                    // ninety seconds, the same as a worker's, and the question
+                    // lands on Today under "Needs you" with Yes and No on the
+                    // row. Somebody at the keyboard at nine in the morning can
+                    // simply answer it.
+                    //
+                    // What survives of the old objection is the cost of asking
+                    // into an empty room, so the run gets one probe. Once a
+                    // question has timed out, nobody is there, and the rest of
+                    // that run is refused immediately with the same words as
+                    // before.
+                    None if scope.unattended && self.asked_into_an_empty_room(scope) => {
                         denial = Some(format!(
                             "'{}' needed approval and this was started by a clock, so there was \
                              nobody to ask. Give it a standing grant if it should be allowed to \
@@ -1127,6 +1148,18 @@ impl ToolService {
                     }
                     None => {
                         let outcome = self.ask_permission(bus, agent_id, scope, call, &requested);
+                        // Nobody answered. On an unattended run that is the
+                        // probe coming back empty, so the rest of this run
+                        // stops asking. A *refusal* is not that — saying no is
+                        // somebody being there, and the next question still
+                        // gets to reach them.
+                        if scope.unattended && matches!(outcome, Outcome::TimedOut) {
+                            if let Some(session) = scope.session_id.as_deref() {
+                                if let Ok(mut seen) = self.nobody_home.lock() {
+                                    seen.insert(session.to_string());
+                                }
+                            }
+                        }
                         if !outcome.allows() {
                             denial = Some(outcome.reason(&call.tool));
                         }
@@ -1205,6 +1238,20 @@ impl ToolService {
 
     /// Ask a person, announcing the request before the wait so the UI learns
     /// about it while there is still time to answer.
+    /// Has this run already asked a question nobody answered?
+    ///
+    /// A run with no session id cannot be remembered either way, and gets the
+    /// old behaviour — refused rather than left to stall.
+    fn asked_into_an_empty_room(&self, scope: &EventScope) -> bool {
+        let Some(session) = scope.session_id.as_deref() else {
+            return true;
+        };
+        self.nobody_home
+            .lock()
+            .map(|seen| seen.contains(session))
+            .unwrap_or(true)
+    }
+
     fn ask_permission(
         &self,
         bus: &EventBus,
@@ -1809,6 +1856,75 @@ mod tests {
             None,
         );
         assert!(!bad.ok, "a non-zero exit must be a failure, not a success");
+    }
+    /// A clock-started run asks once, and only stops asking when nobody
+    /// answers.
+    ///
+    /// It used to refuse outright, on the reasoning that asking "would block
+    /// for the whole timeout and then deny anyway". That stopped being true
+    /// once a question reached a person: a worker's does, in ninety seconds, on
+    /// the first screen. A manager's did not, so on 28 Sep Studio read the
+    /// repository, worked out the right next piece of work, reached for a shell
+    /// to look at `.devdeck`, and was told there was nobody to ask — at nine in
+    /// the morning, with somebody sitting in front of it.
+    ///
+    /// What survives of the old objection is the cost of asking into an empty
+    /// room, so one unanswered question ends the asking for that run.
+    #[test]
+    fn a_clock_started_run_asks_once_and_then_stops() {
+        let t = Tmp::new("unattended-asks");
+        let bus = Arc::new(EventBus::new());
+
+        // Nobody is ever going to answer: every ask times out, fast.
+        let broker = Arc::new(ApprovalBroker::new(std::time::Duration::from_millis(60)));
+        let mut matrix = PermissionMatrix::default();
+        matrix.set("studio", TOOL_FILES, Permission::Approval);
+        let s = svc(&t.0, matrix).with_approvals(broker);
+
+        let scope = EventScope::project("p1").with_session("ses-1").unattended();
+        let call = ToolCall::new(TOOL_FILES, "list", serde_json::json!({ "path": "." }));
+
+        // The probe. Asked, waited, nobody came.
+        let first = s.execute(&bus, "studio", &scope, &call, None);
+        assert!(!first.ok, "nobody answered, so it cannot have been allowed");
+
+        // And now it knows the room is empty, so it says so instead of
+        // spending another ninety seconds finding out.
+        let second = s.execute(&bus, "studio", &scope, &call, None);
+        assert!(!second.ok);
+        assert!(second.denied, "it was refused, not attempted and failed");
+        let why = second.error.clone().unwrap_or_default();
+        assert!(
+            why.contains("nobody to ask"),
+            "the second question should be refused without waiting: {why}"
+        );
+    }
+
+    /// Being told no is not an empty room.
+    ///
+    /// Somebody said no, which means somebody was there — so the next question
+    /// still gets to reach them. Only silence means nobody is home.
+    #[test]
+    fn a_refusal_does_not_stop_a_run_from_asking_again() {
+        let t = Tmp::new("unattended-refused");
+        let s = svc(&t.0, PermissionMatrix::default());
+
+        let answered = EventScope::project("p1").with_session("ses-answered");
+        assert!(
+            !s.asked_into_an_empty_room(&answered),
+            "a run that has heard nothing yet must still be allowed to ask"
+        );
+
+        // Only a timeout marks the room empty.
+        s.nobody_home
+            .lock()
+            .unwrap()
+            .insert("ses-quiet".to_string());
+        let quiet = EventScope::project("p1").with_session("ses-quiet");
+        assert!(s.asked_into_an_empty_room(&quiet));
+
+        // And a run with nothing to remember it by keeps the old behaviour.
+        assert!(s.asked_into_an_empty_room(&EventScope::project("p1")));
     }
 }
 

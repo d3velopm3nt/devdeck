@@ -1459,6 +1459,7 @@ impl Assistant {
                 depends_on: Vec::new(),
                 unattended: false,
                 stop_at: Vec::new(),
+                on_behalf_of: None,
             };
             let live = AgentRuntime::begin(ws, &cmd)?;
             convs.post(
@@ -1717,6 +1718,7 @@ impl Assistant {
             depends_on: Vec::new(),
             unattended: false,
             stop_at: Vec::new(),
+            on_behalf_of: None,
         };
         let live = match AgentRuntime::begin(ws, &cmd) {
             Ok(l) => l,
@@ -2267,6 +2269,7 @@ impl Assistant {
                     depends_on: Vec::new(),
                     unattended: false,
                     stop_at: Vec::new(),
+                    on_behalf_of: None,
                 };
 
                 // Begin synchronously so a bad request fails *here*, where the

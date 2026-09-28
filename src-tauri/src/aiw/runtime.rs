@@ -73,6 +73,24 @@ pub struct StartAgentCommand {
     /// which is why it is words rather than a tool id.
     #[serde(default)]
     pub stop_at: Vec<String>,
+    /// Who this session is running for, in their words — a manager's voice,
+    /// when a manager's clock started it.
+    ///
+    /// A manager has a voice everywhere except where it matters most. Talk to
+    /// one in its room and it knows its goal, its standing instructions and who
+    /// its worker is, because the room builds all of that from `_bot.md` on
+    /// every turn. Wake the same manager on its schedule and none of it
+    /// travelled: the wake handed the runtime an agent id and the runtime ran
+    /// *the agent's* prompt. Studio, whose file names Smith, woke and reported
+    /// "there's no roster I can see" — twice, once after the roster paragraph
+    /// had already been written, because the paragraph was written into the
+    /// half of the code the clock never reaches.
+    ///
+    /// A string, not a `Persona`, on purpose: this layer knows nothing about
+    /// managers and should not start. It is told who it is working for and
+    /// says so; who that is remains `bots.rs`'s business.
+    #[serde(default)]
+    pub on_behalf_of: Option<String>,
 }
 
 /// Whether a call runs into a review point, and which one.
@@ -416,7 +434,7 @@ impl AgentRuntime {
                 agent_id: agent.id.clone(),
                 role: agent.role.clone(),
                 model: agent.model.clone(),
-                system: agent.system.clone(),
+                system: Self::voice(&agent, cmd.on_behalf_of.as_deref()),
                 context: context.to_prompt(),
                 goal: intent.clone(),
                 // Filtered by this agent's permissions, so what a provider is
@@ -869,7 +887,13 @@ impl AgentRuntime {
             ask_config: String::new(),
             ask_tool: String::new(),
         };
-        let prompt = Self::brief(&agent, &intent, &context, &cmd.stop_at);
+        let prompt = Self::brief(
+            &agent,
+            &intent,
+            &context,
+            &cmd.stop_at,
+            cmd.on_behalf_of.as_deref(),
+        );
 
         // How a delegated run is watched while it runs. The transcript is the
         // record and the log is the window: without the second, work happening
@@ -996,6 +1020,18 @@ impl AgentRuntime {
         )
     }
 
+    /// The agent's own instructions, and whoever it is working for.
+    ///
+    /// Both halves or neither: an agent started from a page has no manager
+    /// behind it and should not be told it has one.
+    fn voice(agent: &super::state::AgentDef, on_behalf_of: Option<&str>) -> String {
+        match on_behalf_of.map(str::trim).filter(|v| !v.is_empty()) {
+            Some(v) if agent.system.trim().is_empty() => v.to_string(),
+            Some(v) => format!("{}\n\n{v}", agent.system.trim()),
+            None => agent.system.clone(),
+        }
+    }
+
     /// What the CLI is told.
     ///
     /// The assembled context is the whole point of delegating from here rather
@@ -1007,11 +1043,20 @@ impl AgentRuntime {
         intent: &str,
         context: &super::context::AssembledContext,
         stop_at: &[String],
+        on_behalf_of: Option<&str>,
     ) -> String {
         let mut p = String::new();
         p.push_str("You are ");
         p.push_str(&agent.name);
-        p.push_str(", working in this repository as part of DevDeck.\n\n# What to do\n\n");
+        p.push_str(", working in this repository as part of DevDeck.\n\n");
+        // The CLI is a different engine, not a different job. A manager that
+        // woke this session is still the one it answers to.
+        if let Some(v) = on_behalf_of.map(str::trim).filter(|v| !v.is_empty()) {
+            p.push_str("# Who you are working for\n\n");
+            p.push_str(v);
+            p.push_str("\n\n");
+        }
+        p.push_str("# What to do\n\n");
         p.push_str(intent);
         p.push_str("\n\n");
         if !stop_at.is_empty() {
@@ -1382,5 +1427,38 @@ mod tests {
     fn a_rule_with_no_words_in_it_matches_nothing() {
         let rules = vec!["before any".to_string(), "  ".to_string()];
         assert!(review_point(&call("git", "push", serde_json::json!({})), &rules).is_none());
+    }
+
+    fn an_agent() -> super::super::state::AgentDef {
+        super::super::state::AgentDef {
+            id: "dev".into(),
+            name: "Dev".into(),
+            role: "developer".into(),
+            provider: "mock".into(),
+            model: "m".into(),
+            system: "You implement work items.".into(),
+            permissions: Default::default(),
+            skills: vec![],
+        }
+    }
+
+    /// A session started by a manager's clock says so; one started from a page
+    /// does not invent a manager to have been started by.
+    #[test]
+    fn a_session_says_who_it_is_working_for_only_when_someone_asked() {
+        let agent = an_agent();
+
+        let alone = AgentRuntime::voice(&agent, None);
+        assert_eq!(alone, "You implement work items.");
+
+        let sent = AgentRuntime::voice(&agent, Some("Studio woke this. Its worker is Smith."));
+        assert!(sent.contains("You implement work items."));
+        assert!(
+            sent.contains("Its worker is Smith."),
+            "the manager's voice did not reach the prompt"
+        );
+
+        // Whitespace is nobody.
+        assert_eq!(AgentRuntime::voice(&agent, Some("   ")), alone);
     }
 }

@@ -2341,6 +2341,57 @@ pub fn persona_for(
     p
 }
 
+/// The same manager, said to the agent its clock just woke.
+///
+/// Not [`persona`]. A persona is what the *room* runs on, and half of it is
+/// untrue in a session: "write @name take \"title\" in your reply" is parsed by
+/// the assistant reading a thread, and nothing parses it here — an agent given
+/// those instructions writes a line into a summary nobody acts on. What does
+/// travel is the part a wake was always missing: who wants this, what for, the
+/// standing instructions in the file, and who the worker is.
+///
+/// This is the fix for a manager that woke twice and said both times that it
+/// could not see its own worker. The roster paragraph existed by then; it lived
+/// in `persona`, and a wake never builds one.
+pub fn wake_voice(bot: &Bot) -> String {
+    let mut v = format!(
+        "{} — the manager of {} — woke on its schedule and started this session. You are \
+         its hands for the length of it: its goal and its standing instructions are yours, \
+         and what you leave behind is what it reports.",
+        bot.name, bot.node_name
+    );
+    if !bot.goal.trim().is_empty() {
+        v.push_str(&format!("\n\nIts goal: {}", bot.goal.trim()));
+    }
+    if !bot.body.trim().is_empty() {
+        v.push_str(&format!("\n\n{}", bot.body.trim()));
+    }
+    if !bot.worker.trim().is_empty() {
+        match crate::workers::read_worker(bot.worker.trim()) {
+            Ok(Some(w)) => v.push_str(&format!(
+                "\n\nIts worker is {} (@{}) — {} It works on a branch of its own and never \
+                 pushes.",
+                w.meta.name,
+                w.meta.handle,
+                w.meta.what.trim(),
+            )),
+            // A name that resolves to nobody, said out loud. Silence here is
+            // what produced a manager confidently planning a handover to
+            // somebody who does not exist.
+            _ => v.push_str(&format!(
+                "\n\nIts file names \"{}\" as its worker, and there is no worker by that name. \
+                 Do not plan around it.",
+                bot.worker.trim()
+            )),
+        }
+    }
+    v.push_str(
+        "\n\nNobody is watching this run. Say plainly what you did and what you did not — a \
+         run that could not check its own work says so rather than calling itself done.",
+    );
+    v
+}
+
 /// The same, plus the managers it may pass work to — which needs the tree, and
 /// so needs a connection.
 pub fn persona_in(
@@ -2772,6 +2823,11 @@ pub fn wake_agent(app: &tauri::AppHandle, bot: &Bot) -> Option<(bool, String)> {
         // The bot's own review points travel with the run. A wake is exactly
         // when nobody is watching, so this is when they matter most.
         stop_at: bot.stop_at.clone(),
+        // And so does the manager itself. Without this the runtime ran the
+        // agent's prompt and nothing else, so a wake arrived knowing the
+        // repository and not knowing who had asked, what for, or who its
+        // worker was.
+        on_behalf_of: Some(wake_voice(bot)),
     };
 
     // The line lands in your inbox, so the agent gets its name rather than its
@@ -3096,5 +3152,66 @@ mod tests {
             plan_proposal(&conn, &bot).is_empty(),
             "a product folder was offered a business's first steps"
         );
+    }
+
+    /// What the clock carries into a session.
+    ///
+    /// Studio woke twice and both times reported that it could not see its own
+    /// worker, though `_bot.md` said `worker: smith` and `smith.md` was sitting
+    /// in the personal store parsing fine. The roster paragraph had been
+    /// written — into `persona`, which only the room builds. A wake built a
+    /// `StartAgentCommand` and the runtime ran the *agent's* prompt, so the
+    /// manager's goal, its standing instructions and its worker all stopped at
+    /// the door.
+    #[test]
+    fn a_woken_manager_arrives_as_itself() {
+        let bot = Bot {
+            handle: "studio".into(),
+            name: "Studio".into(),
+            node_name: "Goal tracker".into(),
+            goal: "Keep the goal tracker moving".into(),
+            body: "Ship something small every day.".into(),
+            agent: "assistant".into(),
+            ..Default::default()
+        };
+
+        let v = wake_voice(&bot);
+        assert!(v.contains("Studio"), "the manager did not say who it was");
+        assert!(v.contains("Goal tracker"), "no space named");
+        assert!(v.contains("Keep the goal tracker moving"), "no goal");
+        assert!(v.contains("Ship something small every day."), "no body");
+        assert!(
+            !v.contains("take \""),
+            "the room's @-syntax travelled into a session, where nothing reads it"
+        );
+    }
+
+    /// A worker named and not there is said out loud.
+    ///
+    /// The silent version is what let a manager plan a handover to somebody who
+    /// does not exist — the same failure as an unreachable server reported as
+    /// up to date.
+    #[test]
+    fn a_worker_that_is_not_there_is_named_as_missing() {
+        let bot = Bot {
+            handle: "studio".into(),
+            name: "Studio".into(),
+            node_name: "Goal tracker".into(),
+            worker: "nobody-by-this-name-9e3f".into(),
+            ..Default::default()
+        };
+
+        let v = wake_voice(&bot);
+        assert!(v.contains("nobody-by-this-name-9e3f"));
+        assert!(v.contains("no worker by that name"));
+
+        // And a manager with no worker is told nothing about one.
+        let quiet = Bot {
+            handle: "studio".into(),
+            name: "Studio".into(),
+            node_name: "Goal tracker".into(),
+            ..Default::default()
+        };
+        assert!(!wake_voice(&quiet).contains("worker"));
     }
 }

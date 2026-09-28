@@ -1081,6 +1081,7 @@ pub fn run_demo_on(
             depends_on: vec![],
             unattended: false,
             stop_at: Vec::new(),
+            on_behalf_of: None,
         },
     )?);
 
@@ -1100,6 +1101,7 @@ pub fn run_demo_on(
             depends_on: vec!["SyncResult".into()],
             unattended: false,
             stop_at: Vec::new(),
+            on_behalf_of: None,
         },
     )?;
 
@@ -1116,6 +1118,7 @@ pub fn run_demo_on(
             depends_on: vec![],
             unattended: false,
             stop_at: Vec::new(),
+            on_behalf_of: None,
         },
     )?);
 
@@ -1135,6 +1138,7 @@ pub fn run_demo_on(
             depends_on: vec![],
             unattended: false,
             stop_at: Vec::new(),
+            on_behalf_of: None,
         },
     )?);
 
@@ -1151,6 +1155,7 @@ pub fn run_demo_on(
             depends_on: vec![],
             unattended: false,
             stop_at: Vec::new(),
+            on_behalf_of: None,
         },
     )?);
 

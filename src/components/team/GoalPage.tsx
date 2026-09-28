@@ -153,11 +153,11 @@ export function GoalPage({ goal, board }: { goal: GoalRow; board: Board }) {
     }
   }
 
-  const merge = async (featureId: string, itemId: string) => {
+  const merge = async (featureId: string) => {
     setErr('')
-    setBusy(itemId)
+    setBusy(featureId)
     try {
-      setNote(await ipc.workMerge(goal.node_id, featureId, itemId))
+      setNote(await ipc.workMerge(goal.node_id, featureId))
       await load()
     } catch (e) {
       setErr(String(e))
@@ -352,6 +352,28 @@ export function GoalPage({ goal, board }: { goal: GoalRow; board: Board }) {
                 </p>
               )}
 
+              {/* The goal ships, not an item: its branch carries every item
+                  on it. Shown only when something is actually built, so the
+                  control appears exactly when it means something. */}
+              {items.some((i) => i.status === 'built') && (
+                <div className="mt-2 flex items-center gap-2 rounded-lg border border-sky-500/25 bg-sky-500/[0.07] px-3 py-1.5">
+                  <span className="min-w-0 flex-1 text-[11.5px] text-dim">
+                    {items.filter((i) => i.status === 'built').length} built on{' '}
+                    <code className="font-mono text-[10.5px] text-muted">
+                      devdeck/{f.feature_id}
+                    </code>{' '}
+                    — on a branch, not on the main line.
+                  </span>
+                  <button
+                    className="btn-primary shrink-0 px-2 py-0.5 text-[11px]"
+                    disabled={busy !== null}
+                    onClick={() => void merge(f.feature_id)}
+                  >
+                    Merge
+                  </button>
+                </div>
+              )}
+
               {proposed.length > 0 && (
                 <div className="mt-2 flex items-center gap-2 rounded-lg border border-violet-500/25 bg-violet-500/[0.07] px-3 py-1.5">
                   <span className="min-w-0 flex-1 text-[11.5px] text-dim">
@@ -415,20 +437,11 @@ export function GoalPage({ goal, board }: { goal: GoalRow; board: Board }) {
                             </button>
                           </>
                         ) : i.status === 'built' ? (
-                          /* The only control that writes `done`. A worker may
-                             not merge, and the app will refuse this too if the
-                             tree is dirty or the branch does not apply — it
-                             says so rather than marking it done over a mess. */
-                          <>
-                            <span className="shrink-0 text-[10.5px] text-info">on a branch</span>
-                            <button
-                              className="btn-primary shrink-0 px-2 py-0.5 text-[10.5px]"
-                              disabled={busy !== null}
-                              onClick={() => void merge(f.feature_id, i.id)}
-                            >
-                              Merge
-                            </button>
-                          </>
+                          /* Built is a state, not a button. Its goal's branch
+                             carries every item on it, so merging one alone is
+                             not a thing that can happen — the control for that
+                             belongs to the goal. */
+                          <span className="shrink-0 text-[10.5px] text-info">on the branch</span>
                         ) : by ? (
                           <span className="shrink-0 rounded-full bg-emerald-500/15 px-1.5 text-[9.5px] font-semibold text-ok">
                             {by}

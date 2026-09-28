@@ -2224,11 +2224,12 @@ export const workerAsks = (run: string) => invoke<Ask[]>('worker_asks', { run })
 
 export const workerAnswer = (run: string, ask: string, allow: boolean, note = '') =>
   invoke<void>('worker_answer', { run, ask, allow, note })
-/** Put a built item on the main line — the one thing that may write `done`.
- *  A worker is forbidden to merge, so this happens here, by the app, on the
- *  branch its receipt names. */
-export const workMerge = (nodeId: number, feature: string, item: string) =>
-  invoke<string>('work_merge', { nodeId, feature, item })
+/** Put a goal's built work on the main line — the one thing that may write
+ *  `done`. Per goal, because the branch is per goal: its items have been
+ *  committing on top of each other and arrive as one piece of work. A worker
+ *  is forbidden to merge, so this happens here, by the app. */
+export const workMerge = (nodeId: number, feature: string) =>
+  invoke<string>('work_merge', { nodeId, feature })
 export const runsList = (nodeId = 0) => invoke<Run[]>('runs_list', { nodeId })
 export const runGet = (id: string) => invoke<Run | null>('run_get', { id })
 /** keep | discard, with whatever you want said about it. */

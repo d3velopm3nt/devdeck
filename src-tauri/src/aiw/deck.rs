@@ -215,7 +215,10 @@ pub struct WorkMeta {
 pub struct WorkItem {
     pub id: String,
     pub title: String,
-    /// unclaimed | claimed | in-progress | blocked | done
+    /// unclaimed | claimed | in-progress | blocked | built | done
+    ///
+    /// `built` is written on a branch and not on the main line; `done` means
+    /// merged, and nothing a worker can do reaches it.
     #[serde(default)]
     pub status: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -232,6 +235,15 @@ pub struct WorkItem {
     /// goes here.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub due: Option<String>,
+    /// A branch of its own, when this one item should not share its goal's.
+    ///
+    /// Empty is the normal case and means "the goal's branch", which is what
+    /// makes work accumulate: the second item on a goal starts from the first
+    /// one's commits instead of from the main line. Set it only when a piece
+    /// of work genuinely has to stand apart — a spike, or something you may
+    /// want to throw away without touching the rest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
@@ -928,6 +940,7 @@ mod tests {
                 assignee: Some("claude".into()),
                 areas: vec!["packages/sync".into()],
                 due: None,
+                branch: None,
             }],
         };
         deck.save_work(&slug, &work).unwrap();

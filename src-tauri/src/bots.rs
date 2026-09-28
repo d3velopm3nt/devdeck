@@ -1245,6 +1245,7 @@ fn plan_into_for(
             assignee: None,
             areas: vec![],
             due: None,
+            branch: None,
         });
         added += 1;
     }
@@ -1364,6 +1365,7 @@ pub fn bot_work_save(
             assignee: assignee.filter(|a| !a.trim().is_empty()),
             areas: vec![],
             due: None,
+            branch: None,
         }),
     }
     deck.save_work(&slug, &work)
@@ -1855,6 +1857,7 @@ pub fn propose_plan(conn: &Connection, bot: &Bot) -> Result<Vec<String>, String>
             assignee: None,
             areas: Vec::new(),
             due: None,
+            branch: None,
         });
         added.push(title);
     }

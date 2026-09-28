@@ -967,6 +967,7 @@ mod tests {
                         assignee: None,
                         areas: vec!["packages/sync".into()],
                         due: None,
+                        branch: None,
                     },
                     WorkItem {
                         id: "wi-2".into(),
@@ -975,6 +976,7 @@ mod tests {
                         assignee: None,
                         areas: vec!["apps/mobile".into()],
                         due: None,
+                        branch: None,
                     },
                 ],
             },

@@ -282,6 +282,7 @@ mod tests {
             assignee: None,
             areas: vec![],
             due: None,
+            branch: None,
         }
     }
 

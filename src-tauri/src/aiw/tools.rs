@@ -338,6 +338,7 @@ pub fn work_on_deck(deck: &super::deck::Deck, feature: &str, call: &ToolCall) ->
                 assignee: None,
                 areas: Vec::new(),
                 due: None,
+                branch: None,
             });
             match deck.save_work(feature, &work.meta) {
                 Ok(()) => (

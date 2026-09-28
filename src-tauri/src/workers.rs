@@ -427,6 +427,56 @@ pub fn close_orphans(app: &tauri::AppHandle) -> Result<usize, String> {
     Ok(n)
 }
 
+/// The branch a run works on: its goal's, unless the item asks for its own.
+///
+/// It used to be one branch per *work item*, named from the item's title and
+/// the day — and that is what left `goals.js` on four branches and on no main
+/// line. Each one cut from the same commit and wrote the file from nothing, so
+/// sibling items on one goal could not build on each other and could not be
+/// merged after each other: the store and the due dates, both Mason's, conflict
+/// in four places because neither ever saw the other.
+///
+/// One branch per goal fixes that by construction. The second item starts from
+/// the first one's commits, the goal arrives as one reviewable piece of work,
+/// and there is one merge rather than an argument between versions of the same
+/// file written by workers who never knew about each other.
+///
+/// No date in the name, on purpose: the branch outlives the day so work keeps
+/// accumulating, and an item handed out again tomorrow returns to where it was
+/// rather than starting a second copy.
+///
+/// Two escapes. An item may name its own branch, for a spike or anything that
+/// should be throwable away on its own. And a run started by hand, off no plan,
+/// has no goal to belong to — that keeps the old title-and-day name, which is
+/// the honest thing for a one-off.
+fn branch_for(deck: &Path, feature: &str, item: &str, title: &str) -> String {
+    let own = (!feature.trim().is_empty() && !item.trim().is_empty())
+        .then(|| {
+            crate::aiw::deck::Deck::new(deck)
+                .work(feature)
+                .ok()?
+                .meta
+                .items
+                .into_iter()
+                .find(|i| i.id == item)?
+                .branch
+                .filter(|b| !b.trim().is_empty())
+        })
+        .flatten();
+    if let Some(b) = own {
+        return b.trim().to_string();
+    }
+    if feature.trim().is_empty() {
+        // Off no plan: one-off work, named after itself.
+        return format!(
+            "devdeck/{}-{}",
+            crate::managers::handle_from(title),
+            chrono::Local::now().format("%m%d")
+        );
+    }
+    format!("devdeck/{}", feature.trim())
+}
+
 /// Where a finished run leaves its item — decided by what is on the branch.
 ///
 /// Never by the run's own verdict, which is the thing that was wrong. A clean
@@ -852,11 +902,7 @@ pub fn plan(
 
     Ok(Plan {
         branch: if wants_branch && repo.is_some() {
-            format!(
-                "devdeck/{}-{}",
-                crate::managers::handle_from(title),
-                chrono::Local::now().format("%m%d")
-            )
+            branch_for(&deck, feature, item, title)
         } else {
             String::new()
         },
@@ -1981,55 +2027,71 @@ pub fn worker_stop(id: String) -> Result<(), String> {
     Ok(())
 }
 
-/// Put a built item on the main line, and only then call it done.
+/// Put a goal's work on the main line, and only then call it done.
+///
+/// Per goal, not per item, because the branch is per goal: its items have been
+/// committing on top of each other, so they arrive as one piece of work and
+/// there is nothing to pick apart. That is also the honest shape of shipping —
+/// you release a goal, not half of one. An item that turned out badly is a
+/// commit to revert, not a commit to withhold.
 ///
 /// This is the one thing that may write `done`, and it is deliberately a
 /// person's press rather than something a run does on its way out. A worker is
 /// forbidden to merge (see [`NEVER`]) and that stays true — the merge happens
-/// here, in the repository, by the app, with the branch named in the receipt.
+/// here, in the repository, by the app.
 ///
-/// It refuses rather than forces, in three places, because each of them is a
-/// question only you can answer: a dirty tree might be work you have not
-/// committed, a missing branch means the receipt is lying about where the work
-/// is, and a conflict is a decision. The merge is aborted and the item stays
-/// `built` — which is true — rather than being marked done over a mess.
+/// It refuses rather than forces, in three places, because each is a question
+/// only you can answer: a dirty tree might be work you have not committed, a
+/// missing branch means the receipts are lying about where the work is, and a
+/// conflict is a decision. The merge is aborted and the items stay `built`,
+/// which is true, rather than being marked done over a mess.
 #[tauri::command(async)]
 pub fn work_merge(
     app: tauri::AppHandle,
     db: tauri::State<Db>,
     node_id: i64,
     feature: String,
-    item: String,
 ) -> Result<String, String> {
-    // Matched on the feature as well as the item: ids are only unique within a
-    // feature (`w01-…` is the first item of every plan), so merging on the item
-    // alone could take a branch built for a different plan's `w01`.
-    let run = all_runs()?
-        .into_iter()
-        .filter(|r| {
-            r.node_id == node_id
-                && r.feature == feature
-                && r.item == item
-                && !r.branch.trim().is_empty()
-        })
-        .max_by(|a, b| a.started_at.cmp(&b.started_at))
-        .ok_or("nothing has been built for this item, so there is no branch to merge")?;
-
-    let dir = {
+    let (dir, deck_dir) = {
         let conn = db.conn();
-        db::node_dir_by_id(&conn, node_id).ok_or("that space names no repository")?
+        let n = db::node_by_id(&conn, node_id).map_err(err)?;
+        (
+            db::node_dir(&conn, &n).ok_or("that space names no repository")?,
+            db::node_deck_dir(&conn, &n).ok_or("that space has no folder yet")?,
+        )
     };
     if !crate::git::is_repo(&dir) {
         return Err(format!("{} is not a git repository", dir.display()));
     }
 
-    let branch = run.branch.trim();
-    if crate::git::run_git(&dir, &["rev-parse", "--verify", branch]).is_none() {
-        return Err(format!(
-            "{branch} is not in {} — the receipt says the work is there and it is not",
-            dir.display()
-        ));
+    let deck = crate::aiw::deck::Deck::new(&deck_dir);
+    let mut work = deck.work(&feature)?;
+    let built: Vec<String> = work
+        .meta
+        .items
+        .iter()
+        .filter(|i| i.status == BUILT)
+        .map(|i| i.id.clone())
+        .collect();
+    if built.is_empty() {
+        return Err("nothing on this goal is built, so there is nothing to merge".into());
     }
+
+    // Every branch those items were built on. Normally exactly one — the
+    // goal's — but an item that asked for its own is merged too, and a goal
+    // built before the branch became per-goal can still have several.
+    let mut branches: Vec<String> = all_runs()?
+        .into_iter()
+        .filter(|r| r.node_id == node_id && r.feature == feature && built.contains(&r.item))
+        .map(|r| r.branch.trim().to_string())
+        .filter(|b| !b.is_empty())
+        .collect();
+    branches.sort();
+    branches.dedup();
+    if branches.is_empty() {
+        return Err("those items name no branch, so there is nothing to merge".into());
+    }
+
     let dirty = crate::git::dirty_files(&dir);
     if !dirty.is_empty() {
         return Err(format!(
@@ -2039,34 +2101,43 @@ pub fn work_merge(
             if dirty.len() == 1 { "" } else { "s" }
         ));
     }
+    for b in &branches {
+        if crate::git::run_git(&dir, &["rev-parse", "--verify", b]).is_none() {
+            return Err(format!(
+                "{b} is not in {} — the receipts say the work is there and it is not",
+                dir.display()
+            ));
+        }
+    }
 
-    // `--no-ff`, always: the branch is a piece of work and its shape is worth
-    // keeping. A fast-forward would leave no record that anything was merged.
     let onto = crate::git::run_git(&dir, &["rev-parse", "--abbrev-ref", "HEAD"])
         .map(|s| s.trim().to_string())
         .unwrap_or_else(|| "HEAD".into());
-    let merged = crate::git::run_git(
-        &dir,
-        &[
-            "merge",
-            "--no-ff",
-            "-m",
-            &format!("Merge {branch}\n\n{}", run.title.trim()),
-            branch,
-        ],
-    );
-    if merged.is_none() {
-        let _ = crate::git::run_git(&dir, &["merge", "--abort"]);
-        return Err(format!(
-            "{branch} does not merge cleanly into {onto}. Nothing was changed — the conflict is \
-             yours to settle, and the item stays built."
-        ));
+    for b in &branches {
+        // `--no-ff`, always: the branch is a piece of work and its shape is
+        // worth keeping. A fast-forward would leave no record of a merge.
+        let merged =
+            crate::git::run_git(&dir, &["merge", "--no-ff", "-m", &format!("Merge {b}"), b]);
+        if merged.is_none() {
+            let _ = crate::git::run_git(&dir, &["merge", "--abort"]);
+            return Err(format!(
+                "{b} does not merge cleanly into {onto}. Nothing further was changed — the                  conflict is yours to settle, and the goal stays built."
+            ));
+        }
     }
 
-    move_item(&app, &run, "done");
+    for i in work.meta.items.iter_mut().filter(|i| i.status == BUILT) {
+        i.status = "done".into();
+        i.assignee = None;
+    }
+    let n = built.len();
+    deck.save_work(&feature, &work.meta)?;
+    let _ = app;
     Ok(format!(
-        "Merged {branch} into {onto}. “{}” is done.",
-        run.title.trim()
+        "Merged {} into {onto}. {n} item{} on {feature} {} done.",
+        branches.join(", "),
+        if n == 1 { "" } else { "s" },
+        if n == 1 { "is" } else { "are" }
     ))
 }
 
@@ -2654,6 +2725,42 @@ mod setup_check {
     fn uncommitted_work_alone_does_not_condemn_a_run() {
         assert_eq!(super::outcome_status(true, 0, false, true), "done");
         assert_eq!(super::outcome_status(false, 0, false, true), "failed");
+    }
+
+    /// One branch per goal, so a goal's work accumulates instead of competing.
+    ///
+    /// It was one branch per work item, named from the title and the day. Each
+    /// branch cut from the same commit and wrote the same files from nothing,
+    /// so Mason's due-date work could not build on Mason's own store — and the
+    /// two conflict in four places, because neither ever saw the other.
+    #[test]
+    fn a_goal_has_one_branch_and_its_items_share_it() {
+        let deck = std::env::temp_dir().join(format!("devdeck-branch-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&deck);
+
+        // Two items of one goal, two different titles, one branch.
+        assert_eq!(
+            super::branch_for(&deck, "goal-store", "w1", "Add a goal store"),
+            "devdeck/goal-store"
+        );
+        assert_eq!(
+            super::branch_for(&deck, "goal-store", "w2", "Give a goal a due date"),
+            "devdeck/goal-store"
+        );
+
+        // No date in it, so tomorrow returns to the same work rather than
+        // starting a second copy of it.
+        assert!(
+            !super::branch_for(&deck, "goal-store", "w1", "Add a goal store")
+                .chars()
+                .any(|c| c.is_ascii_digit())
+        );
+
+        // Off no plan there is no goal to belong to, so a one-off is named
+        // after itself and dated, as it always was.
+        let off_plan = super::branch_for(&deck, "", "", "Build the goal store");
+        assert!(off_plan.starts_with("devdeck/build-the-goal-store-"));
+        assert_ne!(off_plan, "devdeck/goal-store");
     }
 
     /// Nothing a worker can do makes an item done.

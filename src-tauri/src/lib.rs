@@ -1105,6 +1105,7 @@ pub fn run() {
             bots::work_decline,
             bots::bot_create,
             bots::bot_plan,
+            bots::bot_adopt,
             bots::bot_plan_proposal,
             bots::bot_work,
             bots::bot_work_save,

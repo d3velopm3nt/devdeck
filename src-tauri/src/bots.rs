@@ -1126,6 +1126,68 @@ pub fn bot_work(
     Ok(out)
 }
 
+/// The space's one feature that nobody manages, when there is exactly one.
+///
+/// "Exactly one" is the whole guard. A space with two unowned features is
+/// asking a question — which of these is yours? — and guessing at it would put
+/// a manager on work somebody meant for another. A space with none has nothing
+/// to adopt. Only the unambiguous case answers itself.
+///
+/// A feature whose `owner:` names a manager that no longer exists counts as
+/// unowned, the same way [`plan_into`] has always treated it: an orphan is not
+/// somebody else's.
+fn the_one_unowned_feature(conn: &Connection, deck: &crate::aiw::deck::Deck) -> Option<String> {
+    let mut free = deck.feature_slugs().into_iter().filter(|slug| {
+        deck.feature(slug)
+            .map(|d| {
+                let owner = d.meta.owner.trim();
+                owner.is_empty() || crate::managers::get(conn, owner).is_none()
+            })
+            .unwrap_or(false)
+    });
+    let one = free.next()?;
+    free.next().is_none().then_some(one)
+}
+
+/// Put a manager on a feature that already exists.
+///
+/// The deliberate half of adoption, for every case
+/// [`the_one_unowned_feature`] will not guess at. A manager is responsible for
+/// features rather than for a folder, so this is how its portfolio grows —
+/// and its plan is the work across everything it owns, never a list of its
+/// own kept somewhere separate.
+///
+/// It refuses to take a feature from a manager that still exists. Ownership
+/// moves by the other one letting go, which is a different sentence and a
+/// different decision.
+#[tauri::command]
+pub fn bot_adopt(
+    db: tauri::State<Db>,
+    node_id: i64,
+    feature: String,
+    handle: String,
+) -> Result<String, String> {
+    let conn = db.conn();
+    let n = db::node_by_id(&conn, node_id).map_err(|e| e.to_string())?;
+    let dir = db::node_deck_dir(&conn, &n).ok_or("that space has no folder yet")?;
+    let deck = crate::aiw::deck::Deck::new(&dir);
+    if !deck.feature_md(&feature).is_file() {
+        return Err(format!("there is no feature called {feature} here"));
+    }
+    let doc = deck.feature(&feature)?;
+    let owner = doc.meta.owner.trim().to_string();
+    if !owner.is_empty() && owner != handle {
+        if let Some(m) = crate::managers::get(&conn, &owner) {
+            return Err(format!(
+                "{} manages {} — it has to let go of it before anyone else can take it.",
+                m.name, doc.meta.name
+            ));
+        }
+    }
+    take_feature(&deck, &feature, &handle)?;
+    Ok(doc.meta.name)
+}
+
 /// Write the owner onto a feature. This is what "a manager's plan" means now:
 /// the feature says whose it is, so a portfolio cannot drift from the work.
 fn take_feature(deck: &crate::aiw::deck::Deck, slug: &str, handle: &str) -> Result<(), String> {
@@ -1195,7 +1257,24 @@ fn plan_into_for(
             bot.goal.clone()
         };
         let candidate = crate::aiw::deck::slugify(&base);
-        if candidate.is_empty() {
+        if let Some(theirs) = the_one_unowned_feature(conn, &deck) {
+            // The space already describes what it is for. Adopt that rather
+            // than inventing a container named after the manager.
+            //
+            // Inventing one is what put "Studio's plan" beside "The goal
+            // store" as *siblings*, when one holds the other's work. Studio
+            // could see only its own list, so it decided from scratch a piece
+            // of work the goal store already recorded — and the goal store,
+            // owned by nobody, sat untouched with `goals.js` finished on a
+            // branch since the 25th. A manager working next to the product
+            // instead of on it is the whole fault.
+            //
+            // Narrow on purpose: exactly one complete feature, owned by
+            // nobody, and this manager owning nothing yet. Anything less
+            // clear-cut is a choice, and it is made with `bot_adopt` rather
+            // than guessed at here.
+            theirs
+        } else if candidate.is_empty() {
             deck.create_feature(&base, &bot.goal, &[])?
         } else if deck.feature_md(&candidate).is_file()
             && deck
@@ -3103,6 +3182,56 @@ mod tests {
     /// `role:engineering`, sitting on a product folder — opened its first
     /// morning by proposing a dependency audit and a pull-request review of a
     /// repository with two files in it. Confident, irrelevant, and written onto
+    /// A manager adopts the space's feature instead of inventing its own.
+    ///
+    /// Inventing one put "Studio's plan" beside "The goal store" as siblings,
+    /// when one holds the other's work. Studio could see only its own list, so
+    /// it decided from scratch a piece of work the goal store already recorded
+    /// — and the goal store, owned by nobody, sat untouched with `goals.js`
+    /// finished on a branch since the 25th.
+    ///
+    /// And the guard on it: two unowned features are a question, not an
+    /// answer, so nothing is guessed.
+    #[test]
+    fn a_manager_takes_the_space_s_own_feature_when_there_is_no_doubt_which() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(crate::db::CORE_SCHEMA).unwrap();
+        crate::db::migrate(&conn);
+
+        let dir = std::env::temp_dir().join(format!("devdeck-adopt-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let deck = crate::aiw::deck::Deck::new(&dir);
+        deck.init("61", "Goal tracker").unwrap();
+
+        // Nothing there yet: nothing to adopt.
+        assert_eq!(the_one_unowned_feature(&conn, &deck), None);
+
+        let store = deck
+            .create_feature("The goal store", "A goal can be added and closed", &[])
+            .unwrap();
+        assert_eq!(
+            the_one_unowned_feature(&conn, &deck).as_deref(),
+            Some(store.as_str()),
+            "the one feature nobody manages was not offered"
+        );
+
+        // A second unowned feature is a question — which of these is yours? —
+        // and guessing would put a manager on somebody else's work.
+        deck.create_feature("The command line", "Ask it from a shell", &[])
+            .unwrap();
+        assert_eq!(
+            the_one_unowned_feature(&conn, &deck),
+            None,
+            "two unowned features were guessed between"
+        );
+
+        // Owned by a manager that is not there is not owned by anybody.
+        take_feature(&deck, &store, "somebody-who-left").unwrap();
+        assert_eq!(the_one_unowned_feature(&conn, &deck), None);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// the plan for the owner to agree to. Proposing nothing is the better
     /// failure: `empty_plan_line` then says it has no plan, which is true.
     #[test]

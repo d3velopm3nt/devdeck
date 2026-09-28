@@ -153,6 +153,19 @@ export function GoalPage({ goal, board }: { goal: GoalRow; board: Board }) {
     }
   }
 
+  const adopt = async (featureId: string) => {
+    setErr('')
+    setBusy(featureId)
+    try {
+      setNote(`${bot?.name ?? handle} now manages ${await ipc.botAdopt(goal.node_id, featureId, handle)}.`)
+      await load()
+    } catch (e) {
+      setErr(String(e))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const merge = async (featureId: string) => {
     setErr('')
     setBusy(featureId)
@@ -509,6 +522,42 @@ export function GoalPage({ goal, board }: { goal: GoalRow; board: Board }) {
             </div>
           )
         })}
+
+        {/* What this manager could be working on and is not.
+            A feature nobody manages is the goal store's whole story: finished
+            on a branch since the 25th, invisible to the manager standing next
+            to it, which is why the same work was decided again from scratch. */}
+        {handle &&
+          (() => {
+            const free = board.rows.filter(
+              (r) => r.node_id === goal.node_id && !r.managed_handle,
+            )
+            if (free.length === 0) return null
+            return (
+              <div className="mt-6 rounded-lg border border-line2 bg-panel px-3 py-2">
+                <div className="text-[11px] text-dim">
+                  Nobody manages {free.length === 1 ? 'this' : 'these'} in {goal.space}:
+                </div>
+                {free.map((r) => (
+                  <div key={r.feature_id} className="mt-1.5 flex items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate text-[11.5px] text-body">
+                      {r.feature_name}
+                    </span>
+                    <span className="shrink-0 text-[10.5px] text-faint">
+                      {r.items_done} of {r.items_total} done
+                    </span>
+                    <button
+                      className="btn-ghost shrink-0 px-2 py-0.5 text-[10.5px]"
+                      disabled={busy !== null}
+                      onClick={() => void adopt(r.feature_id)}
+                    >
+                      {bot?.name ?? handle} takes it
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
 
         <div className="mt-8 flex items-center gap-2 text-[10.5px] text-faint">
           <button className="flex items-center gap-1 hover:text-ink" onClick={() => void load()}>

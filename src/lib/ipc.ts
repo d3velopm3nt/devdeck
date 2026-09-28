@@ -610,6 +610,14 @@ export const botCreate = (b: {
 }) => invoke<Bot>('bot_create', b)
 
 export const botWork = (nodeId: number, handle?: string) => invoke<BotWork[]>('bot_work', { nodeId, handle })
+/** Put a manager on a feature that already exists.
+ *
+ *  How a manager's portfolio grows. A manager is responsible for features
+ *  rather than for a folder, and its plan is the work across everything it
+ *  owns — never a list of its own kept somewhere separate. It refuses to take
+ *  a feature from a manager that still exists. */
+export const botAdopt = (nodeId: number, feature: string, handle: string) =>
+  invoke<string>('bot_adopt', { nodeId, feature, handle })
 export const botPlan = (nodeId: number, steps: string[], handle?: string) =>
   invoke<string>('bot_plan', { nodeId, steps, handle })
 /** What a manager with nothing on its plan would start with. */

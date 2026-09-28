@@ -108,8 +108,12 @@ export function GoalPage({ goal, board }: { goal: GoalRow; board: Board }) {
   /// unmanaged feature in a space onto one page, so picking Innotrack's
   /// engineering plan also showed its product plan as if one thing owned both.
   /// A feature nobody manages is its own page and nothing else's.
+  ///
+  /// Matched on the handle, like the lookup. Matching on `managed_by` — the
+  /// name — compared "Studio" against "studio" and found nothing, so the page
+  /// rendered a manager with no plan at all.
   const shown = handle
-    ? board.rows.filter((r) => r.node_id === goal.node_id && r.managed_by === handle)
+    ? board.rows.filter((r) => r.node_id === goal.node_id && r.managed_handle === handle)
     : [goal]
 
   const workFor = (featureId: string) =>
@@ -280,8 +284,14 @@ export function GoalPage({ goal, board }: { goal: GoalRow; board: Board }) {
             )}
           </div>
         ) : (
+          /* "Nobody owns this" and "I have not read it yet" are different
+             things, and saying the first while the second is true is the
+             update checker's old bug in miniature: a failed read wearing the
+             face of an answer. */
           <div className="mt-4 rounded-lg border border-line2 bg-panel px-3 py-2 text-[11.5px] text-muted">
-            No manager owns this yet, so there is no standing instruction to edit.
+            {handle
+              ? 'Reading its file…'
+              : 'No manager owns this yet, so there is no standing instruction to edit.'}
           </div>
         )}
 

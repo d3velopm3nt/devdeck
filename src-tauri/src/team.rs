@@ -39,8 +39,11 @@ pub struct GoalRow {
     pub feature_name: String,
     pub status: String,
     pub goal: Option<String>,
-    /// The bot whose plan this is, when one has adopted it.
+    /// The bot whose plan this is, when one has adopted it. Its *name*, for
+    /// reading.
     pub managed_by: Option<String>,
+    /// The same manager's handle, which is what anything looking it up needs.
+    pub managed_handle: Option<String>,
     pub bot_node: Option<i64>,
     /// Agents holding a live claim on it right now.
     pub on_it: Vec<String>,
@@ -135,6 +138,17 @@ pub fn board_from(
     let claims = workspace.claims_for(None, true);
     let approvals = workspace.pending_approvals();
     let conflicts = workspace.conflicts.list(None, false);
+    // Questions a worker stopped on and nobody has answered, by the item they
+    // are about. Read once for the whole board rather than per feature: this
+    // walks the personal store, and doing it inside the loop would be one walk
+    // per feature on every refresh.
+    let asked: std::collections::HashMap<String, usize> = crate::workers::all_runs()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|r| r.status == "running" && !r.item.trim().is_empty())
+        .map(|r| (r.item.clone(), crate::asks::unanswered(&r.id).len()))
+        .filter(|(_, n)| *n > 0)
+        .collect();
     let mut out = Vec::new();
     for id in workspace.project_ids() {
         let Some(project) = workspace.project(&id) else {
@@ -177,6 +191,13 @@ pub fn board_from(
                     .unwrap_or_else(|| "unreadable".into()),
                 goal: f.as_ref().and_then(|d| d.meta.goal.clone()),
                 managed_by: managing.map(|b| b.name.clone()),
+                // The name is for reading and the handle is for looking up.
+                // With only the name, the goal page fetched its manager as
+                // `bot_get("Studio")`, which reads `Studio.md` — it resolved
+                // solely because Windows filenames are case-insensitive, and
+                // would have missed any manager whose handle is not its name
+                // in lower case ("Product manager" → `product-manager.md`).
+                managed_handle: managing.map(|b| b.handle.clone()),
                 bot_node: managing.map(|b| b.node_id),
                 items_total: items.len(),
                 items_done: items.iter().filter(|i| i.status == "done").count(),
@@ -185,13 +206,17 @@ pub fn board_from(
                     .iter()
                     .filter(|i| i.status.is_empty() || i.status == "unclaimed")
                     .count(),
-                waiting: approvals
-                    .iter()
-                    .filter(|a| {
-                        a.project_id.as_deref() == Some(&id)
-                            && a.feature_id.as_deref().map(|f| f == slug).unwrap_or(true)
-                    })
-                    .count(),
+                waiting: waiting_on_you(
+                    approvals
+                        .iter()
+                        .filter(|a| {
+                            a.project_id.as_deref() == Some(&id)
+                                && a.feature_id.as_deref().map(|f| f == slug).unwrap_or(true)
+                        })
+                        .count(),
+                    &items,
+                    &asked,
+                ),
                 conflicts: conflicts
                     .iter()
                     .filter(|c| c.project_id == id && c.feature_id.as_deref() == Some(&slug))
@@ -225,9 +250,68 @@ pub fn board_from(
     out
 }
 
+/// Everything on one feature that a person has to answer.
+///
+/// It counted live approval requests and nothing else. So a board showing
+/// three items badged "needs your yes", with an Agree button beside each of
+/// them, said **"0 waiting on you"** across the top — and a worker sitting on
+/// an unanswered question, which is the most urgent thing there is here,
+/// counted for nothing at all.
+///
+/// A proposal is the commonest thing anyone is waiting on: it is the one
+/// status nothing can start from, so until you answer it, nothing happens.
+fn waiting_on_you(
+    approvals: usize,
+    items: &[crate::aiw::deck::WorkItem],
+    asked: &std::collections::HashMap<String, usize>,
+) -> usize {
+    approvals
+        + items.iter().filter(|i| i.status == "proposed").count()
+        + items.iter().filter_map(|i| asked.get(&i.id)).sum::<usize>()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn item(id: &str, status: &str) -> crate::aiw::deck::WorkItem {
+        crate::aiw::deck::WorkItem {
+            id: id.into(),
+            title: id.into(),
+            status: status.into(),
+            assignee: None,
+            areas: vec![],
+            due: None,
+        }
+    }
+
+    /// The count under the heading must agree with the buttons under it.
+    #[test]
+    fn what_is_waiting_on_you_counts_the_things_you_can_press() {
+        let none = std::collections::HashMap::new();
+        let items = vec![
+            item("w01", "proposed"),
+            item("w02", "proposed"),
+            item("w03", "proposed"),
+            item("w04", "in-progress"),
+            item("w05", "done"),
+        ];
+        // Studio's plan exactly: three proposals, no live approval, and the
+        // board said nothing was waiting.
+        assert_eq!(waiting_on_you(0, &items, &none), 3);
+
+        // A worker stopped on two questions is two more things to answer.
+        let asked = std::collections::HashMap::from([("w04".to_string(), 2)]);
+        assert_eq!(waiting_on_you(0, &items, &asked), 5);
+
+        // Approvals still count, and a question about an item that is not on
+        // this plan is not this plan's business.
+        let elsewhere = std::collections::HashMap::from([("w99".to_string(), 7)]);
+        assert_eq!(waiting_on_you(1, &items, &elsewhere), 4);
+
+        // Nothing to answer is nothing to answer.
+        assert_eq!(waiting_on_you(0, &[item("w01", "done")], &none), 0);
+    }
 
     fn row(waiting: usize, conflicts: usize, on_it: &[&str]) -> GoalRow {
         GoalRow {
@@ -238,6 +322,7 @@ mod tests {
             feature_name: "F".into(),
             status: "planned".into(),
             goal: None,
+            managed_handle: None,
             managed_by: None,
             bot_node: None,
             on_it: on_it.iter().map(|s| s.to_string()).collect(),

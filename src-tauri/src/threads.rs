@@ -46,55 +46,6 @@ fn register(app: &tauri::AppHandle, ws: &Arc<Workspace>, node_id: i64) -> Result
     Ok(())
 }
 
-/// Who answers in a feature's thread: the bot managing it, or the assistant.
-///
-/// "Managing" is not a new field — it is the bot whose `_bot.md` already names
-/// this feature as its plan. A feature nobody manages is answered by the
-/// assistant, which is honest: somebody is talking to you, and it is not
-/// pretending to be a manager it does not have.
-fn feature_persona(
-    app: &tauri::AppHandle,
-    ws: &Arc<Workspace>,
-    node_id: i64,
-    feature_id: &str,
-) -> Result<(Persona, Option<String>), String> {
-    let managing = {
-        let db = app.try_state::<Db>().ok_or("no database")?;
-        let conn = db.conn();
-        crate::bots::managers_on(&conn, node_id)
-            .into_iter()
-            .find(|b| {
-                b.portfolio
-                    .iter()
-                    .any(|o| o.node_id == node_id && o.feature == feature_id)
-                    || b.feature.trim() == feature_id
-            })
-            .map(|b| (crate::bots::persona_in(&conn, ws, &b), b.name.clone()))
-    };
-    match managing {
-        Some((persona, name)) => {
-            let mut p = persona;
-            p.system.push_str(&format!(
-                "\n\nYou are in the thread for the feature “{feature_id}”. Other bots and agents \
-                 are in here too. Address one with @name to pull them in; say @name take \"item\" \
-                 only when you actually mean to hand that work over, because that moves the claim."
-            ));
-            Ok((p, Some(name)))
-        }
-        None => {
-            let agent = ws
-                .agent(crate::aiw::assistant::ASSISTANT_ID)
-                .ok_or("no assistant agent")?;
-            let mut p = Persona::assistant(&agent.system);
-            p.system.push_str(&format!(
-                "\n\nYou are in the thread for the feature “{feature_id}”. No bot manages it yet, \
-                 so say so if it matters. Address an agent with @name to pull them in."
-            ));
-            Ok((p, None))
-        }
-    }
-}
-
 /// Register any bot named with `@` as a participant, and say who they are.
 ///
 /// Agents are resolved inside the assistant loop, which knows them. Bots are
@@ -361,69 +312,6 @@ pub async fn thread_wake(
         };
         let convs = workspace.convs()?;
         Assistant::wake_into_thread(&workspace, convs, &conv_id, &agent_id, &sink)
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-
-// ---------------------------------------------------------------------------
-// A feature's thread
-// ---------------------------------------------------------------------------
-
-#[tauri::command]
-pub fn feature_thread(
-    app: tauri::AppHandle,
-    ws: Ws,
-    node_id: i64,
-    feature_id: String,
-) -> Result<ConversationMeta, String> {
-    let workspace: Arc<Workspace> = (*ws).clone();
-    register(&app, &workspace, node_id)?;
-    let name = workspace
-        .project(&node_id.to_string())
-        .and_then(|p| p.deck().feature(&feature_id).ok())
-        .map(|f| f.meta.name)
-        .unwrap_or_else(|| feature_id.clone());
-    ws.convs()?
-        .for_feature(&node_id.to_string(), &feature_id, &name)
-}
-
-#[tauri::command]
-pub async fn feature_thread_send(
-    app: tauri::AppHandle,
-    ws: Ws<'_>,
-    node_id: i64,
-    feature_id: String,
-    text: String,
-) -> Result<AssistantReply, String> {
-    let workspace: Arc<Workspace> = (*ws).clone();
-    register(&app, &workspace, node_id)?;
-    let (who, _managed_by) = feature_persona(&app, &workspace, node_id, &feature_id)?;
-    let name = workspace
-        .project(&node_id.to_string())
-        .and_then(|p| p.deck().feature(&feature_id).ok())
-        .map(|f| f.meta.name)
-        .unwrap_or_else(|| feature_id.clone());
-
-    let conv_id = workspace
-        .convs()?
-        .for_feature(&node_id.to_string(), &feature_id, &name)?
-        .id;
-    let named = pull_in_bots(&app, &workspace, &conv_id, &text);
-
-    let emit = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let progress = emit.clone();
-        let sink = move |e: ChatEvent| {
-            let _ = progress.emit("aiw:chat", e);
-        };
-        let convs = workspace.convs()?;
-        let reply = Assistant::send_as(&workspace, convs, &conv_id, &text, &sink, &who)?;
-        // Then everyone else the message named. The room is the point: one
-        // question, several voices, one transcript.
-        also_answer(&emit, &workspace, &conv_id, &text, named, &who.agent_id);
-        answer_as_agents(&emit, &workspace, &conv_id, &text, &who.agent_id);
-        Ok(reply)
     })
     .await
     .map_err(|e| e.to_string())?

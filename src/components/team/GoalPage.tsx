@@ -66,7 +66,10 @@ export function GoalPage({ goal, board }: { goal: GoalRow; board: Board }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [err, setErr] = useState('')
 
-  const handle = goal.managed_by ?? ''
+  // The handle, never the name: `bot_get` reads `<handle>.md`, so looking a
+  // manager up by what it is *called* only worked because Windows filenames
+  // are case-insensitive.
+  const handle = goal.managed_handle ?? ''
 
   const load = useCallback(async () => {
     setErr('')
@@ -257,6 +260,24 @@ export function GoalPage({ goal, board }: { goal: GoalRow; board: Board }) {
               {bot.stop_at.length > 0 && <span>stops at: {bot.stop_at.join(' · ')}</span>}
               {!!bot.last_woke && <span>woke {fmtAgo(bot.last_woke, Date.now())}</span>}
             </div>
+
+            {/* What it said last time it woke.
+                A wake report is not a work item and has no run to hang off, so
+                the thread was the only place it appeared — and deleting the
+                thread without this would have quietly thrown away the one
+                account of what a manager did all night. */}
+            {bot.last_note?.trim() && (
+              <div
+                className={`mt-2 rounded-lg border px-3 py-2 text-[11.5px] leading-relaxed ${
+                  bot.last_ok
+                    ? 'border-line2 bg-panel text-dim'
+                    : 'border-amber-500/30 bg-amber-500/[0.06] text-dim'
+                }`}
+              >
+                <span className="text-faint">last wake · </span>
+                {bot.last_note?.trim()}
+              </div>
+            )}
           </div>
         ) : (
           <div className="mt-4 rounded-lg border border-line2 bg-panel px-3 py-2 text-[11.5px] text-muted">

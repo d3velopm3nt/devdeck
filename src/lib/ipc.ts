@@ -406,14 +406,6 @@ export const callsClear = () => invoke<void>('calls_clear')
 /** The Team board: every goal in every space, with everyone on it. */
 export const teamBoard = () => invoke<import('./aiw').GoalRow[]>('team_board')
 
-// A feature's thread — the room bots and agents collaborate in. The feature
-// already exists in the deck; this is the same conversation record marked with
-// its slug, so nothing new is created on disk.
-export const featureThread = (nodeId: number, featureId: string) =>
-  invoke<import('./aiw').ConversationMeta>('feature_thread', { nodeId, featureId })
-export const featureThreadSend = (nodeId: number, featureId: string, text: string) =>
-  invoke<import('./aiw').AssistantReply>('feature_thread_send', { nodeId, featureId, text })
-
 // A node's thread, at any level of the tree. A parent has no repository, and
 // says so rather than answering as though it had read code up there.
 export const nodeThread = (nodeId: number) =>
@@ -528,10 +520,6 @@ export const threadWake = (convId: string, agentId: string) =>
   invoke<string>('thread_wake', { convId, agentId })
 
 /** A manager's own chat. `handle` picks the manager on a space that has several. */
-export const botThread = (nodeId: number, handle?: string) =>
-  invoke<import('./aiw').ConversationMeta>('bot_thread', { nodeId, handle })
-export const botThreadSend = (nodeId: number, text: string, handle?: string) =>
-  invoke<import('./aiw').AssistantReply>('bot_thread_send', { nodeId, text, handle })
 
 export interface BotWork {
   id: string

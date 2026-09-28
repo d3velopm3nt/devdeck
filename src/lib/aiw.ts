@@ -433,6 +433,9 @@ export interface GoalRow {
   status: string
   goal?: string
   managed_by?: string
+  /** The same manager's handle — what a lookup needs, where `managed_by` is
+   *  the name you read. */
+  managed_handle?: string
   bot_node?: number
   on_it: string[]
   participants: string[]

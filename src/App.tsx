@@ -333,12 +333,8 @@ export default function App() {
         if (stopped) return
         const [kind, id, ...rest] = line.split(':')
         try {
-          if (kind === 'feature') {
-            await ipc.featureThreadSend(Number(id), rest[0], rest.slice(1).join(':'))
-          } else if (kind === 'node') {
+          if (kind === 'node') {
             await ipc.nodeThreadSend(Number(id), rest.join(':'))
-          } else if (kind === 'bot') {
-            await ipc.botThreadSend(Number(id), rest.join(':'))
           }
         } catch (e) {
           // Failing loudly in the console beats a screenshot of a thread that

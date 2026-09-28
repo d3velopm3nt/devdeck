@@ -38,6 +38,9 @@ function statusDot(status: string): string {
   // the one status nothing can start from, so it must not look like the ones
   // that can.
   if (status === 'proposed') return 'bg-violet-400'
+  // Built is not done and must not look like it: the files exist on a branch
+  // nobody has read, and the main line has none of them.
+  if (status === 'built') return 'bg-sky-400'
   if (status === 'done') return 'bg-line3'
   if (status === 'blocked') return 'bg-amber-400'
   if (status === 'in-progress') return 'bg-emerald-400'
@@ -65,6 +68,7 @@ export function GoalPage({ goal, board }: { goal: GoalRow; board: Board }) {
   const [draft, setDraft] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [err, setErr] = useState('')
+  const [note, setNote] = useState('')
 
   // The handle, never the name: `bot_get` reads `<handle>.md`, so looking a
   // manager up by what it is *called* only worked because Windows filenames
@@ -149,6 +153,19 @@ export function GoalPage({ goal, board }: { goal: GoalRow; board: Board }) {
     }
   }
 
+  const merge = async (featureId: string, itemId: string) => {
+    setErr('')
+    setBusy(itemId)
+    try {
+      setNote(await ipc.workMerge(goal.node_id, featureId, itemId))
+      await load()
+    } catch (e) {
+      setErr(String(e))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const answerAsk = async (run: string, ask: string, allow: boolean) => {
     setErr('')
     setBusy(ask)
@@ -210,6 +227,11 @@ export function GoalPage({ goal, board }: { goal: GoalRow; board: Board }) {
         {err && (
           <div className="mt-3 rounded border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11.5px] text-err">
             {err}
+          </div>
+        )}
+        {note && (
+          <div className="mt-3 rounded border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[11.5px] text-ok">
+            {note}
           </div>
         )}
 
@@ -304,7 +326,15 @@ export function GoalPage({ goal, board }: { goal: GoalRow; board: Board }) {
             <div key={f.feature_id} className="mt-6">
               <div className="flex items-baseline gap-2 border-b border-line pb-1">
                 <h3 className="text-[13.5px] font-semibold text-ink">{f.feature_name}</h3>
+                {/* Two numbers, because they are two different facts and
+                    one of them used to swallow the other: built is on a
+                    branch, done is on the main line. */}
                 <span className="ml-auto text-[10.5px] text-muted">
+                  {items.filter((i) => i.status === 'built').length > 0 && (
+                    <span className="text-info">
+                      {items.filter((i) => i.status === 'built').length} built ·{' '}
+                    </span>
+                  )}
                   {items.filter((i) => i.status === 'done').length} of {items.length} done
                 </span>
               </div>
@@ -382,6 +412,21 @@ export function GoalPage({ goal, board }: { goal: GoalRow; board: Board }) {
                               onClick={() => void decide(f.feature_id, [i.id], false)}
                             >
                               No
+                            </button>
+                          </>
+                        ) : i.status === 'built' ? (
+                          /* The only control that writes `done`. A worker may
+                             not merge, and the app will refuse this too if the
+                             tree is dirty or the branch does not apply — it
+                             says so rather than marking it done over a mess. */
+                          <>
+                            <span className="shrink-0 text-[10.5px] text-info">on a branch</span>
+                            <button
+                              className="btn-primary shrink-0 px-2 py-0.5 text-[10.5px]"
+                              disabled={busy !== null}
+                              onClick={() => void merge(f.feature_id, i.id)}
+                            >
+                              Merge
                             </button>
                           </>
                         ) : by ? (

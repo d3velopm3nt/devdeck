@@ -1275,6 +1275,7 @@ pub fn run() {
             workers::runs_list,
             workers::run_get,
             workers::run_decide,
+            workers::work_merge,
             business::business_get,
             business::business_create,
             business::business_save,

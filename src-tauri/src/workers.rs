@@ -36,6 +36,20 @@ fn now() -> String {
 /// could send, post, pay or push is not a draughtsman, it is an account.
 pub const NEVER: [&str; 5] = ["send mail", "post anywhere", "spend money", "push", "merge"];
 
+/// Written, on a branch, and not yet on the main line.
+///
+/// The state that was missing, and its absence cost four copies of the same
+/// file. `done` meant "the run ended cleanly" — the code said so itself — so
+/// the goal store's plan read `w1 done`, `w2 done` while `main` held nothing
+/// but a README; and a run that ended any other way put its item back to
+/// `unclaimed`, so the next wake handed the same work out again. Smith built
+/// `goals.js` on four separate branches and none of them was ever merged.
+///
+/// Now: **built** is what a worker can reach on its own — the files exist, on
+/// a branch, unmerged and unchecked. **done** means it is on the main line.
+/// Nothing but a merge sets it.
+pub const BUILT: &str = "built";
+
 /// Reading, writing, and the two tools that make a worker's own words work:
 /// `Skill` runs a skill it was given, `Agent` calls a specialist off its kit.
 /// Nothing here reaches a shell, a network, or anybody else's account.
@@ -411,6 +425,25 @@ pub fn close_orphans(app: &tauri::AppHandle) -> Result<usize, String> {
         n += 1;
     }
     Ok(n)
+}
+
+/// Where a finished run leaves its item — decided by what is on the branch.
+///
+/// Never by the run's own verdict, which is the thing that was wrong. A clean
+/// run marked its item `done`, and any other ending put it back to
+/// `unclaimed`; both were wrong the same way. Ending cleanly is not finishing
+/// the work — the files are on a branch nobody has read. And stopping short
+/// having written two good files is not leaving the work undone: handing that
+/// item straight back out is exactly how `goals.js` came to be built on four
+/// branches while `main` kept only a README.
+///
+/// A merge is the only thing that says `done`, and nothing here can merge.
+fn where_the_item_goes(wrote_files: bool) -> &'static str {
+    if wrote_files {
+        BUILT
+    } else {
+        "unclaimed"
+    }
 }
 
 /// Move the item this run came off, and say so on the bus.
@@ -1658,19 +1691,21 @@ Answer here. If nobody does within {} seconds it stops and keeps the question.",
             );
         }
 
-        // A run that did not finish well leaves the item where somebody else
-        // can pick it up, rather than marking it done or leaving it claimed by
-        // a worker that has stopped. "done" here means the run ended cleanly,
-        // not that the work was checked — the receipt says which.
-        move_item(
-            &app2,
-            &live,
-            if live.status == "done" {
-                "done"
-            } else {
-                "unclaimed"
-            },
-        );
+        // Where the item goes is decided by what is on the branch, not by how
+        // the run felt about itself.
+        //
+        // It used to be decided by the run's status: "done" marked the item
+        // done, and anything else put it back to `unclaimed`. Both halves were
+        // wrong in the same direction. A clean run has not *finished* the work
+        // — it has written it on a branch nobody has read — and a run that
+        // stopped short having written two good files has not left the work
+        // undone either. Handing that item straight back out is how Smith came
+        // to build `goals.js` four times on four branches while `main` stayed
+        // empty.
+        //
+        // So: files on the branch means `built`, whatever the run's verdict;
+        // nothing written means nobody has done it and it goes back on offer.
+        move_item(&app2, &live, where_the_item_goes(!live.files.is_empty()));
         say_in_room(
             &app2,
             &live,
@@ -1944,6 +1979,95 @@ pub fn worker_stop(id: String) -> Result<(), String> {
         l.pull();
     }
     Ok(())
+}
+
+/// Put a built item on the main line, and only then call it done.
+///
+/// This is the one thing that may write `done`, and it is deliberately a
+/// person's press rather than something a run does on its way out. A worker is
+/// forbidden to merge (see [`NEVER`]) and that stays true — the merge happens
+/// here, in the repository, by the app, with the branch named in the receipt.
+///
+/// It refuses rather than forces, in three places, because each of them is a
+/// question only you can answer: a dirty tree might be work you have not
+/// committed, a missing branch means the receipt is lying about where the work
+/// is, and a conflict is a decision. The merge is aborted and the item stays
+/// `built` — which is true — rather than being marked done over a mess.
+#[tauri::command(async)]
+pub fn work_merge(
+    app: tauri::AppHandle,
+    db: tauri::State<Db>,
+    node_id: i64,
+    feature: String,
+    item: String,
+) -> Result<String, String> {
+    // Matched on the feature as well as the item: ids are only unique within a
+    // feature (`w01-…` is the first item of every plan), so merging on the item
+    // alone could take a branch built for a different plan's `w01`.
+    let run = all_runs()?
+        .into_iter()
+        .filter(|r| {
+            r.node_id == node_id
+                && r.feature == feature
+                && r.item == item
+                && !r.branch.trim().is_empty()
+        })
+        .max_by(|a, b| a.started_at.cmp(&b.started_at))
+        .ok_or("nothing has been built for this item, so there is no branch to merge")?;
+
+    let dir = {
+        let conn = db.conn();
+        db::node_dir_by_id(&conn, node_id).ok_or("that space names no repository")?
+    };
+    if !crate::git::is_repo(&dir) {
+        return Err(format!("{} is not a git repository", dir.display()));
+    }
+
+    let branch = run.branch.trim();
+    if crate::git::run_git(&dir, &["rev-parse", "--verify", branch]).is_none() {
+        return Err(format!(
+            "{branch} is not in {} — the receipt says the work is there and it is not",
+            dir.display()
+        ));
+    }
+    let dirty = crate::git::dirty_files(&dir);
+    if !dirty.is_empty() {
+        return Err(format!(
+            "{} has {} uncommitted change{} — commit or stash before merging, so a merge cannot bury them",
+            dir.display(),
+            dirty.len(),
+            if dirty.len() == 1 { "" } else { "s" }
+        ));
+    }
+
+    // `--no-ff`, always: the branch is a piece of work and its shape is worth
+    // keeping. A fast-forward would leave no record that anything was merged.
+    let onto = crate::git::run_git(&dir, &["rev-parse", "--abbrev-ref", "HEAD"])
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| "HEAD".into());
+    let merged = crate::git::run_git(
+        &dir,
+        &[
+            "merge",
+            "--no-ff",
+            "-m",
+            &format!("Merge {branch}\n\n{}", run.title.trim()),
+            branch,
+        ],
+    );
+    if merged.is_none() {
+        let _ = crate::git::run_git(&dir, &["merge", "--abort"]);
+        return Err(format!(
+            "{branch} does not merge cleanly into {onto}. Nothing was changed — the conflict is \
+             yours to settle, and the item stays built."
+        ));
+    }
+
+    move_item(&app, &run, "done");
+    Ok(format!(
+        "Merged {branch} into {onto}. “{}” is done.",
+        run.title.trim()
+    ))
 }
 
 #[tauri::command(async)]
@@ -2530,5 +2654,24 @@ mod setup_check {
     fn uncommitted_work_alone_does_not_condemn_a_run() {
         assert_eq!(super::outcome_status(true, 0, false, true), "done");
         assert_eq!(super::outcome_status(false, 0, false, true), "failed");
+    }
+
+    /// Nothing a worker can do makes an item done.
+    ///
+    /// The goal store's plan read `w1 done`, `w2 done` while `main` held a
+    /// README and nothing else, because a clean run marked its own item done.
+    /// And Smith's blocked run — which had written two perfectly good files —
+    /// put its item back to `unclaimed`, so the next wake handed the same work
+    /// out again. `goals.js` exists on four branches and on no main line; both
+    /// halves of that are this rule.
+    #[test]
+    fn a_worker_can_build_an_item_and_never_finish_it() {
+        // Wrote something: it is built, and stays claimed so nobody is sent to
+        // write it a second time.
+        assert_eq!(super::where_the_item_goes(true), super::BUILT);
+        // Wrote nothing: nobody has done it, so it goes back on offer.
+        assert_eq!(super::where_the_item_goes(false), "unclaimed");
+        // And neither of those is "done", whatever the run thought of itself.
+        assert_ne!(super::where_the_item_goes(true), "done");
     }
 }

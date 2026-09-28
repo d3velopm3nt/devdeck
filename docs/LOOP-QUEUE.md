@@ -106,7 +106,10 @@ and asked rather than guessing. Three things came out of it:
 2. **A manager cannot see its own worker.** Studio's file says `worker: smith`;
    Studio reported *"there's no Smith anywhere I can see — no agent roster"*.
    The roster lives in the personal store and is not in the manager's context.
-   **open**
+   **done**, `23931c3`, but only after a wrong fix and a second wake — see
+   "The third wake" below. The roster paragraph went into `bots::persona`,
+   which only a *room* builds; a clock-woken session never touches it. A
+   manager now travels into its own wake as `StartAgentCommand.on_behalf_of`.
 3. **`work` and `delegate` bounced.** Studio: *"the work/delegate tools are
    bouncing my calls back in this project."* Its room has `project_id: '61'` and
    project 61 resolves, so the refusal is past that check. Second-hand evidence
@@ -138,6 +141,31 @@ the manager already speaks there.
 Until then the trial stops here on purpose rather than on a fault: it refused to
 act unattended without permission, which is the design working. Granting that
 permission is the owner's to do, not a thing to be arranged around.
+
+### The third wake, after the ask channel
+
+The ask channel was never exercised — Studio hit a different wall first, and
+answered the two questions that were still second-hand:
+
+1. **The refusal text, first-hand at last.** *"The work and delegate tools both
+   bounce back with `handled by the assistant, not by a project's tools` — I
+   can't create the item or start a session from here."* That is exactly the
+   split `design/devdeck-mcp/BUILD.md` describes: `is_assistant_tool` routes six
+   of the twelve tools away from `ToolService`, and `work` and `delegate` are
+   both in that half, so they are unreachable from a project-scoped wake.
+   **open**, and it is now the only thing standing between a manager and a
+   finished job.
+2. **The worker fix had not reached this path at all.** *"I can't confirm who
+   Smith is… there's no roster I can see."* `StartAgentCommand` carried no
+   persona and `runtime.rs` never mentioned one — the wake ran the *agent's*
+   prompt, so `85eb20f` reached the room and nothing else. Fixed in `23931c3`.
+3. Studio reported a defect against itself: *"my hand slipped on the way in — I
+   fired a pile of duplicate calls at those refused tools instead of stopping at
+   the first error."* Noise rather than harm, and worth a look once (1) is done.
+
+The lesson is worth keeping: **a fix written into a persona is a fix to one of
+two paths.** A manager has a voice in its room and had none on its clock, and
+the second is the path that runs when nobody is watching.
 
 Not a bug, checked: the `sessions/…md` "cannot find the path" in the same run is
 the model reading a session record before it was written.

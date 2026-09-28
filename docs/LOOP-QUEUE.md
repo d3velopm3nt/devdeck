@@ -167,5 +167,39 @@ The lesson is worth keeping: **a fix written into a persona is a fix to one of
 two paths.** A manager has a voice in its room and had none on its clock, and
 the second is the path that runs when nobody is watching.
 
+### The fourth wake, after the voice fix — `ses_1a0e7cc4cc21`
+
+13 turns, 0 files, 3 refused. **The voice arrives.** Studio stopped saying it
+could not see a roster and called `delegate.start` for Smith — it now treats
+Smith as somebody it can dispatch rather than a name inside a sentence. Its
+report is the best one yet: it read the repository, wrote the item down
+(`goals.js` add/list/complete plus `goals.test.js`, four named cases), said
+*"Nothing was built and nothing was checked"*, and listed exactly what it needed.
+
+Four findings, all first-hand:
+
+1. **`work`/`delegate` still bounce**, third confirmation, same words:
+   *"handled by the assistant, not by a project's tools."* Studio: *"the item
+   above isn't written into any plan — it exists only in this report."* **open**
+   — this is now the whole gap.
+2. **A review point fires on the word, not the act.** `stop_at: [before any
+   push]` reduces to the single word `push` in `review_point`
+   (`runtime.rs:107`), which is matched against `tool.action + the whole args
+   JSON`. Studio's item text ends *"npm test green on a branch, **no push**"* —
+   so `delegate.start` carrying that text, and `memory.save` quoting it, were
+   both stopped by a rule about pushing, on calls that said they would not push.
+   A review point the model cannot phrase its way past without avoiding the word
+   is not a review point. **open**
+3. **The ask channel fired.** `terminal.run` waited and timed out at ninety
+   seconds (11:36:21 → 11:38:00) instead of being refused outright, which is the
+   new behaviour working. Nobody was at the keyboard to press it, so whether the
+   question *rendered* is still unwitnessed — it wants a wake watched live.
+4. **The knowledge index and the disk disagree.** Studio: the index lists
+   `.devdeck/features/studio/*` and `.devdeck/features/goal-store/*`, *"but
+   `.devdeck` is empty on disk and every read of those paths fails."* That is the
+   `node_dir` / `node_deck_dir` split in CLAUDE.md showing up in a third place:
+   the index was built against the vault, the agent reads against the repository.
+   **open**
+
 Not a bug, checked: the `sessions/…md` "cannot find the path" in the same run is
 the model reading a session record before it was written.

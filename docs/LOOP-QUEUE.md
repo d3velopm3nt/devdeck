@@ -51,10 +51,10 @@ Status: `open` · `doing` · `done` · `ask`
 
 | # | item | check that decides it | status |
 |---|---|---|---|
-| 1 | **Stale docs.** `ROADMAP.md` still leads with "⚠️ Blocker: the repo is private", says 0.2.9 tagged / 0.2.8 released, and `CLAUDE.md` repeats it. Measured tonight: repo is **PUBLIC**, **v0.3.1** released, `latest.json` → **HTTP 200**, scoop bucket at **0.3.1**. `CLAUDE.md` also still says the app cannot be driven in this session, which stopped being true today. | no false claim left in either file | open |
-| 2 | **Bot → manager, one name.** `CLAUDE.md` says "a bot is a manager"; the code says `bots.rs`, `bots_list`, `bot_thread`, a `bots/` folder, while the vault says `team/` and the UI says both. | no user-facing "bot" left; the gate green | open |
-| 3 | **Delete `bot_thread`.** A manager has a conversation of its own, separate from the space it works on — the same duplication as the page deleted in `3f8bdba`. `design/one-room/BUILD.md` says the room is the thread and the manager hands over *in it*. | a manager's messages land in the space's room; no separate bot conversation | open |
-| 4 | **A manager plans from its goal, not from its template.** Studio's first wake proposed "list the repositories the business depends on" for a goal-tracker space — boilerplate from `template: role:engineering`. | a wake on the goal tracker proposes goal-tracker work | open |
+| 1 | **Stale docs.** `ROADMAP.md` still leads with "⚠️ Blocker: the repo is private", says 0.2.9 tagged / 0.2.8 released, and `CLAUDE.md` repeats it. Measured tonight: repo is **PUBLIC**, **v0.3.1** released, `latest.json` → **HTTP 200**, scoop bucket at **0.3.1**. `CLAUDE.md` also still says the app cannot be driven in this session, which stopped being true today. | no false claim left in either file | done |
+| 2 | **Bot → manager, one name.** `CLAUDE.md` says "a bot is a manager"; the code says `bots.rs`, `bots_list`, `bot_thread`, a `bots/` folder, while the vault says `team/` and the UI says both. | no user-facing "bot" left; the gate green | done |
+| 3 | **Delete `bot_thread`.** A manager has a conversation of its own, separate from the space it works on — the same duplication as the page deleted in `3f8bdba`. `design/one-room/BUILD.md` says the room is the thread and the manager hands over *in it*. | a manager's messages land in the space's room; no separate bot conversation | done |
+| 4 | **A manager plans from its goal, not from its template.** Studio's first wake proposed "list the repositories the business depends on" for a goal-tracker space — boilerplate from `template: role:engineering`. | a wake on the goal tracker proposes goal-tracker work | done |
 | 5 | **The rail is 15 views.** `WHAT-WE-WANT.md` §2: four groups — the work (Today · Items · Rooms), what this space has, what is yours (Mail · Calendar · Team · Workers), Tools folded away. | the rail matches §2 | open |
 | 6 | **Today absorbs Dashboard and Inbox** (§2). All three are in the rail today. | one entry, not three | open |
 
@@ -67,7 +67,7 @@ Status: `open` · `doing` · `done` · `ask`
 | 9 | **L8** — Explorer, Stash and Mail render full lists | bounded rows under a long list | open |
 | 10 | **L4** — **308 of 386** commands are sync on the UI thread | the count falls; `pty_write` stays sync | open |
 | 11 | **L7** — a wake runs on the scheduler thread (`schedule.rs:631`) | a long wake does not stall a due reminder | open |
-| 12 | **L9b** — the release bundle carries no `devdeck-ask` | a bundle has it beside `devdeck.exe` | open |
+| 12 | **L9b** — the release bundle carries no `devdeck-ask` | a bundle has it beside `devdeck.exe` | done |
 
 ### Needs the owner
 
@@ -206,6 +206,22 @@ Four findings, all first-hand:
    paths through search but can't read the feature docs themselves… I was
    working without the feature brief."* Less urgent now that `work` reads the
    deck for it, but a manager still cannot read its own feature.md.
+
+## The night of 28/29 September
+
+A second unattended run, on the owner's goal prompt. The order was theirs:
+the worker grant first, because without it a night produces blocked runs.
+
+| # | item | before → after | gate | note |
+|---|---|---|---|---|
+| A | **A worker may be given permission in advance.** Narrow standing grants existed for *agents* all along — a tool, one action, a scope, an expiry, checked on every use — and the worker asker consulted them **zero** times. So a worker could only wake somebody or be denied: Smith wrote two good files on the 28th and stood at `npm test` for ninety seconds, three times, with nobody at the keyboard. | 0 → a grant the asker reads | green | `d7b38cb`. `allow: [npm test, git add, git commit]` + `allow_until:` in the worker's own file, resolved before the run starts and written into its folder. Refuses: any part of a command line that was not granted, `cd` anywhere but its own worktree, a prefix that is not a whole word, and push/merge/`rm -rf`/sudo whatever the file says. No expiry, an unreadable one, or an empty list all mean *ask, as before* — permission must never be acquired by accident. A covered call is still written down. |
+| B | **A manager takes the space's feature instead of inventing its own.** "Studio's plan" sat beside "The goal store" as siblings when one holds the other's work. | 2 containers → 1 | green | `b8dc5ec`. `plan_into` adopts when there is no doubt which — exactly one complete feature owned by nobody. Two unowned features are a question and nothing is guessed; every other case is `bot_adopt`, which refuses to take a feature from a manager that still exists. Studio now owns the goal store. |
+
+### Still the owner's to decide
+
+- The three template proposals on Studio's plan. Studio asked about them itself.
+- Which of the four `goals.js` branches survives. They all cut from `03680ae` and conflict with each other four ways; merging one works and the second will be refused. Worth keeping the one Mason verified at 7 of 7 and deleting the rest.
+- Whether to grant Smith anything. The mechanism exists now; `smith.md` still carries no `allow:`, deliberately — a grant is given, never assumed.
 
 ## The loop closes — 28 September, wakes five and six
 

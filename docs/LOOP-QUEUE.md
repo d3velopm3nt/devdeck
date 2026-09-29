@@ -231,6 +231,32 @@ services, activity, vault, workers, runs, stash, mail, conn, machine, inbox,
 focus, git, calendar, db. Every one answered. The only failures were wrong
 argument types in the probe itself.
 
+### Which branch survives — measured, so you do not have to
+
+All four extracted and run:
+
+| branch | tests | what is in it |
+|---|---|---|
+| `give-a-goal-a-due-date-…-0925` (w2, Mason) | **10 of 11 — one fails** | the store **and** due dates. A superset of the other three. |
+| `add-a-goal-store-…-0925` (w1, Mason) | 7 of 7 | the store: `add`, `listOpen`, `complete` |
+| `goals-js-add-list-complete-…-0928` (w04, Smith) | 6 of 6 | the same again, but `list` where the others say `listOpen` |
+| `build-the-goal-store-…-0928` | 6 of 6 | the same again. Started by hand off no plan — mine, not the system's. |
+
+**Take w2's and fix one line.** It already contains w1's work, so merging it
+makes the other three redundant. The one failure is real and small:
+
+    ✖ add rejects a due date that is not a real YYYY-MM-DD day
+      The input did not match /due date/. Input: 'RangeError: Invalid time value'
+
+`isDay('2026-13-01')` passes the `YYYY-MM-DD` regex, then
+`new Date(…).toISOString()` throws `RangeError` before the store can raise its
+own error. Guarding the invalid date is a one-line fix — and a good first job
+for Smith now that a worker can be granted `npm test`.
+
+Worth noticing: the plan said w2 was **done**. It was on a branch, unmerged,
+with a failing test. That is the second independent confirmation of the same
+lie, and `built` is exactly the right word for it.
+
 ### Still the owner's to decide
 
 - The three template proposals on Studio's plan. Studio asked about them itself.

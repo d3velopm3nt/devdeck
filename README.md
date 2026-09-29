@@ -167,6 +167,26 @@ Credentials are never in any of them — they go to Windows Credential Manager.
 Back up the vault and the personal store; the SQLite file is an index and can
 be rebuilt from the tree.
 
+## Shared DevDeck state skill
+
+The portable [`devdeck-state` skill](.claude/skills/devdeck-state/SKILL.md) tells an
+assistant how to read and update the separate private
+`d3velopm3nt/devdeck-state` vault. It is an instruction file, not a sync
+service or a copy of the vault. No credentials or private vault contents belong
+in this public source repo.
+
+- **Claude Code:** the project skill loads when working in this `devdeck` repo;
+  invoke `/devdeck-state` explicitly if needed. For use from other repositories,
+  install a copy in your personal `~/.claude/skills/devdeck-state/` folder.
+- **ChatGPT:** install the skill folder as a personal skill in each ChatGPT
+  account that needs it. A skill installed in one account is not automatically
+  shared with another account. Connect that account to GitHub with access to
+  the private state repo; the skill alone does not grant repository access.
+
+Keep this file as the canonical version when changing the workflow, and update
+installed copies where applicable. The vault remains useful through GitHub even
+without DevDeck desktop or either assistant skill.
+
 ## Architecture
 
 ```

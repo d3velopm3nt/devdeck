@@ -257,6 +257,47 @@ Worth noticing: the plan said w2 was **done**. It was on a branch, unmerged,
 with a failing test. That is the second independent confirmation of the same
 lie, and `built` is exactly the right word for it.
 
+### Open and unexplained: one stack overflow
+
+02:38 on 29 September, after the app had been up fourteen minutes:
+
+    thread 'main' (2308) has overflowed its stack
+    error: process didn't exit successfully: `target\debug\devdeck.exe`
+           (exit code: 0xc0000006, STATUS_IN_PAGE_ERROR)
+
+A genuine overflow — that message comes from Rust's guard-page handler, and
+the `STATUS_IN_PAGE_ERROR` is the handler itself faulting afterwards. It is the
+only occurrence anywhere in the session's logs.
+
+**Ruled out, by looking rather than by hoping:**
+
+- *The binary being replaced underneath it.* The first and most likely
+  explanation, and wrong: `devdeck.exe` was timestamped 02:24 and the crash was
+  at 02:38, so the file sat untouched for fourteen minutes beforehand.
+- *A recursive `Drop`.* `DomainEvent` holds `causation_id` as a `String`, not a
+  boxed parent, and the bus stops at `MAX_CAUSATION_DEPTH`.
+- *The event sink recursing on the publishing thread.* It spawns a thread for
+  `schedule::on_event`; `eventlog::post` only sends down a channel.
+- *`vault::walk`*, which is bounded at depth 8.
+- *Anything written that night.* `the_one_unowned_feature`, `branch_for`,
+  `work_merge`, `waiting_on_you`, `frontmatter_lines` and the new `managing`
+  all iterate.
+
+**Not reproduced.** Five rounds of opening both goal pages and touring all nine
+rail views: alive every round. Then the one thing that had not been repeated —
+`capture-window.ps1`, which forces the window topmost and drives `PrintWindow`
+with `PW_RENDERFULLCONTENT` synchronously through the app's *main* thread, and
+which ran about a minute before the crash.
+
+**If it happens again, this is what to do.** Start with
+`RUST_BACKTRACE=full`, note whether a screenshot or a topmost change happened
+just before, and keep the dev log — the timestamp against `devdeck.exe`'s mtime
+is what ruled out the easy answer last time. Do not raise the main thread's
+stack size to make it go away: that hides a recursion rather than finding it.
+
+**Nothing has been merged.** The one action that writes to a repository is the
+goal page's Merge, and it should wait until this is accounted for.
+
 ### Still the owner's to decide
 
 - The three template proposals on Studio's plan. Studio asked about them itself.

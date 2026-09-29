@@ -9,24 +9,39 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { getCurrentWindow, currentMonitor } from '@tauri-apps/api/window'
-import { LogicalPosition } from '@tauri-apps/api/dpi'
+import { LogicalPosition, LogicalSize } from '@tauri-apps/api/dpi'
 import * as ipc from '../lib/ipc'
 import { useApp } from '../store'
 import { useLive } from '../liveStore'
 import type { StashItem, SvcState, TreeNode } from '../lib/types'
 import { findNode, resolveDir } from '../lib/tree'
 import { widgetOpenTerminal, widgetRunCommand, serviceDir } from './widgetActions'
+import { DeckPanel, type DeckView } from './DeckPanel'
+import { DECK_DEFAULTS, loadDeckSettings, mayInterruptFocus } from '../lib/deck'
+import { announceUpdates, updatesFromPaths, type DeckUpdate } from '../lib/deckUpdates'
 
 // Parse a design inline-style string ("a:b;c:d") into a React style object,
 // so the exact style strings from the design can be used verbatim.
 function css(s: string): React.CSSProperties {
   const o: Record<string, string> = {}
+  const colors: Record<string, string> = {
+    '#E7EAF0': 'var(--c-ink)', '#9BA3B2': 'var(--c-dim)',
+    '#656C7A': 'var(--c-muted)', '#5a6070': 'var(--c-muted)',
+    '#4f5563': 'var(--c-muted)', '#7d8494': 'var(--c-dim)',
+    '#A7B2FF': 'var(--c-accent)', '#8E9CFF': 'var(--c-accent)',
+    '#7C8CF8': 'var(--c-accent)', '#4ADE80': 'var(--c-ok)',
+    '#FBBF24': 'var(--c-warn)', '#F87171': 'var(--c-err)',
+    '#1b1e27': 'var(--c-menu)', '#22262f': 'var(--c-menu)',
+  }
   for (const decl of s.split(';')) {
     const i = decl.indexOf(':')
     if (i < 0) continue
     const k = decl.slice(0, i).trim()
     if (!k) continue
-    o[k.replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = decl.slice(i + 1).trim()
+    let value = decl.slice(i + 1).trim()
+    for (const [old, current] of Object.entries(colors)) value = value.replaceAll(old, current)
+    value = value.replace(/rgba\(255,255,255,0\.(?:06|07|08|1|12)\)/g, 'var(--c-line2)')
+    o[k.replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = value
   }
   return o as React.CSSProperties
 }
@@ -39,7 +54,7 @@ type Corner = 'tl' | 'tr' | 'bl' | 'br' | 'free'
 // The widget has two faces: a floating icon and the session panel. `full` is
 // the deeper command view, reached from the panel. (The old `quick` popup was
 // removed — it duplicated the panel and was unreachable.)
-type Mode = 'icon' | 'full'
+type Mode = 'icon' | DeckView | 'full'
 // A press must travel this far before it becomes a window drag; below it, the
 // press is treated as a click. Kept deliberately generous so a normal tap on
 // the floating icon opens it instead of nudging the window across the screen.
@@ -56,6 +71,10 @@ const CORNERS: { key: Corner; label: string }[] = [
 
 function sizeForMode(mode: Mode, full: { w: number; h: number }): { w: number; h: number } {
   if (mode === 'icon') return { w: 58, h: 58 }
+  if (mode === 'menu') return { w: 180, h: 360 }
+  if (mode === 'today') return { w: 380, h: 550 }
+  if (mode === 'focus') return { w: 380, h: 335 }
+  if (mode === 'spaces' || mode === 'updates') return { w: 380, h: 500 }
   return full
 }
 
@@ -173,6 +192,8 @@ export function CommandWidget() {
   const [view, setView] = useState<View>('recent')
   // Two faces: a floating icon (collapsed) and the full widget (expanded).
   const [mode, setMode] = useState<Mode>('full')
+  const [deckSettings, setDeckSettings] = useState(DECK_DEFAULTS)
+  const [deckUpdates, setDeckUpdates] = useState<DeckUpdate[]>([])
   const [corner, setCorner] = useState<Corner>('free')
   const [widgetSetOpen, setWidgetSetOpen] = useState(false)
   const [tourOpen, setTourOpen] = useState(false)
@@ -211,9 +232,14 @@ export function CommandWidget() {
     const root = document.getElementById('root')
     if (root) root.style.background = 'transparent'
     void app.bootstrap()
+    void loadDeckSettings().then(setDeckSettings)
+    void ipc.settingGet('deck.updates').then((raw) => {
+      try { if (raw) setDeckUpdates(JSON.parse(raw) as DeckUpdate[]) } catch { /* old cache */ }
+    })
     const subs = [
       ipc.onSvcStatus((e) => useApp.getState().updateSvcState(e)),
       ipc.onStats((e) => void useLive.getState().setStats(e)),
+      ipc.onDeckSettingsChanged(() => void loadDeckSettings().then(setDeckSettings)),
     ]
     void ipc.settingGet('widget_view').then((v) => v && setView(v as View))
     void ipc.settingGet('widget_density').then((v) => v && setDensity(v as Density))
@@ -229,14 +255,68 @@ export function CommandWidget() {
         // First run: open the full widget so the guided setup tour shows.
         setMode('full')
         setTourOpen(true)
+        await win().setMinSize(new LogicalSize(320, 300))
+      } else {
+        setMode('icon')
+        await win().setMinSize(new LogicalSize(58, 58))
+        await ipc.widgetResize(58, 58)
       }
-      if (c !== 'free') await positionForCorner(c, sizeForMode('full', expandedSize).w, sizeForMode('full', expandedSize).h)
+      if (c !== 'free') {
+        const size = sizeForMode(done === '1' ? 'icon' : 'full', expandedSize)
+        await positionForCorner(c, size.w, size.h)
+      }
     })()
     return () => {
       for (const s of subs) void s.then((un) => un())
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // The widget webview stays alive while hidden; one watcher owns this timer.
+  // The backend fetches off the UI thread and fast-forwards only clean clones.
+  useEffect(() => {
+    if (!deckSettings.watch) return
+    let active = true; let busy = false
+    const poll = async () => {
+      if (busy || !active) return
+      busy = true
+      try {
+        const path = await ipc.settingGet('deck.state_path') || await ipc.vaultRoot()
+        if (!path || !active) return
+        const result = await ipc.deckPoll(path)
+        if (!active) return
+        await ipc.settingSet('deck.watch.status', result.status)
+        const knownPath = await ipc.settingGet('deck.lastRepo')
+        const prior = knownPath === path ? await ipc.settingGet('deck.lastHead') : null
+        if (knownPath !== path) await ipc.settingSet('deck.lastRepo', path)
+        if (prior !== result.head) await ipc.settingSet('deck.lastHead', result.head)
+        if (!prior || !result.paths.length) return
+        const spaces = useApp.getState().nodes.filter((n) => n.kind === 'project')
+        const fresh = updatesFromPaths(result.head, result.paths, spaces, deckSettings.mutedSpaces)
+        if (!fresh.length) return
+        setDeckUpdates((previous) => {
+          const next = [...fresh, ...previous].slice(0, 60)
+          void ipc.settingSet('deck.updates', JSON.stringify(next))
+          return next
+        })
+        void useApp.getState().refreshTree()
+        void ipc.emitDataChanged()
+        const focus = await ipc.focusCurrent()
+        await announceUpdates(fresh, deckSettings, !!focus)
+        if (deckSettings.popups && fresh.some((u) => u.kind !== 'info' && (!focus || mayInterruptFocus(u.kind, deckSettings.focusInterrupt)))) {
+          await goDeck('today')
+          await ipc.widgetShow()
+        }
+      } catch (e) {
+        if (active) void ipc.settingSet('deck.watch.status', String(e))
+      } finally { busy = false }
+    }
+    void poll()
+    const timer = window.setInterval(() => void poll(), deckSettings.intervalMin * 60_000)
+    return () => { active = false; window.clearInterval(timer) }
+    // A watcher is replaced only when saved preferences change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deckSettings])
 
   // Snap to a screen corner when the user drags the widget near one.
   useEffect(() => {
@@ -533,9 +613,26 @@ export function CommandWidget() {
   const placeWidget = async (m: Mode, c: Corner) => {
     const s = sizeForMode(m, expandedSize)
     programmaticMove.current = true
-    await ipc.widgetResize(s.w, s.h)
-    await positionForCorner(c, s.w, s.h)
-    setTimeout(() => (programmaticMove.current = false), 220)
+    try {
+      // A free Deck grows up and left from its launcher. Docked Decks use
+      // their selected corner; clamp both to the monitor work area.
+      const [mon, pos, oldSize] = await Promise.all([currentMonitor(), win().outerPosition(), win().outerSize()])
+      const sf = mon?.scaleFactor ?? await win().scaleFactor()
+      const x = pos.x / sf; const y = pos.y / sf
+      const oldW = oldSize.width / sf; const oldH = oldSize.height / sf
+      await win().setMinSize(new LogicalSize(m === 'full' ? 320 : s.w, m === 'full' ? 300 : s.h))
+      await ipc.widgetResize(s.w, s.h)
+      if (c !== 'free') await positionForCorner(c, s.w, s.h)
+      else if (mon) {
+        const mx = mon.position.x / sf; const my = mon.position.y / sf
+        const mw = mon.size.width / sf; const mh = mon.size.height / sf
+        const nx = Math.max(mx + 4, Math.min(mx + mw - s.w - 4, x + oldW - s.w))
+        const ny = Math.max(my + 4, Math.min(my + mh - s.h - CORNER_BOTTOM, y + oldH - s.h))
+        await win().setPosition(new LogicalPosition(Math.round(nx), Math.round(ny)))
+      }
+    } finally {
+      setTimeout(() => (programmaticMove.current = false), 300)
+    }
   }
   // Remember the full-panel size before leaving it, so it restores.
   const captureFullSize = async () => {
@@ -543,7 +640,7 @@ export function CommandWidget() {
     try {
       const sz = await win().innerSize()
       const sf = await win().scaleFactor()
-      setExpandedSize({ w: sz.width / sf, h: sz.height / sf })
+      setExpandedSize({ w: Math.max(320, sz.width / sf), h: Math.max(300, sz.height / sf) })
     } catch {
       /* keep prior */
     }
@@ -559,6 +656,15 @@ export function CommandWidget() {
   const goFull = async () => {
     setMode('full')
     await placeWidget('full', corner)
+  }
+  const goDeck = async (next: DeckView) => {
+    await captureFullSize()
+    setMode(next)
+    await placeWidget(next, corner)
+  }
+  const openDeckSettings = async () => {
+    await ipc.emitDeckNavigate('settings', 'deck')
+    await ipc.focusMain()
   }
 
   const setCornerDock = (c: Corner) => {
@@ -639,24 +745,31 @@ export function CommandWidget() {
     return (
       <div style={css('position:fixed;inset:0')}>
         <style>{keyframes}</style>
-        <div onMouseDown={dragOrClick(() => void goFull())} title="Tap to open · drag to move"
-          style={css('width:100%;height:100%;border:1px solid rgba(255,255,255,0.12);border-radius:16px;background:linear-gradient(145deg,rgba(28,31,40,0.96),rgba(18,20,27,0.96));cursor:grab;display:flex;align-items:center;justify-content:center;position:relative;box-shadow:0 16px 44px rgba(0,0,0,0.5),0 0 0 1px rgba(124,140,248,0.18)')}>
-          <div style={css('width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#7C8CF8,#4ADE80);display:flex;align-items:center;justify-content:center;color:#0c0e14;font-weight:700;font-size:17px')}>⌘</div>
+        <div className="deck-launcher" onMouseDown={dragOrClick(() => void goDeck('menu'))} title="Tap to open · drag to move" style={{ width: 54, height: 54, margin: 2 }}>
+          <span className="font-bold text-[24px] leading-none">D</span>
           {runningCount > 0 && (
-            <div style={css('position:absolute;top:-4px;right:-4px;min-width:19px;height:19px;padding:0 5px;border-radius:10px;background:#4ADE80;color:#08120b;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid #12141b')}>{runningCount}</div>
+            <div className="deck-badge">{runningCount}</div>
           )}
         </div>
       </div>
     )
   }
 
+  if (mode === 'menu' || mode === 'today' || mode === 'focus' || mode === 'spaces' || mode === 'updates') {
+    return <DeckPanel view={mode} settings={deckSettings} updates={deckUpdates} side={corner === 'tl' || corner === 'bl' ? 'left' : 'right'}
+      onLauncherMouseDown={dragOrClick(() => void (mode === 'menu' ? goIcon() : goDeck('menu')))}
+      onIcon={() => void goIcon()} onView={(next) => void goDeck(next)} onFull={() => void goFull()}
+      onSettings={() => void openDeckSettings()}
+      onDock={() => setCornerDock(corner === 'free' ? 'br' : corner === 'br' ? 'bl' : corner === 'bl' ? 'tl' : corner === 'tl' ? 'tr' : 'free')} />
+  }
+
   return (
     <div style={css('position:fixed;inset:0;font-family:Geist,system-ui,sans-serif;user-select:none')}>
       <style>{keyframes}</style>
-      <div style={css('width:100%;height:100%;display:flex;flex-direction:column;border:1px solid rgba(255,255,255,0.1);border-radius:14px;overflow:hidden;background:radial-gradient(1100px 700px at 78% 12%,rgba(124,140,248,0.14),transparent 60%),linear-gradient(180deg,rgba(24,27,35,0.98),rgba(16,18,25,0.98))')}>
+      <div style={css('width:100%;height:100%;display:flex;flex-direction:column;border:1px solid var(--c-line2);border-radius:14px;overflow:hidden;background:var(--c-panel);box-shadow:0 18px 50px rgba(0,0,0,0.25)')}>
 
         {/* HEADER / drag bar */}
-        <div onMouseDown={startDrag} style={css('flex-shrink:0;display:flex;align-items:center;gap:7px;padding:9px 9px 9px 10px;border-bottom:1px solid rgba(255,255,255,0.06);cursor:grab;background:rgba(255,255,255,0.015)')}>
+        <div onMouseDown={startDrag} style={css('flex-shrink:0;display:flex;align-items:center;gap:7px;padding:9px 9px 9px 10px;border-bottom:1px solid var(--c-line);cursor:grab;background:var(--c-raise)')}>
           {/* space selector */}
           <div style={css('position:relative;min-width:0;flex:1')}>
             <button data-nodrag onClick={() => setSpaceMenuOpen((v) => !v)}
@@ -710,7 +823,8 @@ export function CommandWidget() {
             {navBtn('search', <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={navStroke('search')} strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>)}
           </div>
 
-          <button data-nodrag onClick={() => setWidgetSetOpen((v) => !v)} title="Widget settings (dock, quick list)" style={css('width:26px;height:26px;border:none;border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.04)')}>
+          <button data-nodrag onClick={() => void goDeck('today')} title="Back to Today" style={css('width:26px;height:26px;border:none;border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;background:var(--c-soft);color:var(--c-accent);font-weight:700')}>D</button>
+          <button data-nodrag onClick={() => setWidgetSetOpen((v) => !v)} title="Widget controls (dock, quick list)" style={css('width:26px;height:26px;border:none;border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.04)')}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9BA3B2" strokeWidth="2"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.6 1.6 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.6 1.6 0 00-2.7 1.1v.2a2 2 0 01-4 0v-.1A1.6 1.6 0 006 20.9l-.1.1a2 2 0 11-2.8-2.8l.1-.1A1.6 1.6 0 003.5 15H3.3a2 2 0 010-4h.1A1.6 1.6 0 004.9 8.3l-.1-.1a2 2 0 112.8-2.8l.1.1a1.6 1.6 0 001.8.3H9a1.6 1.6 0 001-1.5V3a2 2 0 014 0v.1a1.6 1.6 0 001 1.5 1.6 1.6 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.6 1.6 0 00-.3 1.8V9a1.6 1.6 0 001.5 1h.2a2 2 0 010 4h-.1a1.6 1.6 0 00-1.5 1z" /></svg>
           </button>
           <button data-nodrag onClick={() => void goIcon()} title="Collapse to icon" style={css('width:26px;height:26px;border:none;border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.04)')}>

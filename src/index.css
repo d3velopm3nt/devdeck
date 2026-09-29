@@ -1,6 +1,26 @@
 @import 'tailwindcss';
 @import 'dockview-core/dist/styles/dockview.css';
 
+/* Deck's floating surfaces share the app's theme tokens. The OS window is
+   transparent around them, so only the controls receive pointer events. */
+.deck-menu-shell,.deck-card-shell{position:fixed;inset:0;display:flex;align-items:flex-end;justify-content:flex-end;flex-direction:column;padding:4px;pointer-events:none;font-family:Geist,system-ui,sans-serif}
+.deck-side-left{align-items:flex-start}.deck-side-left .deck-menu{align-items:flex-start}
+.deck-menu{display:flex;flex-direction:column;align-items:flex-end;gap:6px;margin-bottom:9px;animation:deck-rise .2s cubic-bezier(.2,.8,.2,1) both;pointer-events:auto}
+.deck-menu-button{display:flex;align-items:center;gap:10px;min-width:132px;padding:8px 11px;border:1px solid var(--c-line2);border-radius:12px;background:var(--c-menu);box-shadow:0 10px 30px rgb(0 0 0 / .22);color:var(--c-ink);font-size:12px;text-align:left;transition:transform .16s,background .16s,box-shadow .16s}
+.deck-menu-button:hover,.deck-menu-button:focus-visible{background:var(--c-hover);transform:translateX(-4px);box-shadow:0 14px 34px rgb(0 0 0 / .3);outline:1px solid var(--c-accent)}
+.deck-menu-button:nth-child(1){animation:deck-rise .2s .02s both}.deck-menu-button:nth-child(2){animation:deck-rise .2s .04s both}.deck-menu-button:nth-child(3){animation:deck-rise .2s .06s both}.deck-menu-button:nth-child(4){animation:deck-rise .2s .08s both}.deck-menu-button:nth-child(5){animation:deck-rise .2s .1s both}.deck-menu-button:nth-child(6){animation:deck-rise .2s .12s both}
+.deck-launcher{width:54px;height:54px;flex-shrink:0;display:grid;place-items:center;border:1px solid var(--c-line2);border-radius:16px;background:var(--c-menu);box-shadow:0 12px 32px rgb(0 0 0 / .28),0 0 0 1px color-mix(in srgb,var(--c-accent) 18%,transparent);color:var(--c-accent);cursor:pointer;pointer-events:auto;transition:transform .18s,box-shadow .18s}
+.deck-launcher:hover{transform:translateY(-2px);box-shadow:0 16px 40px rgb(0 0 0 / .32),0 0 0 3px color-mix(in srgb,var(--c-accent) 20%,transparent)}
+.deck-badge{position:absolute;top:-3px;right:-3px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:var(--c-ok);color:var(--c-app);font-size:10px;font-weight:700;display:grid;place-items:center;border:2px solid var(--c-menu)}
+.deck-card{width:100%;min-height:0;overflow:hidden;border:1px solid var(--c-line2);border-radius:15px;background:var(--c-panel);box-shadow:0 18px 50px rgb(0 0 0 / .28);pointer-events:auto;animation:deck-rise .2s cubic-bezier(.2,.8,.2,1) both}
+.deck-card{max-height:calc(100% - 62px);overflow-y:auto}.deck-space-tabs{display:flex;gap:5px;overflow-x:auto;padding:0 0 8px;scrollbar-width:thin}.deck-space-tabs button{flex-shrink:0;border:1px solid var(--c-line2);border-radius:999px;padding:4px 9px;color:var(--c-dim);font-size:11px;transition:background .16s,color .16s}.deck-space-tabs button:hover,.deck-space-tabs button.active{background:var(--c-hover);color:var(--c-accent)}
+.deck-space-row{display:flex;width:100%;align-items:center;justify-content:space-between;border-radius:7px;padding:7px;color:var(--c-body);font-size:12px}.deck-space-row:hover{background:var(--c-hover);color:var(--c-accent)}
+.deck-card-shell{gap:8px}.deck-card-header{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid var(--c-line)}.deck-card-header button{padding:4px;color:var(--c-dim);border-radius:6px}.deck-card-header button:hover{color:var(--c-ink);background:var(--c-hover)}
+.deck-card-body{padding:13px 15px}.deck-schedule-row{display:flex;align-items:center;gap:9px;min-height:41px;border-bottom:1px solid var(--c-line);font-size:12px}.deck-action{display:flex;flex:1;align-items:center;justify-content:center;gap:7px;border:1px solid var(--c-line2);border-radius:8px;background:var(--c-raise);padding:7px;color:var(--c-ink);font-size:12px}.deck-action:hover{background:var(--c-hover)}
+.deck-primary{border-radius:8px;background:var(--c-accent);padding:7px 10px;color:var(--c-app);font-size:12px;font-weight:600;white-space:nowrap}.deck-primary:hover{filter:brightness(1.12)}.deck-input{min-width:0;flex:1;border:1px solid var(--c-line2);border-radius:8px;background:var(--c-raise);padding:7px;color:var(--c-ink);font-size:12px;outline:none}.deck-input:focus{border-color:var(--c-accent)}.deck-link{display:inline-flex;align-items:center;gap:3px;color:var(--c-accent);font-size:11px}.deck-link:hover{text-decoration:underline}
+@keyframes deck-rise{from{opacity:0;transform:translateY(9px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+@media (prefers-reduced-motion:reduce){.deck-menu,.deck-menu-button,.deck-card{animation:none}.deck-launcher,.deck-menu-button{transition:none}}
+
 /* ---------------------------------------------------------------------------
    Design tokens. The raw values live on :root (the default DevDeck dark
    theme) and are overridden *wholesale* by one [data-theme='…'] block per

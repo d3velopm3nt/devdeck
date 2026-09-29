@@ -61,6 +61,7 @@ mod schedule;
 mod seed;
 mod services;
 mod setup;
+mod deck;
 mod shots;
 mod spaces;
 mod stash;
@@ -84,13 +85,24 @@ fn show_widget(app: &tauri::AppHandle) {
     // window is up, the app you came from is no longer the foreground one.
     stash::remember_target();
     if let Some(win) = app.get_webview_window("widget") {
-        // Park it near the top-right on show if it's off-screen/unset.
-        if let Ok(Some(monitor)) = win.primary_monitor() {
+        // Preserve the user's drag/dock position. Only rescue a window whose
+        // saved position is no longer on the available display (unplugged
+        // monitor), or one which has never been placed.
+        if let Some(monitor) = win.current_monitor().ok().flatten()
+            .or_else(|| win.primary_monitor().ok().flatten()) {
             let scale = monitor.scale_factor();
-            let size = monitor.size().to_logical::<f64>(scale);
-            if let Ok(w) = win.outer_size().map(|s| s.to_logical::<f64>(scale)) {
-                let x = (size.width - w.width - 24.0).max(0.0);
-                let _ = win.set_position(tauri::LogicalPosition::new(x, 48.0));
+            let bounds = monitor.size().to_logical::<f64>(scale);
+            let origin = monitor.position().to_logical::<f64>(scale);
+            if let (Ok(w), Ok(pos)) = (win.outer_size(), win.outer_position()) {
+                let w = w.to_logical::<f64>(scale);
+                let pos = pos.to_logical::<f64>(scale);
+                let offscreen = pos.x + w.width < origin.x || pos.x > origin.x + bounds.width
+                    || pos.y + w.height < origin.y || pos.y > origin.y + bounds.height;
+                if offscreen || (pos.x == 0.0 && pos.y == 0.0) {
+                    let x = origin.x + (bounds.width - w.width - 24.0).max(0.0);
+                    let y = origin.y + (bounds.height - w.height - 64.0).max(0.0);
+                    let _ = win.set_position(tauri::LogicalPosition::new(x, y));
+                }
             }
         }
         let _ = win.unminimize();
@@ -113,14 +125,7 @@ pub(crate) fn widget_peek(app: &tauri::AppHandle, sticky: bool) {
     if win.is_visible().unwrap_or(false) && !win.is_minimized().unwrap_or(false) {
         return;
     }
-    if let Ok(Some(monitor)) = win.primary_monitor() {
-        let scale = monitor.scale_factor();
-        let size = monitor.size().to_logical::<f64>(scale);
-        if let Ok(w) = win.outer_size().map(|s| s.to_logical::<f64>(scale)) {
-            let x = (size.width - w.width - 24.0).max(0.0);
-            let _ = win.set_position(tauri::LogicalPosition::new(x, 48.0));
-        }
-    }
+    // A peek also respects the user's dock and free position.
     stash::show_window_without_focus(&win);
 
     if sticky {
@@ -761,6 +766,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         // Managed here, not in `setup` — see the note at the top of `run`.
         .manage(db::Db(Mutex::new(conn)))
@@ -1056,6 +1062,7 @@ pub fn run() {
             widget_show,
             widget_hide,
             widget_resize,
+            deck::deck_poll,
             widget_peek_cmd,
             focus_main,
             reveal_in_explorer,

@@ -9,6 +9,7 @@ import { useApp } from '../store'
 import { loadExampleWorkspace } from '../lib/example'
 import { Icon } from '../lib/icons'
 import { SchedulerPage } from './SchedulerPage'
+import { DeckSettings } from './DeckSettings'
 import { GitHubToken } from './GitHubToken'
 import { CAPTURE_SETTINGS_TAB } from '../lib/devCapture'
 import { THEMES, type ThemeSwatch } from '../lib/themes'
@@ -295,6 +296,16 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
               <Icon name="schedule" size={14} className="shrink-0" />
               Routines
             </button>
+            <button
+              key="deck"
+              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] ${
+                tab === 'deck' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
+              }`}
+              onClick={() => setTab('deck')}
+            >
+              <Icon name="widget" size={14} className="shrink-0" />
+              Deck
+            </button>
             {/* What the team is made of, as opposed to what it is doing: which
                 model each agent runs on, what each may touch, what you have
                 pre-authorised. Talking to them is Team. */}
@@ -330,7 +341,9 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
             </button>
       </nav>
 
-      {tab === 'routines' ? (
+      {tab === 'deck' ? (
+        <div className="min-w-0 flex-1"><DeckSettings /></div>
+      ) : tab === 'routines' ? (
         <div className="min-w-0 flex-1">
           <SchedulerPage />
         </div>

@@ -554,6 +554,17 @@ export default function App() {
       }),
       // The widget's setup tour drives create flows in this window.
       ipc.onTourAction((a) => void handleTourAction(a)),
+      ipc.onDeckNavigate((view, tab) => {
+        if (view === 'settings') {
+          if (tab) useApp.getState().setSettingsTab(tab)
+          useApp.getState().setRailView('settings')
+        } else if (view === 'today') {
+          useApp.getState().setRailView('today')
+        } else if (view === 'mail' || view === 'spaces' || view === 'apps' || view === 'updates') {
+          useApp.getState().setRailView(view === 'spaces' || view === 'apps' ? 'projects' : view === 'updates' ? 'inbox' : 'mail')
+        }
+        void ipc.focusMain()
+      }),
       // When the widget changes data (or vice-versa), refresh.
       // Debounced: a save fires several of these in a row, and each one used
       // to start a full vault scan plus a git read per project.

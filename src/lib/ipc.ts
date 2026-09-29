@@ -1186,6 +1186,8 @@ export const widgetShow = () => invoke<void>('widget_show')
 export const widgetHide = () => invoke<void>('widget_hide')
 export const widgetResize = (width: number, height: number) =>
   invoke<void>('widget_resize', { width, height })
+export interface DeckPoll { head: string; paths: string[]; status: string }
+export const deckPoll = (path: string) => invoke<DeckPoll>('deck_poll', { path })
 
 export const focusMain = () => invoke<void>('focus_main')
 
@@ -1366,6 +1368,15 @@ export function onTourAction(cb: (action: TourAction) => void): Promise<Unlisten
 export const emitDataChanged = () => emit('devdeck:data-changed', {})
 export function onDataChanged(cb: () => void): Promise<UnlistenFn> {
   return listen('devdeck:data-changed', () => cb())
+}
+
+export const emitDeckSettingsChanged = () => emit('devdeck:deck-settings-changed', {})
+export function onDeckSettingsChanged(cb: () => void): Promise<UnlistenFn> {
+  return listen('devdeck:deck-settings-changed', () => cb())
+}
+export const emitDeckNavigate = (view: string, tab?: string) => emit('devdeck:deck-navigate', { view, tab })
+export function onDeckNavigate(cb: (view: string, tab?: string) => void): Promise<UnlistenFn> {
+  return listen<{ view: string; tab?: string }>('devdeck:deck-navigate', (e) => cb(e.payload.view, e.payload.tab))
 }
 
 // ---- cross-window: widget asks the main IDE to open a terminal panel ----

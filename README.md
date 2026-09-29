@@ -170,18 +170,22 @@ be rebuilt from the tree.
 ## Shared DevDeck state skill
 
 The portable [`devdeck-state` skill](.claude/skills/devdeck-state/SKILL.md) tells an
-assistant how to read and update the separate private
-`d3velopm3nt/devdeck-state` vault. It is an instruction file, not a sync
-service or a copy of the vault. No credentials or private vault contents belong
-in this public source repo.
+assistant how to read and update a vault in a GitHub repo **you choose**. Each
+person can create their own private state repo and point the skill to its
+`owner/repo`. The skill is an instruction file, not a sync service or a copy of
+the vault. No credentials or private vault contents belong in this public source
+repo.
 
 - **Claude Code:** the project skill loads when working in this `devdeck` repo;
-  invoke `/devdeck-state` explicitly if needed. For use from other repositories,
-  install a copy in your personal `~/.claude/skills/devdeck-state/` folder.
+  invoke `/devdeck-state` explicitly if needed. Set `DEVDECK_STATE_REPO` to
+  `owner/repo` in your local environment, or provide that repo in your request.
+  For use from other repositories, install a copy in your personal
+  `~/.claude/skills/devdeck-state/` folder.
 - **ChatGPT:** install the skill folder as a personal skill in each ChatGPT
-  account that needs it. A skill installed in one account is not automatically
-  shared with another account. Connect that account to GitHub with access to
-  the private state repo; the skill alone does not grant repository access.
+  account that needs it, with the chosen repo configured in that private copy
+  or supplied in the request. A skill installed in one account is not
+  automatically shared with another. Connect each account to GitHub with access
+  to its state repo; the skill alone does not grant repository access.
 
 Keep this file as the canonical version when changing the workflow, and update
 installed copies where applicable. The vault remains useful through GitHub even

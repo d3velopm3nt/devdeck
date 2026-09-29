@@ -298,6 +298,28 @@ stack size to make it go away: that hides a recursion rather than finding it.
 **Nothing has been merged.** The one action that writes to a repository is the
 goal page's Merge, and it should wait until this is accounted for.
 
+### Half of `done` is still a lie
+
+Found while updating the README, by checking a sentence before writing it
+rather than after.
+
+`built` vs `done` was fixed for **workers**: `where_the_item_goes` can only
+reach `built`, and `work_merge` is what writes `done`. Two other paths were
+missed and still write `done` with nothing merged:
+
+- `aiw/runtime.rs:1203` — an **agent session** that ends without failing marks
+  its work item done. This is the path a manager's wake runs through, so it is
+  not a corner.
+- `aiw/tools.rs:409` — the `work.done` tool a manager may call on itself.
+
+Both are the same mistake the worker path had: *I stopped* read as *it is
+finished*. The fix is the same shape — neither may write more than `built`, and
+`work_merge` stays the only door to `done` — but it touches the agent runtime,
+so it is written down rather than done at the end of a night.
+
+Until then the README says so out loud rather than claiming a guarantee the
+code does not make. **open**
+
 ### Still the owner's to decide
 
 - The three template proposals on Studio's plan. Studio asked about them itself.

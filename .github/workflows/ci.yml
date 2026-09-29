@@ -44,6 +44,11 @@ jobs:
         run: cargo fmt --all --check
         working-directory: src-tauri
 
+      # Tauri's config names this sidecar as an external binary. Clippy and
+      # tests run the build script too, so stage it before either command.
+      - name: Stage asker sidecar
+        run: npm run ask
+
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
         working-directory: src-tauri

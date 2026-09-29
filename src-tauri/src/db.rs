@@ -985,13 +985,13 @@ pub fn nodes_on(conn: &Connection) -> Result<Vec<Node>, String> {
     Ok(nodes)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn tree_list(db: tauri::State<Db>) -> Result<Vec<Node>, String> {
     let conn = db.conn();
     nodes_on(&conn)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn node_create(
     db: tauri::State<Db>,
     parent_id: Option<i64>,
@@ -1028,7 +1028,7 @@ pub fn node_create(
 }
 
 /// Set (or clear, with an empty string) a node's display label.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn node_set_label(db: tauri::State<Db>, id: i64, label: String) -> Result<(), String> {
     let conn = db.conn();
     let v = label.trim();
@@ -1040,7 +1040,7 @@ pub fn node_set_label(db: tauri::State<Db>, id: i64, label: String) -> Result<()
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn node_rename(db: tauri::State<Db>, id: i64, name: String) -> Result<(), String> {
     let conn = db.conn();
     conn.execute(
@@ -1052,7 +1052,7 @@ pub fn node_rename(db: tauri::State<Db>, id: i64, name: String) -> Result<(), St
 }
 
 /// Update a project's base path / a folder's paths (and optionally name).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn node_update(
     db: tauri::State<Db>,
     id: i64,
@@ -1110,7 +1110,7 @@ pub fn node_update(
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn node_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
     let conn = db.conn();
     conn.execute("DELETE FROM nodes WHERE id = ?1", params![id])
@@ -1133,7 +1133,7 @@ fn row_to_command(row: &rusqlite::Row) -> rusqlite::Result<CommandDef> {
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn commands_list(db: tauri::State<Db>) -> Result<Vec<CommandDef>, String> {
     let conn = db.conn();
     let mut stmt = conn
@@ -1150,7 +1150,7 @@ pub fn commands_list(db: tauri::State<Db>) -> Result<Vec<CommandDef>, String> {
     Ok(rows)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn command_save(db: tauri::State<Db>, cmd: CommandDef) -> Result<i64, String> {
     let conn = db.conn();
     if cmd.id <= 0 {
@@ -1179,7 +1179,7 @@ pub fn command_save(db: tauri::State<Db>, cmd: CommandDef) -> Result<i64, String
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn command_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
     let conn = db.conn();
     conn.execute("DELETE FROM commands WHERE id = ?1", params![id])
@@ -1203,7 +1203,7 @@ fn row_to_service(row: &rusqlite::Row) -> rusqlite::Result<ServiceDef> {
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn services_list(db: tauri::State<Db>) -> Result<Vec<ServiceDef>, String> {
     let conn = db.conn();
     let mut stmt = conn
@@ -1300,7 +1300,7 @@ pub fn service_get(conn: &Connection, id: i64) -> Result<ServiceDef, String> {
     .map_err(err)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn service_save(db: tauri::State<Db>, svc: ServiceDef) -> Result<i64, String> {
     let conn = db.conn();
     if svc.id <= 0 {
@@ -1341,7 +1341,7 @@ pub fn service_save(db: tauri::State<Db>, svc: ServiceDef) -> Result<i64, String
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn service_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
     let conn = db.conn();
     conn.execute("DELETE FROM services WHERE id = ?1", params![id])
@@ -1351,7 +1351,7 @@ pub fn service_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
 
 // ---------- profiles ----------
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn profiles_list(db: tauri::State<Db>) -> Result<Vec<ProfileDef>, String> {
     let conn = db.conn();
     let mut stmt = conn
@@ -1372,7 +1372,7 @@ pub fn profiles_list(db: tauri::State<Db>) -> Result<Vec<ProfileDef>, String> {
     Ok(rows)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn profile_save(db: tauri::State<Db>, profile: ProfileDef) -> Result<i64, String> {
     let conn = db.conn();
     if profile.id <= 0 {
@@ -1392,7 +1392,7 @@ pub fn profile_save(db: tauri::State<Db>, profile: ProfileDef) -> Result<i64, St
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn profile_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
     let conn = db.conn();
     conn.execute("DELETE FROM profiles WHERE id = ?1", params![id])
@@ -1402,7 +1402,7 @@ pub fn profile_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
 
 // ---------- layouts ----------
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn layouts_list(db: tauri::State<Db>) -> Result<Vec<LayoutDef>, String> {
     let conn = db.conn();
     let mut stmt = conn
@@ -1422,7 +1422,7 @@ pub fn layouts_list(db: tauri::State<Db>) -> Result<Vec<LayoutDef>, String> {
     Ok(rows)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn layout_save(db: tauri::State<Db>, name: String, data: String) -> Result<(), String> {
     let conn = db.conn();
     conn.execute(
@@ -1434,7 +1434,7 @@ pub fn layout_save(db: tauri::State<Db>, name: String, data: String) -> Result<(
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn layout_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
     let conn = db.conn();
     conn.execute("DELETE FROM layouts WHERE id = ?1", params![id])
@@ -1444,7 +1444,7 @@ pub fn layout_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
 
 // ---------- settings ----------
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn setting_get(db: tauri::State<Db>, key: String) -> Result<Option<String>, String> {
     let conn = db.conn();
     setting_get_conn(&conn, &key)
@@ -1462,7 +1462,7 @@ pub fn setting_get_conn(conn: &Connection, key: &str) -> Result<Option<String>, 
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn setting_set(db: tauri::State<Db>, key: String, value: String) -> Result<(), String> {
     let conn = db.conn();
     setting_set_conn(&conn, &key, &value)
@@ -1516,13 +1516,13 @@ pub fn recent_bump_conn(conn: &Connection, kind: &str, ref_id: i64) -> Result<()
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn recent_bump(db: tauri::State<Db>, kind: String, ref_id: i64) -> Result<(), String> {
     let conn = db.conn();
     recent_bump_conn(&conn, &kind, ref_id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn recents_list(db: tauri::State<Db>) -> Result<Vec<Recent>, String> {
     let conn = db.conn();
     let mut stmt = conn

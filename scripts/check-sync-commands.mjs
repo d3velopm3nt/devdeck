@@ -28,10 +28,16 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 /// Lower this as commands move off the UI thread. Never raise it.
-const BASELINE = 138
+const BASELINE = 69
 
 /// Sync because being in order matters more than being off-thread.
 const ON_PURPOSE = new Set(['pty_write'])
+
+// What is left, and why it is left: almost all of it is `aiw/commands.rs`,
+// which is the AI Workspace's whole surface and wants reading rather than a
+// bulk edit — some of those really are quick reads of in-memory state. The
+// rest is `pty.rs`, which stays where it is: a terminal's calls have to arrive
+// in the order they were made, and a thread pool does not promise that.
 
 const src = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'src-tauri', 'src')
 

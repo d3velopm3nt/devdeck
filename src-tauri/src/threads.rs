@@ -60,7 +60,7 @@ fn register(app: &tauri::AppHandle, ws: &Arc<Workspace>, node_id: i64) -> Result
 /// tools, so asking "what will this send" has to ask as whoever is going to
 /// answer. Which is why this lives here, beside the code that builds personas,
 /// rather than in `aiw` where nothing knows what a bot is.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn thread_context(
     app: tauri::AppHandle,
     ws: tauri::State<Arc<Workspace>>,
@@ -78,7 +78,7 @@ pub fn thread_context(
 /// Remembered on the conversation, because it is a fact about this room: a
 /// thread where the profile is noise stays that way, and does not have to be
 /// tidied again every time it is opened.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn thread_context_set(
     app: tauri::AppHandle,
     ws: tauri::State<Arc<Workspace>>,
@@ -108,7 +108,7 @@ pub fn thread_context_set(
 }
 
 /// Replace what a context part says. An empty body puts the assembly back.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn thread_context_edit(
     app: tauri::AppHandle,
     ws: tauri::State<Arc<Workspace>>,
@@ -287,7 +287,7 @@ pub fn answer_as_agents(
 }
 
 /// Wake an agent from whichever thread you are reading.
-#[tauri::command]
+#[tauri::command(async)]
 pub async fn thread_wake(
     app: tauri::AppHandle,
     ws: Ws<'_>,
@@ -438,7 +438,7 @@ fn node_persona(
     Ok(p)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn node_thread(
     app: tauri::AppHandle,
     ws: Ws,
@@ -478,7 +478,7 @@ fn seat_managers(app: &tauri::AppHandle, ws: &Arc<Workspace>, conv_id: &str, nod
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub async fn node_thread_send(
     app: tauri::AppHandle,
     ws: Ws<'_>,

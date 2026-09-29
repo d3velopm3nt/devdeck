@@ -129,7 +129,7 @@ pub fn git_info(dir: String) -> GitInfo {
 /// Best-effort quiet fetch (updates remote-tracking refs), then fresh status.
 /// Non-interactive: a repo whose credentials aren't cached fails fast and we
 /// simply return the pre-fetch status rather than hanging on a prompt.
-#[tauri::command]
+#[tauri::command(async)]
 pub async fn git_fetch(dir: String) -> GitInfo {
     // `git fetch` talks to a remote, and a synchronous #[tauri::command] runs
     // on the thread that answers the interface -- so on a slow network this
@@ -476,7 +476,7 @@ fn run_logged(app: &tauri::AppHandle, dir: &Path, name: &str, args: &[&str]) -> 
 ///
 /// Streams to Logs and emits `git:done` so the tree refreshes, the same way
 /// `git_pull` does.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn git_commit(
     app: tauri::AppHandle,
     dir: String,

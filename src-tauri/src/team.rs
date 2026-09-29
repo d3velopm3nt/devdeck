@@ -85,7 +85,7 @@ impl GoalRow {
 /// but a space whose deck cannot be read is *not* silently skipped as empty:
 /// it keeps its row with `status: "unreadable"`, because "no features here"
 /// and "I could not look" must never render the same.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn team_board(app: tauri::AppHandle, ws: Ws) -> Result<Vec<GoalRow>, String> {
     let workspace: Arc<Workspace> = (*ws).clone();
 

@@ -175,7 +175,7 @@ pub fn parse_due(s: &str) -> Option<i64> {
 }
 
 /// Everything between two moments, from every source, sorted by when.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn calendar_range(
     db: tauri::State<Db>,
     ws: tauri::State<std::sync::Arc<crate::aiw::state::Workspace>>,

@@ -488,7 +488,7 @@ fn service_with_dir(conn: &rusqlite::Connection, id: i64) -> Result<ServiceDef, 
     Ok(def)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn svc_start(app: tauri::AppHandle, db: tauri::State<Db>, id: i64) -> Result<SvcState, String> {
     let def = {
         let conn = db.conn();
@@ -498,7 +498,7 @@ pub fn svc_start(app: tauri::AppHandle, db: tauri::State<Db>, id: i64) -> Result
     start_internal(&app, &def, false)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn svc_stop(
     app: tauri::AppHandle,
     mgr: tauri::State<Arc<ServiceManager>>,
@@ -594,7 +594,7 @@ pub fn svc_restart(
 }
 
 /// Run a one-shot command in the background; output lands in the log viewer.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn run_background(
     app: tauri::AppHandle,
     name: String,
@@ -620,7 +620,7 @@ pub fn run_background(
     start_internal(&app, &def, true)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn svc_states(mgr: tauri::State<Arc<ServiceManager>>) -> Vec<SvcState> {
     let running = mgr.running.lock().unwrap();
     let mut list: Vec<SvcState> = running.values().map(|r| r.state.clone()).collect();
@@ -630,19 +630,19 @@ pub fn svc_states(mgr: tauri::State<Arc<ServiceManager>>) -> Vec<SvcState> {
 
 // ---------- logs ----------
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn logs_recent(mgr: tauri::State<Arc<ServiceManager>>, limit: Option<usize>) -> Vec<LogEntry> {
     let logs = mgr.logs.lock().unwrap_or_else(|p| p.into_inner());
     let n = limit.unwrap_or(2000).min(logs.len());
     logs.iter().skip(logs.len() - n).cloned().collect()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn logs_clear(mgr: tauri::State<Arc<ServiceManager>>) {
     mgr.logs.lock().unwrap().clear();
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn logs_export(mgr: tauri::State<Arc<ServiceManager>>, path: String) -> Result<usize, String> {
     let logs = mgr.logs.lock().unwrap();
     let mut out = String::new();

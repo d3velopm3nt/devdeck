@@ -297,13 +297,13 @@ fn all(conn: &Connection) -> Result<Vec<Schedule>, String> {
     Ok(out)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn schedules_list(db: tauri::State<Db>) -> Result<Vec<Schedule>, String> {
     let conn = db.conn();
     all(&conn)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[allow(clippy::too_many_arguments)]
 pub fn schedule_save(
     db: tauri::State<Db>,
@@ -402,7 +402,7 @@ pub fn schedule_save(
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn schedule_enable(db: tauri::State<Db>, id: i64, on: bool) -> Result<(), String> {
     let conn = db.conn();
     conn.execute(
@@ -413,7 +413,7 @@ pub fn schedule_enable(db: tauri::State<Db>, id: i64, on: bool) -> Result<(), St
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn schedule_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
     let conn = db.conn();
     conn.execute("DELETE FROM schedules WHERE id = ?1", params![id])

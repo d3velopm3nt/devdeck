@@ -645,7 +645,7 @@ fn own_feature(bot: &Bot, node_id: i64) -> String {
 /// Without that a bot could sit on disk saying "weekdays at 07:00" and never
 /// once wake, which is the flavour of silent failure the update checker taught
 /// us to design out: a routine that is displayed must be a routine that runs.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bots_list(db: tauri::State<Db>) -> Result<Vec<Bot>, String> {
     let conn = db.conn();
     let mut out = all_bots(&conn);
@@ -679,7 +679,7 @@ pub fn bots_list(db: tauri::State<Db>) -> Result<Vec<Bot>, String> {
     Ok(out)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_get(db: tauri::State<Db>, handle: String) -> Result<Option<Bot>, String> {
     let conn = db.conn();
     Ok(bot_on(&conn, &handle))
@@ -689,7 +689,7 @@ pub fn bot_get(db: tauri::State<Db>, handle: String) -> Result<Option<Bot>, Stri
 ///
 /// The bot page is still opened from a space, and a space still knows which
 /// manager came from it. When ownership drives that page instead, this goes.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_for_node(db: tauri::State<Db>, node_id: i64) -> Result<Option<Bot>, String> {
     let conn = db.conn();
     Ok(bot_on_node(&conn, node_id))
@@ -922,7 +922,7 @@ fn save_into(
     Ok((b, created))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[allow(clippy::too_many_arguments)]
 pub fn bot_save(
     app: tauri::AppHandle,
@@ -1023,7 +1023,7 @@ pub fn bot_set_worker(db: tauri::State<Db>, handle: String, worker: String) -> R
     crate::managers::save(&conn, &m)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_delete(
     app: tauri::AppHandle,
     db: tauri::State<Db>,
@@ -1074,7 +1074,7 @@ fn deck_of(conn: &Connection, node_id: i64) -> Result<(crate::aiw::deck::Deck, P
 /// one, and everything in the deck otherwise — a bot dropped onto a project
 /// that already had features should show you the work that is there, not
 /// pretend the space is empty.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_work(
     db: tauri::State<Db>,
     node_id: i64,
@@ -1160,7 +1160,7 @@ fn the_one_unowned_feature(conn: &Connection, deck: &crate::aiw::deck::Deck) -> 
 /// It refuses to take a feature from a manager that still exists. Ownership
 /// moves by the other one letting go, which is a different sentence and a
 /// different decision.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_adopt(
     db: tauri::State<Db>,
     node_id: i64,
@@ -1336,7 +1336,7 @@ fn plan_into_for(
     Ok((slug, bot.name, added))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_plan(
     app: tauri::AppHandle,
     db: tauri::State<Db>,
@@ -1384,7 +1384,7 @@ fn next_work_id(items: &[crate::aiw::deck::WorkItem]) -> String {
 }
 
 /// Add or change one step. `id` empty means a new one.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_work_save(
     db: tauri::State<Db>,
     node_id: i64,
@@ -1450,7 +1450,7 @@ pub fn bot_work_save(
     deck.save_work(&slug, &work)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_work_delete(
     db: tauri::State<Db>,
     node_id: i64,
@@ -1587,7 +1587,7 @@ pub(crate) fn create_into(
     Ok(fresh)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[allow(clippy::too_many_arguments)]
 pub fn bot_create(
     app: tauri::AppHandle,
@@ -1657,7 +1657,7 @@ pub struct BotStanding {
     pub features: usize,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bots_standing(db: tauri::State<Db>) -> Vec<BotStanding> {
     let conn = db.conn();
     all_bots(&conn)
@@ -2043,7 +2043,7 @@ pub fn empty_plan_line(conn: &Connection, bot: &Bot) -> Option<String> {
 }
 
 /// The steps a manager would start with, for its Plan tab.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_plan_proposal(
     db: tauri::State<Db>,
     node_id: i64,
@@ -2079,12 +2079,12 @@ fn now_ms() -> i64 {
     chrono::Utc::now().timestamp_millis()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_interview(node_id: i64) -> Result<InterviewView, String> {
     mind_ops::interview(&mind()?, node_id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_answer(
     node_id: i64,
     step: usize,
@@ -2094,37 +2094,37 @@ pub fn bot_answer(
     mind_ops::answer_question(&mind()?, node_id, step, &answer, skipped, &now())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_interview_reset(node_id: i64) -> Result<InterviewView, String> {
     mind_ops::reset_interview(&mind()?, node_id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_beliefs(node_id: i64) -> Result<Vec<BeliefView>, String> {
     mind_ops::beliefs(&mind()?, node_id, now_ms())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_belief_add(node_id: i64, text: String) -> Result<(), String> {
     mind_ops::add_belief(&mind()?, node_id, &text, &now())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_belief_correct(node_id: i64, id: String, text: String) -> Result<(), String> {
     mind_ops::correct_belief(&mind()?, node_id, &id, &text)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_belief_pin(node_id: i64, id: String, pinned: bool) -> Result<(), String> {
     mind_ops::pin_belief(&mind()?, node_id, &id, pinned)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_belief_drop(node_id: i64, id: String) -> Result<(), String> {
     mind_ops::drop_belief(&mind()?, node_id, &id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_belief_drop_stale(node_id: i64) -> Result<usize, String> {
     mind_ops::drop_stale(&mind()?, node_id, now_ms())
 }
@@ -2140,7 +2140,7 @@ pub struct ToolView {
     pub decided: String,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_tools(db: tauri::State<Db>, node_id: i64) -> Result<Vec<ToolView>, String> {
     let bot = {
         let conn = db.conn();
@@ -2180,7 +2180,7 @@ pub fn bot_tools(db: tauri::State<Db>, node_id: i64) -> Result<Vec<ToolView>, St
 /// yourself — this never installs anything, starts anything, or grants
 /// anything, and pretending otherwise would be the worst lie this app could
 /// tell.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_tool_decide(
     app: tauri::AppHandle,
     db: tauri::State<Db>,
@@ -2246,7 +2246,7 @@ pub fn bot_tool_decide(
 
 // -- what it suggests ------------------------------------------------------
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_suggestions(db: tauri::State<Db>, node_id: i64) -> Result<Vec<Suggestion>, String> {
     let (bot, work) = {
         let conn = db.conn();
@@ -2296,7 +2296,7 @@ pub fn bot_suggestions(db: tauri::State<Db>, node_id: i64) -> Result<Vec<Suggest
 /// Answer a suggestion. "Not now" comes back in a week; "wrong" never does, and
 /// the reason you gave becomes something it knows — which is the whole point of
 /// asking for one.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_suggestion_answer(
     node_id: i64,
     id: String,

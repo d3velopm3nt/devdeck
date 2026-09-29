@@ -33,7 +33,8 @@ export function HomeStep({
   onClose?: () => void
   nav?: SetupNav
 }) {
-  const { refreshTree, nodes } = useApp()
+  const refreshTree = useApp((s) => s.refreshTree)
+  const nodes = useApp((s) => s.nodes)
   // Made already, on an earlier pass. Coming back here shows the space
   // rather than a form that would make a second one.
   const existing = nodes.find((x) => x.kind === 'workspace' && x.name === 'Home')

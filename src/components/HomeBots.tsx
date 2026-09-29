@@ -56,7 +56,7 @@ function twoLines(name: string): [string, string] {
 }
 
 export function HomeBots() {
-  const { nodes } = useApp()
+  const nodes = useApp((s) => s.nodes)
   const aiw = useAiw()
   const [bots, setBots] = useState<ipc.Bot[] | null>(null)
   const [standing, setStanding] = useState<Record<string, ipc.BotStanding>>({})

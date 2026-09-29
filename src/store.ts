@@ -2,6 +2,7 @@
 // (App.tsx) push backend events in; components subscribe to slices.
 
 import { create } from 'zustand'
+import { useLive } from './liveStore'
 import * as ipc from './lib/ipc'
 import type { GitInfo } from './lib/ipc'
 import type { Layer } from './lib/calendarLayers'
@@ -10,8 +11,6 @@ import { findNode, projectOf, resolveDir, serviceDir, subtreeIds } from './lib/t
 import type {
   CommandDef,
   LayoutDef,
-  LogEntry,
-  ProcStat,
   ProfileDef,
   PtyInfo,
   Recent,
@@ -42,8 +41,6 @@ import type {
 /** Day, week, month, year — the only thing that differs between calendar
  *  views is the window they ask for. */
 export type CalView = 'day' | 'week' | 'month' | 'year'
-
-const LOG_UI_LIMIT = 5000
 
 export type Theme = 'dark' | 'light'
 export type RailView =
@@ -77,10 +74,6 @@ export type RailView =
   /// because the pairing is the point: Machine installs for you, this
   /// installs for them.
   | 'community'
-  /// The Assistant's own workspace pages — providers, agents, conflicts.
-  /// Reached from Settings rather than from the rail: it is where you
-  /// configure the team, not where you work with it.
-  | 'aiworkspace'
   | 'machine'
   | 'settings'
 export type BottomTab = 'logs' | 'processes' | 'events' | 'calls'
@@ -114,8 +107,6 @@ export interface AppState {
   shells: ShellDef[]
   terminals: PtyInfo[]
   svcStates: Record<number, SvcState>
-  stats: ProcStat[]
-  logs: LogEntry[]
   recents: Recent[]
   /** Git branch info per project node id (only repos appear). */
   gitByNode: Record<number, GitInfo>
@@ -198,11 +189,7 @@ export interface AppState {
    *  the automatic retry after a failed first read. */
   retryBootstrap: () => Promise<void>
 
-  // event ingestion
-  appendLog: (e: LogEntry) => void
-  setLogs: (e: LogEntry[]) => void
-  clearLogs: () => void
-  setStats: (s: ProcStat[]) => void
+  // event ingestion — logs and stats live in `useLive` (liveStore.ts)
   /** Persist the monitor-detected port into any running service that has no
    *  health_port set — so an imported service gets its port automatically. */
   adoptDetectedPorts: () => void
@@ -511,7 +498,6 @@ const RAIL_VIEWS: readonly RailView[] = [
   'stash',
   'connections',
   'community',
-  'aiworkspace',
   'machine',
   'settings',
 ]
@@ -623,8 +609,6 @@ export const useApp = create<AppState>((set, get) => ({
   shells: [],
   terminals: [],
   svcStates: {},
-  stats: [],
-  logs: [],
   recents: [],
   gitByNode: {},
   changesByNode: {},
@@ -671,7 +655,8 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   servicePort: (id) => {
-    const { services, stats } = get()
+    const { services } = get()
+    const { stats } = useLive.getState()
     const saved = services.find((s) => s.id === id)?.health_port
     if (saved != null) return saved
     const st = stats.find((s) => s.kind === 'service' && s.id === id)
@@ -813,6 +798,7 @@ export const useApp = create<AppState>((set, get) => ({
       ])
     const svcStates: Record<number, SvcState> = {}
     for (const s of states) svcStates[s.id] = s
+    useLive.getState().setLogs(logs)
     set({
       commands,
       services,
@@ -821,7 +807,6 @@ export const useApp = create<AppState>((set, get) => ({
       shells,
       terminals,
       svcStates,
-      logs,
       recents,
       hotkey: hotkey ?? 'ctrl+shift+Space',
       // Default monitoring on; only an explicit '0' disables it.
@@ -850,16 +835,9 @@ export const useApp = create<AppState>((set, get) => ({
     await get().bootstrap()
   },
 
-  appendLog: (e) =>
-    set((st) => {
-      const logs = st.logs.length >= LOG_UI_LIMIT ? [...st.logs.slice(-LOG_UI_LIMIT + 1), e] : [...st.logs, e]
-      return { logs }
-    }),
-  setLogs: (logs) => set({ logs }),
-  clearLogs: () => set({ logs: [] }),
-  setStats: (stats) => set({ stats }),
   adoptDetectedPorts: () => {
-    const { services, stats } = get()
+    const { services } = get()
+    const { stats } = useLive.getState()
     for (const st of stats) {
       if (st.kind !== 'service' || !st.ports || st.ports.length === 0) continue
       const svc = services.find((s) => s.id === st.id)

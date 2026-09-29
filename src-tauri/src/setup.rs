@@ -264,7 +264,7 @@ fn push_tool(
 
 /// Re-read PATH from the registry (+ scoop shims) into this process, so tools
 /// installed while DevDeck is running resolve without a restart.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn refresh_path() -> Result<(), String> {
     let path = resolved_path().ok_or("could not read PATH from the registry")?;
     std::env::set_var("PATH", path);
@@ -272,7 +272,7 @@ pub fn refresh_path() -> Result<(), String> {
 }
 
 /// Detect a project's required tools + bootstrap steps and their current state.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn detect_project_setup(dir: String) -> ProjectSetup {
     let d = Path::new(&dir);
     let mut tools: Vec<RequiredTool> = Vec::new();
@@ -363,7 +363,7 @@ pub fn detect_project_setup(dir: String) -> ProjectSetup {
 
 /// Given one line of a command's output, suggest an installable tool if it
 /// looks like a "command not found" error. Returns null otherwise.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn suggest_install(line: String) -> Option<RequiredTool> {
     let l = line.to_ascii_lowercase();
     // Extract the offending binary name from common shells' phrasings.
@@ -454,7 +454,7 @@ fn stream(app: &tauri::AppHandle, name: &str, mut cmd: Command) -> bool {
 /// Clone a git repository into `parent`/<repo-name> and return the path.
 /// Relies on the user's existing git credentials (helper / gh auth) for
 /// private repos. Output streams to the log bus.
-#[tauri::command]
+#[tauri::command(async)]
 pub async fn clone_repo(
     app: tauri::AppHandle,
     url: String,
@@ -528,7 +528,7 @@ pub(crate) fn clone_now(
 /// Install the given tools, refresh PATH, then run the bootstrap steps in the
 /// project directory. Emits `setup:done` with `{ ok }` when finished so the UI
 /// can start the service it was preparing.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn run_project_setup(
     app: tauri::AppHandle,
     tools: Vec<InstallTool>,

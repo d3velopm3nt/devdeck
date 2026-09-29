@@ -4,9 +4,8 @@
 
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
-use std::process::Command;
 use std::sync::Arc;
-use sysinfo::{Pid, ProcessesToUpdate, System};
+use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 use tauri::{Emitter, Manager};
 
 use crate::pty::PtyManager;
@@ -119,38 +118,112 @@ fn is_system_proc(name: &str) -> bool {
     )
 }
 
-/// pid → listening TCP ports, from one netstat pass.
-fn listening_ports() -> HashMap<u32, Vec<u16>> {
-    let mut map: HashMap<u32, Vec<u16>> = HashMap::new();
-    let mut cmd = Command::new("netstat");
-    cmd.args(["-ano", "-p", "TCP"]);
-    // Suppress the console window that would otherwise flash every tick.
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+/// `AF_INET` and `AF_INET6`, from `ws2def.h`.
+///
+/// Spelled out rather than pulling the whole WinSock module in for two
+/// integers; they are fixed by the ABI and cannot change.
+#[cfg(windows)]
+const AF_INET: u32 = 2;
+#[cfg(windows)]
+const AF_INET6: u32 = 23;
+
+/// A port out of a `dwLocalPort`, which Windows keeps in network order inside
+/// the low two bytes of a `u32`.
+fn port_of(raw: u32) -> u16 {
+    u16::from_be_bytes([(raw & 0xff) as u8, ((raw >> 8) & 0xff) as u8])
+}
+
+fn add_port(map: &mut HashMap<u32, Vec<u16>>, pid: u32, port: u16) {
+    let ports = map.entry(pid).or_default();
+    if !ports.contains(&port) {
+        ports.push(port);
     }
-    let out = cmd.output();
-    if let Ok(out) = out {
-        for line in String::from_utf8_lossy(&out.stdout).lines() {
-            let cols: Vec<&str> = line.split_whitespace().collect();
-            if cols.len() >= 5 && cols[0] == "TCP" && cols[3] == "LISTENING" {
-                if let (Some(port), Ok(pid)) = (
-                    cols[1]
-                        .rsplit(':')
-                        .next()
-                        .and_then(|p| p.parse::<u16>().ok()),
-                    cols[4].parse::<u32>(),
-                ) {
-                    let ports = map.entry(pid).or_default();
-                    if !ports.contains(&port) {
-                        ports.push(port);
-                    }
-                }
-            }
+}
+
+/// One address family's listener table.
+///
+/// # Safety
+/// The documented two-step: ask how much room the table needs, then hand over
+/// a buffer that big. The table is read here and nowhere else, so nothing can
+/// free it underneath the slice.
+#[cfg(windows)]
+unsafe fn tcp_listeners(family: u32, map: &mut HashMap<u32, Vec<u16>>) {
+    use windows_sys::Win32::NetworkManagement::IpHelper::{
+        GetExtendedTcpTable, MIB_TCP6TABLE_OWNER_PID, MIB_TCPTABLE_OWNER_PID,
+        TCP_TABLE_OWNER_PID_LISTENER,
+    };
+
+    let mut size: u32 = 0;
+    // The first call is *expected* to fail: it is how the size is obtained.
+    GetExtendedTcpTable(
+        std::ptr::null_mut(),
+        &mut size,
+        0,
+        family,
+        TCP_TABLE_OWNER_PID_LISTENER,
+        0,
+    );
+    if size == 0 {
+        return;
+    }
+    // A `u32` buffer rather than a `u8` one: every field of both row types is
+    // four bytes wide, so this is aligned for them and a byte vector would not
+    // be guaranteed to be.
+    let mut buf: Vec<u32> = vec![0; (size as usize).div_ceil(4)];
+    let rc = GetExtendedTcpTable(
+        buf.as_mut_ptr().cast(),
+        &mut size,
+        0,
+        family,
+        TCP_TABLE_OWNER_PID_LISTENER,
+        0,
+    );
+    if rc != 0 {
+        return;
+    }
+
+    if family == AF_INET6 {
+        let t = &*(buf.as_ptr() as *const MIB_TCP6TABLE_OWNER_PID);
+        for r in std::slice::from_raw_parts(t.table.as_ptr(), t.dwNumEntries as usize) {
+            add_port(map, r.dwOwningPid, port_of(r.dwLocalPort));
+        }
+    } else {
+        let t = &*(buf.as_ptr() as *const MIB_TCPTABLE_OWNER_PID);
+        for r in std::slice::from_raw_parts(t.table.as_ptr(), t.dwNumEntries as usize) {
+            add_port(map, r.dwOwningPid, port_of(r.dwLocalPort));
         }
     }
+}
+
+/// pid → listening TCP ports, asked of Windows directly.
+///
+/// This used to spawn `netstat -ano -p TCP` every two seconds and read its
+/// columns back: a process launch per tick, a console window suppressed by a
+/// flag so it did not flash, and a text format that is localised — all to get a
+/// table the kernel hands over for the asking. `GetExtendedTcpTable` is the
+/// same data with none of that, and it covers IPv6, which the parse did not
+/// distinguish.
+#[cfg(windows)]
+fn listening_ports() -> HashMap<u32, Vec<u16>> {
+    let mut map: HashMap<u32, Vec<u16>> = HashMap::new();
+    unsafe {
+        tcp_listeners(AF_INET, &mut map);
+        tcp_listeners(AF_INET6, &mut map);
+    }
+    for ports in map.values_mut() {
+        ports.sort_unstable();
+    }
     map
+}
+
+/// DevDeck is a Windows app; this keeps it compiling and testable elsewhere.
+///
+/// Reporting no listeners is honest, which the old `netstat -ano` parse was not
+/// on another platform: those are Windows flags, so it produced an empty map
+/// there too, by accident rather than on purpose.
+#[cfg(not(windows))]
+fn listening_ports() -> HashMap<u32, Vec<u16>> {
+    HashMap::new()
 }
 
 /// Transitive children of `root` using a parent map built per tick.
@@ -172,11 +245,34 @@ fn tree_pids(root: u32, children: &HashMap<u32, Vec<u32>>) -> Vec<u32> {
     out
 }
 
+/// Is any window of ours on screen?
+///
+/// The dashboard this feeds is only ever read from a window, so when every one
+/// of them is hidden or minimised there is nobody to show a sample to. The
+/// widget counts: it is a window of its own and shows live state.
+fn on_screen(app: &tauri::AppHandle) -> bool {
+    ["main", "widget"].iter().any(|label| {
+        app.get_webview_window(label)
+            .map(|w| w.is_visible().unwrap_or(false) && !w.is_minimized().unwrap_or(false))
+            .unwrap_or(false)
+    })
+}
+
 pub fn spawn(app: tauri::AppHandle) {
     std::thread::spawn(move || {
         let mut sys = System::new();
         loop {
             std::thread::sleep(std::time::Duration::from_secs(2));
+
+            // Minimised cost nothing to nobody, and it was reported: this
+            // walked every process on the machine every two seconds behind a
+            // hidden window. The sleep stays short rather than backing off, so
+            // the first sample after you come back is two seconds away and not
+            // ten — it is the walk that is skipped, not the clock.
+            if !on_screen(&app) {
+                continue;
+            }
+
             let svc_mgr = app.state::<Arc<ServiceManager>>();
             let pty_mgr = app.state::<Arc<PtyManager>>();
 
@@ -185,7 +281,27 @@ pub fn spawn(app: tauri::AppHandle) {
 
             // Always refresh: even with nothing of ours running we still scan
             // for foreign dev servers (e.g. one Claude or a script just started).
-            sys.refresh_processes(ProcessesToUpdate::All, true);
+            //
+            // **Asking for `cmd` and `cwd` is a fix, not a tuning.**
+            // `refresh_processes` gathers memory, CPU, disk usage, exe and
+            // tasks — and neither the command line nor the working directory.
+            // This loop reads both: `dev_tool` matches a command line to label
+            // a detected server, and `cwd` is how one gets attributed to a
+            // space. Measured on this machine: of 269 processes, **none** had
+            // either under the old call and 132 had both under this one. So
+            // every foreign server was labelled by its bare process name — a
+            // `vite` was a "node" — and none could be placed in a space, with
+            // nothing anywhere saying so. Disk usage and tasks are dropped in
+            // the same breath, because nothing here reads them.
+            sys.refresh_processes_specifics(
+                ProcessesToUpdate::All,
+                true,
+                ProcessRefreshKind::nothing()
+                    .with_cpu()
+                    .with_memory()
+                    .with_cmd(UpdateKind::OnlyIfNotSet)
+                    .with_cwd(UpdateKind::OnlyIfNotSet),
+            );
 
             // Build parent → children map once.
             let mut children: HashMap<u32, Vec<u32>> = HashMap::new();
@@ -320,4 +436,54 @@ pub fn spawn(app: tauri::AppHandle) {
             let _ = app.emit("stats:update", stats);
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Windows keeps the port in network order inside a `u32`, so reading it
+    /// as a number gives 5173 as 13588. Off-by-byte-order here would list
+    /// every dev server under a port nobody is using.
+    #[test]
+    fn a_port_is_read_out_of_network_order() {
+        // 5173 = 0x1435. On the wire that is [0x14, 0x35]; read back out of a
+        // little-endian u32 that is 0x3514.
+        assert_eq!(port_of(0x3514), 5173);
+        assert_eq!(port_of(0xB80B), 3000); // 3000 = 0x0BB8
+        assert_eq!(port_of(0x5000), 80);
+        assert_eq!(port_of(0), 0);
+    }
+
+    /// The same port from two families is one port, and the list is sorted so
+    /// the UI does not reorder itself between ticks.
+    #[test]
+    fn a_port_heard_twice_is_listed_once() {
+        let mut map = HashMap::new();
+        add_port(&mut map, 42, 5173);
+        add_port(&mut map, 42, 3000);
+        add_port(&mut map, 42, 5173); // again, e.g. once for IPv4 and once for IPv6
+        let mut ports = map.remove(&42).expect("the pid is there");
+        ports.sort_unstable();
+        assert_eq!(ports, vec![3000, 5173]);
+    }
+
+    /// The label comes from the command line, which is the thing that was
+    /// empty for every process until the refresh started asking for it. A
+    /// `vite` that reads as "node" is the symptom to watch for.
+    #[test]
+    fn a_dev_server_is_named_by_its_command_line() {
+        assert_eq!(
+            dev_tool("node.exe", "node C:/p/node_modules/vite/bin/vite.js"),
+            Some("vite".into())
+        );
+        assert_eq!(
+            dev_tool("python.exe", "python -m uvicorn app:api --reload"),
+            Some("uvicorn".into())
+        );
+        // With no command line the best it can do is the process name — which
+        // is exactly what every detected server used to get.
+        assert_eq!(dev_tool("node.exe", ""), Some("node".into()));
+        assert_eq!(dev_tool("notepad.exe", ""), None);
+    }
 }

@@ -16,6 +16,9 @@ const select = params.get('select')
 const tab = params.get('tab')
 const sheet = params.get('sheet')
 
+// Checks drive the real store from the page (see the perf check).
+;(window as unknown as { __app: typeof useApp }).__app = useApp
+
 function Harness() {
   useEffect(() => {
     const st = useApp.getState()

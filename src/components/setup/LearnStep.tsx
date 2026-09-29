@@ -79,7 +79,9 @@ export function LearnStep({
   onClose?: () => void
   nav?: SetupNav
 }) {
-  const { mailSyncing, mailAccounts, refreshMailAccounts } = useApp()
+  const mailSyncing = useApp((s) => s.mailSyncing)
+  const mailAccounts = useApp((s) => s.mailAccounts)
+  const refreshMailAccounts = useApp((s) => s.refreshMailAccounts)
   const [phase, setPhase] = useState<Phase>('sorting')
   useEffect(() => {
     // The first run has not opened Mail, so the store has nothing yet.

@@ -61,7 +61,10 @@ function Tag({ label, active, onClick }: { label: string; active: boolean; onCli
 }
 
 export function StashSidebar() {
-  const { stashCounts: counts, stashFilters: f, setStashFilters, createStashNote } = useApp()
+  const counts = useApp((s) => s.stashCounts)
+  const f = useApp((s) => s.stashFilters)
+  const setStashFilters = useApp((s) => s.setStashFilters)
+  const createStashNote = useApp((s) => s.createStashNote)
 
   // Picking a group clears the type tag (and vice-versa) — the two both
   // narrow by type, so combining them mostly produces an empty list.

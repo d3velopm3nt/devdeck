@@ -5,6 +5,7 @@
 import { useMemo, useState } from 'react'
 import type { IDockviewPanelProps } from 'dockview-react'
 import { useApp } from '../store'
+import { useLive } from '../liveStore'
 import * as ipc from '../lib/ipc'
 import { openEditor, openNodeSetup, openService, openTerminalPanel } from '../lib/dock'
 import { openTerminal, runCommandInNewTerminal, runCommandInBackground, launchProfile } from '../lib/runner'
@@ -30,7 +31,14 @@ type Tab = 'services' | 'commands' | 'profiles'
 
 export function SpaceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
   const projectId = props.params.id
-  const { nodes, services, commands, profiles, svcStates, stats, terminals, refreshTree } = useApp()
+  const nodes = useApp((s) => s.nodes)
+  const services = useApp((s) => s.services)
+  const commands = useApp((s) => s.commands)
+  const profiles = useApp((s) => s.profiles)
+  const svcStates = useApp((s) => s.svcStates)
+  const terminals = useApp((s) => s.terminals)
+  const refreshTree = useApp((s) => s.refreshTree)
+  const stats = useLive((s) => s.stats)
   const [tab, setTab] = useState<Tab>('services')
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [busy, setBusy] = useState<number | null>(null)

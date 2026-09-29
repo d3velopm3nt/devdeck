@@ -21,12 +21,25 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
   return null as unknown as T
 }
 
-export const listen = async () => () => {}
-export const emit = async () => {}
+// A real in-page event bus, so a check can push backend events (log lines,
+// stats samples) through the production listeners: `window.__emit(name, payload)`.
+type Handler = (e: { event: string; payload: unknown }) => void
+const handlers = new Map<string, Set<Handler>>()
+export const listen = async (event: string, cb: Handler) => {
+  if (!handlers.has(event)) handlers.set(event, new Set())
+  handlers.get(event)!.add(cb)
+  return () => void handlers.get(event)?.delete(cb)
+}
+export const emit = async (event: string, payload?: unknown) => {
+  for (const cb of handlers.get(event) ?? []) cb({ event, payload })
+}
+;(window as unknown as { __emit: typeof emit }).__emit = emit
 export const once = async () => () => {}
 export type UnlistenFn = () => void
 
 export const getCurrentWindow = () => ({
+  isMaximized: async () => false,
+  onResized: async () => () => {},
   label: 'main',
   listen: async () => () => {},
   onCloseRequested: async () => () => {},

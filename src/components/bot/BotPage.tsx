@@ -25,10 +25,9 @@ import { BotTools } from './BotTools'
 import { BotSettings } from './BotSettings'
 import { BotInterview } from './BotInterview'
 import { BotGrants } from './BotGrants'
-import { BotChat } from './BotChat'
 import { CAPTURE_BOT_MODAL, CAPTURE_BOT_TAB } from '../../lib/devCapture'
 
-type Tab = 'chat' | 'overview' | 'plan' | 'knows' | 'tools' | 'settings'
+type Tab = 'overview' | 'plan' | 'knows' | 'tools' | 'settings'
 
 const SUGGESTION_ICON: Record<string, IconName> = {
   interview: 'ai',
@@ -68,7 +67,10 @@ export function BotDetail({
   ask?: boolean
   onAskConsumed?: () => void
 }) {
-  const { nodes, focus, refreshBots, refreshActivity } = useApp()
+  const nodes = useApp((s) => s.nodes)
+  const focus = useApp((s) => s.focus)
+  const refreshBots = useApp((s) => s.refreshBots)
+  const refreshActivity = useApp((s) => s.refreshActivity)
   const aiw = useAiw()
 
   const [bot, setBot] = useState<ipc.Bot | null>(null)
@@ -79,7 +81,7 @@ export function BotDetail({
   const [proposal, setProposal] = useState<string[]>([])
   // Opens on the thread. A page that opened on settings was a form with a bot
   // attached; opening on what the bot said is the other way round.
-  const [tab, setTab] = useState<Tab>((CAPTURE_BOT_TAB as Tab) || 'chat')
+  const [tab, setTab] = useState<Tab>((CAPTURE_BOT_TAB as Tab) || 'overview')
   const [gone, setGone] = useState(false)
   const [err, setErr] = useState('')
   const [asking, setAsking] = useState(ask || CAPTURE_BOT_MODAL === 'interview')
@@ -88,7 +90,7 @@ export function BotDetail({
   const [why, setWhy] = useState('')
 
   // Every read reports its own failure. A `mind.md` someone hand-edited into
-  // invalid YAML must never render as "this bot knows nothing" — that is the
+  // invalid YAML must never render as "this manager knows nothing" — that is the
   // update checker's old bug (couldn't reach the server → "up to date"), and
   // here it would be followed by a write that replaced everything you told it.
   const reload = useCallback(() => {
@@ -193,7 +195,7 @@ export function BotDetail({
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 bg-page px-8 text-center">
         <Icon name="bot" size={24} className="text-faint" />
-        <div className="text-[12.5px] text-dim">That bot is gone</div>
+        <div className="text-[12.5px] text-dim">That manager is gone</div>
         <p className="max-w-[380px] text-[11.5px] leading-relaxed text-muted">
           Its folder, its work items and everything else in the space are untouched. You can close
           this tab.
@@ -207,7 +209,7 @@ export function BotDetail({
       <div className="flex h-full flex-col items-center justify-center gap-2 bg-page px-8 text-center">
         <Icon name="bot" size={24} className="text-faint" />
         <div className="text-[12.5px] text-dim">
-          {err ? 'That did not load' : 'No bot in this folder'}
+          {err ? 'That did not load' : 'No manager in this folder'}
         </div>
         {err && <p className="max-w-[420px] text-[11.5px] text-err">{err}</p>}
       </div>
@@ -221,7 +223,6 @@ export function BotDetail({
   const scriptLen = interview?.script.length ?? 6
 
   const TABS: { id: Tab; label: string; badge?: string }[] = [
-    { id: 'chat', label: 'Chat' },
     { id: 'overview', label: 'Overview' },
     { id: 'plan', label: 'Plan', badge: work.length ? `${p.done}/${p.total}` : undefined },
     {
@@ -307,12 +308,6 @@ export function BotDetail({
         {err && (
           <div className="mb-3 rounded-lg border border-red-500/25 bg-red-500/[0.07] px-3 py-2 text-[11.5px] leading-[1.5] text-err">
             {err}
-          </div>
-        )}
-
-        {tab === 'chat' && bot && (
-          <div className="h-full">
-            <BotChat bot={bot} />
           </div>
         )}
 

@@ -121,7 +121,9 @@ function Card({
 /** Tag chips plus one box that adds them. Comma-separate to add several at
  *  once; existing tags autocomplete so you don't fork "bug" into "Bug". */
 function TagRow({ item }: { item: StashItem }) {
-  const { addStashTags, removeStashTag, stashCounts } = useApp()
+  const addStashTags = useApp((s) => s.addStashTags)
+  const removeStashTag = useApp((s) => s.removeStashTag)
+  const stashCounts = useApp((s) => s.stashCounts)
   const [draft, setDraft] = useState('')
   const [open, setOpen] = useState(false)
 
@@ -207,7 +209,10 @@ function TagRow({ item }: { item: StashItem }) {
  * apply — an empty row beats a row of greyed-out buttons.
  */
 function SmartActions({ item, onError }: { item: StashItem; onError: (msg: string) => void }) {
-  const { updateStashItem, searchLogs, setRailView, nodes } = useApp()
+  const updateStashItem = useApp((s) => s.updateStashItem)
+  const searchLogs = useApp((s) => s.searchLogs)
+  const setRailView = useApp((s) => s.setRailView)
+  const nodes = useApp((s) => s.nodes)
   const [jwt, setJwt] = useState<DecodedJwt | null>(null)
 
   useEffect(() => setJwt(null), [item.id])

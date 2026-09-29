@@ -300,8 +300,9 @@ export function Thread({
     const a = useAiw.getState()
     if (!a.ready) void a.bootstrap()
     void a.refreshApprovals()
-    let stop: (() => void) | undefined
-    void aiw
+    // Hold the promise: cleanup can run before it resolves, and a listener
+    // captured late is never removed.
+    const stop = aiw
       .onEvent((e) => {
         // Into the store too, so the Events tab below sees what this room
         // caused. A bus panel that says "nothing yet" under a handover that
@@ -310,19 +311,17 @@ export function Thread({
         void useAiw.getState().refreshApprovals()
         void aiw.sessions().then((sessions) => useAiw.setState({ sessions })).catch(() => {})
       })
-      .then((un) => {
-        stop = un
-      })
     void aiw.sessions().then((sessions) => useAiw.setState({ sessions })).catch(() => {})
-    return () => stop?.()
+    return () => void stop.then((un) => un())
   }, [])
 
   // Progress arrives on the assistant's channel, keyed by conversation. Only
   // this one is ours: another thread's tokens spliced in here would be worse
   // than a spinner.
   useEffect(() => {
-    let stop: (() => void) | undefined
-    void aiw
+    // Hold the promise: cleanup can run before it resolves, and a listener
+    // captured late is never removed — which doubled streamed text.
+    const stop = aiw
       .onChat((e: ChatEvent) => {
         if (!conv || e.conversation_id !== conv.id) return
         if (e.kind === 'delta') setStreaming((s) => s + e.text)
@@ -343,10 +342,7 @@ export function Thread({
           if (e.done) void reload()
         }
       })
-      .then((un) => {
-        stop = un
-      })
-    return () => stop?.()
+    return () => void stop.then((un) => un())
   }, [conv?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {

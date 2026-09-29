@@ -880,7 +880,7 @@ fn agent_view(ws: &Arc<Workspace>) -> Vec<(String, Vec<String>, Vec<(String, Str
 /// startup, where nothing else would.
 pub fn sync_servers(db: &Db, ws: &Arc<Workspace>) -> Result<(), String> {
     let rows = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         all(&conn)?
     };
     ws.set_mcp_servers(servers(&rows));
@@ -895,10 +895,10 @@ fn now_ms() -> i64 {
 }
 
 /// Everything you could install, and what has been.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn community_catalog(db: tauri::State<Db>, ws: Ws) -> Result<Vec<Listing>, String> {
     let installed = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         all(&conn)?
     };
     let agents = agent_view(&ws);
@@ -917,10 +917,10 @@ pub fn community_catalog(db: tauri::State<Db>, ws: Ws) -> Result<Vec<Listing>, S
 }
 
 /// What is installed, and whether anything can actually use it.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn community_installed(db: tauri::State<Db>, ws: Ws) -> Result<Vec<Standing>, String> {
     let rows = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         all(&conn)?
     };
     let agents = agent_view(&ws);
@@ -938,13 +938,13 @@ pub fn community_installed(db: tauri::State<Db>, ws: Ws) -> Result<Vec<Standing>
 /// skill is written where the runtime can find it without being added to
 /// anybody. The separate act is `community_grant`, and keeping the two apart
 /// is the whole design.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn community_install(db: tauri::State<Db>, ws: Ws, id: String) -> Result<Standing, String> {
     // Resolved against the catalogue *and* every cached index, so a registry
     // entry can be installed from Discover. It used to look only in the
     // starter catalogue, which made the whole index read-only.
     let (entry, rows) = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let rows = all(&conn)?;
         let feeds: Vec<(String, Vec<Item>)> = crate::community_index::SOURCES
             .iter()
@@ -1014,7 +1014,7 @@ pub fn community_install(db: tauri::State<Db>, ws: Ws, id: String) -> Result<Sta
         tool_id: entry.tool_id.clone(),
     };
     {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         record(&conn, &row)?;
     }
     sync_servers(&db, &ws)?;
@@ -1027,10 +1027,10 @@ pub fn community_install(db: tauri::State<Db>, ws: Ws, id: String) -> Result<Sta
 /// Revoking first matters. A permission row naming a tool that is no longer
 /// installed is a grant to nothing, and it would come back the moment the tool
 /// was reinstalled — silently re-granting something a person had removed.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn community_uninstall(db: tauri::State<Db>, ws: Ws, id: String) -> Result<(), String> {
     let row = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         all(&conn)?.into_iter().find(|i| i.id == id)
     };
     let Some(row) = row else { return Ok(()) };
@@ -1061,7 +1061,7 @@ pub fn community_uninstall(db: tauri::State<Db>, ws: Ws, id: String) -> Result<(
     }
 
     {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         forget(&conn, &id)?;
     }
     // A server whose install is gone must stop being reachable *and* stop
@@ -1092,7 +1092,7 @@ fn set_tool(
 ) -> Result<(), String> {
     ws.set_permission(agent_id, tool, level)?;
     let json = serde_json::to_string(&ws.permission_grants()).map_err(|e| e.to_string())?;
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     crate::db::setting_set_conn(&conn, crate::aiw::commands::PERMISSIONS_KEY, &json)
 }
 
@@ -1123,9 +1123,9 @@ fn set_skill(ws: &Arc<Workspace>, agent_id: &str, skill: &str, on: bool) -> Resu
 ///
 /// Never fetches. Opening the page must not spend a rate limit, and a list
 /// that refetched on every visit would be unusable at ten searches a minute.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn community_index(db: tauri::State<Db>) -> Vec<crate::community_index::Feed> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut feeds: Vec<_> = crate::community_index::SOURCES
         .iter()
         .map(|s| crate::community_index::describe(crate::community_index::cached(&conn, s)))
@@ -1141,7 +1141,7 @@ pub fn community_index(db: tauri::State<Db>) -> Vec<crate::community_index::Feed
 /// Go and look. Deliberately a button rather than something that happens on
 /// its own: this is the only outbound call the module makes, and it should be
 /// somebody's decision rather than a surprise in a network log.
-#[tauri::command]
+#[tauri::command(async)]
 pub async fn community_refresh_index(
     app: tauri::AppHandle,
     source: Option<String>,
@@ -1171,7 +1171,7 @@ fn refresh_index_now(
             .map(|s| s.to_string())
             .collect(),
     };
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut feeds: Vec<_> = wanted
         .iter()
         .map(|s| crate::community_index::describe(crate::community_index::refresh(&conn, s)))
@@ -1187,7 +1187,7 @@ fn refresh_index_now(
 /// Cache-only and therefore free: this never goes near the network, which is
 /// what lets it run on every keystroke. `source` names one feed, or `catalog`
 /// for the things that ship with DevDeck.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn community_arrange(
     db: tauri::State<Db>,
     source: String,
@@ -1196,7 +1196,7 @@ pub fn community_arrange(
     permissive: bool,
     sort: String,
 ) -> Vec<Item> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let items = if source == "catalog" {
         catalog()
     } else if source == crate::community_index::SOURCE_YEAR {
@@ -1213,10 +1213,10 @@ pub fn community_arrange(
 /// installed server: `Hub::ensure` starts the process if it is not already
 /// running, which is a thing to do when somebody opened the page for that
 /// server and not a thing to do while rendering a list.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn community_repo(db: tauri::State<Db>, ws: Ws, id: String) -> Result<Repo, String> {
     let (rows, feeds) = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let rows = all(&conn)?;
         let feeds: Vec<(String, Vec<Item>)> = crate::community_index::SOURCES
             .iter()
@@ -1300,10 +1300,10 @@ pub fn community_repo(db: tauri::State<Db>, ws: Ws, id: String) -> Result<Repo, 
 }
 
 /// Every bundle, with what installing it would do right now.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn community_bundles(db: tauri::State<Db>, ws: Ws) -> Result<Vec<(Bundle, Plan)>, String> {
     let rows = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         all(&conn)?
     };
     let agents: Vec<String> = ws.agents().into_iter().map(|a| a.id).collect();
@@ -1321,7 +1321,7 @@ pub fn community_bundles(db: tauri::State<Db>, ws: Ws) -> Result<Vec<(Bundle, Pl
 /// Returns the grants it proposes, for a person to accept in one deliberate
 /// step through `community_grant`. A bundle that applied them here would be
 /// the one thing this module exists to prevent, dressed up as convenience.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn community_install_bundle(db: tauri::State<Db>, ws: Ws, id: String) -> Result<Plan, String> {
     let b = bundles()
         .into_iter()
@@ -1336,7 +1336,7 @@ pub fn community_install_bundle(db: tauri::State<Db>, ws: Ws, id: String) -> Res
     }
 
     let rows = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         all(&conn)?
     };
     let agents: Vec<String> = ws.agents().into_iter().map(|a| a.id).collect();
@@ -1349,13 +1349,13 @@ pub fn community_install_bundle(db: tauri::State<Db>, ws: Ws, id: String) -> Res
 /// nobody can stop. It is not in the Processes bottom bar — that watches
 /// services you configured, and these start themselves on an agent's first
 /// call — so Community answers the question instead.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn community_servers(ws: Ws) -> Vec<crate::mcp::ServerStatus> {
     ws.mcp.statuses()
 }
 
 /// Stop a running server. It restarts on the next call that needs it.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn community_stop_server(ws: Ws, id: String) -> bool {
     ws.mcp.stop(&id)
 }
@@ -1366,7 +1366,7 @@ pub fn community_stop_server(ws: Ws, id: String) -> bool {
 /// an agent's own list; a tool is a row in the permission matrix. Both are
 /// refused when the item is not installed — a permission pointing at something
 /// that is not there is worse than no permission, because it reads as one.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn community_grant(
     db: tauri::State<Db>,
     ws: Ws,
@@ -1378,7 +1378,7 @@ pub fn community_grant(
     on: bool,
 ) -> Result<(), String> {
     let installed = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         all(&conn)?.into_iter().any(|i| i.id == id)
     };
     if !installed {

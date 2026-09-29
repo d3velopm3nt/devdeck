@@ -32,8 +32,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # `tsc -b`, not `tsc --noEmit`: the root tsconfig is references-only, so
+      # `--noEmit` against it compiles nothing and passes whatever is broken.
       - name: Typecheck
-        run: npx tsc --noEmit
+        run: npx tsc -b
 
       - name: Lint (frontend)
         run: npm run lint
@@ -43,7 +45,11 @@ jobs:
         working-directory: src-tauri
 
       - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
+        working-directory: src-tauri
+
+      - name: Test (Rust)
+        run: cargo test --workspace --all-targets
         working-directory: src-tauri
 
       - name: Build app

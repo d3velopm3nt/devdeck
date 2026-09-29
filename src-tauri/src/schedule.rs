@@ -297,13 +297,13 @@ fn all(conn: &Connection) -> Result<Vec<Schedule>, String> {
     Ok(out)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn schedules_list(db: tauri::State<Db>) -> Result<Vec<Schedule>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     all(&conn)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[allow(clippy::too_many_arguments)]
 pub fn schedule_save(
     db: tauri::State<Db>,
@@ -348,7 +348,7 @@ pub fn schedule_save(
     } else {
         work_item.unwrap_or_default()
     };
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     match id {
         Some(id) => {
             conn.execute(
@@ -402,9 +402,9 @@ pub fn schedule_save(
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn schedule_enable(db: tauri::State<Db>, id: i64, on: bool) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute(
         "UPDATE schedules SET enabled = ?1 WHERE id = ?2",
         params![on as i64, id],
@@ -413,9 +413,9 @@ pub fn schedule_enable(db: tauri::State<Db>, id: i64, on: bool) -> Result<(), St
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn schedule_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute("DELETE FROM schedules WHERE id = ?1", params![id])
         .map_err(err)?;
     Ok(())
@@ -436,6 +436,45 @@ fn dir_for(conn: &Connection, node_id: Option<i64>) -> Option<String> {
 /// Takes no connection on purpose. `activity::record` locks the database
 /// itself, so a caller holding that lock while calling this deadlocks the
 /// thread — which is exactly what the first version of the tick did.
+/// How many scheduled runs may be in flight at once. Each is a thread and,
+/// for a bot, an agent session; the cap is what stops a startup catch-up
+/// with twenty overdue rhythms from starting twenty of them.
+const MAX_RUNS: usize = 4;
+
+/// Slots for in-flight scheduled runs. Acquired under the schedule lock at
+/// claim time, released by the run's own thread when it finishes.
+struct RunSlots {
+    busy: std::sync::atomic::AtomicUsize,
+    cap: usize,
+}
+
+impl RunSlots {
+    const fn new(cap: usize) -> Self {
+        Self {
+            busy: std::sync::atomic::AtomicUsize::new(0),
+            cap,
+        }
+    }
+
+    fn try_acquire(&self) -> bool {
+        use std::sync::atomic::Ordering::SeqCst;
+        self.busy
+            .fetch_update(SeqCst, SeqCst, |n| (n < self.cap).then_some(n + 1))
+            .is_ok()
+    }
+
+    fn release(&self) {
+        self.busy.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    #[cfg(test)]
+    fn in_flight(&self) -> usize {
+        self.busy.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+static RUNS: RunSlots = RunSlots::new(MAX_RUNS);
+
 fn run_one(
     app: &tauri::AppHandle,
     s: &Schedule,
@@ -487,7 +526,7 @@ fn run_one(
             let empty = if report.is_none() {
                 bot.as_ref().and_then(|b| {
                     let db = app.try_state::<Db>()?;
-                    let conn = db.0.lock().ok()?;
+                    let conn = db.conn();
                     crate::bots::empty_plan_line(&conn, b)
                 })
             } else {
@@ -501,7 +540,7 @@ fn run_one(
                 // proposals, which nothing can start, so agreeing is still
                 // entirely your move.
                 let wrote = app.try_state::<Db>().and_then(|db| {
-                    let conn = db.0.lock().ok()?;
+                    let conn = db.conn();
                     crate::bots::propose_plan(&conn, b).ok()
                 });
                 if let Some(added) = wrote.as_deref().filter(|a| !a.is_empty()) {
@@ -546,9 +585,9 @@ fn run_one(
             if let Some(b) = bot.as_ref() {
                 let decision = {
                     let db = app.try_state::<Db>();
-                    db.and_then(|db| {
-                        let conn = db.0.lock().ok()?;
-                        Some(crate::workers::handoff(&conn, b))
+                    db.map(|db| {
+                        let conn = db.conn();
+                        crate::workers::handoff(&conn, b)
                     })
                 };
                 match decision {
@@ -557,7 +596,7 @@ fn run_one(
                             break 'wake (false, "the database was not there".into());
                         };
                         let plan = {
-                            let conn = db.0.lock().unwrap();
+                            let conn = db.conn();
                             crate::workers::plan(&conn, &worker, b.node_id, &feature, &item, &title, &format!(
                                 "{title}\n\nThis is item {item} on {}'s plan. Do it, and say what you could not check.",
                                 b.name
@@ -675,6 +714,11 @@ pub fn on_event(app: &tauri::AppHandle, event_type: &str, project_id: Option<&st
     if !TRIGGERS.contains(&event_type) {
         return;
     }
+    // Called on a thread of its own (the bus sink in `lib.rs` spawns one),
+    // never on the publisher's, because whoever published may be holding the
+    // DB lock. That is what lets this *wait* for the lock below: it used to
+    // `try_lock` and return, which silently dropped the routine whenever the
+    // database was busy.
     let Some(db) = app.try_state::<Db>() else {
         return;
     };
@@ -682,7 +726,7 @@ pub fn on_event(app: &tauri::AppHandle, event_type: &str, project_id: Option<&st
     let now = chrono::Local::now().timestamp_millis();
 
     let due: Vec<(Schedule, Option<String>)> = {
-        let Ok(conn) = db.0.try_lock() else { return };
+        let conn = db.conn();
         let Ok(all) = all(&conn) else { return };
         let mut out = Vec::new();
         for s in all
@@ -696,6 +740,13 @@ pub fn on_event(app: &tauri::AppHandle, event_type: &str, project_id: Option<&st
                 }
             }
             if s.last_run.is_some_and(|r| now - r < COOLDOWN_MS) {
+                continue;
+            }
+            // Same cap as the clock: a burst of events must not become a
+            // burst of agent sessions. An event that finds no slot is dropped
+            // rather than queued — its cooldown is not claimed, so the next
+            // one of its kind fires normally.
+            if !RUNS.try_acquire() {
                 continue;
             }
             // Claim the cooldown before running, not after.
@@ -714,9 +765,10 @@ pub fn on_event(app: &tauri::AppHandle, event_type: &str, project_id: Option<&st
         std::thread::spawn(move || {
             let (report, bot) = {
                 let Some(db) = h.try_state::<Db>() else {
+                    RUNS.release();
                     return;
                 };
-                let conn = db.0.lock().unwrap();
+                let conn = db.conn();
                 // The heartbeat names its manager; the report is about the
                 // space that manager's memory is filed under.
                 let bot = crate::bots::bot_on(&conn, &s.manager);
@@ -727,8 +779,9 @@ pub fn on_event(app: &tauri::AppHandle, event_type: &str, project_id: Option<&st
                 (report, bot)
             };
             let (ok, note) = run_one(&h, &s, dir, false, report, bot);
+            RUNS.release();
             if let Some(db) = h.try_state::<Db>() {
-                let conn = db.0.lock().unwrap();
+                let conn = db.conn();
                 let _ = conn.execute(
                     "UPDATE schedules SET last_ok=?1, last_note=?2 WHERE id=?3",
                     params![ok as i64, note, s.id],
@@ -771,7 +824,7 @@ pub fn tick(app: &tauri::AppHandle, startup: bool) {
     let now = chrono::Local::now();
 
     let todo: Vec<Do> = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let Ok(list) = all(&conn) else { return };
         let mut todo = Vec::new();
         for s in list.into_iter().filter(|s| s.enabled) {
@@ -796,6 +849,18 @@ pub fn tick(app: &tauri::AppHandle, startup: bool) {
             if late && (!s.catch_up || s.kind == "reminder") {
                 todo.push(Do::Missed(s, due_ms));
             } else {
+                // Claim it now, under the lock, because the run happens on a
+                // thread of its own and the next tick arrives in thirty
+                // seconds: without the claim a run still going would look
+                // due again and start twice. When every slot is busy the
+                // schedule stays unclaimed and is picked up by a later tick.
+                if !RUNS.try_acquire() {
+                    continue;
+                }
+                let _ = conn.execute(
+                    "UPDATE schedules SET last_run=?1 WHERE id=?2",
+                    params![now.timestamp_millis(), s.id],
+                );
                 let dir = dir_for(&conn, s.node_id);
                 let (report, bot) = if s.kind == "bot" {
                     let bot = crate::bots::bot_on(&conn, &s.manager);
@@ -815,13 +880,23 @@ pub fn tick(app: &tauri::AppHandle, startup: bool) {
 
     for item in todo {
         match item {
+            // Off this thread. A bot wake that starts an agent takes minutes,
+            // and while it ran here nothing else on the clock — reminders,
+            // deadlines, the next routine — could fire.
             Do::Run(s, dir, late, report, bot) => {
-                let (ok, note) = run_one(app, &s, dir, late, report, bot);
-                let conn = db.0.lock().unwrap();
-                let _ = conn.execute(
-                    "UPDATE schedules SET last_run=?1, last_ok=?2, last_note=?3 WHERE id=?4",
-                    params![now.timestamp_millis(), ok as i64, note, s.id],
-                );
+                let app = app.clone();
+                let ran_at = now.timestamp_millis();
+                std::thread::spawn(move || {
+                    let (ok, note) = run_one(&app, &s, dir, late, report, bot);
+                    RUNS.release();
+                    if let Some(db) = app.try_state::<Db>() {
+                        let conn = db.conn();
+                        let _ = conn.execute(
+                            "UPDATE schedules SET last_run=?1, last_ok=?2, last_note=?3 WHERE id=?4",
+                            params![ran_at, ok as i64, note, s.id],
+                        );
+                    }
+                });
             }
             Do::Warn(s, next_ms, away) => {
                 crate::activity::record(
@@ -844,7 +919,7 @@ pub fn tick(app: &tauri::AppHandle, startup: bool) {
                     true,
                     Some(s.id),
                 );
-                let conn = db.0.lock().unwrap();
+                let conn = db.conn();
                 let _ = conn.execute(
                     "UPDATE schedules SET last_remind = ?1 WHERE id = ?2",
                     params![next_ms, s.id],
@@ -859,7 +934,7 @@ pub fn tick(app: &tauri::AppHandle, startup: bool) {
                     false,
                     Some(s.id),
                 );
-                let conn = db.0.lock().unwrap();
+                let conn = db.conn();
                 let _ = conn.execute(
                     "UPDATE schedules SET last_run=?1, last_ok=0, last_note=?2 WHERE id=?3",
                     params![due_ms, "missed", s.id],
@@ -904,14 +979,26 @@ pub struct RunOutcome {
 }
 
 /// Run a schedule by hand, ignoring whether it is due.
-#[tauri::command]
+///
+/// **`async`, and that is not a detail.** Both clock paths have spawned a
+/// thread for a long time, for the reason written beside them — a wake that
+/// starts an agent takes minutes and would stop everything else on the clock.
+/// The hand path never got the same treatment, and a sync `#[tauri::command]`
+/// runs on the UI thread: pressing Run now on a manager froze the whole
+/// window for as long as the model took, which on the 28th was five and a half
+/// minutes.
+///
+/// It stays synchronous *to the caller* — the button wants the outcome, and
+/// returning before there is one would be the update checker's bug again. What
+/// changes is which thread waits.
+#[tauri::command(async)]
 pub fn schedule_run_now(
     app: tauri::AppHandle,
     db: tauri::State<Db>,
     id: i64,
 ) -> Result<RunOutcome, String> {
     let (s, dir, report, bot) = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let sql = format!("SELECT {COLS} FROM schedules WHERE id = ?1");
         let s = conn.query_row(&sql, params![id], row).map_err(err)?;
         let dir = dir_for(&conn, s.node_id);
@@ -934,7 +1021,7 @@ pub fn schedule_run_now(
     };
     let (ok, note) = run_one(&app, &s, dir, false, report, bot);
     let ran_at = chrono::Local::now().timestamp_millis();
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute(
         "UPDATE schedules SET last_run=?1, last_ok=?2, last_note=?3 WHERE id=?4",
         params![ran_at, ok as i64, note, id],
@@ -1053,5 +1140,35 @@ mod tests {
             .unwrap();
         let (next_ms, _) = warning_due(&told, tomorrow).expect("a warning");
         assert_ne!(next_ms, today_ms);
+    }
+}
+
+#[cfg(test)]
+mod run_slots_tests {
+    use super::RunSlots;
+
+    #[test]
+    fn the_cap_holds_and_a_release_frees_a_slot() {
+        let slots = RunSlots::new(2);
+        assert!(slots.try_acquire());
+        assert!(slots.try_acquire());
+        assert!(!slots.try_acquire(), "a third run must wait for a slot");
+        assert_eq!(slots.in_flight(), 2);
+        slots.release();
+        assert!(slots.try_acquire());
+        assert_eq!(slots.in_flight(), 2);
+    }
+
+    #[test]
+    fn slots_are_safe_to_race_for() {
+        let slots = std::sync::Arc::new(RunSlots::new(3));
+        let got: usize = (0..16)
+            .map(|_| {
+                let s = slots.clone();
+                std::thread::spawn(move || usize::from(s.try_acquire()))
+            })
+            .map(|h| h.join().unwrap())
+            .sum();
+        assert_eq!(got, 3, "exactly the cap may win, never more");
     }
 }

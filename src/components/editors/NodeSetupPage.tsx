@@ -19,7 +19,12 @@ import { Icon } from '../../lib/icons'
 type Params = { id: number }
 
 export function NodeSetupPage(props: IDockviewPanelProps<Params>) {
-  const { nodes, commands, services, refreshTree, refreshCommands, refreshServices } = useApp()
+  const nodes = useApp((s) => s.nodes)
+  const commands = useApp((s) => s.commands)
+  const services = useApp((s) => s.services)
+  const refreshTree = useApp((s) => s.refreshTree)
+  const refreshCommands = useApp((s) => s.refreshCommands)
+  const refreshServices = useApp((s) => s.refreshServices)
   const id = props.params.id
   const node = useMemo(() => findNode(nodes, id), [nodes, id])
 

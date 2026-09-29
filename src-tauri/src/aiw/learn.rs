@@ -1847,7 +1847,7 @@ pub fn run(
     }
 
     let corpus = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         build_corpus(&conn, people, only, depth)?
     };
     if corpus.messages.is_empty() {
@@ -1863,7 +1863,7 @@ pub fn run(
     // because the run that crashes on the wire is the one you most want a row
     // for.
     let run_id = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         conn.execute(
             "INSERT INTO learn_runs
                 (started_at, provider, model, status, depth, people, threads, messages,
@@ -1922,7 +1922,7 @@ pub fn run(
     let reply = match outcome {
         Ok(r) => r,
         Err(e) => {
-            let conn = db.0.lock().unwrap();
+            let conn = db.conn();
             let _ = conn.execute(
                 "UPDATE learn_runs SET status='failed', finished_at=?2, error=?3 WHERE id=?1",
                 params![run_id, now_millis(), e.clone()],
@@ -1941,7 +1941,7 @@ pub fn run(
     let proposed = parse_facts(&reply.message);
 
     {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         for f in &proposed {
             // The person the fact names, so a "thing" fact gets a suggested
             // space. Matched on the corpus rather than on the whole address
@@ -2005,7 +2005,7 @@ pub fn run(
         None,
     );
 
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     runs(&conn, 1)?
         .into_iter()
         .find(|r| r.id == run_id)
@@ -2133,7 +2133,7 @@ pub fn run_live(
 
     // The whole batch first: it is the receipt, and the plan the screen shows.
     let whole = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         build_corpus_scoped(
             &conn,
             people,
@@ -2152,7 +2152,7 @@ pub fn run_live(
     let (cost_usd, _) = estimate_cost(&model, tokens);
 
     let run_id = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         conn.execute(
             "INSERT INTO learn_runs
                 (started_at, provider, model, status, depth, people, threads, messages,
@@ -2243,7 +2243,7 @@ pub fn run_live(
         // This person's slice, built the same way the whole was. Asked for
         // every ranked person so a late name in the ranking is still found.
         let part = {
-            let conn = db.0.lock().unwrap();
+            let conn = db.conn();
             build_corpus_scoped(
                 &conn,
                 100,
@@ -2261,7 +2261,7 @@ pub fn run_live(
         // leaves a card to decide, with whatever facts had landed.
         {
             let who = unit.live.clone();
-            let conn = db.0.lock().unwrap();
+            let conn = db.conn();
             let _ = conn.execute(
                 "INSERT INTO learn_people (run_id, contact_id, name, email, status, business, contact_ids, kind)
                  VALUES (?1, ?2, ?3, ?4, 'proposed', ?5, ?6, ?7)",
@@ -2364,7 +2364,7 @@ pub fn run_live(
                         if c.name.is_empty() {
                             c.name = p.name.clone();
                         }
-                        let conn = db.0.lock().unwrap();
+                        let conn = db.conn();
                         let cur: String = conn
                             .query_row(
                                 "SELECT contacts FROM learn_people WHERE run_id=?1 AND contact_id=?2",
@@ -2398,7 +2398,7 @@ pub fn run_live(
                 }
                 let text = sum.text.clone();
                 {
-                    let conn = db.0.lock().unwrap();
+                    let conn = db.conn();
                     let _ = conn.execute(
                         "UPDATE learn_people SET summary=?3, role=?4, relates=?5, title=?6 WHERE run_id=?1 AND contact_id=?2",
                         params![
@@ -2431,7 +2431,7 @@ pub fn run_live(
                 return;
             };
             let filed = {
-                let conn = db.0.lock().unwrap();
+                let conn = db.conn();
                 let mut filed = file_fact(
                     &conn,
                     run_id,
@@ -2494,7 +2494,7 @@ pub fn run_live(
                     "learn:failed",
                     serde_json::json!({ "run_id": run_id, "index": i, "person": who, "error": e }),
                 );
-                let conn = db.0.lock().unwrap();
+                let conn = db.conn();
                 let _ = conn.execute(
                     "UPDATE learn_runs SET status='failed', finished_at=?2, error=?3 WHERE id=?1",
                     params![run_id, now_millis(), e.clone()],
@@ -2511,7 +2511,7 @@ pub fn run_live(
             }
         }
         {
-            let conn = db.0.lock().unwrap();
+            let conn = db.conn();
             let _ = conn.execute(
                 "UPDATE learn_runs SET people=?2, threads=?3, messages=?4, thread_keys=?5 WHERE id=?1",
                 params![
@@ -2542,7 +2542,7 @@ pub fn run_live(
     }
 
     {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let _ = conn.execute(
             "UPDATE learn_runs SET status='done', finished_at=?2, tokens=?3 WHERE id=?1",
             params![run_id, now_millis(), tokens_so_far.max(1)],
@@ -2566,7 +2566,7 @@ pub fn run_live(
         None,
     );
     let run = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         runs(&conn, 1)?
             .into_iter()
             .find(|r| r.id == run_id)
@@ -2726,7 +2726,7 @@ pub async fn learn_estimate(
     business: Option<i64>,
 ) -> Result<LearnEstimate, String> {
     let (provider, provider_name, model, ready, note) = destination_model(&ws);
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let scope = crate::business::scope_of(&conn, business.unwrap_or(0))?;
     let corpus = build_corpus_scoped(
         &conn,
@@ -2746,7 +2746,7 @@ pub fn learn_people(
     db: tauri::State<Db>,
     limit: i64,
 ) -> Result<Vec<crate::mail::Correspondent>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     crate::mail::rank_correspondents_pub(&conn, if limit > 0 { limit } else { 50 })
 }
 
@@ -2791,7 +2791,7 @@ pub async fn learn_run_live(
     tauri::async_runtime::spawn_blocking(move || {
         let db = <tauri::AppHandle as tauri::Manager<tauri::Wry>>::state::<Db>(&app);
         let scope = {
-            let conn = db.0.lock().unwrap();
+            let conn = db.conn();
             crate::business::scope_of(&conn, business.unwrap_or(0))?
         };
         run_live(&app, &ws, &db, people, &only, depth, fresh, &scope)
@@ -2808,7 +2808,7 @@ pub fn learn_stop() {
 
 #[tauri::command(async)]
 pub fn learn_runs(db: tauri::State<Db>, limit: i64) -> Result<Vec<LearnRun>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     runs(&conn, if limit > 0 { limit } else { 20 })
 }
 
@@ -2818,7 +2818,7 @@ pub fn learn_facts(
     run_id: i64,
     status: String,
 ) -> Result<Vec<LearnFact>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     facts(&conn, run_id, &status)
 }
 
@@ -2829,7 +2829,7 @@ pub fn learn_keep(
     text: String,
     node_id: i64,
 ) -> Result<String, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     keep(&conn, id, &text, node_id)
 }
 
@@ -2846,7 +2846,7 @@ pub struct KnownNote {
 /// exactly what the space's manager sees, and no more.
 #[tauri::command(async)]
 pub fn learn_notes(db: tauri::State<Db>, node_id: i64) -> Result<Vec<KnownNote>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let dir = match thing_dir(&conn, node_id) {
         Ok(d) => d,
         Err(_) => return Ok(Vec::new()),
@@ -2880,7 +2880,7 @@ pub fn learn_note_save(
     title: String,
     body: String,
 ) -> Result<String, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let dir = thing_dir(&conn, node_id)?;
     std::fs::create_dir_all(&dir).map_err(|e| format!("could not open {}: {e}", dir.display()))?;
     let title = title.trim();
@@ -2908,7 +2908,7 @@ learned_at: {}
 
 #[tauri::command(async)]
 pub fn learn_decline(db: tauri::State<Db>, id: i64) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     decline(&conn, id)
 }
 
@@ -2975,7 +2975,7 @@ pub fn learn_decide_person(
     decision: PersonDecision,
 ) -> Result<PersonOutcome, String> {
     let out = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         decide_person(&conn, &decision)?
     };
     // A kept organisation gets its folder under the kind the owner chose.
@@ -2992,7 +2992,7 @@ pub fn learn_decide_person(
     if decision.business > 0 && kept && !folder.is_empty() {
         let name = crate::business::folder_name(&decision.name);
         let (parent, existing) = {
-            let conn = db.0.lock().unwrap();
+            let conn = db.conn();
             let parent: Option<i64> = conn
                 .query_row(
                     "SELECT id FROM nodes WHERE parent_id = ?1 AND name = ?2 COLLATE NOCASE",
@@ -3032,7 +3032,7 @@ pub fn learn_decide_person(
     // Someone on the team, kept: in the business's record, by address, so
     // the team step and its managers know who the business is.
     if decision.business > 0 && kept && decision.role == "team" {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         if let Some(mut meta) = crate::business::read(&conn, decision.business)? {
             let email = decision.email.trim().to_ascii_lowercase();
             let member = crate::business::TeamMember {
@@ -3382,7 +3382,7 @@ pub async fn learn_life_proposals(
     tauri::async_runtime::spawn_blocking(move || {
         let db = <tauri::AppHandle as tauri::Manager<tauri::Wry>>::state::<Db>(&app);
         let (kept, summaries) = {
-            let conn = db.0.lock().unwrap();
+            let conn = db.conn();
             let mut st = conn
                 .prepare("SELECT text FROM learn_facts WHERE status = 'kept' ORDER BY decided_at, id")
                 .map_err(err)?;
@@ -3406,7 +3406,7 @@ pub async fn learn_life_proposals(
         }
         let stamp = format!("{}:{}", kept.len(), summaries.len());
         {
-            let conn = db.0.lock().unwrap();
+            let conn = db.conn();
             if let Ok(Some(cached)) = crate::db::setting_get_conn(&conn, "life.proposals") {
                 if let Ok(v) = serde_json::from_str::<serde_json::Value>(&cached) {
                     if v.get("stamp").and_then(|s| s.as_str()) == Some(stamp.as_str()) {
@@ -3449,7 +3449,7 @@ pub async fn learn_life_proposals(
         let reply = provider.run(&request)?;
         let items = parse_life(&reply.message);
         {
-            let conn = db.0.lock().unwrap();
+            let conn = db.conn();
             let _ = crate::db::setting_set_conn(
                 &conn,
                 "life.proposals",
@@ -3708,7 +3708,7 @@ fn attribute_orphans(conn: &Connection, run_id: i64) -> Result<(), String> {
 
 #[tauri::command(async)]
 pub fn learn_review(db: tauri::State<Db>, run_id: i64) -> Result<Vec<LearnCard>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     review(&conn, run_id)
 }
 

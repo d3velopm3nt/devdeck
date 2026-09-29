@@ -32,7 +32,8 @@ function since(startedAt: number, now: number): string {
  *  approval or an unresolved conflict outside the goal's space. Activity is
  *  news and is never held — it was not going to interrupt you anyway. */
 export function useHeldCount(): number {
-  const { focus, nodes } = useApp()
+  const focus = useApp((s) => s.focus)
+  const nodes = useApp((s) => s.nodes)
   const aiw = useAiw()
 
   return useMemo(() => {
@@ -54,7 +55,10 @@ export function useHeldCount(): number {
 }
 
 export function FocusBar() {
-  const { focus, endFocus, nodes, setRailView } = useApp()
+  const focus = useApp((s) => s.focus)
+  const endFocus = useApp((s) => s.endFocus)
+  const nodes = useApp((s) => s.nodes)
+  const setRailView = useApp((s) => s.setRailView)
   const held = useHeldCount()
   const [now, setNow] = useState(() => Date.now())
 
@@ -113,7 +117,9 @@ export function FocusStart({
   nodeId?: number | null
   onClose: () => void
 }) {
-  const { nodes, startFocus, activeWorkspaceId } = useApp()
+  const nodes = useApp((s) => s.nodes)
+  const startFocus = useApp((s) => s.startFocus)
+  const activeWorkspaceId = useApp((s) => s.activeWorkspaceId)
   const [goal, setGoal] = useState(initialGoal)
   const [nodeId, setNodeId] = useState<number | null>(initialNode)
   const [busy, setBusy] = useState(false)

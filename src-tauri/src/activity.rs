@@ -166,14 +166,14 @@ pub fn record_in(
 /// It is a rolling history — `record` trims to the most recent rows overall —
 /// so an answer here means "as far back as is kept", never "this is all that
 /// ever happened".
-#[tauri::command]
+#[tauri::command(async)]
 pub fn activity_for(
     db: tauri::State<Db>,
     ref_id: i64,
     kinds: Vec<String>,
     limit: i64,
 ) -> Result<Vec<Activity>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut stmt = conn
         .prepare(
             "SELECT id, kind, title, detail, ok, ref_id, project_name, ts
@@ -202,9 +202,9 @@ pub fn activity_for(
         .collect())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn activity_list(db: tauri::State<Db>, limit: i64) -> Result<Vec<Activity>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut stmt = conn
         .prepare(
             "SELECT id, kind, title, detail, ok, ref_id, project_name, ts
@@ -230,9 +230,9 @@ pub fn activity_list(db: tauri::State<Db>, limit: i64) -> Result<Vec<Activity>, 
     Ok(rows)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn activity_clear(db: tauri::State<Db>) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute("DELETE FROM activity", []).map_err(err)?;
     Ok(())
 }
@@ -252,13 +252,13 @@ pub struct ServiceRun {
     pub outcome: String,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn service_runs(
     db: tauri::State<Db>,
     service_id: i64,
     limit: i64,
 ) -> Result<Vec<ServiceRun>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut stmt = conn
         .prepare(
             "SELECT id, service_id, started_at, ended_at, exit_code, outcome
@@ -290,7 +290,7 @@ pub fn run_started(app: &tauri::AppHandle, service_id: i64) {
     let Some(db) = app.try_state::<Db>() else {
         return;
     };
-    let Ok(conn) = db.0.lock() else { return };
+    let conn = db.conn();
     // Close any run left open by a crash or a kill we never saw, so one
     // service can't accumulate phantom "still running" rows across restarts.
     let _ = conn.execute(
@@ -310,7 +310,7 @@ pub fn run_ended(app: &tauri::AppHandle, service_id: i64, exit_code: Option<i64>
     let Some(db) = app.try_state::<Db>() else {
         return;
     };
-    let Ok(conn) = db.0.lock() else { return };
+    let conn = db.conn();
     let _ = conn.execute(
         "UPDATE service_runs SET ended_at = ?1, exit_code = ?2, outcome = ?3
           WHERE service_id = ?4 AND ended_at IS NULL",

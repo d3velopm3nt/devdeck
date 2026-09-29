@@ -35,8 +35,6 @@ import { StashSidebar } from './components/StashSidebar'
 import { StashView } from './components/StashView'
 import { ConnectionsSidebar } from './components/ConnectionsSidebar'
 import { CAPTURE_CHECK, CAPTURE_ENTRY, CAPTURE_OPEN_FILE, CAPTURE_EVENT, CAPTURE_NODE, CAPTURE_RAIL, CAPTURE_MET, CAPTURE_BUSINESS, CAPTURE_CLEAR, CAPTURE_MAIL_ACCOUNT, CAPTURE_LEARN, CAPTURE_MAIL_PANE, CAPTURE_LIFE_PAGE, CAPTURE_MEET_STEP, CAPTURE_SAY, CAPTURE_START_WORKER, CAPTURE_GO } from './lib/devCapture'
-import { AiwSidebar } from './components/aiw/AiwSidebar'
-import { AiWorkspace } from './components/aiw/AiWorkspace'
 import { ConnectionsView } from './components/ConnectionsView'
 import { ConnectionEditor } from './components/ConnectionEditor'
 import { ConfigPage } from './components/ConfigPage'
@@ -46,6 +44,8 @@ import * as ipc from './lib/ipc'
 import { aiw as aiwApi } from './lib/aiw'
 import { routeOutput } from './lib/termBus'
 import { useApp } from './store'
+import { useShallow } from 'zustand/react/shallow'
+import { useLive } from './liveStore'
 import { forgetFileListings } from './lib/fileIndex'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { openNodeThread, dockApi, openFile, openTerminalPanel, openEditor, openNodeSetup, openSingleton, openLearnRun, openLife, saveLayout, restoreLayout, openRun } from './lib/dock'
@@ -139,13 +139,20 @@ function Menu({
 
 /// Whether the capture harness has already said its piece this session.
 let said = false
+let dataChangedTimer: number | undefined
 let checked = false
 let evented = false
 let entered = false
 let filed = false
 
 export default function App() {
-  const app = useApp()
+  // A pick, not the whole store: the shell sits above everything, and a
+  // whole-store subscription here re-rendered the entire window (dock
+  // included) on any write anywhere. `selectedNodeId` is picked because the
+  // getters below read it through get(), so App must re-render when it moves.
+  const app = useApp(
+    useShallow((s) => ({ activeWorkspace: s.activeWorkspace, activeWorkspaceId: s.activeWorkspaceId, bootstrap: s.bootstrap, bottomCollapsed: s.bottomCollapsed, bottomTab: s.bottomTab, dismissSetup: s.dismissSetup, gitMonitorEnabled: s.gitMonitorEnabled, gitMonitorIntervalMin: s.gitMonitorIntervalMin, hotkey: s.hotkey, installHint: s.installHint, layouts: s.layouts, mailAccountEditing: s.mailAccountEditing, mailPane: s.mailPane, nodes: s.nodes, openMailAccountEditor: s.openMailAccountEditor, profiles: s.profiles, railView: s.railView, refreshTree: s.refreshTree, selectedNode: s.selectedNode, selectedProject: s.selectedProject, setBottomCollapsed: s.setBottomCollapsed, setBottomTab: s.setBottomTab, setInstallHint: s.setInstallHint, setMailPane: s.setMailPane, setRailView: s.setRailView, setupPrompt: s.setupPrompt, shells: s.shells, showBottom: s.showBottom, svcStates: s.svcStates, terminals: s.terminals, theme: s.theme, selectedNodeId: s.selectedNodeId })),
+  )
   const node = app.selectedNode()
   const nodeDir = resolveDir(app.nodes, node)
   const railView = app.railView
@@ -326,12 +333,8 @@ export default function App() {
         if (stopped) return
         const [kind, id, ...rest] = line.split(':')
         try {
-          if (kind === 'feature') {
-            await ipc.featureThreadSend(Number(id), rest[0], rest.slice(1).join(':'))
-          } else if (kind === 'node') {
+          if (kind === 'node') {
             await ipc.nodeThreadSend(Number(id), rest.join(':'))
-          } else if (kind === 'bot') {
-            await ipc.botThreadSend(Number(id), rest.join(':'))
           }
         } catch (e) {
           // Failing loudly in the console beats a screenshot of a thread that
@@ -524,7 +527,7 @@ export default function App() {
         routeOutput(e.id, '\r\n\x1b[90m[session ended]\x1b[0m\r\n')
       }),
       ipc.onSvcLog((e) => {
-        useApp.getState().appendLog(e)
+        useLive.getState().appendLog(e)
         // A "command not found"-style error on a service line → suggest the
         // tool to install. Cheap prefilter before the IPC round-trip.
         if (
@@ -538,7 +541,8 @@ export default function App() {
       }),
       ipc.onSvcStatus((e) => useApp.getState().updateSvcState(e)),
       ipc.onStats((e) => {
-        useApp.getState().setStats(e)
+        // Unchanged samples are dropped, and so is the work that follows them.
+        if (!useLive.getState().setStats(e)) return
         // Learn each running service's port from the monitor so you never have
         // to type it in.
         useApp.getState().adoptDetectedPorts()
@@ -551,12 +555,17 @@ export default function App() {
       // The widget's setup tour drives create flows in this window.
       ipc.onTourAction((a) => void handleTourAction(a)),
       // When the widget changes data (or vice-versa), refresh.
+      // Debounced: a save fires several of these in a row, and each one used
+      // to start a full vault scan plus a git read per project.
       ipc.onDataChanged(() => {
-        const s = useApp.getState()
-        void s.refreshTree()
-        void s.refreshCommands()
-        void s.refreshServices()
-        void s.refreshProfiles()
+        window.clearTimeout(dataChangedTimer)
+        dataChangedTimer = window.setTimeout(() => {
+          const s = useApp.getState()
+          void s.refreshTree()
+          void s.refreshCommands()
+          void s.refreshServices()
+          void s.refreshProfiles()
+        }, 250)
       }),
       // After a pull finishes, re-read local git status (counts change).
       ipc.onGitDone(() => {
@@ -1058,11 +1067,6 @@ export default function App() {
             <ConnectionsSidebar />
           </aside>
         )}
-        {railView === 'aiworkspace' && (
-          <aside className="w-[224px] shrink-0 overflow-hidden border-r border-line">
-            <AiwSidebar />
-          </aside>
-        )}
         {railView === 'calendar' && (
           <aside className="w-[236px] shrink-0 overflow-hidden border-r border-line">
             <CalendarSidebar />
@@ -1079,7 +1083,6 @@ export default function App() {
           {railView === 'mail' && (app.mailPane === 'contacts' ? <ContactsView /> : <MailView />)}
           {railView === 'stash' && <StashView />}
           {railView === 'connections' && <ConnectionsView />}
-          {railView === 'aiworkspace' && <AiWorkspace />}
           {railView === 'community' && <CommunityView />}
           {railView === 'machine' && <MachineSetup />}
           {railView === 'inbox' && <InboxPage />}

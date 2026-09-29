@@ -75,7 +75,23 @@ function ThemePreview({ swatch }: { swatch: ThemeSwatch }) {
 const TAB_KEY = 'devdeck.settings.tab'
 
 export function ConfigPage() {
-  const { hotkey, setHotkey, shells, gitMonitorEnabled, gitMonitorIntervalMin, setGitMonitor, fetchGitStatus, theme, setTheme, stashStatus, refreshStashStatus, setStashCapture, refreshTree, labels, saveLabels, recentLimit, setRecentLimit } = useApp()
+  const hotkey = useApp((s) => s.hotkey)
+  const setHotkey = useApp((s) => s.setHotkey)
+  const shells = useApp((s) => s.shells)
+  const gitMonitorEnabled = useApp((s) => s.gitMonitorEnabled)
+  const gitMonitorIntervalMin = useApp((s) => s.gitMonitorIntervalMin)
+  const setGitMonitor = useApp((s) => s.setGitMonitor)
+  const fetchGitStatus = useApp((s) => s.fetchGitStatus)
+  const theme = useApp((s) => s.theme)
+  const setTheme = useApp((s) => s.setTheme)
+  const stashStatus = useApp((s) => s.stashStatus)
+  const refreshStashStatus = useApp((s) => s.refreshStashStatus)
+  const setStashCapture = useApp((s) => s.setStashCapture)
+  const refreshTree = useApp((s) => s.refreshTree)
+  const labels = useApp((s) => s.labels)
+  const saveLabels = useApp((s) => s.saveLabels)
+  const recentLimit = useApp((s) => s.recentLimit)
+  const setRecentLimit = useApp((s) => s.setRecentLimit)
   const [draft, setDraft] = useState(hotkey)
   const [status, setStatus] = useState<string | null>(null)
   const [seeding, setSeeding] = useState(false)
@@ -326,15 +342,16 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
             <div className="mb-5">
               <h2 className="text-[16px] font-semibold text-ink">Assistant</h2>
               <p className="text-[12px] leading-[1.6] text-muted">
-                Providers, agents, skills, permissions and standing grants — what the team is made
-                of. What it is <em>doing</em> is Team.
+                Who is on the team, what each one may touch, and the kit they carry — on Workers.
+                What the team is <em>doing</em> is Team, and what it has decided is on the space
+                itself, beside its thread.
               </p>
             </div>
             <button
               className="btn-primary text-[12px]"
-              onClick={() => useApp.getState().setRailView('aiworkspace')}
+              onClick={() => useApp.getState().setRailView('workers')}
             >
-              <Icon name="ai" size={12} /> Open the Assistant workspace
+              <Icon name="ai" size={12} /> Open Workers
             </button>
           </>
         )}

@@ -37,7 +37,9 @@ function routineText(r: ipc.RoutineDraft): string {
 }
 
 export function SpaceSetup({ onClose }: { onClose: () => void }) {
-  const { nodes, refreshTree, setActiveWorkspace } = useApp()
+  const nodes = useApp((s) => s.nodes)
+  const refreshTree = useApp((s) => s.refreshTree)
+  const setActiveWorkspace = useApp((s) => s.setActiveWorkspace)
 
   const [starters, setStarters] = useState<ipc.Starter[]>([])
   const [step, setStep] = useState<Step>('start')

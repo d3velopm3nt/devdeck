@@ -78,7 +78,7 @@ pub fn aiw_projects(ws: Ws, db: tauri::State<crate::db::Db>) -> Vec<ProjectSumma
     // until someone adds a project, and a stale one here is indistinguishable
     // from the split registry we just removed.
     {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         sync_projects_from_tree(&ws, &conn);
     }
     ws.summaries()
@@ -172,7 +172,7 @@ pub fn sync_projects_from_tree(ws: &Arc<Workspace>, conn: &rusqlite::Connection)
 #[tauri::command]
 pub fn aiw_sync_projects(ws: Ws, db: tauri::State<crate::db::Db>) -> Vec<ProjectSummary> {
     {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         sync_projects_from_tree(&ws, &conn);
     }
     ws.summaries()
@@ -656,7 +656,7 @@ pub fn aiw_set_permission(
 ) -> Result<(), String> {
     ws.set_permission(&agent_id, &tool, &permission)?;
     let json = serde_json::to_string(&ws.permission_grants()).map_err(|e| e.to_string())?;
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     crate::db::setting_set_conn(&conn, PERMISSIONS_KEY, &json)
 }
 
@@ -973,6 +973,7 @@ pub fn seed_demo(base: &Path) -> Result<(PathBuf, PathBuf), String> {
                     assignee: None,
                     areas: vec!["packages/sync".into(), "api/sync".into()],
                     due: None,
+                    branch: None,
                 },
                 WorkItem {
                     id: "wi-ui".into(),
@@ -981,6 +982,7 @@ pub fn seed_demo(base: &Path) -> Result<(PathBuf, PathBuf), String> {
                     assignee: None,
                     areas: vec!["apps/mobile".into()],
                     due: None,
+                    branch: None,
                 },
                 WorkItem {
                     id: "wi-tests".into(),
@@ -989,6 +991,7 @@ pub fn seed_demo(base: &Path) -> Result<(PathBuf, PathBuf), String> {
                     assignee: None,
                     areas: vec!["tests".into()],
                     due: None,
+                    branch: None,
                 },
             ],
         },
@@ -1081,6 +1084,7 @@ pub fn run_demo_on(
             depends_on: vec![],
             unattended: false,
             stop_at: Vec::new(),
+            on_behalf_of: None,
         },
     )?);
 
@@ -1100,6 +1104,7 @@ pub fn run_demo_on(
             depends_on: vec!["SyncResult".into()],
             unattended: false,
             stop_at: Vec::new(),
+            on_behalf_of: None,
         },
     )?;
 
@@ -1116,6 +1121,7 @@ pub fn run_demo_on(
             depends_on: vec![],
             unattended: false,
             stop_at: Vec::new(),
+            on_behalf_of: None,
         },
     )?);
 
@@ -1135,6 +1141,7 @@ pub fn run_demo_on(
             depends_on: vec![],
             unattended: false,
             stop_at: Vec::new(),
+            on_behalf_of: None,
         },
     )?);
 
@@ -1151,6 +1158,7 @@ pub fn run_demo_on(
             depends_on: vec![],
             unattended: false,
             stop_at: Vec::new(),
+            on_behalf_of: None,
         },
     )?);
 
@@ -1187,7 +1195,7 @@ pub async fn aiw_run_demo(
         blocking(move || seed_demo(&base)).await??
     };
     let (tyrex_id, assetx_id) = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let ws_node = crate::db::demo_workspace(&conn)?;
         let t = crate::db::upsert_project(&conn, ws_node, "TyreX", &seeded.0)?;
         let a = crate::db::upsert_project(&conn, ws_node, "AssetX", &seeded.1)?;
@@ -1260,7 +1268,7 @@ pub fn aiw_configure_provider(
     // Replace this endpoint's entry, keeping every other endpoint — including
     // the ones speaking the same protocol, which is the point.
     let mut saved = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         saved_provider_configs(&conn)
     };
     let id = config.instance_id().to_string();
@@ -1273,7 +1281,7 @@ pub fn aiw_configure_provider(
     saved.push(stored);
 
     let json = serde_json::to_string(&saved).map_err(|e| e.to_string())?;
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     crate::db::setting_set_conn(&conn, PROVIDERS_KEY, &json)
 }
 
@@ -1304,7 +1312,7 @@ pub struct ProviderSetup {
 
 #[tauri::command]
 pub fn aiw_provider_setups(db: tauri::State<crate::db::Db>) -> Vec<ProviderSetup> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     saved_provider_configs(&conn)
         .into_iter()
         .map(|c| ProviderSetup {
@@ -1372,7 +1380,8 @@ pub async fn aiw_model_check(
     {
         use tauri::Manager;
         if let Some(db) = app.try_state::<crate::db::Db>() {
-            if let Ok(conn) = db.0.lock() {
+            {
+                let conn = db.conn();
                 crate::calls::remember_check(&conn, &check);
             }
         }
@@ -1398,12 +1407,12 @@ pub fn aiw_provider_remove(
 ) -> Result<(), String> {
     ws.remove_provider(&provider_id);
     let mut saved = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         saved_provider_configs(&conn)
     };
     saved.retain(|c| c.instance_id() != provider_id);
     let json = serde_json::to_string(&saved).map_err(|e| e.to_string())?;
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     crate::db::setting_set_conn(&conn, PROVIDERS_KEY, &json)
 }
 

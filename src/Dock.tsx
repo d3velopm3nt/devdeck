@@ -33,7 +33,9 @@ import { Icon } from './lib/icons'
 const AUTOSAVE = '__autosave_v2__'
 
 function Welcome() {
-  const { shells, nodes, selectedNode } = useApp()
+  const shells = useApp((s) => s.shells)
+  const nodes = useApp((s) => s.nodes)
+  const selectedNode = useApp((s) => s.selectedNode)
   const node = selectedNode()
   const dir = resolveDir(nodes, node)
   const [hasExample, setHasExample] = useState(true)

@@ -227,7 +227,7 @@ pub async fn business_repos() -> Result<RepoList, String> {
 /// Where new clones for this business go, when the owner has not said.
 #[tauri::command(async)]
 pub fn business_clone_folder(db: tauri::State<Db>, node_id: i64) -> Result<String, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let name: String = conn
         .query_row(
             "SELECT name FROM nodes WHERE id = ?1",
@@ -430,7 +430,7 @@ fn link_blocking(app: &tauri::AppHandle, req: LinkRequest) -> Result<Linked, Str
 
     // Already a project somewhere? Then that clone is the one.
     let paths: Vec<String> = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let mut st = conn
             .prepare(
                 "SELECT path FROM nodes WHERE kind = 'project' AND path IS NOT NULL AND path <> ''",
@@ -476,7 +476,7 @@ fn link_blocking(app: &tauri::AppHandle, req: LinkRequest) -> Result<Linked, Str
 
     let name = crate::business::folder_name(&req.repo.name);
     let existing: Option<i64> = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         conn.query_row(
             "SELECT id FROM nodes WHERE parent_id = ?1 AND name = ?2 COLLATE NOCASE",
             params![req.parent, name],
@@ -499,7 +499,7 @@ fn link_blocking(app: &tauri::AppHandle, req: LinkRequest) -> Result<Linked, Str
 
     let found = crate::scan::scan_project(path_str.clone()).unwrap_or_default();
     let (commands, services) = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         seed_runs(&conn, node_id, &path, &found)?
     };
     crate::activity::record(

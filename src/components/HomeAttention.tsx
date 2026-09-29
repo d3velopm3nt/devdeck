@@ -17,6 +17,7 @@
 // agent is genuinely stuck, and nothing in the app currently produces a
 // suggestion worth that risk.
 
+import { openSpace } from '../lib/dock'
 import { useEffect } from 'react'
 import { useApp } from '../store'
 import { useAiw } from '../lib/aiwStore'
@@ -37,11 +38,10 @@ export function HomeAttention() {
     // And subscribe while Home is open: without the live tail this feed is a
     // snapshot from whenever the page mounted, and an approval raised a minute
     // later would never appear.
-    let stop: (() => void) | undefined
-    void aiw.onEvent((e) => useAiw.getState().pushEvent(e)).then((un) => {
-      stop = un
-    })
-    return () => stop?.()
+    // Hold the promise, not the resolved unlisten: cleanup can run before it
+    // resolves, and a listener captured late is never removed.
+    const stop = aiw.onEvent((e) => useAiw.getState().pushEvent(e))
+    return () => void stop.then((un) => un())
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -57,12 +57,16 @@ export function HomeAttention() {
     return node?.name ?? projectId
   }
 
+  // Lands on the space's own page, where the thread, its decisions and its
+  // conflicts all are. This used to open the AI Workspace, which held a second
+  // copy of each of those.
   const openProject = (projectId?: string) => {
     if (!projectId) return
     const node = app.nodes.find((n) => String(n.id) === projectId)
-    if (node) app.setSelectedNode(node.id)
+    if (!node) return
+    app.setSelectedNode(node.id)
     void a.selectProject(projectId)
-    app.setRailView('aiworkspace')
+    openSpace(node.id, node.name)
   }
 
   return (

@@ -400,7 +400,7 @@ fn devdeck_via_scoop() -> bool {
 /// Check for the latest release and compare to the running version. Reads the
 /// updater manifest (latest.json) from the release download URL — a plain CDN
 /// URL that isn't subject to GitHub's REST API rate limit — rather than the API.
-#[tauri::command]
+#[tauri::command(async)]
 fn app_update_info() -> UpdateInfo {
     let current = env!("CARGO_PKG_VERSION").to_string();
     let latest = ps_capture(
@@ -573,14 +573,19 @@ fn app_update(app: tauri::AppHandle) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Before anything else: this binary is also the thing a worker's CLI
-    // spawns to ask whether it may do something. It has to answer that on
-    // stdin/stdout without a window, a database or a Tauri runtime, so the
-    // check comes first and the process ends when the pipe closes.
+    // Before anything else: answer as an asker if we were spawned as one.
     //
-    // The app asking itself is why there is no helper to install and nothing
-    // to keep in step with a release: `std::env::current_exe` is always the
-    // build that started the run.
+    // The asker is its own binary now (`devdeck-ask`), because a run that held
+    // this executable open stopped `cargo` from replacing it — so editing
+    // anything under `src-tauri` either failed the build or restarted the app
+    // underneath a live worker. This path stays for one reason: a run started
+    // by an older build has `devdeck.exe --ask-server <run>` written into its
+    // MCP config, and taking that away would leave that worker unable to ask
+    // anyone anything. Five lines is a cheap way not to break a run in flight.
+    //
+    // It has to answer on stdin/stdout with no window, no database and no Tauri
+    // runtime, so the check comes first and the process ends when the pipe
+    // closes.
     let argv: Vec<String> = std::env::args().collect();
     if let Some(i) = argv.iter().position(|a| a == "--ask-server") {
         let run = argv.get(i + 1).cloned().unwrap_or_default();
@@ -770,20 +775,27 @@ pub fn run() {
             // agent asks. Without this an installed server would only wake up
             // after somebody happened to open the Community page, which is a
             // strange thing for a grant to depend on.
-            match (
-                app.try_state::<db::Db>(),
-                app.try_state::<Arc<aiw::state::Workspace>>(),
-            ) {
-                (Some(db), Some(ws)) => match community::sync_servers(&db, &ws) {
-                    // Say how many, because zero is the interesting number and
-                    // it used to be indistinguishable from not having looked.
-                    Ok(()) => eprintln!("[community] {} MCP server(s) registered", ws.mcp_servers().len()),
-                    Err(e) => eprintln!("[community] could not read installed servers: {e}"),
-                },
-                // The silent no-op that was here is exactly the failure this
-                // project has a rule about: if the state is missing, nothing
-                // happened and nothing said so.
-                _ => eprintln!("[community] MCP servers not registered: app state missing at setup"),
+            // Off the path the window is waiting on: it takes the DB lock and
+            // reads installed servers from disk.
+            {
+                let h = app.handle().clone();
+                std::thread::spawn(move || {
+                    match (
+                        h.try_state::<db::Db>(),
+                        h.try_state::<Arc<aiw::state::Workspace>>(),
+                    ) {
+                        (Some(db), Some(ws)) => match community::sync_servers(&db, &ws) {
+                            // Say how many, because zero is the interesting number and
+                            // it used to be indistinguishable from not having looked.
+                            Ok(()) => eprintln!("[community] {} MCP server(s) registered", ws.mcp_servers().len()),
+                            Err(e) => eprintln!("[community] could not read installed servers: {e}"),
+                        },
+                        // The silent no-op that was here is exactly the failure this
+                        // project has a rule about: if the state is missing, nothing
+                        // happened and nothing said so.
+                        _ => eprintln!("[community] MCP servers not registered: app state missing at setup"),
+                    }
+                });
             }
 
             report_google_client();
@@ -801,16 +813,14 @@ pub fn run() {
                     // path the window is waiting on.
                     {
                         let moved = match h.try_state::<db::Db>() {
-                            Some(db) => match db.0.lock() {
-                                Ok(conn) => {
-                                    let moved = managers::migrate_from_bots(&conn);
-                                    // The first migration predated `home`, so
-                                    // give it back to anyone missing it.
-                                    managers::backfill_home(&conn);
-                                    moved
-                                }
-                                Err(_) => Vec::new(),
-                            },
+                            Some(db) => {
+                                let conn = db.conn();
+                                let moved = managers::migrate_from_bots(&conn);
+                                // The first migration predated `home`, so
+                                // give it back to anyone missing it.
+                                managers::backfill_home(&conn);
+                                moved
+                            }
                             None => Vec::new(),
                         };
                         if !moved.is_empty() {
@@ -848,7 +858,8 @@ pub fn run() {
             // is one that did not survive the last stop. Said plainly at
             // startup rather than left spinning on the page for ever.
             if let Some(db) = app.try_state::<db::Db>() {
-                if let Ok(conn) = db.0.lock() {
+                {
+        let conn = db.conn();
                     let _ = eventlog::trim(&conn);
                 }
             }
@@ -942,20 +953,28 @@ pub fn run() {
             // a month still tidies up the moment it opens -- and re-check
             // stored screenshot text against the image guardrail, which
             // shipped after the OCR that filled those rows.
-            if let Some(db) = app.try_state::<db::Db>() {
-                if let Ok(conn) = db.0.lock() {
+            // On a background thread: the OCR pass runs a regex over every
+            // stored screenshot's text, and the window should not wait for it.
+            {
+                let h = app.handle().clone();
+                std::thread::spawn(move || {
+                    let Some(db) = h.try_state::<db::Db>() else { return };
+                    let conn = db.conn();
                     let _ = stash::prune(&conn, stash_retention);
-                    match stash::redact_stored_ocr(&conn) {
-                        Ok(n) if n > 0 => services::push_log(
-                            app.handle(),
-                            -500_000,
-                            "stash",
-                            "system",
-                            format!("redacted text read out of {n} screenshot(s) that may show credentials"),
-                        ),
-                        _ => {}
+                    let redacted = stash::redact_stored_ocr(&conn);
+                    drop(conn);
+                    if let Ok(n) = redacted {
+                        if n > 0 {
+                            services::push_log(
+                                &h,
+                                services::STASH_LOG_ID,
+                                "stash",
+                                "system",
+                                format!("redacted text read out of {n} screenshot(s) that may show credentials"),
+                            );
+                        }
                     }
-                }
+                });
             }
 
             let handle = app.handle().clone();
@@ -1086,6 +1105,7 @@ pub fn run() {
             bots::work_decline,
             bots::bot_create,
             bots::bot_plan,
+            bots::bot_adopt,
             bots::bot_plan_proposal,
             bots::bot_work,
             bots::bot_work_save,
@@ -1256,6 +1276,7 @@ pub fn run() {
             workers::runs_list,
             workers::run_get,
             workers::run_decide,
+            workers::work_merge,
             business::business_get,
             business::business_create,
             business::business_save,
@@ -1377,8 +1398,6 @@ pub fn run() {
             aiw::commands::aiw_delete_conversation,
             aiw::commands::aiw_focus_conversation,
             aiw::commands::aiw_send_message,
-            bots::bot_thread,
-            bots::bot_thread_send,
             files::node_files,
             files::file_text,
             files::vault_files,
@@ -1388,8 +1407,6 @@ pub fn run() {
             threads::thread_context,
             threads::thread_context_set,
             threads::thread_context_edit,
-            threads::feature_thread,
-            threads::feature_thread_send,
             threads::node_thread,
             threads::node_thread_send,
             aiw::commands::aiw_personal_root,

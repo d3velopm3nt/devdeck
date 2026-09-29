@@ -148,9 +148,9 @@ fn write_meta(dir: &Path, m: &Meta) -> Result<(), String> {
 // ---------------------------------------------------------------------------
 
 /// Where the vault lives, or None until the user has chosen.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_root(db: tauri::State<Db>) -> Result<Option<String>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let v = db::setting_get_conn(&conn, ROOT_KEY)?;
     Ok(v.filter(|s| !s.trim().is_empty()))
 }
@@ -160,7 +160,7 @@ pub fn vault_root(db: tauri::State<Db>) -> Result<Option<String>, String> {
 /// `~/DevDeck` is chosen for being somewhere a person already backs up and can
 /// find in File Explorer without being told where it is. Nothing enforces it —
 /// it is a default, not a location the app depends on.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_default_root() -> String {
     dirs::home_dir()
         .map(|h| h.join("DevDeck"))
@@ -181,9 +181,9 @@ pub struct Legacy {
     pub services: i64,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_legacy(db: tauri::State<Db>) -> Result<Legacy, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let one = |sql: &str| conn.query_row(sql, [], |r| r.get::<_, i64>(0)).unwrap_or(0);
     Ok(Legacy {
         nodes: one("SELECT COUNT(*) FROM nodes WHERE rel_path = ''"),
@@ -198,7 +198,7 @@ pub fn vault_legacy(db: tauri::State<Db>) -> Result<Legacy, String> {
 
 /// Adopt `path` as the vault. Creates it if it does not exist, and optionally
 /// runs `git init` so the whole thing can be pushed somewhere.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_set_root(
     db: tauri::State<Db>,
     path: String,
@@ -228,7 +228,7 @@ pub fn vault_set_root(
         let _ = cmd.status();
     }
 
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
 
     // Rows from before the vault have no folder behind them, and leaving them
     // that way is never right — they would sit in the tree pointing at nothing.
@@ -311,9 +311,34 @@ fn kind_of(f: &Found) -> &'static str {
 /// commands and services — across a rescan. Rows whose folder has gone are
 /// deleted, which cascades exactly as deleting the folder should.
 pub fn scan_into(conn: &Connection, root: &Path) -> Result<usize, String> {
+    apply_scan(conn, walk_root(root))
+}
+
+/// The disk half of a scan. Needs no database, so callers can run it before
+/// taking the lock rather than making every other command wait on a walk.
+fn walk_root(root: &Path) -> Vec<Found> {
     let mut found = Vec::new();
     walk(root, None, 0, &mut found);
+    found
+}
 
+/// The database half: one transaction for the whole tree. Row by row, each
+/// UPDATE was its own commit — a WAL append and a sync per node.
+fn apply_scan(conn: &Connection, found: Vec<Found>) -> Result<usize, String> {
+    // A caller already inside a transaction keeps it; nesting BEGIN fails.
+    let own_tx = conn.is_autocommit();
+    if own_tx {
+        conn.execute_batch("BEGIN IMMEDIATE").map_err(err)?;
+    }
+    let out = apply_scan_rows(conn, found);
+    if own_tx {
+        let end = if out.is_ok() { "COMMIT" } else { "ROLLBACK" };
+        conn.execute_batch(end).map_err(err)?;
+    }
+    out
+}
+
+fn apply_scan_rows(conn: &Connection, found: Vec<Found>) -> Result<usize, String> {
     // Existing rows by rel_path, so ids survive.
     let mut existing: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
     {
@@ -391,17 +416,23 @@ pub fn scan_into(conn: &Connection, root: &Path) -> Result<usize, String> {
 }
 
 /// Rescan, and hand back the tree the UI should now show.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_scan(db: tauri::State<Db>) -> Result<Vec<db::Node>, String> {
-    let conn = db.0.lock().unwrap();
-    let Some(root) = db::setting_get_conn(&conn, ROOT_KEY)? else {
+    let root = {
+        let conn = db.conn();
+        db::setting_get_conn(&conn, ROOT_KEY)?
+    };
+    let Some(root) = root else {
         return Ok(Vec::new());
     };
     if root.trim().is_empty() {
         return Ok(Vec::new());
     }
     let root = PathBuf::from(root);
-    scan_into(&conn, &root)?;
+    // Walk first, lock after: the walk is the slow part and needs no database.
+    let found = walk_root(&root);
+    let conn = db.conn();
+    apply_scan(&conn, found)?;
 
     // Hand back each node's own folder alongside it. Without this a node with
     // no repository had no working directory at all — no terminal, and commands
@@ -440,13 +471,13 @@ fn rel_of(conn: &Connection, id: i64) -> Result<String, String> {
 
 /// Create a folder. `parent_id` of None puts it at the top, where it becomes a
 /// workspace by virtue of its depth.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_create(
     db: tauri::State<Db>,
     parent_id: Option<i64>,
     name: String,
 ) -> Result<db::Node, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let root = root_of(&conn)?;
     let name = valid_name(&name)?;
 
@@ -480,9 +511,9 @@ pub fn vault_create(
 }
 
 /// Rename a node — which renames its folder, since the folder is the node.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_rename(db: tauri::State<Db>, id: i64, name: String) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let root = root_of(&conn)?;
     let name = valid_name(&name)?;
     let rel = rel_of(&conn, id)?;
@@ -516,7 +547,7 @@ pub fn vault_rename(db: tauri::State<Db>, id: i64, name: String) -> Result<(), S
 }
 
 /// Update a node's meta file. Empty strings clear a field.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_set_meta(
     db: tauri::State<Db>,
     id: i64,
@@ -525,7 +556,7 @@ pub fn vault_set_meta(
     color: Option<String>,
     body: Option<String>,
 ) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let root = root_of(&conn)?;
     let rel = rel_of(&conn, id)?;
     let dir = root.join(&rel);
@@ -549,18 +580,18 @@ pub fn vault_set_meta(
 }
 
 /// Read a node's meta file, for the page that edits it.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_meta(db: tauri::State<Db>, id: i64) -> Result<Meta, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let root = root_of(&conn)?;
     let rel = rel_of(&conn, id)?;
     Ok(read_meta(&root.join(rel)))
 }
 
 /// Delete a node's folder, and everything in it.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let root = root_of(&conn)?;
     let rel = rel_of(&conn, id)?;
     let dir = root.join(&rel);
@@ -573,9 +604,9 @@ pub fn vault_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
 
 /// The absolute path of a node's own folder — for "Reveal in File Explorer",
 /// and for anything that needs somewhere to write context.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_dir(db: tauri::State<Db>, id: i64) -> Result<String, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let root = root_of(&conn)?;
     let rel = rel_of(&conn, id)?;
     Ok(root.join(rel).to_string_lossy().to_string())
@@ -915,9 +946,9 @@ fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
 /// This is the safe way to change the root: every folder goes with it, so the
 /// relative paths the index is keyed on still match and nothing loses its id —
 /// which means nothing loses its commands or services either.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_move(db: tauri::State<Db>, new_path: String) -> Result<String, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let old = root_of(&conn)?;
     let new = PathBuf::from(new_path.trim());
     if new.as_os_str().is_empty() {
@@ -972,9 +1003,9 @@ pub struct SwitchCost {
     pub losing_services: i64,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_switch_cost(db: tauri::State<Db>, path: String) -> Result<SwitchCost, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let target = PathBuf::from(path.trim());
     if !target.is_dir() {
         return Err("That folder does not exist.".into());
@@ -1019,9 +1050,9 @@ pub fn vault_switch_cost(db: tauri::State<Db>, path: String) -> Result<SwitchCos
 /// Point the vault at a folder that already holds one — a clone of your config
 /// repo on another machine, say. Nothing is moved; the index is rebuilt from
 /// what is there.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_switch(db: tauri::State<Db>, path: String) -> Result<String, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let target = PathBuf::from(path.trim());
     if !target.is_dir() {
         return Err("That folder does not exist.".into());

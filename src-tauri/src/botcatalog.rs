@@ -259,7 +259,7 @@ pub fn tool_by_id(id: &str) -> Option<ToolOffer> {
     all().into_iter().flat_map(|t| t.tools).find(|t| t.id == id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_catalog() -> Vec<Template> {
     all()
 }

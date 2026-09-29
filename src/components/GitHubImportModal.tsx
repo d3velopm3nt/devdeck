@@ -15,7 +15,11 @@ const PARENT_KEY = 'devdeck.clone.parent'
 type Phase = 'idle' | 'working' | 'error' | 'done'
 
 export function GitHubImportModal({ onClose }: { onClose: () => void }) {
-  const { activeWorkspaceId, refreshTree, refreshCommands, refreshServices, setSelectedNode } = useApp()
+  const activeWorkspaceId = useApp((s) => s.activeWorkspaceId)
+  const refreshTree = useApp((s) => s.refreshTree)
+  const refreshCommands = useApp((s) => s.refreshCommands)
+  const refreshServices = useApp((s) => s.refreshServices)
+  const setSelectedNode = useApp((s) => s.setSelectedNode)
   const [url, setUrl] = useState('')
   const [parent, setParent] = useState(() => localStorage.getItem(PARENT_KEY) ?? '')
   const [phase, setPhase] = useState<Phase>('idle')

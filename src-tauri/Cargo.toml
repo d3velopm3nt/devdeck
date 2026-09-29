@@ -1,3 +1,12 @@
+# `ask` is a member rather than a second `[[bin]]` here, and that was measured:
+# a bin target is relinked whenever its package's lib changes — even one that
+# never mentions the lib — so a running copy failed the whole build with
+# "failed to remove file … Access is denied". A worker waiting at a question
+# would have gone on blocking `cargo`, just under a different filename. As its
+# own crate it is only rebuilt when its own sources change.
+[workspace]
+members = ["ask"]
+
 [package]
 name = "devdeck"
 version = "0.3.1"
@@ -18,6 +27,10 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
+# The asking half of a worker run. Depended on for its types and its file
+# protocol, so there is one definition of both; its *binary* is what the CLI
+# spawns. See the workspace note at the top.
+devdeck-ask = { path = "ask" }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-global-shortcut = "2"
@@ -66,6 +79,7 @@ tauri-plugin-updater = "2"
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
+    "Win32_NetworkManagement_IpHelper",
     "Win32_Security_Credentials",
     "Win32_Storage_FileSystem",
     "Win32_System_DataExchange",

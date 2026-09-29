@@ -269,6 +269,164 @@ pub fn is_assistant_tool(tool: &str) -> bool {
         || tool == TOOL_WORK
 }
 
+/// Of those, the ones a session genuinely cannot run.
+///
+/// `work` is the exception and the reason this function exists separately: a
+/// work item is a file in *this project's* deck, so a project-scoped service
+/// can do it honestly. The other five need the whole workspace, the personal
+/// store, or a conversation to report into.
+///
+/// Offering a tool that cannot run is its own fault, separate from the tool not
+/// running. A manager woken by a clock was handed `delegate`, spent turns of a
+/// paid session calling it, got "handled by the assistant" back each time, and
+/// wrote its plan into a report instead of into the plan. A model cannot be
+/// blamed for using what it was given.
+pub fn unavailable_in_a_session(tool: &str) -> bool {
+    is_assistant_tool(tool) && tool != TOOL_WORK
+}
+
+/// [`definitions_for`], minus the tools a session would only be refused.
+pub fn session_definitions_for(agent: &str, permissions: &PermissionMatrix) -> Vec<ToolDefinition> {
+    let hidden: Vec<String> = registry()
+        .into_iter()
+        .map(|t| t.id)
+        .filter(|id| unavailable_in_a_session(id))
+        .map(|id| format!("{}_", wire_tool(&id)))
+        .collect();
+    definitions_for(agent, permissions)
+        .into_iter()
+        .filter(|d| !hidden.iter().any(|p| d.name.starts_with(p.as_str())))
+        .collect()
+}
+
+/// The plan, as files in one feature's deck.
+///
+/// Lives here rather than in the assistant because both callers need exactly
+/// this and must not drift: the assistant, which resolves the feature from a
+/// conversation, and `ToolService`, which takes it from the session's scope.
+/// Neither knows anything the other does not once the feature is decided.
+pub fn work_on_deck(deck: &super::deck::Deck, feature: &str, call: &ToolCall) -> (bool, String) {
+    let s = |k: &str| {
+        call.args
+            .get(k)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+    };
+    match call.action.as_str() {
+        "add" => {
+            let title = s("title");
+            if title.is_empty() {
+                return (false, "a work item needs a title".into());
+            }
+            let mut work = deck.work(feature).unwrap_or_else(|_| super::deck::Doc {
+                meta: super::deck::WorkMeta {
+                    feature: feature.to_string(),
+                    items: vec![],
+                },
+                body: String::new(),
+            });
+            let id = format!(
+                "w{:02}-{}",
+                work.meta.items.len() + 1,
+                super::deck::slugify(title)
+            );
+            work.meta.items.push(super::deck::WorkItem {
+                id: id.clone(),
+                title: title.to_string(),
+                status: "unclaimed".into(),
+                assignee: None,
+                areas: Vec::new(),
+                due: None,
+                branch: None,
+            });
+            match deck.save_work(feature, &work.meta) {
+                Ok(()) => (
+                    true,
+                    format!("Added “{title}” to {feature} as {id}, unclaimed."),
+                ),
+                Err(e) => (false, e),
+            }
+        }
+        "list" => match deck.work(feature) {
+            Ok(w) if w.meta.items.is_empty() => (true, format!("{feature} has no work items yet.")),
+            Ok(w) => (
+                true,
+                w.meta
+                    .items
+                    .iter()
+                    .map(|i| {
+                        format!(
+                            "- {} · {} · {}{}",
+                            i.id,
+                            i.title,
+                            i.status,
+                            i.assignee
+                                .as_deref()
+                                .map(|a| format!(" · {a}"))
+                                .unwrap_or_default()
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            ),
+            Err(e) => (false, e),
+        },
+        // Ticking one off and letting one go. Both find the item the same way
+        // `take` does — by id, then by exact title, then by a title that
+        // contains what was said — so a manager can name an item the way it
+        // appears in the thread rather than by its slug.
+        "done" | "drop" => {
+            let wanted = s("title").to_lowercase();
+            if wanted.is_empty() {
+                return (false, "which item? name it by title or id".into());
+            }
+            let mut work = match deck.work(feature) {
+                Ok(w) => w.meta,
+                Err(e) => return (false, e),
+            };
+            let found = work
+                .items
+                .iter()
+                .position(|i| i.id.to_lowercase() == wanted || i.title.to_lowercase() == wanted)
+                .or_else(|| {
+                    work.items
+                        .iter()
+                        .position(|i| i.title.to_lowercase().contains(&wanted))
+                });
+            let Some(at) = found else {
+                return (
+                    false,
+                    format!(
+                        "nothing on {feature} matches “{}”, so nothing changed",
+                        s("title")
+                    ),
+                );
+            };
+            let was = work.items[at].status.clone();
+            let title = work.items[at].title.clone();
+            if call.action == "done" {
+                work.items[at].status = "done".into();
+            } else {
+                work.items[at].status = "unclaimed".into();
+                work.items[at].assignee = None;
+            }
+            match deck.save_work(feature, &work) {
+                Ok(()) if call.action == "done" => (
+                    true,
+                    format!("Marked “{title}” done on {feature} — was {was}."),
+                ),
+                Ok(()) => (
+                    true,
+                    format!("Let “{title}” go on {feature} — unclaimed again, was {was}."),
+                ),
+                Err(e) => (false, e),
+            }
+        }
+        other => (false, format!("unknown work action '{other}'")),
+    }
+}
+
 /// Shorthand for a JSON Schema object.
 fn schema(props: serde_json::Value, required: &[&str]) -> serde_json::Value {
     serde_json::json!({
@@ -930,6 +1088,14 @@ pub struct ToolService {
     pub grants: Arc<GrantStore>,
     /// Processes started by the process tool, keyed by project.
     pub apps: std::sync::Mutex<HashMap<String, RunningApp>>,
+    /// Sessions where an unattended run asked and nobody answered.
+    ///
+    /// A manager woken by a clock may now ask — see the `unattended` arm in
+    /// `execute` — but it asks *once*. If that question times out, nobody is at
+    /// the keyboard, and every later question in the same run would do nothing
+    /// but stall ninety seconds and cost money on the way to the same "no". One
+    /// probe is enough to learn whether somebody is home.
+    pub nobody_home: std::sync::Mutex<std::collections::HashSet<String>>,
     /// MCP servers installed from Community, and the hub that runs them.
     ///
     /// Held here rather than reached for globally because this is the one
@@ -954,6 +1120,7 @@ impl ToolService {
             approvals: Arc::new(ApprovalBroker::immediate_denial()),
             grants: Arc::new(GrantStore::ephemeral()),
             apps: std::sync::Mutex::new(HashMap::new()),
+            nobody_home: std::sync::Mutex::new(std::collections::HashSet::new()),
             mcp: crate::mcp::Hub::new(),
             mcp_servers: Vec::new(),
         }
@@ -1112,11 +1279,23 @@ impl ToolService {
                         );
                         true
                     }
-                    // Nobody is there. Asking would block for the whole
-                    // timeout and then deny anyway, so it denies now and says
-                    // why — a bot's morning wake should not take a quarter of
-                    // an hour to arrive at "no".
-                    None if scope.unattended => {
+                    // Started by a clock — so ask anyway, once.
+                    //
+                    // This used to deny outright, and the reason given was that
+                    // asking "would block for the whole timeout and then deny
+                    // anyway". That was true when there was nowhere for the
+                    // question to appear. It is not true now: the wait is
+                    // ninety seconds, the same as a worker's, and the question
+                    // lands on Today under "Needs you" with Yes and No on the
+                    // row. Somebody at the keyboard at nine in the morning can
+                    // simply answer it.
+                    //
+                    // What survives of the old objection is the cost of asking
+                    // into an empty room, so the run gets one probe. Once a
+                    // question has timed out, nobody is there, and the rest of
+                    // that run is refused immediately with the same words as
+                    // before.
+                    None if scope.unattended && self.asked_into_an_empty_room(scope) => {
                         denial = Some(format!(
                             "'{}' needed approval and this was started by a clock, so there was \
                              nobody to ask. Give it a standing grant if it should be allowed to \
@@ -1127,6 +1306,18 @@ impl ToolService {
                     }
                     None => {
                         let outcome = self.ask_permission(bus, agent_id, scope, call, &requested);
+                        // Nobody answered. On an unattended run that is the
+                        // probe coming back empty, so the rest of this run
+                        // stops asking. A *refusal* is not that — saying no is
+                        // somebody being there, and the next question still
+                        // gets to reach them.
+                        if scope.unattended && matches!(outcome, Outcome::TimedOut) {
+                            if let Some(session) = scope.session_id.as_deref() {
+                                if let Ok(mut seen) = self.nobody_home.lock() {
+                                    seen.insert(session.to_string());
+                                }
+                            }
+                        }
                         if !outcome.allows() {
                             denial = Some(outcome.reason(&call.tool));
                         }
@@ -1158,7 +1349,7 @@ impl ToolService {
             return result;
         }
 
-        let result = self.dispatch(call);
+        let result = self.dispatch(call, scope);
 
         if result.ok {
             bus.emit(
@@ -1205,6 +1396,20 @@ impl ToolService {
 
     /// Ask a person, announcing the request before the wait so the UI learns
     /// about it while there is still time to answer.
+    /// Has this run already asked a question nobody answered?
+    ///
+    /// A run with no session id cannot be remembered either way, and gets the
+    /// old behaviour — refused rather than left to stall.
+    fn asked_into_an_empty_room(&self, scope: &EventScope) -> bool {
+        let Some(session) = scope.session_id.as_deref() else {
+            return true;
+        };
+        self.nobody_home
+            .lock()
+            .map(|seen| seen.contains(session))
+            .unwrap_or(true)
+    }
+
     fn ask_permission(
         &self,
         bus: &EventBus,
@@ -1260,7 +1465,7 @@ impl ToolService {
         outcome
     }
 
-    fn dispatch(&self, call: &ToolCall) -> ToolResult {
+    fn dispatch(&self, call: &ToolCall, scope: &EventScope) -> ToolResult {
         match call.tool.as_str() {
             TOOL_FILES => self.files(call),
             TOOL_GIT => self.git(call),
@@ -1268,6 +1473,36 @@ impl ToolService {
             TOOL_PROCESS => self.process(call),
             TOOL_TESTS => self.tests(call),
             TOOL_KNOWLEDGE => self.knowledge(call),
+            // The plan, from inside a session.
+            //
+            // This is the one tool on the assistant's side of the split that a
+            // project-scoped service can honestly run, because a work item is a
+            // file in this project's deck and nothing else — no personal store,
+            // no other project, no session. The assistant still intercepts it
+            // first when there is a conversation, because a thread can say
+            // which feature it is about; here the scope says.
+            //
+            // It had to: a manager woken by a clock decided on exactly the right
+            // next item, tried to write it down, was told work "is handled by
+            // the assistant", and so the plan stayed empty — and an empty plan
+            // is what `workers::handoff` reads to decide there is nothing to
+            // hand its worker. Every wake reasoned its way to the same item and
+            // every wake lost it.
+            TOOL_WORK => match scope.feature_id.as_deref() {
+                Some(f) => {
+                    let (ok, text) =
+                        work_on_deck(&super::deck::Deck::new(self.deck_root.clone()), f, call);
+                    if ok {
+                        ToolResult::ok(call, text)
+                    } else {
+                        ToolResult::failed(call, text)
+                    }
+                }
+                None => ToolResult::failed(
+                    call,
+                    "a work item belongs to a feature, and this session is not in one".to_string(),
+                ),
+            },
             // An MCP server, reached only from here — after the matrix and the
             // approval gate have already had their say.
             t if crate::mcp::is_mcp(t) => self.mcp_call(call),
@@ -1809,6 +2044,176 @@ mod tests {
             None,
         );
         assert!(!bad.ok, "a non-zero exit must be a failure, not a success");
+    }
+    /// A clock-started run asks once, and only stops asking when nobody
+    /// answers.
+    ///
+    /// It used to refuse outright, on the reasoning that asking "would block
+    /// for the whole timeout and then deny anyway". That stopped being true
+    /// once a question reached a person: a worker's does, in ninety seconds, on
+    /// the first screen. A manager's did not, so on 28 Sep Studio read the
+    /// repository, worked out the right next piece of work, reached for a shell
+    /// to look at `.devdeck`, and was told there was nobody to ask — at nine in
+    /// the morning, with somebody sitting in front of it.
+    ///
+    /// What survives of the old objection is the cost of asking into an empty
+    /// room, so one unanswered question ends the asking for that run.
+    #[test]
+    fn a_clock_started_run_asks_once_and_then_stops() {
+        let t = Tmp::new("unattended-asks");
+        let bus = Arc::new(EventBus::new());
+
+        // Nobody is ever going to answer: every ask times out, fast.
+        let broker = Arc::new(ApprovalBroker::new(std::time::Duration::from_millis(60)));
+        let mut matrix = PermissionMatrix::default();
+        matrix.set("studio", TOOL_FILES, Permission::Approval);
+        let s = svc(&t.0, matrix).with_approvals(broker);
+
+        let scope = EventScope::project("p1").with_session("ses-1").unattended();
+        let call = ToolCall::new(TOOL_FILES, "list", serde_json::json!({ "path": "." }));
+
+        // The probe. Asked, waited, nobody came.
+        let first = s.execute(&bus, "studio", &scope, &call, None);
+        assert!(!first.ok, "nobody answered, so it cannot have been allowed");
+
+        // And now it knows the room is empty, so it says so instead of
+        // spending another ninety seconds finding out.
+        let second = s.execute(&bus, "studio", &scope, &call, None);
+        assert!(!second.ok);
+        assert!(second.denied, "it was refused, not attempted and failed");
+        let why = second.error.clone().unwrap_or_default();
+        assert!(
+            why.contains("nobody to ask"),
+            "the second question should be refused without waiting: {why}"
+        );
+    }
+
+    /// Being told no is not an empty room.
+    ///
+    /// Somebody said no, which means somebody was there — so the next question
+    /// still gets to reach them. Only silence means nobody is home.
+    #[test]
+    fn a_refusal_does_not_stop_a_run_from_asking_again() {
+        let t = Tmp::new("unattended-refused");
+        let s = svc(&t.0, PermissionMatrix::default());
+
+        let answered = EventScope::project("p1").with_session("ses-answered");
+        assert!(
+            !s.asked_into_an_empty_room(&answered),
+            "a run that has heard nothing yet must still be allowed to ask"
+        );
+
+        // Only a timeout marks the room empty.
+        s.nobody_home
+            .lock()
+            .unwrap()
+            .insert("ses-quiet".to_string());
+        let quiet = EventScope::project("p1").with_session("ses-quiet");
+        assert!(s.asked_into_an_empty_room(&quiet));
+
+        // And a run with nothing to remember it by keeps the old behaviour.
+        assert!(s.asked_into_an_empty_room(&EventScope::project("p1")));
+    }
+
+    /// A session can write the plan it is working from.
+    ///
+    /// Studio decided on exactly the right next item four wakes running, tried
+    /// to write it down, and was told `work` "is handled by the assistant, not
+    /// by a project's tools". The plan stayed empty — and an empty plan is what
+    /// `workers::handoff` reads to decide there is nothing to hand its worker,
+    /// so every wake reasoned its way to the same item and every wake lost it.
+    #[test]
+    fn a_session_can_write_the_plan_it_works_from() {
+        let t = Tmp::new("plan");
+        let bus = Arc::new(EventBus::new());
+        let s = svc(&t.0, full_for("dev"));
+        let scope = EventScope::feature("p1", "goal-store");
+
+        let added = s.execute(
+            &bus,
+            "dev",
+            &scope,
+            &ToolCall::new(
+                TOOL_WORK,
+                "add",
+                serde_json::json!({ "title": "goals.js add/list/complete" }),
+            ),
+            None,
+        );
+        assert!(added.ok, "work.add was refused: {:?}", added.error);
+
+        // On the plan, unclaimed — which is what a hand-over looks for.
+        let listed = s.execute(
+            &bus,
+            "dev",
+            &scope,
+            &ToolCall::new(TOOL_WORK, "list", serde_json::json!({})),
+            None,
+        );
+        assert!(listed.ok, "{:?}", listed.error);
+        assert!(listed.output.contains("goals.js add/list/complete"));
+        assert!(listed.output.contains("unclaimed"));
+
+        // And it is on disk in the deck, where the next wake reads it — not
+        // only in this session's memory.
+        let deck = super::super::deck::Deck::new(t.0.clone());
+        let on_disk = deck.work("goal-store").expect("the plan was not written");
+        assert_eq!(on_disk.meta.items.len(), 1);
+    }
+
+    /// A session with no feature says so rather than guessing one.
+    #[test]
+    fn a_work_item_outside_a_feature_is_refused_plainly() {
+        let t = Tmp::new("plan-nofeature");
+        let bus = Arc::new(EventBus::new());
+        let s = svc(&t.0, full_for("dev"));
+
+        let r = s.execute(
+            &bus,
+            "dev",
+            &EventScope::project("p1"),
+            &ToolCall::new(TOOL_WORK, "add", serde_json::json!({ "title": "x" })),
+            None,
+        );
+        assert!(!r.ok);
+        assert!(r.error.unwrap_or_default().contains("feature"));
+    }
+
+    /// The other five stay where they are, and stop being offered.
+    ///
+    /// Studio was handed `delegate`, spent turns of a paid session calling it,
+    /// got "handled by the assistant" back each time, and ended up writing its
+    /// plan into a report instead of into the plan. A model cannot be blamed
+    /// for using what it was given.
+    #[test]
+    fn a_session_is_not_offered_the_tools_it_would_only_be_refused() {
+        let m = full_for("dev");
+        let offered = session_definitions_for("dev", &m);
+        let names: Vec<&str> = offered.iter().map(|d| d.name.as_str()).collect();
+
+        for gone in [
+            TOOL_DELEGATE,
+            TOOL_MEMORY,
+            TOOL_BOTS,
+            TOOL_ROUTINE,
+            TOOL_SKILL,
+        ] {
+            let prefix = format!("{}_", wire_tool(gone));
+            assert!(
+                !names.iter().any(|n| n.starts_with(&prefix)),
+                "{gone} was offered to a session that cannot run it"
+            );
+        }
+        // The plan is the exception, and the tools that touch the machine are
+        // untouched.
+        assert!(names.iter().any(|n| n.starts_with("work_")));
+        assert!(names.iter().any(|n| n.starts_with("files_")));
+        assert!(names.iter().any(|n| n.starts_with("terminal_")));
+
+        // The assistant's own list is unchanged — it can still run all six.
+        let all = definitions_for("dev", &m);
+        assert!(all.iter().any(|d| d.name.starts_with("delegate_")));
+        assert!(offered.len() < all.len());
     }
 }
 

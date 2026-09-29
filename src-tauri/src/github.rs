@@ -64,7 +64,7 @@ fn client_id() -> String {
 ///
 /// The frontend asks *before* offering the button, so an unconfigured build
 /// says "this build has no OAuth app" instead of dead-ending in an error.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn github_oauth_configured() -> bool {
     !client_id().is_empty()
 }
@@ -590,7 +590,7 @@ pub fn stored_token() -> Option<String> {
 }
 
 /// Do we hold a token of our own? Never *what* it is.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn github_token_stored() -> bool {
     creds::exists(CRED_TARGET)
 }

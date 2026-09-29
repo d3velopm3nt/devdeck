@@ -185,6 +185,8 @@ const counts = () => ({
 })
 
 export const SEED: Record<string, (a?: Record<string, unknown>) => unknown> = {
+  // Already introduced, so the shell renders instead of the first-run screen.
+  aiw_profile: () => ({ met_at: 1 }),
   mail_accounts_list: () => accounts,
   mail_counts: () => counts(),
   mail_contacts_list: () => contacts,

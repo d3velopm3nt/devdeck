@@ -1,7 +1,7 @@
 // Goals — every space, right now, grouped by goal rather than by bot.
 //
 // A bot on two goals appears twice, which is the point: the thing you are
-// trying to move is the goal, and "which bot owns it" is an answer to a
+// trying to move is the goal, and "which manager owns it" is an answer to a
 // different question.
 //
 // Three groups, ranked: **Waiting on you** first because it has a person in
@@ -9,10 +9,10 @@
 // under a green progress bar is one that teaches you to skim past the
 // approval.
 //
-// Selecting a goal opens its thread — the feature *is* the room, so there is
-// nowhere else for it to go. The list is one of four the page can put beside
-// that thread, so it renders the column and nothing else: which one is picked
-// belongs to the page, or switching tabs would lose your place.
+// Selecting a goal opens its page: the goal, its features, its work, and every
+// question anyone is waiting on. The list is one of four the page can put beside
+// that, so it renders the column and nothing else: which one is picked belongs
+// to the page, or switching tabs would lose your place.
 
 import type { GoalRow } from '../../lib/aiw'
 import { goalGroup } from '../../lib/aiw'
@@ -106,7 +106,7 @@ export function GoalsList({
                       <div className="truncate text-[10.5px] text-muted">
                         {g.last_said
                           ? `${g.last_by ? `${speakers(g.last_by)}: ` : ''}${g.last_said}`
-                          : 'nothing said in its thread yet'}
+                          : 'nothing has happened on it yet'}
                         {g.last_at && (
                           <span className="text-faint">
                             {' · '}

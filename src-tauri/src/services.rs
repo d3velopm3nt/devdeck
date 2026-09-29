@@ -3,10 +3,10 @@
 //! auto-restart, and one-shot background commands.
 
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{Emitter, Manager};
@@ -47,7 +47,11 @@ pub struct RunningService {
 pub struct ServiceManager {
     pub running: Mutex<HashMap<i64, RunningService>>,
     next_ephemeral: AtomicI64,
-    pub logs: Mutex<Vec<LogEntry>>,
+    pub logs: Mutex<VecDeque<LogEntry>>,
+    /// Lines not yet sent to the UI. Drained by one flusher thread so a busy
+    /// service costs one IPC event per tick rather than one per line.
+    pending: Mutex<Vec<LogEntry>>,
+    flusher: AtomicBool,
 }
 
 #[derive(Serialize, Clone)]
@@ -147,14 +151,37 @@ pub fn push_log(
         line,
     };
     {
-        let mut logs = mgr.logs.lock().unwrap();
-        logs.push(entry.clone());
-        let len = logs.len();
-        if len > LOG_BUFFER_LIMIT {
-            logs.drain(..len - LOG_BUFFER_LIMIT);
+        // A ring buffer: trimming the front of a Vec shifted all 20k entries
+        // on every line once it was full.
+        let mut logs = mgr.logs.lock().unwrap_or_else(|p| p.into_inner());
+        logs.push_back(entry.clone());
+        while logs.len() > LOG_BUFFER_LIMIT {
+            logs.pop_front();
         }
     }
-    let _ = app.emit("svc:log", entry);
+    mgr.pending
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .push(entry);
+    if !mgr.flusher.swap(true, Ordering::SeqCst) {
+        spawn_log_flusher(app.clone());
+    }
+}
+
+/// How often queued log lines go to the UI. Fast enough to read as live,
+/// slow enough that a service printing thousands of lines a second no longer
+/// floods the webview with one event each.
+const LOG_FLUSH_MS: u64 = 50;
+
+fn spawn_log_flusher(app: tauri::AppHandle) {
+    std::thread::spawn(move || loop {
+        std::thread::sleep(std::time::Duration::from_millis(LOG_FLUSH_MS));
+        let mgr = app.state::<Arc<ServiceManager>>();
+        let batch = std::mem::take(&mut *mgr.pending.lock().unwrap_or_else(|p| p.into_inner()));
+        if !batch.is_empty() {
+            let _ = app.emit("svc:logs", batch);
+        }
+    });
 }
 
 /// The widget-peek setting. Read per event rather than cached so toggling it
@@ -162,7 +189,7 @@ pub fn push_log(
 fn peek_enabled(app: &tauri::AppHandle) -> bool {
     app.try_state::<crate::db::Db>()
         .and_then(|db| {
-            db.0.lock().ok().and_then(|c| {
+            Some(db.conn()).and_then(|c| {
                 crate::db::setting_get_conn(&c, "widget_peek")
                     .ok()
                     .flatten()
@@ -461,17 +488,17 @@ fn service_with_dir(conn: &rusqlite::Connection, id: i64) -> Result<ServiceDef, 
     Ok(def)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn svc_start(app: tauri::AppHandle, db: tauri::State<Db>, id: i64) -> Result<SvcState, String> {
     let def = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let _ = db::recent_bump_conn(&conn, "service", id);
         service_with_dir(&conn, id)?
     };
     start_internal(&app, &def, false)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn svc_stop(
     app: tauri::AppHandle,
     mgr: tauri::State<Arc<ServiceManager>>,
@@ -527,7 +554,7 @@ pub fn stop_all_running(mgr: &ServiceManager) {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn svc_restart(
     app: tauri::AppHandle,
     db: tauri::State<Db>,
@@ -559,7 +586,7 @@ pub fn svc_restart(
         }
     }
     let def = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         service_with_dir(&conn, id)?
     };
     start_internal(&app, &def, false)?;
@@ -567,7 +594,7 @@ pub fn svc_restart(
 }
 
 /// Run a one-shot command in the background; output lands in the log viewer.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn run_background(
     app: tauri::AppHandle,
     name: String,
@@ -593,7 +620,7 @@ pub fn run_background(
     start_internal(&app, &def, true)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn svc_states(mgr: tauri::State<Arc<ServiceManager>>) -> Vec<SvcState> {
     let running = mgr.running.lock().unwrap();
     let mut list: Vec<SvcState> = running.values().map(|r| r.state.clone()).collect();
@@ -603,19 +630,19 @@ pub fn svc_states(mgr: tauri::State<Arc<ServiceManager>>) -> Vec<SvcState> {
 
 // ---------- logs ----------
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn logs_recent(mgr: tauri::State<Arc<ServiceManager>>, limit: Option<usize>) -> Vec<LogEntry> {
-    let logs = mgr.logs.lock().unwrap();
+    let logs = mgr.logs.lock().unwrap_or_else(|p| p.into_inner());
     let n = limit.unwrap_or(2000).min(logs.len());
-    logs[logs.len() - n..].to_vec()
+    logs.iter().skip(logs.len() - n).cloned().collect()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn logs_clear(mgr: tauri::State<Arc<ServiceManager>>) {
     mgr.logs.lock().unwrap().clear();
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn logs_export(mgr: tauri::State<Arc<ServiceManager>>, path: String) -> Result<usize, String> {
     let logs = mgr.logs.lock().unwrap();
     let mut out = String::new();

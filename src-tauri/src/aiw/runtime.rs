@@ -73,6 +73,83 @@ pub struct StartAgentCommand {
     /// which is why it is words rather than a tool id.
     #[serde(default)]
     pub stop_at: Vec<String>,
+    /// Who this session is running for, in their words — a manager's voice,
+    /// when a manager's clock started it.
+    ///
+    /// A manager has a voice everywhere except where it matters most. Talk to
+    /// one in its room and it knows its goal, its standing instructions and who
+    /// its worker is, because the room builds all of that from `_bot.md` on
+    /// every turn. Wake the same manager on its schedule and none of it
+    /// travelled: the wake handed the runtime an agent id and the runtime ran
+    /// *the agent's* prompt. Studio, whose file names Smith, woke and reported
+    /// "there's no roster I can see" — twice, once after the roster paragraph
+    /// had already been written, because the paragraph was written into the
+    /// half of the code the clock never reaches.
+    ///
+    /// A string, not a `Persona`, on purpose: this layer knows nothing about
+    /// managers and should not start. It is told who it is working for and
+    /// says so; who that is remains `bots.rs`'s business.
+    #[serde(default)]
+    pub on_behalf_of: Option<String>,
+}
+
+/// Free text the model wrote: an argument that *describes* work rather than
+/// being any part of doing it.
+///
+/// A review point must not read these. Studio wrote itself an item ending
+/// "npm test green on a branch, **no push**" and then tried to hand it to its
+/// worker; `delegate.start` carried that sentence in `intent`, `memory.save`
+/// quoted it in `body`, and a rule reading "before any push" stopped them both.
+/// The rule fired on a promise not to push. A review point you can only get
+/// past by avoiding a word is not a review point, and the failure gets worse
+/// the more carefully a model explains itself.
+const PROSE_ARGS: &[&str] = &[
+    "message",
+    "intent",
+    "text",
+    "summary",
+    "title",
+    "body",
+    "note",
+    "reason",
+    "description",
+    "content",
+    "query",
+    "goal",
+    "why",
+];
+
+/// What a call *does*, in words a rule can be matched against: its tool, its
+/// action, and every structured argument — a path, a branch, an id, and above
+/// all `command`, which is itself an act. Prose is left out.
+fn act_of(call: &super::tools::ToolCall) -> String {
+    fn render(v: &serde_json::Value, out: &mut String) {
+        match v {
+            serde_json::Value::Object(m) => {
+                for (k, val) in m {
+                    if PROSE_ARGS.contains(&k.to_ascii_lowercase().as_str()) {
+                        continue;
+                    }
+                    out.push(' ');
+                    out.push_str(k);
+                    render(val, out);
+                }
+            }
+            serde_json::Value::Array(a) => a.iter().for_each(|val| render(val, out)),
+            serde_json::Value::String(s) => {
+                out.push(' ');
+                out.push_str(s);
+            }
+            serde_json::Value::Null => {}
+            other => {
+                out.push(' ');
+                out.push_str(&other.to_string());
+            }
+        }
+    }
+    let mut s = format!("{}.{}", call.tool, call.action);
+    render(&call.args, &mut s);
+    s.to_lowercase()
 }
 
 /// Whether a call runs into a review point, and which one.
@@ -82,11 +159,14 @@ pub struct StartAgentCommand {
 /// matched nothing would be worse than no rule at all — you would believe you
 /// had a review point and not have one — so anything that looks like it
 /// applies, does.
+///
+/// Blunt about the *act*, though, and never about the prose around it — see
+/// [`PROSE_ARGS`].
 pub fn review_point(call: &super::tools::ToolCall, stop_at: &[String]) -> Option<String> {
     if stop_at.is_empty() {
         return None;
     }
-    let subject = format!("{}.{} {}", call.tool, call.action, call.args).to_lowercase();
+    let subject = act_of(call);
     const NOISE: &[&str] = &[
         "before", "any", "the", "a", "an", "all", "every", "stop", "at", "on", "to", "not",
         "without", "me", "first", "ask", "for",
@@ -416,7 +496,7 @@ impl AgentRuntime {
                 agent_id: agent.id.clone(),
                 role: agent.role.clone(),
                 model: agent.model.clone(),
-                system: agent.system.clone(),
+                system: Self::voice(&agent, cmd.on_behalf_of.as_deref()),
                 context: context.to_prompt(),
                 goal: intent.clone(),
                 // Filtered by this agent's permissions, so what a provider is
@@ -426,7 +506,10 @@ impl AgentRuntime {
                     // offer this agent. One list: the model has no idea which
                     // of its callables came from where, and should not.
                     let m = ws.permission_matrix();
-                    let mut t = super::tools::definitions_for(&agent.id, &m);
+                    // Session list, not the assistant's: `delegate`, `memory`,
+                    // `bots`, `routine` and `skill` cannot run here, and
+                    // offering them only buys turns spent being refused.
+                    let mut t = super::tools::session_definitions_for(&agent.id, &m);
                     t.extend(super::tools::mcp_definitions_for(
                         &agent.id,
                         &m,
@@ -869,7 +952,13 @@ impl AgentRuntime {
             ask_config: String::new(),
             ask_tool: String::new(),
         };
-        let prompt = Self::brief(&agent, &intent, &context, &cmd.stop_at);
+        let prompt = Self::brief(
+            &agent,
+            &intent,
+            &context,
+            &cmd.stop_at,
+            cmd.on_behalf_of.as_deref(),
+        );
 
         // How a delegated run is watched while it runs. The transcript is the
         // record and the log is the window: without the second, work happening
@@ -996,6 +1085,18 @@ impl AgentRuntime {
         )
     }
 
+    /// The agent's own instructions, and whoever it is working for.
+    ///
+    /// Both halves or neither: an agent started from a page has no manager
+    /// behind it and should not be told it has one.
+    fn voice(agent: &super::state::AgentDef, on_behalf_of: Option<&str>) -> String {
+        match on_behalf_of.map(str::trim).filter(|v| !v.is_empty()) {
+            Some(v) if agent.system.trim().is_empty() => v.to_string(),
+            Some(v) => format!("{}\n\n{v}", agent.system.trim()),
+            None => agent.system.clone(),
+        }
+    }
+
     /// What the CLI is told.
     ///
     /// The assembled context is the whole point of delegating from here rather
@@ -1007,11 +1108,20 @@ impl AgentRuntime {
         intent: &str,
         context: &super::context::AssembledContext,
         stop_at: &[String],
+        on_behalf_of: Option<&str>,
     ) -> String {
         let mut p = String::new();
         p.push_str("You are ");
         p.push_str(&agent.name);
-        p.push_str(", working in this repository as part of DevDeck.\n\n# What to do\n\n");
+        p.push_str(", working in this repository as part of DevDeck.\n\n");
+        // The CLI is a different engine, not a different job. A manager that
+        // woke this session is still the one it answers to.
+        if let Some(v) = on_behalf_of.map(str::trim).filter(|v| !v.is_empty()) {
+            p.push_str("# Who you are working for\n\n");
+            p.push_str(v);
+            p.push_str("\n\n");
+        }
+        p.push_str("# What to do\n\n");
         p.push_str(intent);
         p.push_str("\n\n");
         if !stop_at.is_empty() {
@@ -1382,5 +1492,124 @@ mod tests {
     fn a_rule_with_no_words_in_it_matches_nothing() {
         let rules = vec!["before any".to_string(), "  ".to_string()];
         assert!(review_point(&call("git", "push", serde_json::json!({})), &rules).is_none());
+    }
+
+    /// A review point reads what a call does, not what it says about itself.
+    ///
+    /// Studio decided on an item ending "npm test green on a branch, no push",
+    /// then tried to hand it to Smith. `delegate.start` carried that sentence
+    /// as its `intent` and `memory.save` quoted it in `body`, and "before any
+    /// push" stopped them both — a rule about pushing, firing on a promise not
+    /// to push, on two calls that cannot push. Nothing was dispatched and the
+    /// manager could not even leave itself the note.
+    #[test]
+    fn a_review_point_does_not_fire_on_a_sentence_about_the_act() {
+        let rules = vec!["before any push".to_string()];
+
+        let handover = call(
+            "delegate",
+            "start",
+            serde_json::json!({
+                "agent_id": "smith",
+                "feature_id": "studio",
+                "intent": "goals.js add/list/complete with tests. npm test green on a branch, no push."
+            }),
+        );
+        assert!(
+            review_point(&handover, &rules).is_none(),
+            "a handover was stopped by a rule about pushing"
+        );
+
+        let note = call(
+            "memory",
+            "save",
+            serde_json::json!({
+                "title": "Next on the goal tracker",
+                "body": "Smith builds goals.js on a branch. No push."
+            }),
+        );
+        assert!(
+            review_point(&note, &rules).is_none(),
+            "a note is not an act"
+        );
+
+        // What the rule is for still stops: the act itself, and a command that
+        // performs it.
+        assert!(review_point(&call("git", "push", serde_json::json!({})), &rules).is_some());
+        assert!(review_point(
+            &call(
+                "terminal",
+                "run",
+                serde_json::json!({ "command": "git push origin main" })
+            ),
+            &rules
+        )
+        .is_some());
+    }
+
+    /// Structured arguments are part of the act and keep matching — only prose
+    /// is dropped. A rule narrowed until it stops nothing is the other failure.
+    #[test]
+    fn the_arguments_that_are_not_prose_still_count() {
+        let rules = vec!["nothing under bucket".to_string()];
+        assert!(review_point(
+            &call(
+                "files",
+                "write",
+                serde_json::json!({
+                    "path": "bucket/devdeck.json",
+                    "content": "anything at all"
+                })
+            ),
+            &rules
+        )
+        .is_some());
+
+        // And the same words, this time only in the file being written.
+        assert!(
+            review_point(
+                &call(
+                    "files",
+                    "write",
+                    serde_json::json!({ "path": "notes.md", "content": "the bucket is at 0.3.1" })
+                ),
+                &rules
+            )
+            .is_none(),
+            "the contents of a file are not what the file write does"
+        );
+    }
+
+    fn an_agent() -> super::super::state::AgentDef {
+        super::super::state::AgentDef {
+            id: "dev".into(),
+            name: "Dev".into(),
+            role: "developer".into(),
+            provider: "mock".into(),
+            model: "m".into(),
+            system: "You implement work items.".into(),
+            permissions: Default::default(),
+            skills: vec![],
+        }
+    }
+
+    /// A session started by a manager's clock says so; one started from a page
+    /// does not invent a manager to have been started by.
+    #[test]
+    fn a_session_says_who_it_is_working_for_only_when_someone_asked() {
+        let agent = an_agent();
+
+        let alone = AgentRuntime::voice(&agent, None);
+        assert_eq!(alone, "You implement work items.");
+
+        let sent = AgentRuntime::voice(&agent, Some("Studio woke this. Its worker is Smith."));
+        assert!(sent.contains("You implement work items."));
+        assert!(
+            sent.contains("Its worker is Smith."),
+            "the manager's voice did not reach the prompt"
+        );
+
+        // Whitespace is nobody.
+        assert_eq!(AgentRuntime::voice(&agent, Some("   ")), alone);
     }
 }

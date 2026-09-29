@@ -74,6 +74,11 @@ runs in progress, proposals waiting on you, and managers that could not act.
 
 ## 3. Discussed, not yet decided
 
+- **A bridge an agent can drive DevDeck through** — designed 27 Sep in
+  `design/devdeck-mcp/BUILD.md`. An MCP server over the existing tool registry,
+  workers first. It is listed here rather than under *agreed* because three
+  calls are still open, but it is load-bearing for the next three items: the
+  phone, GitHub issues, and triggers all want the same surface.
 - **A phone.** Mirror the spaces, see state and progress, approve from bed,
   give it a voice. The vault stays on the PC. Events are the transport.
 - **Connectors**, configured the way a harness does it: GitHub, Google Drive,
@@ -121,7 +126,11 @@ runs in progress, proposals waiting on you, and managers that could not act.
   number an earlier run had used was discarded without a word. Three silences
   in a row hid it — the sink dropped quietly, `keep` swallowed its error, and
   `IGNORE` is quiet by design. Ids now carry the run's start time.
-- **A live run blocks a rebuild.** The asker is `devdeck.exe --ask-server`, so
+- ~~**A live run blocks a rebuild.**~~ **Fixed 27 Sep** (L9 in
+  `docs/REVIEW-2026-09.md` §11). The asker is its own binary now, so a blocked
+  worker holds 700 KB that rarely changes instead of the app's own executable.
+  What is left: the release bundle does not yet ship it beside the app.
+  Previously: the asker was `devdeck.exe --ask-server`, so
   while a worker runs, the binary is held open.
 - **Editing `src-tauri` kills a running worker**, because `tauri dev` restarts
   the app. It deserves a guard.

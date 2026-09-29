@@ -58,7 +58,7 @@ export function NodeManagers({
           </button>
         ) : managers.length === 0 ? (
           <button className="btn-primary text-[11.5px]" onClick={() => setCreating(true)}>
-            <Icon name="add" size={12} /> Give it a bot
+            <Icon name="add" size={12} /> Give it a manager
           </button>
         ) : null}
       </div>

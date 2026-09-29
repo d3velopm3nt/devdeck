@@ -82,7 +82,8 @@ function until(ms: number | null): string {
 }
 
 export function SchedulerPage() {
-  const { nodes, refreshActivity } = useApp()
+  const nodes = useApp((s) => s.nodes)
+  const refreshActivity = useApp((s) => s.refreshActivity)
   const [list, setList] = useState<ipc.Schedule[]>([])
   // What the last hand-run did, by schedule. A reminder that worked says
   // nothing at all through the schedules table — its note is empty, because
@@ -244,7 +245,7 @@ export function SchedulerPage() {
                       <span className="truncate font-mono">{s.payload}</span>
                     ) : s.kind === 'bot' ? (
                       <span>
-                        Reads the space, and runs the agent the bot names — if it names one.
+                        Reads the space, and runs the agent the manager names — if it names one.
                       </span>
                     ) : (
                       <span>Tells you. Nothing runs.</span>

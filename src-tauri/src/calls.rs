@@ -118,9 +118,9 @@ pub struct ModelCheck {
 }
 
 /// Every verdict for one provider, for badging its list.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn model_checks(db: tauri::State<Db>, provider: String) -> Result<Vec<ModelCheck>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut stmt = conn
         .prepare("SELECT provider, model, ok, detail, at FROM model_checks WHERE provider = ?1")
         .map_err(err)?;
@@ -271,7 +271,7 @@ pub fn record(app: &tauri::AppHandle, c: crate::aiw::state::CallRecord) {
     // and calling it from in here freezes the window with no error anywhere.
     let mut tell: Option<(String, String, String)> = None;
     {
-        let Ok(conn) = db.0.lock() else { return };
+        let conn = db.conn();
 
         let (prompt, prompt_len) = head(&c.prompt);
         let (reply, reply_len) = head(&c.reply);
@@ -376,7 +376,7 @@ pub fn tell_the_missed_failures(app: &tauri::AppHandle) {
     };
 
     let told: Vec<(String, String, i64)> = {
-        let Ok(conn) = db.0.lock() else { return };
+        let conn = db.conn();
         if crate::db::setting_get_conn(&conn, "calls.told_missed")
             .ok()
             .flatten()
@@ -442,9 +442,9 @@ pub fn tell_the_missed_failures(app: &tauri::AppHandle) {
 }
 
 /// The calls, newest first.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn calls_list(db: tauri::State<Db>, limit: Option<i64>) -> Result<Vec<Call>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let sql = format!("SELECT {COLS} FROM llm_calls ORDER BY at DESC LIMIT ?1");
     let mut stmt = conn.prepare(&sql).map_err(err)?;
     let out = stmt
@@ -494,9 +494,9 @@ pub struct UsageReport {
     pub by_day: Vec<UsageRow>,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn calls_usage(db: tauri::State<Db>, days: Option<i64>) -> Result<UsageReport, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let days = days.unwrap_or(30).clamp(1, 3650);
     let since = chrono::Local::now().timestamp_millis() - days * 86_400_000;
 
@@ -554,9 +554,9 @@ pub fn calls_usage(db: tauri::State<Db>, days: Option<i64>) -> Result<UsageRepor
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn calls_clear(db: tauri::State<Db>) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute("DELETE FROM llm_calls", []).map_err(err)?;
     Ok(())
 }

@@ -131,7 +131,7 @@ export function AnalyticsPage() {
         <div className="min-w-0">
           <h2 className="text-[15px] font-semibold text-ink">Analytics</h2>
           <p className="text-[11.5px] text-muted">
-            What the AI is costing, across every space. Every turn a bot, an agent or the assistant
+            What the AI is costing, across every space. Every turn a manager, an agent or the assistant
             takes.
           </p>
         </div>
@@ -166,7 +166,7 @@ export function AnalyticsPage() {
           <div className="py-10 text-center text-[12px] text-muted">Adding it up…</div>
         ) : report && report.calls === 0 ? (
           <div className="py-10 text-center text-[12px] leading-relaxed text-muted">
-            No model calls in this window. Every turn is recorded from now on — talk to a bot, or
+            No model calls in this window. Every turn is recorded from now on — talk to a manager, or
             hand an agent an item, and this fills in.
           </div>
         ) : (
@@ -224,7 +224,7 @@ export function AnalyticsPage() {
                 empty="Nothing attributed to a space yet."
               />
               <Table
-                title="By bot and agent"
+                title="By manager and agent"
                 blurb="who is spending it"
                 rows={report.by_speaker}
                 empty="Nobody has spoken yet."

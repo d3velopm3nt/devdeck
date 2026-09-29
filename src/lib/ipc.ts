@@ -406,14 +406,6 @@ export const callsClear = () => invoke<void>('calls_clear')
 /** The Team board: every goal in every space, with everyone on it. */
 export const teamBoard = () => invoke<import('./aiw').GoalRow[]>('team_board')
 
-// A feature's thread — the room bots and agents collaborate in. The feature
-// already exists in the deck; this is the same conversation record marked with
-// its slug, so nothing new is created on disk.
-export const featureThread = (nodeId: number, featureId: string) =>
-  invoke<import('./aiw').ConversationMeta>('feature_thread', { nodeId, featureId })
-export const featureThreadSend = (nodeId: number, featureId: string, text: string) =>
-  invoke<import('./aiw').AssistantReply>('feature_thread_send', { nodeId, featureId, text })
-
 // A node's thread, at any level of the tree. A parent has no repository, and
 // says so rather than answering as though it had read code up there.
 export const nodeThread = (nodeId: number) =>
@@ -528,10 +520,6 @@ export const threadWake = (convId: string, agentId: string) =>
   invoke<string>('thread_wake', { convId, agentId })
 
 /** A manager's own chat. `handle` picks the manager on a space that has several. */
-export const botThread = (nodeId: number, handle?: string) =>
-  invoke<import('./aiw').ConversationMeta>('bot_thread', { nodeId, handle })
-export const botThreadSend = (nodeId: number, text: string, handle?: string) =>
-  invoke<import('./aiw').AssistantReply>('bot_thread_send', { nodeId, text, handle })
 
 export interface BotWork {
   id: string
@@ -622,6 +610,14 @@ export const botCreate = (b: {
 }) => invoke<Bot>('bot_create', b)
 
 export const botWork = (nodeId: number, handle?: string) => invoke<BotWork[]>('bot_work', { nodeId, handle })
+/** Put a manager on a feature that already exists.
+ *
+ *  How a manager's portfolio grows. A manager is responsible for features
+ *  rather than for a folder, and its plan is the work across everything it
+ *  owns — never a list of its own kept somewhere separate. It refuses to take
+ *  a feature from a manager that still exists. */
+export const botAdopt = (nodeId: number, feature: string, handle: string) =>
+  invoke<string>('bot_adopt', { nodeId, feature, handle })
 export const botPlan = (nodeId: number, steps: string[], handle?: string) =>
   invoke<string>('bot_plan', { nodeId, steps, handle })
 /** What a manager with nothing on its plan would start with. */
@@ -1410,8 +1406,12 @@ export function onPtyOutput(cb: (e: PtyOutputEvent) => void): Promise<UnlistenFn
 export function onPtyExit(cb: (e: { id: number }) => void): Promise<UnlistenFn> {
   return listen<{ id: number }>('pty:exit', (e) => cb(e.payload))
 }
+/** Log lines arrive batched (one event per ~50ms from the backend's log bus);
+ *  the callback still sees them one at a time, in order. */
 export function onSvcLog(cb: (e: LogEntry) => void): Promise<UnlistenFn> {
-  return listen<LogEntry>('svc:log', (e) => cb(e.payload))
+  return listen<LogEntry[]>('svc:logs', (e) => {
+    for (const entry of e.payload) cb(entry)
+  })
 }
 export function onSvcStatus(cb: (e: SvcState) => void): Promise<UnlistenFn> {
   return listen<SvcState>('svc:status', (e) => cb(e.payload))
@@ -2132,7 +2132,16 @@ export interface Worker {
   usd: number
   /** Spaces it may work in. Empty means any. */
   spaces: number[]
+  /** May a manager start it while nobody is watching? */
   unattended: boolean
+  /** Commands it may run without asking, inside its own worktree. `unattended`
+   *  only decides whether it may be *started*; this is what it may do once it
+   *  is up, and without it a night's run stops at `npm test` waiting for
+   *  somebody who is asleep. */
+  allow: string[]
+  /** `YYYY-MM-DD`. Required for `allow` to mean anything — an expiry nobody
+   *  checks is a note, not a limit. */
+  allow_until: string
   created_at: string
   /** Anything you want said to it every time. */
   body: string
@@ -2182,6 +2191,10 @@ export interface Run {
   worker_name: string
   node_id: number
   space: string
+  /** The feature and the work item it was handed, so a run can be shown on the
+   *  thing it is about rather than only in a list of runs. */
+  feature: string
+  item: string
   title: string
   intent: string
   /** running | done | stopped | failed | kept | discarded */
@@ -2228,6 +2241,12 @@ export const workerAsks = (run: string) => invoke<Ask[]>('worker_asks', { run })
 
 export const workerAnswer = (run: string, ask: string, allow: boolean, note = '') =>
   invoke<void>('worker_answer', { run, ask, allow, note })
+/** Put a goal's built work on the main line — the one thing that may write
+ *  `done`. Per goal, because the branch is per goal: its items have been
+ *  committing on top of each other and arrive as one piece of work. A worker
+ *  is forbidden to merge, so this happens here, by the app. */
+export const workMerge = (nodeId: number, feature: string) =>
+  invoke<string>('work_merge', { nodeId, feature })
 export const runsList = (nodeId = 0) => invoke<Run[]>('runs_list', { nodeId })
 export const runGet = (id: string) => invoke<Run | null>('run_get', { id })
 /** keep | discard, with whatever you want said about it. */

@@ -643,6 +643,22 @@ impl Conversations {
     /// Adopted: a chat made while a space had one manager was keyed by the
     /// node. The manager it was made for (the title is its name) takes it;
     /// any other manager on the same space gets a chat of its own.
+    /// The room a manager speaks in — which is the **space's** room, not one of
+    /// its own.
+    ///
+    /// It used to open a conversation per manager, so a manager talked in one
+    /// place and the space it works on talked in another, and neither knew about
+    /// the other. You could read "Studio put three things on its plan" on the
+    /// manager's page and find nothing about it on the space's. That is the same
+    /// duplication as the AI Workspace, one layer down, and `design/one-room`
+    /// already says what the answer is: the room is the thread, and the manager
+    /// hands over *in it*.
+    ///
+    /// A space may have several managers, so the handle is stamped on the room
+    /// only when nothing has claimed it yet — `effective_team` reads it, and the
+    /// first claim must not be taken away by the second manager to say
+    /// something. Who said what is carried per message by `post_as`, which is
+    /// the right place for it.
     pub fn for_manager(
         &self,
         handle: &str,
@@ -652,21 +668,56 @@ impl Conversations {
     ) -> Result<ConversationMeta, String> {
         let _gate = writing();
         let list = self.list();
-        if let Some(existing) = list
+
+        // **The space's room wins.** That is the whole point: a manager talks
+        // where the space talks. Preferring the manager's own room instead left
+        // the goal tracker with two — "Goal tracker" with eleven messages, and
+        // "Studio" with Studio's — which is the fault this is meant to remove,
+        // not a migration of it.
+        let theirs = list
+            .iter()
+            .find(|c| c.node == Some(node_id))
+            .map(|c| c.id.clone());
+        // Only if the space has no room of its own does the manager's become
+        // it, stamped with the node below so it *is* the space's room from then
+        // on rather than a second one beside it.
+        let mine = list
             .iter()
             .find(|c| c.bot_handle.as_deref() == Some(handle))
-        {
-            return self.load(&existing.id);
-        }
-        if let Some(old) = list
-            .iter()
-            .find(|c| c.bot_handle.is_none() && c.bot_node == Some(node_id) && c.title == name)
-        {
-            let mut conv = self.load(&old.id)?;
-            conv.bot_handle = Some(handle.to_string());
-            self.save(&conv)?;
+            .map(|c| c.id.clone());
+
+        if let Some(id) = theirs.or(mine) {
+            let mut conv = self.load(&id)?;
+            let mut touched = false;
+            if conv.bot_handle.is_none() {
+                conv.bot_handle = Some(handle.to_string());
+                touched = true;
+            }
+            if conv.bot_node.is_none() {
+                conv.bot_node = Some(node_id);
+                touched = true;
+            }
+            // Without this the room stays invisible to `for_node`, so the space
+            // opens a second one and the two never meet — which is exactly what
+            // happened the first time this was changed.
+            if conv.node.is_none() {
+                conv.node = Some(node_id);
+                touched = true;
+            }
+            if conv.project_id.is_none() {
+                conv.project_id = Some(project_id.to_string());
+                touched = true;
+            }
+            if !conv.participants.iter().any(|p| p == handle) {
+                conv.participants.push(handle.to_string());
+                touched = true;
+            }
+            if touched {
+                self.save(&conv)?;
+            }
             return Ok(conv);
         }
+
         let now = now_iso();
         let meta = ConversationMeta {
             id: new_id("conv"),
@@ -674,8 +725,10 @@ impl Conversations {
             started_at: now.clone(),
             updated_at: now,
             project_id: Some(project_id.to_string()),
+            node: Some(node_id),
             bot_node: Some(node_id),
             bot_handle: Some(handle.to_string()),
+            participants: vec![handle.to_string()],
             ..Default::default()
         };
         self.save(&meta)?;
@@ -1406,6 +1459,7 @@ impl Assistant {
                 depends_on: Vec::new(),
                 unattended: false,
                 stop_at: Vec::new(),
+                on_behalf_of: None,
             };
             let live = AgentRuntime::begin(ws, &cmd)?;
             convs.post(
@@ -1629,6 +1683,7 @@ impl Assistant {
                     assignee: None,
                     areas: Vec::new(),
                     due: None,
+                    branch: None,
                 };
                 items.push(new_item.clone());
                 let meta = super::deck::WorkMeta {
@@ -1664,6 +1719,7 @@ impl Assistant {
             depends_on: Vec::new(),
             unattended: false,
             stop_at: Vec::new(),
+            on_behalf_of: None,
         };
         let live = match AgentRuntime::begin(ws, &cmd) {
             Ok(l) => l,
@@ -1763,6 +1819,7 @@ impl Assistant {
                 assignee: None,
                 areas: Vec::new(),
                 due: None,
+                branch: None,
             });
             if let Err(e) = deck.save_work(&plan, &work) {
                 return refuse(format!("could not put “{title}” on {}: {e}", to.name));
@@ -2214,6 +2271,7 @@ impl Assistant {
                     depends_on: Vec::new(),
                     unattended: false,
                     stop_at: Vec::new(),
+                    on_behalf_of: None,
                 };
 
                 // Begin synchronously so a bad request fails *here*, where the
@@ -2304,119 +2362,20 @@ impl Assistant {
             }
         };
         let deck = project.deck();
-        match call.action.as_str() {
-            "add" => {
-                let title = s("title");
-                if title.is_empty() {
-                    return (false, "a work item needs a title".into());
-                }
-                let mut work = deck.work(&feature).unwrap_or_else(|_| Doc {
-                    meta: super::deck::WorkMeta {
-                        feature: feature.clone(),
-                        items: vec![],
-                    },
-                    body: String::new(),
-                });
-                let id = format!(
-                    "w{:02}-{}",
-                    work.meta.items.len() + 1,
-                    super::deck::slugify(title)
-                );
-                work.meta.items.push(super::deck::WorkItem {
-                    id: id.clone(),
-                    title: title.to_string(),
-                    status: "unclaimed".into(),
-                    assignee: None,
-                    areas: Vec::new(),
-                    due: None,
-                });
-                match deck.save_work(&feature, &work.meta) {
-                    Ok(()) => (
-                        true,
-                        format!("Added “{title}” to {feature} as {id}, unclaimed. Hand it to someone with @name take \"{title}\"."),
-                    ),
-                    Err(e) => (false, e),
-                }
-            }
-            "list" => match deck.work(&feature) {
-                Ok(w) if w.meta.items.is_empty() => {
-                    (true, format!("{feature} has no work items yet."))
-                }
-                Ok(w) => (
-                    true,
-                    w.meta
-                        .items
-                        .iter()
-                        .map(|i| {
-                            format!(
-                                "- {} · {} · {}{}",
-                                i.id,
-                                i.title,
-                                i.status,
-                                i.assignee
-                                    .as_deref()
-                                    .map(|a| format!(" · {a}"))
-                                    .unwrap_or_default()
-                            )
-                        })
-                        .collect::<Vec<_>>()
-                        .join("\n"),
+        let (ok, text) = super::tools::work_on_deck(&deck, &feature, call);
+        // A thread is where a hand-over is written, so the receipt says how to
+        // write one. `ToolService` runs the same function inside a session,
+        // where nothing parses that line, and leaves it off.
+        if ok && call.action == "add" {
+            return (
+                true,
+                format!(
+                    "{text} Hand it to someone with @name take \"{}\".",
+                    s("title")
                 ),
-                Err(e) => (false, e),
-            },
-            // Ticking one off and letting one go. Both find the item the same
-            // way `take` does — by id, then by exact title, then by a title
-            // that contains what was said — so a manager can name an item the
-            // way it appears in the thread rather than by its slug.
-            "done" | "drop" => {
-                let wanted = s("title").to_lowercase();
-                if wanted.is_empty() {
-                    return (false, "which item? name it by title or id".into());
-                }
-                let mut work = match deck.work(&feature) {
-                    Ok(w) => w.meta,
-                    Err(e) => return (false, e),
-                };
-                let found = work
-                    .items
-                    .iter()
-                    .position(|i| i.id.to_lowercase() == wanted || i.title.to_lowercase() == wanted)
-                    .or_else(|| {
-                        work.items
-                            .iter()
-                            .position(|i| i.title.to_lowercase().contains(&wanted))
-                    });
-                let Some(at) = found else {
-                    return (
-                        false,
-                        format!(
-                            "nothing on {feature} matches “{}”, so nothing changed",
-                            s("title")
-                        ),
-                    );
-                };
-                let was = work.items[at].status.clone();
-                let title = work.items[at].title.clone();
-                if call.action == "done" {
-                    work.items[at].status = "done".into();
-                } else {
-                    work.items[at].status = "unclaimed".into();
-                    work.items[at].assignee = None;
-                }
-                match deck.save_work(&feature, &work) {
-                    Ok(()) if call.action == "done" => (
-                        true,
-                        format!("Marked “{title}” done on {feature} — was {was}."),
-                    ),
-                    Ok(()) => (
-                        true,
-                        format!("Let “{title}” go on {feature} — unclaimed again, was {was}."),
-                    ),
-                    Err(e) => (false, e),
-                }
-            }
-            other => (false, format!("unknown work action '{other}'")),
+            );
         }
+        (ok, text)
     }
 
     /// Write down how something is done.

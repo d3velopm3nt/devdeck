@@ -91,15 +91,15 @@ fn open_session(conn: &Connection) -> Result<Option<Focus>, String> {
 
 /// The session you are in, or None. Read on boot, so a session survives a
 /// reload — the clock is wall time, not a timer we would have to keep alive.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn focus_current(db: tauri::State<Db>) -> Result<Option<Focus>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     open_session(&conn)
 }
 
 /// Start one. Any session still open is ended first rather than refused:
 /// forgetting to end yesterday's must not stand between you and today's.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn focus_start(
     app: tauri::AppHandle,
     db: tauri::State<Db>,
@@ -115,7 +115,7 @@ pub fn focus_start(
     // takes the same mutex, and holding it across that call is the deadlock
     // the scheduler's first tick shipped with.
     let (stale, started) = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let stale = open_session(&conn)?;
         if let Some(s) = &stale {
             conn.execute(
@@ -167,10 +167,10 @@ pub fn focus_start(
 /// End the running session. `held` is what the inbox counted; it is recorded
 /// so the summary can say what you did not see rather than implying nothing
 /// happened.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn focus_end(app: tauri::AppHandle, db: tauri::State<Db>, held: i64) -> Result<(), String> {
     let ended = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let Some(s) = open_session(&conn)? else {
             return Ok(());
         };
@@ -204,9 +204,9 @@ pub fn focus_end(app: tauri::AppHandle, db: tauri::State<Db>, held: i64) -> Resu
 
 /// The last few, newest first. Enough to answer "what did I actually do this
 /// week" without becoming a report nobody asked for.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn focus_recent(db: tauri::State<Db>, limit: i64) -> Result<Vec<Focus>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let sql = format!(
         "SELECT {COLS} FROM focus_sessions WHERE ended_at IS NOT NULL ORDER BY ended_at DESC LIMIT ?1"
     );

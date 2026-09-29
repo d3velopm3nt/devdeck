@@ -16,20 +16,18 @@ export function WindowControls() {
 
   useEffect(() => {
     const win = getCurrentWindow()
-    let stop: (() => void) | undefined
     void win.isMaximized().then(setMaximized).catch(() => {})
     // The window can be maximised by a drag to the top edge or a keyboard
     // shortcut, neither of which comes through our buttons — so the glyph
     // follows the window rather than our last click.
-    void win
+    // Hold the promise: cleanup can run before it resolves, and a listener
+    // captured late is never removed.
+    const stop = win
       .onResized(() => {
         void win.isMaximized().then(setMaximized).catch(() => {})
       })
-      .then((un) => {
-        stop = un
-      })
       .catch(() => {})
-    return () => stop?.()
+    return () => void stop.then((un) => un?.())
   }, [])
 
   const win = () => getCurrentWindow()

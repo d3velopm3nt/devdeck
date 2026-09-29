@@ -73,9 +73,9 @@ fn now_millis() -> i64 {
 
 // ---------- CRUD ----------
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn conn_list(db: tauri::State<Db>) -> Result<Vec<ConnDef>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut stmt = conn
         .prepare(&format!(
             "SELECT {CONN_COLS} FROM connections ORDER BY sort, name"
@@ -89,9 +89,9 @@ pub fn conn_list(db: tauri::State<Db>) -> Result<Vec<ConnDef>, String> {
     Ok(rows)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn conn_save(db: tauri::State<Db>, def: ConnDef) -> Result<i64, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     if def.id <= 0 {
         conn.execute(
             "INSERT INTO connections
@@ -131,9 +131,9 @@ pub fn conn_save(db: tauri::State<Db>, def: ConnDef) -> Result<i64, String> {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn conn_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute("DELETE FROM connections WHERE id = ?1", params![id])
         .map_err(err)?;
     drop(conn);
@@ -146,9 +146,9 @@ pub fn conn_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
 
 /// Store a password. It goes to Windows Credential Manager and is never
 /// echoed back — there is deliberately no command to read one out.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn conn_set_password(db: tauri::State<Db>, id: i64, password: String) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let user: String = conn
         .query_row(
             "SELECT username FROM connections WHERE id = ?1",
@@ -164,7 +164,7 @@ pub fn conn_set_password(db: tauri::State<Db>, id: i64, password: String) -> Res
     creds::set(&creds::target_for(id), &user, &password)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn conn_clear_password(id: i64) -> Result<(), String> {
     creds::delete(&creds::target_for(id));
     Ok(())
@@ -406,9 +406,9 @@ fn execute(def: &ConnDef, sql: &str, timeout: u64) -> QueryResult {
 }
 
 /// Is this connection reachable? Same shape as a service's status.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn conn_test(db: tauri::State<Db>, id: i64) -> Result<QueryResult, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let def = get_conn(&conn, id)?;
     drop(conn);
     Ok(execute(&def, "select 1", TEST_TIMEOUT_SECS))
@@ -416,20 +416,20 @@ pub fn conn_test(db: tauri::State<Db>, id: i64) -> Result<QueryResult, String> {
 
 /// Run SQL and return a grid. Every run is recorded, successful or not — a
 /// history you only keep when things go well isn't a history.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn conn_run(
     app: tauri::AppHandle,
     db: tauri::State<Db>,
     id: i64,
     sql: String,
 ) -> Result<QueryResult, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let def = get_conn(&conn, id)?;
     drop(conn);
 
     let result = execute(&def, &sql, QUERY_TIMEOUT_SECS);
 
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let _ = conn.execute(
         "INSERT INTO conn_runs (connection_id, sql, ok, row_count, ms, error, ran_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -483,9 +483,9 @@ pub struct SavedQuery {
     pub created_at: i64,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn conn_queries_list(db: tauri::State<Db>) -> Result<Vec<SavedQuery>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut stmt = conn
         .prepare("SELECT id, connection_id, name, sql, created_at FROM conn_queries ORDER BY name")
         .map_err(err)?;
@@ -505,9 +505,9 @@ pub fn conn_queries_list(db: tauri::State<Db>) -> Result<Vec<SavedQuery>, String
     Ok(rows)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn conn_query_save(db: tauri::State<Db>, query: SavedQuery) -> Result<i64, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     if query.id <= 0 {
         conn.execute(
             "INSERT INTO conn_queries (connection_id, name, sql, created_at)
@@ -526,9 +526,9 @@ pub fn conn_query_save(db: tauri::State<Db>, query: SavedQuery) -> Result<i64, S
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn conn_query_delete(db: tauri::State<Db>, id: i64) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute("DELETE FROM conn_queries WHERE id = ?1", params![id])
         .map_err(err)?;
     Ok(())
@@ -546,13 +546,13 @@ pub struct QueryRun {
     pub ran_at: i64,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn conn_runs_list(
     db: tauri::State<Db>,
     connection_id: i64,
     limit: i64,
 ) -> Result<Vec<QueryRun>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut stmt = conn
         .prepare(
             "SELECT id, connection_id, sql, ok, row_count, ms, error, ran_at FROM conn_runs

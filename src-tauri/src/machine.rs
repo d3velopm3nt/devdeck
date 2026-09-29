@@ -181,7 +181,7 @@ fn scoop_installed() -> Vec<String> {
 }
 
 /// What's installed on this machine, for marking the catalog.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn machine_status() -> MachineStatus {
     let winget_available = exists("winget");
     let scoop_available = scoop_present();
@@ -216,7 +216,7 @@ fn install_command(item: &InstallItem) -> String {
 /// Install a batch of packages sequentially in a background thread. Output
 /// streams into the log bus (service = the package id); a `machine:item` event
 /// fires as each item flips to installing/ok/failed. Returns immediately.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn machine_install(app: tauri::AppHandle, items: Vec<InstallItem>) -> Result<(), String> {
     std::thread::spawn(move || {
         for item in items {
@@ -331,7 +331,7 @@ pub fn machine_install(app: tauri::AppHandle, items: Vec<InstallItem>) -> Result
 /// Install scoop itself (per-user, no admin) via its official one-liner, so the
 /// scoop catalog becomes available. Streams to the log bus; emits machine:done
 /// so the UI re-checks availability.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn machine_install_scoop(app: tauri::AppHandle) -> Result<(), String> {
     if scoop_present() {
         return Ok(());
@@ -422,7 +422,7 @@ pub fn machine_install_scoop(app: tauri::AppHandle) -> Result<(), String> {
 /// Build a manifest from what's installed, matched against a caller-supplied
 /// catalog (id → source) so we record the right source per package and skip
 /// system noise the catalog doesn't know about.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn machine_snapshot(name: String, known: Vec<InstallItem>) -> Manifest {
     let status = machine_status();
     let mut packages = Vec::new();
@@ -453,14 +453,14 @@ pub fn machine_snapshot(name: String, known: Vec<InstallItem>) -> Manifest {
 }
 
 /// Write a manifest to disk (pretty JSON).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn machine_export(path: String, manifest: Manifest) -> Result<(), String> {
     let json = serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())?;
     std::fs::write(&path, json).map_err(|e| e.to_string())
 }
 
 /// Read a manifest file and return it parsed.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn machine_import(path: String) -> Result<Manifest, String> {
     let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
     serde_json::from_str::<Manifest>(&text).map_err(|e| format!("Invalid manifest: {e}"))
@@ -468,7 +468,7 @@ pub fn machine_import(path: String) -> Result<Manifest, String> {
 
 /// Live package configuration from the source (winget show / scoop info):
 /// version, publisher, homepage, license, description, etc.
-#[tauri::command]
+#[tauri::command(async)]
 pub async fn machine_show(id: String, source: String) -> Result<String, String> {
     // winget and scoop both go to the network to answer this.
     tauri::async_runtime::spawn_blocking(move || show_now(id, source))
@@ -513,7 +513,7 @@ fn show_now(id: String, source: String) -> Result<String, String> {
 
 /// The exact install command DevDeck will run for a package — shown in the
 /// details panel so there are no surprises.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn machine_install_preview(id: String, source: String) -> String {
     install_command(&InstallItem { id, source })
 }
@@ -554,9 +554,9 @@ fn row_to_pkg(row: &rusqlite::Row) -> rusqlite::Result<MachinePackage> {
 
 /// The whole catalog (curated + custom) as the user has it. Hidden rows are
 /// included so the UI can offer "restore"; it filters them from the list.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn machine_packages_list(db: tauri::State<Db>) -> Result<Vec<MachinePackage>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut stmt = conn
         .prepare("SELECT id, name, source, category, blurb, elevate, custom, hidden, sort FROM machine_packages ORDER BY sort, id")
         .map_err(err)?;
@@ -571,12 +571,12 @@ pub fn machine_packages_list(db: tauri::State<Db>) -> Result<Vec<MachinePackage>
 /// Seed curated packages (INSERT OR IGNORE) — first run populates the table,
 /// later runs add any newly-shipped packages while preserving the user's edits,
 /// hides and custom entries. Returns how many new rows were added.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn machine_packages_seed(
     db: tauri::State<Db>,
     packages: Vec<MachinePackage>,
 ) -> Result<usize, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut added = 0usize;
     for (i, p) in packages.iter().enumerate() {
         let n = conn
@@ -593,9 +593,9 @@ pub fn machine_packages_seed(
 
 /// Upsert a package (curated override or new custom). Editing a curated package
 /// simply overwrites its row; it stays put until the user resets it.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn machine_package_save(db: tauri::State<Db>, pkg: MachinePackage) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     conn.execute(
         "INSERT INTO machine_packages (id, name, source, category, blurb, elevate, custom, hidden, sort)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
@@ -613,9 +613,9 @@ pub fn machine_package_save(db: tauri::State<Db>, pkg: MachinePackage) -> Result
 
 /// Remove a package. Custom entries are deleted outright; curated ones are
 /// hidden (so the seed won't bring them back) and can be restored later.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn machine_package_delete(db: tauri::State<Db>, id: String) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let is_custom: bool = conn
         .query_row(
             "SELECT custom FROM machine_packages WHERE id = ?1",

@@ -3,11 +3,13 @@
 // and follow mode.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { save as saveDialog } from '@tauri-apps/plugin-dialog'
 import * as ipc from '../lib/ipc'
 import type { LogLevel } from '../lib/types'
 import { logKind } from '../lib/logIds'
 import { useApp } from '../store'
+import { useLive } from '../liveStore'
 
 const LEVEL_COLOR: Record<LogLevel, string> = {
   error: 'text-err',
@@ -18,15 +20,22 @@ const LEVEL_COLOR: Record<LogLevel, string> = {
 
 const LEVELS: LogLevel[] = ['error', 'warn', 'info', 'debug']
 
+// One formatter, not one per row: `toLocaleTimeString` builds one internally
+// on every call, and it was called for every visible line on every flush.
+const TIME = new Intl.DateTimeFormat('en-GB', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
+const fmtTime = (ts: number) => TIME.format(ts)
+
 export function LogViewer() {
-  const { logs, clearLogs, logFocus } = useApp()
+  const logs = useLive((s) => s.logs)
+  const clearLogs = useLive((s) => s.clearLogs)
+  const logFocus = useApp((s) => s.logFocus)
   const [search, setSearch] = useState('')
   // By id, not by name. Names are not unique — a service you called "mail"
   // and the mail system stream would otherwise be one entry showing both.
   const [source, setSource] = useState<number | 'all'>('all')
   const [levels, setLevels] = useState<Set<LogLevel>>(new Set(LEVELS))
   const [follow, setFollow] = useState(true)
-  const endRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   const sources = useMemo(() => {
     const byId = new Map<number, string>()
@@ -55,8 +64,20 @@ export function LogViewer() {
     )
   }, [logs, search, source, levels])
 
+  // Only the rows on screen exist in the DOM. Five thousand rows, each
+  // formatting its own timestamp, re-rendered on every flush before this —
+  // the panel alone held a busy service to a few frames a second.
+  const virt = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => scrollRef.current,
+    // Rows wrap, so this is a guess the virtualizer corrects on measure.
+    estimateSize: () => 18,
+    overscan: 20,
+  })
+
   useEffect(() => {
-    if (follow) endRef.current?.scrollIntoView({ behavior: 'auto' })
+    if (follow && filtered.length > 0) virt.scrollToIndex(filtered.length - 1, { align: 'end' })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered.length, follow])
 
   // "View logs" from the sidebar focuses this panel on one service; a
@@ -139,21 +160,29 @@ export function LogViewer() {
           Clear
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto p-1 font-mono text-[11.5px] leading-[1.5]">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-1 font-mono text-[11.5px] leading-[1.5]">
         {filtered.length === 0 && (
           <div className="p-3 text-faint">No log output {logs.length > 0 ? 'matches the filters' : 'yet'}.</div>
         )}
-        {filtered.map((l) => (
-          <div key={l.seq} className="flex gap-2 whitespace-pre-wrap break-all px-1 hover:bg-hover">
-            <span className="shrink-0 text-faint">
-              {new Date(l.ts).toLocaleTimeString('en-GB', { hour12: false })}
-            </span>
-            <span className="shrink-0 text-indigo-400/80">{l.service}</span>
-            <span className={`shrink-0 w-10 ${LEVEL_COLOR[l.level]}`}>{l.level}</span>
-            <span className={l.level === 'error' ? 'text-err' : ''}>{l.line}</span>
-          </div>
-        ))}
-        <div ref={endRef} />
+        <div className="relative w-full" style={{ height: virt.getTotalSize() }}>
+          {virt.getVirtualItems().map((row) => {
+            const l = filtered[row.index]
+            return (
+              <div
+                key={l.seq}
+                ref={virt.measureElement}
+                data-index={row.index}
+                className="absolute left-0 top-0 flex w-full gap-2 whitespace-pre-wrap break-all px-1 hover:bg-hover"
+                style={{ transform: `translateY(${row.start}px)` }}
+              >
+                <span className="shrink-0 text-faint">{fmtTime(l.ts)}</span>
+                <span className="shrink-0 text-indigo-400/80">{l.service}</span>
+                <span className={`shrink-0 w-10 ${LEVEL_COLOR[l.level]}`}>{l.level}</span>
+                <span className={l.level === 'error' ? 'text-err' : ''}>{l.line}</span>
+              </div>
+            )
+          })}
+        </div>
       </div>
     </div>
   )

@@ -46,7 +46,10 @@ function loadPicked(): Picked {
 }
 
 export function BotsPage({ compact }: { compact?: boolean } = {}) {
-  const { bots, refreshBots, nodes, activeWorkspaceId } = useApp()
+  const bots = useApp((s) => s.bots)
+  const refreshBots = useApp((s) => s.refreshBots)
+  const nodes = useApp((s) => s.nodes)
+  const activeWorkspaceId = useApp((s) => s.activeWorkspaceId)
   const a = useAiw()
   const [threads, setThreads] = useState<ConversationSummary[] | null>(null)
   const [creating, setCreating] = useState(false)

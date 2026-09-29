@@ -163,6 +163,39 @@ pub fn fmt_at(at_min: i64) -> String {
     format!("{:02}:{:02}", at_min / 60, at_min % 60)
 }
 
+/// Frontmatter lines, with a wrapped value joined back onto its key.
+///
+/// These files are written by `serde_yaml`, which folds a long value onto the
+/// next line with two spaces of indent. Both readers of them are line-based and
+/// look for a colon, so a continuation line matched nothing and was dropped in
+/// silence — and the longest thing in a manager's file is its goal.
+///
+/// Studio's file says: "Keep the goal tracker moving — decide the next piece of
+/// work, put Smith on it, have Warden check it, and say plainly what was not
+/// checked." The app held it as "…put Smith on", and had since the file was
+/// written. Warden was never mentioned to Studio, nor was saying what it had not
+/// checked; the board showed the cut sentence; the wake ran on it; and the copy
+/// written onto the feature was cut too, which is how it was noticed.
+///
+/// A list item is indented as well and is not a continuation, so it is left
+/// where it is rather than glued onto the key above it.
+pub fn frontmatter_lines(yaml: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for line in yaml.lines() {
+        let indented = line.starts_with(' ') || line.starts_with('\t');
+        let item = line.trim_start().starts_with('-');
+        if indented && !item && !line.trim().is_empty() {
+            if let Some(last) = out.last_mut() {
+                last.push(' ');
+                last.push_str(line.trim());
+                continue;
+            }
+        }
+        out.push(line.to_string());
+    }
+    out
+}
+
 /// Read `_bot.md`, or None when the folder has no bot. A malformed file is
 /// still a bot — the same forgiveness `_devdeck.md` gets, for the same reason:
 /// someone editing it by hand should not lose it to a typo.
@@ -176,7 +209,7 @@ fn read(dir: &Path) -> Option<Bot> {
     let rest = match raw.strip_prefix("---") {
         Some(after) => match after.find("\n---") {
             Some(end) => {
-                for line in after[..end].lines() {
+                for line in frontmatter_lines(&after[..end]) {
                     let Some((k, v)) = line.split_once(':') else {
                         continue;
                     };
@@ -612,9 +645,9 @@ fn own_feature(bot: &Bot, node_id: i64) -> String {
 /// Without that a bot could sit on disk saying "weekdays at 07:00" and never
 /// once wake, which is the flavour of silent failure the update checker taught
 /// us to design out: a routine that is displayed must be a routine that runs.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bots_list(db: tauri::State<Db>) -> Result<Vec<Bot>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut out = all_bots(&conn);
     for b in out.iter_mut() {
         b.schedule_id = sync_heartbeat(&conn, b)?;
@@ -646,9 +679,9 @@ pub fn bots_list(db: tauri::State<Db>) -> Result<Vec<Bot>, String> {
     Ok(out)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_get(db: tauri::State<Db>, handle: String) -> Result<Option<Bot>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     Ok(bot_on(&conn, &handle))
 }
 
@@ -656,9 +689,9 @@ pub fn bot_get(db: tauri::State<Db>, handle: String) -> Result<Option<Bot>, Stri
 ///
 /// The bot page is still opened from a space, and a space still knows which
 /// manager came from it. When ownership drives that page instead, this goes.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_for_node(db: tauri::State<Db>, node_id: i64) -> Result<Option<Bot>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     Ok(bot_on_node(&conn, node_id))
 }
 
@@ -833,6 +866,14 @@ fn save_into(
     // Fields the editor never sends, and must never lose: which role template
     // it came from, and the review points, which are edited in the file
     // because "not without me" is a sentence rather than a checkbox.
+    //
+    // `worker` belongs on that list and was not on it — it was written back as
+    // an empty string, so saving a manager for any reason at all detached the
+    // worker it hands its work to. Nothing said so: the file simply stopped
+    // saying `worker: smith`, the next wake found nothing to hand over, and the
+    // manager went back to thinking in circles. The whole chain proved this
+    // afternoon — decide, write the item, hand it to Smith — would have been
+    // undone by one edit of the goal.
     let prior = crate::managers::get(conn, &handle);
     let m = crate::managers::Manager {
         handle: handle.clone(),
@@ -860,7 +901,7 @@ fn save_into(
             .unwrap_or_default(),
         was: prior.as_ref().map(|p| p.was.clone()).unwrap_or_default(),
         home: prior.as_ref().map(|p| p.home).unwrap_or(node_id),
-        worker: String::new(),
+        worker: prior.as_ref().map(|p| p.worker.clone()).unwrap_or_default(),
         businesses: prior
             .as_ref()
             .map(|p| p.businesses.clone())
@@ -881,7 +922,7 @@ fn save_into(
     Ok((b, created))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[allow(clippy::too_many_arguments)]
 pub fn bot_save(
     app: tauri::AppHandle,
@@ -899,7 +940,7 @@ pub fn bot_save(
     wake_intent: String,
 ) -> Result<Bot, String> {
     let (bot, created) = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         save_into(
             &conn,
             node_id,
@@ -976,13 +1017,13 @@ fn delete_into_for(
 /// Say which worker a manager hands its jobs to. Empty takes it back.
 #[tauri::command(async)]
 pub fn bot_set_worker(db: tauri::State<Db>, handle: String, worker: String) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let mut m = crate::managers::get(&conn, &handle).ok_or("there is no manager by that name.")?;
     m.worker = worker.trim().to_string();
     crate::managers::save(&conn, &m)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_delete(
     app: tauri::AppHandle,
     db: tauri::State<Db>,
@@ -990,7 +1031,7 @@ pub fn bot_delete(
     handle: Option<String>,
 ) -> Result<(), String> {
     let name = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         delete_into_for(&conn, &mind()?, node_id, handle.as_deref())?
     };
     crate::activity::record(
@@ -1033,13 +1074,13 @@ fn deck_of(conn: &Connection, node_id: i64) -> Result<(crate::aiw::deck::Deck, P
 /// one, and everything in the deck otherwise — a bot dropped onto a project
 /// that already had features should show you the work that is there, not
 /// pretend the space is empty.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_work(
     db: tauri::State<Db>,
     node_id: i64,
     handle: Option<String>,
 ) -> Result<Vec<WorkRow>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let (deck, dir) = deck_of(&conn, node_id)?;
     if !deck.exists() {
         return Ok(vec![]);
@@ -1083,6 +1124,68 @@ pub fn bot_work(
         }
     }
     Ok(out)
+}
+
+/// The space's one feature that nobody manages, when there is exactly one.
+///
+/// "Exactly one" is the whole guard. A space with two unowned features is
+/// asking a question — which of these is yours? — and guessing at it would put
+/// a manager on work somebody meant for another. A space with none has nothing
+/// to adopt. Only the unambiguous case answers itself.
+///
+/// A feature whose `owner:` names a manager that no longer exists counts as
+/// unowned, the same way [`plan_into`] has always treated it: an orphan is not
+/// somebody else's.
+fn the_one_unowned_feature(conn: &Connection, deck: &crate::aiw::deck::Deck) -> Option<String> {
+    let mut free = deck.feature_slugs().into_iter().filter(|slug| {
+        deck.feature(slug)
+            .map(|d| {
+                let owner = d.meta.owner.trim();
+                owner.is_empty() || crate::managers::get(conn, owner).is_none()
+            })
+            .unwrap_or(false)
+    });
+    let one = free.next()?;
+    free.next().is_none().then_some(one)
+}
+
+/// Put a manager on a feature that already exists.
+///
+/// The deliberate half of adoption, for every case
+/// [`the_one_unowned_feature`] will not guess at. A manager is responsible for
+/// features rather than for a folder, so this is how its portfolio grows —
+/// and its plan is the work across everything it owns, never a list of its
+/// own kept somewhere separate.
+///
+/// It refuses to take a feature from a manager that still exists. Ownership
+/// moves by the other one letting go, which is a different sentence and a
+/// different decision.
+#[tauri::command(async)]
+pub fn bot_adopt(
+    db: tauri::State<Db>,
+    node_id: i64,
+    feature: String,
+    handle: String,
+) -> Result<String, String> {
+    let conn = db.conn();
+    let n = db::node_by_id(&conn, node_id).map_err(|e| e.to_string())?;
+    let dir = db::node_deck_dir(&conn, &n).ok_or("that space has no folder yet")?;
+    let deck = crate::aiw::deck::Deck::new(&dir);
+    if !deck.feature_md(&feature).is_file() {
+        return Err(format!("there is no feature called {feature} here"));
+    }
+    let doc = deck.feature(&feature)?;
+    let owner = doc.meta.owner.trim().to_string();
+    if !owner.is_empty() && owner != handle {
+        if let Some(m) = crate::managers::get(&conn, &owner) {
+            return Err(format!(
+                "{} manages {} — it has to let go of it before anyone else can take it.",
+                m.name, doc.meta.name
+            ));
+        }
+    }
+    take_feature(&deck, &feature, &handle)?;
+    Ok(doc.meta.name)
 }
 
 /// Write the owner onto a feature. This is what "a manager's plan" means now:
@@ -1154,7 +1257,24 @@ fn plan_into_for(
             bot.goal.clone()
         };
         let candidate = crate::aiw::deck::slugify(&base);
-        if candidate.is_empty() {
+        if let Some(theirs) = the_one_unowned_feature(conn, &deck) {
+            // The space already describes what it is for. Adopt that rather
+            // than inventing a container named after the manager.
+            //
+            // Inventing one is what put "Studio's plan" beside "The goal
+            // store" as *siblings*, when one holds the other's work. Studio
+            // could see only its own list, so it decided from scratch a piece
+            // of work the goal store already recorded — and the goal store,
+            // owned by nobody, sat untouched with `goals.js` finished on a
+            // branch since the 25th. A manager working next to the product
+            // instead of on it is the whole fault.
+            //
+            // Narrow on purpose: exactly one complete feature, owned by
+            // nobody, and this manager owning nothing yet. Anything less
+            // clear-cut is a choice, and it is made with `bot_adopt` rather
+            // than guessed at here.
+            theirs
+        } else if candidate.is_empty() {
             deck.create_feature(&base, &bot.goal, &[])?
         } else if deck.feature_md(&candidate).is_file()
             && deck
@@ -1204,6 +1324,7 @@ fn plan_into_for(
             assignee: None,
             areas: vec![],
             due: None,
+            branch: None,
         });
         added += 1;
     }
@@ -1215,7 +1336,7 @@ fn plan_into_for(
     Ok((slug, bot.name, added))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_plan(
     app: tauri::AppHandle,
     db: tauri::State<Db>,
@@ -1233,7 +1354,7 @@ pub fn bot_plan(
     }
 
     let (slug, name, added) = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         plan_into_for(&conn, node_id, handle.as_deref(), &steps)?
     };
 
@@ -1263,7 +1384,7 @@ fn next_work_id(items: &[crate::aiw::deck::WorkItem]) -> String {
 }
 
 /// Add or change one step. `id` empty means a new one.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_work_save(
     db: tauri::State<Db>,
     node_id: i64,
@@ -1281,7 +1402,7 @@ pub fn bot_work_save(
         return Err(format!("{status} is not a status a step can be in."));
     }
 
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let (deck, _dir) = deck_of(&conn, node_id)?;
     let mut bot =
         resolve(&conn, node_id, handle.as_deref()).ok_or("There is no manager for that space.")?;
@@ -1323,19 +1444,20 @@ pub fn bot_work_save(
             assignee: assignee.filter(|a| !a.trim().is_empty()),
             areas: vec![],
             due: None,
+            branch: None,
         }),
     }
     deck.save_work(&slug, &work)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_work_delete(
     db: tauri::State<Db>,
     node_id: i64,
     id: String,
     handle: Option<String>,
 ) -> Result<(), String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let (deck, _dir) = deck_of(&conn, node_id)?;
     let mut bot =
         resolve(&conn, node_id, handle.as_deref()).ok_or("There is no manager for that space.")?;
@@ -1465,7 +1587,7 @@ pub(crate) fn create_into(
     Ok(fresh)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 #[allow(clippy::too_many_arguments)]
 pub fn bot_create(
     app: tauri::AppHandle,
@@ -1480,7 +1602,7 @@ pub fn bot_create(
     with_plan: bool,
 ) -> Result<Bot, String> {
     let bot = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         create_into(
             &conn,
             node_id,
@@ -1535,11 +1657,9 @@ pub struct BotStanding {
     pub features: usize,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bots_standing(db: tauri::State<Db>) -> Vec<BotStanding> {
-    let Ok(conn) = db.0.lock() else {
-        return Vec::new();
-    };
+    let conn = db.conn();
     all_bots(&conn)
         .into_iter()
         .map(|b| {
@@ -1693,8 +1813,23 @@ pub fn wake_report_for(conn: &Connection, bot: &Bot) -> Option<String> {
 /// first steps, made concrete from the business, or its starter's steps.
 pub fn plan_proposal(conn: &Connection, bot: &Bot) -> Vec<String> {
     if let Some(role) = bot.template.strip_prefix("role:") {
+        // A role's first steps are written for a **business**: "list the
+        // repositories X depends on", "list dependencies with known
+        // vulnerabilities", "review the open pull requests". On a product
+        // folder they are noise dressed as initiative — Studio, whose goal is
+        // "keep the goal tracker moving", opened its first morning by
+        // proposing a dependency audit of a repository with two files in it.
+        //
+        // So the role's steps are only offered where the role is *about* a
+        // business. Anywhere else this returns nothing, and `empty_plan_line`
+        // says the manager has no plan — which is true, and better than three
+        // confident suggestions about the wrong thing.
         let business = bot.businesses.first().copied().unwrap_or(bot.node_id);
-        return crate::business_team::first_steps(conn, role, business);
+        let is_business = matches!(crate::business::read(conn, bot.node_id), Ok(Some(_)));
+        if is_business {
+            return crate::business_team::first_steps(conn, role, business);
+        }
+        return Vec::new();
     }
     crate::botcatalog::get(&bot.template)
         .map(|t| t.steps)
@@ -1801,6 +1936,7 @@ pub fn propose_plan(conn: &Connection, bot: &Bot) -> Result<Vec<String>, String>
             assignee: None,
             areas: Vec::new(),
             due: None,
+            branch: None,
         });
         added.push(title);
     }
@@ -1827,7 +1963,7 @@ pub fn work_agree(
     feature: String,
     ids: Vec<String>,
 ) -> Result<usize, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let node = db::node_by_id(&conn, node_id).map_err(|_| "that space is gone".to_string())?;
     let dir = dir_of(&conn, &node).ok_or("that space has no folder in the vault")?;
     let deck = crate::aiw::deck::Deck::new(&dir);
@@ -1865,7 +2001,7 @@ pub fn work_decline(
     feature: String,
     ids: Vec<String>,
 ) -> Result<usize, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let node = db::node_by_id(&conn, node_id).map_err(|_| "that space is gone".to_string())?;
     let dir = dir_of(&conn, &node).ok_or("that space has no folder in the vault")?;
     let deck = crate::aiw::deck::Deck::new(&dir);
@@ -1907,13 +2043,13 @@ pub fn empty_plan_line(conn: &Connection, bot: &Bot) -> Option<String> {
 }
 
 /// The steps a manager would start with, for its Plan tab.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_plan_proposal(
     db: tauri::State<Db>,
     node_id: i64,
     handle: Option<String>,
 ) -> Result<Vec<String>, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     let Some(bot) = resolve(&conn, node_id, handle.as_deref()) else {
         return Ok(vec![]);
     };
@@ -1943,12 +2079,12 @@ fn now_ms() -> i64 {
     chrono::Utc::now().timestamp_millis()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_interview(node_id: i64) -> Result<InterviewView, String> {
     mind_ops::interview(&mind()?, node_id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_answer(
     node_id: i64,
     step: usize,
@@ -1958,37 +2094,37 @@ pub fn bot_answer(
     mind_ops::answer_question(&mind()?, node_id, step, &answer, skipped, &now())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_interview_reset(node_id: i64) -> Result<InterviewView, String> {
     mind_ops::reset_interview(&mind()?, node_id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_beliefs(node_id: i64) -> Result<Vec<BeliefView>, String> {
     mind_ops::beliefs(&mind()?, node_id, now_ms())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_belief_add(node_id: i64, text: String) -> Result<(), String> {
     mind_ops::add_belief(&mind()?, node_id, &text, &now())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_belief_correct(node_id: i64, id: String, text: String) -> Result<(), String> {
     mind_ops::correct_belief(&mind()?, node_id, &id, &text)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_belief_pin(node_id: i64, id: String, pinned: bool) -> Result<(), String> {
     mind_ops::pin_belief(&mind()?, node_id, &id, pinned)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_belief_drop(node_id: i64, id: String) -> Result<(), String> {
     mind_ops::drop_belief(&mind()?, node_id, &id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_belief_drop_stale(node_id: i64) -> Result<usize, String> {
     mind_ops::drop_stale(&mind()?, node_id, now_ms())
 }
@@ -2004,10 +2140,10 @@ pub struct ToolView {
     pub decided: String,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_tools(db: tauri::State<Db>, node_id: i64) -> Result<Vec<ToolView>, String> {
     let bot = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let (_, dir) = deck_of(&conn, node_id)?;
         read(&dir)
     };
@@ -2044,7 +2180,7 @@ pub fn bot_tools(db: tauri::State<Db>, node_id: i64) -> Result<Vec<ToolView>, St
 /// yourself — this never installs anything, starts anything, or grants
 /// anything, and pretending otherwise would be the worst lie this app could
 /// tell.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_tool_decide(
     app: tauri::AppHandle,
     db: tauri::State<Db>,
@@ -2071,7 +2207,7 @@ pub fn bot_tool_decide(
             // third time this exact shape has bitten this codebase (the
             // scheduler's first tick, and `schedule_run_now` before it).
             let name = {
-                let conn = db.0.lock().unwrap();
+                let conn = db.conn();
                 let bot =
                     bot_on_node(&conn, node_id).ok_or("There is no manager for that space.")?;
                 let mut m = crate::managers::get(&conn, &bot.handle)
@@ -2110,10 +2246,10 @@ pub fn bot_tool_decide(
 
 // -- what it suggests ------------------------------------------------------
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_suggestions(db: tauri::State<Db>, node_id: i64) -> Result<Vec<Suggestion>, String> {
     let (bot, work) = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let (deck, dir) = deck_of(&conn, node_id)?;
         let Some(bot) = read(&dir) else {
             return Ok(vec![]);
@@ -2160,7 +2296,7 @@ pub fn bot_suggestions(db: tauri::State<Db>, node_id: i64) -> Result<Vec<Suggest
 /// Answer a suggestion. "Not now" comes back in a week; "wrong" never does, and
 /// the reason you gave becomes something it knows — which is the whole point of
 /// asking for one.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bot_suggestion_answer(
     node_id: i64,
     id: String,
@@ -2198,7 +2334,7 @@ pub fn bot_on(conn: &Connection, handle: &str) -> Option<Bot> {
 fn repo_of(app: &tauri::AppHandle, node_id: i64) -> Option<PathBuf> {
     use tauri::Manager;
     let db = app.try_state::<Db>()?;
-    let conn = db.0.lock().ok()?;
+    let conn = db.conn();
     let n = db::node_by_id(&conn, node_id).ok()?;
     n.path.filter(|p| !p.trim().is_empty()).map(PathBuf::from)
 }
@@ -2236,6 +2372,34 @@ The receipts in the thread are the record. A line such as \"claimed by @dev-a\" 
             bot.team.join(", ")
         ));
     }
+    // Its worker, by name and by what it is for.
+    //
+    // This was missing entirely, and a manager cannot hand work to somebody it
+    // has never heard of. Studio — whose file says `worker: smith` — woke, read
+    // the repository, worked out the right next piece of work, and then stopped
+    // at *"there's no Smith anywhere I can see — no agent roster"*. The roster
+    // lives in the personal store and nothing put it in front of the manager.
+    if !bot.worker.trim().is_empty() {
+        match crate::workers::read_worker(bot.worker.trim()) {
+            Ok(Some(w)) => system.push_str(&format!(
+                "\n\nYour worker is {} (@{}) — {} It writes on a branch of its own and never \
+                 pushes. Hand it a piece of work with @{} take \"title\".",
+                w.meta.name,
+                w.meta.handle,
+                w.meta.what.trim(),
+                w.meta.handle,
+            )),
+            // Named but not there: say so rather than leaving the manager to
+            // discover it mid-handover. A name that resolves to nobody is the
+            // failure this whole paragraph exists to prevent.
+            _ => system.push_str(&format!(
+                "\n\nYour file names \"{}\" as your worker, but there is no worker by that name. \
+                 Do not try to hand work to it — say that it is missing and who you would need.",
+                bot.worker.trim()
+            )),
+        }
+    }
+
     system.push_str(
         "\n\nWhat you can actually do, and how:\n\
          - Put someone on an item: write @name take \"title\" in your reply. That starts them \
@@ -2298,6 +2462,57 @@ pub fn persona_for(
     let mut p = persona(bot);
     p.may_delegate_to = Some(effective_team(ws, bot));
     p
+}
+
+/// The same manager, said to the agent its clock just woke.
+///
+/// Not [`persona`]. A persona is what the *room* runs on, and half of it is
+/// untrue in a session: "write @name take \"title\" in your reply" is parsed by
+/// the assistant reading a thread, and nothing parses it here — an agent given
+/// those instructions writes a line into a summary nobody acts on. What does
+/// travel is the part a wake was always missing: who wants this, what for, the
+/// standing instructions in the file, and who the worker is.
+///
+/// This is the fix for a manager that woke twice and said both times that it
+/// could not see its own worker. The roster paragraph existed by then; it lived
+/// in `persona`, and a wake never builds one.
+pub fn wake_voice(bot: &Bot) -> String {
+    let mut v = format!(
+        "{} — the manager of {} — woke on its schedule and started this session. You are \
+         its hands for the length of it: its goal and its standing instructions are yours, \
+         and what you leave behind is what it reports.",
+        bot.name, bot.node_name
+    );
+    if !bot.goal.trim().is_empty() {
+        v.push_str(&format!("\n\nIts goal: {}", bot.goal.trim()));
+    }
+    if !bot.body.trim().is_empty() {
+        v.push_str(&format!("\n\n{}", bot.body.trim()));
+    }
+    if !bot.worker.trim().is_empty() {
+        match crate::workers::read_worker(bot.worker.trim()) {
+            Ok(Some(w)) => v.push_str(&format!(
+                "\n\nIts worker is {} (@{}) — {} It works on a branch of its own and never \
+                 pushes.",
+                w.meta.name,
+                w.meta.handle,
+                w.meta.what.trim(),
+            )),
+            // A name that resolves to nobody, said out loud. Silence here is
+            // what produced a manager confidently planning a handover to
+            // somebody who does not exist.
+            _ => v.push_str(&format!(
+                "\n\nIts file names \"{}\" as its worker, and there is no worker by that name. \
+                 Do not plan around it.",
+                bot.worker.trim()
+            )),
+        }
+    }
+    v.push_str(
+        "\n\nNobody is watching this run. Say plainly what you did and what you did not — a \
+         run that could not check its own work says so rather than calling itself done.",
+    );
+    v
 }
 
 /// The same, plus the managers it may pass work to — which needs the tree, and
@@ -2386,75 +2601,6 @@ pub fn bot_on_node(conn: &Connection, node_id: i64) -> Option<Bot> {
             })
         })?;
     bot_on(conn, &m.handle)
-}
-
-#[tauri::command]
-pub fn bot_thread(
-    ws: tauri::State<std::sync::Arc<crate::aiw::state::Workspace>>,
-    db: tauri::State<Db>,
-    node_id: i64,
-    handle: Option<String>,
-) -> Result<crate::aiw::assistant::ConversationMeta, String> {
-    let bot = {
-        let conn = db.0.lock().unwrap();
-        resolve(&conn, node_id, handle.as_deref()).ok_or("There is no manager for that space.")?
-    };
-    let convs = ws.convs()?;
-    convs.for_manager(
-        &bot.handle,
-        bot.node_id,
-        &bot.node_id.to_string(),
-        &bot.name,
-    )
-}
-
-/// Say something to a bot in its own thread, and get its answer.
-///
-/// The same loop the assistant uses, run as the bot: its voice from
-/// `_bot.md`, its permissions from the agent it names. Streams progress on the
-/// assistant's channel, keyed by conversation, so the page that asked is the
-/// only one that hears it.
-#[tauri::command]
-pub async fn bot_thread_send(
-    app: tauri::AppHandle,
-    ws: tauri::State<'_, std::sync::Arc<crate::aiw::state::Workspace>>,
-    db: tauri::State<'_, Db>,
-    node_id: i64,
-    text: String,
-    handle: Option<String>,
-) -> Result<crate::aiw::assistant::AssistantReply, String> {
-    use tauri::Emitter;
-    let bot = {
-        let conn = db.0.lock().unwrap();
-        resolve(&conn, node_id, handle.as_deref()).ok_or("There is no manager for that space.")?
-    };
-    let node_id = bot.node_id;
-    // The space has to be registered before the bot can read it — the same
-    // step a wake takes, for the same reason.
-    if ws.project(&node_id.to_string()).is_none() {
-        let dir = std::path::PathBuf::from(&bot.dir);
-        let code_root = repo_of(&app, node_id).unwrap_or_else(|| dir.clone());
-        ws.register_project(&node_id.to_string(), &bot.node_name, code_root, dir);
-    }
-    let workspace = ws.inner().clone();
-    let who = persona_for(&workspace, &bot);
-    tauri::async_runtime::spawn_blocking(move || {
-        let progress = app.clone();
-        let sink = move |e: crate::aiw::assistant::ChatEvent| {
-            let _ = progress.emit("aiw:chat", e);
-        };
-        let convs = workspace.convs()?;
-        let conv = convs.for_manager(&bot.handle, node_id, &node_id.to_string(), &bot.name)?;
-        let reply = crate::aiw::assistant::Assistant::send_as(
-            &workspace, convs, &conv.id, &text, &sink, &who,
-        )?;
-        // Then every agent the message named, as itself. A room where you can
-        // name someone and they never speak is a room where @ looks broken.
-        crate::threads::answer_as_agents(&app, &workspace, &conv.id, &text, &who.agent_id);
-        Ok(reply)
-    })
-    .await
-    .map_err(|e| e.to_string())?
 }
 
 /// Who this bot may actually put work on.
@@ -2707,7 +2853,7 @@ pub fn wake_agent(app: &tauri::AppHandle, bot: &Bot) -> Option<(bool, String)> {
         return Some((
             false,
             format!(
-                "{} names {} but has no plan yet — an agent needs steps to work on. Give it some                  on the bot's Plan tab.",
+                "{} names {} but has no plan yet — an agent needs steps to work on. Give it some on its Plan tab.",
                 bot.name, bot.agent
             ),
         ));
@@ -2731,6 +2877,11 @@ pub fn wake_agent(app: &tauri::AppHandle, bot: &Bot) -> Option<(bool, String)> {
         // The bot's own review points travel with the run. A wake is exactly
         // when nobody is watching, so this is when they matter most.
         stop_at: bot.stop_at.clone(),
+        // And so does the manager itself. Without this the runtime ran the
+        // agent's prompt and nothing else, so a wake arrived knowing the
+        // repository and not knowing who had asked, what for, or who its
+        // worker was.
+        on_behalf_of: Some(wake_voice(bot)),
     };
 
     // The line lands in your inbox, so the agent gets its name rather than its
@@ -3022,5 +3173,266 @@ mod tests {
         assert_eq!(read(&dir).unwrap().every, "");
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A role's first steps are about a business, so they are only offered on
+    /// one.
+    ///
+    /// Studio — goal "keep the goal tracker moving", template
+    /// `role:engineering`, sitting on a product folder — opened its first
+    /// morning by proposing a dependency audit and a pull-request review of a
+    /// repository with two files in it. Confident, irrelevant, and written onto
+    /// A manager adopts the space's feature instead of inventing its own.
+    ///
+    /// Inventing one put "Studio's plan" beside "The goal store" as siblings,
+    /// when one holds the other's work. Studio could see only its own list, so
+    /// it decided from scratch a piece of work the goal store already recorded
+    /// — and the goal store, owned by nobody, sat untouched with `goals.js`
+    /// finished on a branch since the 25th.
+    ///
+    /// And the guard on it: two unowned features are a question, not an
+    /// answer, so nothing is guessed.
+    #[test]
+    fn a_manager_takes_the_space_s_own_feature_when_there_is_no_doubt_which() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(crate::db::CORE_SCHEMA).unwrap();
+        crate::db::migrate(&conn);
+
+        let dir = std::env::temp_dir().join(format!("devdeck-adopt-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let deck = crate::aiw::deck::Deck::new(&dir);
+        deck.init("61", "Goal tracker").unwrap();
+
+        // Nothing there yet: nothing to adopt.
+        assert_eq!(the_one_unowned_feature(&conn, &deck), None);
+
+        let store = deck
+            .create_feature("The goal store", "A goal can be added and closed", &[])
+            .unwrap();
+        assert_eq!(
+            the_one_unowned_feature(&conn, &deck).as_deref(),
+            Some(store.as_str()),
+            "the one feature nobody manages was not offered"
+        );
+
+        // A second unowned feature is a question — which of these is yours? —
+        // and guessing would put a manager on somebody else's work.
+        deck.create_feature("The command line", "Ask it from a shell", &[])
+            .unwrap();
+        assert_eq!(
+            the_one_unowned_feature(&conn, &deck),
+            None,
+            "two unowned features were guessed between"
+        );
+
+        // Owned by a manager that is not there is not owned by anybody.
+        take_feature(&deck, &store, "somebody-who-left").unwrap();
+        assert_eq!(the_one_unowned_feature(&conn, &deck), None);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// the plan for the owner to agree to. Proposing nothing is the better
+    /// failure: `empty_plan_line` then says it has no plan, which is true.
+    #[test]
+    fn a_role_does_not_propose_business_work_on_a_product() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(crate::db::CORE_SCHEMA).unwrap();
+        crate::db::migrate(&conn);
+
+        // Node 61 is a plain folder here: nothing has set it up as a business,
+        // which is exactly the goal tracker's situation.
+        let bot = Bot {
+            handle: "studio".into(),
+            name: "Studio".into(),
+            goal: "Keep the goal tracker moving".into(),
+            template: "role:engineering".into(),
+            node_id: 61,
+            businesses: vec![61],
+            ..Default::default()
+        };
+
+        assert!(
+            plan_proposal(&conn, &bot).is_empty(),
+            "a product folder was offered a business's first steps"
+        );
+    }
+
+    /// What the clock carries into a session.
+    ///
+    /// Studio woke twice and both times reported that it could not see its own
+    /// worker, though `_bot.md` said `worker: smith` and `smith.md` was sitting
+    /// in the personal store parsing fine. The roster paragraph had been
+    /// written — into `persona`, which only the room builds. A wake built a
+    /// `StartAgentCommand` and the runtime ran the *agent's* prompt, so the
+    /// manager's goal, its standing instructions and its worker all stopped at
+    /// the door.
+    #[test]
+    fn a_woken_manager_arrives_as_itself() {
+        let bot = Bot {
+            handle: "studio".into(),
+            name: "Studio".into(),
+            node_name: "Goal tracker".into(),
+            goal: "Keep the goal tracker moving".into(),
+            body: "Ship something small every day.".into(),
+            agent: "assistant".into(),
+            ..Default::default()
+        };
+
+        let v = wake_voice(&bot);
+        assert!(v.contains("Studio"), "the manager did not say who it was");
+        assert!(v.contains("Goal tracker"), "no space named");
+        assert!(v.contains("Keep the goal tracker moving"), "no goal");
+        assert!(v.contains("Ship something small every day."), "no body");
+        assert!(
+            !v.contains("take \""),
+            "the room's @-syntax travelled into a session, where nothing reads it"
+        );
+    }
+
+    /// A worker named and not there is said out loud.
+    ///
+    /// The silent version is what let a manager plan a handover to somebody who
+    /// does not exist — the same failure as an unreachable server reported as
+    /// up to date.
+    #[test]
+    fn a_worker_that_is_not_there_is_named_as_missing() {
+        let bot = Bot {
+            handle: "studio".into(),
+            name: "Studio".into(),
+            node_name: "Goal tracker".into(),
+            worker: "nobody-by-this-name-9e3f".into(),
+            ..Default::default()
+        };
+
+        let v = wake_voice(&bot);
+        assert!(v.contains("nobody-by-this-name-9e3f"));
+        assert!(v.contains("no worker by that name"));
+
+        // And a manager with no worker is told nothing about one.
+        let quiet = Bot {
+            handle: "studio".into(),
+            name: "Studio".into(),
+            node_name: "Goal tracker".into(),
+            ..Default::default()
+        };
+        assert!(!wake_voice(&quiet).contains("worker"));
+    }
+
+    /// A goal too long for one line is still the whole goal.
+    ///
+    /// `serde_yaml` folds a long value onto the next line with two spaces of
+    /// indent. Both readers of these files are line-based and look for a colon,
+    /// so the continuation matched nothing and was dropped without a word.
+    ///
+    /// Studio's file has said, since it was written: "…put Smith on it, have
+    /// Warden check it, and say plainly what was not checked." The app held
+    /// "…put Smith on". Warden was never mentioned to Studio, nor was saying
+    /// what it had not checked — the wake ran on the cut sentence, the board
+    /// showed it, and the copy written onto the feature was cut too.
+    #[test]
+    fn a_goal_that_wraps_is_read_whole() {
+        let yaml = "name: Studio\n\
+                    goal: Keep the goal tracker moving — decide the next piece of work, put Smith on\n  \
+                    it, have Warden check it, and say plainly what was not checked.\n\
+                    worker: smith\n";
+        let lines = frontmatter_lines(yaml);
+
+        let goal = lines
+            .iter()
+            .find_map(|l| l.strip_prefix("goal:"))
+            .expect("no goal line")
+            .trim();
+        assert!(
+            goal.ends_with("say plainly what was not checked."),
+            "the goal was cut: {goal}"
+        );
+        assert!(goal.contains("Warden"), "Warden never reached the manager");
+
+        // The key after the wrapped one is still its own line, not swallowed.
+        assert!(lines.iter().any(|l| l.trim() == "worker: smith"));
+    }
+
+    /// Saving a manager keeps the worker it hands its work to.
+    ///
+    /// `save_into` carefully preserved the role, the template, the review
+    /// points and the businesses — and wrote `worker` back as an empty string.
+    /// So editing a manager for any reason detached its worker, in silence:
+    /// the file stopped saying `worker: smith`, the next wake found nobody to
+    /// hand the plan to, and the manager went back to thinking in circles. The
+    /// whole chain — decide, write the item, hand it to Smith — would have been
+    /// undone by one edit of the goal.
+    #[test]
+    fn saving_a_manager_does_not_detach_its_worker() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(crate::db::CORE_SCHEMA).unwrap();
+        // Saving a manager syncs its heartbeat, so the clock's tables are part
+        // of what a save needs.
+        conn.execute_batch(crate::schedule::SCHEMA).unwrap();
+        crate::db::migrate(&conn);
+
+        conn.execute(
+            "INSERT INTO nodes (id, parent_id, kind, name, path) VALUES (61, NULL, 'project', 'Goal tracker', NULL)",
+            [],
+        )
+        .unwrap();
+
+        let vault = std::env::temp_dir().join(format!("devdeck-keepworker-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&vault);
+        std::fs::create_dir_all(&vault).unwrap();
+        crate::db::setting_set_conn(&conn, "vault_root", &vault.to_string_lossy()).unwrap();
+
+        crate::managers::save(
+            &conn,
+            &crate::managers::Manager {
+                handle: "studio".into(),
+                name: "Studio".into(),
+                goal: "Keep the goal tracker moving".into(),
+                worker: "smith".into(),
+                stop_at: vec!["before any push".into()],
+                home: 61,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        // The editor sends a new goal, and nothing it does not know about.
+        save_into(
+            &conn,
+            61,
+            "Studio",
+            "Keep the goal tracker moving, and stop guessing",
+            "weekdays",
+            420,
+            "",
+            "",
+            vec![],
+            "assistant",
+            vec!["assistant".into()],
+            "",
+        )
+        .unwrap();
+
+        let after = crate::managers::get(&conn, "studio").expect("the manager vanished");
+        assert_eq!(after.worker, "smith", "saving detached the worker");
+        assert_eq!(
+            after.goal,
+            "Keep the goal tracker moving, and stop guessing"
+        );
+        // And the fields that were already kept, stay kept.
+        assert_eq!(after.stop_at, vec!["before any push".to_string()]);
+
+        let _ = std::fs::remove_dir_all(&vault);
+    }
+
+    /// A list item is indented too, and is not a continuation of the key above.
+    #[test]
+    fn a_list_item_is_not_glued_onto_the_key_above_it() {
+        let lines = frontmatter_lines("stop_at:\n  - before any push\nworker: smith\n");
+        assert!(
+            lines.iter().any(|l| l.trim() == "- before any push"),
+            "a list item was folded into its key: {lines:?}"
+        );
+        assert!(lines.iter().any(|l| l.trim() == "worker: smith"));
     }
 }

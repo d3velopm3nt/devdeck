@@ -36,6 +36,7 @@ import { findNode, subtreeIds, workspaceOf } from '../lib/tree'
 import { FocusStart } from './FocusBar'
 import { activityItem, approvalItem, conflictItem, factItem, unread } from '../lib/inbox'
 import * as ipc from '../lib/ipc'
+import { openAssistant, openSpace } from '../lib/dock'
 import { CAPTURE_INBOX_UNREAD } from '../lib/devCapture'
 
 type Tone = 'wait' | 'agent' | 'fail' | 'news'
@@ -158,10 +159,9 @@ export function InboxPage() {
         space: spaceOf(r.project_id),
         at: now,
         nodeId: Number(r.project_id),
-        onOpen: () => {
-          setRailView('aiworkspace')
-          useAiw.getState().setPage('agents')
-        },
+        // The roster is on Workers now; the AI Workspace that used to hold it
+        // was a second copy of pages Spaces and the thread already had.
+        onOpen: () => setRailView('workers'),
       })
     }
 
@@ -195,10 +195,9 @@ export function InboxPage() {
         space: spaceOf(c.project_id),
         at: Date.parse(c.detected_at) || now,
         nodeId: Number(c.project_id),
-        onOpen: () => {
-          setRailView('aiworkspace')
-          useAiw.getState().setPage('conflicts')
-        },
+        // Conflicts live on the space they are about, beside its thread —
+        // which is where you answer one.
+        onOpen: () => openSpace(Number(c.project_id), spaceOf(c.project_id) || 'Space'),
       })
     }
 
@@ -449,10 +448,7 @@ export function InboxPage() {
       <div className="shrink-0 border-t border-line bg-panel px-4 py-2.5">
         <button
           className="flex w-full items-center gap-2.5 rounded-lg border border-line bg-page px-3 py-2 text-left hover:border-line2"
-          onClick={() => {
-            setRailView('aiworkspace')
-            useAiw.getState().setPage('chat')
-          }}
+          onClick={() => openAssistant()}
         >
           <Icon name="ai" size={14} className="shrink-0 text-indigo-400" />
           <span className="flex-1 text-[12px] text-faint">

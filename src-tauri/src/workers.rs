@@ -36,6 +36,20 @@ fn now() -> String {
 /// could send, post, pay or push is not a draughtsman, it is an account.
 pub const NEVER: [&str; 5] = ["send mail", "post anywhere", "spend money", "push", "merge"];
 
+/// Written, on a branch, and not yet on the main line.
+///
+/// The state that was missing, and its absence cost four copies of the same
+/// file. `done` meant "the run ended cleanly" — the code said so itself — so
+/// the goal store's plan read `w1 done`, `w2 done` while `main` held nothing
+/// but a README; and a run that ended any other way put its item back to
+/// `unclaimed`, so the next wake handed the same work out again. Smith built
+/// `goals.js` on four separate branches and none of them was ever merged.
+///
+/// Now: **built** is what a worker can reach on its own — the files exist, on
+/// a branch, unmerged and unchecked. **done** means it is on the main line.
+/// Nothing but a merge sets it.
+pub const BUILT: &str = "built";
+
 /// Reading, writing, and the two tools that make a worker's own words work:
 /// `Skill` runs a skill it was given, `Agent` calls a specialist off its kit.
 /// Nothing here reaches a shell, a network, or anybody else's account.
@@ -115,6 +129,27 @@ pub struct WorkerMeta {
     /// May a manager start it while nobody is watching?
     #[serde(default)]
     pub unattended: bool,
+    /// Commands it may run without asking, inside its own worktree.
+    ///
+    /// `unattended` only decides whether it may be *started* while you sleep.
+    /// Once running, a sealed session that reaches for a shell still stops to
+    /// ask — so Smith wrote two good files on the night of 28 September and
+    /// then stood at `npm test` for ninety seconds, three times, with nobody
+    /// at the keyboard. This is the other half: what it may do once it is up.
+    ///
+    /// Named commands, never a blanket yes. The alternative the CLI offers is
+    /// `bypassPermissions`, and `cli_agent` already says of that: "a session
+    /// allowed to do anything at all is not something to point at a repository
+    /// on a schedule."
+    #[serde(default)]
+    pub allow: Vec<String>,
+    /// The day that permission runs out — `YYYY-MM-DD`.
+    ///
+    /// Required for `allow` to mean anything: an expiry nobody checks is a
+    /// note, not a limit, and permission you forgot you gave is the kind that
+    /// surprises you.
+    #[serde(default)]
+    pub allow_until: String,
     #[serde(default)]
     pub created_at: String,
 }
@@ -413,6 +448,75 @@ pub fn close_orphans(app: &tauri::AppHandle) -> Result<usize, String> {
     Ok(n)
 }
 
+/// The branch a run works on: its goal's, unless the item asks for its own.
+///
+/// It used to be one branch per *work item*, named from the item's title and
+/// the day — and that is what left `goals.js` on four branches and on no main
+/// line. Each one cut from the same commit and wrote the file from nothing, so
+/// sibling items on one goal could not build on each other and could not be
+/// merged after each other: the store and the due dates, both Mason's, conflict
+/// in four places because neither ever saw the other.
+///
+/// One branch per goal fixes that by construction. The second item starts from
+/// the first one's commits, the goal arrives as one reviewable piece of work,
+/// and there is one merge rather than an argument between versions of the same
+/// file written by workers who never knew about each other.
+///
+/// No date in the name, on purpose: the branch outlives the day so work keeps
+/// accumulating, and an item handed out again tomorrow returns to where it was
+/// rather than starting a second copy.
+///
+/// Two escapes. An item may name its own branch, for a spike or anything that
+/// should be throwable away on its own. And a run started by hand, off no plan,
+/// has no goal to belong to — that keeps the old title-and-day name, which is
+/// the honest thing for a one-off.
+fn branch_for(deck: &Path, feature: &str, item: &str, title: &str) -> String {
+    let own = (!feature.trim().is_empty() && !item.trim().is_empty())
+        .then(|| {
+            crate::aiw::deck::Deck::new(deck)
+                .work(feature)
+                .ok()?
+                .meta
+                .items
+                .into_iter()
+                .find(|i| i.id == item)?
+                .branch
+                .filter(|b| !b.trim().is_empty())
+        })
+        .flatten();
+    if let Some(b) = own {
+        return b.trim().to_string();
+    }
+    if feature.trim().is_empty() {
+        // Off no plan: one-off work, named after itself.
+        return format!(
+            "devdeck/{}-{}",
+            crate::managers::handle_from(title),
+            chrono::Local::now().format("%m%d")
+        );
+    }
+    format!("devdeck/{}", feature.trim())
+}
+
+/// Where a finished run leaves its item — decided by what is on the branch.
+///
+/// Never by the run's own verdict, which is the thing that was wrong. A clean
+/// run marked its item `done`, and any other ending put it back to
+/// `unclaimed`; both were wrong the same way. Ending cleanly is not finishing
+/// the work — the files are on a branch nobody has read. And stopping short
+/// having written two good files is not leaving the work undone: handing that
+/// item straight back out is exactly how `goals.js` came to be built on four
+/// branches while `main` kept only a README.
+///
+/// A merge is the only thing that says `done`, and nothing here can merge.
+fn where_the_item_goes(wrote_files: bool) -> &'static str {
+    if wrote_files {
+        BUILT
+    } else {
+        "unclaimed"
+    }
+}
+
 /// Move the item this run came off, and say so on the bus.
 ///
 /// Until this existed a worker could do the whole job and the plan would
@@ -432,7 +536,7 @@ fn move_item(app: &tauri::AppHandle, r: &Run, status: &str) {
         return;
     };
     let moved = (|| -> Option<bool> {
-        let conn = db.0.lock().ok()?;
+        let conn = db.conn();
         let n = db::node_by_id(&conn, r.node_id).ok()?;
         let dir = db::node_deck_dir(&conn, &n)?;
         let deck = crate::aiw::deck::Deck::new(&dir);
@@ -546,6 +650,46 @@ fn salvage_worktree(r: &Run) -> String {
     )
 }
 
+/// How a run ended, from the four things that are actually known about it.
+///
+/// Its own function because this rule has been wrong three times, each time in
+/// a way that took a real run to notice:
+///
+/// * **`refused > 0` alone meant blocked.** A run on 25 Sep was told no to one
+///   `cat > file` heredoc, wrote the file another way, ran seven passing tests
+///   and committed — and was recorded "stopped short … unverified".
+/// * **`ok` alone meant done.** Mason ended "done, ok" on 24 Sep having written
+///   three files and run no check at all, because every shell call was denied
+///   and the CLI still counts its own turn a success.
+/// * **`ok` alone again.** On 28 Sep Smith wrote `goals.js` and six tests, was
+///   refused `npm test` twice, said outright *"I could not verify the tests
+///   actually pass"* — and was recorded `done, ok: true`. The tests did pass,
+///   checked by hand afterwards, which is not the same as the run knowing it.
+///
+/// What separates the first from the other two is not the summary, which is
+/// prose, but whether the worker **committed**: one adapted and finished, the
+/// others stopped and left everything for the salvage. So the caller asks git,
+/// which cannot be optimistic, and hands the answer here.
+fn outcome_status(ok: bool, refused: usize, stopped: bool, left_uncommitted: bool) -> String {
+    if stopped {
+        return "stopped".into();
+    }
+    // Uncommitted work only demotes a run that was *refused* something. On its
+    // own it means nothing: plenty of good runs are asked to leave the tree
+    // alone. It is the pair that is damning — told no, and stopped with the
+    // work still loose.
+    if ok && !(refused > 0 && left_uncommitted) {
+        return "done".into();
+    }
+    if refused > 0 {
+        // Refused something it needed and could not go on. Not a fault in the
+        // worker, and the one state where answering the question makes the
+        // work continue rather than start over.
+        return "blocked".into();
+    }
+    "failed".into()
+}
+
 /// The part of [`salvage_worktree`] that does not need to know where the
 /// personal store is, so a test can hand it a real repository in a temp folder
 /// instead of reaching into yours.
@@ -652,6 +796,11 @@ pub fn starters() -> Vec<(WorkerMeta, String, &'static str)> {
                 usd,
                 spaces: Vec::new(),
                 unattended: false,
+                // A starter grants nothing. Permission to act while nobody is
+                // watching is a thing you give a named worker, deliberately,
+                // not something that arrives with a template.
+                allow: Vec::new(),
+                allow_until: String::new(),
                 created_at: String::new(),
             },
             body.to_string(),
@@ -779,11 +928,7 @@ pub fn plan(
 
     Ok(Plan {
         branch: if wants_branch && repo.is_some() {
-            format!(
-                "devdeck/{}-{}",
-                crate::managers::handle_from(title),
-                chrono::Local::now().format("%m%d")
-            )
+            branch_for(&deck, feature, item, title)
         } else {
             String::new()
         },
@@ -1291,7 +1436,7 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
         return Err(format!("{} is not a folder on this machine.", p.folder));
     }
     let deck_dir = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let (_, deck, _) = space_dir(&conn, p.node_id)?;
         deck
     };
@@ -1392,6 +1537,31 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
             (String::new(), String::new())
         }
     };
+
+    // What it may do once it is up, as against whether it may be started at
+    // all. Both halves are needed for a night to produce work: `unattended`
+    // gets a run going, and this is what stops it standing at `npm test` for
+    // ninety seconds with nobody there.
+    if crate::asks::set_standing(
+        &run.id,
+        &w.meta.handle,
+        &cwd,
+        &w.meta.allow,
+        &w.meta.allow_until,
+    ) {
+        crate::services::push_log(
+            app,
+            crate::services::RUNNER_LOG_ID,
+            "workers",
+            "stdout",
+            format!(
+                "{} may run {} here without asking, until {}.",
+                w.meta.name,
+                w.meta.allow.join(", "),
+                w.meta.allow_until
+            ),
+        );
+    }
 
     let spec = RunnerSpec {
         program: String::new(),
@@ -1536,19 +1706,32 @@ Answer here. If nobody does within {} seconds it stops and keeps the question.",
                 // the CLI still considers its own turn a success. Calling
                 // that done is the failure-honesty rule broken in our own
                 // codebase, so the refusals decide, not the summary.
-                live.status = if leash.pulled() {
-                    "stopped".into()
-                } else if o.ok {
-                    "done".into()
-                } else if o.refused > 0 {
-                    // Refused something it needed and could not go on. Not a
-                    // fault in the worker, and the one state where answering
-                    // the question makes the work continue rather than start
-                    // over.
-                    "blocked".into()
-                } else {
-                    "failed".into()
+                // Refused, and left its work uncommitted: it did not finish,
+                // whatever its own last turn reported.
+                //
+                // This is the third go at this rule, so the reasoning is worth
+                // keeping. `refused > 0` alone was too blunt — a run told no to
+                // one heredoc on 25 Sep wrote the file another way, ran seven
+                // passing tests, committed, and was still called "stopped
+                // short". Trusting `o.ok` alone is too generous the other way:
+                // on 28 Sep Smith wrote `goals.js` and six tests, was refused
+                // `npm test` twice, said outright *"I could not verify the
+                // tests actually pass"* — and was recorded `done, ok: true`.
+                //
+                // What separates them is not the prose, it is whether the
+                // worker committed. One adapted and finished; the other stopped
+                // and left everything for the salvage. So ask git, which cannot
+                // be optimistic.
+                let left_uncommitted = o.refused > 0 && !live.at.trim().is_empty() && {
+                    std::process::Command::new("git")
+                        .args(["status", "--porcelain"])
+                        .current_dir(&live.at)
+                        .output()
+                        .map(|out| !String::from_utf8_lossy(&out.stdout).trim().is_empty())
+                        .unwrap_or(false)
                 };
+
+                live.status = outcome_status(o.ok, o.refused, leash.pulled(), left_uncommitted);
                 live.ok = live.status == "done";
                 // A refusal is worth recording either way, but only a refusal
                 // that ended the run is what stopped it.
@@ -1605,19 +1788,21 @@ Answer here. If nobody does within {} seconds it stops and keeps the question.",
             );
         }
 
-        // A run that did not finish well leaves the item where somebody else
-        // can pick it up, rather than marking it done or leaving it claimed by
-        // a worker that has stopped. "done" here means the run ended cleanly,
-        // not that the work was checked — the receipt says which.
-        move_item(
-            &app2,
-            &live,
-            if live.status == "done" {
-                "done"
-            } else {
-                "unclaimed"
-            },
-        );
+        // Where the item goes is decided by what is on the branch, not by how
+        // the run felt about itself.
+        //
+        // It used to be decided by the run's status: "done" marked the item
+        // done, and anything else put it back to `unclaimed`. Both halves were
+        // wrong in the same direction. A clean run has not *finished* the work
+        // — it has written it on a branch nobody has read — and a run that
+        // stopped short having written two good files has not left the work
+        // undone either. Handing that item straight back out is how Smith came
+        // to build `goals.js` four times on four branches while `main` stayed
+        // empty.
+        //
+        // So: files on the branch means `built`, whatever the run's verdict;
+        // nothing written means nobody has done it and it goes back on offer.
+        move_item(&app2, &live, where_the_item_goes(!live.files.is_empty()));
         say_in_room(
             &app2,
             &live,
@@ -1847,7 +2032,7 @@ pub fn worker_plan(
     feature: Option<String>,
     item: Option<String>,
 ) -> Result<Plan, String> {
-    let conn = db.0.lock().unwrap();
+    let conn = db.conn();
     plan(
         &conn,
         &handle,
@@ -1871,7 +2056,7 @@ pub async fn worker_start(
     item: Option<String>,
 ) -> Result<Run, String> {
     let p = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         plan(
             &conn,
             &handle,
@@ -1891,6 +2076,120 @@ pub fn worker_stop(id: String) -> Result<(), String> {
         l.pull();
     }
     Ok(())
+}
+
+/// Put a goal's work on the main line, and only then call it done.
+///
+/// Per goal, not per item, because the branch is per goal: its items have been
+/// committing on top of each other, so they arrive as one piece of work and
+/// there is nothing to pick apart. That is also the honest shape of shipping —
+/// you release a goal, not half of one. An item that turned out badly is a
+/// commit to revert, not a commit to withhold.
+///
+/// This is the one thing that may write `done`, and it is deliberately a
+/// person's press rather than something a run does on its way out. A worker is
+/// forbidden to merge (see [`NEVER`]) and that stays true — the merge happens
+/// here, in the repository, by the app.
+///
+/// It refuses rather than forces, in three places, because each is a question
+/// only you can answer: a dirty tree might be work you have not committed, a
+/// missing branch means the receipts are lying about where the work is, and a
+/// conflict is a decision. The merge is aborted and the items stay `built`,
+/// which is true, rather than being marked done over a mess.
+#[tauri::command(async)]
+pub fn work_merge(
+    app: tauri::AppHandle,
+    db: tauri::State<Db>,
+    node_id: i64,
+    feature: String,
+) -> Result<String, String> {
+    let (dir, deck_dir) = {
+        let conn = db.conn();
+        let n = db::node_by_id(&conn, node_id).map_err(err)?;
+        (
+            db::node_dir(&conn, &n).ok_or("that space names no repository")?,
+            db::node_deck_dir(&conn, &n).ok_or("that space has no folder yet")?,
+        )
+    };
+    if !crate::git::is_repo(&dir) {
+        return Err(format!("{} is not a git repository", dir.display()));
+    }
+
+    let deck = crate::aiw::deck::Deck::new(&deck_dir);
+    let mut work = deck.work(&feature)?;
+    let built: Vec<String> = work
+        .meta
+        .items
+        .iter()
+        .filter(|i| i.status == BUILT)
+        .map(|i| i.id.clone())
+        .collect();
+    if built.is_empty() {
+        return Err("nothing on this goal is built, so there is nothing to merge".into());
+    }
+
+    // Every branch those items were built on. Normally exactly one — the
+    // goal's — but an item that asked for its own is merged too, and a goal
+    // built before the branch became per-goal can still have several.
+    let mut branches: Vec<String> = all_runs()?
+        .into_iter()
+        .filter(|r| r.node_id == node_id && r.feature == feature && built.contains(&r.item))
+        .map(|r| r.branch.trim().to_string())
+        .filter(|b| !b.is_empty())
+        .collect();
+    branches.sort();
+    branches.dedup();
+    if branches.is_empty() {
+        return Err("those items name no branch, so there is nothing to merge".into());
+    }
+
+    let dirty = crate::git::dirty_files(&dir);
+    if !dirty.is_empty() {
+        return Err(format!(
+            "{} has {} uncommitted change{} — commit or stash before merging, so a merge cannot bury them",
+            dir.display(),
+            dirty.len(),
+            if dirty.len() == 1 { "" } else { "s" }
+        ));
+    }
+    for b in &branches {
+        if crate::git::run_git(&dir, &["rev-parse", "--verify", b]).is_none() {
+            return Err(format!(
+                "{b} is not in {} — the receipts say the work is there and it is not",
+                dir.display()
+            ));
+        }
+    }
+
+    let onto = crate::git::run_git(&dir, &["rev-parse", "--abbrev-ref", "HEAD"])
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| "HEAD".into());
+    for b in &branches {
+        // `--no-ff`, always: the branch is a piece of work and its shape is
+        // worth keeping. A fast-forward would leave no record of a merge.
+        let merged =
+            crate::git::run_git(&dir, &["merge", "--no-ff", "-m", &format!("Merge {b}"), b]);
+        if merged.is_none() {
+            let _ = crate::git::run_git(&dir, &["merge", "--abort"]);
+            return Err(format!(
+                "{b} does not merge cleanly into {onto}. Nothing further was changed — the                  conflict is yours to settle, and the goal stays built."
+            ));
+        }
+    }
+
+    for i in work.meta.items.iter_mut().filter(|i| i.status == BUILT) {
+        i.status = "done".into();
+        i.assignee = None;
+    }
+    let n = built.len();
+    deck.save_work(&feature, &work.meta)?;
+    let _ = app;
+    Ok(format!(
+        "Merged {} into {onto}. {n} item{} on {feature} {} done.",
+        branches.join(", "),
+        if n == 1 { "" } else { "s" },
+        if n == 1 { "is" } else { "are" }
+    ))
 }
 
 #[tauri::command(async)]
@@ -1927,7 +2226,7 @@ pub fn run_decide(
     };
     write_run(&r)?;
     if r.status == "kept" && r.node_id > 0 {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let slug = crate::managers::handle_from(&r.title);
         let body = format!(
             "---\nid: {slug}\nsource: worker\nworker: {}\nrun: {}\n---\n\n# {}\n\n{}\n\n{}\n\n> {} wrote {} file{} in {} on {}\n",
@@ -1947,7 +2246,7 @@ pub fn run_decide(
     // because they pressed Discard on a draught would be its own bug.
     if r.status == "discarded" && !r.branch.is_empty() {
         let repo = {
-            let conn = db.0.lock().unwrap();
+            let conn = db.conn();
             db::node_by_id(&conn, r.node_id)
                 .ok()
                 .and_then(|n| n.path)
@@ -2440,5 +2739,157 @@ mod setup_check {
             super::Handoff::Ask(w, t) => println!("  would ASK to put {w} on: {t}"),
             super::Handoff::Nothing => println!("  would do NOTHING"),
         }
+    }
+
+    /// The three ways this rule has been wrong, pinned so it cannot be wrong
+    /// that way again.
+    #[test]
+    fn how_a_run_ended_is_decided_by_what_it_committed() {
+        // 25 Sep: refused once, adapted, ran the tests, committed. Finished.
+        assert_eq!(super::outcome_status(true, 1, false, false), "done");
+
+        // 28 Sep: refused twice, wrote the files, could not verify them, left
+        // them for the salvage. Recorded `done, ok: true` at the time, which
+        // is the failure-honesty rule broken in our own codebase.
+        assert_eq!(super::outcome_status(true, 2, false, true), "blocked");
+
+        // 24 Sep: every shell call denied, three files written, no check run.
+        assert_eq!(super::outcome_status(false, 5, false, true), "blocked");
+
+        // The clean cases still read the obvious way.
+        assert_eq!(super::outcome_status(true, 0, false, false), "done");
+        assert_eq!(super::outcome_status(false, 0, false, false), "failed");
+
+        // A leash beats everything: it is the one ending we caused.
+        assert_eq!(super::outcome_status(true, 0, true, false), "stopped");
+        assert_eq!(super::outcome_status(false, 3, true, true), "stopped");
+    }
+
+    /// Uncommitted work on its own says nothing.
+    ///
+    /// Plenty of good runs are asked to leave the tree alone. It is the pair —
+    /// told no, *and* stopped with the work still loose — that means it did not
+    /// finish. Written down because the first draft of this rule demoted on
+    /// uncommitted work alone, which would have called an ordinary read-only
+    /// run a failure.
+    #[test]
+    fn uncommitted_work_alone_does_not_condemn_a_run() {
+        assert_eq!(super::outcome_status(true, 0, false, true), "done");
+        assert_eq!(super::outcome_status(false, 0, false, true), "failed");
+    }
+
+    /// A worker with no `allow:` is granted nothing, and says so by leaving
+    /// nothing behind.
+    ///
+    /// The safe direction matters more here than anywhere else in this file: a
+    /// missing expiry, an empty list, or a worker whose file has never heard of
+    /// this must all mean "ask, exactly as before". Permission is the one thing
+    /// that must never be acquired by accident.
+    #[test]
+    fn permission_to_act_unasked_is_given_and_never_assumed() {
+        let run = format!("run-standing-{}", std::process::id());
+        let Ok(dir) = crate::asks::dir_for(&run) else {
+            return; // no personal store on this machine; nothing to assert.
+        };
+        let at = std::env::temp_dir().join("worktree");
+
+        // Nothing named: nothing written.
+        assert!(!crate::asks::set_standing(
+            &run,
+            "smith",
+            &at,
+            &[],
+            "2026-10-06"
+        ));
+        assert!(devdeck_ask::standing(&dir).is_none());
+
+        // Named, but no expiry: still nothing. A grant without an end is not a
+        // narrower grant, it is a wider one.
+        assert!(!crate::asks::set_standing(
+            &run,
+            "smith",
+            &at,
+            &["npm test".into()],
+            ""
+        ));
+        assert!(devdeck_ask::standing(&dir).is_none());
+
+        // Both: written, with the day read as the end of that day.
+        assert!(crate::asks::set_standing(
+            &run,
+            "smith",
+            &at,
+            &["npm test".into(), "  ".into()],
+            "2099-01-01"
+        ));
+        let s = devdeck_ask::standing(&dir).expect("the grant was not written");
+        assert_eq!(
+            s.commands,
+            vec!["npm test".to_string()],
+            "blanks are not commands"
+        );
+        assert_eq!(s.worker, "smith");
+        assert!(s.expires_at.starts_with("2099-01-01T23:59:59"));
+
+        // And taking it away takes it away.
+        assert!(!crate::asks::set_standing(&run, "smith", &at, &[], ""));
+        assert!(devdeck_ask::standing(&dir).is_none());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// One branch per goal, so a goal's work accumulates instead of competing.
+    ///
+    /// It was one branch per work item, named from the title and the day. Each
+    /// branch cut from the same commit and wrote the same files from nothing,
+    /// so Mason's due-date work could not build on Mason's own store — and the
+    /// two conflict in four places, because neither ever saw the other.
+    #[test]
+    fn a_goal_has_one_branch_and_its_items_share_it() {
+        let deck = std::env::temp_dir().join(format!("devdeck-branch-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&deck);
+
+        // Two items of one goal, two different titles, one branch.
+        assert_eq!(
+            super::branch_for(&deck, "goal-store", "w1", "Add a goal store"),
+            "devdeck/goal-store"
+        );
+        assert_eq!(
+            super::branch_for(&deck, "goal-store", "w2", "Give a goal a due date"),
+            "devdeck/goal-store"
+        );
+
+        // No date in it, so tomorrow returns to the same work rather than
+        // starting a second copy of it.
+        assert!(
+            !super::branch_for(&deck, "goal-store", "w1", "Add a goal store")
+                .chars()
+                .any(|c| c.is_ascii_digit())
+        );
+
+        // Off no plan there is no goal to belong to, so a one-off is named
+        // after itself and dated, as it always was.
+        let off_plan = super::branch_for(&deck, "", "", "Build the goal store");
+        assert!(off_plan.starts_with("devdeck/build-the-goal-store-"));
+        assert_ne!(off_plan, "devdeck/goal-store");
+    }
+
+    /// Nothing a worker can do makes an item done.
+    ///
+    /// The goal store's plan read `w1 done`, `w2 done` while `main` held a
+    /// README and nothing else, because a clean run marked its own item done.
+    /// And Smith's blocked run — which had written two perfectly good files —
+    /// put its item back to `unclaimed`, so the next wake handed the same work
+    /// out again. `goals.js` exists on four branches and on no main line; both
+    /// halves of that are this rule.
+    #[test]
+    fn a_worker_can_build_an_item_and_never_finish_it() {
+        // Wrote something: it is built, and stays claimed so nobody is sent to
+        // write it a second time.
+        assert_eq!(super::where_the_item_goes(true), super::BUILT);
+        // Wrote nothing: nobody has done it, so it goes back on offer.
+        assert_eq!(super::where_the_item_goes(false), "unclaimed");
+        // And neither of those is "done", whatever the run thought of itself.
+        assert_ne!(super::where_the_item_goes(true), "done");
     }
 }

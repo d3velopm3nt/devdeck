@@ -30,6 +30,18 @@ import * as ipc from '../lib/ipc'
 import { Icon } from '../lib/icons'
 import { TodayBusinesses } from './business/TodayBusinesses'
 import { openLife, openNodeThread, openRun, openSpace } from '../lib/dock'
+
+/// What a worker is asking to do, in one line you can judge.
+///
+/// The command itself, never a summary of ours: approving a paraphrase is how
+/// an approval becomes theatre. Mirrors `asks::one_line` on the Rust side.
+function askLine(q: ipc.Ask): string {
+  for (const key of ['command', 'file_path', 'path', 'url', 'pattern', 'prompt']) {
+    const v = q.input[key]
+    if (typeof v === 'string' && v.trim() !== '') return v.trim()
+  }
+  return `${q.tool}: ${JSON.stringify(q.input).slice(0, 120)}`
+}
 import { findNode, workspaceOf } from '../lib/tree'
 import { DAY_MS, hhmm, startOfDay } from '../lib/calendarWindow'
 
@@ -86,6 +98,8 @@ export function Today() {
   // working" while Mason was three minutes into a branch, because it was
   // reading assistant sessions and a worker is not one.
   const [runs, setRuns] = useState<ipc.Run[]>([])
+  /// Questions a running worker is stopped on, by run id.
+  const [asks, setAsks] = useState<Record<string, ipc.Ask[]>>({})
 
   // Its own data, and its own live tail. Today is the first thing on screen on
   // a cold start, before the Assistant has been opened — without this it would
@@ -93,11 +107,10 @@ export function Today() {
   useEffect(() => {
     if (!a.ready) void a.bootstrap()
     else void a.refreshApprovals()
-    let stop: (() => void) | undefined
-    void aiw.onEvent((e) => useAiw.getState().pushEvent(e)).then((un) => {
-      stop = un
-    })
-    return () => stop?.()
+    // Hold the promise, not the resolved unlisten: cleanup can run before it
+    // resolves, and a listener captured late is never removed.
+    const stop = aiw.onEvent((e) => useAiw.getState().pushEvent(e))
+    return () => void stop.then((un) => un())
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -114,7 +127,28 @@ export function Today() {
   }, [load])
 
   useEffect(() => {
-    const read = () => void ipc.runsList(0).then(setRuns).catch(() => setRuns([]))
+    const read = () => {
+      void ipc
+        .runsList(0)
+        .then(async (rs) => {
+          setRuns(rs)
+          // What a running worker is stopped on. It used to be readable only
+          // on that run's own page, so a worker asked, nobody was looking at
+          // the one screen that showed it, and it timed out — twice in a row
+          // on 28 Sep, with the question sitting in the app the whole time.
+          // A question with a ninety-second clock belongs on the screen that
+          // exists to say what is waiting on you.
+          const live = rs.filter((r) => r.status === 'running')
+          const pairs = await Promise.all(
+            live.map(async (r) => [r.id, await ipc.workerAsks(r.id).catch(() => [])] as const),
+          )
+          setAsks(Object.fromEntries(pairs.filter(([, q]) => q.length > 0)))
+        })
+        .catch(() => {
+          setRuns([])
+          setAsks({})
+        })
+    }
     read()
     let off: (() => void) | undefined
     void ipc.onWorker({ done: read, asking: read }).then((f) => (off = f))
@@ -173,10 +207,31 @@ export function Today() {
     }
   }
 
+  /// Answer a worker's question from here, and take it off the list at once.
+  ///
+  /// The worker is on a ninety-second clock, so the row cannot wait for the
+  /// next poll to tell you it worked.
+  const answerAsk = async (run: string, askId: string, allow: boolean) => {
+    setDeciding(askId)
+    try {
+      await ipc.workerAnswer(run, askId, allow, allow ? '' : 'Not this one.')
+      setAsks((prev) => {
+        const left = (prev[run] ?? []).filter((q) => q.id !== askId)
+        const next = { ...prev }
+        if (left.length > 0) next[run] = left
+        else delete next[run]
+        return next
+      })
+    } finally {
+      setDeciding(null)
+    }
+  }
+
   const approvals = a.approvals.filter((r) => inArea(nodeIdOf(r.project_id)))
   const blockers = a.conflicts.filter((c) => !c.resolved && inArea(nodeIdOf(c.project_id)))
   const unreadMail = app.mailCounts?.unread ?? 0
-  const needs = approvals.length + blockers.length + (todayArea == null && unreadMail > 0 ? 1 : 0)
+  const waiting = Object.values(asks).reduce((n, q) => n + q.length, 0)
+  const needs = waiting + approvals.length + blockers.length + (todayArea == null && unreadMail > 0 ? 1 : 0)
 
   // -- the day --------------------------------------------------------------
 
@@ -316,6 +371,49 @@ export function Today() {
               </Card>
             ) : (
               <Card>
+                {/* Above the approvals, because a worker's question expires in
+                    ninety seconds and an approval does not. */}
+                {Object.entries(asks).flatMap(([run, list]) =>
+                  list.map((q) => {
+                    const r = runs.find((x) => x.id === run)
+                    return (
+                      <Row key={q.id} tint="bg-amber-500/[0.06]">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-amber-500/15 text-[8.5px] font-bold text-warn">
+                          {(r?.worker_name ?? '??').slice(0, 2).toUpperCase()}
+                        </span>
+                        <button
+                          className="min-w-0 flex-1 text-left"
+                          title="Open the run"
+                          onClick={() => openRun(run, r?.title ?? 'Run')}
+                        >
+                          <span className="block truncate font-mono text-[12px] text-ink">
+                            {askLine(q)}
+                          </span>
+                          <span className="mt-0.5 block truncate text-[11px] text-muted">
+                            {r?.worker_name ?? 'A worker'} wants to run this · it gives up in 90
+                            seconds
+                          </span>
+                        </button>
+                        <span className="flex shrink-0 items-center gap-1.5">
+                          <button
+                            className="btn-primary text-[11px]"
+                            disabled={deciding === q.id}
+                            onClick={() => void answerAsk(run, q.id, true)}
+                          >
+                            Yes
+                          </button>
+                          <button
+                            className="btn text-[11px]"
+                            disabled={deciding === q.id}
+                            onClick={() => void answerAsk(run, q.id, false)}
+                          >
+                            No
+                          </button>
+                        </span>
+                      </Row>
+                    )
+                  }),
+                )}
                 {approvals.map((r) => (
                   <Row key={r.id} tint="bg-amber-500/[0.06]">
                     <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-amber-500/15 text-[8.5px] font-bold text-warn">

@@ -29,7 +29,8 @@ const when = (iso: string) => {
 }
 
 export function CodeStep({ view, setView, nav, onClose, next }: StepProps) {
-  const { nodes, refreshTree } = useApp()
+  const nodes = useApp((s) => s.nodes)
+  const refreshTree = useApp((s) => s.refreshTree)
   const [list, setList] = useState<ipc.RepoList | null>(null)
   const [owner, setOwner] = useState('')
   const [q, setQ] = useState('')

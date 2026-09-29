@@ -3,14 +3,20 @@
 // history, and a tail of its own log output. Editing the config opens the
 // slide-over sheet; this page is about *observing and operating* the service.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { IDockviewPanelProps } from 'dockview-react'
 import * as ipc from '../lib/ipc'
 import { useApp } from '../store'
+import { useLive } from '../liveStore'
 import { Icon } from '../lib/icons'
 import { openEditor, openSpace } from '../lib/dock'
 import { findNode, projectOf, serviceDir } from '../lib/tree'
 import { fmtAgo, fmtUptime } from '../lib/time'
+import type { LogEntry } from '../lib/types'
+
+// A stable empty list, so a service with no output does not hand React a new
+// array (and a re-render) on every store change.
+const NO_LOGS: LogEntry[] = []
 
 function InfoCell({ k, children, mono }: { k: string; children: React.ReactNode; mono?: boolean }) {
   return (
@@ -26,9 +32,13 @@ function InfoCell({ k, children, mono }: { k: string; children: React.ReactNode;
 export function ServiceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
   const serviceId = props.params.id
   const {
-    services, nodes, svcStates, stats, logs, recents,
+    services, nodes, svcStates, recents,
     servicePort, requestStartService, showBottom, focusServiceLogs,
   } = useApp()
+  const stats = useLive((s) => s.stats)
+  // This service's slice of the master log, newest last. Kept per service by
+  // the live store, so another service's chatter does not re-render this page.
+  const svcLogs = useLive((s) => s.byService[serviceId]) ?? NO_LOGS
   const [busy, setBusy] = useState(false)
 
   const [now, setNow] = useState(() => Date.now())
@@ -45,12 +55,6 @@ export function ServiceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
   const port = svc ? servicePort(svc.id) : null
   const proj = svc ? projectOf(nodes, findNode(nodes, svc.project_id)) : null
   const recent = recents.find((r) => r.kind === 'service' && r.ref_id === serviceId)
-
-  // This service's slice of the master log, newest last.
-  const svcLogs = useMemo(
-    () => (svc ? logs.filter((l) => l.service_id === svc.id).slice(-40) : []),
-    [logs, svc],
-  )
 
   if (!svc) {
     return (

@@ -112,7 +112,7 @@ fn chip(rel: &str, features: &[(String, Vec<String>)]) -> Option<String> {
 /// whose whole point is keeping one. The caller says which; there is no
 /// default that guesses, because one function answering both is the bug that
 /// put `_bot.md` in somebody's repository.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn node_files(
     ws: tauri::State<std::sync::Arc<crate::aiw::state::Workspace>>,
     db: tauri::State<Db>,
@@ -122,7 +122,7 @@ pub fn node_files(
 ) -> Result<Vec<FileRow>, String> {
     let vault = root.as_deref() == Some("vault");
     let root = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let node = db::node_by_id(&conn, node_id)?;
         if vault {
             db::node_deck_dir(&conn, &node)
@@ -195,10 +195,10 @@ pub fn node_files(
 /// Hidden folders are *not* skipped here. `.devdeck` is the point of the
 /// vault, and hiding it in the one view meant for seeing everything would be
 /// the same mistake as a file manager that hides the folder you came to find.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_files(db: tauri::State<Db>, rel: String) -> Result<Vec<FileRow>, String> {
     let root = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let raw = crate::db::setting_get_conn(&conn, "vault_root")?
             .filter(|s| !s.trim().is_empty())
             .ok_or("No vault folder has been chosen yet.")?;
@@ -255,10 +255,10 @@ pub fn vault_files(db: tauri::State<Db>, rel: String) -> Result<Vec<FileRow>, St
 }
 
 /// One file anywhere in the vault, as text. Same root, same refusal.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vault_file_text(db: tauri::State<Db>, rel: String) -> Result<FileText, String> {
     let root = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let raw = crate::db::setting_get_conn(&conn, "vault_root")?
             .filter(|s| !s.trim().is_empty())
             .ok_or("No vault folder has been chosen yet.")?;
@@ -302,7 +302,7 @@ const MAX_TEXT: u64 = 2_000_000;
 ///
 /// Same two roots as `node_files`, same refusal to climb out of them: a path
 /// with `..` in it is not a file, it is a way out of the sandbox.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn file_text(
     db: tauri::State<Db>,
     node_id: i64,
@@ -311,7 +311,7 @@ pub fn file_text(
 ) -> Result<FileText, String> {
     let vault = root.as_deref() == Some("vault");
     let base = {
-        let conn = db.0.lock().unwrap();
+        let conn = db.conn();
         let node = db::node_by_id(&conn, node_id)?;
         if vault {
             db::node_deck_dir(&conn, &node)

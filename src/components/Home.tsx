@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import * as ipc from '../lib/ipc'
 import { useApp } from '../store'
+import { useLive } from '../liveStore'
 import { Icon } from '../lib/icons'
 import { openService, openSpace, openTerminalPanel } from '../lib/dock'
 import { findNode, projectOf, subtreeIds } from '../lib/tree'
@@ -21,7 +22,10 @@ function hexA(hex: string, a: number): string {
 
 // One space (project) card: colour spine, avatar, name, live counts.
 function SpaceCard({ project, topUsed }: { project: TreeNode; topUsed: boolean }) {
-  const { nodes, services, commands, svcStates } = useApp()
+  const nodes = useApp((s) => s.nodes)
+  const services = useApp((s) => s.services)
+  const commands = useApp((s) => s.commands)
+  const svcStates = useApp((s) => s.svcStates)
   const scope = useMemo(() => new Set(subtreeIds(nodes, project.id)), [nodes, project.id])
   const svc = services.filter((s) => s.project_id != null && scope.has(s.project_id))
   const running = svc.filter((s) => svcStates[s.id]?.status === 'running').length
@@ -120,10 +124,17 @@ const LEVEL_STYLE: Record<string, string> = {
 
 export function Home() {
   const {
-    nodes, services, svcStates, stats, terminals, logs, recents, commands, gitByNode,
+    nodes, services, svcStates, terminals, recents, commands, gitByNode,
     activeWorkspaceId, showBottom, focusServiceLogs, servicePort, requestStartService,
     treeError, treeLoading, retryBootstrap,
   } = useApp()
+  const stats = useLive((s) => s.stats)
+  // Summary fields, not the buffer: a log flush that changes none of these
+  // leaves Home alone.
+  const errorCount = useLive((s) => s.errorCount)
+  const warnCount = useLive((s) => s.warnCount)
+  const logIssuesRaw = useLive((s) => s.issues)
+  const lastLogs = useLive((s) => s.tail)
 
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
@@ -168,14 +179,14 @@ export function Home() {
       liveTerms: terminals.filter((t) => t.alive),
       cpu,
       mem,
-      errors: logs.filter((l) => l.level === 'error').length,
-      warns: logs.filter((l) => l.level === 'warn').length,
+      errors: errorCount,
+      warns: warnCount,
       projects: nodes.filter((n) => n.kind === 'project').length,
       folders: nodes.filter((n) => n.kind === 'folder').length,
       workspaces: workspaces.length,
       behind: Object.values(gitByNode).filter((g) => g.behind > 0).length,
     }
-  }, [nodes, services, svcStates, stats, terminals, logs, workspaces, gitByNode])
+  }, [nodes, services, svcStates, stats, terminals, errorCount, warnCount, workspaces, gitByNode])
 
   // Idle services in the active workspace — a short quick-start list.
   const idle = useMemo(() => {
@@ -210,11 +221,7 @@ export function Home() {
       serviceId: number
       service: string
       line: string
-    }> = logs
-      .filter((l) => l.level === 'error' || l.level === 'warn')
-      .slice(-30)
-      .reverse()
-      .map((l) => ({
+    }> = logIssuesRaw.map((l) => ({
         key: `log-${l.seq}`,
         ts: l.ts,
         level: l.level,
@@ -225,7 +232,7 @@ export function Home() {
         line: l.line,
       }))
     return [...crashed, ...logIssues].slice(0, 30)
-  }, [services, svcStates, logs])
+  }, [services, svcStates, logIssuesRaw])
 
   // The real activity stream. This used to be derived from `recents`, which
   // only stores the *last* time something ran — so two runs looked like one
@@ -233,8 +240,6 @@ export function Home() {
 
   const openBrowser = (port: number) =>
     void ipc.openUrl(`http://localhost:${port}`).catch((e) => alert(String(e)))
-
-  const lastLogs = logs.slice(-6)
 
   return (
     <div className="flex h-full flex-col bg-page text-body">

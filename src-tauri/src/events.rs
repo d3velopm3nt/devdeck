@@ -88,7 +88,7 @@ pub fn day_of(at_ms: i64) -> String {
 
 /// Read one occurrence's entry. A file that is not there is an empty entry,
 /// not an error: most occurrences have never been written about.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn event_entry(schedule_id: i64, at: i64) -> Result<Entry, String> {
     let day = day_of(at);
     let path = path_for(schedule_id, &day);
@@ -112,7 +112,7 @@ pub fn event_entry(schedule_id: i64, at: i64) -> Result<Entry, String> {
 /// Write it. An entry with nothing said in it is deleted rather than kept as
 /// an empty file — a folder of blank records is worse than an empty folder,
 /// because it looks like data.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn event_entry_save(
     schedule_id: i64,
     at: i64,
@@ -164,7 +164,7 @@ pub fn event_entry_save(
 /// What turns a page into a record: the last time you did this, and the time
 /// before that. Bounded — a schedule you have kept for years is still a folder
 /// of small files, and the page only ever shows the recent end of it.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn event_history(schedule_id: i64, limit: Option<usize>) -> Result<Vec<Entry>, String> {
     let dir = root().join(schedule_id.to_string());
     let Ok(read) = std::fs::read_dir(&dir) else {

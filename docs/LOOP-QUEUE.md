@@ -217,6 +217,20 @@ the worker grant first, because without it a night produces blocked runs.
 | A | **A worker may be given permission in advance.** Narrow standing grants existed for *agents* all along — a tool, one action, a scope, an expiry, checked on every use — and the worker asker consulted them **zero** times. So a worker could only wake somebody or be denied: Smith wrote two good files on the 28th and stood at `npm test` for ninety seconds, three times, with nobody at the keyboard. | 0 → a grant the asker reads | green | `d7b38cb`. `allow: [npm test, git add, git commit]` + `allow_until:` in the worker's own file, resolved before the run starts and written into its folder. Refuses: any part of a command line that was not granted, `cd` anywhere but its own worktree, a prefix that is not a whole word, and push/merge/`rm -rf`/sudo whatever the file says. No expiry, an unreadable one, or an empty list all mean *ask, as before* — permission must never be acquired by accident. A covered call is still written down. |
 | B | **A manager takes the space's feature instead of inventing its own.** "Studio's plan" sat beside "The goal store" as siblings when one holds the other's work. | 2 containers → 1 | green | `b8dc5ec`. `plan_into` adopts when there is no doubt which — exactly one complete feature owned by nobody. Two unowned features are a question and nothing is guessed; every other case is `bot_adopt`, which refuses to take a feature from a manager that still exists. Studio now owns the goal store. |
 
+| C | **A wake by hand froze the window.** L7 said a wake runs on the scheduler thread; both *clock* paths had spawned one for months, so that entry was stale. The **hand** path never had. `schedule_run_now` was a sync `#[tauri::command]`, which Tauri runs on the webview's own thread — pressing Run now on a manager froze everything for as long as the model took, five and a half minutes on the 28th. | froze → off-thread | green | `b8d0c11`. It stays synchronous *to the caller*, because the button wants the outcome; what changes is which thread waits. |
+| D | **Nothing was counting.** L4 had no measure, which is why "308 of 386" could sit in this file being wrong. | no measure → a ratchet | green | `b8d0c11`. `check-sync-commands.mjs`, wired into `npm run lint`. The real count was **254**. `pty_write` is named as deliberately sync — what it writes has to arrive in the order it was typed. |
+| E | **L4, ground down.** | 254 → **69** | green | `a50f735`, `891b5ff`, `21252ba`. Connections and Machine spawn CLIs; Mail opens sockets; Stash walks the disk and does OCR; then Vault, Community, GitHub, Setup, Files, Seed, Spaces, Activity, Focus, Inbox, Calls, Bots, the database, Services, Threads, Schedule, Calendar, Git, Team, Events. Each checked for window use first — a window is the one thing that genuinely wants the main thread. What is left is almost all `aiw/commands.rs`, which wants reading rather than a bulk edit, and `pty.rs`, which stays. |
+| F | **L3, ground down.** | 62 → **25** | green | `ca3471f`. 133 fields across 34 files, all of the `const { a, b } = useApp()` shape, which converts to one selector per field and is exactly equivalent. The 25 left hold the whole store in a variable and read it later; those need reading, not transforming. |
+
+### Checked at runtime, not just compiled
+
+185 commands changed attribute in one night, and `cargo test` does not
+exercise Tauri's dispatch at all. So the app was started and one command per
+converted module was called through the real boundary: bots, team, schedule,
+services, activity, vault, workers, runs, stash, mail, conn, machine, inbox,
+focus, git, calendar, db. Every one answered. The only failures were wrong
+argument types in the probe itself.
+
 ### Still the owner's to decide
 
 - The three template proposals on Studio's plan. Studio asked about them itself.

@@ -38,7 +38,7 @@ function Num({ value, label }: { value: string; label: string }) {
 }
 
 export function LearnRunPage() {
-  const { nodes } = useApp()
+  const nodes = useApp((s) => s.nodes)
 
   const [step, setStep] = useState<Step>('estimate')
   const [est, setEst] = useState<ipc.LearnEstimate | null>(null)

@@ -31,7 +31,9 @@ export function BotCreate({
   onClose: () => void
   onCreated: (bot: ipc.Bot) => void
 }) {
-  const { nodes, activeWorkspaceId, bots } = useApp()
+  const nodes = useApp((s) => s.nodes)
+  const activeWorkspaceId = useApp((s) => s.activeWorkspaceId)
+  const bots = useApp((s) => s.bots)
   const [templates, setTemplates] = useState<ipc.BotTemplate[]>([])
   const [templateId, setTemplateId] = useState('website')
   const [nodeId, setNodeId] = useState<number | null>(fixedNode ?? null)

@@ -39,7 +39,7 @@ const initials = (name: string) =>
     .join('')
 
 export function LifePage() {
-  const { setRailView } = useApp()
+  const setRailView = useApp((s) => s.setRailView)
   const [people, setPeople] = useState<PersonView[]>([])
   const [waiting, setWaiting] = useState(0)
   const [open, setOpen] = useState<string | null>(null)

@@ -67,7 +67,10 @@ export function BotDetail({
   ask?: boolean
   onAskConsumed?: () => void
 }) {
-  const { nodes, focus, refreshBots, refreshActivity } = useApp()
+  const nodes = useApp((s) => s.nodes)
+  const focus = useApp((s) => s.focus)
+  const refreshBots = useApp((s) => s.refreshBots)
+  const refreshActivity = useApp((s) => s.refreshActivity)
   const aiw = useAiw()
 
   const [bot, setBot] = useState<ipc.Bot | null>(null)

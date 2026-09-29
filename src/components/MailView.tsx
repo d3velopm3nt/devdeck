@@ -226,7 +226,8 @@ function Tabs({
 }
 
 function AssistantPane() {
-  const { mailNotes, setAssistantStatus } = useApp()
+  const mailNotes = useApp((s) => s.mailNotes)
+  const setAssistantStatus = useApp((s) => s.setAssistantStatus)
 
   if (mailNotes.length === 0) {
     return (

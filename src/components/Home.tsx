@@ -22,7 +22,10 @@ function hexA(hex: string, a: number): string {
 
 // One space (project) card: colour spine, avatar, name, live counts.
 function SpaceCard({ project, topUsed }: { project: TreeNode; topUsed: boolean }) {
-  const { nodes, services, commands, svcStates } = useApp()
+  const nodes = useApp((s) => s.nodes)
+  const services = useApp((s) => s.services)
+  const commands = useApp((s) => s.commands)
+  const svcStates = useApp((s) => s.svcStates)
   const scope = useMemo(() => new Set(subtreeIds(nodes, project.id)), [nodes, project.id])
   const svc = services.filter((s) => s.project_id != null && scope.has(s.project_id))
   const running = svc.filter((s) => svcStates[s.id]?.status === 'running').length

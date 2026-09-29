@@ -9,7 +9,8 @@ import { ServiceEditorPage } from './editors/ServiceEditorPage'
 import { ProfileEditorPage } from './editors/ProfileEditorPage'
 
 export function Sheet() {
-  const { sheet, closeSheet } = useApp()
+  const sheet = useApp((s) => s.sheet)
+  const closeSheet = useApp((s) => s.closeSheet)
 
   useEffect(() => {
     if (!sheet) return

@@ -17,7 +17,9 @@ import { useApp } from '../store'
 import { Icon } from '../lib/icons'
 
 export function ClockToast() {
-  const { toast, dismissToast, setRailView } = useApp()
+  const toast = useApp((s) => s.toast)
+  const dismissToast = useApp((s) => s.dismissToast)
+  const setRailView = useApp((s) => s.setRailView)
   if (!toast) return null
 
   const bad = !toast.ok

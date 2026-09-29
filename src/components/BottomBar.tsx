@@ -32,7 +32,7 @@ export function BottomBar({
   height: number
   onHeight: (h: number) => void
 }) {
-  const { svcStates } = useApp()
+  const svcStates = useApp((s) => s.svcStates)
   const logCount = useLive((s) => s.logs.length)
   const events = useAiw((s) => s.events)
   const drag = useRef<{ startY: number; startH: number } | null>(null)

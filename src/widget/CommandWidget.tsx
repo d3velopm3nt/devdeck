@@ -908,7 +908,7 @@ function ItemRow({ it, d, status, onRun, onToggle, onRestart, onTerminal }: {
   const isService = it.kind === 'service'
   const running = status === 'running'
   // Look up the live port / uptime for services (restores the session-panel info).
-  const { services } = useApp()
+  const services = useApp((s) => s.services)
   const stats = useLive((s) => s.stats)
   const svc = isService ? services.find((s) => s.id === it.refId) : undefined
   const stat = isService ? stats.find((s) => s.kind === 'service' && s.id === it.refId) : undefined

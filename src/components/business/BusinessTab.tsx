@@ -37,7 +37,7 @@ function Head({ title, note }: { title: string; note?: string }) {
 }
 
 export function BusinessTab({ nodeId }: { nodeId: number }) {
-  const { nodes } = useApp()
+  const nodes = useApp((s) => s.nodes)
   const [view, setView] = useState<ipc.BusinessView | null>(null)
   const [space, setSpace] = useState<ipc.SpaceView | null>(null)
   const [err, setErr] = useState('')

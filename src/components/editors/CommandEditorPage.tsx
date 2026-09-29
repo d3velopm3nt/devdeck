@@ -28,7 +28,11 @@ const blank = (ownerId: number | null): CommandDef => ({
 })
 
 export function CommandEditorPage(props: EditorPageProps<Params>) {
-  const { commands, nodes, refreshCommands, refreshServices, selectedNode } = useApp()
+  const commands = useApp((s) => s.commands)
+  const nodes = useApp((s) => s.nodes)
+  const refreshCommands = useApp((s) => s.refreshCommands)
+  const refreshServices = useApp((s) => s.refreshServices)
+  const selectedNode = useApp((s) => s.selectedNode)
   const id = props.params.id
   const owners = useMemo(() => ownerNodes(nodes), [nodes])
 

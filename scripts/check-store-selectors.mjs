@@ -23,7 +23,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 /// Lower this when you convert some. Never raise it.
-const BASELINE = 62
+const BASELINE = 25
 
 const src = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'src')
 

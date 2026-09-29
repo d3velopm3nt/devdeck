@@ -8,7 +8,9 @@
 import { useApp } from '../store'
 
 export function MailPaneSwitch() {
-  const { mailPane, setMailPane, mailContacts } = useApp()
+  const mailPane = useApp((s) => s.mailPane)
+  const setMailPane = useApp((s) => s.setMailPane)
+  const mailContacts = useApp((s) => s.mailContacts)
   return (
     <div className="flex gap-1 border-b border-line px-2.5 py-1.5">
       {(['mail', 'contacts'] as const).map((p) => (

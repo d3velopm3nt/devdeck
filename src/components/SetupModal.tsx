@@ -20,7 +20,7 @@ export function SetupModal({
   dir: string
   onClose: () => void
 }) {
-  const { refreshServices } = useApp()
+  const refreshServices = useApp((s) => s.refreshServices)
   const [running, setRunning] = useState(false)
   const [status, setStatus] = useState('')
 

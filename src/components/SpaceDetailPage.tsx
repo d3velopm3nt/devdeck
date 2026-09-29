@@ -31,7 +31,13 @@ type Tab = 'services' | 'commands' | 'profiles'
 
 export function SpaceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
   const projectId = props.params.id
-  const { nodes, services, commands, profiles, svcStates, terminals, refreshTree } = useApp()
+  const nodes = useApp((s) => s.nodes)
+  const services = useApp((s) => s.services)
+  const commands = useApp((s) => s.commands)
+  const profiles = useApp((s) => s.profiles)
+  const svcStates = useApp((s) => s.svcStates)
+  const terminals = useApp((s) => s.terminals)
+  const refreshTree = useApp((s) => s.refreshTree)
   const stats = useLive((s) => s.stats)
   const [tab, setTab] = useState<Tab>('services')
   const [selected, setSelected] = useState<Set<number>>(new Set())

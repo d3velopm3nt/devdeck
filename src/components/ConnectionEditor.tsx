@@ -30,7 +30,11 @@ const BLANK: ConnDef = {
 }
 
 export function ConnectionEditor() {
-  const { connEditing, connections, closeConnEditor, refreshConnections, selectConnection } = useApp()
+  const connEditing = useApp((s) => s.connEditing)
+  const connections = useApp((s) => s.connections)
+  const closeConnEditor = useApp((s) => s.closeConnEditor)
+  const refreshConnections = useApp((s) => s.refreshConnections)
+  const selectConnection = useApp((s) => s.selectConnection)
   const [def, setDef] = useState<ConnDef>(BLANK)
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')

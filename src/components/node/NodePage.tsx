@@ -79,7 +79,12 @@ function GitTab({ nodeId }: { nodeId: number }) {
 
 export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
   const nodeId = params.id
-  const { nodes, commands, services, gitByNode, bots, refreshBots } = useApp()
+  const nodes = useApp((s) => s.nodes)
+  const commands = useApp((s) => s.commands)
+  const services = useApp((s) => s.services)
+  const gitByNode = useApp((s) => s.gitByNode)
+  const bots = useApp((s) => s.bots)
+  const refreshBots = useApp((s) => s.refreshBots)
   const a = useAiw()
   const [dir, setDir] = useState('')
   const [tab, setTab] = useState<Tab>((CAPTURE_NODE_TAB as Tab) || 'thread')

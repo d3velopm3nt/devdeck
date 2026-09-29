@@ -22,7 +22,12 @@ import { openSpace, openNodeSetup, openNodeConfig } from '../../lib/dock'
 import { SPACE_TAGS, nodeColor } from '../../lib/spaces'
 
 export function NodeConfigPage({ params }: IDockviewPanelProps<{ id: number }>) {
-  const { nodes, commands, services, refreshTree, setSelectedNode, labels } = useApp()
+  const nodes = useApp((s) => s.nodes)
+  const commands = useApp((s) => s.commands)
+  const services = useApp((s) => s.services)
+  const refreshTree = useApp((s) => s.refreshTree)
+  const setSelectedNode = useApp((s) => s.setSelectedNode)
+  const labels = useApp((s) => s.labels)
   const node = useMemo(() => nodes.find((n) => n.id === params.id) ?? null, [nodes, params.id])
 
   const [busy, setBusy] = useState(false)

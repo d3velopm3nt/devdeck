@@ -27,7 +27,11 @@ const blank = (ownerId: number | null): ServiceDef => ({
 })
 
 export function ServiceEditorPage(props: EditorPageProps<Params>) {
-  const { services, nodes, refreshServices, refreshCommands, selectedNode } = useApp()
+  const services = useApp((s) => s.services)
+  const nodes = useApp((s) => s.nodes)
+  const refreshServices = useApp((s) => s.refreshServices)
+  const refreshCommands = useApp((s) => s.refreshCommands)
+  const selectedNode = useApp((s) => s.selectedNode)
   const id = props.params.id
   const owners = useMemo(() => ownerNodes(nodes), [nodes])
 

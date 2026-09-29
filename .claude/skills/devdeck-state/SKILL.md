@@ -1,15 +1,16 @@
 ---
 name: devdeck-state
-description: Read and update the user's shared DevDeck state vault in the private d3velopm3nt/devdeck-state GitHub repository. Use for DevDeck goals, projects, features, work items, decisions, progress, and continuation across conversations; also use when a user asks for the current state of another project that may be recorded in the DevDeck vault. Fetch current repo files rather than relying on chat memory.
+description: Read and update a user's shared DevDeck state vault in their configured GitHub repository. Use for DevDeck goals, projects, features, work items, decisions, progress, and continuation across conversations; also use when a user asks for the current state of another project that may be recorded in the DevDeck vault. Fetch current repo files rather than relying on chat memory.
 ---
 
 # DevDeck State
 
 ## Source and boundaries
 
-- Use the connected GitHub tools, or authorized Git access, for the private `d3velopm3nt/devdeck-state` repository. Its default branch is `main`; verify repository access and branch rather than assuming stale local copies are current.
-- Treat the vault as shared, human-editable project state. Application source code lives separately in `d3velopm3nt/devdeck`. The desktop app can optionally view a local clone; it is not required for vault use. Recording a work item does not start an agent, local worker, reminder, or Windows task.
-- Read `README.md` for the current repository contract and find the relevant project before acting. The known seed is `Work/DevDeck/`, with `_devdeck.md` folder metadata, `.devdeck/project.md` and `context.md`, and feature folders under `.devdeck/features/<slug>/` containing `feature.md`, `context.md`, `requirements.md`, and `work.md`. Discover actual paths each time; do not assume all projects have been seeded or use that exact schema forever.
+- Resolve the vault repository before reading: use an explicit `owner/repo` from the user, then `DEVDECK_STATE_REPO` for local Claude Code, then a repository configured in this skill's private installed copy. If none is available, ask the user which repo holds their vault. Do not default to the DevDeck author's repo. Never commit a user's private configuration to this public skill.
+- Use the connected GitHub tools, or authorized Git access, for that repository. Discover its default branch and verify access rather than assuming stale local copies are current.
+- Treat the vault as shared, human-editable project state. DevDeck application source code lives separately from the state vault. The desktop app can optionally view a local clone; it is not required for vault use. Recording a work item does not start an agent, local worker, reminder, or Windows task.
+- Read the vault's `README.md` for its contract and discover the relevant paths. DevDeck vaults can use `_devdeck.md` folder metadata, `.devdeck/project.md` and `context.md`, and `.devdeck/features/<slug>/` with `feature.md`, `context.md`, `requirements.md`, and `work.md`. Do not assume every user has the same folders or feature set.
 
 ## Read, work, update
 

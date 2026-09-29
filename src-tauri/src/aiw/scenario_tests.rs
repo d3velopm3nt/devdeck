@@ -2886,6 +2886,15 @@ fn dev_manager(feature: &str) -> Bot {
         node_name: "TyreX".into(),
         goal: "Get offline sync shipped without losing anyone's data.".into(),
         feature: feature.into(),
+        // What it owns, which is where `feature` comes from in the first place:
+        // `from_manager` takes the portfolio's first entry. Setting one without
+        // the other made a manager this code could never produce, and the board
+        // used to agree with it only because it asked the wrong field.
+        portfolio: vec![crate::bots::Owned {
+            node_id: 7,
+            node_name: "TyreX".into(),
+            feature: feature.into(),
+        }],
         agent: "dev-a".into(),
         team: vec!["dev-a".into(), "dev-b".into(), "qa".into()],
         every: "weekdays".into(),

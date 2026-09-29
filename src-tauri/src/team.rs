@@ -159,9 +159,24 @@ pub fn board_from(
         for slug in deck.feature_slugs() {
             let f = deck.feature(&slug).ok();
             let items = deck.work(&slug).map(|w| w.meta.items).unwrap_or_default();
-            let managing = bots
-                .iter()
-                .find(|b| b.node_id == node_id && b.feature.trim() == slug);
+            // Whoever owns *this* feature, out of everything they own.
+            //
+            // It asked `b.feature`, which is a manager's *first* feature — the
+            // one kept for pages that still want a single answer. That held
+            // only while a manager owned exactly one thing. The moment Studio
+            // took the goal store as well, `b.feature` became `goal-store`
+            // (the portfolio is sorted), and "Studio's plan" — the other
+            // feature it owns — reported no manager at all: no name, no
+            // instruction to edit, and the page fell back to "No manager owns
+            // this yet".
+            //
+            // The portfolio is the answer to "who owns this", and `b.feature`
+            // is the answer to "where does a loose step go". Two questions.
+            let managing = bots.iter().find(|b| {
+                b.portfolio
+                    .iter()
+                    .any(|o| o.node_id == node_id && o.feature.trim() == slug)
+            });
             let thread = convs.and_then(|c| {
                 c.list().into_iter().find(|x| {
                     x.feature.as_deref() == Some(&slug) && x.project_id.as_deref() == Some(&id)
@@ -284,6 +299,53 @@ mod tests {
             due: None,
             branch: None,
         }
+    }
+
+    /// A manager owning two features manages both of them.
+    ///
+    /// Who manages a feature was read from `bot.feature` — a manager's *first*
+    /// feature, kept for pages that still want a single answer. That held only
+    /// while a manager owned exactly one thing. The moment Studio took the goal
+    /// store as well, `bot.feature` became `goal-store` and "Studio's plan"
+    /// reported no manager at all: no name on the page, no instruction to edit,
+    /// and a fallback that said nobody owned it.
+    #[test]
+    fn owning_a_second_feature_does_not_disown_the_first() {
+        let studio = crate::bots::Bot {
+            handle: "studio".into(),
+            name: "Studio".into(),
+            node_id: 61,
+            // Sorted, as `portfolios` returns it — so the *first* is not the
+            // one this manager was originally made for.
+            feature: "goal-store".into(),
+            portfolio: vec![
+                crate::bots::Owned {
+                    node_id: 61,
+                    node_name: "Goal tracker".into(),
+                    feature: "goal-store".into(),
+                },
+                crate::bots::Owned {
+                    node_id: 61,
+                    node_name: "Goal tracker".into(),
+                    feature: "studio".into(),
+                },
+            ],
+            ..Default::default()
+        };
+        let bots = [studio];
+
+        let manages = |slug: &str, node: i64| {
+            bots.iter().any(|b| {
+                b.portfolio
+                    .iter()
+                    .any(|o| o.node_id == node && o.feature == slug)
+            })
+        };
+        assert!(manages("goal-store", 61));
+        assert!(manages("studio", 61), "the second feature lost its manager");
+        // And nothing is claimed that was not owned.
+        assert!(!manages("splash-screen", 61));
+        assert!(!manages("goal-store", 62), "a feature in another space");
     }
 
     /// The count under the heading must agree with the buttons under it.

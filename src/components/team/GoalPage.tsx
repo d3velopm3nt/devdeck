@@ -372,9 +372,24 @@ export function GoalPage({ goal, board }: { goal: GoalRow; board: Board }) {
                 <div className="mt-2 flex items-center gap-2 rounded-lg border border-sky-500/25 bg-sky-500/[0.07] px-3 py-1.5">
                   <span className="min-w-0 flex-1 text-[11.5px] text-dim">
                     {items.filter((i) => i.status === 'built').length} built on{' '}
-                    <code className="font-mono text-[10.5px] text-muted">
-                      devdeck/{f.feature_id}
-                    </code>{' '}
+                    {/* The branches the receipts name, never the one the rule
+                        would pick today: work built before the branch became
+                        per-goal is still on its old per-item branch, and
+                        naming a branch that does not hold it would be a
+                        confident lie about where the work is. */}
+                    {[
+                      ...new Set(
+                        items
+                          .filter((i) => i.status === 'built')
+                          .map((i) => runFor(i.id)?.branch)
+                          .filter((b): b is string => !!b),
+                      ),
+                    ].map((b, n, all) => (
+                      <span key={b}>
+                        <code className="font-mono text-[10.5px] text-muted">{b}</code>
+                        {n < all.length - 1 ? ' and ' : ''}
+                      </span>
+                    ))}{' '}
                     — on a branch, not on the main line.
                   </span>
                   <button

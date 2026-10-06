@@ -38,7 +38,7 @@ Keeping a code run requires a human review note and records the reviewed commit.
 | Browser interaction checks | 11 passed, no page errors | Real React/store/event subscriptions; native IPC and model responses mocked |
 | Desktop-sized layout | Captured at 1440×1000 and 1100×800 | No document horizontal overflow at laptop size |
 | Full Linux Tauri build | Blocked | Sandbox lacks GTK/GLib development dependencies |
-| Native Windows verification | Full Clippy passed at `66bc46c`; test/build status on PR | CI performs full Clippy, Rust tests and installer build |
+| Native Windows verification | Full Clippy passed at `66bc46c`; 675 tests passed, one old auto-completion expectation corrected; rerun on PR | CI performs full Clippy, Rust tests and installer build |
 
 The browser scenario uses fictional Life, Personal and Business spaces, a Builder, a Reviewer, and synthetic manager messages. It exercises role editing, request → model reply → acknowledgement, creating a personal manager, scope filtering, scope persistence, Work scope, theme switching and navigation. No real agent, mail account, personal vault, purchase or external communication is exercised.
 

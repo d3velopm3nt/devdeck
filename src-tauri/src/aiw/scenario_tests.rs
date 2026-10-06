@@ -3007,28 +3007,28 @@ fn a_goal_a_manager_and_its_team_move_work_and_the_board_follows() {
         r.participants
     );
 
-    // --- Beat 4: work finished on disk moves the board ---------------------
-    // The agent that ran in beat 1 has already closed something of its own —
-    // which is the first thing worth asserting, because it means the board is
-    // reading the deck the session wrote rather than a number held in memory.
-    let done_by_agent = r.items_done;
-    assert!(
-        done_by_agent > 0,
-        "the session that ran should have closed something: {r:?}"
-    );
-
-    // Then one more, through the deck, the way a tool call does it — not by
-    // editing a struct, which would prove only that a struct can be edited.
+    // --- Beat 4: finished work waits for a human, and the board says so -----
+    assert_eq!(r.items_done, 0, "an agent cannot accept its own result");
     let project = w.project("7").unwrap();
     let deck = project.deck();
     let mut work = deck.work(slug).unwrap();
+    assert!(
+        work.meta
+            .items
+            .iter()
+            .any(|i| i.id == "wi-ui" && i.status == "needs-review"),
+        "the finished item must persist as awaiting review"
+    );
+    assert!(r.waiting > 0, "the board must surface the human review");
+
+    // Simulate the person accepting a result through the persisted deck.
     let next = work
         .meta
         .items
         .iter()
-        .find(|i| i.status != "done")
+        .find(|i| i.status == "needs-review")
         .map(|i| i.id.clone())
-        .expect("something is still open");
+        .expect("the agent result is awaiting review");
     for item in work.meta.items.iter_mut() {
         if item.id == next {
             item.status = "done".into();
@@ -3039,9 +3039,8 @@ fn a_goal_a_manager_and_its_team_move_work_and_the_board_follows() {
     let board = board_from(&w, Some(&c), &names, &parents, &bots);
     let r = row_for(&board, slug);
     assert_eq!(
-        r.items_done,
-        done_by_agent + 1,
-        "the board counts what the deck says"
+        r.items_done, 1,
+        "only the result explicitly accepted by the person counts as done"
     );
     assert_eq!(r.items_total, total, "and closing one invents no others");
 

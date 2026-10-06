@@ -67,3 +67,8 @@ export const confirm = async () => false
 export const relaunch = async () => {}
 export const exit = async () => {}
 export const check = async () => null
+
+// Native notifications stay inside the test boundary.
+export const isPermissionGranted = async () => false
+export const requestPermission = async () => 'denied'
+export const sendNotification = () => {}

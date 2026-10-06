@@ -17,6 +17,7 @@ export default defineConfig({
       { find: /^@tauri-apps\/api\/window$/, replacement: mock },
       { find: /^@tauri-apps\/api\/dpi$/, replacement: mock },
       { find: /^@tauri-apps\/plugin-dialog$/, replacement: mock },
+      { find: /^@tauri-apps\/plugin-notification$/, replacement: mock },
       { find: /^@tauri-apps\/plugin-process$/, replacement: mock },
       { find: /^@tauri-apps\/plugin-updater$/, replacement: mock },
     ],

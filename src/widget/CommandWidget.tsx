@@ -17,6 +17,7 @@ import type { StashItem, SvcState, TreeNode } from '../lib/types'
 import { findNode, resolveDir } from '../lib/tree'
 import { widgetOpenTerminal, widgetRunCommand, serviceDir } from './widgetActions'
 import { DeckPanel, type DeckView } from './DeckPanel'
+import { DeckLogo } from './DeckLogo'
 import { DECK_DEFAULTS, loadDeckSettings, mayInterruptFocus } from '../lib/deck'
 import { announceUpdates, updatesFromPaths, type DeckUpdate } from '../lib/deckUpdates'
 
@@ -70,11 +71,11 @@ const CORNERS: { key: Corner; label: string }[] = [
 ]
 
 function sizeForMode(mode: Mode, full: { w: number; h: number }): { w: number; h: number } {
-  if (mode === 'icon') return { w: 58, h: 58 }
-  if (mode === 'menu') return { w: 180, h: 360 }
-  if (mode === 'today') return { w: 380, h: 550 }
-  if (mode === 'focus') return { w: 380, h: 335 }
-  if (mode === 'spaces' || mode === 'updates') return { w: 380, h: 500 }
+  if (mode === 'icon') return { w: 72, h: 72 }
+  if (mode === 'menu') return { w: 172, h: 380 }
+  if (mode === 'today') return { w: 620, h: 740 }
+  if (mode === 'focus') return { w: 330, h: 350 }
+  if (mode === 'spaces' || mode === 'updates') return { w: 620, h: 740 }
   return full
 }
 
@@ -191,7 +192,7 @@ export function CommandWidget() {
   // ---- interactive UI state (mirrors the design's this.state) ----
   const [view, setView] = useState<View>('recent')
   // Two faces: a floating icon (collapsed) and the full widget (expanded).
-  const [mode, setMode] = useState<Mode>('full')
+  const [mode, setMode] = useState<Mode>('today')
   const [deckSettings, setDeckSettings] = useState(DECK_DEFAULTS)
   const [deckUpdates, setDeckUpdates] = useState<DeckUpdate[]>([])
   const [corner, setCorner] = useState<Corner>('free')
@@ -250,21 +251,15 @@ export function CommandWidget() {
     void (async () => {
       const c = ((await ipc.settingGet('widget_corner')) as Corner | null) ?? 'free'
       setCorner(c)
-      const done = await ipc.settingGet('widget_tour_done')
+      const done = await ipc.settingGet('deck.introduced')
       if (done !== '1') {
-        // First run: open the full widget so the guided setup tour shows.
-        setMode('full')
-        setTourOpen(true)
-        await win().setMinSize(new LogicalSize(320, 300))
+        // First run opens the designed Today surface; command setup stays in the deeper panel.
+        setMode('today')
+        await ipc.settingSet('deck.introduced', '1')
       } else {
         setMode('icon')
-        await win().setMinSize(new LogicalSize(58, 58))
-        await ipc.widgetResize(58, 58)
       }
-      if (c !== 'free') {
-        const size = sizeForMode(done === '1' ? 'icon' : 'full', expandedSize)
-        await positionForCorner(c, size.w, size.h)
-      }
+      await placeWidget(done === '1' ? 'icon' : 'today', c)
     })()
     return () => {
       for (const s of subs) void s.then((un) => un())
@@ -618,6 +613,7 @@ export function CommandWidget() {
       // their selected corner; clamp both to the monitor work area.
       const [mon, pos, oldSize] = await Promise.all([currentMonitor(), win().outerPosition(), win().outerSize()])
       const sf = mon?.scaleFactor ?? await win().scaleFactor()
+      if (mon) { s.w = Math.min(s.w, mon.size.width / sf - 28); s.h = Math.min(s.h, mon.size.height / sf - CORNER_BOTTOM - 14) }
       const x = pos.x / sf; const y = pos.y / sf
       const oldW = oldSize.width / sf; const oldH = oldSize.height / sf
       await win().setMinSize(new LogicalSize(m === 'full' ? 320 : s.w, m === 'full' ? 300 : s.h))
@@ -745,12 +741,12 @@ export function CommandWidget() {
     return (
       <div style={css('position:fixed;inset:0')}>
         <style>{keyframes}</style>
-        <div className="deck-launcher" onMouseDown={dragOrClick(() => void goDeck('menu'))} title="Tap to open · drag to move" style={{ width: 54, height: 54, margin: 2 }}>
-          <span className="font-bold text-[24px] leading-none">D</span>
-          {runningCount > 0 && (
-            <div className="deck-badge">{runningCount}</div>
+        <button className="deck-launcher" aria-label="Open Deck" onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void goDeck('menu') } }} onMouseDown={dragOrClick(() => void goDeck('menu'))} title="Tap to open · drag to move" style={{ width: 54, height: 54, margin: 9 }}>
+          <DeckLogo />
+          {deckUpdates.length > 0 && (
+            <div className="deck-badge">{deckUpdates.length}</div>
           )}
-        </div>
+        </button>
       </div>
     )
   }

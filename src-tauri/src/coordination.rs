@@ -166,6 +166,12 @@ pub fn send(
         );
     }
     let all = messages(dir)?;
+    let key = serde_json::to_vec(&(from, &draft)).map_err(|e| e.to_string())?;
+    let id = format!("{:x}", Sha256::digest(&key));
+    if let Some(existing) = all.iter().find(|m| m.id == id) {
+        return Ok(existing.clone());
+    }
+
     let depth = if let Some(id) = &draft.reply_to {
         let parent = all
             .iter()
@@ -176,10 +182,7 @@ pub fn send(
                 "A reply must go back to the sender of a message addressed to this manager.".into(),
             );
         }
-        if all
-            .iter()
-            .any(|m| m.reply_to.as_deref() == Some(id) && m.body != draft.body)
-        {
+        if all.iter().any(|m| m.reply_to.as_deref() == Some(id)) {
             return Err("This message already has a response. Reload the inbox.".into());
         }
         parent.depth + 1
@@ -191,11 +194,6 @@ pub fn send(
     };
     if depth > 8 {
         return Err("This exchange reached eight replies. Ask the person to resolve it.".into());
-    }
-    let key = serde_json::to_vec(&(from, &draft)).map_err(|e| e.to_string())?;
-    let id = format!("{:x}", Sha256::digest(&key));
-    if let Some(existing) = all.iter().find(|m| m.id == id) {
-        return Ok(existing.clone());
     }
     if pending(&all, &draft.to).len() >= 100 {
         return Err("This manager has 100 unanswered messages. Resolve those first.".into());

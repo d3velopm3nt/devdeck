@@ -458,9 +458,17 @@ impl RunSlots {
 
     fn try_acquire(&self) -> bool {
         use std::sync::atomic::Ordering::SeqCst;
-        self.busy
-            .fetch_update(SeqCst, SeqCst, |n| (n < self.cap).then_some(n + 1))
-            .is_ok()
+        let mut current = self.busy.load(SeqCst);
+        while current < self.cap {
+            match self
+                .busy
+                .compare_exchange_weak(current, current + 1, SeqCst, SeqCst)
+            {
+                Ok(_) => return true,
+                Err(actual) => current = actual,
+            }
+        }
+        false
     }
 
     fn release(&self) {

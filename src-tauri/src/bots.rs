@@ -2437,7 +2437,7 @@ The receipts in the thread are the record. A line such as \"claimed by @dev-a\" 
         "\n\nWhat you can actually do, and how:\n\
          - Put someone on an item: write @name take \"title\" in your reply. That starts them \
            in a session and posts a receipt here.\n\
-         - Keep the plan: work.add to put something on it, work.done when a receipt shows it \
+         - Keep the plan: work.add to put something on it, work.done to submit for human review when a receipt shows it \
            finished, work.drop to let go of one nobody is doing. work.list to see it.",
     );
     if acts {
@@ -2982,6 +2982,8 @@ pub fn wake_agent(app: &tauri::AppHandle, bot: &Bot) -> Option<(bool, String)> {
                         if out.refused == 1 { "" } else { "s" },
                     ),
                 ))
+            } else if out.status != "Completed" {
+                Some((false, format!("{did}. {}: {}", out.status, out.summary)))
             } else if out.summary.trim().is_empty() {
                 Some((true, format!("{did}. {}", out.status)))
             } else {

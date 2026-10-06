@@ -1468,7 +1468,6 @@ impl Assistant {
             let cmd = StartAgentCommand {
                 project_id,
                 feature_id: feature_id.clone(),
-                manager_handle: None,
                 agent_id: agent.id.clone(),
                 work_item_id: None,
                 intent: Some(format!(
@@ -1732,7 +1731,6 @@ impl Assistant {
         let cmd = StartAgentCommand {
             project_id,
             feature_id,
-            manager_handle: None,
             agent_id: agent.id.clone(),
             work_item_id: Some(item.id.clone()),
             intent: Some(format!("{} handed this over: {}", persona.name, item.title)),

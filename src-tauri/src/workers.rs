@@ -1804,7 +1804,7 @@ Answer here. If nobody does within {} seconds it stops and keeps the question.",
         move_item(
             &app2,
             &live,
-            where_the_item_goes(live.ok, !live.files.is_empty()),
+            where_the_item_goes(live.ok, !live.files.is_empty() && !live.branch.is_empty()),
         );
         say_in_room(
             &app2,

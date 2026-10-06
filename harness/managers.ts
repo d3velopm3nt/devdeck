@@ -23,7 +23,7 @@ const send=(from:string,draft:Omit<ManagerMessage,'id'|'from'|'created_at'|'dept
  messages.push(msg);publish('manager.message.delivered',{message_id:msg.id,from,to:msg.to});return msg
 }
 Object.assign(SEED,{
- tree_list:()=>nodes,focus_current:()=>null,
+ tree_list:()=>nodes,vault_scan:()=>nodes,focus_current:()=>null,
  bots_list:()=>team.map(t=>t.bot),bot_get:({handle}:any)=>team.find(t=>t.bot.handle===handle)?.bot??null,
  bot_for_node:({nodeId}:any)=>team.find(t=>t.bot.node_id===nodeId)?.bot??null,
  manager_team:()=>team.map(t=>({...t,pending:messages.filter(m=>m.to===t.bot.handle&&m.kind!=='acknowledgement'&&!messages.some(r=>r.reply_to===m.id)).length})),

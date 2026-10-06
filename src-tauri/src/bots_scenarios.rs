@@ -414,7 +414,7 @@ fn the_next_open_item_says_which_feature_it_came_off() {
     .unwrap();
 
     let bot = bot_on_node(&w.conn, 3).expect("a manager on that node");
-    let (feature, _id, title) =
+    let (_node, feature, _id, title) =
         crate::workers::next_open_item(&w.conn, &bot).expect("an item nobody has picked up");
 
     assert_eq!(title, "Write down who is on call", "the first open one");

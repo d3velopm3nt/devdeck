@@ -692,7 +692,7 @@ pub fn registry() -> Vec<ToolInfo> {
                 ),
                 act(
                     "done",
-                    "Mark an item done. Only when a receipt in the thread shows it finished —                      this records what happened, it does not make it so.",
+                    "Submit an item for human review when a receipt shows the work finished. This never marks it accepted or done.",
                     Access::Write,
                     schema(
                         serde_json::json!({

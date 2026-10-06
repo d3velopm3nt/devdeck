@@ -90,6 +90,12 @@ mod tests {
         let permit = RunPermit::acquire(keys.clone()).unwrap();
         assert!(RunPermit::acquire(keys.clone()).is_err());
         drop(permit);
-        assert!(RunPermit::acquire(keys).is_ok());
+        let first = RunPermit::acquire(keys).unwrap();
+        let second = RunPermit::acquire(vec!["test-target-2".into()]).unwrap();
+        let third = RunPermit::acquire(vec!["test-target-3".into()]).unwrap();
+        let fourth = RunPermit::acquire(vec!["test-target-4".into()]).unwrap();
+        assert!(RunPermit::acquire(vec!["test-target-5".into()]).is_err());
+        drop((first, second, third, fourth));
+        assert!(RunPermit::acquire(vec!["test-target-5".into()]).is_ok());
     }
 }

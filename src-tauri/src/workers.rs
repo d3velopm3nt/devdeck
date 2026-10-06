@@ -1903,8 +1903,12 @@ pub fn next_open_item(
     bot: &crate::bots::Bot,
 ) -> Option<(i64, String, String, String)> {
     for owned in &bot.portfolio {
-        let n = db::node_by_id(conn, owned.node_id).ok()?;
-        let dir = crate::db::node_deck_dir(conn, &n)?;
+        let Ok(n) = db::node_by_id(conn, owned.node_id) else {
+            continue;
+        };
+        let Some(dir) = crate::db::node_deck_dir(conn, &n) else {
+            continue;
+        };
         let deck = crate::aiw::deck::Deck::new(&dir);
         let Ok(work) = deck.work(&owned.feature) else {
             continue;
@@ -3011,7 +3015,7 @@ mod setup_check {
         // Wrote something: it is built, and stays claimed so nobody is sent to
         // write it a second time.
         assert_eq!(super::where_the_item_goes(true, true), super::BUILT);
-        // Wrote nothing: nobody has done it, so it goes back on offer.
+        // Failed work stays blocked, including partial output.
         assert_eq!(super::where_the_item_goes(false, false), "blocked");
         // And neither of those is "done", whatever the run thought of itself.
         assert_ne!(super::where_the_item_goes(true, true), "done");

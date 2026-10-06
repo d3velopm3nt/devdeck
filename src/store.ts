@@ -620,10 +620,18 @@ export const useApp = create<AppState>((set, get) => ({
   treeLoading: true,
   selectedNodeId: null,
   activeWorkspaceId: loadActiveWs(),
-  spaceScopeId: null,
+  spaceScopeId: loadTodayArea(),
   setSpaceScope: (id) => {
+    if (id == null) localStorage.removeItem(TODAY_AREA_KEY)
+    else localStorage.setItem(TODAY_AREA_KEY, String(id))
     if (id != null) persistActiveWs(id)
-    set({spaceScopeId:id,todayArea:id,...(id==null?{}:{activeWorkspaceId:id}),selectedNodeId:null,activeSolutionId:null})
+    set({
+      spaceScopeId: id,
+      todayArea: id,
+      ...(id == null ? {} : { activeWorkspaceId: id }),
+      selectedNodeId: null,
+      activeSolutionId: null,
+    })
   },
   activeSolutionId: null,
   labels: DEFAULT_LABELS,
@@ -681,6 +689,8 @@ export const useApp = create<AppState>((set, get) => ({
       persistActiveWs(activeWorkspaceId)
       treeRetries = 0
       window.clearTimeout(treeRetryTimer)
+      const scope = get().spaceScopeId
+      if (scope != null && !nodes.some(n => n.id === scope)) get().setSpaceScope(null)
       set({ nodes, activeWorkspaceId, treeError: null, treeLoading: false })
       void get().refreshGit()
     } catch (e) {
@@ -1029,11 +1039,7 @@ export const useApp = create<AppState>((set, get) => ({
     set({ teamTab: t, railView: 'team' })
   },
   todayArea: loadTodayArea(),
-  setTodayArea: (id) => {
-    if (id == null) localStorage.removeItem(TODAY_AREA_KEY)
-    else localStorage.setItem(TODAY_AREA_KEY, String(id))
-    set({ todayArea: id })
-  },
+  setTodayArea: (id) => get().setSpaceScope(id),
   inboxRead: {},
   inboxFloor: 0,
   inboxLoaded: false,

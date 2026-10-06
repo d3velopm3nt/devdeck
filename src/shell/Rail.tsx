@@ -28,37 +28,18 @@ import type { TreeNode } from '../lib/types'
 
 type Item = { view: RailView; icon: IconName; label: string }
 
-/// Team's views, as the sub-menu under it.
-///
-/// Managers is here rather than beside Team: who does the work and what the work
-/// is are two questions about one team, and having them in different corners
-/// of the rail meant a trip through navigation to answer either one.
-/// The places you live in. Ordered by how often a day touches them.
-const WORK: Item[] = [
-  // Beside Team on purpose: managers keep the plan, workers do the job, and
-  // keeping them a rail apart is how you forget you own either.
-  { view: 'workers', icon: 'tool', label: 'Agents' },
-  // Time sits with the places you go rather than with the app's own settings:
-  // a calendar is a thing you work out of, not a thing you configure.
+// Shared destinations remain available regardless of the selected space.
+const SHARED: Item[] = [
   { view: 'calendar', icon: 'schedule', label: 'Calendar' },
-  // Mail is deliberately not next to Inbox: the Inbox is what the team needs
-  // from you, and mixing other people's email into that count is how the
-  // badge stops meaning anything.
   { view: 'mail', icon: 'mail', label: 'Mail' },
 ]
 
-/// Tools: the surfaces you visit on purpose rather than live in.
-///
-/// These were five separate doors on a rail of twelve, which is how a rail
-/// stops being navigation and becomes a list. They are one door now, opening
-/// on a sub-menu — the same shape Team uses, for the same reason.
+// Advanced surfaces stay behind one expandable entry.
 const TOOLS: Item[] = [
   { view: 'home', icon: 'home', label: 'Operations' },
   { view: 'connections', icon: 'database', label: 'Connections' },
   { view: 'analytics', icon: 'history', label: 'Analytics' },
   { view: 'stash', icon: 'stash', label: 'Stash' },
-  // Directly above Machine, and the adjacency is the idea: Machine installs
-  // tools for you, Community installs them for your managers.
   { view: 'machine', icon: 'machine', label: 'Machine' },
 ]
 
@@ -264,7 +245,7 @@ export function Rail() {
       }`}
     >
       <div className="mb-3 w-full">
-        {expanded && <label htmlFor="sidebar-space" className="mb-1.5 block px-1 text-[10px] font-semibold uppercase tracking-wider text-faint">Workspace</label>}
+        {expanded && <label htmlFor="sidebar-space" className="mb-1.5 block px-1 text-[10px] font-semibold uppercase tracking-wider text-faint">Space</label>}
         <select id="sidebar-space" aria-label="Switch space" title="Switch space" value={spaceScopeId??''}
           onChange={e=>setSpaceScope(e.target.value?Number(e.target.value):null)}
           className={`input w-full rounded-lg bg-panel text-[12px] ${expanded?'px-2 py-2':'px-0 py-2'}`}>
@@ -280,30 +261,10 @@ export function Rail() {
         onClick={() => setRailView('today')}
       />
 
-      <RailButton
-        label="Inbox"
-        icon="inbox"
-        active={railView === 'inbox'}
-        expanded={expanded}
-        count={unreadCount}
-        alarm={broken > 0}
-        onClick={() => setRailView('inbox')}
-      />
-
-      {WORK.map((it) => (
-        <RailButton
-          key={it.view}
-          label={it.label}
-          icon={it.icon}
-          active={railView === it.view}
-          expanded={expanded}
-          // A dot rather than a count: unread mail is worth noticing and is
-          // not something the team is waiting on you for, which is what the
-          // numbered badge above means.
-          dot={it.view === 'mail' && (mailCounts?.unread ?? 0) > 0}
-          onClick={() => setRailView(it.view)}
-        />
-      ))}
+      <RailButton label="Work" icon="check" active={railView === 'team'} expanded={expanded} live={working}
+        onClick={() => setRailView('team')} />
+      <RailButton label="Agents" icon="tool" active={railView === 'workers'} expanded={expanded}
+        onClick={() => setRailView('workers')} />
 
       {/* The tree of everything: areas, folders, clients and projects. Called
           Spaces again now the workspace tabs are gone — the word meant two
@@ -344,8 +305,32 @@ export function Rail() {
         )
       })}
 
-      <RailButton label="Work" icon="check" active={railView === 'team'} expanded={expanded} live={working}
-        onClick={() => setRailView('team')} />
+      <Rule expanded={expanded} />
+      {expanded && <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-faint">Shared</div>}
+      <RailButton
+        label="Inbox"
+        icon="inbox"
+        active={railView === 'inbox'}
+        expanded={expanded}
+        count={unreadCount}
+        alarm={broken > 0}
+        onClick={() => setRailView('inbox')}
+      />
+
+      {SHARED.map((it) => (
+        <RailButton
+          key={it.view}
+          label={it.label}
+          icon={it.icon}
+          active={railView === it.view}
+          expanded={expanded}
+          // A dot rather than a count: unread mail is worth noticing and is
+          // not something the team is waiting on you for, which is what the
+          // numbered badge above means.
+          dot={it.view === 'mail' && (mailCounts?.unread ?? 0) > 0}
+          onClick={() => setRailView(it.view)}
+        />
+      ))}
 
       <div className="flex-1" />
 

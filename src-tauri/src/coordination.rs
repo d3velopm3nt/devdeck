@@ -303,6 +303,63 @@ mod tests {
         fs::remove_dir_all(d).unwrap();
     }
     #[test]
+    fn retries_are_idempotent_but_different_second_responses_are_refused() {
+        let d = dir();
+        let (a, b) = profiles();
+        let first = send(&d, "life", &a, &b, draft()).unwrap();
+        let reply = Draft {
+            to: "life".into(),
+            kind: "reply".into(),
+            subject: "Plan".into(),
+            body: "Reviewed at 15:00.".into(),
+            reply_to: Some(first.id),
+        };
+        let sent = send(&d, "business", &b, &a, reply.clone()).unwrap();
+        assert_eq!(
+            send(&d, "business", &b, &a, reply.clone()).unwrap().id,
+            sent.id
+        );
+        let mut changed = reply;
+        changed.subject = "Different response".into();
+        assert!(send(&d, "business", &b, &a, changed).is_err());
+        assert_eq!(messages(&d).unwrap().len(), 2);
+        fs::remove_dir_all(d).unwrap();
+    }
+    #[test]
+    fn reply_chains_stop_at_eight() {
+        let d = dir();
+        let (a, b) = profiles();
+        let mut previous = send(&d, "life", &a, &b, draft()).unwrap();
+        for depth in 1..=9 {
+            let (from, to, sender, recipient) = if depth % 2 == 1 {
+                ("business", "life", &b, &a)
+            } else {
+                ("life", "business", &a, &b)
+            };
+            let result = send(
+                &d,
+                from,
+                sender,
+                recipient,
+                Draft {
+                    to: to.into(),
+                    kind: "reply".into(),
+                    subject: format!("Response {depth}"),
+                    body: "Needs clarification.".into(),
+                    reply_to: Some(previous.id.clone()),
+                },
+            );
+            if depth == 9 {
+                assert!(result.is_err());
+            } else {
+                previous = result.unwrap();
+                assert_eq!(previous.depth, depth);
+            }
+        }
+        assert_eq!(messages(&d).unwrap().len(), 9);
+        fs::remove_dir_all(d).unwrap();
+    }
+    #[test]
     fn cross_domain_requires_mutual_consent() {
         let (a, mut b) = profiles();
         b.peers.clear();

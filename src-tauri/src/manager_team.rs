@@ -59,6 +59,7 @@ pub fn manager_profile_save(
 ) -> Result<Profile, String> {
     let conn = db.conn();
     let _ = self::profile(&conn, &handle)?;
+    coordination::validate_profile(&profile)?;
     for peer in &profile.peers {
         if peer == &handle || crate::managers::get(&conn, peer).is_none() {
             return Err(format!("Unknown or self peer: {peer}"));

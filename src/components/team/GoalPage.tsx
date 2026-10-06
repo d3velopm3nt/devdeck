@@ -103,6 +103,11 @@ export function GoalPage({ goal, board }: { goal: GoalRow; board: Board }) {
     setDraft(null)
   }, [load])
 
+  useEffect(() => {
+    const stop = ipc.onWorker({ done: () => void load(), asking: () => void load() })
+    return () => { void stop.then(off => off()) }
+  }, [load])
+
   /// Every feature this manager owns in this space. A manager is responsible
   /// for features rather than for a folder, and the goal it is working to
   /// spans all of them — so showing one and hiding the rest would be showing
@@ -128,13 +133,13 @@ export function GoalPage({ goal, board }: { goal: GoalRow; board: Board }) {
   const held = new Map(
     a.claims
       .filter((c) => c.status === 'active' && c.work_item_id)
-      .map((c) => [c.work_item_id as string, c.agent_id]),
+      .map((c) => [`${c.project_id}:${c.feature_id}:${c.work_item_id}`, c.agent_id]),
   )
 
   /// The most recent run for a work item, which is the one worth showing.
-  const runFor = (itemId: string) =>
+  const runFor = (featureId: string, itemId: string) =>
     runs
-      .filter((r) => r.item === itemId)
+      .filter((r) => r.node_id === goal.node_id && r.feature === featureId && r.item === itemId)
       .sort((x, y) => String(y.started_at).localeCompare(String(x.started_at)))[0]
 
   const decide = async (featureId: string, ids: string[], yes: boolean) => {
@@ -167,10 +172,12 @@ export function GoalPage({ goal, board }: { goal: GoalRow; board: Board }) {
   }
 
   const merge = async (featureId: string) => {
+    const target = prompt('Merge reviewed output into which checked-out branch?')
+    if (!target?.trim()) return
     setErr('')
     setBusy(featureId)
     try {
-      setNote(await ipc.workMerge(goal.node_id, featureId))
+      setNote(await ipc.workMerge(goal.node_id, featureId, target.trim()))
       await load()
     } catch (e) {
       setErr(String(e))
@@ -202,6 +209,7 @@ export function GoalPage({ goal, board }: { goal: GoalRow; board: Board }) {
     try {
       const saved = await ipc.botSave({
         nodeId: bot.node_id,
+        handle: bot.handle,
         name: bot.name,
         goal: draft.trim(),
         every: bot.every,
@@ -381,7 +389,7 @@ export function GoalPage({ goal, board }: { goal: GoalRow; board: Board }) {
                       ...new Set(
                         items
                           .filter((i) => i.status === 'built')
-                          .map((i) => runFor(i.id)?.branch)
+                          .map((i) => runFor(f.feature_id, i.id)?.branch)
                           .filter((b): b is string => !!b),
                       ),
                     ].map((b, n, all) => (
@@ -431,8 +439,8 @@ export function GoalPage({ goal, board }: { goal: GoalRow; board: Board }) {
 
               <div className="mt-1">
                 {items.map((i) => {
-                  const by = held.get(i.id)
-                  const run = runFor(i.id)
+                  const by = held.get(`${goal.node_id}:${f.feature_id}:${i.id}`)
+                  const run = runFor(f.feature_id, i.id)
                   const open = run ? (asks[run.id] ?? []) : []
                   return (
                     <div key={i.id} className="border-b border-line/60 py-1.5 last:border-0">
@@ -464,6 +472,11 @@ export function GoalPage({ goal, board }: { goal: GoalRow; board: Board }) {
                               No
                             </button>
                           </>
+                        ) : i.status === 'needs-review' ? (
+                          <button className="btn-primary text-[11px]" onClick={() => {
+                            const evidence=prompt('What result did you check? This records your acceptance.')
+                            if (evidence?.trim()) void ipc.workAccept(goal.node_id,f.feature_id,i.id,evidence).then(load).catch(e=>setErr(String(e)))
+                          }}>Review & accept</button>
                         ) : i.status === 'built' ? (
                           /* Built is a state, not a button. Its goal's branch
                              carries every item on it, so merging one alone is

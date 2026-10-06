@@ -35,3 +35,6 @@ design/*/[a-z]*-*.html
 
 # Staged sidecar: built by scripts/stage-ask.mjs, never committed.
 src-tauri/binaries/
+
+# Standalone sandbox Rust tests
+harness/rust-core/target/

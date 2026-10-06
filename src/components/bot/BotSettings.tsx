@@ -76,6 +76,7 @@ export function BotSettings({
     void ipc
       .botSave({
         nodeId: bot.node_id,
+        handle: bot.handle,
         name,
         goal,
         every,

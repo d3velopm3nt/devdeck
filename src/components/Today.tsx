@@ -28,6 +28,7 @@ import { useAiw } from '../lib/aiwStore'
 import { aiw, ago } from '../lib/aiw'
 import * as ipc from '../lib/ipc'
 import { Icon } from '../lib/icons'
+import { LifeSpaces } from './agents/LifeSpaces'
 import { TodayBusinesses } from './business/TodayBusinesses'
 import { openLife, openNodeThread, openRun, openSpace } from '../lib/dock'
 
@@ -91,7 +92,7 @@ function Row({
 export function Today() {
   const app = useApp()
   const a = useAiw()
-  const { nodes, todayArea, setTodayArea } = app
+  const { nodes, todayArea, setSpaceScope } = app
   const [items, setItems] = useState<ipc.CalendarItem[] | null>(null)
   const [schedules, setSchedules] = useState<ipc.Schedule[]>([])
   // Worker runs, which this page could not see at all. It said "No bot is
@@ -300,7 +301,7 @@ export function Today() {
                 ? 'border-line2 bg-raise text-ink'
                 : 'border-line2 bg-transparent text-dim hover:bg-hover/50'
             }`}
-            onClick={() => setTodayArea(null)}
+            onClick={() => setSpaceScope(null)}
           >
             All
           </button>
@@ -312,13 +313,13 @@ export function Today() {
                   ? 'border-line2 bg-raise text-ink'
                   : 'border-line2 bg-transparent text-dim hover:bg-hover/50'
               }`}
-              onClick={() => setTodayArea(todayArea === n.id ? null : n.id)}
+              onClick={() => setSpaceScope(todayArea === n.id ? null : n.id)}
             >
               {n.name}
             </button>
           ))}
           <span className="ml-2 text-[10.5px] text-faint">
-            narrows this page, and only this page
+            shared with Work and Agents
           </span>
         </div>
       </div>
@@ -326,32 +327,9 @@ export function Today() {
       <div className="flex min-h-0 flex-1 gap-5 overflow-auto px-7 pb-6">
         <div className="flex min-w-0 flex-1 flex-col gap-5">
           <section>
+            <LifeSpaces />
             {/* The rest of setup, for anyone who met the assistant before
                 these steps existed. Goes away once Home is a space. */}
-            {!nodes.some((x) => x.kind === 'workspace' && x.name === 'Home') && (
-              <button
-                className="mb-3 flex w-full items-center gap-2.5 rounded-lg border border-indigo-500/30 bg-indigo-500/5 px-3 py-2 text-left hover:bg-indigo-500/10"
-                onClick={() =>
-                  // Where you left off, not always the first of the three.
-                  void ipc
-                    .settingGet('setup.at')
-                    .catch(() => null)
-                    .then((at) =>
-                      window.dispatchEvent(
-                        new CustomEvent('devdeck:setup', {
-                          detail: at && at !== 'done' && at !== 'voice' && at !== 'mail' ? at : 'learn',
-                        }),
-                      ),
-                    )
-                }
-              >
-                <Icon name="ai" size={13} className="text-indigo-400" />
-                <span className="text-[12px] text-ink">Finish setting up</span>
-                <span className="text-[11px] text-muted">
-                  read your mail, say who is in your life, make Home a space
-                </span>
-              </button>
-            )}
             <div className="mb-3 flex items-center gap-2">
               <button className="btn-ghost text-[11.5px]" onClick={() => openLife()}>
                 <Icon name="contacts" size={12} /> Your life

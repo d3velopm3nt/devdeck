@@ -22,6 +22,7 @@ export function WorkersPage() {
   const [runs, setRuns] = useState<ipc.Run[]>([])
   const [editing, setEditing] = useState<ipc.Worker | null>(null)
   const [err, setErr] = useState('')
+  const [showLibrary,setShowLibrary]=useState(false)
   const lib = useLibrary()
 
   const reload = () => {
@@ -29,7 +30,11 @@ export function WorkersPage() {
     void ipc.workerStarters().then(setStarters).catch(() => setStarters([]))
     void ipc.runsList(0).then(setRuns).catch(() => setRuns([]))
   }
-  useEffect(reload, [])
+  useEffect(() => {
+    reload()
+    const stop=ipc.onWorker({done:reload,asking:reload})
+    return () => { void stop.then(off=>off()) }
+  }, [])
 
   // Screenshot harness: open one worker's editor without a mouse.
   useEffect(() => {
@@ -75,6 +80,7 @@ export function WorkersPage() {
                 limit. Managers hand them work; you can start one yourself from any space.
               </p>
             </div>
+            <button className="btn-ghost text-[12px]" onClick={()=>setShowLibrary(!showLibrary)}>Skills & templates</button>
             <button className="btn-primary text-[12px]" onClick={() => setEditing(blank)}>
               <Icon name="add" size={12} /> New worker
             </button>
@@ -223,9 +229,9 @@ export function WorkersPage() {
         </div>
       </div>
 
-      <div className="flex w-[380px] shrink-0 flex-col border-l border-line bg-panel px-4 py-4">
+      {showLibrary && <div className="flex w-[min(380px,35vw)] shrink-0 flex-col border-l border-line bg-panel px-4 py-4">
         <LibraryPanel items={lib.items} reload={lib.reload} />
-      </div>
+      </div>}
 
       {editing && (
         <WorkerEditor

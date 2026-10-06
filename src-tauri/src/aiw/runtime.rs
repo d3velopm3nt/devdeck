@@ -1165,9 +1165,14 @@ impl AgentRuntime {
             turns,
             refused,
             files_touched,
-            failed,
+            mut failed,
             budget,
         } = work;
+        if failed.is_none() && summary.is_empty() && budget.is_some_and(|limit| turns >= limit) {
+            failed = Some(format!(
+                "Turn budget exhausted after {turns} turns; output requires review."
+            ));
+        }
         let Some(project) = ws.project(&cmd.project_id) else {
             return Err(format!("unknown project '{}'", cmd.project_id));
         };
@@ -1188,19 +1193,24 @@ impl AgentRuntime {
                 if failed.is_some() {
                     EventType::WorkReleased
                 } else {
-                    EventType::WorkCompleted
+                    EventType::WorkUpdated
                 },
                 scope.clone(),
-                serde_json::json!({ "claimId": claim_id }),
+                serde_json::json!({ "claimId": claim_id, "status": if failed.is_some() { "blocked" } else { "needs-review" } }),
             )
             .caused_by(claimed),
         );
 
         if let Some(wi) = &cmd.work_item_id {
-            if failed.is_none() {
+            {
                 if let Ok(mut work) = deck.work(&cmd.feature_id) {
                     if let Some(item) = work.meta.items.iter_mut().find(|i| &i.id == wi) {
-                        item.status = "done".into();
+                        item.status = if failed.is_some() {
+                            "blocked"
+                        } else {
+                            "needs-review"
+                        }
+                        .into();
                     }
                     let _ = deck.save_work(&cmd.feature_id, &work.meta);
                 }

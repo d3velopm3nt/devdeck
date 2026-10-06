@@ -187,6 +187,7 @@ pub struct ConversationMeta {
 /// provider and model do the talking.
 #[derive(Clone, Debug)]
 pub struct Persona {
+    pub manager_handle: Option<String>,
     pub agent_id: String,
     pub runs_as: String,
     pub name: String,
@@ -260,6 +261,7 @@ pub struct Colleague {
 impl Persona {
     pub fn assistant(system: &str) -> Self {
         Self {
+            manager_handle: None,
             agent_id: ASSISTANT_ID.into(),
             runs_as: ASSISTANT_ID.into(),
             name: "Assistant".into(),
@@ -276,6 +278,7 @@ impl Persona {
     /// An agent speaking in a thread, as itself, with no hands.
     pub fn agent_in_thread(agent: &super::state::AgentDef, thread: &str) -> Self {
         Self {
+            manager_handle: None,
             agent_id: agent.id.clone(),
             runs_as: agent.id.clone(),
             name: agent.name.clone(),
@@ -1382,6 +1385,22 @@ impl Assistant {
                 });
             }
         }
+        if !persona.talk_only {
+            if let Some(handle) = &persona.manager_handle {
+                let receipt = ws.manager_message(handle, &reply);
+                let ok = receipt.is_ok();
+                let text = receipt.unwrap_or_else(|e| format!("Message not delivered: {e}"));
+                if !text.is_empty() {
+                    let note = ChatMessage::note(&persona.agent_id, "manager-message", ok, text);
+                    conv.messages.push(note.clone());
+                    appended.push(note.clone());
+                    sink(ChatEvent::Step {
+                        conversation_id: conv_id.clone(),
+                        message: note,
+                    });
+                }
+            }
+        }
         conv.updated_at = now_iso();
 
         // Write by appending to what is on disk *now*, not by saving the copy
@@ -1449,6 +1468,7 @@ impl Assistant {
             let cmd = StartAgentCommand {
                 project_id,
                 feature_id: feature_id.clone(),
+                manager_handle: None,
                 agent_id: agent.id.clone(),
                 work_item_id: None,
                 intent: Some(format!(
@@ -1712,6 +1732,7 @@ impl Assistant {
         let cmd = StartAgentCommand {
             project_id,
             feature_id,
+            manager_handle: None,
             agent_id: agent.id.clone(),
             work_item_id: Some(item.id.clone()),
             intent: Some(format!("{} handed this over: {}", persona.name, item.title)),

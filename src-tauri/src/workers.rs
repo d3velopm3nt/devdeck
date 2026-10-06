@@ -236,6 +236,8 @@ pub struct Run {
     /// What you did with it afterwards, in your words.
     #[serde(default)]
     pub decision: String,
+    #[serde(default)]
+    pub reviewed_commit: String,
 }
 
 /// What starting a worker would mean, before it means it.
@@ -509,12 +511,8 @@ fn branch_for(deck: &Path, feature: &str, item: &str, title: &str) -> String {
 /// branches while `main` kept only a README.
 ///
 /// A merge is the only thing that says `done`, and nothing here can merge.
-fn where_the_item_goes(wrote_files: bool) -> &'static str {
-    if wrote_files {
-        BUILT
-    } else {
-        "unclaimed"
-    }
+fn where_the_item_goes(ok: bool, wrote_files: bool) -> &'static str {
+    crate::execution_policy::task_outcome(ok, wrote_files)
 }
 
 /// Move the item this run came off, and say so on the bus.
@@ -900,7 +898,7 @@ pub fn plan(
         .collect();
 
     let health = crate::aiw::cli_agent::health(&w.meta.runner);
-    let allowed = w.meta.spaces.is_empty() || w.meta.spaces.contains(&node_id);
+    let allowed = lent_to(conn, &w.meta.spaces, node_id);
 
     let mut note = String::new();
     let mut ready = true;
@@ -1444,6 +1442,19 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
     // Named before the folder is made, because the worktree is named after the
     // run: one run, one folder, and no way for two to land on each other.
     let run_id = new_id();
+    let permit = crate::execution_policy::RunPermit::acquire(vec![
+        format!(
+            "write:{}:{}",
+            cwd.canonicalize().unwrap_or(cwd.clone()).display(),
+            if p.is_repo { &p.branch } else { "folder" }
+        ),
+        format!(
+            "task:{}:{}:{}",
+            p.node_id,
+            p.feature,
+            if p.item.is_empty() { &run_id } else { &p.item }
+        ),
+    ])?;
 
     // Work on code happens in a worktree, so the folder the worker edits is
     // never the folder you — or a dev server — have open.
@@ -1610,6 +1621,7 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
     let mut live = run.clone();
     let started = std::time::SystemTime::now();
     std::thread::spawn(move || {
+        let _permit = permit;
         let mut last_write = std::time::Instant::now();
         // Questions already put to the room, so a question is asked once
         // however many times the loop comes round while it waits.
@@ -1788,21 +1800,12 @@ Answer here. If nobody does within {} seconds it stops and keeps the question.",
             );
         }
 
-        // Where the item goes is decided by what is on the branch, not by how
-        // the run felt about itself.
-        //
-        // It used to be decided by the run's status: "done" marked the item
-        // done, and anything else put it back to `unclaimed`. Both halves were
-        // wrong in the same direction. A clean run has not *finished* the work
-        // — it has written it on a branch nobody has read — and a run that
-        // stopped short having written two good files has not left the work
-        // undone either. Handing that item straight back out is how Smith came
-        // to build `goals.js` four times on four branches while `main` stayed
-        // empty.
-        //
-        // So: files on the branch means `built`, whatever the run's verdict;
-        // nothing written means nobody has done it and it goes back on offer.
-        move_item(&app2, &live, where_the_item_goes(!live.files.is_empty()));
+        // Failure stays blocked; successful output still requires human review.
+        move_item(
+            &app2,
+            &live,
+            where_the_item_goes(live.ok, !live.files.is_empty()),
+        );
         say_in_room(
             &app2,
             &live,
@@ -1881,28 +1884,34 @@ Answer here. If nobody does within {} seconds it stops and keeps the question.",
 /// moved afterwards, because finding it again needs the feature that holds
 /// it; and the worker's report had nowhere to be posted. A worker did the job
 /// and the plan never heard about it.
+pub fn lent_to(conn: &rusqlite::Connection, scopes: &[i64], node: i64) -> bool {
+    let Ok(nodes) = db::nodes_on(conn) else {
+        return false;
+    };
+    crate::execution_policy::scope_allows(
+        scopes,
+        node,
+        &nodes
+            .iter()
+            .map(|n| (n.id, n.parent_id))
+            .collect::<Vec<_>>(),
+    )
+}
+
 pub fn next_open_item(
     conn: &rusqlite::Connection,
     bot: &crate::bots::Bot,
-) -> Option<(String, String, String)> {
-    let n = db::node_by_id(conn, bot.node_id).ok()?;
-    let dir = crate::db::node_deck_dir(conn, &n)?;
-    let deck = crate::aiw::deck::Deck::new(&dir);
-    if !deck.exists() {
-        return None;
-    }
-    let mine: Vec<String> = bot
-        .portfolio
-        .iter()
-        .filter(|o| o.node_id == bot.node_id)
-        .map(|o| o.feature.clone())
-        .collect();
-    for slug in mine {
-        let Ok(work) = deck.work(&slug) else { continue };
-        // `slug` is moved by the return below, so the work is read first.
+) -> Option<(i64, String, String, String)> {
+    for owned in &bot.portfolio {
+        let n = db::node_by_id(conn, owned.node_id).ok()?;
+        let dir = crate::db::node_deck_dir(conn, &n)?;
+        let deck = crate::aiw::deck::Deck::new(&dir);
+        let Ok(work) = deck.work(&owned.feature) else {
+            continue;
+        };
         for item in work.meta.items {
             if item.status.is_empty() || item.status == "unclaimed" {
-                return Some((slug, item.id, item.title));
+                return Some((owned.node_id, owned.feature.clone(), item.id, item.title));
             }
         }
     }
@@ -1918,31 +1927,49 @@ pub enum Handoff {
     /// here so that everything downstream — the event's scope, the room the
     /// receipt goes in, and moving the item when it is done — can find the
     /// work again without guessing.
-    Start(String, String, String, String),
+    Start(String, i64, String, String, String),
     /// It would start this, but nothing has said it may while you sleep.
     Ask(String, String),
     Nothing,
 }
 
 pub fn handoff(conn: &rusqlite::Connection, bot: &crate::bots::Bot) -> Handoff {
-    if bot.worker.trim().is_empty() {
-        return Handoff::Nothing;
-    }
-    let Some((feature, id, title)) = next_open_item(conn, bot) else {
+    let Some((node_id, feature, id, title)) = next_open_item(conn, bot) else {
         return Handoff::Nothing;
     };
-    let Ok(Some(w)) = read_worker(bot.worker.trim()) else {
+    let Ok(profile) = crate::manager_team::profile(conn, &bot.handle) else {
         return Handoff::Nothing;
     };
-    let lent = w.meta.spaces.is_empty() || w.meta.spaces.contains(&bot.node_id);
-    if !lent {
+    let mut pool = profile.workers;
+    if !bot.worker.trim().is_empty() {
+        pool.retain(|h| h != bot.worker.trim());
+        pool.insert(0, bot.worker.trim().into());
+    }
+    let Ok(runs) = all_runs() else {
         return Handoff::Nothing;
+    };
+    let mut needs_approval = None;
+    for handle in pool {
+        let Ok(Some(w)) = read_worker(&handle) else {
+            continue;
+        };
+        if !lent_to(conn, &w.meta.spaces, node_id) {
+            continue;
+        }
+        if runs
+            .iter()
+            .any(|r| r.worker == handle && r.status == "running")
+        {
+            continue;
+        }
+        if w.meta.unattended {
+            return Handoff::Start(w.meta.handle, node_id, feature, id, title);
+        }
+        needs_approval.get_or_insert(w.meta.name);
     }
-    if w.meta.unattended {
-        Handoff::Start(w.meta.handle, feature, id, title)
-    } else {
-        Handoff::Ask(w.meta.name, title)
-    }
+    needs_approval
+        .map(|name| Handoff::Ask(name, title))
+        .unwrap_or(Handoff::Nothing)
 }
 
 // ---------------------------------------------------------------------------
@@ -2102,6 +2129,7 @@ pub fn work_merge(
     db: tauri::State<Db>,
     node_id: i64,
     feature: String,
+    target: String,
 ) -> Result<String, String> {
     let (dir, deck_dir) = {
         let conn = db.conn();
@@ -2128,20 +2156,51 @@ pub fn work_merge(
         return Err("nothing on this goal is built, so there is nothing to merge".into());
     }
 
-    // Every branch those items were built on. Normally exactly one — the
-    // goal's — but an item that asked for its own is merged too, and a goal
-    // built before the branch became per-goal can still have several.
-    let mut branches: Vec<String> = all_runs()?
-        .into_iter()
-        .filter(|r| r.node_id == node_id && r.feature == feature && built.contains(&r.item))
-        .map(|r| r.branch.trim().to_string())
-        .filter(|b| !b.is_empty())
-        .collect();
+    let runs = all_runs()?;
+    let mut branches = Vec::new();
+    for item in &built {
+        let latest = runs
+            .iter()
+            .filter(|r| r.node_id == node_id && r.feature == feature && &r.item == item)
+            .max_by(|a, b| a.started_at.cmp(&b.started_at))
+            .ok_or("A built item has no run receipt.")?;
+        if !latest.ok || latest.status != "kept" || latest.reviewed_commit.is_empty() {
+            return Err(format!(
+                "Review and keep the latest successful run for {item} before merging."
+            ));
+        }
+        let head = crate::git::run_git(
+            &dir,
+            &[
+                "rev-parse",
+                "--verify",
+                &format!("{}^{{commit}}", latest.branch),
+            ],
+        )
+        .ok_or("A reviewed branch is unavailable.")?;
+        if head.trim() != latest.reviewed_commit {
+            return Err(format!(
+                "{} changed after review. Review it again.",
+                latest.branch
+            ));
+        }
+        branches.push(latest.branch.clone());
+    }
     branches.sort();
     branches.dedup();
-    if branches.is_empty() {
-        return Err("those items name no branch, so there is nothing to merge".into());
+    let onto = crate::git::run_git(&dir, &["symbolic-ref", "--short", "HEAD"])
+        .ok_or("Checkout the target branch first.")?;
+    let onto = onto.trim();
+    if target.trim().is_empty() || onto != target.trim() || branches.iter().any(|b| b == onto) {
+        return Err(format!("Expected target '{}', checked out '{onto}'. Checkout and confirm the intended target first.",target));
     }
+    let prefix = dir.canonicalize().unwrap_or(dir.clone());
+    let mut keys: Vec<String> = branches
+        .iter()
+        .map(|b| format!("write:{}:{b}", prefix.display()))
+        .collect();
+    keys.push(format!("write:{}:{onto}", prefix.display()));
+    let _permit = crate::execution_policy::RunPermit::acquire(keys)?;
 
     let dirty = crate::git::dirty_files(&dir);
     if !dirty.is_empty() {
@@ -2161,20 +2220,13 @@ pub fn work_merge(
         }
     }
 
-    let onto = crate::git::run_git(&dir, &["rev-parse", "--abbrev-ref", "HEAD"])
-        .map(|s| s.trim().to_string())
-        .unwrap_or_else(|| "HEAD".into());
-    for b in &branches {
-        // `--no-ff`, always: the branch is a piece of work and its shape is
-        // worth keeping. A fast-forward would leave no record of a merge.
-        let merged =
-            crate::git::run_git(&dir, &["merge", "--no-ff", "-m", &format!("Merge {b}"), b]);
-        if merged.is_none() {
-            let _ = crate::git::run_git(&dir, &["merge", "--abort"]);
-            return Err(format!(
-                "{b} does not merge cleanly into {onto}. Nothing further was changed — the                  conflict is yours to settle, and the goal stays built."
-            ));
-        }
+    // A single merge transaction: no earlier branch silently remains merged if another conflicts.
+    let message = format!("Merge reviewed work on {feature}");
+    let mut args = vec!["merge", "--no-ff", "-m", message.as_str()];
+    args.extend(branches.iter().map(String::as_str));
+    if crate::git::run_git(&dir, &args).is_none() {
+        let _ = crate::git::run_git(&dir, &["merge", "--abort"]);
+        return Err(format!("Reviewed branches could not merge into {onto}. Inspect git status before retrying; work stays built."));
     }
 
     for i in work.meta.items.iter_mut().filter(|i| i.status == BUILT) {
@@ -2190,6 +2242,52 @@ pub fn work_merge(
         if n == 1 { "" } else { "s" },
         if n == 1 { "is" } else { "are" }
     ))
+}
+
+/// Human acceptance for non-code outcomes; model tool calls cannot invoke this path.
+#[tauri::command(async)]
+pub fn work_accept(
+    db: tauri::State<Db>,
+    node_id: i64,
+    feature: String,
+    item: String,
+    evidence: String,
+) -> Result<(), String> {
+    if evidence.trim().is_empty() {
+        return Err("Describe the result you checked.".into());
+    }
+    let conn = db.conn();
+    let node = db::node_by_id(&conn, node_id)?;
+    let root = db::node_deck_dir(&conn, &node).ok_or("Space has no knowledge folder.")?;
+    let deck = crate::aiw::deck::Deck::new(root);
+    let mut work = deck.work(&feature)?;
+    let task = work
+        .meta
+        .items
+        .iter_mut()
+        .find(|i| i.id == item)
+        .ok_or("Task not found.")?;
+    if task.status != "needs-review" {
+        return Err(
+            "Only a task awaiting review can be accepted here. Code branches use review and merge."
+                .into(),
+        );
+    }
+    task.status = "done".into();
+    task.assignee = None;
+    // Store the human's evidence in the work document rather than claiming an automated check.
+    let reviews = deck.root.join(".devdeck").join("reviews");
+    std::fs::create_dir_all(&reviews).map_err(err)?;
+    std::fs::write(
+        reviews.join(format!("{}.json", new_id())),
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "feature":feature,"item":item,"evidence":evidence.trim(),"accepted_at":now(),"by":"user"
+        }))
+        .map_err(err)?,
+    )
+    .map_err(err)?;
+    deck.save_work(&feature, &work.meta)?;
+    Ok(())
 }
 
 #[tauri::command(async)]
@@ -2218,6 +2316,32 @@ pub fn run_decide(
     note: String,
 ) -> Result<Run, String> {
     let mut r = read_run(&id)?.ok_or("no run by that id.")?;
+    if r.status == "running" {
+        return Err("Stop the run and wait for its receipt before reviewing it.".into());
+    }
+    if decision != "keep" && decision != "discard" {
+        return Err("Choose keep or discard.".into());
+    }
+    if decision == "keep" && !r.ok {
+        return Err(
+            "This run failed or stopped early. Inspect its output and retry before accepting it."
+                .into(),
+        );
+    }
+    if decision == "keep" {
+        if note.trim().is_empty() {
+            return Err("Record what you checked before accepting this run.".into());
+        }
+        if !r.branch.is_empty() {
+            r.reviewed_commit = crate::git::run_git(
+                Path::new(&r.folder),
+                &["rev-parse", "--verify", &format!("{}^{{commit}}", r.branch)],
+            )
+            .ok_or("The run branch is unavailable; nothing was accepted.")?
+            .trim()
+            .to_string();
+        }
+    }
     r.decision = note.trim().to_string();
     r.status = match decision.as_str() {
         "keep" => "kept".into(),
@@ -2727,14 +2851,14 @@ mod setup_check {
         println!("manager: {} on node {}", bot.name, bot.node_id);
         println!("  hands work to: {:?}", bot.worker);
         match super::next_open_item(&conn, &bot) {
-            Some((feature, id, title)) => {
-                println!("  first open item: {id} on {feature} — {title}")
+            Some((node, feature, id, title)) => {
+                println!("  first open item: {id} on {node}/{feature} — {title}")
             }
             None => println!("  first open item: NONE (the plan is empty or unreadable)"),
         }
         match super::handoff(&conn, &bot) {
-            super::Handoff::Start(w, f, i, t) => {
-                println!("  would START {w} on {i} ({f}) — {t}")
+            super::Handoff::Start(w, n, f, i, t) => {
+                println!("  would START {w} on {i} ({n}/{f}) — {t}")
             }
             super::Handoff::Ask(w, t) => println!("  would ASK to put {w} on: {t}"),
             super::Handoff::Nothing => println!("  would do NOTHING"),
@@ -2886,10 +3010,10 @@ mod setup_check {
     fn a_worker_can_build_an_item_and_never_finish_it() {
         // Wrote something: it is built, and stays claimed so nobody is sent to
         // write it a second time.
-        assert_eq!(super::where_the_item_goes(true), super::BUILT);
+        assert_eq!(super::where_the_item_goes(true, true), super::BUILT);
         // Wrote nothing: nobody has done it, so it goes back on offer.
-        assert_eq!(super::where_the_item_goes(false), "unclaimed");
+        assert_eq!(super::where_the_item_goes(false, false), "blocked");
         // And neither of those is "done", whatever the run thought of itself.
-        assert_ne!(super::where_the_item_goes(true), "done");
+        assert_ne!(super::where_the_item_goes(true, true), "done");
     }
 }

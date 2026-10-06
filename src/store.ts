@@ -131,6 +131,8 @@ export interface AppState {
   /** The workspace the Explorer is currently showing. Workspaces are switched,
    *  not browsed in the tree. */
   activeWorkspaceId: number | null
+  spaceScopeId: number | null
+  setSpaceScope: (id: number | null) => void
   /** Scopes the Explorer to one solution. Null = show the whole workspace. */
   activeSolutionId: number | null
   hotkey: string
@@ -618,6 +620,11 @@ export const useApp = create<AppState>((set, get) => ({
   treeLoading: true,
   selectedNodeId: null,
   activeWorkspaceId: loadActiveWs(),
+  spaceScopeId: null,
+  setSpaceScope: (id) => {
+    if (id != null) persistActiveWs(id)
+    set({spaceScopeId:id,todayArea:id,...(id==null?{}:{activeWorkspaceId:id}),selectedNodeId:null,activeSolutionId:null})
+  },
   activeSolutionId: null,
   labels: DEFAULT_LABELS,
   recent: loadRecent(),

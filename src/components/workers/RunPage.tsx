@@ -256,12 +256,12 @@ export function RunView({ id }: { id: string }) {
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <button className="btn-primary text-[12px]" onClick={() => void decide('keep')}>
-                    Keep it
+                  <button className="btn-primary text-[12px]" disabled={!run.ok || !note.trim()} onClick={() => void decide('keep')}>
+                    Accept reviewed output
                   </button>
                   <input
                     className="input flex-1 text-[12px]"
-                    placeholder="Anything to remember about it: “good angle, drop the uptime figure until Norcrest agrees”"
+                    placeholder="Required: what did you check? Include tests or acceptance evidence."
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
                   />

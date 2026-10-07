@@ -1,7 +1,7 @@
 {
   "name": "devdeck",
   "private": true,
-  "version": "0.3.1",
+  "version": "0.4.0-beta.1",
   "type": "module",
   "description": "A local-first development command center for Windows: run your whole stack, watch every service, and jump into any terminal.",
   "license": "MIT",
@@ -36,9 +36,9 @@
   "dependencies": {
     "@tailwindcss/vite": "^4.3.2",
     "@tanstack/react-virtual": "^3.14.13",
-    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/api": "2.11.1",
     "@tauri-apps/plugin-dialog": "^2.7.1",
-    "@tauri-apps/plugin-notification": "^2.5.0",
+    "@tauri-apps/plugin-notification": "2.4.0",
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-updater": "^2.10.1",
     "@xterm/addon-fit": "^0.11.0",

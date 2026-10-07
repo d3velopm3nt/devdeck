@@ -664,7 +664,7 @@ dependencies = [
 
 [[package]]
 name = "devdeck"
-version = "0.3.1"
+version = "0.4.0-beta.1"
 dependencies = [
  "base64 0.22.1",
  "chrono",

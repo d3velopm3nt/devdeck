@@ -42,5 +42,14 @@ try {
   assert.equal(await page.getByLabel('Workflow Markdown').inputValue(), 'a locally edited draft')
   assert.equal(await page.evaluate(() => window.__workflowCalls.find(c => c.command === 'save').args.expected), 'revision-1')
   console.log('PASS: external update cannot overwrite a stale editor draft')
+
+  await page.goto(`${base}/harness/folder-workflows.html`)
+  await button('Start workflow').click()
+  await button('Start this step').waitFor()
+  await page.evaluate(() => window.__externalEdit())
+  await button('Start this step').click()
+  await page.getByRole('alert').getByText('The workflow changed. Reload before starting.').waitFor()
+  assert.equal(await page.evaluate(() => window.__workflowCalls.find(c => c.command === 'start').args.expected), 'revision-1')
+  console.log('PASS: changed definition invalidates the worker preview')
   assert.deepEqual(errors, [])
 } finally { await browser.close() }

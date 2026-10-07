@@ -44,6 +44,7 @@ export function FolderWorkflowPage({ node, name, onDashboard }: { node: number; 
   const [draft, setDraft] = useState('')
   const [selected, setSelected] = useState('')
   const [evidence, setEvidence] = useState('')
+  const [planRevision, setPlanRevision] = useState('')
   const [plan, setPlan] = useState<ipc.RunPlan | null>(null)
   const refresh = useCallback(async () => {
     try { setData(await ipc.folderWorkflowGet(node)); setError('') }
@@ -72,7 +73,7 @@ export function FolderWorkflowPage({ node, name, onDashboard }: { node: number; 
   const preview = async () => {
     if (!step || !data) return
     setBusy(true); setError('')
-    try { setPlan(await ipc.workerPlan(step.worker, step.target, step.title, `${data.body}\n\n${step.instructions}`)) }
+    try { setPlan(await ipc.workerPlan(step.worker, step.target, step.title, `${data.body}\n\n${step.instructions}`)); setPlanRevision(data.raw) }
     catch (e) { setError(String(e)) }
     finally { setBusy(false) }
   }
@@ -123,7 +124,7 @@ export function FolderWorkflowPage({ node, name, onDashboard }: { node: number; 
           <p className="text-[12px]">{plan.minutes} minute limit · ${plan.usd} budget · {plan.is_repo ? 'Separate branch and worktree' : 'Writes in the target workspace folder'}</p>
           <p className="text-[12px]">Skills: {plan.skills.map(s => s.name).join(', ') || 'None selected'}</p>
           {plan.note && <p className="text-[12px] text-warn">{plan.note}</p>}
-          <button className="btn-primary text-[12px]" disabled={busy || !plan.ready || !canRun} onClick={() => void act(() => ipc.folderWorkflowStart(node, step.id, data.raw))}>Start this step</button>
+          <button className="btn-primary text-[12px]" disabled={busy || !plan.ready || !canRun} onClick={() => void act(() => ipc.folderWorkflowStart(node, step.id, planRevision))}>Start this step</button>
           <button className={`${button} ml-2`} onClick={() => setPlan(null)}>Cancel</button>
         </div>}
         {step.status === 'review' && <div className="space-y-3 rounded-xl border border-line2 p-4">

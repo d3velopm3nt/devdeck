@@ -225,10 +225,13 @@ pub fn folder_workflow_start(
         .collect::<Vec<_>>()
         .join("\n");
     let intent = format!("Workflow source: {}\n\n{}\n\n{}\n\nPrevious review: {}\n\nAccepted dependencies:\n{}\n\nReport results and verification for human review. Do not change workflow state or publish.", p.display(), doc.body, s.instructions, s.evidence, dependencies);
-    let plan = {
+    let mut plan = {
         let conn = db.conn();
         workers::plan(&conn, &s.worker, s.target, "", &claim, &s.title, &intent)?
     };
+    if plan.is_repo {
+        plan.branch = format!("devdeck/workflow-{node}-{}", s.id);
+    }
     if !plan.ready {
         return Err(plan.note);
     }

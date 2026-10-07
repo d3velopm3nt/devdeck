@@ -121,13 +121,14 @@ export function VaultSetup({ onDone }: { onDone: () => void }) {
           {showToken && <GitHubToken onSignedIn={() => void loadRepos()} />}
           {repos && <>
             <p className="text-[12px] text-body">Connected as {repos.login}</p>
-            <label className="block text-[12px] text-body">State repository
-              <select className="input mt-1 w-full" value={repo} disabled={busy || listing}
+            <div>
+              <label htmlFor="state-repository" className="block text-[12px] text-body">State repository</label>
+              <select id="state-repository" className="input mt-1 w-full" value={repo} disabled={busy || listing}
                 onChange={(e) => setRepo(e.target.value)}>
                 <option value="">Choose a repository…</option>
                 {repos.repos.map((r) => <option key={r.full_name} value={r.clone_url}>{r.full_name}{r.private ? ' (private)' : ''}</option>)}
               </select>
-            </label>
+            </div>
             <button className="btn-ghost text-[11.5px]" disabled={busy || listing} onClick={() => void loadRepos()}>Refresh repositories</button>
           </>}
           {listing && <p role="status" className="text-[12px] text-muted">Loading repositories…</p>}

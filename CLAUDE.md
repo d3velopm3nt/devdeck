@@ -187,12 +187,18 @@ npm run tauri build                    # release build (kill any running devdeck
 
 ## Release process
 
-1. Bump **four** files: `package.json`, `src-tauri/Cargo.toml`,
-   `src-tauri/tauri.conf.json`, `src-tauri/Cargo.lock`
-2. Commit `Release vX.Y.Z`, tag `vX.Y.Z`, push both — CI (`release.yml`) builds,
-   minisign-signs, generates `latest.json`, publishes
-3. Once assets are live: download the installer, SHA256 it, bump
-   `bucket/devdeck.json` (version + url + hash), push
+1. Bump the version in `package.json`, `package-lock.json`,
+   `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.lock`.
+2. Merge to main. Successful push CI triggers `release.yml` for that exact
+   commit if its version tag does not already exist. Tag/manual runs remain available.
+3. After a stable release publishes, the same workflow downloads the published
+   installer, verifies its size and available asset digest, computes SHA256, and
+   commits the version, URL and hash to `bucket/devdeck.json` on main.
+   Beta releases never update Scoop; older releases cannot downgrade it.
+   The workflow token needs contents-write access permitted by main's rules.
+   A rejected manifest commit fails the step visibly; do not bypass branch rules.
+   Re-running the release for the same tag can repair an incomplete Scoop update.
+   Commits made with GITHUB_TOKEN do not start another push CI/release cycle.
 
 The updater reads `releases/latest/download/latest.json` (a CDN URL, not the
 rate-limited REST API). `src-tauri/tauri.conf.updater.json` enables signing

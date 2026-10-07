@@ -221,3 +221,61 @@ jobs:
             worker so you can see DevDeck work before wiring up your own repos.
 
             **Requirements:** Windows 10/11 (x64). No runtime to install.
+
+      # Keep this in the publishing workflow: releases created with GITHUB_TOKEN
+      # do not trigger another release-event workflow.
+      - name: Update Scoop after stable publication
+        if: ${{ !contains(env.TAG, '-') }}
+        uses: actions/github-script@v7
+        env:
+          RELEASE_TAG: ${{ env.TAG }}
+        with:
+          script: |
+            const { createHash } = require('node:crypto');
+            const tag = process.env.RELEASE_TAG;
+            if (!/^v\d+\.\d+\.\d+$/.test(tag)) {
+              core.notice('Scoop tracks stable releases only');
+              return;
+            }
+            const version = tag.slice(1);
+            const { data: release } = await github.rest.repos.getReleaseByTag({ ...context.repo, tag });
+            if (release.draft || release.prerelease) throw new Error('Release is not published and stable');
+            const name = `DevDeck_${version}_x64-setup.exe`;
+            const asset = release.assets.find(asset => asset.name === name);
+            if (!asset || asset.state !== 'uploaded') throw new Error('Published Windows installer is missing');
+            const url = `https://github.com/${context.repo.owner}/${context.repo.repo}/releases/download/${tag}/${name}`;
+            if (asset.browser_download_url !== url) throw new Error('Unexpected installer URL');
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`Installer download failed: ${response.status}`);
+            const bytes = Buffer.from(await response.arrayBuffer());
+            if (!bytes.length || bytes.length !== asset.size) throw new Error('Installer download size mismatch');
+            const hash = createHash('sha256').update(bytes).digest('hex');
+            if (asset.digest && asset.digest !== `sha256:${hash}`) throw new Error('Installer digest mismatch');
+            const path = 'bucket/devdeck.json';
+            const { data: file } = await github.rest.repos.getContent({ ...context.repo, path, ref: 'main' });
+            const manifest = JSON.parse(Buffer.from(file.content, 'base64').toString('utf8'));
+            const parts = value => {
+              if (!/^\d+\.\d+\.\d+$/.test(value)) throw new Error('Invalid stable Scoop version');
+              return value.split('.').map(BigInt);
+            };
+            const current = parts(manifest.version);
+            const next = parts(version);
+            const different = next.findIndex((part, i) => part !== current[i]);
+            if (different >= 0 && next[different] < current[different]) {
+              core.notice('Scoop already tracks a newer stable release');
+              return;
+            }
+            const architecture = manifest.architecture['64bit'];
+            if (manifest.version === version && architecture.url === url && architecture.hash === hash) {
+              core.notice('Scoop manifest is already current');
+              return;
+            }
+            manifest.version = version;
+            architecture.url = url;
+            architecture.hash = hash;
+            await github.rest.repos.createOrUpdateFileContents({
+              ...context.repo, branch: 'main', path, sha: file.sha,
+              message: `chore(scoop): update DevDeck to ${version}`,
+              content: Buffer.from(JSON.stringify(manifest, null, 2) + '\n').toString('base64')
+            });
+            core.notice(`Scoop updated to ${version}`);

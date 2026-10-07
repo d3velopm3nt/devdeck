@@ -2363,3 +2363,30 @@ export const managerMessageSend = (from: string, draft: Omit<ManagerMessage,'id'
 
 export const managerConversation = (handle: string) => invoke<import('./aiw').ChatMessage[]>('manager_conversation',{handle})
 export const managerTurn = (handle: string, text: string) => invoke<import('./aiw').AssistantReply>('manager_turn',{handle,text})
+
+export interface FolderWorkflowStep {
+  previous_runs: string[]
+  id: string
+  title: string
+  worker: string
+  target: number
+  needs: string[]
+  instructions: string
+  status: 'pending' | 'starting' | 'running' | 'review' | 'done' | 'blocked'
+  claim: string
+  run: string
+  evidence: string
+}
+export interface FolderWorkflow {
+  raw: string
+  definition: { title: string; steps: FolderWorkflowStep[] }
+  body: string
+  path: string
+}
+export const folderWorkflowGet = (node: number) => invoke<FolderWorkflow>('folder_workflow_get', { node })
+export const folderWorkflowSave = (node: number, expected: string, raw: string) =>
+  invoke<FolderWorkflow>('folder_workflow_save', { node, expected, raw })
+export const folderWorkflowStart = (node: number, step: string, expected: string) =>
+  invoke<FolderWorkflow>('folder_workflow_start', { node, step, expected })
+export const folderWorkflowReview = (node: number, step: string, expected: string, accept: boolean, evidence: string) =>
+  invoke<FolderWorkflow>('folder_workflow_review', { node, step, expected, accept, evidence })

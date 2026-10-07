@@ -12,3 +12,6 @@ impl Manager for AppHandle {}
 #[path = "../../src-tauri/src/aiw/events.rs"]
 pub mod events;
 pub mod aiw { pub mod state { pub struct Workspace { pub bus: crate::events::SharedBus } } }
+
+#[path = "../../src-tauri/src/workflow_model.rs"]
+pub mod workflow_model;

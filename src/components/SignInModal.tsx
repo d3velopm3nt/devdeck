@@ -177,8 +177,7 @@ export function SignInModal({ onClose, onSignedIn }: { onClose: () => void; onSi
               <Icon name="alert" size={26} className="text-warn" />
               <div className="text-[13px] font-medium text-ink">Sign-in isn’t configured in this build</div>
               <div className="max-w-[330px] text-[11.5px] leading-relaxed text-muted">
-                It needs a GitHub OAuth app’s client id. Register one, enable Device Flow, and set it in{' '}
-                <span className="font-mono text-[11px] text-dim">src-tauri/src/github.rs</span>.
+                Use a personal access token to connect your account, or use an existing local clone.
               </div>
             </div>
           )}

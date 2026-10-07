@@ -1954,6 +1954,7 @@ export interface Linked {
   services: number
 }
 export const businessRepos = () => invoke<RepoList>('business_repos')
+export const githubStateRepos = () => invoke<RepoList>('github_state_repos')
 export const businessCloneFolder = (nodeId: number) => invoke<string>('business_clone_folder', { nodeId })
 /** Link a repository to a product (or Marketing) as a project, cloning it if it is not here. */
 export const businessLinkRepo = (req: { business: number; parent: number; repo: Repo; clone_into: string }) =>

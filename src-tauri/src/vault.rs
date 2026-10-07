@@ -240,9 +240,7 @@ pub fn vault_set_root(
         conn.execute("DELETE FROM nodes WHERE rel_path = ''", [])
             .map_err(err)?;
     }
-    scan_into(&conn, &root)?;
-
-    db::setting_set_conn(&conn, ROOT_KEY, &root.to_string_lossy())?;
+    select_root(&conn, &root, walk_root(&root))?;
     Ok(root.to_string_lossy().to_string())
 }
 
@@ -319,7 +317,32 @@ pub fn scan_into(conn: &Connection, root: &Path) -> Result<usize, String> {
 fn walk_root(root: &Path) -> Vec<Found> {
     let mut found = Vec::new();
     walk(root, None, 0, &mut found);
+    // A shared state repo can also contain canvas assets and reusable skills.
+    // Its declared top-level folders are spaces; auxiliary folders are not.
+    if root.join("workspace.json").is_file() {
+        let spaces: Vec<_> = found
+            .iter()
+            .filter(|f| f.depth == 0 && root.join(&f.rel).join(META).is_file())
+            .map(|f| f.rel.clone())
+            .collect();
+        found.retain(|f| {
+            spaces
+                .iter()
+                .any(|space| f.rel == *space || f.rel.starts_with(&format!("{space}/")))
+        });
+    }
     found
+}
+
+/// The index and selected state root change together. Deck reads ROOT_KEY too,
+/// so a separate watcher path can never select a different repository.
+fn select_root(conn: &Connection, root: &Path, found: Vec<Found>) -> Result<(), String> {
+    let tx = conn.unchecked_transaction().map_err(err)?;
+    apply_scan(&tx, found)?;
+    db::setting_set_conn(&tx, ROOT_KEY, &root.to_string_lossy())?;
+    tx.execute("DELETE FROM settings WHERE key = 'deck.state_path'", [])
+        .map_err(err)?;
+    tx.commit().map_err(err)
 }
 
 /// The database half: one transaction for the whole tree. Row by row, each
@@ -773,6 +796,66 @@ mod tests {
         .unwrap()
     }
 
+    #[test]
+    fn shared_state_scans_spaces_without_canvas_or_skills() {
+        let root = tmp("shared-state-layout");
+        fs::write(root.join("workspace.json"), "{}").unwrap();
+        for space in ["Life", "Work"] {
+            fs::create_dir_all(root.join(space)).unwrap();
+            fs::write(root.join(space).join(META), "---\n---\n").unwrap();
+        }
+        for folder in [
+            "Life/Home-and-garden",
+            "Work/InnoTrack/TyreX",
+            "canvas/assets",
+            "skills/devdeck-state",
+        ] {
+            fs::create_dir_all(root.join(folder)).unwrap();
+        }
+        let paths: Vec<_> = walk_root(&root).into_iter().map(|f| f.rel).collect();
+        assert!(paths.contains(&"Life/Home-and-garden".to_string()));
+        assert!(paths.contains(&"Work/InnoTrack/TyreX".to_string()));
+        assert!(!paths
+            .iter()
+            .any(|p| p.starts_with("canvas") || p.starts_with("skills")));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn selecting_state_updates_root_and_index_atomically() {
+        let root = tmp("select-state-root");
+        fs::create_dir_all(root.join("Life")).unwrap();
+        let conn = db();
+        conn.execute_batch("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);")
+            .unwrap();
+        db::setting_set_conn(&conn, ROOT_KEY, "old").unwrap();
+        db::setting_set_conn(&conn, "deck.state_path", "different-repo").unwrap();
+        select_root(&conn, &root, walk_root(&root)).unwrap();
+        assert_eq!(
+            db::setting_get_conn(&conn, ROOT_KEY).unwrap().unwrap(),
+            root.to_string_lossy()
+        );
+        assert!(db::setting_get_conn(&conn, "deck.state_path")
+            .unwrap()
+            .is_none());
+
+        let other = tmp("select-state-rollback");
+        fs::create_dir_all(other.join("Work")).unwrap();
+        conn.execute_batch("CREATE TRIGGER refuse_root BEFORE UPDATE ON settings BEGIN SELECT RAISE(ABORT, 'test failure'); END;").unwrap();
+        assert!(select_root(&conn, &other, walk_root(&other)).is_err());
+        assert_eq!(
+            db::setting_get_conn(&conn, ROOT_KEY).unwrap().unwrap(),
+            root.to_string_lossy()
+        );
+        assert_eq!(
+            conn.query_row("SELECT name FROM nodes", [], |r| r.get::<_, String>(0))
+                .unwrap(),
+            "Life"
+        );
+        fs::remove_dir_all(root).unwrap();
+        fs::remove_dir_all(other).unwrap();
+    }
+
     /// The migration's whole reason for existing: a node keeps its id, so the
     /// commands and services pointing at it survive. Recreating the tree
     /// instead would silently discard every configured thing in it.
@@ -984,8 +1067,7 @@ pub fn vault_move(db: tauri::State<Db>, new_path: String) -> Result<String, Stri
         })?;
     }
 
-    db::setting_set_conn(&conn, ROOT_KEY, &new.to_string_lossy())?;
-    scan_into(&conn, &new)?;
+    select_root(&conn, &new, walk_root(&new))?;
     Ok(new.to_string_lossy().to_string())
 }
 
@@ -1052,12 +1134,12 @@ pub fn vault_switch_cost(db: tauri::State<Db>, path: String) -> Result<SwitchCos
 /// what is there.
 #[tauri::command(async)]
 pub fn vault_switch(db: tauri::State<Db>, path: String) -> Result<String, String> {
-    let conn = db.conn();
     let target = PathBuf::from(path.trim());
     if !target.is_dir() {
         return Err("That folder does not exist.".into());
     }
-    db::setting_set_conn(&conn, ROOT_KEY, &target.to_string_lossy())?;
-    scan_into(&conn, &target)?;
+    let found = walk_root(&target);
+    let conn = db.conn();
+    select_root(&conn, &target, found)?;
     Ok(target.to_string_lossy().to_string())
 }

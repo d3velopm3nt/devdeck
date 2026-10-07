@@ -1313,6 +1313,7 @@ pub fn run() {
             business_clear::business_clear_preview,
             business_clear::business_clear,
             business_code::business_repos,
+            github::github_state_repos,
             business_code::business_clone_folder,
             business_code::business_link_repo,
             business_team::business_team,

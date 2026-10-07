@@ -29,7 +29,7 @@ import { Icon } from '../lib/icons'
 const NEW_TOKEN_URL =
   'https://github.com/settings/tokens/new?scopes=repo,read:org,gist&description=DevDeck'
 
-export function GitHubToken() {
+export function GitHubToken({ onSignedIn }: { onSignedIn?: () => void } = {}) {
   /** Whether a token is in Credential Manager. `null` until we know — which
    *  is not the same as "no", and must not be drawn as one. */
   const [stored, setStored] = useState<boolean | null>(null)
@@ -61,6 +61,7 @@ export function GitHubToken() {
       setToken('')
       setResult(r)
       setStored(true)
+      onSignedIn?.()
     } catch (e) {
       setError(errText(e))
     } finally {
@@ -120,9 +121,8 @@ export function GitHubToken() {
 
       {stored === false && (
         <p className="mt-1 text-[11.5px] leading-5 text-muted">
-          DevDeck has no OAuth app registered yet, so sign-in is a token you make yourself. It is
-          stored in Windows Credential Manager — never in DevDeck&apos;s database, never in a log,
-          and never shown back to you.
+          Use a personal access token as an alternative to GitHub sign-in. It is stored in
+          Windows Credential Manager and is never saved in your state repository.
         </p>
       )}
 

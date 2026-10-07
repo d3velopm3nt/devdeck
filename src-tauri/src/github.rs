@@ -56,7 +56,10 @@ const SCOPES: &str = "repo read:org gist";
 fn client_id() -> String {
     match std::env::var("DEVDECK_GITHUB_CLIENT_ID") {
         Ok(v) if !v.trim().is_empty() => v.trim().to_string(),
-        _ => CLIENT_ID.trim().to_string(),
+        _ => option_env!("DEVDECK_GITHUB_CLIENT_ID")
+            .unwrap_or(CLIENT_ID)
+            .trim()
+            .to_string(),
     }
 }
 
@@ -67,6 +70,56 @@ fn client_id() -> String {
 #[tauri::command(async)]
 pub fn github_oauth_configured() -> bool {
     !client_id().is_empty()
+}
+
+/// Use the app's saved credential for GitHub HTTPS requests without putting it
+/// in a URL, command argument, repository config, or log. Other hosts keep
+/// their own credential helpers. Disable redirects for authenticated requests.
+pub(crate) fn configure_git_auth(cmd: &mut Command, url: &str) {
+    cmd.env("GIT_TERMINAL_PROMPT", "0");
+    let Ok(url) = reqwest::Url::parse(url) else {
+        return;
+    };
+    if url.scheme() != "https"
+        || url.host_str() != Some("github.com")
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.port().is_some()
+    {
+        return;
+    }
+    let Some(token) = stored_token() else {
+        return;
+    };
+    use base64::Engine;
+    let header = format!(
+        "Authorization: Basic {}",
+        base64::engine::general_purpose::STANDARD.encode(format!("x-access-token:{token}"))
+    );
+    let count = std::env::var("GIT_CONFIG_COUNT")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(0);
+    let config = [
+        ("http.https://github.com/.extraheader", header.as_str()),
+        ("http.https://github.com/.followRedirects", "false"),
+    ];
+    for (offset, (key, value)) in config.iter().enumerate() {
+        cmd.env(format!("GIT_CONFIG_KEY_{}", count + offset), key);
+        cmd.env(format!("GIT_CONFIG_VALUE_{}", count + offset), value);
+    }
+    cmd.env("GIT_CONFIG_COUNT", (count + config.len()).to_string());
+}
+
+/// Real account repositories only; onboarding must never adopt demo repos.
+#[tauri::command(async)]
+pub async fn github_state_repos() -> Result<crate::business_code::RepoList, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let token = stored_token().ok_or("Connect your GitHub account first.")?;
+        crate::business_code::list_github(&token)
+    })
+    .await
+    .map_err(|e| format!("Repository listing stopped: {e}"))?
 }
 
 #[cfg(windows)]

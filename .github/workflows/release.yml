@@ -26,6 +26,7 @@ jobs:
       TAG: ${{ github.event.inputs.tag || github.ref_name }}
       # True when SignPath signing is configured for this repo.
       SIGN: ${{ vars.SIGNPATH_PROJECT_SLUG != '' }}
+      DEVDECK_GITHUB_CLIENT_ID: ${{ vars.DEVDECK_GITHUB_CLIENT_ID }}
     steps:
       - uses: actions/checkout@v4
 

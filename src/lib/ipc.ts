@@ -287,6 +287,7 @@ export const botGet = (handle: string) => invoke<Bot | null>('bot_get', { handle
  *  space still finds it. */
 export const botForNode = (nodeId: number) => invoke<Bot | null>('bot_for_node', { nodeId })
 export const botSave = (b: {
+  handle?: string
   nodeId: number
   name: string
   goal: string
@@ -530,7 +531,7 @@ export interface BotWork {
   feature: string
 }
 
-export const WORK_STATUSES = ['unclaimed', 'claimed', 'in-progress', 'blocked', 'done'] as const
+export const WORK_STATUSES = ['unclaimed', 'claimed', 'in-progress', 'blocked', 'built', 'needs-review', 'done'] as const
 
 export interface ToolOffer {
   id: string
@@ -2256,8 +2257,10 @@ export const workerAnswer = (run: string, ask: string, allow: boolean, note = ''
  *  `done`. Per goal, because the branch is per goal: its items have been
  *  committing on top of each other and arrive as one piece of work. A worker
  *  is forbidden to merge, so this happens here, by the app. */
-export const workMerge = (nodeId: number, feature: string) =>
-  invoke<string>('work_merge', { nodeId, feature })
+export const workMerge = (nodeId: number, feature: string, target: string) =>
+  invoke<string>('work_merge', { nodeId, feature, target })
+export const workAccept = (nodeId: number, feature: string, item: string, evidence: string) =>
+  invoke<void>('work_accept', { nodeId, feature, item, evidence })
 export const runsList = (nodeId = 0) => invoke<Run[]>('runs_list', { nodeId })
 export const runGet = (id: string) => invoke<Run | null>('run_get', { id })
 /** keep | discard, with whatever you want said about it. */
@@ -2337,3 +2340,25 @@ export const eventsHistory = (thisSession: boolean, projectId?: string, limit?: 
   invoke<KeptEvent[]>('events_history', { thisSession, projectId, limit })
 /** [all, this session] */
 export const eventsCount = () => invoke<[number, number]>('events_count')
+
+export interface ManagerProfile {
+  revision: number
+  domain: string
+  role: string
+  responsibilities: string[]
+  boundaries: string[]
+  peers: string[]
+  workers: string[]
+}
+export interface ManagerMessage {
+  id: string; from: string; to: string; kind: string; subject: string; body: string
+  reply_to: string | null; created_at: string; depth: number
+}
+export interface TeamMember { bot: Bot; profile: ManagerProfile; pending: number }
+export const managerTeam = () => invoke<TeamMember[]>('manager_team')
+export const managerProfileSave = (handle: string, profile: ManagerProfile) => invoke<ManagerProfile>('manager_profile_save', {handle,profile})
+export const managerMessages = (handle: string) => invoke<ManagerMessage[]>('manager_messages', {handle})
+export const managerMessageSend = (from: string, draft: Omit<ManagerMessage,'id'|'from'|'created_at'|'depth'>) => invoke<ManagerMessage>('manager_message_send',{from,draft})
+
+export const managerConversation = (handle: string) => invoke<import('./aiw').ChatMessage[]>('manager_conversation',{handle})
+export const managerTurn = (handle: string, text: string) => invoke<import('./aiw').AssistantReply>('manager_turn',{handle,text})

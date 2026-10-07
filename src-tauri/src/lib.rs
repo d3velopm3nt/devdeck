@@ -35,11 +35,13 @@ mod calls;
 mod community;
 mod community_index;
 mod conn;
+mod coordination;
 mod creds;
 mod db;
 mod deck;
 mod eventlog;
 mod events;
+mod execution_policy;
 mod files;
 mod focus;
 mod gauth;
@@ -52,6 +54,7 @@ mod library;
 mod machine;
 mod mail;
 mod mailfiles;
+mod manager_team;
 mod managers;
 mod mcp;
 mod monitor;
@@ -723,6 +726,11 @@ pub fn run() {
             bots::set_routine(&conn, node_id, &d.what, &d.every, d.at_min, &d.on)
         }));
     }
+    let manager_bus = aiw_workspace.bus.clone();
+    aiw_workspace.set_manager_messenger(Box::new(move |handle, text| {
+        let conn = crate::db::open();
+        manager_team::deliver_reply(&conn, handle, text, &manager_bus)
+    }));
     // Re-register whatever this install was pointed at last time. Without this
     // the project list is lost on every restart, which looks exactly like the
     // projects themselves being gone.
@@ -1105,6 +1113,12 @@ pub fn run() {
             focus::focus_start,
             focus::focus_end,
             focus::focus_recent,
+            manager_team::manager_turn,
+            manager_team::manager_conversation,
+            manager_team::manager_team,
+            manager_team::manager_profile_save,
+            manager_team::manager_messages,
+            manager_team::manager_message_send,
             bots::bots_list,
             bots::bots_standing,
             bots::bot_get,
@@ -1290,6 +1304,7 @@ pub fn run() {
             workers::run_get,
             workers::run_decide,
             workers::work_merge,
+            workers::work_accept,
             business::business_get,
             business::business_create,
             business::business_save,

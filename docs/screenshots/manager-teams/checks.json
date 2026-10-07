@@ -1,0 +1,17 @@
+{
+  "checks": [
+    "community removed from primary navigation",
+    "manager responsibility changes saved",
+    "mock manager processes request and sends a reply",
+    "acknowledgement closes reply",
+    "space switcher filters the manager roster",
+    "new personal manager created with responsibilities",
+    "top-right theme switch updates existing theme",
+    "no document horizontal overflow at laptop size",
+    "selected space survives a reload",
+    "work view uses the shared space",
+    "no browser page errors"
+  ],
+  "errors": [],
+  "boundary": "Real React components; Tauri IPC and model outputs mocked. Rust production core tested separately."
+}

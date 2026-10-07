@@ -406,7 +406,7 @@ pub fn work_on_deck(deck: &super::deck::Deck, feature: &str, call: &ToolCall) ->
             let was = work.items[at].status.clone();
             let title = work.items[at].title.clone();
             if call.action == "done" {
-                work.items[at].status = "done".into();
+                work.items[at].status = "needs-review".into();
             } else {
                 work.items[at].status = "unclaimed".into();
                 work.items[at].assignee = None;
@@ -414,7 +414,7 @@ pub fn work_on_deck(deck: &super::deck::Deck, feature: &str, call: &ToolCall) ->
             match deck.save_work(feature, &work) {
                 Ok(()) if call.action == "done" => (
                     true,
-                    format!("Marked “{title}” done on {feature} — was {was}."),
+                    format!("Submitted “{title}” for review on {feature} — was {was}. Only a person can accept it."),
                 ),
                 Ok(()) => (
                     true,
@@ -692,7 +692,7 @@ pub fn registry() -> Vec<ToolInfo> {
                 ),
                 act(
                     "done",
-                    "Mark an item done. Only when a receipt in the thread shows it finished —                      this records what happened, it does not make it so.",
+                    "Submit an item for human review when a receipt shows the work finished. This never marks it accepted or done.",
                     Access::Write,
                     schema(
                         serde_json::json!({

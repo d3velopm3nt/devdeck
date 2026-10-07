@@ -31,7 +31,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - uses: dtolnay/rust-toolchain@stable
@@ -127,7 +127,8 @@ jobs:
           tag_name: ${{ env.TAG }}
           name: DevDeck ${{ env.TAG }}
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(env.TAG, '-') }}
+          make_latest: ${{ !contains(env.TAG, '-') }}
           files: |
             ${{ steps.final.outputs.path }}
             latest.json

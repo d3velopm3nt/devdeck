@@ -281,7 +281,10 @@ fn waiting_on_you(
     asked: &std::collections::HashMap<String, usize>,
 ) -> usize {
     approvals
-        + items.iter().filter(|i| i.status == "proposed").count()
+        + items
+            .iter()
+            .filter(|i| matches!(i.status.as_str(), "proposed" | "needs-review" | "built"))
+            .count()
         + items.iter().filter_map(|i| asked.get(&i.id)).sum::<usize>()
 }
 
@@ -362,6 +365,14 @@ mod tests {
         // Studio's plan exactly: three proposals, no live approval, and the
         // board said nothing was waiting.
         assert_eq!(waiting_on_you(0, &items, &none), 3);
+        assert_eq!(
+            waiting_on_you(
+                0,
+                &[item("review", "needs-review"), item("branch", "built")],
+                &none
+            ),
+            2
+        );
 
         // A worker stopped on two questions is two more things to answer.
         let asked = std::collections::HashMap::from([("w04".to_string(), 2)]);

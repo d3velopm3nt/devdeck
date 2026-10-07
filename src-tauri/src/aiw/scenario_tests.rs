@@ -350,7 +350,7 @@ fn a_mock_agent_goes_through_the_same_runtime_as_a_real_one() {
     assert!(saw(&w, EventType::SessionCheckpointed));
     assert!(saw(&w, EventType::WorkClaimed));
     assert!(saw(&w, EventType::ToolExecuted));
-    assert!(saw(&w, EventType::WorkCompleted));
+    assert!(saw(&w, EventType::WorkUpdated));
     assert!(saw(&w, EventType::SessionCompleted));
 
     let session = w.sessions_for(Some("tyrex")).into_iter().next().unwrap();
@@ -365,7 +365,7 @@ fn a_mock_agent_goes_through_the_same_runtime_as_a_real_one() {
 }
 
 #[test]
-fn a_work_item_is_marked_done_in_devdeck_not_just_in_memory() {
+fn a_work_item_waits_for_review_in_devdeck_not_just_in_memory() {
     let t = Tmp::new("durable");
     let (tyrex, _) = seed_demo(&t.0).unwrap();
     let w = ws();
@@ -399,7 +399,7 @@ fn a_work_item_is_marked_done_in_devdeck_not_just_in_memory() {
         .into_iter()
         .find(|i| i.id == "wi-conflict")
         .unwrap();
-    assert_eq!(item.status, "done");
+    assert_eq!(item.status, "needs-review");
     assert_eq!(item.assignee.as_deref(), Some("dev-a"));
 }
 
@@ -1301,6 +1301,7 @@ fn a_bot_with_no_agent_can_talk_in_a_room_but_cannot_move_work() {
     // Exactly what `bots::persona` builds for a bot that names no agent: an
     // unknown id, running on the assistant's provider.
     let voice = Persona {
+        manager_handle: None,
         agent_id: "bot:99".into(),
         runs_as: ASSISTANT_ID.into(),
         name: "TyreX bot".into(),
@@ -1522,6 +1523,7 @@ fn a_failed_turn_still_reports_that_it_ended() {
         .unwrap();
 
     let voice = Persona {
+        manager_handle: None,
         agent_id: "dev-a".into(),
         runs_as: "dev-a".into(),
         name: "Developer A".into(),
@@ -1589,6 +1591,7 @@ fn a_manager_can_take_an_item_itself() {
 
     // A bot that runs as dev-a, whose team is somebody else entirely.
     let voice = Persona {
+        manager_handle: None,
         agent_id: "dev-a".into(),
         runs_as: "dev-a".into(),
         name: "TyreX bot".into(),
@@ -1647,6 +1650,7 @@ fn a_manager_can_pass_an_item_to_another_manager() {
         .unwrap();
 
     let voice = Persona {
+        manager_handle: None,
         agent_id: "bot:1".into(),
         runs_as: ASSISTANT_ID.into(),
         name: "TyreX bot".into(),
@@ -1734,6 +1738,7 @@ fn passing_to_a_manager_with_no_plan_is_refused_out_loud() {
         .unwrap();
 
     let voice = Persona {
+        manager_handle: None,
         agent_id: "bot:1".into(),
         runs_as: ASSISTANT_ID.into(),
         name: "TyreX bot".into(),
@@ -1793,6 +1798,7 @@ fn two_bots_hold_a_conversation_in_one_feature_thread() {
         .unwrap();
 
     let bot = |id: &str, name: &str| Persona {
+        manager_handle: None,
         agent_id: id.into(),
         runs_as: ASSISTANT_ID.into(),
         name: name.into(),
@@ -3001,28 +3007,28 @@ fn a_goal_a_manager_and_its_team_move_work_and_the_board_follows() {
         r.participants
     );
 
-    // --- Beat 4: work finished on disk moves the board ---------------------
-    // The agent that ran in beat 1 has already closed something of its own —
-    // which is the first thing worth asserting, because it means the board is
-    // reading the deck the session wrote rather than a number held in memory.
-    let done_by_agent = r.items_done;
-    assert!(
-        done_by_agent > 0,
-        "the session that ran should have closed something: {r:?}"
-    );
-
-    // Then one more, through the deck, the way a tool call does it — not by
-    // editing a struct, which would prove only that a struct can be edited.
+    // --- Beat 4: finished work waits for a human, and the board says so -----
+    assert_eq!(r.items_done, 0, "an agent cannot accept its own result");
     let project = w.project("7").unwrap();
     let deck = project.deck();
     let mut work = deck.work(slug).unwrap();
+    assert!(
+        work.meta
+            .items
+            .iter()
+            .any(|i| i.id == "wi-ui" && i.status == "needs-review"),
+        "the finished item must persist as awaiting review"
+    );
+    assert!(r.waiting > 0, "the board must surface the human review");
+
+    // Simulate the person accepting a result through the persisted deck.
     let next = work
         .meta
         .items
         .iter()
-        .find(|i| i.status != "done")
+        .find(|i| i.status == "needs-review")
         .map(|i| i.id.clone())
-        .expect("something is still open");
+        .expect("the agent result is awaiting review");
     for item in work.meta.items.iter_mut() {
         if item.id == next {
             item.status = "done".into();
@@ -3033,9 +3039,8 @@ fn a_goal_a_manager_and_its_team_move_work_and_the_board_follows() {
     let board = board_from(&w, Some(&c), &names, &parents, &bots);
     let r = row_for(&board, slug);
     assert_eq!(
-        r.items_done,
-        done_by_agent + 1,
-        "the board counts what the deck says"
+        r.items_done, 1,
+        "only the result explicitly accepted by the person counts as done"
     );
     assert_eq!(r.items_total, total, "and closing one invents no others");
 

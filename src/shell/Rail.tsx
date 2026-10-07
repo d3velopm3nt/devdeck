@@ -17,7 +17,7 @@
 // is the question this rail exists to answer.
 
 import { useEffect, useMemo, useState } from 'react'
-import { useApp, type RailView, type TeamTab } from '../store'
+import { useApp, type RailView } from '../store'
 import { approvalItem, conflictItem, unread, unreadFailures } from '../lib/inbox'
 import { openBot, openNodeThread } from '../lib/dock'
 import { useAiw } from '../lib/aiwStore'
@@ -28,44 +28,18 @@ import type { TreeNode } from '../lib/types'
 
 type Item = { view: RailView; icon: IconName; label: string }
 
-/// Team's views, as the sub-menu under it.
-///
-/// Managers is here rather than beside Team: who does the work and what the work
-/// is are two questions about one team, and having them in different corners
-/// of the rail meant a trip through navigation to answer either one.
-const TEAM: { id: TeamTab; icon: IconName; label: string }[] = [
-  { id: 'goals', icon: 'project', label: 'Goals' },
-  { id: 'features', icon: 'list', label: 'Features' },
-  { id: 'work', icon: 'check', label: 'Work' },
-  { id: 'bots', icon: 'bot', label: 'Managers' },
-]
-
-/// The places you live in. Ordered by how often a day touches them.
-const WORK: Item[] = [
-  // Beside Team on purpose: managers keep the plan, workers do the job, and
-  // keeping them a rail apart is how you forget you own either.
-  { view: 'workers', icon: 'tool', label: 'Workers' },
-  // Time sits with the places you go rather than with the app's own settings:
-  // a calendar is a thing you work out of, not a thing you configure.
+// Shared destinations remain available regardless of the selected space.
+const SHARED: Item[] = [
   { view: 'calendar', icon: 'schedule', label: 'Calendar' },
-  // Mail is deliberately not next to Inbox: the Inbox is what the team needs
-  // from you, and mixing other people's email into that count is how the
-  // badge stops meaning anything.
   { view: 'mail', icon: 'mail', label: 'Mail' },
 ]
 
-/// Tools: the surfaces you visit on purpose rather than live in.
-///
-/// These were five separate doors on a rail of twelve, which is how a rail
-/// stops being navigation and becomes a list. They are one door now, opening
-/// on a sub-menu — the same shape Team uses, for the same reason.
+// Advanced surfaces stay behind one expandable entry.
 const TOOLS: Item[] = [
+  { view: 'home', icon: 'home', label: 'Operations' },
   { view: 'connections', icon: 'database', label: 'Connections' },
   { view: 'analytics', icon: 'history', label: 'Analytics' },
   { view: 'stash', icon: 'stash', label: 'Stash' },
-  // Directly above Machine, and the adjacency is the idea: Machine installs
-  // tools for you, Community installs them for your managers.
-  { view: 'community', icon: 'package', label: 'Community' },
   { view: 'machine', icon: 'machine', label: 'Machine' },
 ]
 
@@ -77,7 +51,7 @@ const TOOLS_OPEN_KEY = 'devdeck.rail.toolsOpen'
 const LAST_TOOL_KEY = 'devdeck.rail.lastTool'
 /// Whether Team's sub-menu is open. Remembered, because a menu that springs
 /// open on every launch is one you learn to close before reading.
-const TEAM_OPEN_KEY = 'devdeck.rail.teamOpen'
+
 
 function RailButton({
   label,
@@ -112,12 +86,12 @@ function RailButton({
   live?: number
   onClick: () => void
 }) {
-  const height = mini ? (expanded ? 'h-7' : 'h-8') : expanded ? 'h-8' : 'h-10'
+  const height = mini ? (expanded ? 'h-7' : 'h-8') : expanded ? 'h-9' : 'h-10'
 
   return (
     <button
       className={`relative flex items-center rounded-lg transition-colors ${height} ${
-        expanded ? 'w-full gap-2 px-2 text-[12px]' : 'w-10 justify-center'
+        expanded ? 'w-full gap-2.5 px-2.5 text-[13px]' : 'w-10 justify-center'
       } ${active ? 'bg-raise text-ink' : 'text-muted hover:bg-hover/50 hover:text-dim'}`}
       // Expanded, the label is on screen — a tooltip repeating it is noise.
       title={expanded ? undefined : label}
@@ -190,6 +164,8 @@ export function Rail() {
     mailCounts,
     nodes,
     activeWorkspaceId,
+    spaceScopeId,
+    setSpaceScope,
     activeSolutionId,
     setActiveSolution,
     recent,
@@ -200,8 +176,6 @@ export function Rail() {
     inboxFloor,
     inboxLoaded,
     bots,
-    teamTab,
-    setTeamTab,
   } = useApp()
   const aiw = useAiw()
   const anyRunning = Object.values(svcStates).some((s) => s.status === 'running')
@@ -224,21 +198,18 @@ export function Rail() {
   // What is moving, so the rail says so without being opened: items held by
   // a live claim under Work, agents mid-session under Bots. Green counts
   // rather than the Inbox's badge, because these are good news.
-  const moving = aiw.claims.filter((c) => c.status === 'active').length
   const working = new Set(
     aiw.sessions.filter((s) => s.status === 'working' || s.status === 'planning').map((s) => s.agent_id),
   ).size
 
-  const [expanded, setExpanded] = useState(() => localStorage.getItem(KEY) === '1')
+  const [expanded, setExpanded] = useState(() => localStorage.getItem(KEY) !== '0')
   useEffect(() => localStorage.setItem(KEY, expanded ? '1' : '0'), [expanded])
-  const [teamOpen, setTeamOpen] = useState(() => localStorage.getItem(TEAM_OPEN_KEY) !== '0')
   const [toolsOpen, setToolsOpen] = useState(() => localStorage.getItem(TOOLS_OPEN_KEY) === '1')
   useEffect(() => localStorage.setItem(TOOLS_OPEN_KEY, toolsOpen ? '1' : '0'), [toolsOpen])
   const [lastTool, setLastTool] = useState<RailView>(() => {
     const v = localStorage.getItem(LAST_TOOL_KEY) as RailView | null
     return v && TOOLS.some((t) => t.view === v) ? v : 'home'
   })
-  useEffect(() => localStorage.setItem(TEAM_OPEN_KEY, teamOpen ? '1' : '0'), [teamOpen])
 
   // The folders you opened most recently, in this workspace.
   //
@@ -270,9 +241,18 @@ export function Rail() {
   return (
     <nav
       className={`flex shrink-0 flex-col border-r border-line bg-app ${
-        expanded ? 'w-[160px] items-stretch gap-px px-1.5 py-1.5' : 'w-[52px] items-center gap-1 py-2'
+        expanded ? 'w-[188px] items-stretch gap-1 px-3 py-3' : 'w-[52px] items-center gap-1 py-2'
       }`}
     >
+      <div className="mb-3 w-full">
+        {expanded && <label htmlFor="sidebar-space" className="mb-1.5 block px-1 text-[10px] font-semibold uppercase tracking-wider text-faint">Space</label>}
+        <select id="sidebar-space" aria-label="Switch space" title="Switch space" value={spaceScopeId??''}
+          onChange={e=>setSpaceScope(e.target.value?Number(e.target.value):null)}
+          className={`input w-full rounded-lg bg-panel text-[12px] ${expanded?'px-2 py-2':'px-0 py-2'}`}>
+          <option value="">All spaces</option>{nodes.filter(n=>n.parent_id==null).map(n=><option key={n.id} value={n.id}>{n.name}</option>)}
+        </select>
+        {expanded && <p className="mt-2 px-1 text-[10px] text-faint">{spaceScopeId==null?'Your whole workspace':'Today, work and managers in this space'}</p>}
+      </div>
       <RailButton
         label="Today"
         icon="schedule"
@@ -281,42 +261,10 @@ export function Rail() {
         onClick={() => setRailView('today')}
       />
 
-      {/* Directly under Today, because the two answer the same question from
-          opposite ends: Today is what needs you, the Dashboard is what the
-          machine is doing — services, terminals, the master log. It was in the
-          Tools drawer, two clicks from a screen you check constantly. */}
-      <RailButton
-        label="Dashboard"
-        icon="home"
-        active={railView === 'home'}
-        expanded={expanded}
-        onClick={() => setRailView('home')}
-      />
-
-      <RailButton
-        label="Inbox"
-        icon="inbox"
-        active={railView === 'inbox'}
-        expanded={expanded}
-        count={unreadCount}
-        alarm={broken > 0}
-        onClick={() => setRailView('inbox')}
-      />
-
-      {WORK.map((it) => (
-        <RailButton
-          key={it.view}
-          label={it.label}
-          icon={it.icon}
-          active={railView === it.view}
-          expanded={expanded}
-          // A dot rather than a count: unread mail is worth noticing and is
-          // not something the team is waiting on you for, which is what the
-          // numbered badge above means.
-          dot={it.view === 'mail' && (mailCounts?.unread ?? 0) > 0}
-          onClick={() => setRailView(it.view)}
-        />
-      ))}
+      <RailButton label="Work" icon="check" active={railView === 'team'} expanded={expanded} live={working}
+        onClick={() => setRailView('team')} />
+      <RailButton label="Agents" icon="tool" active={railView === 'workers'} expanded={expanded}
+        onClick={() => setRailView('workers')} />
 
       {/* The tree of everything: areas, folders, clients and projects. Called
           Spaces again now the workspace tabs are gone — the word meant two
@@ -357,56 +305,32 @@ export function Rail() {
         )
       })}
 
-      {/* Team, with what it holds as a sub-menu rather than as tabs on the
-          page — one navigation, not two. Collapsed to icons there is no room
-          for sub-items, so the icon opens whichever was last used. */}
-      <div className="relative">
+      <Rule expanded={expanded} />
+      {expanded && <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-faint">Shared</div>}
+      <RailButton
+        label="Inbox"
+        icon="inbox"
+        active={railView === 'inbox'}
+        expanded={expanded}
+        count={unreadCount}
+        alarm={broken > 0}
+        onClick={() => setRailView('inbox')}
+      />
+
+      {SHARED.map((it) => (
         <RailButton
-          label="Team"
-          icon="agent"
-          active={railView === 'team'}
+          key={it.view}
+          label={it.label}
+          icon={it.icon}
+          active={railView === it.view}
           expanded={expanded}
-          // Collapsed there is no sub-menu, so a bot at work has to say so
-          // here or not at all.
-          live={working}
-          onClick={() => setRailView('team')}
+          // A dot rather than a count: unread mail is worth noticing and is
+          // not something the team is waiting on you for, which is what the
+          // numbered badge above means.
+          dot={it.view === 'mail' && (mailCounts?.unread ?? 0) > 0}
+          onClick={() => setRailView(it.view)}
         />
-        {expanded && (
-          <button
-            className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-0.5 text-faint hover:bg-hover hover:text-dim"
-            title={teamOpen ? 'Hide what Team holds' : 'Show what Team holds'}
-            aria-label={teamOpen ? 'Collapse Team' : 'Expand Team'}
-            onClick={(e) => {
-              e.stopPropagation()
-              setTeamOpen((o) => !o)
-            }}
-          >
-            <Icon name={teamOpen ? 'chevron-down' : 'chevron-right'} size={13} />
-          </button>
-        )}
-      </div>
-      {expanded &&
-        teamOpen &&
-        TEAM.map((t) => (
-          <button
-            key={t.id}
-            className={`flex h-7 w-full items-center gap-2 rounded-lg pl-8 pr-2 text-[11.5px] ${
-              railView === 'team' && teamTab === t.id
-                ? 'text-ink'
-                : 'text-muted hover:bg-hover/50 hover:text-dim'
-            }`}
-            onClick={() => setTeamTab(t.id)}
-          >
-            <Icon name={t.icon} size={12} className="shrink-0" />
-            <span className="min-w-0 flex-1 truncate text-left">{t.label}</span>
-            {t.id === 'work' && moving > 0 && (
-              <span className="shrink-0 text-[10px] font-semibold text-ok">{moving}</span>
-            )}
-            {t.id === 'bots' && working > 0 && (
-              <span className="h-[6px] w-[6px] shrink-0 rounded-full bg-emerald-400" />
-            )}
-          </button>
-        ))}
+      ))}
 
       <div className="flex-1" />
 

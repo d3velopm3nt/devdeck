@@ -329,7 +329,10 @@ pub type LogSink = Box<dyn Fn(&str, &str, String) + Send + Sync>;
 /// outer app hands one over, and a build that does not simply cannot.
 pub type RoutineMaker = Box<dyn Fn(RoutineDraft) -> Result<String, String> + Send + Sync>;
 
+pub type ManagerMessenger = Box<dyn Fn(&str, &str) -> Result<String, String> + Send + Sync>;
+
 pub struct Workspace {
+    manager_messenger: std::sync::OnceLock<ManagerMessenger>,
     pub bus: SharedBus,
     pub conflicts: ConflictService,
     /// MCP servers installed from Community: the hub that runs them, and the
@@ -405,6 +408,7 @@ impl Workspace {
             approvals: Arc::new(ApprovalBroker::new(timeout)),
             bot_maker: std::sync::OnceLock::new(),
             routine_maker: std::sync::OnceLock::new(),
+            manager_messenger: std::sync::OnceLock::new(),
             call_log: std::sync::OnceLock::new(),
             log_sink: std::sync::OnceLock::new(),
             conversations: std::sync::OnceLock::new(),
@@ -1440,6 +1444,17 @@ impl Workspace {
     }
 
     /// Teach this workspace how to turn a sentence into a routine.
+    pub fn set_manager_messenger(&self, f: ManagerMessenger) {
+        let _ = self.manager_messenger.set(f);
+    }
+    pub fn manager_message(&self, handle: &str, text: &str) -> Result<String, String> {
+        match self.manager_messenger.get() {
+            Some(f) => f(handle, text),
+            None if crate::coordination::outgoing(text)?.is_none() => Ok(String::new()),
+            None => Err("Manager messaging is unavailable in this runtime.".into()),
+        }
+    }
+
     pub fn set_routine_maker(&self, f: RoutineMaker) {
         let _ = self.routine_maker.set(f);
     }

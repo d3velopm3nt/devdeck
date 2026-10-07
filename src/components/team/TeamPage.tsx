@@ -26,6 +26,7 @@ import * as ipc from '../../lib/ipc'
 import type { GoalRow } from '../../lib/aiw'
 import { aiw } from '../../lib/aiw'
 import { useApp, type TeamTab } from '../../store'
+import { subtreeIds } from '../../lib/tree'
 import { Icon } from '../../lib/icons'
 import { GoalsList } from './Goals'
 import { FeaturesList } from './FeaturesTab'
@@ -36,15 +37,13 @@ import { CAPTURE_GOAL } from '../../lib/devCapture'
 
 const TABS: { id: TeamTab; label: string }[] = [
   { id: 'goals', label: 'Goals' },
-  { id: 'features', label: 'Features' },
   { id: 'work', label: 'Work' },
-  { id: 'bots', label: 'Bots' },
 ]
 
 const SAYS: Record<TeamTab, { title: string; sub: string }> = {
   goals: {
     title: 'Goals',
-    sub: 'Every space, right now, grouped by goal. Pick one to open it.',
+    sub: 'Priorities grouped by goal. Pick one to see its work and evidence.',
   },
   features: { title: 'Features', sub: 'Every feature in every space, and who is on it.' },
   work: { title: 'Work', sub: 'Every open item, and who is holding it.' },
@@ -62,6 +61,8 @@ export interface Board {
 export function TeamPage() {
   // Which view is open is one piece of state with two handles on it: the
   // tabs here and the sub-menu on the rail. Either sets it, both show it.
+  const scope = useApp(s=>s.spaceScopeId)
+  const nodes = useApp(s=>s.nodes)
   const tab = useApp((s) => s.teamTab)
   const setTab = useApp((s) => s.setTeamTab)
   const [board, setBoard] = useState<Board>({ rows: [], error: null, loaded: false })
@@ -99,8 +100,13 @@ export function TeamPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const waiting = board.rows.filter((r) => r.waiting > 0 || r.conflicts > 0).length
-  const moving = board.rows.filter(
+  const scopeIds=scope==null?null:new Set(subtreeIds(nodes,scope))
+  const visibleBoard={...board,rows:scopeIds?board.rows.filter(r=>scopeIds.has(r.node_id)):board.rows}
+  const scopeName=nodes.find(n=>n.id===scope)?.name??'All spaces'
+  useEffect(()=>setPicked(null),[scope])
+
+  const waiting = visibleBoard.rows.filter((r) => r.waiting > 0 || r.conflicts > 0).length
+  const moving = visibleBoard.rows.filter(
     (r) => r.waiting === 0 && r.conflicts === 0 && r.on_it.length > 0,
   ).length
 
@@ -108,14 +114,14 @@ export function TeamPage() {
   // Nothing picked yet opens the first row rather than an empty half-page —
   // but only once you have chosen nothing, never over a choice.
   const current =
-    picked == null ? board.rows[0] : board.rows.find((g) => key(g) === picked)
+    picked == null ? visibleBoard.rows[0] : visibleBoard.rows.find((g) => key(g) === picked)
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-page">
       <div className="flex shrink-0 items-center gap-3 border-b border-line px-5 py-3">
         <div className="min-w-0">
           <h2 className="text-[15px] font-semibold text-ink">{SAYS[tab].title}</h2>
-          <p className="text-[11.5px] text-muted">{SAYS[tab].sub}</p>
+          <p className="text-[11.5px] text-muted">{SAYS[tab].sub} · {scopeName}</p>
         </div>
         <div className="ml-auto flex items-center gap-3 text-[10.5px] text-faint">
           {board.error ? (
@@ -124,7 +130,7 @@ export function TeamPage() {
             </span>
           ) : (
             <span>
-              {moving} moving · {waiting} waiting on you · every space
+              {moving} moving · {waiting} waiting on you · {scopeName}
             </span>
           )}
           <button
@@ -169,16 +175,16 @@ export function TeamPage() {
       ) : (
         <div className="flex min-h-0 flex-1">
           <div className="flex w-[320px] shrink-0 flex-col border-r border-line bg-panel">
-            {tab === 'goals' && <GoalsList board={board} picked={picked} onPick={setPicked} />}
+            {tab === 'goals' && <GoalsList board={visibleBoard} picked={picked} onPick={setPicked} />}
             {tab === 'features' && (
-              <FeaturesList board={board} picked={picked} onPick={setPicked} />
+              <FeaturesList board={visibleBoard} picked={picked} onPick={setPicked} />
             )}
-            {tab === 'work' && <WorkList board={board} picked={picked} onPick={setPicked} />}
+            {tab === 'work' && <WorkList board={visibleBoard} picked={picked} onPick={setPicked} />}
           </div>
 
           <div className="min-w-0 flex-1">
             {current ? (
-              <GoalPage goal={current} board={board} />
+              <GoalPage goal={current} board={visibleBoard} />
             ) : (
               <div className="flex h-full items-center justify-center px-8 text-center text-[12px] text-muted">
                 {board.loaded ? 'Pick a goal.' : 'Reading the board…'}

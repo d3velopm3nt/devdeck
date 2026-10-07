@@ -458,9 +458,17 @@ impl RunSlots {
 
     fn try_acquire(&self) -> bool {
         use std::sync::atomic::Ordering::SeqCst;
-        self.busy
-            .fetch_update(SeqCst, SeqCst, |n| (n < self.cap).then_some(n + 1))
-            .is_ok()
+        let mut current = self.busy.load(SeqCst);
+        while current < self.cap {
+            match self
+                .busy
+                .compare_exchange_weak(current, current + 1, SeqCst, SeqCst)
+            {
+                Ok(_) => return true,
+                Err(actual) => current = actual,
+            }
+        }
+        false
     }
 
     fn release(&self) {
@@ -591,13 +599,13 @@ fn run_one(
                     })
                 };
                 match decision {
-                    Some(crate::workers::Handoff::Start(worker, feature, item, title)) => {
+                    Some(crate::workers::Handoff::Start(worker, node_id, feature, item, title)) => {
                         let Some(db) = app.try_state::<Db>() else {
                             break 'wake (false, "the database was not there".into());
                         };
                         let plan = {
                             let conn = db.conn();
-                            crate::workers::plan(&conn, &worker, b.node_id, &feature, &item, &title, &format!(
+                            crate::workers::plan(&conn, &worker, node_id, &feature, &item, &title, &format!(
                                 "{title}\n\nThis is item {item} on {}'s plan. Do it, and say what you could not check.",
                                 b.name
                             ))

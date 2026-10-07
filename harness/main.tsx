@@ -10,6 +10,7 @@ import { useApp } from '../src/store'
 
 // Which screen to open is a query param, so one bundle serves every shot.
 const params = new URLSearchParams(location.search)
+if (params.get('scenario') === 'managers') await import('./managers')
 const view = params.get('view') ?? 'mail'
 const pane = params.get('pane') === 'contacts' ? 'contacts' : 'mail'
 const select = params.get('select')

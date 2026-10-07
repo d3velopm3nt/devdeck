@@ -928,6 +928,7 @@ pub fn bot_save(
     app: tauri::AppHandle,
     db: tauri::State<Db>,
     node_id: i64,
+    handle: Option<String>,
     name: String,
     goal: String,
     every: String,
@@ -941,20 +942,44 @@ pub fn bot_save(
 ) -> Result<Bot, String> {
     let (bot, created) = {
         let conn = db.conn();
-        save_into(
-            &conn,
-            node_id,
-            &name,
-            &goal,
-            &every,
-            at_min,
-            &days,
-            &body,
-            skills,
-            &agent,
-            team,
-            &wake_intent,
-        )?
+        if let Some(handle) = handle.as_deref() {
+            let mut m =
+                crate::managers::get(&conn, handle).ok_or("Manager not found; reload the page.")?;
+            if name.trim().is_empty() || goal.trim().is_empty() {
+                return Err("Give the manager a name and goal.".into());
+            }
+            m.team = vet_team(&name, &agent, team)?;
+            m.name = name.trim().into();
+            m.goal = goal.trim().into();
+            m.every = every;
+            m.at_min = at_min.clamp(0, 1439);
+            m.days = days;
+            m.body = body;
+            m.skills = skills;
+            m.agent = agent;
+            m.wake_intent = wake_intent;
+            crate::managers::save(&conn, &m)?;
+            sync_manager_heartbeat(&conn, handle)?;
+            (
+                bot_on(&conn, handle).ok_or("Saved manager could not be reloaded.")?,
+                false,
+            )
+        } else {
+            save_into(
+                &conn,
+                node_id,
+                &name,
+                &goal,
+                &every,
+                at_min,
+                &days,
+                &body,
+                skills,
+                &agent,
+                team,
+                &wake_intent,
+            )?
+        }
     };
 
     crate::activity::record(
@@ -1062,7 +1087,15 @@ pub struct WorkRow {
     pub feature: String,
 }
 
-pub const STATUSES: [&str; 5] = ["unclaimed", "claimed", "in-progress", "blocked", "done"];
+pub const STATUSES: [&str; 7] = [
+    "unclaimed",
+    "claimed",
+    "in-progress",
+    "blocked",
+    "built",
+    "needs-review",
+    "done",
+];
 
 fn deck_of(conn: &Connection, node_id: i64) -> Result<(crate::aiw::deck::Deck, PathBuf), String> {
     let n = db::node_by_id(conn, node_id)?;
@@ -2404,7 +2437,7 @@ The receipts in the thread are the record. A line such as \"claimed by @dev-a\" 
         "\n\nWhat you can actually do, and how:\n\
          - Put someone on an item: write @name take \"title\" in your reply. That starts them \
            in a session and posts a receipt here.\n\
-         - Keep the plan: work.add to put something on it, work.done when a receipt shows it \
+         - Keep the plan: work.add to put something on it, work.done to submit for human review when a receipt shows it \
            finished, work.drop to let go of one nobody is doing. work.list to see it.",
     );
     if acts {
@@ -2423,6 +2456,7 @@ The receipts in the thread are the record. A line such as \"claimed by @dev-a\" 
         );
     }
     crate::aiw::assistant::Persona {
+        manager_handle: Some(bot.handle.clone()),
         hand_on_to: Vec::new(),
         // A manager keeps its own plan, with or without an agent. This is the
         // only thing a bot may do without a row in the permission matrix, and
@@ -2524,6 +2558,12 @@ pub fn persona_in(
 ) -> crate::aiw::assistant::Persona {
     let mut p = persona_for(ws, bot);
     p.hand_on_to = colleagues(conn, ws, bot);
+    match crate::manager_team::context(conn, &bot.handle) {
+        Ok(context) => p.system.push_str(&context),
+        Err(e) => p.system.push_str(&format!(
+            "\nManager coordination unavailable: {e}. Do not claim delivery."
+        )),
+    }
     if !p.hand_on_to.is_empty() {
         p.system.push_str(&format!(
             "\n\nThe managers you may pass an item to, when it belongs to them rather than to \
@@ -2881,7 +2921,15 @@ pub fn wake_agent(app: &tauri::AppHandle, bot: &Bot) -> Option<(bool, String)> {
         // agent's prompt and nothing else, so a wake arrived knowing the
         // repository and not knowing who had asked, what for, or who its
         // worker was.
-        on_behalf_of: Some(wake_voice(bot)),
+        on_behalf_of: Some({
+            let conn = crate::db::open();
+            format!(
+                "{}\n{}",
+                wake_voice(bot),
+                crate::manager_team::context(&conn, &bot.handle)
+                    .unwrap_or_else(|e| format!("Coordination unavailable: {e}"))
+            )
+        }),
     };
 
     // The line lands in your inbox, so the agent gets its name rather than its
@@ -2896,6 +2944,18 @@ pub fn wake_agent(app: &tauri::AppHandle, bot: &Bot) -> Option<(bool, String)> {
 
     match crate::aiw::runtime::AgentRuntime::run(&workspace, &cmd) {
         Ok(out) => {
+            let receipt = crate::manager_team::deliver_reply(
+                &crate::db::open(),
+                &bot.handle,
+                &out.summary,
+                &workspace.bus,
+            );
+            if let Err(e) = receipt {
+                return Some((
+                    false,
+                    format!("{} ran, but communication failed: {e}", bot.name),
+                ));
+            }
             let did = format!(
                 "{} ran {agent_name} — {} turn{}, {} file{} touched",
                 bot.name,
@@ -2922,6 +2982,8 @@ pub fn wake_agent(app: &tauri::AppHandle, bot: &Bot) -> Option<(bool, String)> {
                         if out.refused == 1 { "" } else { "s" },
                     ),
                 ))
+            } else if out.status != "Completed" {
+                Some((false, format!("{did}. {}: {}", out.status, out.summary)))
             } else if out.summary.trim().is_empty() {
                 Some((true, format!("{did}. {}", out.status)))
             } else {

@@ -62,6 +62,8 @@ fn run_tag() -> &'static str {
 /// should be a compile error, not a handler that silently never fires.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum EventType {
+    ManagerMessageDelivered,
+    ManagerProfileChanged,
     WorkspaceCreated,
     WorkspaceUpdated,
     ProjectCreated,
@@ -114,6 +116,8 @@ impl EventType {
     pub fn as_str(self) -> &'static str {
         use EventType::*;
         match self {
+            ManagerMessageDelivered => "manager.message.delivered",
+            ManagerProfileChanged => "manager.profile.changed",
             WorkspaceCreated => "workspace.created",
             WorkspaceUpdated => "workspace.updated",
             ProjectCreated => "project.created",

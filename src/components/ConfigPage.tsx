@@ -9,6 +9,7 @@ import { useApp } from '../store'
 import { loadExampleWorkspace } from '../lib/example'
 import { Icon } from '../lib/icons'
 import { SchedulerPage } from './SchedulerPage'
+import { Settings as AgentSettings } from './aiw/Settings'
 import { DeckSettings } from './DeckSettings'
 import { GitHubToken } from './GitHubToken'
 import { CAPTURE_SETTINGS_TAB } from '../lib/devCapture'
@@ -350,24 +351,13 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
       ) : (
       <div className="min-w-0 flex-1 overflow-y-auto px-7 py-6">
         <div className="max-w-2xl space-y-6">
-        {tab === 'assistant' && (
-          <>
-            <div className="mb-5">
-              <h2 className="text-[16px] font-semibold text-ink">Assistant</h2>
-              <p className="text-[12px] leading-[1.6] text-muted">
-                Who is on the team, what each one may touch, and the kit they carry — on Workers.
-                What the team is <em>doing</em> is Team, and what it has decided is on the space
-                itself, beside its thread.
-              </p>
-            </div>
-            <button
-              className="btn-primary text-[12px]"
-              onClick={() => useApp.getState().setRailView('workers')}
-            >
-              <Icon name="ai" size={12} /> Open Workers
-            </button>
-          </>
-        )}
+        {tab === 'assistant' && <>
+          <AgentSettings />
+          <details className="border-t border-line pt-4"><summary className="cursor-pointer text-sm text-muted">Advanced integrations</summary>
+            <p className="my-3 text-xs text-muted">Manage installed community tools and integrations. Installing a tool does not grant agents permission to use it.</p>
+            <button className="btn-ghost text-sm" onClick={()=>useApp.getState().setRailView('community')}>Manage community tools</button>
+          </details>
+        </>}
         {tab === 'general' && (
           <>
             <div className="mb-5">

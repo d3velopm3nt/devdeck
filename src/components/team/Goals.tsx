@@ -44,8 +44,7 @@ export function GoalsList({
         <div className="min-h-0 flex-1 overflow-y-auto px-1.5 py-2">
           {board.loaded && board.rows.length === 0 && !board.error && (
             <div className="px-3 py-8 text-center text-[11.5px] leading-relaxed text-muted">
-              No goals yet, in any space. A goal is a feature in a node&rsquo;s deck — a bot&rsquo;s
-              plan makes one, and so does creating a feature by hand.
+              No goals in this view yet. Give a manager an outcome and add the next steps to its plan.
             </div>
           )}
           {!board.loaded && (

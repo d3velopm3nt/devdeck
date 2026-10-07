@@ -20,6 +20,20 @@ the asker binary and the monitor fixes
 
 ---
 
+## In review: Life, Personal and Business manager teams
+
+`feature/space-manager-teams` builds on `feature/deck-widget`; draft PR #3.
+Adds persistent space navigation, a top-right switch for existing themes,
+explicit manager roles and specialist pools, and durable peer messages on the
+existing event bus. Work output now waits for human review and explicit merge
+or acceptance. Community and diagnostic surfaces move out of the daily path.
+
+Implementation, screenshots, sandbox test boundaries, and the real-agent
+Windows checklist: [Manager teams verification](docs/MANAGER-TEAMS-VERIFICATION.md).
+Not released; live-provider validation remains part of the Windows handoff.
+
+---
+
 ## The turn — DevDeck manages, it does not type
 
 Decided 18 September 2026. This reframes everything below it, which is why it

@@ -12,7 +12,7 @@ import { SetupModal } from './components/SetupModal'
 import { VaultSetup } from './components/VaultSetup'
 import { Meet } from './components/Meet'
 import { BusinessSetup } from './components/business/BusinessSetup'
-import { WorkersPage } from './components/workers/WorkersPage'
+import { AgentsPage } from './components/agents/AgentsPage'
 import { StartWorker } from './components/workers/StartWorker'
 import { ClearBusinesses } from './components/business/ClearBusinesses'
 import { Sheet } from './components/Sheet'
@@ -20,6 +20,7 @@ import { UpdateBar, VersionPill, type UpState } from './components/UpdateBar'
 import { ClockToast } from './components/ClockToast'
 import { Rail } from './shell/Rail'
 import { WindowControls } from './shell/WindowControls'
+import { ThemeSwitch } from './shell/ThemeSwitch'
 import { AgentCluster, NotificationBell, AccountChip } from './shell/TopBarStatus'
 import { Home } from './components/Home'
 import { Today } from './components/Today'
@@ -1014,6 +1015,7 @@ export default function App() {
             onClick={() => (upHidden ? checkUpdate() : setUpHidden(true))}
           />
           <div className="h-4 w-px bg-line" />
+          <ThemeSwitch />
           <NotificationBell />
           <AccountChip />
         </div>
@@ -1098,7 +1100,7 @@ export default function App() {
           {railView === 'machine' && <MachineSetup />}
           {railView === 'inbox' && <InboxPage />}
           {railView === 'team' && <TeamPage />}
-          {railView === 'workers' && <WorkersPage />}
+          {railView === 'workers' && <AgentsPage />}
           {railView === 'analytics' && <AnalyticsPage />}
           {railView === 'calendar' && <CalendarPage />}
           {railView === 'settings' && <ConfigPage />}
@@ -1108,14 +1110,14 @@ export default function App() {
       {starting && <StartWorker open={starting} onClose={() => setStarting(null)} />}
 
       {/* Collapsible / resizable bottom bar: Logs + Processes */}
-      <BottomBar
+      {['projects', 'home', 'machine', 'connections'].includes(railView) && <BottomBar
         tab={app.bottomTab}
         onTab={app.setBottomTab}
         collapsed={app.bottomCollapsed}
         onToggleCollapsed={() => app.setBottomCollapsed(!app.bottomCollapsed)}
         height={bottomHeight}
         onHeight={setBottomHeight}
-      />
+      />}
 
       {/* Status bar */}
       <div className="flex items-center gap-4 border-t border-line bg-panel px-3 py-1 text-[11px] text-muted">

@@ -1,0 +1,92 @@
+[
+  {
+    "slug": "welcome",
+    "title": "Welcome to DevDeck",
+    "group": "Start here"
+  },
+  {
+    "slug": "getting-started",
+    "title": "Getting started",
+    "group": "Start here"
+  },
+  {
+    "slug": "workspaces",
+    "title": "Spaces, folders and repositories",
+    "group": "Start here"
+  },
+  {
+    "slug": "development",
+    "title": "Terminals, commands and services",
+    "group": "Tools"
+  },
+  {
+    "slug": "git",
+    "title": "Git and reviewing changes",
+    "group": "Tools"
+  },
+  {
+    "slug": "agents",
+    "title": "Workers and managers",
+    "group": "Agents & workflows"
+  },
+  {
+    "slug": "skills",
+    "title": "Skills and agent tools",
+    "group": "Agents & workflows"
+  },
+  {
+    "slug": "workflows",
+    "title": "Folder workflows",
+    "group": "Agents & workflows"
+  },
+  {
+    "slug": "planning",
+    "title": "Goals, features and work",
+    "group": "Agents & workflows"
+  },
+  {
+    "slug": "automation",
+    "title": "Bots, schedules and events",
+    "group": "Agents & workflows"
+  },
+  {
+    "slug": "mail",
+    "title": "Mail, inbox and contacts",
+    "group": "Tools"
+  },
+  {
+    "slug": "calendar",
+    "title": "Calendar and reminders",
+    "group": "Tools"
+  },
+  {
+    "slug": "stash",
+    "title": "Stash and knowledge",
+    "group": "Tools"
+  },
+  {
+    "slug": "databases",
+    "title": "Database connections",
+    "group": "Tools"
+  },
+  {
+    "slug": "desktop",
+    "title": "Desktop and machine tools",
+    "group": "Tools"
+  },
+  {
+    "slug": "settings",
+    "title": "Settings and diagnostics",
+    "group": "Tools"
+  },
+  {
+    "slug": "troubleshooting",
+    "title": "Troubleshooting",
+    "group": "Reference"
+  },
+  {
+    "slug": "tools",
+    "title": "Tool directory",
+    "group": "Reference"
+  }
+]

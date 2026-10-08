@@ -31,7 +31,10 @@
     "build": "npm run ask:release && tsc -b && vite build",
     "lint": "oxlint && node scripts/check-store-selectors.mjs && node scripts/check-sync-commands.mjs",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "docs:dev": "vite --config apps/docs/vite.config.ts",
+    "docs:build": "tsc --project apps/docs/tsconfig.json && vite build --config apps/docs/vite.config.ts",
+    "docs:preview": "vite preview --config apps/docs/vite.config.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.2",

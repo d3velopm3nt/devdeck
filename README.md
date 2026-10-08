@@ -242,3 +242,9 @@ expected.
 ## License
 
 [MIT](LICENSE) © Develtech
+
+## Documentation app
+
+Run `npm run docs:dev` to open the standalone guides, tool directory and workflow
+walkthrough. `npm run docs:build` produces a static site in `dist-docs/`.
+See [the docs app README](apps/docs/README.md) for editing and hosting details.

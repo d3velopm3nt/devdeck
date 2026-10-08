@@ -38,3 +38,6 @@ src-tauri/binaries/
 
 # Standalone sandbox Rust tests
 harness/rust-core/target/
+
+# Standalone documentation build
+/dist-docs/

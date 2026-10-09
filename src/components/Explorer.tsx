@@ -445,7 +445,7 @@ export function Explorer() {
     // A workspace is the exception: it carries Business or Personal, which is
     // a different question with different consequences, so it is offered those
     // and only those.
-    for (const l of node.kind === 'workspace' ? SPACE_TAGS : labels) {
+    for (const l of node.kind === 'workspace' ? SPACE_TAGS : [...new Set([...labels, 'Workflow'])]) {
       if (l === node.label) continue
       items.push({
         icon: 'tag',
@@ -1253,7 +1253,8 @@ export function Explorer() {
             // dashboard, its settings and its context are on that page, one
             // click further — which is what the five pseudo-rows under every
             // project used to be for.
-            openNodeThread(node.id, node.name)
+            if (node.label?.trim().toLowerCase() === 'workflow') openSpace(node.id, node.name)
+            else openNodeThread(node.id, node.name)
           }}
           onDoubleClick={() => {
             if (renaming) return

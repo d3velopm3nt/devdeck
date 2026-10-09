@@ -44,6 +44,7 @@ mod events;
 mod execution_policy;
 mod files;
 mod focus;
+mod folder_workflows;
 mod gauth;
 mod git;
 mod github;
@@ -72,6 +73,7 @@ mod team;
 mod threads;
 mod vault;
 mod workers;
+mod workflow_model;
 
 use std::sync::{Arc, Mutex};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
@@ -933,6 +935,8 @@ pub fn run() {
                 }));
             }
 
+            folder_workflows::install(app.handle());
+
             // Give the AI Workspace bus a way out to the UI. The closure lives
             // here, in the shell, so the bus itself stays free of Tauri — which
             // is both cleaner layering and what keeps the test binary linkable.
@@ -1299,6 +1303,10 @@ pub fn run() {
             workers::worker_starters,
             workers::worker_plan,
             workers::worker_start,
+            folder_workflows::folder_workflow_get,
+            folder_workflows::folder_workflow_save,
+            folder_workflows::folder_workflow_start,
+            folder_workflows::folder_workflow_review,
             workers::worker_stop,
             workers::runs_list,
             workers::run_get,

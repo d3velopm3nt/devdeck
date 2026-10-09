@@ -2,6 +2,7 @@
 // live activity/sessions, and the space's Services, Commands, and Profiles
 // with run controls (including multi-select "Run selected" for services).
 
+import { FolderWorkflowPage } from './FolderWorkflowPage'
 import { useMemo, useState } from 'react'
 import type { IDockviewPanelProps } from 'dockview-react'
 import { useApp } from '../store'
@@ -30,6 +31,7 @@ function hexA(hex: string, a: number): string {
 type Tab = 'services' | 'commands' | 'profiles'
 
 export function SpaceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
+  const [dashboard, setDashboard] = useState(false)
   const projectId = props.params.id
   const nodes = useApp((s) => s.nodes)
   const services = useApp((s) => s.services)
@@ -84,6 +86,10 @@ export function SpaceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
         This space no longer exists.
       </div>
     )
+  }
+
+  if (project.label?.trim().toLowerCase() === 'workflow' && !dashboard) {
+    return <FolderWorkflowPage key={projectId} node={projectId} name={project.name} onDashboard={() => setDashboard(true)} />
   }
 
   const act = async (id: number, fn: () => Promise<unknown>) => {
@@ -159,6 +165,7 @@ export function SpaceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
 
   return (
     <div className="flex h-full flex-col overflow-auto bg-page text-body">
+      {project.label?.trim().toLowerCase() === 'workflow' && <button className="border-b border-line p-2 text-left text-[12px] text-info" onClick={() => setDashboard(false)}>Open workflow</button>}
       {/* Hero */}
       <div
         className="relative border-b border-line px-5 pb-4 pt-5"

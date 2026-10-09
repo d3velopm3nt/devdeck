@@ -20,6 +20,17 @@ the asker binary and the monitor fixes
 
 ---
 
+## In development: folder workflows
+
+`feature/folder-workflows` adds a Workflow label to existing vault folders,
+Markdown instructions and durable progress, explicit worker starts, dependency
+gates and human review. Reuses the Explorer, worker launcher and event bus.
+No automatic label triggers or separate hierarchy. Not released.
+
+[Setup, scope and verification](docs/FOLDER-WORKFLOWS.md).
+
+---
+
 ## In review: Life, Personal and Business manager teams
 
 `feature/space-manager-teams` builds on `feature/deck-widget`; draft PR #3.

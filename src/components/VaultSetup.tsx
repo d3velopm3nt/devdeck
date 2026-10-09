@@ -10,8 +10,18 @@ import { useEffect, useState } from 'react'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import * as ipc from '../lib/ipc'
 import { Icon } from '../lib/icons'
+import { SignInModal } from './SignInModal'
+import { GitHubToken } from './GitHubToken'
 
 export function VaultSetup({ onDone }: { onDone: () => void }) {
+  const [source, setSource] = useState<'github' | 'local'>('github')
+  const [oauth, setOauth] = useState<boolean | null>(null)
+  const [signIn, setSignIn] = useState(false)
+  const [showToken, setShowToken] = useState(false)
+  const [repos, setRepos] = useState<ipc.RepoList | null>(null)
+  const [repo, setRepo] = useState('')
+  const [listing, setListing] = useState(false)
+  const [cloned, setCloned] = useState<{ url: string; parent: string; path: string } | null>(null)
   const [path, setPath] = useState('')
   const [gitInit, setGitInit] = useState(true)
   const [adoptExisting, setAdoptExisting] = useState(true)
@@ -22,6 +32,8 @@ export function VaultSetup({ onDone }: { onDone: () => void }) {
   // be deleted are invisible from here.
   const [legacy, setLegacy] = useState<ipc.VaultLegacy | null>(null)
   useEffect(() => {
+    void ipc.githubOauthConfigured().then(setOauth).catch(() => setOauth(false))
+    void ipc.githubTokenStored().then((stored) => { if (stored) void loadRepos() }).catch((e) => setError(String(e)))
     void ipc.vaultLegacy().then(setLegacy).catch(() => setLegacy(null))
     // Pre-filled, so the common case is one click rather than a file dialog.
     void ipc.vaultDefaultRoot().then((d) => setPath((p) => p || d)).catch(() => {})
@@ -29,45 +41,105 @@ export function VaultSetup({ onDone }: { onDone: () => void }) {
   const legacyOwned = (legacy?.commands ?? 0) + (legacy?.services ?? 0)
   const [error, setError] = useState('')
 
+  const loadRepos = async () => {
+    setListing(true)
+    setError('')
+    try {
+      const list = await ipc.githubStateRepos()
+      setRepos(list)
+    } catch (e) { setError(String(e)) }
+    finally { setListing(false) }
+  }
+
   const choose = async () => {
-    const dir = await openDialog({ directory: true, title: 'Where should DevDeck keep its folders?' })
+    const dir = await openDialog({ directory: true, title: source === 'github' ? 'Choose where to clone your state repository' : 'Choose your state folder or existing local clone' })
     if (typeof dir === 'string') {
       setPath(dir)
       setError('')
     }
   }
 
-  const confirm = () => {
+  const confirm = async () => {
     if (!path.trim()) return
     setBusy(true)
     setError('')
-    void ipc
-      .vaultSetRoot(path.trim(), gitInit, adoptExisting)
-      .then(() => onDone())
-      .catch((e) => setError(String(e)))
-      .finally(() => setBusy(false))
+    try {
+      let root = path.trim()
+      if (source === 'github') {
+        if (!/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?\/?$/.test(repo.trim())) {
+          throw new Error('Choose a GitHub repository or enter its HTTPS URL.')
+        }
+        const parent = root
+        root = cloned?.url === repo.trim() && cloned.parent === parent
+          ? cloned.path : await ipc.cloneRepo(repo.trim(), parent)
+        setCloned({ url: repo.trim(), parent, path: root })
+      }
+      await ipc.vaultSetRoot(root, source === 'local' && gitInit, adoptExisting)
+      void ipc.emitDeckSettingsChanged()
+      onDone()
+    } catch (e) { setError(String(e)) }
+    finally { setBusy(false) }
   }
 
   return (
-    <div className="flex h-full items-center justify-center bg-app p-8">
+    <div className="flex h-full items-start justify-center overflow-y-auto bg-app p-8">
       <div className="w-full max-w-[520px]">
         <div className="mb-5 flex items-center gap-3">
           <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-500/15 text-indigo-400">
             <Icon name="folder" size={20} />
           </span>
           <div>
-            <h1 className="text-[17px] font-semibold text-ink">Where should DevDeck keep things?</h1>
+            <h1 className="text-[17px] font-semibold text-ink">Connect your DevDeck state</h1>
             <p className="mt-0.5 text-[12px] text-muted">
-              One folder holds every workspace, project and topic you make.
+              One state repository holds your spaces, context and work.
             </p>
           </div>
         </div>
 
         <p className="mb-4 text-[12.5px] leading-relaxed text-body">
-          Everything in the Explorer is a real folder inside this one, so you can open it in File
-          Explorer, edit it by hand, and back it up like anything else. Your code repositories stay
-          where they already are — a project here just points at one.
+          Connect the GitHub repository that keeps your DevDeck state. The desktop reads a local
+          clone of it, and Deck watches that same clone for updates. Your code repositories stay
+          where they are.
         </p>
+
+        <div className="mb-4 flex gap-2" role="group" aria-label="State storage">
+          <button className={source === 'github' ? 'btn-primary' : 'btn-ghost'} disabled={busy}
+            onClick={() => setSource('github')}><Icon name="github" size={15} /> GitHub repository</button>
+          <button className={source === 'local' ? 'btn-primary' : 'btn-ghost'} disabled={busy}
+            onClick={() => setSource('local')}><Icon name="folder" size={15} /> Existing clone or local folder</button>
+        </div>
+
+        {source === 'github' && <div className="mb-4 space-y-3 rounded-lg border border-line bg-panel p-4">
+          <button className="btn-primary w-full justify-center" disabled={oauth !== true || busy || listing}
+            onClick={() => setSignIn(true)}><Icon name="github" size={15} /> Connect with GitHub</button>
+          {oauth === false && <p className="text-[11.5px] text-muted">
+            GitHub sign-in is not configured in this build. Use a personal access token below,
+            or select an existing local clone.
+          </p>}
+          <button className="btn-ghost text-[12px]" disabled={busy} aria-expanded={showToken}
+            onClick={() => setShowToken(!showToken)}>Use a personal access token instead</button>
+          {showToken && <GitHubToken onSignedIn={() => void loadRepos()} />}
+          {repos && <>
+            <p className="text-[12px] text-body">Connected as {repos.login}</p>
+            <div>
+              <label htmlFor="state-repository" className="block text-[12px] text-body">State repository</label>
+              <select id="state-repository" className="input mt-1 w-full" value={repo} disabled={busy || listing}
+                onChange={(e) => setRepo(e.target.value)}>
+                <option value="">Choose a repository…</option>
+                {repos.repos.map((r) => <option key={r.full_name} value={r.clone_url}>{r.full_name}{r.private ? ' (private)' : ''}</option>)}
+              </select>
+            </div>
+            <button className="btn-ghost text-[11.5px]" disabled={busy || listing} onClick={() => void loadRepos()}>Refresh repositories</button>
+          </>}
+          {listing && <p role="status" className="text-[12px] text-muted">Loading repositories…</p>}
+          <label className="block text-[12px] text-body">Repository URL
+            <input className="input mt-1 w-full text-[12px]" value={repo} disabled={busy}
+              placeholder="https://github.com/you/devdeck-state.git" onChange={(e) => setRepo(e.target.value)} />
+          </label>
+          <p className="text-[11.5px] text-muted">Choose your state repository. Private repositories need an account with access.</p>
+        </div>}
+
+        <p className="mb-1 text-[12px] text-body">{source === 'github' ? 'Clone into this folder' : 'State folder or existing local clone'}</p>
 
         <div className="flex items-center gap-2 rounded-lg border border-line bg-raise px-3.5 py-2.5">
           <Icon name="folder" size={15} className={path ? 'text-ok' : 'text-faint'} />
@@ -79,7 +151,7 @@ export function VaultSetup({ onDone }: { onDone: () => void }) {
           </button>
         </div>
 
-        <label className="mt-3 flex cursor-pointer items-start gap-2.5">
+        {source === 'local' && <label className="mt-3 flex cursor-pointer items-start gap-2.5">
           <input
             type="checkbox"
             className="mt-0.5"
@@ -93,7 +165,7 @@ export function VaultSetup({ onDone }: { onDone: () => void }) {
               have the same setup on another machine. You can do this yourself any time instead.
             </span>
           </span>
-        </label>
+        </label>}
 
         {(legacy?.nodes ?? 0) > 0 && (
           <div className="mt-3 rounded-lg border border-line2 bg-raise px-3.5 py-2.5">
@@ -127,12 +199,13 @@ export function VaultSetup({ onDone }: { onDone: () => void }) {
 
         <button
           className="btn-primary mt-5 w-full justify-center py-2 text-[13px]"
-          disabled={!path.trim() || busy}
-          onClick={confirm}
+          disabled={!path.trim() || (source === 'github' && !repo.trim()) || busy}
+          onClick={() => void confirm()}
         >
-          {busy ? 'Setting up…' : 'Use this folder'}
+          {busy ? 'Setting up…' : source === 'github' ? 'Connect state repository' : 'Use this state folder'}
         </button>
       </div>
+      {signIn && <SignInModal onClose={() => setSignIn(false)} onSignedIn={() => { setSignIn(false); void loadRepos() }} />}
     </div>
   )
 }

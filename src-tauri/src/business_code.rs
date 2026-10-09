@@ -122,7 +122,7 @@ pub fn example_repos() -> Vec<Repo> {
     ]
 }
 
-fn list_github(token: &str) -> Result<RepoList, String> {
+pub(crate) fn list_github(token: &str) -> Result<RepoList, String> {
     let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .user_agent("DevDeck")

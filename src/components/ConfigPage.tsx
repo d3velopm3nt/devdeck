@@ -226,6 +226,8 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
       const now = await ipc.vaultSwitch(dir)
       setVault(now)
       await refreshTree()
+      void ipc.emitDeckSettingsChanged()
+      void ipc.emitDataChanged()
       setVaultMsg('Switched.')
     } catch (e) {
       setVaultMsg(String(e))

@@ -9,7 +9,7 @@ members = ["ask"]
 
 [package]
 name = "devdeck"
-version = "0.4.0-beta.1"
+version = "0.4.0-beta.2"
 description = "DevDeck — local development command center"
 authors = ["Develtech"]
 license = "MIT"

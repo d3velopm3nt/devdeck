@@ -276,7 +276,7 @@ export function CommandWidget() {
       if (busy || !active) return
       busy = true
       try {
-        const path = await ipc.settingGet('deck.state_path') || await ipc.vaultRoot()
+        const path = await ipc.vaultRoot()
         if (!path || !active) return
         const result = await ipc.deckPoll(path)
         if (!active) return
@@ -285,6 +285,11 @@ export function CommandWidget() {
         const prior = knownPath === path ? await ipc.settingGet('deck.lastHead') : null
         if (knownPath !== path) await ipc.settingSet('deck.lastRepo', path)
         if (prior !== result.head) await ipc.settingSet('deck.lastHead', result.head)
+        // Always refresh after a pull, even when no notification is produced.
+        if (result.paths.length) {
+          void useApp.getState().refreshTree()
+          void ipc.emitDataChanged()
+        }
         if (!prior || !result.paths.length) return
         const spaces = useApp.getState().nodes.filter((n) => n.kind === 'project')
         const fresh = updatesFromPaths(result.head, result.paths, spaces, deckSettings.mutedSpaces)
@@ -294,8 +299,6 @@ export function CommandWidget() {
           void ipc.settingSet('deck.updates', JSON.stringify(next))
           return next
         })
-        void useApp.getState().refreshTree()
-        void ipc.emitDataChanged()
         const focus = await ipc.focusCurrent()
         await announceUpdates(fresh, deckSettings, !!focus)
         if (deckSettings.popups && fresh.some((u) => u.kind !== 'info' && (!focus || mayInterruptFocus(u.kind, deckSettings.focusInterrupt)))) {

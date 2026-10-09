@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { Icon } from '../lib/icons'
 import * as ipc from '../lib/ipc'
 import { DECK_DEFAULTS, loadDeckSettings, saveDeckSettings, type DeckEventKind, type DeckSettings as Preferences } from '../lib/deck'
@@ -44,23 +43,18 @@ export function DeckSettings() {
   const [repoPath, setRepoPath] = useState('')
   const [watchStatus, setWatchStatus] = useState('')
   useEffect(() => {
-    void Promise.all([loadDeckSettings(), ipc.settingGet('deck.state_path'), ipc.settingGet('deck.watch.status'), ipc.vaultRoot()]).then(([settings, path, status, vault]) => {
+    void Promise.all([loadDeckSettings(), ipc.settingGet('deck.watch.status'), ipc.vaultRoot()]).then(([settings, status, vault]) => {
       setValue(settings)
-      setRepoPath(path || vault || '')
+      setRepoPath(vault || '')
       setWatchStatus(status ?? '')
       setReady(true)
     }).catch((e) => setMessage(String(e)))
   }, [])
   const update = (patch: Partial<Preferences>) => setValue((v) => ({ ...v, ...patch }))
-  const chooseRepo = async () => {
-    const selected = await openDialog({ directory: true, title: 'Choose a local clone of your state vault' })
-    if (typeof selected === 'string') setRepoPath(selected)
-  }
   const save = async () => {
     setMessage('')
     try {
       await saveDeckSettings(value)
-      await ipc.settingSet('deck.state_path', repoPath.trim())
       void ipc.emitDeckSettingsChanged()
       setMessage('Deck settings saved.')
     } catch (e) { setMessage(String(e)) }
@@ -83,10 +77,10 @@ export function DeckSettings() {
             </label>
           </div>
           <div className="mt-3 flex items-center gap-2">
-            <input className="min-w-0 flex-1 rounded-md border border-line2 bg-raise px-2 py-1.5 text-[12px] text-ink" value={repoPath} onChange={(e) => setRepoPath(e.target.value)} placeholder="Local clone of the shared state repository" aria-label="State repository folder" />
-            <button className="btn-ghost" onClick={() => void chooseRepo()}>Choose folder</button>
+            <input className="min-w-0 flex-1 rounded-md border border-line2 bg-raise px-2 py-1.5 text-[12px] text-ink" value={repoPath} readOnly placeholder="Choose your state folder in Storage settings" aria-label="State repository folder" />
+            <button className="btn-ghost" onClick={() => { useApp.getState().setSettingsTab('vault'); useApp.getState().setRailView('settings') }}>Storage settings</button>
           </div>
-          <p className="mt-1 text-[11px] text-muted">Each person selects their own authorized local clone. Deck never stores GitHub credentials here.</p>
+          <p className="mt-1 text-[11px] text-muted">Deck watches the same state folder as the Explorer. Connect or switch your repository in Storage settings.</p>
           {watchStatus && <p className="mt-1 text-[11px] text-dim">Last check: {watchStatus}</p>}
         </section>
         <section className={section}>

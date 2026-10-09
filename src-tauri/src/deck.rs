@@ -14,10 +14,24 @@ pub struct DeckPoll {
 }
 
 fn git(root: &Path, args: &[&str]) -> Result<String, String> {
-    let output = Command::new("git")
-        .args(["-C", root.to_str().ok_or("Invalid repository path")?])
+    let mut cmd = Command::new("git");
+    cmd.args(["-C", root.to_str().ok_or("Invalid repository path")?])
         .args(args)
-        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GIT_TERMINAL_PROMPT", "0");
+    if args.first() == Some(&"fetch") {
+        // Fetch only the branch's selected upstream remote. Authenticate that
+        // URL with the same saved account used to clone the state repository.
+        if let Some(remote) = args.last().filter(|remote| **remote != ".") {
+            let url = git(root, &["remote", "get-url", remote])?;
+            crate::github::configure_git_auth(&mut cmd, &url);
+        }
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000);
+    }
+    let output = cmd
         .stdin(Stdio::null())
         .output()
         .map_err(|e| format!("Could not run git: {e}"))?;
@@ -40,7 +54,12 @@ fn poll(path: String) -> Result<DeckPoll, String> {
         &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
     )
     .map_err(|_| "This branch has no upstream. Set its tracking branch first.".to_string())?;
-    git(root, &["fetch", "--quiet"])?;
+    let branch = git(root, &["symbolic-ref", "--short", "HEAD"])?;
+    let tracking_remote = git(
+        root,
+        &["config", "--get", &format!("branch.{branch}.remote")],
+    )?;
+    git(root, &["fetch", "--quiet", "--", &tracking_remote])?;
     let remote = git(root, &["rev-parse", "@{u}"])?;
     if old == remote {
         return Ok(DeckPoll {

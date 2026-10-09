@@ -479,6 +479,13 @@ pub(crate) fn clone_now(
     if !on_path("git") {
         return Err("Git isn't installed — install Git, then try again.".into());
     }
+    if let Ok(parsed) = reqwest::Url::parse(&url) {
+        if !parsed.username().is_empty() || parsed.password().is_some() {
+            return Err(
+                "Use a repository URL without credentials. Connect your account separately.".into(),
+            );
+        }
+    }
     let name = url
         .trim_end_matches('/')
         .rsplit('/')
@@ -502,6 +509,8 @@ pub(crate) fn clone_now(
         ));
     }
     let target_str = target.to_string_lossy().to_string();
+    std::fs::create_dir_all(&parent)
+        .map_err(|e| format!("Could not create the clone folder: {e}"))?;
 
     services::push_log(
         &app,
@@ -511,7 +520,8 @@ pub(crate) fn clone_now(
         format!("cloning {url} → {target_str}"),
     );
     let mut cmd = Command::new("git");
-    cmd.args(["clone", "--progress", &url, &target_str]);
+    crate::github::configure_git_auth(&mut cmd, &url);
+    cmd.args(["clone", "--progress", "--", &url, &target_str]);
     if !stream(&app, "git clone", cmd) {
         return Err("git clone failed — see the Logs.".into());
     }

@@ -41,6 +41,15 @@ fixture.folder_workflow_review = args => {
   void update()
   return copy()
 }
+fixture.folder_workflow_checkpoint = args => {
+  calls.push({ command: 'checkpoint', args })
+  if (args?.expected !== data.raw) throw new Error('The workflow changed. Reload before recording progress.')
+  const step = data.definition.steps.find(s => s.id === args?.step)!
+  step.actor = String(args?.actor); step.evidence = String(args?.evidence); step.next_action = String(args?.nextAction)
+  step.status = args?.submit ? 'review' : 'blocked'
+  void update()
+  return copy()
+}
 fixture.folder_workflow_save = args => {
   calls.push({ command: 'save', args })
   if (args?.expected !== data.raw) throw new Error('This workflow changed. Reload before saving.')

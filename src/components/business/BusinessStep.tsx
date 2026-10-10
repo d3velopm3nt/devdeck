@@ -124,7 +124,7 @@ export function BusinessStep({ view, setView, nav, onClose, next }: StepProps) {
         </div>
         <Foot>
           Nothing from your other businesses, Home or Your life is copied into a new business. It
-          gets its own space, its own mail and its own team.
+          gets its own space and mail, with managers shared across your companies.
         </Foot>
       </BizFrame>
     )
@@ -346,7 +346,7 @@ export function BusinessStep({ view, setView, nav, onClose, next }: StepProps) {
       </div>
       <Foot>
         Nothing from your other businesses, Home or Your life is copied into a new business. It gets
-        its own space, its own mail and its own team.
+        its own space and mail, with managers shared across your companies.
       </Foot>
     </BizFrame>
   )

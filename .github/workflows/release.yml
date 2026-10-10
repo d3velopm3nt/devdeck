@@ -220,9 +220,21 @@ jobs:
             > warn "Windows protected your PC". Click **More info → Run anyway**, or
             > build from source. (Signed builds via SignPath Foundation clear this.)
 
-            First run? Click **Load example workspace** on the welcome screen — it
-            creates a small demo project with a real web server and a background
-            worker so you can see DevDeck work before wiring up your own repos.
+            ### Work & Life onboarding
+
+            Connect your state repository or local folder, then use the new **Work & Life**
+            onboarding step. Work opens business setup with its existing manager-team flow.
+            Life drafts Family, Home, Finance, Health, Routines and Knowledge areas,
+            an editable manager goal, an evening check-in and a Sunday review.
+            Review the draft before creating it. Existing spaces are kept.
+
+            Already set up? Open **Today → Set up Work & Life** to try it.
+            Configure your AI engine and manager permissions before running AI work.
+            Existing functional managers are suggested for reuse across companies.
+            Workflow folders include an assistant handoff packet and external progress checkpoints,
+            with evidence, next actions and review gates. Pull/commit/push the state repo
+            when switching assistants; automatic Git synchronization is not included.
+            Hierarchical reporting and automatic label-triggered workflows are not included.
 
             **Requirements:** Windows 10/11 (x64). No runtime to install.
 

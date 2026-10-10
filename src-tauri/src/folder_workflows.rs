@@ -178,6 +178,9 @@ pub fn folder_workflow_save(
             || !s.claim.is_empty()
             || !s.evidence.is_empty()
             || !s.previous_runs.is_empty()
+            || !s.actor.is_empty()
+            || !s.next_action.is_empty()
+            || !s.updated_at.is_empty()
     }) {
         return Err("New definitions must contain pending steps without run receipts.".into());
     }
@@ -243,6 +246,9 @@ pub fn folder_workflow_start(
     }
     doc.meta.steps[i].run.clear();
     doc.meta.steps[i].evidence.clear();
+    doc.meta.steps[i].actor.clear();
+    doc.meta.steps[i].next_action = "Review the worker result when it completes.".into();
+    doc.meta.steps[i].updated_at = chrono::Utc::now().to_rfc3339();
     save(&p, &doc)?; // Persist ownership before launching; recovery finds the claim in the receipt.
     match workers::start(&app, &db, plan) {
         Ok(run) => {
@@ -288,16 +294,70 @@ pub fn folder_workflow_review(
     if s.status != Status::Review {
         return Err("Only a successful run awaiting review can be accepted.".into());
     }
-    let r = workers::read_run(&s.run)?.ok_or("The run receipt is missing.")?;
-    if receipt_status(&r.status, r.ok) != Status::Review {
-        return Err("The worker receipt no longer supports acceptance.".into());
+    if s.run.is_empty() {
+        if s.actor.trim().is_empty() || s.evidence.trim().is_empty() {
+            return Err("The external progress record is missing.".into());
+        }
+    } else {
+        let r = workers::read_run(&s.run)?.ok_or("The run receipt is missing.")?;
+        if receipt_status(&r.status, r.ok) != Status::Review {
+            return Err("The worker receipt no longer supports acceptance.".into());
+        }
     }
     s.status = if accept {
         Status::Done
     } else {
         Status::Blocked
     };
-    s.evidence = evidence.trim().into();
+    s.evidence = format!("{}\n\nReview: {}", s.evidence, evidence.trim());
+    s.next_action = if accept {
+        "Continue with the next ready step.".into()
+    } else {
+        "Address the review notes and submit again.".into()
+    };
+    s.updated_at = chrono::Utc::now().to_rfc3339();
+    let raw = save(&p, &doc)?;
+    drop(guard);
+    changed(&app, node);
+    view(&p, raw)
+}
+
+#[tauri::command(async)]
+#[allow(clippy::too_many_arguments)]
+pub fn folder_workflow_checkpoint(
+    app: tauri::AppHandle,
+    db: tauri::State<Db>,
+    node: i64,
+    step: String,
+    expected: String,
+    actor: String,
+    evidence: String,
+    next_action: String,
+    submit: bool,
+) -> Result<View, String> {
+    let guard = TRANSITION.lock().map_err(|e| e.to_string())?;
+    let p = path(&db, node)?;
+    let raw = read(&p)?;
+    if raw != expected {
+        return Err("The workflow changed. Reload before recording progress.".into());
+    }
+    let mut doc = parse(&raw)?;
+    crate::workflow_model::checkpoint(
+        &mut doc.meta,
+        &step,
+        &actor,
+        &evidence,
+        &next_action,
+        submit,
+    )?;
+    doc.body.push_str(&format!(
+        "\n\n## Handoff checkpoint — {}\n\nAssistant: {}\n\nStep: {}\n\n{}\n\nNext action: {}\n",
+        chrono::Utc::now().to_rfc3339(),
+        actor.trim(),
+        step,
+        evidence.trim(),
+        next_action.trim(),
+    ));
     let raw = save(&p, &doc)?;
     drop(guard);
     changed(&app, node);

@@ -91,9 +91,9 @@ pub fn starters() -> Vec<Starter> {
     vec![
         Starter {
             id: s("business"),
-            name: s("A business"),
+            name: s("Work — your business"),
             what: s(
-                "Your company. Its website is read, then what it sells, its code, its mail and its team, one step at a time.",
+                "Projects, operations and company knowledge. Set up your business, connect its repositories and mail, and choose its manager team.",
             ),
             brings: s("Opens adding a business"),
             label: s("Business"),
@@ -105,6 +105,31 @@ pub fn starters() -> Vec<Starter> {
             routines: vec![
                 weekly("The week ahead", 1, 9 * 60),
                 weekly("Invoices and follow-ups", 5, 16 * 60),
+            ],
+            bot: true,
+        },
+        Starter {
+            id: s("life"),
+            name: s("Life — everything outside work"),
+            what: s("Family, home, finances, health and routines in one editable space. Keep your knowledge and plans together."),
+            brings: s("Six areas · an evening check-in · a Sunday review · a Life manager"),
+            label: s("Personal"),
+            folders: vec![
+                folder("Family", "Shared plans and family routines. Add only what you want kept in this vault."),
+                folder("Home", "Garden, pool, household maintenance and upcoming repairs."),
+                folder("Finance", "Budgets, bills and financial goals. Keep credentials out of the vault."),
+                folder("Health", "Fitness goals and everyday wellbeing routines."),
+                folder("Routines", "Habits, reminders and recurring commitments."),
+                folder("Knowledge", "Useful notes, references and decisions for everyday life."),
+            ],
+            routines: vec![
+                RoutineDraft {
+                    name: s("Life check-in"),
+                    every: s("daily"),
+                    at_min: 18 * 60,
+                    days: String::new(),
+                },
+                weekly("Plan life alongside work", 0, 18 * 60),
             ],
             bot: true,
         },
@@ -302,9 +327,13 @@ pub fn space_create(
             "blank".into(),
             bot_name.trim().to_string(),
             bot_goal.trim().to_string(),
-            // It watches on the same rhythm the space keeps, in the morning.
+            // Personal managers check in outside the default working day.
             "weekdays".into(),
-            8 * 60,
+            if label.eq_ignore_ascii_case("Personal") {
+                18 * 60
+            } else {
+                8 * 60
+            },
             String::new(),
             false,
         ) {

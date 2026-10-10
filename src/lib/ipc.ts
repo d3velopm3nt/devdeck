@@ -2365,6 +2365,9 @@ export const managerConversation = (handle: string) => invoke<import('./aiw').Ch
 export const managerTurn = (handle: string, text: string) => invoke<import('./aiw').AssistantReply>('manager_turn',{handle,text})
 
 export interface FolderWorkflowStep {
+  actor?: string
+  next_action?: string
+  updated_at?: string
   previous_runs: string[]
   id: string
   title: string
@@ -2390,3 +2393,6 @@ export const folderWorkflowStart = (node: number, step: string, expected: string
   invoke<FolderWorkflow>('folder_workflow_start', { node, step, expected })
 export const folderWorkflowReview = (node: number, step: string, expected: string, accept: boolean, evidence: string) =>
   invoke<FolderWorkflow>('folder_workflow_review', { node, step, expected, accept, evidence })
+
+export const folderWorkflowCheckpoint = (node: number, step: string, expected: string, actor: string, evidence: string, nextAction: string, submit: boolean) =>
+  invoke<FolderWorkflow>('folder_workflow_checkpoint', { node, step, expected, actor, evidence, nextAction, submit })

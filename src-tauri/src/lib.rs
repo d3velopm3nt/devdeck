@@ -1307,6 +1307,7 @@ pub fn run() {
             folder_workflows::folder_workflow_save,
             folder_workflows::folder_workflow_start,
             folder_workflows::folder_workflow_review,
+            folder_workflows::folder_workflow_checkpoint,
             workers::worker_stop,
             workers::runs_list,
             workers::run_get,

@@ -210,8 +210,15 @@ pub fn visibility_github_issues(repository: String) -> Result<IssueSnapshot, Str
     }
     let (mut sessions, parse_warnings) = comment_sessions(&repository, &comments);
     for session in &mut sessions {
+        let ticket_number = session
+            .ticket_url
+            .rsplit('/')
+            .next()
+            .and_then(|s| s.parse::<u64>().ok());
         if let Some(item) = items.iter().find(|i| {
-            i["number"].to_string() == session.ticket_url.rsplit('/').next().unwrap_or("")
+            i["number"]
+                .as_u64()
+                .is_some_and(|number| Some(number) == ticket_number)
         }) {
             session.ticket_url = item["url"]
                 .as_str()

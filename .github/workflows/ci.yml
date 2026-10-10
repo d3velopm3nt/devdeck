@@ -32,6 +32,8 @@ jobs:
           done
           node harness/check-onboarding.mjs
           node harness/check-folder-workflows.mjs
+          HARNESS_URL=http://127.0.0.1:5199 node harness/check-visibility.mjs
+          node --test scripts/session-checkpoint.test.mjs
 
   build:
     runs-on: windows-latest

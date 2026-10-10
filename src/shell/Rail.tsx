@@ -30,6 +30,8 @@ type Item = { view: RailView; icon: IconName; label: string }
 
 // Shared destinations remain available regardless of the selected space.
 const SHARED: Item[] = [
+  { view: 'activity', icon: 'history', label: 'Activity board' },
+  { view: 'sessions', icon: 'agent', label: 'Sessions' },
   { view: 'calendar', icon: 'schedule', label: 'Calendar' },
   { view: 'mail', icon: 'mail', label: 'Mail' },
 ]

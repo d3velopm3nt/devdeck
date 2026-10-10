@@ -3,10 +3,16 @@ import { aiw, type FeatureWork, type Session, type AgentDef } from '../lib/aiw'
 import { visibility, isStale, stage, type VisibilitySnapshot, type IssueSnapshot, type SessionRecord, type ProductLink } from '../lib/visibility'
 import { useApp } from '../store'
 import { subtreeIds } from '../lib/tree'
+import { openBusiness } from './business/TodayBusinesses'
 import * as ipc from '../lib/ipc'
 
 interface Row { id: string; title: string; product: string; productId: string; space: string; folder: string; status: string; source: string; owners?: string[]; url?: string; updated: string; sessions: SessionRecord[] }
 const field = 'rounded-lg border border-line bg-panel px-3 py-2 text-sm text-ink'
+function mergeSessions(local: SessionRecord[], remote: SessionRecord[]) {
+  const records = new Map(local.map(s => [s.id, s]))
+  for (const s of remote) { const old = records.get(s.id); if (!old || Date.parse(s.updated_at) >= Date.parse(old.updated_at)) records.set(s.id, s) }
+  return [...records.values()]
+}
 const columns = ['Queued', 'Working', 'Blocked', 'Review', 'Done']
 const empty: VisibilitySnapshot = { products: [], sessions: [], config_raw: '', warnings: [] }
 function Link({ url, children }: { url: string; children: React.ReactNode }) {
@@ -24,10 +30,12 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  const [businesses, setBusinesses] = useState<ipc.BusinessSummary[]>([])
   const [product, setProduct] = useState('')
   const [assistant, setAssistant] = useState('')
   const [session, setSession] = useState('')
   const [space, setSpace] = useState('')
+  const [source, setSource] = useState('')
   const [query, setQuery] = useState('')
   const [picked, setPicked] = useState('')
   const [showDone, setShowDone] = useState(false)
@@ -55,7 +63,7 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
         if (!mounted.current) return
         reads.forEach((r, i) => {
           const p = links[i]
-          if (r.status === 'fulfilled') { setGithub(g => ({ ...g, [p.id]: r.value })); error(p.name, '') }
+          if (r.status === 'fulfilled') { setGithub(g => ({ ...g, [p.id]: { ...r.value, sessions: mergeSessions(g[p.id]?.sessions || [], r.value.sessions || []) } })); error(p.name, '') }
           else error(p.name, String(r.reason))
         })
       }
@@ -65,15 +73,17 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
     }
   }, [error])
   useEffect(() => {
+    void ipc.businessList().then(setBusinesses).catch(e => error('Businesses', String(e)))
     mounted.current = true
     void reload(true)
-    const interval = window.setInterval(() => void reload(), 30_000)
+    const interval = window.setInterval(() => { if (document.visibilityState !== 'hidden') void reload(true) }, 60_000)
     const stop = aiw.onEvent(() => void reload())
     return () => { mounted.current = false; window.clearInterval(interval); void stop.then(un => un()) }
-  }, [reload])
+  }, [reload, error])
 
+  const remoteWarnings = Object.values(github).flatMap(g => g.warnings || [])
   const allSessions = useMemo(() => [
-    ...snapshot.sessions,
+    ...mergeSessions(snapshot.sessions, snapshot.products.flatMap(p => (github[p.id]?.sessions || []).map(s => ({...s, product_id: p.id, space: p.space, folder: p.folder})))),
     ...native.map(s => {
       const node = nodes.find(n => String(n.id) === s.project_id)
       return {
@@ -85,7 +95,7 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
         next_action: '', checkpoints: s.transcript.filter(t => ['checkpoint', 'summary', 'completed'].includes(t.kind)).map(t => ({ at: t.at, summary: t.text, evidence: [] })),
       } satisfies SessionRecord
     }),
-  ], [snapshot.sessions, native, nodes, agents])
+  ], [snapshot.sessions, snapshot.products, github, native, nodes, agents])
   const rows = useMemo(() => {
     const external = allSessions.filter(s => !s.id.startsWith('native:'))
     const linked = new Set<string>()
@@ -121,8 +131,8 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
       return !!n && !!scopeIds?.has(n.id)
     })
   }, [snapshot.products, github, allSessions, work, native, nodes, scope])
-  const filteredSessions = allSessions.filter(s => (!product || s.product_id === product) && (!assistant || s.assistant === assistant) && (!session || s.id === session) && (!space || s.space === space) && (!query || `${s.title} ${s.folder} ${s.id}`.toLowerCase().includes(query.toLowerCase())) && (showDone || stage(s.status) !== 'Done') && (scope == null || subtreeIds(nodes, scope).some(id => nodes.find(n => n.id === id)?.rel_path === s.folder)))
-  const filtered = rows.filter(r => (!product || r.productId === product) && (!space || r.space === space) && (!assistant || r.sessions.some(s => s.assistant === assistant)) && (!session || r.sessions.some(s => s.id === session)) && (!query || `${r.title} ${r.product} ${r.folder}`.toLowerCase().includes(query.toLowerCase())) && (showDone || r.status !== 'Done'))
+  const filteredSessions = allSessions.filter(s => (!source || (source === 'native' ? s.id.startsWith('native:') : !s.id.startsWith('native:'))) && (!product || s.product_id === product) && (!assistant || s.assistant === assistant) && (!session || s.id === session) && (!space || s.space === space) && (!query || `${s.title} ${s.folder} ${s.id}`.toLowerCase().includes(query.toLowerCase())) && (showDone || stage(s.status) !== 'Done') && (scope == null || subtreeIds(nodes, scope).some(id => nodes.find(n => n.id === id)?.rel_path === s.folder)))
+  const filtered = rows.filter(r => (!source || r.sessions.some(s => source === 'native' ? s.id.startsWith('native:') : !s.id.startsWith('native:'))) && (!product || r.productId === product) && (!space || r.space === space) && (!assistant || r.sessions.some(s => s.assistant === assistant)) && (!session || r.sessions.some(s => s.id === session)) && (!query || `${r.title} ${r.product} ${r.folder}`.toLowerCase().includes(query.toLowerCase())) && (showDone || r.status !== 'Done'))
   const selected = sessionsOnly ? filteredSessions.find(s => s.id === picked) : filtered.find(r => r.id === picked)
   const details = selected ? 'sessions' in selected ? selected.sessions : [selected] : []
   const choices = (values: string[]) => [...new Set(values.filter(Boolean))].sort()
@@ -136,20 +146,21 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
   return <div className="flex h-full min-h-0 flex-col bg-page text-ink">
     <header className="border-b border-line px-6 py-5">
       <div className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-xl font-semibold">{sessionsOnly ? 'Sessions' : 'Activity board'}</h1><p className="mt-1 text-sm text-muted">{sessionsOnly ? 'External conversations and DevDeck agents, connected to their work.' : 'Product issues from GitHub, Life and Personal tasks from DevDeck.'}</p></div>
-        <div className="flex gap-2"><button className={field} disabled={busy} onClick={() => void reload(true)}>{busy ? 'Refreshing…' : 'Refresh'}</button><button className={field} onClick={() => { setDraft(snapshot.products); setEditing(v => !v) }}>Product connections</button></div></div>
+        <div className="flex gap-2"><select aria-label="Add business or product" className={field} value="" onChange={e => { if(e.target.value === 'new') openBusiness(); else if(e.target.value) openBusiness({ nodeId: Number(e.target.value), step: 'sells' }) }}><option value="">Add business / product</option><option value="new">New business</option>{businesses.map(b => <option key={b.node_id} value={b.node_id}>Add product to {b.name}</option>)}</select><button className={field} disabled={busy} onClick={() => void reload(true)}>{busy ? 'Refreshing…' : 'Refresh'}</button><button className={field} onClick={() => { setDraft(snapshot.products); setEditing(v => !v) }}>Advanced connections</button></div></div>
       <nav className="mt-4 flex gap-4 text-sm" aria-label="Visibility views"><button className={!sessionsOnly ? 'text-info' : 'text-muted'} onClick={() => useApp.getState().setRailView('activity')}>Activity board</button><button className={sessionsOnly ? 'text-info' : 'text-muted'} onClick={() => useApp.getState().setRailView('sessions')}>Sessions</button></nav>
       <div className="mt-4 flex flex-wrap gap-2">
         <select className={field} aria-label="Product filter" value={product} onChange={e => setProduct(e.target.value)}><option value="">All products</option>{[...productChoices].filter(([id]) => id).map(([id,name]) => <option key={id} value={id}>{name}</option>)}</select>
         <select className={field} aria-label="Space filter" value={space} onChange={e => setSpace(e.target.value)}><option value="">All spaces</option>{choices([...rows.map(r => r.space), ...allSessions.map(s => s.space)]).map(v => <option key={v}>{v}</option>)}</select>
+        <select aria-label="Source filter" className={field} value={source} onChange={e => setSource(e.target.value)}><option value="">All sources</option><option value="native">DevDeck</option><option value="external">External</option></select>
         <select className={field} aria-label="Assistant filter" value={assistant} onChange={e => setAssistant(e.target.value)}><option value="">All assistants</option>{choices(allSessions.map(s => s.assistant)).map(v => <option key={v}>{v}</option>)}</select>
         <select className={`${field} max-w-60`} aria-label="Session filter" value={session} onChange={e => setSession(e.target.value)}><option value="">All sessions</option>{allSessions.map(s => <option key={s.id} value={s.id}>{s.assistant} · {s.id}</option>)}</select>
         <input className={field} placeholder="Search work or folders" aria-label="Search activity" value={query} onChange={e => setQuery(e.target.value)} />
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showDone} onChange={e => setShowDone(e.target.checked)} />Show done</label>
       </div>
-      <p className="mt-3 text-xs text-muted">Last recorded activity is not a live heartbeat. Sessions become stale after 15 minutes. Columns show reported activity; cards retain GitHub issue state.</p>
+      <p className="mt-3 text-xs text-muted">GitHub checkpoints refresh every minute while this page is visible. Last recorded activity is not a live heartbeat. Sessions become stale after 15 minutes. Columns show reported activity; cards retain GitHub issue state.</p>
     </header>
     {Object.entries(errors).filter(([,v]) => v).map(([k,v]) => <p role="alert" key={k} className="border-b border-line px-6 py-2 text-sm text-err">{k}: {v}{snapshot.products.some(p => p.name === k && github[p.id]) ? ' Showing the previous GitHub snapshot.' : ''}</p>)}
-    {snapshot.warnings.map(w => <p key={w} className="px-6 py-2 text-sm text-muted">{w}</p>)}
+    {[...snapshot.warnings, ...remoteWarnings].map(w => <p key={w} className="px-6 py-2 text-sm text-muted">{w}</p>)}
     {snapshot.products.map(p => github[p.id] && <p key={p.id} className="px-6 py-1 text-xs text-muted">{p.name} · GitHub checked {new Date(github[p.id].fetched_at).toLocaleString()}{github[p.id].truncated ? ' · Showing the 500 most recently updated items' : ''}{p.project_url && <> · <Link url={p.project_url}>Product backlog</Link></>}</p>)}
     {editing && <section className="border-b border-line p-5"><h2 className="font-semibold">Product connections</h2><p className="my-2 text-sm text-muted">Connect a repository and optionally link its GitHub Project. Changes are saved in your vault; use Git sync to share them.</p>
       {draft.map((p,i) => <div key={i} className="my-2 flex flex-wrap gap-2">{(['id','name','space','folder','repository','project_url'] as const).map(k => <input key={k} className={`${field} w-40`} aria-label={`Product ${i+1} ${k}`} placeholder={k === 'repository' ? 'owner/repository' : k.replace('_',' ')} value={p[k]} onChange={e => setDraft(d => d.map((v,j) => j === i ? {...v,[k]: e.target.value} : v))} />)}<button className={field} onClick={() => setDraft(d => d.filter((_,j) => i !== j))}>Remove</button></div>)}

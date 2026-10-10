@@ -340,7 +340,7 @@ fn site_pages(conn: &Connection, node_id: i64) -> Vec<SiteText> {
         .unwrap_or_default()
 }
 
-fn view(conn: &Connection, node_id: i64) -> Result<BusinessView, String> {
+pub(crate) fn view(conn: &Connection, node_id: i64) -> Result<BusinessView, String> {
     let meta = read(conn, node_id)?.ok_or("That space has not been set up as a business.")?;
     let pages = site_pages(conn, node_id);
     let site = match pages.first() {

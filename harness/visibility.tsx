@@ -13,7 +13,7 @@ const data: VisibilitySnapshot = {
 }
 let remoteFails = false
 fixture.visibility_snapshot = () => structuredClone(data)
-fixture.visibility_github_issues = () => { if (remoteFails) throw Error('Repository read failed'); return {fetched_at:now,truncated:false,items:[{number:8,title:'Activity board',state:'open',url:'https://github.com/d3velopm3nt/devdeck/issues/8',updated_at:now,assignees:[],pull_request:false},{number:9,title:'Unclaimed GitHub issue',state:'open',url:'https://github.com/d3velopm3nt/devdeck/issues/9',updated_at:now,assignees:[],pull_request:false}]} }
+fixture.visibility_github_issues = () => { if (remoteFails) throw Error('Repository read failed'); return {fetched_at:now,truncated:false,sessions:[],warnings:[],items:[{number:8,title:'Activity board',state:'open',url:'https://github.com/d3velopm3nt/devdeck/issues/8',updated_at:now,assignees:[],pull_request:false},{number:9,title:'Unclaimed GitHub issue',state:'open',url:'https://github.com/d3velopm3nt/devdeck/issues/9',updated_at:now,assignees:[],pull_request:false}]} }
 fixture.visibility_products_save = args => { if(args?.expected!==data.config_raw) throw Error('Product links changed. Refresh before saving.'); data.products = args.products as typeof data.products; data.config_raw='version-2' }
 fixture.aiw_all_work = () => [{project_id:'1',project_name:'Home',feature_id:'garden',feature_name:'Garden',status:'planned',items:[{id:'weeds',title:'Clear pool weeds',status:'blocked',areas:[]}] }]
 fixture.aiw_sessions = () => []

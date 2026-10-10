@@ -31,7 +31,7 @@ try {
   await page.getByRole('alert').getByText(/Repository read failed/).waitFor()
   await page.getByRole('button',{name:/Clear pool weeds/}).waitFor()
   await page.getByRole('button',{name:/#8 Activity board/}).waitFor()
-  await page.getByRole('button',{name:'Product connections',exact:true}).click()
+  await page.getByRole('button',{name:'Advanced connections',exact:true}).click()
   await page.evaluate(()=>window.__externalEdit())
   await page.getByRole('button',{name:'Save connections',exact:true}).click()
   await page.getByRole('alert').getByText(/Product links changed/).waitFor()

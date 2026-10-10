@@ -30,10 +30,11 @@ jobs:
             if curl --fail --silent http://127.0.0.1:5199/harness/onboarding.html > /dev/null; then break; fi
             sleep 1
           done
+          node harness/check-beta5.mjs
           node harness/check-onboarding.mjs
           node harness/check-folder-workflows.mjs
           HARNESS_URL=http://127.0.0.1:5199 node harness/check-visibility.mjs
-          node --test scripts/session-checkpoint.test.mjs
+          node --test scripts/session-checkpoint.test.mjs scripts/github-session-checkpoint.test.mjs
 
   build:
     runs-on: windows-latest

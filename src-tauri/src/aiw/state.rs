@@ -1251,6 +1251,11 @@ impl Workspace {
             .map(|d| (d.meta.name, d.body))
             .collect();
 
+        let default_choice = docs
+            .iter()
+            .find(|d| d.meta.id == super::assistant::ASSISTANT_ID)
+            .map(|d| (d.meta.provider.clone(), d.meta.model.clone()))
+            .unwrap_or(("mock".into(), "mock-1".into()));
         let agents: Vec<AgentDef> = docs
             .into_iter()
             .map(|d| {
@@ -1267,8 +1272,16 @@ impl Workspace {
                     id: d.meta.id,
                     name: d.meta.name,
                     role: d.meta.role,
-                    provider: d.meta.provider,
-                    model: d.meta.model,
+                    provider: if d.meta.provider == "default" {
+                        default_choice.0.clone()
+                    } else {
+                        d.meta.provider.clone()
+                    },
+                    model: if d.meta.provider == "default" {
+                        default_choice.1.clone()
+                    } else {
+                        d.meta.model
+                    },
                     system,
                     permissions: d.meta.permissions,
                     skills: d.meta.skills,

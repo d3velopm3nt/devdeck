@@ -3,8 +3,7 @@ import * as ipc from '../../lib/ipc'
 import { useApp } from '../../store'
 import { subtreeIds } from '../../lib/tree'
 import { openBot } from '../../lib/dock'
-import { WorkersPage } from '../workers/WorkersPage'
-import { Settings } from '../aiw/Settings'
+import { AgentDirectory } from './AgentDirectory'
 import { aiw } from '../../lib/aiw'
 import { Icon } from '../../lib/icons'
 
@@ -61,51 +60,7 @@ const lines = (s: string) =>
     .filter(Boolean)
 
 export function AgentsPage() {
-  const [tab, setTab] = useState<'managers' | 'specialists' | 'engines'>(
-    'managers'
-  )
-  return (
-    <div className="flex h-full min-h-0 flex-col bg-page">
-      <header className="border-b border-line px-6 pt-5">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-semibold text-ink">Agents</h1>
-            <p className="mt-1 text-sm text-muted">
-              Managers own outcomes. Specialists do bounded work. You stay in
-              control.
-            </p>
-          </div>
-          <span className="rounded-full border border-line px-3 py-1 text-xs text-dim">
-            Life · Personal · Business
-          </span>
-        </div>
-        <nav className="mt-5 flex gap-6" aria-label="Agent views">
-          {(['managers', 'specialists', 'engines'] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`border-b-2 pb-3 text-sm ${tab === t ? 'border-indigo-500 font-semibold text-ink' : 'border-transparent text-muted'}`}
-            >
-              {t === 'engines'
-                ? 'Engines & permissions'
-                : t === 'managers'
-                  ? 'Managers'
-                  : 'Specialists'}
-            </button>
-          ))}
-        </nav>
-      </header>
-      <div className="min-h-0 flex-1">
-        {tab === 'managers' ? (
-          <ManagerHub />
-        ) : tab === 'specialists' ? (
-          <WorkersPage />
-        ) : (
-          <Settings />
-        )}
-      </div>
-    </div>
-  )
+  return <AgentDirectory />
 }
 
 export function ManagerHub() {
@@ -388,7 +343,7 @@ export function ManagerHub() {
   )
 }
 
-function ManagerWorkspace({
+export function ManagerWorkspace({
   member,
   team,
   workers,
@@ -665,7 +620,7 @@ function ManagerWorkspace({
               </div>
               {workers.length === 0 && (
                 <p className="mt-1 text-xs text-muted">
-                  Create a specialist on the Specialists tab first.
+                  Add a worker or specialist from Agents first.
                 </p>
               )}
             </div>

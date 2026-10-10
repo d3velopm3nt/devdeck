@@ -177,12 +177,6 @@ pub async fn manager_turn(
         let conn = db.conn();
         let _ = profile(&conn, &handle)?;
         let bot = crate::bots::bot_on(&conn, &handle).ok_or("Manager not found.")?;
-        if bot.agent.is_empty() {
-            return Err(
-                "Assign this manager an engine under Plan, engine & schedule → Settings first."
-                    .into(),
-            );
-        }
         let node = crate::db::node_by_id(&conn, bot.node_id)?;
         let deck =
             crate::db::node_deck_dir(&conn, &node).ok_or("This manager has no space folder.")?;

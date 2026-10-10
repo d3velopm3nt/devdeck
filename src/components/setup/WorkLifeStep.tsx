@@ -25,17 +25,17 @@ export function WorkLifeStep({ onDone, onClose, nav }: {
   if (adding === 'work') return <BusinessSetup onClose={closeCreation} />
   return (
     <Frame step="spaces" onClose={onClose} nav={nav}>
-      <Header icon="folder" title="Set up Work & Life" text="Your main assistant brings work and personal commitments together. Spaces hold context; shared managers and specialists handle assigned work. Workflow folders keep the process and progress so you can continue with another assistant." />
+      <Header icon="folder" title="Add a space" text="Your main assistant brings work and personal commitments together. Spaces hold context; shared managers and specialists handle assigned work. Workflow folders keep the process and progress so you can continue with another assistant." />
       <div className="grid gap-4 md:grid-cols-2">
         <section className="rounded-xl border border-line bg-panel p-4">
-          <h2 className="text-sm font-semibold text-ink">Work</h2>
+          <h2 className="text-sm font-semibold text-ink">Business</h2>
           <p className="mt-2 text-xs leading-relaxed text-muted">Add companies with their own profiles, projects, repositories and mail. Shared functional managers can serve several companies; review each assignment during setup.</p>
-          <button className="btn-primary mt-4 text-xs" onClick={() => setAdding('work')}>Set up Work</button>
+          <button className="btn-primary mt-4 text-xs" onClick={() => setAdding('work')}>Add a business</button>
         </section>
         <section className="rounded-xl border border-line bg-panel p-4">
-          <h2 className="text-sm font-semibold text-ink">Life</h2>
+          <h2 className="text-sm font-semibold text-ink">Personal</h2>
           <p className="mt-2 text-xs leading-relaxed text-muted">Family, Home, Finance, Health, Routines and Knowledge. Starts with a Life manager, an evening check-in and a Sunday review you can edit.</p>
-          <button className="btn-primary mt-4 text-xs" onClick={() => life ? (onDone(), openSpace(life.id, life.name)) : setAdding('life')}>{life ? 'Open Life' : 'Set up Life'}</button>
+          <button className="btn-primary mt-4 text-xs" onClick={() => life ? (onDone(), openSpace(life.id, life.name)) : setAdding('life')}>{life ? 'Open Life' : 'Add a personal space'}</button>
           {personal.length > 0 && <p className="mt-3 text-xs text-muted">Existing personal spaces are kept: {personal.map((n) => n.name).join(', ')}. Creating Life adds a space; it does not move their contents.</p>}
         </section>
       </div>

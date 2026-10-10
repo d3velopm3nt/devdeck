@@ -227,7 +227,9 @@ pub async fn business_repos() -> Result<RepoList, String> {
 /// Where new clones for this business go, when the owner has not said.
 #[tauri::command(async)]
 pub fn business_clone_folder(db: tauri::State<Db>, node_id: i64) -> Result<String, String> {
-    let conn = db.conn();
+    clone_folder(&db.conn(), node_id)
+}
+pub(crate) fn clone_folder(conn: &rusqlite::Connection, node_id: i64) -> Result<String, String> {
     let name: String = conn
         .query_row(
             "SELECT name FROM nodes WHERE id = ?1",
@@ -417,7 +419,7 @@ pub struct Linked {
     pub services: usize,
 }
 
-fn link_blocking(app: &tauri::AppHandle, req: LinkRequest) -> Result<Linked, String> {
+pub(crate) fn link_blocking(app: &tauri::AppHandle, req: LinkRequest) -> Result<Linked, String> {
     let db = app.state::<Db>();
     let key = repo_key(if req.repo.clone_url.is_empty() {
         &req.repo.html_url
@@ -521,6 +523,7 @@ fn link_blocking(app: &tauri::AppHandle, req: LinkRequest) -> Result<Linked, Str
         true,
         Some(req.business),
     );
+    crate::visibility::register_product(&db, req.business, req.parent, &key)?;
     Ok(Linked {
         node_id,
         name,

@@ -70,7 +70,7 @@ jobs:
             if (tauri !== version || cargo !== version) throw new Error('Release versions differ');
             let existing;
             try {
-              existing = await github.rest.repos.getCommit({ ...context.repo, ref: tag });
+              existing = await github.rest.git.getRef({ ...context.repo, ref: `tags/${tag}` });
             } catch (error) {
               if (error.status !== 404) throw error;
             }
@@ -78,6 +78,10 @@ jobs:
               core.notice(`${tag} already exists; no new release`);
               core.setOutput('publish', 'false');
               return;
+            }
+            // Resolve annotated and lightweight tags to their commit before comparing.
+            if (existing) {
+              existing = await github.rest.repos.getCommit({ ...context.repo, ref: tag });
             }
             if (existing && existing.data.sha !== sha) {
               throw new Error('Existing tag points to another commit; select that ref or bump the version');

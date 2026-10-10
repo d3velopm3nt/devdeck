@@ -15,6 +15,7 @@ import { Icon } from '../../lib/icons'
 import { aiw, type ProviderHealth, type ProviderSetup } from '../../lib/aiw'
 import { ModelPicker } from './ModelPicker'
 import { DEFS, Mark, type Def } from './providerDefs'
+import { CliConnections } from './CliConnections'
 
 const Label = ({ children }: { children: React.ReactNode }) => (
   <div className="mb-1 text-[11px] font-medium text-dim">{children}</div>
@@ -172,7 +173,9 @@ export function ProviderCards({ onChanged }: { onChanged?: () => void }) {
   }
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_424px] items-start gap-5">
+    <>
+    <CliConnections onChanged={onChanged} />
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,360px),1fr))] items-start gap-5">
       {/* gallery */}
       <div className="min-w-0">
         <div className="mb-2 flex items-center gap-2">
@@ -183,7 +186,7 @@ export function ProviderCards({ onChanged }: { onChanged?: () => void }) {
           <span className="text-[10.5px] text-faint">{DEFS.length} available</span>
         </div>
 
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,180px),1fr))] gap-2.5">
           {DEFS.map((d) => {
             const on = d.id === selected
             const st = statusOf(d)
@@ -496,5 +499,6 @@ export function ProviderCards({ onChanged }: { onChanged?: () => void }) {
         </div>
       </div>
     </div>
+    </>
   )
 }

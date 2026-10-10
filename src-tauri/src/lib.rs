@@ -32,6 +32,8 @@ mod business_code;
 mod business_team;
 mod calendar;
 mod calls;
+mod cli_setup;
+mod cli_setup_model;
 mod community;
 mod community_index;
 mod conn;
@@ -71,6 +73,8 @@ mod setup;
 mod shots;
 mod spaces;
 mod stash;
+mod subscription_model;
+mod subscription_process;
 mod team;
 mod threads;
 mod vault;
@@ -1181,6 +1185,8 @@ pub fn run() {
             db::recent_bump,
             db::recents_list,
             pty::pty_create,
+            cli_setup::cli_setup_status,
+            cli_setup::cli_setup_plan,
             pty::pty_write,
             pty::pty_resize,
             pty::pty_kill,

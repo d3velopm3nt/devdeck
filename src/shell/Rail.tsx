@@ -25,6 +25,7 @@ import { Icon, type IconName } from '../lib/icons'
 import { avatarLabel, nodeColor } from '../lib/spaces'
 import { findNode, subtreeIds } from '../lib/tree'
 import type { TreeNode } from '../lib/types'
+import { SpaceSwitcher } from './SpaceSwitcher'
 
 type Item = { view: RailView; icon: IconName; label: string }
 
@@ -247,13 +248,7 @@ export function Rail() {
       }`}
     >
       <div className="mb-3 w-full">
-        {expanded && <label htmlFor="sidebar-space" className="mb-1.5 block px-1 text-[10px] font-semibold uppercase tracking-wider text-faint">Space</label>}
-        <select id="sidebar-space" aria-label="Switch space" title="Switch space" value={spaceScopeId??''}
-          onChange={e=>setSpaceScope(e.target.value?Number(e.target.value):null)}
-          className={`input w-full rounded-lg bg-panel text-[12px] ${expanded?'px-2 py-2':'px-0 py-2'}`}>
-          <option value="">All spaces</option>{nodes.filter(n=>n.parent_id==null).map(n=><option key={n.id} value={n.id}>{n.name}</option>)}
-        </select>
-        {expanded && <p className="mt-2 px-1 text-[10px] text-faint">{spaceScopeId==null?'Your whole workspace':'Today, work and managers in this space'}</p>}
+        <SpaceSwitcher spaces={nodes.filter(n => n.parent_id == null)} value={spaceScopeId} expanded={expanded} onChange={setSpaceScope} />
       </div>
       <RailButton
         label="Today"

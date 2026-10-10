@@ -2513,6 +2513,12 @@ impl ProviderRegistry {
         self.providers.iter().find(|p| p.id() == id).cloned()
     }
 
+    /// Clone handles before probing, so slow CLI health checks never hold the registry lock.
+    pub fn handles(&self) -> Vec<Arc<dyn LLMProvider>> {
+        self.providers.clone()
+    }
+
+    #[cfg(test)]
     pub fn list(&self) -> Vec<(String, String, ProviderHealth)> {
         self.providers
             .iter()

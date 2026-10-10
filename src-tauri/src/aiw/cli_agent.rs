@@ -50,7 +50,8 @@ pub fn runners() -> Vec<(String, String, super::provider::ProviderHealth)> {
 
 pub fn health(runner: &str) -> super::provider::ProviderHealth {
     let program = default_program(runner);
-    let present = crate::mcp::program_present(program);
+    let resolved = crate::cli_setup::resolve_cli(crate::cli_setup_model::CliTool::ClaudeCode);
+    let present = std::path::Path::new(&resolved).is_file() || crate::mcp::program_present(program);
     super::provider::ProviderHealth {
         ok: present,
         configured: present,
@@ -413,7 +414,11 @@ pub fn run_watched(
     leash: &Leash,
 ) -> Result<RunOutcome, String> {
     let name = spec.program_name();
-    let program = crate::mcp::resolve_program(name);
+    let program = if name == "claude" {
+        crate::cli_setup::resolve_cli(crate::cli_setup_model::CliTool::ClaudeCode)
+    } else {
+        crate::mcp::resolve_program(name)
+    };
     let mut cmd = Command::new(&program);
     cmd.args(spec.args(prompt))
         .current_dir(cwd)

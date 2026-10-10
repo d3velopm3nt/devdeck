@@ -236,6 +236,15 @@ jobs:
             when switching assistants; automatic Git synchronization is not included.
             Hierarchical reporting and automatic label-triggered workflows are not included.
 
+            ### Activity board and sessions
+
+            Activity combines GitHub issues and PRs with Life and Personal tasks.
+            Filter by product, space, assistant or session. Sessions includes DevDeck
+            agents and external ChatGPT/Claude records, with checkpoints, blockers,
+            next actions and stale indicators. External chats must save checkpoints;
+            automatic external-chat updates and Git sync are not included.
+            GitHub Project custom status fields are not imported yet.
+
             **Requirements:** Windows 10/11 (x64). No runtime to install.
 
       # Keep this in the publishing workflow: releases created with GITHUB_TOKEN

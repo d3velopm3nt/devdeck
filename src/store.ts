@@ -59,6 +59,8 @@ export type RailView =
   /// The hands: workers you own, the skills they draw on, and their runs.
   | 'workers'
   /// What the AI is costing, across every space.
+  | 'activity'
+  | 'sessions'
   | 'analytics'
   | 'calendar'
   /// Email: accounts, threads, contacts. A place you work out of, which is
@@ -490,6 +492,9 @@ const RAIL_VIEWS: readonly RailView[] = [
   'home',
   'inbox',
   'team',
+  'activity',
+  'sessions',
+  'workers',
   'analytics',
   'calendar',
   // Mail and Community were missing, which is exactly the failure the note

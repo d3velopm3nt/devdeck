@@ -72,6 +72,8 @@ mod stash;
 mod team;
 mod threads;
 mod vault;
+mod visibility;
+mod visibility_model;
 mod workers;
 mod workflow_model;
 
@@ -1441,6 +1443,9 @@ pub fn run() {
             files::vault_files,
             files::vault_file_text,
             team::team_board,
+            visibility::visibility_snapshot,
+            visibility::visibility_products_save,
+            visibility::visibility_github_issues,
             threads::thread_wake,
             threads::thread_context,
             threads::thread_context_set,

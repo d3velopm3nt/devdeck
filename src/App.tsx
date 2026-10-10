@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Dock, buildDefaultLayout } from './Dock'
 import { BottomBar } from './components/BottomBar'
 import { InboxPage } from './components/InboxPage'
+import { ActivityBoard } from './components/ActivityBoard'
 import { TeamPage } from './components/team/TeamPage'
 import { AnalyticsPage } from './components/AnalyticsPage'
 import { CalendarPage } from './components/CalendarPage'
@@ -1099,6 +1100,8 @@ export default function App() {
           {railView === 'community' && <CommunityView />}
           {railView === 'machine' && <MachineSetup />}
           {railView === 'inbox' && <InboxPage />}
+          {railView === 'activity' && <ActivityBoard />}
+          {railView === 'sessions' && <ActivityBoard sessionsOnly />}
           {railView === 'team' && <TeamPage />}
           {railView === 'workers' && <AgentsPage />}
           {railView === 'analytics' && <AnalyticsPage />}

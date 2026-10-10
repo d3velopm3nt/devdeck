@@ -15,3 +15,6 @@ pub mod aiw { pub mod state { pub struct Workspace { pub bus: crate::events::Sha
 
 #[path = "../../src-tauri/src/workflow_model.rs"]
 pub mod workflow_model;
+
+#[path = "../../src-tauri/src/visibility_model.rs"]
+pub mod visibility_model;

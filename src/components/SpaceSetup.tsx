@@ -25,6 +25,8 @@ import { SPACE_TAGS, isQuiet } from '../lib/spaces'
 
 type Step = 'start' | 'draft' | 'review'
 
+const LIFE_GOAL = 'Help me balance everyday life with work: keep family, home, finances, health and routines organised, identify upcoming commitments, and propose priorities. Ask before taking external actions.'
+
 const LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
 function routineText(r: ipc.RoutineDraft): string {
@@ -36,7 +38,7 @@ function routineText(r: ipc.RoutineDraft): string {
   return day ? `${day}s at ${at}` : `Weekly at ${at}`
 }
 
-export function SpaceSetup({ onClose }: { onClose: () => void }) {
+export function SpaceSetup({ onClose, initialStarter }: { onClose: () => void; initialStarter?: string }) {
   const nodes = useApp((s) => s.nodes)
   const refreshTree = useApp((s) => s.refreshTree)
   const setActiveWorkspace = useApp((s) => s.setActiveWorkspace)
@@ -58,8 +60,22 @@ export function SpaceSetup({ onClose }: { onClose: () => void }) {
   const [made, setMade] = useState<ipc.SpaceCreated | null>(null)
 
   useEffect(() => {
-    void ipc.spaceStarters().then(setStarters).catch((e) => setErr(String(e)))
-  }, [])
+    void ipc.spaceStarters().then((all) => {
+      setStarters(all)
+      const initial = all.find((s) => s.id === initialStarter)
+      if (initial && initial.id !== 'business') {
+        setPick(initial.id)
+        setFolders(initial.folders.map((f) => ({ ...f })))
+        setRoutines(initial.routines.map((r) => ({ ...r })))
+        setWithBot(initial.bot)
+        setLabel(initial.label)
+        if (initial.id === 'life') {
+          setName('Life')
+          setBotGoal(LIFE_GOAL)
+        }
+      }
+    }).catch((e) => setErr(String(e)))
+  }, [initialStarter])
 
   useEffect(() => {
     const esc = (e: KeyboardEvent) => {
@@ -97,13 +113,17 @@ export function SpaceSetup({ onClose }: { onClose: () => void }) {
       return
     }
     setPick(s.id)
+    if (s.id === 'life') {
+      if (!name.trim()) setName('Life')
+      if (!botGoal.trim()) setBotGoal(LIFE_GOAL)
+    }
     setFolders(s.folders.map((f) => ({ ...f })))
     setRoutines(s.routines.map((r) => ({ ...r })))
     setWithBot(s.bot)
     if (!touchedLabel) setLabel(s.label)
   }
 
-  const botName = name.trim() ? `${name.trim()} bot` : ''
+  const botName = name.trim() ? `${name.trim()} manager` : ''
   const needsGoal = withBot && !botGoal.trim()
 
   const create = () => {
@@ -180,8 +200,8 @@ export function SpaceSetup({ onClose }: { onClose: () => void }) {
     return (
       <Shell
         onClose={onClose}
-        title="A new space"
-        sub="A space is a folder in your vault. Everything you put in it lives there, and you can move it later."
+        title="Set up Work or Life"
+        sub="Start with your business or everyday life. Each space has editable folders, knowledge and routines; you can also choose a smaller starter."
       >
         <div className="flex gap-6">
           <div className="flex w-[560px] shrink-0 flex-col gap-4">
@@ -192,7 +212,7 @@ export function SpaceSetup({ onClose }: { onClose: () => void }) {
               <input
                 autoFocus
                 className="input w-full text-[14px]"
-                placeholder="Fitness"
+                placeholder="Life, your business, or another space"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
@@ -365,7 +385,7 @@ export function SpaceSetup({ onClose }: { onClose: () => void }) {
                 </Foot>
               </Card>
 
-              <Card title="A bot for this space">
+              <Card title="A manager for this space">
                 <div className="flex items-center gap-2.5 border-t border-line px-3 py-2.5">
                   <Icon name="bot" size={14} className="shrink-0 text-indigo-400" />
                   <span className="min-w-0 flex-1 text-[12.5px] text-ink">
@@ -577,7 +597,7 @@ export function SpaceSetup({ onClose }: { onClose: () => void }) {
               <div>No repository. Give a folder one later and it becomes a project.</div>
               <div>
                 {withBot && botGoal.trim()
-                  ? 'The bot watches on weekdays at 08:00, whichever tag you picked. It wakes nothing until you name an agent for it.'
+                  ? `The manager checks in on weekdays at ${quiet ? '18:00' : '08:00'}. Connect an engine and review its permissions before asking it to run AI work.`
                   : 'No bot.'}
               </div>
               <div>Nothing reaches outside this machine.</div>

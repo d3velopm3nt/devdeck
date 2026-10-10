@@ -7,6 +7,7 @@ import { GoogleButton } from './GoogleMark'
 import { CAPTURE_MEET_STEP } from '../lib/devCapture'
 import { Frame, LearnStep } from './setup/LearnStep'
 import { LifeStep } from './setup/LifeStep'
+import { WorkLifeStep } from './setup/WorkLifeStep'
 import { HomeStep } from './setup/HomeStep'
 import { SETUP_AT, SETUP_REACHED, isStep, stepIndex, type SetupStep } from './setup/steps'
 
@@ -203,8 +204,11 @@ export function Meet({
   if (step === 'life') {
     return <LifeStep onDone={() => go('home')} onClose={close} nav={nav} />
   }
+  if (step === 'spaces') {
+    return <WorkLifeStep onDone={finish} onClose={close} nav={nav} />
+  }
   if (step === 'home') {
-    return <HomeStep onDone={finish} onSkip={finish} onClose={close} nav={nav} />
+    return <HomeStep onDone={() => go('spaces')} onSkip={() => go('spaces')} onClose={close} nav={nav} />
   }
 
   if (step === 'mail') {

@@ -4,7 +4,7 @@
 // and has. Each covers every product, project and client it touches, so
 // nobody is hired per project. A role is on the team or the directors keep
 // doing it. A manager already working for another business is offered above
-// the roles, and never assumed.
+// the roles. Existing role holders are suggested for reuse and confirmed at creation.
 
 import { useEffect, useRef, useState } from 'react'
 import * as ipc from '../../lib/ipc'
@@ -56,7 +56,12 @@ export function TeamStep({ view, setView, nav, onClose }: StepProps) {
       .businessTeam(view.node_id)
       .then((o) => {
         setOffer(o)
-        setOn(Object.fromEntries(o.roles.map((r) => [r.id, r.on])))
+        const shared = o.roles.filter(r => r.on && !r.made).flatMap(r => {
+          const match = o.others.find(m => m.role === r.name.toLowerCase())
+          return match ? [match] : []
+        })
+        setReuse(new Set(shared.map(m => m.handle)))
+        setOn(Object.fromEntries(o.roles.map(r => [r.id, r.on && !shared.some(m => m.role === r.name.toLowerCase())])))
       })
       .catch((e) => setErr(String(e)))
   }, [view?.node_id])
@@ -74,7 +79,8 @@ export function TeamStep({ view, setView, nav, onClose }: StepProps) {
   const name = view.meta.name
   const roles = offer?.roles ?? []
   const onCount = roles.filter((r) => on[r.id]).length + reuse.size
-  const keep = roles.filter((r) => !on[r.id]).length
+  const sharedRole = (r: ipc.RoleOffer) => offer?.others.some(m => reuse.has(m.handle) && m.role === r.name.toLowerCase())
+  const keep = roles.filter(r => !on[r.id] && !sharedRole(r)).length
 
   const make = async () => {
     setBusy(true)
@@ -163,7 +169,7 @@ export function TeamStep({ view, setView, nav, onClose }: StepProps) {
         <div className="rounded-[10px] border border-line bg-panel">
           <div className="flex items-center gap-2 px-4 py-2.5">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">Already on your team</span>
-            <span className="text-[10.5px] text-faint">optional · a manager from another business can work for {name} too</span>
+            <span className="text-[10.5px] text-faint">shared roles are suggested · review access for {name}</span>
           </div>
           {offer!.others.map((m) => {
             const yes = reuse.has(m.handle)
@@ -220,7 +226,7 @@ export function TeamStep({ view, setView, nav, onClose }: StepProps) {
               ) : (
                 <Switch
                   on={!!on[r.id]}
-                  label={on[r.id] ? 'on the team' : 'you do this'}
+                  label={on[r.id] ? 'new manager' : sharedRole(r) ? 'shared manager' : 'you do this'}
                   onChange={(v) => setOn((cur) => ({ ...cur, [r.id]: v }))}
                 />
               )}

@@ -45,6 +45,10 @@ export function FolderWorkflowPage({ node, name, onDashboard }: { node: number; 
   const [selected, setSelected] = useState('')
   const [evidence, setEvidence] = useState('')
   const [planRevision, setPlanRevision] = useState('')
+  const [checkpointExpected, setCheckpointExpected] = useState('')
+  const [actor, setActor] = useState('ChatGPT')
+  const [progress, setProgress] = useState('')
+  const [nextAction, setNextAction] = useState('')
   const [plan, setPlan] = useState<ipc.RunPlan | null>(null)
   const refresh = useCallback(async () => {
     try { setData(await ipc.folderWorkflowGet(node)); setError('') }
@@ -63,10 +67,15 @@ export function FolderWorkflowPage({ node, name, onDashboard }: { node: number; 
   const steps = data?.definition.steps ?? []
   const step = steps.find(s => s.id === selected) ?? steps[0]
   const canRun = step && ['pending', 'blocked'].includes(step.status) && step.needs.every(id => steps.some(s => s.id === id && s.status === 'done'))
+  const handoff = data ? `Read the latest WORKFLOW.md before acting. Follow dependencies and instructions; preserve completed work and record evidence and the next action. Sync the state repository before switching assistants.
+
+Workflow file: ${data.path}
+
+${data.raw}` : ''
   const editable = steps.every(s => s.status === 'pending')
   const act = async (fn: () => Promise<ipc.FolderWorkflow>) => {
     setBusy(true); setError('')
-    try { setData(await fn()); setPlan(null); setEvidence(''); setEditing(false) }
+    try { setData(await fn()); setPlan(null); setEvidence(''); setProgress(''); setNextAction(''); setEditing(false) }
     catch (e) { setError(String(e)) }
     finally { setBusy(false) }
   }
@@ -88,6 +97,11 @@ export function FolderWorkflowPage({ node, name, onDashboard }: { node: number; 
       {data && editable && !editing && <button className={button} onClick={() => { setEditExpected(data.raw); setDraft(data.raw || template(node, workers[0]?.handle ?? 'choose-worker')); setEditing(true); setPlan(null) }}>{data.raw ? 'Edit workflow' : 'Create workflow'}</button>}
     </header>
     {error && <div role="alert" className="border-b border-line bg-red-500/10 px-5 py-3 text-[13px] text-err">{error}</div>}
+    {data && steps.length > 0 && <details className="border-b border-line px-5 py-3">
+      <summary className="cursor-pointer text-[12px] text-info">Continue with another assistant</summary>
+      <p className="my-2 text-[12px] text-muted">Share the current workflow and its referenced files. Pull before reading, then commit and push progress so the next assistant sees it. DevDeck reads your local clone; chat history does not sync automatically.</p>
+      <textarea aria-label="Assistant handoff" readOnly rows={8} className={`${field} font-mono`} value={handoff} onFocus={e => e.currentTarget.select()} />
+    </details>}
     {!data && !error && <p className="p-5 text-muted">Loading workflow…</p>}
     {editing ? <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-5">
       <p className="text-[12px] text-muted">Use existing worker handles and target folder IDs below. Each step can depend on other step IDs. Markdown after the header gives every worker the shared context.</p>
@@ -102,7 +116,7 @@ export function FolderWorkflowPage({ node, name, onDashboard }: { node: number; 
       <p className="mt-2 max-w-xl text-[13px] text-muted">Add steps for a roadmap, marketing campaign, documentation or development. Instructions and progress live in WORKFLOW.md in this existing folder. Creating or labelling it starts no agents.</p>
     </div> : data && <div className="grid min-h-0 flex-1 grid-cols-[minmax(220px,2fr)_minmax(260px,3fr)] overflow-auto">
       <section aria-label="Workflow steps" className="space-y-3 border-r border-line p-4">
-        {steps.map((s, i) => <button key={s.id} onClick={() => { setSelected(s.id); setPlan(null); setEvidence('') }} className={`w-full rounded-xl border p-4 text-left ${step?.id === s.id ? 'border-indigo-400 bg-indigo-500/10' : 'border-line bg-panel hover:bg-hover'}`}>
+        {steps.map((s, i) => <button key={s.id} onClick={() => { setSelected(s.id); setPlan(null); setEvidence(''); setProgress(''); setNextAction('') }} className={`w-full rounded-xl border p-4 text-left ${step?.id === s.id ? 'border-indigo-400 bg-indigo-500/10' : 'border-line bg-panel hover:bg-hover'}`}>
           <div className="flex justify-between gap-2"><span className="text-[11px] text-muted">STEP {i + 1}</span><span className={`text-[11px] uppercase ${s.status === 'done' ? 'text-ok' : s.status === 'blocked' ? 'text-err' : 'text-info'}`}>{s.status === 'review' ? 'Needs review' : s.status}</span></div>
           <h2 className="mt-2 text-[14px] font-semibold text-ink">{s.title}</h2>
           <p className="mt-1 text-[12px] text-dim">@{s.worker} · {nodes.find(n => n.id === s.target)?.name ?? `Folder ${s.target}`}</p>
@@ -114,6 +128,18 @@ export function FolderWorkflowPage({ node, name, onDashboard }: { node: number; 
         <div><h3 className="mb-2 text-[11px] uppercase text-muted">Instructions</h3><p className="whitespace-pre-wrap text-[13px]">{step.instructions}</p></div>
         <details><summary className="cursor-pointer text-[12px] text-muted">Shared workflow context</summary><p className="mt-2 whitespace-pre-wrap text-[13px]">{data.body}</p></details>
         {step.evidence && <div className="rounded-lg border border-line bg-panel p-3"><h3 className="text-[11px] uppercase text-muted">Result / review notes</h3><p className="mt-2 whitespace-pre-wrap text-[13px]">{step.evidence}</p></div>}
+        {step.actor && <p className="text-[12px] text-muted">Updated by {step.actor}{step.updated_at ? ` · ${step.updated_at}` : ''}</p>}
+        {step.next_action && <p className="text-[13px]"><b>Next action:</b> {step.next_action}</p>}
+        {canRun && <details className="rounded-xl border border-line p-4">
+          <summary className="cursor-pointer text-[12px] text-info" onClick={() => setCheckpointExpected(data.raw)}>Record work from another assistant</summary>
+          <div className="mt-3 space-y-3">
+            <input aria-label="Progress assistant" className={field} value={actor} onChange={e => setActor(e.target.value)} placeholder="ChatGPT, Claude or your name" />
+            <textarea aria-label="Progress evidence" className={field} rows={3} value={progress} onChange={e => setProgress(e.target.value)} placeholder="Completed work, commit or file references, checks and blockers" />
+            <textarea aria-label="Next action" className={field} rows={2} value={nextAction} onChange={e => setNextAction(e.target.value)} placeholder="What the next assistant should do" />
+            <button className={button} disabled={busy || !actor.trim() || !progress.trim() || !nextAction.trim()} onClick={() => void act(() => ipc.folderWorkflowCheckpoint(node, step.id, checkpointExpected, actor, progress, nextAction, false))}>Save checkpoint</button>
+            <button className={`${button} ml-2`} disabled={busy || !actor.trim() || !progress.trim() || !nextAction.trim()} onClick={() => void act(() => ipc.folderWorkflowCheckpoint(node, step.id, checkpointExpected, actor, progress, nextAction, true))}>Submit for review</button>
+          </div>
+        </details>}
         {step.previous_runs.length > 0 && <details><summary className="cursor-pointer text-[12px] text-muted">Previous attempts</summary>{step.previous_runs.map(id => <button key={id} className={`${button} mt-2 mr-2`} onClick={() => openRun(id, step.title)}>{id}</button>)}</details>}
         {step.run && <button className={button} onClick={() => openRun(step.run, step.title)}>Open worker receipt</button>}
         {['running', 'starting'].includes(step.status) && <button className={button} disabled={busy || !step.run} onClick={() => { void ipc.workerStop(step.run).catch(e => setError(String(e))) }}>Stop worker</button>}

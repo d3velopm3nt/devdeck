@@ -29,6 +29,13 @@ pub struct Step {
     pub evidence: String,
     #[serde(default)]
     pub previous_runs: Vec<String>,
+    /// Portable progress from an assistant working outside the desktop runtime.
+    #[serde(default)]
+    pub actor: String,
+    #[serde(default)]
+    pub next_action: String,
+    #[serde(default)]
+    pub updated_at: String,
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -102,6 +109,43 @@ pub(crate) fn receipt_status(status: &str, ok: bool) -> Status {
         _ => Status::Blocked,
     }
 }
+/// External work never bypasses dependency or live-run ownership gates.
+pub(crate) fn checkpoint(
+    d: &mut Definition,
+    id: &str,
+    actor: &str,
+    evidence: &str,
+    next_action: &str,
+    submit: bool,
+) -> Result<(), String> {
+    if actor.trim().is_empty() || evidence.trim().is_empty() || next_action.trim().is_empty() {
+        return Err("Record the assistant, progress evidence and next action.".into());
+    }
+    let i = d
+        .steps
+        .iter()
+        .position(|s| s.id == id)
+        .ok_or("Step not found.")?;
+    if !ready(d, i) {
+        return Err("This step is already claimed or its dependencies are not accepted.".into());
+    }
+    let s = &mut d.steps[i];
+    if !s.run.is_empty() {
+        s.previous_runs.push(std::mem::take(&mut s.run));
+    }
+    s.claim.clear();
+    s.actor = actor.trim().into();
+    s.evidence = evidence.trim().into();
+    s.next_action = next_action.trim().into();
+    s.updated_at = chrono::Utc::now().to_rfc3339();
+    s.status = if submit {
+        Status::Review
+    } else {
+        Status::Blocked
+    };
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -128,6 +172,37 @@ mod tests {
                 },
             ],
         }
+    }
+    #[test]
+    fn external_handoff_keeps_dependencies_and_live_claims() {
+        let mut d = definition();
+        assert!(checkpoint(&mut d, "docs", "Claude", "Draft", "Verify", true).is_err());
+        assert!(checkpoint(&mut d, "build", "", "Draft", "Verify", true).is_err());
+        checkpoint(
+            &mut d,
+            "build",
+            "ChatGPT",
+            "Commit abc; tests passed",
+            "Review output",
+            true,
+        )
+        .unwrap();
+        assert_eq!(d.steps[0].status, Status::Review);
+        assert!(!ready(&d, 1));
+        d.steps[0].status = Status::Done;
+        checkpoint(
+            &mut d,
+            "docs",
+            "Claude",
+            "Partial guide",
+            "Add screenshots",
+            false,
+        )
+        .unwrap();
+        assert_eq!(d.steps[1].status, Status::Blocked);
+        assert_eq!(d.steps[1].next_action, "Add screenshots");
+        d.steps[1].status = Status::Running;
+        assert!(checkpoint(&mut d, "docs", "ChatGPT", "Changed", "Continue", true).is_err());
     }
     #[test]
     fn review_is_not_dependency_completion() {

@@ -62,7 +62,7 @@ export function WorkerEditor({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 border-b border-line px-5 py-3.5">
-          <span className="text-[14px] font-semibold text-ink">{isNew ? 'A new worker' : w.name}</span>
+          <span className="text-[14px] font-semibold text-ink">{isNew ? 'New agent' : w.name}</span>
           {!isNew && <span className="font-mono text-[11px] text-faint">@{w.handle}</span>}
           <span className="flex-1" />
           <button className="btn-ghost text-[11.5px]" onClick={onClose}>
@@ -80,6 +80,14 @@ export function WorkerEditor({
               onChange={(e) => set('name', e.target.value)}
             />
 
+            <label className={label} htmlFor="agent-role">Role</label>
+            <select id="agent-role" className="input" value={w.category || 'worker'} onChange={e => set('category', e.target.value as 'worker' | 'specialist')}>
+              <option value="worker">Worker</option><option value="specialist">Specialist</option>
+            </select>
+            <label className={label} htmlFor="agent-profile">Role profile</label>
+            <select id="agent-profile" className="input" value={w.profile || ''} onChange={e => setW(cur => ({...cur, profile: e.target.value, what: e.target.value === 'Developer' ? 'Implement an agreed task and return a reviewable change' : e.target.value === 'QA' ? 'Verify agreed behavior and report reproducible findings' : cur.what}))}>
+              <option value="">Custom</option><option>Developer</option><option>QA</option><option>Researcher</option><option>Writer</option>
+            </select>
             <span className={label}>What it is for</span>
             <input
               className="input text-[12.5px]"

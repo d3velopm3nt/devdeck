@@ -2129,6 +2129,8 @@ export const libraryRemove = (id: string, kind: string) => invoke<void>('library
 
 /** A worker: yours, lent to any space, with the skills you gave it. */
 export interface Worker {
+  category?: "worker" | "specialist"
+  profile?: string
   handle: string
   name: string
   what: string

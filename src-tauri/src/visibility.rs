@@ -116,6 +116,8 @@ pub struct IssueSnapshot {
     pub items: Vec<serde_json::Value>,
     pub fetched_at: String,
     pub truncated: bool,
+    pub sessions: Vec<SessionRecord>,
+    pub warnings: Vec<String>,
 }
 #[tauri::command(async)]
 pub fn visibility_github_issues(repository: String) -> Result<IssueSnapshot, String> {
@@ -179,9 +181,209 @@ pub fn visibility_github_issues(repository: String) -> Result<IssueSnapshot, Str
             truncated = true;
         }
     }
+    let mut comments = vec![];
+    let mut warnings = vec![];
+    for page in 1..=5 {
+        let endpoint = format!("repos/{repository}/issues/comments?sort=created&direction=desc&per_page=100&page={page}");
+        match github_get(&endpoint) {
+            Ok(value) => {
+                let rows = value
+                    .as_array()
+                    .ok_or("GitHub returned unreadable comments.")?;
+                let count = rows.len();
+                comments.extend(rows.clone());
+                if count < 100 {
+                    break;
+                }
+                if page == 5 {
+                    warnings.push(
+                        "Session history is limited to the 500 latest repository comments.".into(),
+                    );
+                }
+            }
+            Err(e) => {
+                return Err(format!(
+                    "Issues were read but session comments could not be read: {e}"
+                ));
+            }
+        }
+    }
+    let (mut sessions, parse_warnings) = comment_sessions(&repository, &comments);
+    for session in &mut sessions {
+        let ticket_number = session
+            .ticket_url
+            .rsplit('/')
+            .next()
+            .and_then(|s| s.parse::<u64>().ok());
+        if let Some(item) = items.iter().find(|i| {
+            i["number"]
+                .as_u64()
+                .is_some_and(|number| Some(number) == ticket_number)
+        }) {
+            session.ticket_url = item["url"]
+                .as_str()
+                .unwrap_or(&session.ticket_url)
+                .to_string();
+        }
+    }
+    warnings.extend(parse_warnings);
     Ok(IssueSnapshot {
         items,
         fetched_at: chrono::Utc::now().to_rfc3339(),
         truncated,
+        sessions,
+        warnings,
     })
+}
+
+/// GitHub reads and mutations keep tokens off command lines and reject redirects.
+pub(crate) fn github_request(
+    endpoint: &str,
+    method: &str,
+    body: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    let token = crate::github::stored_token();
+    if let Some(token) = token {
+        let client = reqwest::blocking::Client::builder()
+            .timeout(Duration::from_secs(20))
+            .redirect(reqwest::redirect::Policy::none())
+            .user_agent("DevDeck")
+            .build()
+            .map_err(|e| e.to_string())?;
+        let method = reqwest::Method::from_bytes(method.as_bytes()).map_err(|e| e.to_string())?;
+        let mut req = client
+            .request(method, format!("https://api.github.com/{endpoint}"))
+            .bearer_auth(token)
+            .header("Accept", "application/vnd.github+json");
+        if let Some(body) = body {
+            req = req.json(&body);
+        }
+        let response = req
+            .send()
+            .map_err(|_| "Could not reach GitHub.".to_string())?;
+        if !response.status().is_success() {
+            return Err(format!(
+                "GitHub returned {}. Check account access and required permissions.",
+                response.status().as_u16()
+            ));
+        }
+        response
+            .json()
+            .map_err(|_| "GitHub returned unreadable data.".into())
+    } else {
+        use std::io::Write;
+        let mut cmd = std::process::Command::new("gh");
+        cmd.args([
+            "api",
+            "--hostname",
+            "github.com",
+            "--method",
+            method,
+            endpoint,
+        ]);
+        if body.is_some() {
+            cmd.args(["--input", "-"]);
+        }
+        cmd.stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x0800_0000);
+        }
+        let mut child = cmd
+            .spawn()
+            .map_err(|_| "Connect GitHub in Settings or sign in with gh first.".to_string())?;
+        if let Some(body) = body {
+            let mut input = child.stdin.take().ok_or("GitHub input unavailable")?;
+            input
+                .write_all(body.to_string().as_bytes())
+                .map_err(|e| e.to_string())?;
+        } else {
+            drop(child.stdin.take());
+        }
+        let output = child.wait_with_output().map_err(|e| e.to_string())?;
+        if !output.status.success() {
+            return Err(
+                "GitHub request failed. Check account access and required permissions.".into(),
+            );
+        }
+        serde_json::from_slice(&output.stdout)
+            .map_err(|_| "GitHub returned unreadable data.".into())
+    }
+}
+pub(crate) fn github_get(endpoint: &str) -> Result<serde_json::Value, String> {
+    github_request(endpoint, "GET", None)
+}
+
+/// Product setup owns Activity connections. One entry per linked repository.
+pub(crate) fn register_product(
+    db: &Db,
+    business: i64,
+    parent: i64,
+    repository: &str,
+) -> Result<(), String> {
+    if !repository_valid(repository) {
+        return Err("Invalid repository address.".into());
+    }
+    let dir = root(db)?.join(".devdeck");
+    let conn = db.conn();
+    let space = db::node_by_id(&conn, business)?;
+    let product = db::node_by_id(&conn, parent)?;
+    let file = dir.join("activity-products.json");
+    let raw = read_optional(&file)?;
+    let mut links: Vec<ProductLink> = if raw.is_empty() {
+        vec![]
+    } else {
+        serde_json::from_str(&raw).map_err(|e| format!("Product links could not be read: {e}"))?
+    };
+    let id = format!("repo:{repository}");
+    if let Some(p) = links
+        .iter_mut()
+        .find(|p| p.repository.eq_ignore_ascii_case(repository))
+    {
+        p.name = product.name;
+        p.space = space.name;
+        p.folder = product.rel_path;
+    } else {
+        links.push(ProductLink {
+            id,
+            name: product.name,
+            space: space.name,
+            folder: product.rel_path,
+            repository: repository.into(),
+            project_url: String::new(),
+        });
+    }
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    if read_optional(&file)? != raw {
+        return Err("Product links changed. Retry linking after refreshing.".into());
+    }
+    fs::write(
+        file,
+        serde_json::to_string_pretty(&links).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())
+}
+
+pub(crate) fn set_project_url(db: &Db, repository: &str, url: &str) -> Result<(), String> {
+    let dir = root(db)?.join(".devdeck");
+    let _conn = db.conn();
+    let file = dir.join("activity-products.json");
+    let raw = read_optional(&file)?;
+    let mut links: Vec<ProductLink> = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+    let p = links
+        .iter_mut()
+        .find(|p| p.repository.eq_ignore_ascii_case(repository))
+        .ok_or("Activity connection not found")?;
+    p.project_url = url.into();
+    if read_optional(&file)? != raw {
+        return Err("Product connections changed. Refresh and retry.".into());
+    }
+    fs::write(
+        file,
+        serde_json::to_string_pretty(&links).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())
 }

@@ -205,7 +205,10 @@ fn device_start_blocking() -> Result<DeviceStart, String> {
         .post("https://github.com/login/device/code")
         .header("Accept", "application/json")
         .header("Content-Type", "application/x-www-form-urlencoded")
-        .body(form(&[("client_id", id.as_str()), ("scope", SCOPES)]))
+        .body(form(&[
+            ("client_id", id.as_str()),
+            ("scope", "repo read:org gist project"),
+        ]))
         .send()
         .map_err(|e| format!("could not reach GitHub: {e}"))?;
 

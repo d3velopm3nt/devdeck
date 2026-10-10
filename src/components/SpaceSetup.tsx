@@ -239,7 +239,7 @@ export function SpaceSetup({ onClose, initialStarter }: { onClose: () => void; i
                 </div>
               )}
               <div className="grid grid-cols-2 gap-2">
-                {starters.map((s) => {
+                {starters.filter(s => initialStarter !== 'life' || s.label === 'Personal').map((s) => {
                   const on = pick === s.id
                   const wide = s.id === 'empty'
                   return (
@@ -311,8 +311,7 @@ export function SpaceSetup({ onClose, initialStarter }: { onClose: () => void; i
                     : 'Business drafts the reminders below on work hours. It is a starting point, not a rule.'}
               </div>
               <div className="border-t border-line px-3.5 py-2.5 text-[10.5px] leading-[1.55] text-faint">
-                The kind above only suggests one — the two are not tied. A decision you are working
-                out at work is Business; a product you ship at the weekend is Personal. This is the
+                The kind above only suggests one — the two are not tied. Business holds companies and products; Personal holds home, family, health and routines. This is the
                 workspace&rsquo;s own question, not a label: the words in Settings are for the
                 folders you put inside it.
               </div>

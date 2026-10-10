@@ -11,6 +11,8 @@ import { useEffect, useState } from 'react'
 import { Icon, type IconName } from '../../lib/icons'
 import { useAiw } from '../../lib/aiwStore'
 import { aiw, type AgentDef, type ModelCheck, type ProviderHealth } from '../../lib/aiw'
+import { invoke } from '@tauri-apps/api/core'
+import { DefaultProvider, type ProviderDefaults } from './DefaultProvider'
 import { ProviderCards } from './ProviderCards'
 import { ModelPicker } from './ModelPicker'
 
@@ -28,6 +30,7 @@ const TABS: Array<{ id: Tab; icon: IconName; label: string; blurb: string }> = [
 
 function AgentProviders() {
   const a = useAiw()
+  const [inherited, setInherited] = useState<string[]>([])
   const [providers, setProviders] = useState<[string, string, ProviderHealth][]>([])
   const [drafts, setDrafts] = useState<Record<string, { provider: string; model: string }>>({})
   const [saving, setSaving] = useState<string | null>(null)
@@ -39,6 +42,7 @@ function AgentProviders() {
   >({})
 
   useEffect(() => {
+    void invoke<ProviderDefaults>('aiw_provider_defaults').then(d => setInherited(d.inherited)).catch(e => setError(String(e)))
     aiw.providers().then(setProviders).catch(() => setProviders([]))
   }, [])
 
@@ -56,6 +60,7 @@ function AgentProviders() {
       // Apply still lit — which looks exactly like a save that failed.
       await a.reloadAgents()
       setDrafts({ ...drafts, [ag.id]: d })
+      setInherited(ids => ids.filter(id => id !== ag.id))
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -70,10 +75,8 @@ function AgentProviders() {
       <div className="mb-3 flex items-start gap-2.5 rounded-md border border-line bg-raise px-3.5 py-3">
         <Icon name="info" size={13} className="mt-px shrink-0 text-indigo-400" />
         <div className="text-[11.5px] leading-[1.6] text-dim">
-          Setting up a provider doesn&rsquo;t put anyone to work — this is where you choose who
-          uses it. Every agent starts on <span className="text-ink">Mock</span>, which follows a
-          fixed script instead of thinking, so you can try one agent on a real model and leave the
-          others alone.
+          Choose the default model once in Providers. Assistant-backed agents inherit it,
+          and explicit choices here override it. Coding workers use their CLI connection.
           {realCount > 0 && (
             <span className="ml-1 text-ok">
               {realCount} of {a.agents.length} are using a real model.
@@ -106,7 +109,12 @@ function AgentProviders() {
               <div className="grid grid-cols-[minmax(0,1fr)_170px_minmax(0,220px)_88px] items-center">
               <div className="min-w-0 px-3 py-2.5">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[12.5px] text-ink">{ag.name}</span>
+                  <span className="text-[12.5px] text-ink">{ag.name}</span>{inherited.includes(ag.id) && <span className="text-xs text-muted">Default</span>}
+                  {ag.id !== 'assistant' && <button className="btn-ghost text-xs" disabled={saving !== null} onClick={() => {
+                    setSaving(ag.id); setError(null)
+                    void invoke('aiw_agent_use_default', {agentId: ag.id}).then(async () => { await a.reloadAgents(); setInherited(ids => [...new Set([...ids, ag.id])]); setDrafts(ds => { const next = {...ds}; delete next[ag.id]; return next }) }).catch(e => setError(String(e))).finally(() => setSaving(null))
+                  }}>Use default</button>}
+
                   {!isMock && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />}
                 </div>
                 <div className="mt-0.5 truncate text-[10.5px] text-muted">{ag.role}</div>
@@ -327,7 +335,7 @@ export function Settings() {
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto p-5">
-        {tab === 'providers' && <ProviderCards onChanged={() => void a.refresh()} />}
+        {tab === 'providers' && <><DefaultProvider /><ProviderCards onChanged={() => void a.refresh()} /></>}
         {tab === 'agents' && <AgentProviders />}
         {tab === 'tools' && <ToolPermissions />}
       </div>

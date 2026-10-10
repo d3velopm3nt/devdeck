@@ -13,6 +13,8 @@ import { useApp } from '../../store'
 import { Err, Header } from '../setup/LearnStep'
 import { CAPTURE_BUSINESS_AUTO } from '../../lib/devCapture'
 import { Foot } from './BusinessStep'
+import { ProductGitHub } from './ProductGitHub'
+import { GitHubConnection } from '../GitHubConnection'
 import { BizFrame, hostOf, type StepProps } from './shared'
 
 const tokens = (name: string) => name.toLowerCase().split(/[-_.\s]+/).filter((t) => t.length >= 4)
@@ -37,7 +39,6 @@ export function CodeStep({ view, setView, nav, onClose, next }: StepProps) {
   const [pick, setPick] = useState<Record<string, number>>({})
   const [dismissed, setDismissed] = useState<Set<string>>(new Set())
   const [cloneInto, setCloneInto] = useState('')
-  const [token, setToken] = useState('')
   const [busy, setBusy] = useState('')
   const [err, setErr] = useState('')
   const [results, setResults] = useState<string[]>([])
@@ -170,40 +171,11 @@ export function CodeStep({ view, setView, nav, onClose, next }: StepProps) {
         text={`Pick the repositories that belong to ${view.meta.name} and say which product each one is part of. Each becomes a project inside that product. Services have no code, so they are not listed here.`}
       />
 
+      {list?.signed_in && <div className="grid gap-4 md:grid-cols-2">{products.map(p => <ProductGitHub key={p.id} business={view.node_id} product={p.id} name={p.name} repos={list.repos} login={list.login} onChanged={() => void load()} />)}</div>}
+      <details><summary className="cursor-pointer text-sm text-muted">Advanced: link additional code repositories</summary>
       {list && !list.signed_in ? (
         <div className="flex flex-col gap-2.5 rounded-[10px] border border-line bg-panel p-4">
-          <span className="text-[12.5px] text-ink">Connect GitHub to list your repositories</span>
-          <span className="text-[11px] leading-relaxed text-muted">
-            Paste a personal access token with the repo and read:org scopes. It goes to Windows Credential
-            Manager and is never shown again.
-          </span>
-          <div className="flex items-center gap-2">
-            <input
-              className="input min-w-0 flex-1 font-mono text-[12px]"
-              placeholder="ghp_…"
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-            />
-            <button
-              className="btn-primary text-[12px]"
-              disabled={!token.trim() || !!busy}
-              onClick={async () => {
-                setBusy('token')
-                setErr('')
-                try {
-                  await ipc.githubTokenPaste(token)
-                  setToken('')
-                  await load()
-                } catch (e) {
-                  setErr(String(e))
-                } finally {
-                  setBusy('')
-                }
-              }}
-            >
-              Connect
-            </button>
-          </div>
+          <GitHubConnection onConnected={() => void load()} />
         </div>
       ) : (
         <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_320px] gap-4">
@@ -412,6 +384,7 @@ export function CodeStep({ view, setView, nav, onClose, next }: StepProps) {
           ))}
         </div>
       )}
+      </details>
       {err && <Err>{err}</Err>}
       <div className="flex items-center gap-3">
         {picked.length > 0 ? (

@@ -11,6 +11,8 @@ import { Icon } from '../lib/icons'
 import { SchedulerPage } from './SchedulerPage'
 import { Settings as AgentSettings } from './aiw/Settings'
 import { DeckSettings } from './DeckSettings'
+import { CoreSetup } from './setup/CoreSetup'
+import { GitHubConnection } from './GitHubConnection'
 import { GitHubToken } from './GitHubToken'
 import { CAPTURE_SETTINGS_TAB } from '../lib/devCapture'
 import { THEMES, type ThemeSwatch } from '../lib/themes'
@@ -342,9 +344,11 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
               <Icon name="database" size={14} className="shrink-0" />
               Data
             </button>
+        <button className="btn-ghost justify-start text-sm" onClick={() => setTab('core')}>Core setup</button>
+        <button className="btn-ghost justify-start text-sm" onClick={() => setTab('github')}>GitHub</button>
       </nav>
 
-      {tab === 'deck' ? (
+      {tab === 'core' ? <div className="min-w-0 flex-1 overflow-auto"><CoreSetup /></div> : tab === 'github' ? <div className="min-w-0 flex-1 overflow-auto p-6"><GitHubConnection /></div> : tab === 'deck' ? (
         <div className="min-w-0 flex-1"><DeckSettings /></div>
       ) : tab === 'routines' ? (
         <div className="min-w-0 flex-1">

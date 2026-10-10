@@ -8,6 +8,7 @@ import { CAPTURE_MEET_STEP } from '../lib/devCapture'
 import { Frame, LearnStep } from './setup/LearnStep'
 import { LifeStep } from './setup/LifeStep'
 import { WorkLifeStep } from './setup/WorkLifeStep'
+import { CoreSetup } from './setup/CoreSetup'
 import { HomeStep } from './setup/HomeStep'
 import { SETUP_AT, SETUP_REACHED, isStep, stepIndex, type SetupStep } from './setup/steps'
 
@@ -47,7 +48,7 @@ export function Meet({
   // Two steps, and the first one is saved before the second begins. Closing
   // the window at the mail step must not lose the voice you just picked.
   const [step, setStep] = useState<MeetStep>(
-    start ?? ((CAPTURE_MEET_STEP as MeetStep) || 'voice'),
+    start ?? ((CAPTURE_MEET_STEP as MeetStep) || 'core'),
   )
   // Screenshot harness: follow the flag when it changes under a hot reload,
   // so a shot of each step does not need a cold start each time.
@@ -60,13 +61,13 @@ export function Meet({
 
   // Where you got to. The furthest step is what the bar lets you go back
   // to; the step you are on is saved as you move, so Today reopens there.
-  const [reached, setReached] = useState<MeetStep | 'done'>(start ?? 'voice')
+  const [reached, setReached] = useState<MeetStep | 'done'>(start ?? 'core')
   useEffect(() => {
     void ipc
       .settingGet(SETUP_REACHED)
       .then((v) => {
         const saved = v === 'done' ? 'done' : isStep(v) ? v : null
-        if (saved && stepIndex(saved) > stepIndex(start ?? 'voice')) setReached(saved)
+        if (saved && stepIndex(saved) > stepIndex(start ?? 'core')) setReached(saved)
       })
       .catch(() => {})
   }, [start])
@@ -196,6 +197,7 @@ export function Meet({
   // to finish it. Before anyone has met, the voice step has already been
   // saved by the time these show, so closing is safe there too.
   const close = onClose ?? onDone
+  if (step === 'core') return <div className="h-full overflow-auto bg-page"><CoreSetup onDone={() => go('voice')} /></div>
   if (step === 'learn') {
     return (
       <LearnStep onDone={() => go('life')} onSkip={() => go('life')} onClose={close} nav={nav} />

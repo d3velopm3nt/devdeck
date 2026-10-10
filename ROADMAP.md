@@ -20,6 +20,14 @@ the asker binary and the monitor fixes
 
 ---
 
+## In development: beta five business flow
+
+Core setup, product repository/Project picks, a unified Agents directory and
+GitHub comment checkpoints. [Scope and verification](docs/BETA5-BUSINESS-FLOW.md).
+Windows native build and real-agent acceptance remain release gates.
+
+---
+
 ## In development: folder workflows
 
 `feature/folder-workflows` adds a Workflow label to existing vault folders,

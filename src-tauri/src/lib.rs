@@ -59,6 +59,8 @@ mod manager_team;
 mod managers;
 mod mcp;
 mod monitor;
+mod product_github;
+mod provider_defaults;
 mod pty;
 mod runners;
 mod scan;
@@ -1446,6 +1448,13 @@ pub fn run() {
             visibility::visibility_snapshot,
             visibility::visibility_products_save,
             visibility::visibility_github_issues,
+            product_github::product_github_projects,
+            product_github::product_github_create_project,
+            product_github::product_github_create_repo,
+            product_github::product_github_connect,
+            provider_defaults::aiw_provider_defaults,
+            provider_defaults::aiw_default_provider_set,
+            provider_defaults::aiw_agent_use_default,
             threads::thread_wake,
             threads::thread_context,
             threads::thread_context_set,

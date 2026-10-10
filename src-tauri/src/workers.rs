@@ -87,6 +87,10 @@ pub fn has_shell(w: &WorkerMeta) -> bool {
 /// One worker, as its file says it.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct WorkerMeta {
+    #[serde(default)]
+    pub category: String,
+    #[serde(default)]
+    pub profile: String,
     pub handle: String,
     pub name: String,
     /// One line: what it is for.
@@ -348,6 +352,12 @@ pub fn all_workers() -> Result<Vec<Worker>, String> {
 
 pub fn save_worker(w: &Worker) -> Result<Worker, String> {
     let mut w = w.clone();
+    if w.meta.category.is_empty() {
+        w.meta.category = "worker".into();
+    }
+    if !["worker", "specialist"].contains(&w.meta.category.as_str()) {
+        return Err("Choose Worker or Specialist.".into());
+    }
     w.meta.handle = crate::managers::handle_from(if w.meta.handle.trim().is_empty() {
         &w.meta.name
     } else {
@@ -781,6 +791,8 @@ pub fn starters() -> Vec<(WorkerMeta, String, &'static str)> {
              needs: &'static str| {
         (
             WorkerMeta {
+                category: "worker".into(),
+                profile: String::new(),
                 handle: handle.into(),
                 name: name.into(),
                 what: what.into(),

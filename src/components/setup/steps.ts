@@ -7,9 +7,9 @@
 // populates itself from what it already saved, so going back shows what was
 // processed and chosen rather than a blank form.
 
-export type SetupStep = 'voice' | 'mail' | 'learn' | 'life' | 'home' | 'spaces'
+export type SetupStep = 'core' | 'voice' | 'mail' | 'learn' | 'life' | 'home' | 'spaces'
 
-export const SETUP_ORDER: SetupStep[] = ['voice', 'mail', 'learn', 'life', 'home', 'spaces']
+export const SETUP_ORDER: SetupStep[] = ['core', 'voice', 'mail', 'learn', 'life', 'home', 'spaces']
 
 export const SETUP_AT = 'setup.at'
 export const SETUP_REACHED = 'setup.reached'
@@ -33,12 +33,13 @@ export interface StepDef {
 }
 
 export const PERSONAL_STEPS: StepDef[] = [
+  { id: 'core', label: 'Core setup' },
   { id: 'voice', label: 'Voice' },
   { id: 'mail', label: 'Mail' },
   { id: 'learn', label: 'Learn' },
   { id: 'life', label: 'Life' },
   { id: 'home', label: 'Home' },
-  { id: 'spaces', label: 'Work & Life' },
+  { id: 'spaces', label: 'Add a space' },
 ]
 
 export type BusinessStepId = 'business' | 'sells' | 'code' | 'mail' | 'learn' | 'team'

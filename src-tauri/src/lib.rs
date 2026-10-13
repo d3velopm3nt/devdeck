@@ -36,6 +36,8 @@ mod cli_setup;
 mod cli_setup_model;
 mod community;
 mod community_index;
+mod companion;
+mod companion_protocol;
 mod conn;
 mod coordination;
 mod creds;
@@ -50,6 +52,7 @@ mod folder_workflows;
 mod gauth;
 mod git;
 mod github;
+mod github_issue_read;
 mod inbox;
 mod installed;
 mod legacy;
@@ -78,7 +81,6 @@ mod subscription_process;
 mod team;
 mod threads;
 mod vault;
-mod github_issue_read;
 mod visibility;
 mod visibility_model;
 mod workers;
@@ -801,6 +803,7 @@ pub fn run() {
         // The AI Workspace. Registered here with the rest of the state so the
         // first invoke from a webview cannot arrive before it exists.
         .manage(aiw_workspace)
+        .manage(companion::Companion::default())
         .setup(move |app| {
             // MCP servers installed from Community, made reachable before any
             // agent asks. Without this an installed server would only wake up
@@ -1468,6 +1471,9 @@ pub fn run() {
             threads::thread_context_edit,
             threads::node_thread,
             threads::node_thread_send,
+            companion::companion_start,
+            companion::companion_pair,
+            companion::companion_stop,
             aiw::commands::aiw_personal_root,
             aiw::commands::aiw_profile,
             aiw::commands::aiw_save_profile,

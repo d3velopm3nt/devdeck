@@ -320,6 +320,49 @@ so it is written down rather than done at the end of a night.
 Until then the README says so out loud rather than claiming a guarantee the
 code does not make. **open**
 
+### A green suite over an app that will not build — 12 October
+
+`main` could not be compiled, and `v0.4.0-beta.5` was tagged on it.
+
+    cargo check -p devdeck
+    error[E0599]: no method named `list` found for
+                  MutexGuard<'_, ProviderRegistry>   --> srcots.rs:2790
+
+`ProviderRegistry::list` carried `#[cfg(test)]` while `bots.rs` called it
+from ordinary code — naming the providers a wake could have used when it
+refuses one that does not exist. The method existed in test builds and nowhere
+else.
+
+**This is the one a green suite cannot see.** `cargo test` compiles with
+`cfg(test)` on, which is the only configuration where the method exists, so the
+suite passes *because of* the bug rather than despite it. `cargo check
+--all-targets` does catch it, because it builds the lib as well — so the gate
+would have. It was not run.
+
+Fixed in `4084892` on `fix/provider-list-not-test-only`: the attribute goes,
+because a public method ordinary code depends on is not test scaffolding. Gate
+green, including the plain `cargo check -p devdeck` that was failing.
+
+**Worth deciding:** whether CI builds the app at all, or only tests it. A
+pipeline that runs `cargo test` and stops has no opinion about whether the thing
+it is testing can be run.
+
+### The night's four, still in the tree — checked 12 October
+
+Not asserted; looked up, two weeks and seventy-five commits of other people's
+work later:
+
+| item | where it lives now |
+|---|---|
+| 1 · the worker grant | `Standing` in `ask/src/lib.rs`; `allow` / `allow_until` in `workers.rs` |
+| 2 · a manager adopts | `the_one_unowned_feature`, `bot_adopt` in `bots.rs` |
+| 3 · the hand wake off the UI thread | `#[tauri::command(async)]` on `schedule_run_now`, `schedule.rs:1002` |
+| 4 · the ratchets | both scripts, wired into `npm run lint` |
+
+The sync-command ratchet has since gone **69 → 68** on somebody else's commit,
+which is the ratchet working: a number that only moves when its author moves it
+would be a worse mechanism.
+
 ### Still the owner's to decide
 
 - The three template proposals on Studio's plan. Studio asked about them itself.

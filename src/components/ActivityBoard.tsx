@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { aiw, type FeatureWork, type Session, type AgentDef } from '../lib/aiw'
+import { aiw, type FeatureWork, type Session, type AgentDef, type ChatMessage } from '../lib/aiw'
 import { visibility, isStale, stage, type VisibilitySnapshot, type IssueSnapshot, type SessionRecord, type ProductLink } from '../lib/visibility'
+import { Markdown } from './thread/Markdown'
 import { Icon } from '../lib/icons'
 import { useApp } from '../store'
 import { subtreeIds } from '../lib/tree'
@@ -15,11 +16,17 @@ function mergeSessions(local: SessionRecord[], remote: SessionRecord[]) {
   return [...records.values()]
 }
 type BoardView = 'timeline' | 'local' | 'github'
+function githubLabel(url: string) {
+  const item = url.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/(issues|pull)\/(\d+)/)
+  if (item) return `${item[2]} #${item[4]}`
+  if (/^https:\/\/github\.com\/(users|orgs)\/.+\/projects\//.test(url)) return 'Project board'
+  return url.replace(/^https:\/\/github\.com\//, '').split('#')[0]
+}
 const columns = ['Queued', 'Working', 'Blocked', 'Review', 'Done']
 const empty: VisibilitySnapshot = { products: [], sessions: [], config_raw: '', warnings: [] }
 function Link({ url, children }: { url: string; children: React.ReactNode }) {
   if (!/^https:\/\/github\.com\//.test(url)) return <span>{children}</span>
-  return <button className="text-info underline" onClick={() => void ipc.openUrl(url)}>{children}</button>
+  return <button className="inline-flex items-center gap-1.5 rounded-full border border-line bg-soft px-2.5 py-1 text-xs text-info hover:bg-hover" onClick={() => void ipc.openUrl(url)}><Icon name="github" size={12} />{typeof children === 'string' && children.startsWith('https://') ? githubLabel(url) : children}</button>
 }
 export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean }) {
   const nodes = useApp(s => s.nodes)
@@ -45,11 +52,13 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
   const [query, setQuery] = useState('')
   const [picked, setPicked] = useState('')
   const [showDone, setShowDone] = useState(false)
-  const [messageFrom, setMessageFrom] = useState('')
-  const [messageTo, setMessageTo] = useState('')
-  const [messageSubject, setMessageSubject] = useState('')
+  const [chatTarget, setChatTarget] = useState('')
+  const [chatLoading, setChatLoading] = useState(false)
+  const [chatReady, setChatReady] = useState(false)
+  const [chat, setChat] = useState<ChatMessage[]>([])
   const [messageBody, setMessageBody] = useState('')
   const [sending, setSending] = useState(false)
+  const chatBusy = useRef(false)
   const [notice, setNotice] = useState('')
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<ProductLink[]>([])
@@ -103,6 +112,15 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
     const stop = aiw.onEvent(() => void reload())
     return () => { mounted.current = false; window.clearInterval(interval); void stop.then(un => un()) }
   }, [reload, error])
+
+  useEffect(() => {
+    let live = true
+    setChat([]); setNotice(''); setChatReady(false); setChatLoading(!!chatTarget); error('Conversation', '')
+    if (chatTarget) void ipc.managerConversation(chatTarget).then(messages => {
+      if (live) { setChat(messages); setChatReady(true); error('Conversation', '') }
+    }).catch(e => { if (live) error('Conversation', String(e)) }).finally(() => { if (live) setChatLoading(false) })
+    return () => { live = false }
+  }, [chatTarget, error])
 
   const remoteWarnings = Object.values(github).flatMap(g => g.warnings || [])
   const allSessions = useMemo(() => [
@@ -175,25 +193,38 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
         productId: '', product: '', space: linked?.space || workspace?.name || '',
         folder: node?.rel_path || '', status: '', sessionId: '', url: '', evidence: [], source: 'native' })
     }
-    return list.filter(e => (!product || e.productId === product) && (!space || e.space === space)
+    const manager = team.find(t => t.bot.handle === chatTarget)
+    const chatNode = nodes.find(n => n.id === manager?.bot.node_id)
+    const chatProduct = snapshot.products.find(p => p.folder && p.folder === chatNode?.rel_path)
+    for (const [i, message] of chat.entries()) {
+      // Public conversation messages only; tool receipts remain in the manager workspace.
+      if (message.from === 'tool') continue
+      list.push({ id: `chat:${chatTarget}:${i}`, title: 'Conversation', body: message.text, at: message.at,
+        from: message.from === 'user' ? 'You' : manager?.bot.name || chatTarget, to: message.from === 'user' ? manager?.bot.name || chatTarget : 'You',
+        productId: chatProduct?.id || '', product: chatProduct?.name || '', space: chatProduct?.space || chatNode?.name || '',
+        folder: chatNode?.rel_path || '', status: '', sessionId: '', url: '', evidence: [], source: 'native' })
+    }
+    return list.filter(e => (!chatTarget || e.id.startsWith(`chat:${chatTarget}:`) || e.from === manager?.bot.name || e.to === manager?.bot.name) && (!product || e.productId === product) && (!space || e.space === space)
       && (!assistant || e.from === assistant || e.to === assistant) && (!session || e.sessionId === session)
       && (!status || e.status === status) && (!source || e.source === source)
       && (showDone || e.status !== 'Done')
       && (!query || `${e.title} ${e.body} ${e.from} ${e.to} ${e.folder}`.toLowerCase().includes(query.toLowerCase()))
       && (scope == null || subtreeIds(nodes, scope).some(id => nodes.find(n => n.id === id)?.rel_path === e.folder)))
-      .sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || a.id.localeCompare(b.id))
-  }, [allSessions, messages, team, nodes, snapshot.products, product, space, assistant, session, status, source, showDone, query, scope])
+      .sort((a, b) => Date.parse(a.at) - Date.parse(b.at) || a.id.localeCompare(b.id))
+  }, [allSessions, messages, team, chatTarget, chat, nodes, snapshot.products, product, space, assistant, session, status, source, showDone, query, scope])
   const timelineEntry = timeline.find(e => e.id === picked) || timeline[0]
-  const messageSender = team.find(t => t.bot.handle === messageFrom)
-  const messagePeers = team.filter(t => messageSender?.profile.peers.includes(t.bot.handle) && t.profile.peers.includes(messageFrom))
+  const chatManager = team.find(t => t.bot.handle === chatTarget)
   const sendMessage = async () => {
-    setSending(true); setNotice('')
+    if (!chatTarget || !chatReady || !messageBody.trim() || chatBusy.current) return
+    chatBusy.current = true; setSending(true); setNotice(''); error('Chat', '')
+    const text = messageBody.trim()
     try {
-      const delivered = await ipc.managerMessageSend(messageFrom, { to: messageTo, kind: 'request', subject: messageSubject, body: messageBody, reply_to: null })
-      setMessages(current => [...new Map([...current, delivered].map(m => [m.id, m])).values()])
-      setMessageBody(''); error('Send message', ''); setNotice('Delivered to the local inbox. No agent was started.'); await reload()
-    } catch (e) { error('Send message', String(e)) } finally { setSending(false) }
+      const response = await ipc.managerTurn(chatTarget, text)
+      setChat(current => [...current, ...response.appended])
+      setMessageBody(''); setNotice('Reply received.'); await reload()
+    } catch (e) { error('Chat', String(e)) } finally { chatBusy.current = false; setSending(false) }
   }
+  const linkedIssue = Object.values(github).flatMap(g => g.items).find(i => i.url === timelineEntry?.url)
   const issueProduct = snapshot.products.find(p => p.id === product || p.id === timelineEntry?.productId)
   const draftIssue = () => {
     if (!issueProduct || !timelineEntry) return
@@ -211,10 +242,9 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
     finally { setBusy(false) }
   }
   return <div className="flex h-full min-h-0 flex-col bg-page text-ink">
-    <header className="border-b border-line px-6 py-5">
+    <header className="border-b border-line px-6 py-3">
       <div className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-xl font-semibold">{sessionsOnly ? 'Sessions' : 'Activity board'}</h1><p className="mt-1 text-sm text-muted">{sessionsOnly ? 'External conversations and DevDeck agents, connected to their work.' : 'Local agent messages, DevDeck work and linked GitHub issues.'}</p></div>
         <div className="flex gap-2"><select aria-label="Add business or product" className={field} value="" onChange={e => { if(e.target.value === 'new') openBusiness(); else if(e.target.value) openBusiness({ nodeId: Number(e.target.value), step: 'sells' }) }}><option value="">Add business / product</option><option value="new">New business</option>{businesses.map(b => <option key={b.node_id} value={b.node_id}>Add product to {b.name}</option>)}</select><button className={field} disabled={busy} onClick={() => void reload(true)}>{busy ? 'Refreshing…' : 'Refresh'}</button><button className={field} onClick={() => { setDraft(snapshot.products); setEditing(v => !v) }}>Advanced connections</button></div></div>
-      <nav className="mt-3 flex gap-4 text-xs" aria-label="Visibility views"><button className={!sessionsOnly ? 'text-info' : 'text-muted'} onClick={() => useApp.getState().setRailView('activity')}>Activity board</button><button className={sessionsOnly ? 'text-info' : 'text-muted'} onClick={() => useApp.getState().setRailView('sessions')}>Sessions</button></nav>
       {!sessionsOnly && <div role="tablist" aria-label="Activity views" className="mt-4 flex gap-4 border-b border-line">
         {([['timeline', 'Timeline'], ['local', 'DevDeck issues'], ['github', 'GitHub issues']] as const).map(([id, label]) => <button key={id} role="tab" aria-selected={view === id} aria-controls="activity-view" className={`border-b-2 px-1 py-2 text-sm ${view === id ? 'border-indigo-500 text-info' : 'border-transparent text-muted'}`} onClick={() => { setView(id); setPicked('') }}>{label}</button>)}
       </div>}
@@ -242,29 +272,26 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
         {!loaded && <p className="text-muted">Reading shared activity…</p>}
         {loaded && (sessionsOnly ? filteredSessions.length : view === 'timeline' ? timeline.length : filtered.length) === 0 && <p className="rounded-xl border border-line p-6 text-muted">No matching {sessionsOnly ? 'sessions' : view === 'timeline' ? 'messages or checkpoints' : 'work'}. Connect a product to read GitHub issues, or record a session in your shared vault.</p>}
         {!sessionsOnly && view === 'timeline' ? <div className="space-y-3">
-          <p className="text-xs text-muted">Recorded peer messages and session checkpoints. Manager home context is shown when available; messages without a task link are not assigned to a project.</p>
-          <h2 className="text-xl font-semibold">{timelineEntry?.title || 'Agent messages'}</h2>
-          {timeline.map(e => <article key={e.id} className={`flex gap-3 rounded-xl border p-4 ${picked === e.id ? 'border-indigo-500 bg-raise' : 'border-line bg-panel'}`}>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3"><h2 className="text-xl font-semibold">{chatManager ? `Chat with ${chatManager.bot.name}` : 'Team timeline'}</h2><select aria-label="Chat with manager" className={field} disabled={sending} value={chatTarget} onChange={e => { setChatTarget(e.target.value); setPicked(''); setMessageBody('') }}><option value="">All activity · choose a manager to chat</option>{team.map(t => <option key={t.bot.handle} value={t.bot.handle}>{t.bot.name}</option>)}</select></div>
+          {timeline.map(e => <article key={e.id} className={`relative flex gap-3 py-2 ${picked === e.id ? 'rounded-lg bg-raise' : ''}`}>
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-500/10 text-info font-semibold" aria-hidden="true">{e.from.slice(0, 1)}</span><div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-sm font-semibold">{e.from}{e.to && <> → {e.to}</>}</h2><time className="text-xs text-muted" dateTime={e.at}>{new Date(e.at).toLocaleString()}</time></div>
-            <button onClick={() => setPicked(e.id)} className="mt-2 text-left text-sm font-medium text-info">{e.title}</button><p className="mt-2 rounded-lg border border-line bg-soft px-3 py-2 whitespace-pre-wrap text-sm text-body">{e.body}</p>
-            <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted"><span className="rounded-full bg-indigo-500/10 px-3 py-1 text-info">{e.space || 'Unscoped'}</span><span className="rounded-full bg-indigo-500/10 px-3 py-1 text-info">{e.product || 'Project not linked'}</span>{e.status && <span className="rounded-full bg-soft px-3 py-1">{e.status}</span>}</div>
-            {e.url && <p className="mt-2 text-sm"><Link url={e.url}>Linked GitHub issue</Link></p>}
+            <div className="flex flex-wrap items-center justify-between gap-2"><button aria-label={`Select message from ${e.from}`} onClick={() => setPicked(e.id)} className="text-left text-sm font-semibold">{e.from}{e.to && <> → {e.to}</>}</button><time title="Recorded update, not a live heartbeat" className="text-xs text-muted" dateTime={e.at}>{new Date(e.at).toLocaleString()}</time></div>
+            {!e.id.startsWith('chat:') && <button onClick={() => setPicked(e.id)} className="mt-1 text-left text-xs text-muted">{e.title}</button>}<div className="mt-2 rounded-lg border border-line bg-soft px-3 py-2"><Markdown text={e.body} linkLabel={href => /^https:\/\/github\.com\//.test(href) ? githubLabel(href) : undefined} /></div>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted"><span className="rounded-full bg-indigo-500/10 px-3 py-1 text-info">{e.space || 'Unscoped'}</span><span className="rounded-full bg-indigo-500/10 px-3 py-1 text-info">{e.product || 'Project not linked'}</span>{e.status && <span className="rounded-full bg-soft px-3 py-1">Recorded: {e.status}</span>}<span className="rounded-full bg-soft px-3 py-1">{e.id.startsWith('github:') ? 'GitHub checkpoint' : e.id.startsWith('native:') ? 'Local session' : e.id.startsWith('chat:') ? 'Local chat' : e.sessionId ? 'DevDeck state' : 'Local message'}</span></div>
+            {e.url && <p className="mt-2 text-sm"><Link url={e.url}>{githubLabel(e.url)}</Link></p>}
             {e.evidence.filter(url => url !== e.url).map(url => <p key={url} className="mt-1 break-all text-xs"><Link url={url}>{url}</Link></p>)}
           </div></article>)}
-          <form className="rounded-xl border border-line bg-panel p-4" onSubmit={e => { e.preventDefault(); void sendMessage() }}>
-            <h3 className="text-sm font-semibold">Message the team</h3>
-            <p className="mt-1 text-xs text-muted">Send on behalf of a manager through its existing peer permissions.</p>
-            <div className="mt-3 flex flex-wrap gap-2"><select aria-label="Message sender" className={field} value={messageFrom} onChange={e => { setMessageFrom(e.target.value); setMessageTo('') }}><option value="">From manager</option>{team.map(t => <option key={t.bot.handle} value={t.bot.handle}>{t.bot.name}</option>)}</select><select aria-label="Message recipient" className={field} value={messageTo} onChange={e => setMessageTo(e.target.value)}><option value="">To peer</option>{messagePeers.map(t => <option key={t.bot.handle} value={t.bot.handle}>{t.bot.name}</option>)}</select></div>
-            <input aria-label="Message subject" placeholder="Subject" maxLength={200} className={`${field} mt-3 w-full`} value={messageSubject} onChange={e => setMessageSubject(e.target.value)} />
-            <textarea aria-label="Team message" placeholder="Message the team…" maxLength={6000} className={`${field} mt-2 w-full resize-y`} value={messageBody} onChange={e => setMessageBody(e.target.value)} />
-            <div className="mt-2 flex items-center justify-between gap-3"><p role="status" className="text-xs text-muted">{notice}</p><button className="btn-primary" disabled={sending || !messageFrom || !messageTo || !messageSubject.trim() || !messageBody.trim()}>{sending ? 'Sending…' : 'Send'}</button></div>
+          <form className="sticky bottom-0 rounded-xl border border-line bg-panel p-3 shadow-sm" onSubmit={e => { e.preventDefault(); void sendMessage() }}>
+            <p className="mb-2 text-xs text-muted">{chatManager ? `Message ${chatManager.bot.name} directly. Existing context and permissions apply.` : 'Choose a manager above to start a conversation.'}</p>
+            <textarea aria-label="Team message" placeholder={chatManager ? `Message ${chatManager.bot.name}…` : 'Choose a manager to chat…'} disabled={!chatTarget || !chatReady || sending} maxLength={6000} className={`${field} mt-2 w-full resize-y`} value={messageBody} onChange={e => setMessageBody(e.target.value)} />
+            <div className="mt-2 flex items-center justify-between gap-3"><p role="status" className="text-xs text-muted">{notice}</p><button className="btn-primary" disabled={sending || chatLoading || !chatReady || !chatTarget || !messageBody.trim()}>{sending ? 'Replying…' : 'Send'}</button></div>
           </form>
         </div> : sessionsOnly ? <div className="space-y-3">{filteredSessions.map(s => <button key={s.id} onClick={() => setPicked(s.id)} className={`w-full rounded-xl border p-4 text-left ${picked === s.id ? 'border-indigo-500 bg-raise' : 'border-line bg-panel'}`}><div className="flex justify-between gap-3"><b>{s.title}</b><span className="text-xs text-muted">{stage(s.status)} · {isStale(s.updated_at) && stage(s.status) !== 'Done' ? 'Stale' : 'Recorded'}</span></div><p className="mt-2 text-sm text-muted">{s.assistant} · {s.id}</p><p className="mt-1 text-xs text-muted">{s.space} / {s.folder} · {new Date(s.updated_at).toLocaleString()}</p></button>)}</div> : <div className="grid min-w-[900px] grid-cols-5 gap-3">{columns.map(c => <section key={c}><h2 className="mb-3 text-sm font-semibold">{c} <span className="text-muted">{filtered.filter(r => r.status === c).length}</span></h2><div className="space-y-3">{filtered.filter(r => r.status === c).map(r => <button key={r.id} onClick={() => setPicked(r.id)} className={`w-full rounded-xl border p-3 text-left ${picked === r.id ? 'border-indigo-500 bg-raise' : 'border-line bg-panel'}`}><p className="text-[11px] text-muted">{r.product} · {r.source}</p><p className="mt-2 text-sm font-medium">{r.title}</p><p className="mt-3 text-xs text-muted">{r.owners?.length ? `GitHub assignee: ${r.owners.join(', ')} · ` : ''}{r.sessions.length ? r.sessions.map(s => `${s.assistant} · ${stage(s.status)}${isStale(s.updated_at) && stage(s.status) !== 'Done' ? ' · Stale' : ''}`).join(', ') : 'No linked session'}</p><p className="mt-2 text-[11px] text-muted">{r.updated ? new Date(r.updated).toLocaleString() : 'No recorded update'}</p></button>)}</div></section>)}</div>}
       </main>
       {!sessionsOnly && view === 'timeline' && <aside className="w-80 shrink-0 overflow-auto border-l border-line bg-panel p-5">
         <h2 className="text-lg font-semibold">Linked work</h2>
-        <section className="mt-4 rounded-xl border border-line p-4"><h3 className="flex items-center gap-2 font-semibold"><Icon name="github" size={18} />{timelineEntry?.url ? 'GitHub issue' : 'Local discussion'}</h3><p className="mt-3 text-sm">{timelineEntry?.title || 'Select a message or checkpoint'}</p><p className="mt-2 text-xs text-muted">{timelineEntry?.space || 'Unscoped'} · {timelineEntry?.product || 'Project not linked'}</p>{timelineEntry?.status && <p className="mt-3 text-sm text-info">{timelineEntry.status}</p>}{timelineEntry?.url && <p className="mt-4"><Link url={timelineEntry.url}>Open issue</Link></p>}</section>
+        <section className="mt-4 rounded-xl border border-line p-4"><h3 className="flex items-center gap-2 font-semibold"><Icon name="github" size={18} />{timelineEntry?.url ? githubLabel(timelineEntry.url) : 'Local discussion'}</h3><p className="mt-3 text-sm">{linkedIssue?.title || timelineEntry?.title || 'Select a message or checkpoint'}</p><p className="mt-2 text-xs text-muted">{timelineEntry?.space || 'Unscoped'} · {timelineEntry?.product || 'Project not linked'}</p>{timelineEntry?.status && <p className="mt-3 text-sm text-info">Recorded: {timelineEntry.status}</p>}{timelineEntry?.url && <p className="mt-4"><Link url={timelineEntry.url}>Open issue</Link></p>}</section>
         <section className="mt-4 rounded-xl border border-line p-4"><h3 className="font-semibold">Create a task</h3><p className="mt-2 text-xs text-muted">Open this checkpoint as a GitHub issue draft. Review and submit it on GitHub.</p><button className="btn-ghost mt-3 w-full" disabled={!issueProduct || !timelineEntry} onClick={draftIssue}>Create GitHub issue</button>{!issueProduct && <p className="mt-2 text-xs text-muted">Choose a connected project first.</p>}</section>
         <h3 className="mt-6 border-t border-line pt-4 font-semibold">Participants</h3>{choices(timeline.flatMap(e => [e.from, e.to])).map(name => <p key={name} className="mt-3 flex items-center gap-3 text-sm"><span className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-500/10 text-info">{name.slice(0, 1)}</span>{name}</p>)}
       </aside>}

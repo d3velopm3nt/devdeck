@@ -22,6 +22,17 @@ const peerMessages = [{id:'peer-1',from:'orchestrator',to:'reviewer',kind:'reque
 fixture.manager_team = () => ['orchestrator','reviewer'].map(handle => ({bot:{handle,name:handle === 'orchestrator' ? 'Orchestrator' : 'Reviewer',node_id:1},profile:{peers:[handle === 'orchestrator' ? 'reviewer' : 'orchestrator']},pending:0}))
 fixture.manager_messages = () => structuredClone(peerMessages)
 fixture.manager_message_send = args => { const draft = args?.draft as typeof peerMessages[0]; const message = {...draft,id:'peer-2',from:String(args?.from),created_at:now,depth:0}; peerMessages.push(message); return message }
+let chatFails = false
+const conversations: Record<string, {at:string;from:string;text:string;by?:string}[]> = {}
+fixture.manager_conversation = args => structuredClone(conversations[String(args?.handle)] || [])
+fixture.manager_turn = args => {
+ if(chatFails) throw Error('Fixture manager unavailable')
+ const handle = String(args?.handle)
+ const appended = [{at:now,from:'user',text:String(args?.text)},{at:now,from:'assistant',by:handle,text:'I will check the existing activity flow. https://github.com/d3velopm3nt/devdeck/issues/11'}]
+ conversations[handle] = [...(conversations[handle] || []), ...appended]
+ return {conversation_id:handle,reply:appended[1].text,appended,delegated:[],turns:1}
+}
+Object.assign(window,{__chatFailure:()=>{chatFails=true}})
 fixture.open_url = args => { (window as unknown as {__openedUrl:string}).__openedUrl=String(args?.url); return undefined }
 useApp.setState({spaceScopeId:null,nodes:[{id:1,parent_id:null,kind:'workspace',name:'Home',rel_path:'Life/Home',dir:'/state/Life/Home',path:null,sort:1,color:null,label:'Personal'}]})
 Object.assign(window,{__remoteFailure:()=>{remoteFails=true},__externalEdit:()=>{data.config_raw='external-revision'},__checkpoint:async()=>{data.sessions[0].next_action='Verify Windows CI';data.sessions[0].checkpoints.push({at:now,summary:'Handoff ready for Claude',evidence:[]});await emit('aiw:event',{type:'session.checkpointed'})}})

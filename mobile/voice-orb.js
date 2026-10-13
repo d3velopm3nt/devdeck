@@ -10,7 +10,7 @@ function mountVoiceOrb(canvas, isVisible, mode, audioLevel = () => 0) {
     const angle = i * Math.PI * (3 - Math.sqrt(5));
     return { x: Math.cos(angle) * radius, y, z: Math.sin(angle) * radius, phase: i * .17 };
   });
-  let frame = 0, previous = 0, angle = 0, stopped = false;
+  let frame = 0, previous = 0, angle = 0, envelope = 0, thinkingAngle = 0, stopped = false;
   const ratio = Math.min(devicePixelRatio || 1, 2);
   canvas.width = 300 * ratio; canvas.height = 300 * ratio;
   ctx.scale(ratio, ratio);
@@ -19,19 +19,23 @@ function mountVoiceOrb(canvas, isVisible, mode, audioLevel = () => 0) {
     if (!isVisible() || document.hidden || time - previous < (reduced.matches ? 100 : 33)) {
       frame = requestAnimationFrame(paint); return;
     }
+    const elapsed = Math.min(previous ? time - previous : 33, 100);
     previous = time;
     const state = mode();
-    const speed = state === 'thinking' ? .014 : state === 'speaking' ? .009 : .002;
-    if (!reduced.matches) angle += speed;
-    const amplitude = state === 'speaking' ? audioLevel() : 0;
-    const pulse = reduced.matches ? 0 : state === 'speaking' ? amplitude * 18 : Math.sin(time * .0015) * (state ? 5 : 1.5);
+    const target = state === 'speaking' ? Math.max(0, Math.min(1, audioLevel())) : 0;
+    // Smooth syllables with a soft attack and slower release, independent of frame rate.
+    envelope += (target - envelope) * (1 - Math.exp(-elapsed / (target > envelope ? 160 : 320)));
+    if (!reduced.matches && state === 'thinking') thinkingAngle += elapsed * .000025;
+    // Bounded sway avoids the relentless full rotation while idle or speaking.
+    angle = reduced.matches ? 0 : thinkingAngle + Math.sin(time * .00045) * .06;
+    const pulse = reduced.matches ? 0 : envelope * 6 + Math.sin(time * .001) * (state === 'thinking' ? 1.8 : .7);
     ctx.clearRect(0, 0, 300, 300);
     const glow = ctx.createRadialGradient(150, 150, 80, 150, 150, 148);
     glow.addColorStop(0, '#5479ff08'); glow.addColorStop(.65, '#8f62ff30'); glow.addColorStop(1, '#13142300');
     ctx.fillStyle = glow; ctx.fillRect(0, 0, 300, 300);
     ctx.globalCompositeOperation = 'lighter';
     const projected = points.map(p => {
-      const wave = 1 + Math.sin(p.y * 7 + angle * 4 + p.phase * .08) * .045;
+      const wave = 1 + Math.sin(p.y * 7 + angle * 4 + p.phase * .08) * .02;
       const x = p.x * Math.cos(angle) - p.z * Math.sin(angle);
       const z = p.x * Math.sin(angle) + p.z * Math.cos(angle);
       const radius = (105 + pulse) * wave;

@@ -112,11 +112,20 @@ pub fn visibility_products_save(
 }
 pub use crate::github_issue_read::IssueSnapshot;
 #[tauri::command(async)]
-pub fn visibility_github_issues(repository: String) -> Result<IssueSnapshot, String> {
+pub async fn visibility_github_issues(repository: String) -> Result<IssueSnapshot, String> {
     // Validate before touching credentials or constructing a request.
     if !repository_valid(&repository) {
         return Err("Use owner/repository.".into());
     }
+    // reqwest's blocking client cannot be constructed on the async runtime.
+    // Await the worker so a panic also becomes an IPC error instead of leaving
+    // the Activity board waiting for its frontend deadline.
+    tauri::async_runtime::spawn_blocking(move || github_issues_blocking(&repository))
+        .await
+        .map_err(|_| "GitHub issue reader stopped unexpectedly. Retry the refresh.".to_string())?
+}
+
+fn github_issues_blocking(repository: &str) -> Result<IssueSnapshot, String> {
     let token = crate::github::stored_token();
     let client = reqwest::blocking::Client::builder()
         .timeout(crate::github_issue_read::READ_BUDGET)
@@ -125,7 +134,7 @@ pub fn visibility_github_issues(repository: String) -> Result<IssueSnapshot, Str
         .build()
         .map_err(|_| "GitHub HTTP client could not be initialized.".to_string())?;
     crate::github_issue_read::read(
-        &repository,
+        repository,
         crate::github_issue_read::READ_BUDGET,
         |endpoint, timeout| {
             if let Some(token) = &token {

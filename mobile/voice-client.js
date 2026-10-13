@@ -3,7 +3,7 @@ function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange, onPr
   let worker, ready = false, loading = false, busy = false, context, analyser, waveform;
   let generation = 0, activeId = 0, endAt = 0, sources = [], finished = false;
   function update() {
-    button.disabled = loading || busy;
+    button.disabled = loading || busy || ready;
     button.textContent = loading ? 'Preparing voice…' : ready ? 'Voice ready' : 'Download voice';
     onChange();
   }

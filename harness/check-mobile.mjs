@@ -57,8 +57,8 @@ await context.addInitScript(() => {
       }
       if (data.type === 'speak') {
         const samples=Float32Array.from({length:24000},(_,i)=>Math.sin(i*2*Math.PI*440/24000)*.2);
-        setTimeout(() => this.onmessage({data:{type:'audio',id:data.id,samples,rate:24000}}), 30);
-        setTimeout(() => this.onmessage({data:{type:'complete',id:data.id}}), 80);
+        setTimeout(() => this.onmessage({data:{type:'audio',id:data.id,samples,rate:24000}}), 200);
+        setTimeout(() => this.onmessage({data:{type:'complete',id:data.id}}), 250);
       }
     }
     terminate() {}

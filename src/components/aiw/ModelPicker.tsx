@@ -32,7 +32,7 @@ const TYPE_IT = '__type__'
 export type Price = { kind: 'free' | 'paid'; label: string; why: string } | null
 
 export function priceOf(m: ModelInfo | undefined, providerId: string): Price {
-  if (!m) return null
+  if (!m || ['claude-subscription', 'chatgpt-subscription'].includes(providerId)) return null
   if (m.free) {
     return {
       kind: 'free',

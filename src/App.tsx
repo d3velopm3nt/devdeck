@@ -1113,7 +1113,7 @@ export default function App() {
       {starting && <StartWorker open={starting} onClose={() => setStarting(null)} />}
 
       {/* Collapsible / resizable bottom bar: Logs + Processes */}
-      {['projects', 'home', 'machine', 'connections'].includes(railView) && <BottomBar
+      {<BottomBar
         tab={app.bottomTab}
         onTab={app.setBottomTab}
         collapsed={app.bottomCollapsed}

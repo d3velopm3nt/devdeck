@@ -305,6 +305,7 @@ function ToolPermissions() {
 export function Settings() {
   const a = useAiw()
   const [tab, setTab] = useState<Tab>((CAPTURE_SETTINGS_TAB as Tab) || 'providers')
+  const [providerGeneration, setProviderGeneration] = useState(0)
 
   return (
     <div className="flex h-full flex-col">
@@ -335,7 +336,7 @@ export function Settings() {
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto p-5">
-        {tab === 'providers' && <><DefaultProvider /><ProviderCards onChanged={() => void a.refresh()} /></>}
+        {tab === 'providers' && <div className="space-y-5"><ProviderCards onChanged={() => { setProviderGeneration(g => g + 1); void a.refresh() }} /><DefaultProvider key={providerGeneration} /></div>}
         {tab === 'agents' && <AgentProviders />}
         {tab === 'tools' && <ToolPermissions />}
       </div>

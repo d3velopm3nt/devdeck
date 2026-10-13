@@ -794,9 +794,13 @@ pub fn aiw_grant_forget(ws: Ws, id: String) -> Result<(), String> {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn aiw_providers(ws: Ws) -> Vec<(String, String, ProviderHealth)> {
-    let mut all = ws.providers.lock().unwrap().list();
+    let handles = ws.providers.lock().unwrap().handles();
+    let mut all: Vec<_> = handles
+        .into_iter()
+        .map(|p| (p.id().to_string(), p.name().to_string(), p.health()))
+        .collect();
     // The mock is not something real work may be pointed at.
     //
     // It stays in the codebase — the offline tests are built on it, and

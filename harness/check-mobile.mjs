@@ -40,7 +40,7 @@ const server=http.createServer(async(req,res)=>{
 await new Promise(r=>server.listen(0,'127.0.0.1',r))
 const base=`http://127.0.0.1:${server.address().port}`
 const browser=await chromium.launch({headless:true,args:['--no-sandbox'],...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{})})
-const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true})
+const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,timezoneId:'Africa/Johannesburg'})
 const page=await context.newPage(), errors=[]
 page.on('pageerror',e=>errors.push(e.message))
 const shots=process.env.MOBILE_SCREENSHOTS||'/tmp/devdeck-mobile-screenshots'
@@ -49,11 +49,11 @@ try{
   await page.goto(base+'/#pair=fixture-pair')
   await page.getByText('PC connected',{exact:true}).waitFor()
   assert.equal(new URL(page.url()).hash,'','Pairing secret is removed from history')
-  await page.getByText('Your workspace is ready. What would you like to work on?',{exact:true}).waitFor()
+  await page.locator('.message.assistant').filter({hasText:'Your workspace is ready. What would you like to work on?'}).waitFor()
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'No horizontal overflow')
   await page.screenshot({path:path.join(shots,'01-chat.png')})
   await page.getByRole('button',{name:'Load older messages'}).click()
-  await page.getByText('History message 0',{exact:true}).waitFor()
+  await page.locator('.message.user').filter({hasText:'History message 0'}).waitFor()
   assert.equal(await page.getByRole('button',{name:'Load older messages'}).isVisible(),false)
   await page.getByRole('button',{name:'Spaces',exact:true}).click()
   await page.getByRole('button',{name:/Mobile companion/}).waitFor()
@@ -62,7 +62,7 @@ try{
   await page.getByLabel('Message to Dev').fill('Show my spaces')
   await page.getByRole('button',{name:'Send',exact:true}).click()
   await page.getByText('Reply saved in your desktop conversation.',{exact:true}).waitFor()
-  await page.getByText('I can see your spaces.',{exact:true}).waitFor()
+  await page.locator('.message.assistant').filter({hasText:'I can see your spaces.'}).waitFor()
   assert.equal(executions,1)
   await page.getByRole('button',{name:'Activity',exact:true}).click()
   await page.getByText(/No recent checkpoint/).waitFor()

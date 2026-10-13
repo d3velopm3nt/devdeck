@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { aiw, type FeatureWork, type Session, type AgentDef, type ChatMessage } from '../lib/aiw'
 import { visibility, isStale, stage, type VisibilitySnapshot, type IssueSnapshot, type SessionRecord, type ProductLink } from '../lib/visibility'
 import { BrandIcon, SenderMark } from './BrandIcon'
+import { GITHUB_REFRESH_EVENT, loadGithubRefresh } from '../lib/githubRefresh'
 import { Markdown } from './thread/Markdown'
 import { Icon, type IconName } from '../lib/icons'
 import { useApp } from '../store'
@@ -49,6 +50,7 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
   const [snapshot, setSnapshot] = useState(empty)
   const [view, setView] = useState<BoardView>('timeline')
   const [status, setStatus] = useState('')
+  const [refreshMinutes, setRefreshMinutes] = useState<number | null>(null)
   const [team, setTeam] = useState<ipc.TeamMember[]>([])
   const [messages, setMessages] = useState<ipc.ManagerMessage[]>([])
   const [work, setWork] = useState<FeatureWork[]>([])
@@ -79,10 +81,11 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<ProductLink[]>([])
   const inFlight = useRef(false)
+  const remotePending = useRef(false)
   const mounted = useRef(true)
   const error = useCallback((key: string, value: string) => setErrors(e => ({ ...e, [key]: value })), [])
-  const reload = useCallback(async (remote = false) => {
-    if (inFlight.current) return
+  const reload = useCallback(async (remote = false): Promise<void> => {
+    if (inFlight.current) { if (remote) remotePending.current = true; return }
     inFlight.current = true
     if (remote) setBusy(true)
     try {
@@ -120,17 +123,33 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
       await Promise.allSettled([readMessages(), readGithub()])
     } finally {
       inFlight.current = false
-      if (mounted.current) setBusy(false)
+      if (mounted.current) {
+        setBusy(false)
+        if (remotePending.current) { remotePending.current = false; queueMicrotask(() => void reload(true)) }
+      }
     }
   }, [error])
   useEffect(() => {
     void ipc.businessList().then(setBusinesses).catch(e => error('Businesses', String(e)))
     mounted.current = true
-    void reload(true)
-    const interval = window.setInterval(() => { if (document.visibilityState !== 'hidden') void reload(true) }, 60_000)
+    void reload()
     const stop = aiw.onEvent(() => void reload())
-    return () => { mounted.current = false; window.clearInterval(interval); void stop.then(un => un()) }
+    return () => { mounted.current = false; void stop.then(un => un()) }
   }, [reload, error])
+
+  useEffect(() => {
+    let active = true
+    const read = () => void loadGithubRefresh().then(value => { if (active) setRefreshMinutes(value) }).catch(e => error('Refresh settings', String(e)))
+    read(); window.addEventListener(GITHUB_REFRESH_EVENT, read)
+    return () => { active = false; window.removeEventListener(GITHUB_REFRESH_EVENT, read) }
+  }, [error])
+  useEffect(() => {
+    if (refreshMinutes === null || refreshMinutes === 0) return
+    const refresh = () => { if (document.visibilityState !== 'hidden') void reload(true) }
+    refresh()
+    const interval = window.setInterval(refresh, refreshMinutes * 60_000)
+    return () => { window.clearInterval(interval) }
+  }, [refreshMinutes, reload])
 
   useEffect(() => {
     let live = true
@@ -290,7 +309,7 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
         {[[query, 'Search', () => setQuery('')], [space, 'Space', () => setSpace('')], [product, 'Project', () => setProduct('')], [assistant, 'Assistant', () => setAssistant('')], [session, 'Session', () => setSession('')], [source, 'Source', () => setSource('')], [status, 'Status', () => setStatus('')]].map(([value, label, clear]) => value ? <button key={String(label)} aria-label={`Remove filter: ${label}`} onClick={clear as () => void} className="flex max-w-64 items-center gap-2 rounded-full border border-line bg-soft px-3 py-1 text-body"><span className="truncate">{String(label)}: {label === 'Project' ? productChoices.get(String(value)) || String(value) : String(value)}</span><Icon name="close" size={12} /></button> : null)}
         <button className="text-accent hover:underline" onClick={() => { setQuery(''); setSpace(''); setProduct(''); setAssistant(''); setSession(''); setSource(''); setStatus(''); setShowDone(false) }}>Clear all filters</button>
       </div>}
-      <details className="mt-3 text-xs text-muted"><summary className="cursor-pointer">Refresh and status details</summary><p className="mt-2">GitHub checkpoints refresh every minute while this page is visible. Last recorded activity is not a live heartbeat. Sessions become stale after 15 minutes. Columns show reported activity; cards retain GitHub issue state.</p></details>
+      <details className="mt-3 text-xs text-muted"><summary className="cursor-pointer">Refresh and status details</summary><p className="mt-2">{refreshMinutes === 0 ? 'GitHub refresh is manual only.' : `GitHub checkpoints refresh every ${refreshMinutes || 1} minute${refreshMinutes === 1 ? '' : 's'} while this page is visible.`} Last recorded activity is not a live heartbeat. Sessions become stale after 15 minutes. Columns show reported activity; cards retain GitHub issue state.</p></details>
     </header>
     {Object.entries(errors).filter(([,v]) => v).map(([k,v]) => <p role="alert" key={k} className="border-b border-line px-6 py-2 text-sm text-err">{k}: {v}{snapshot.products.some(p => p.name === k && github[p.id]) ? ' Showing the previous GitHub snapshot.' : ''}</p>)}
     {[...snapshot.warnings, ...remoteWarnings].map(w => <p key={w} className="px-6 py-2 text-sm text-muted">{w}</p>)}

@@ -230,6 +230,15 @@ fn serve(mut stream: TcpStream, app: &tauri::AppHandle, b: &Arc<Bridge>) -> std:
             None,
         );
     }
+    if method == "GET" && target == "/voice-orb.js" {
+        return respond(
+            &mut stream,
+            200,
+            "application/javascript; charset=utf-8",
+            include_str!("../../mobile/voice-orb.js"),
+            None,
+        );
+    }
     let input: Value = if length == 0 {
         Value::Null
     } else {
@@ -336,7 +345,7 @@ fn route(
         let recent: Vec<_> = summaries.iter().take(5).filter_map(|s| convs.load(&s.id).ok()).map(|c| json!({"id":c.id,"messages":c.messages.iter().rev().take(30).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>() })).collect();
         return Ok((
             200,
-            json!({"nodes":nodes.iter().map(|n| json!({"id":n.id,"parent_id":n.parent_id,"kind":n.kind,"name":n.name})).collect::<Vec<_>>(),"conversations":summaries,"recent":recent,"cursor":cursor,"sessions":ws.sessions_for(None)}),
+            json!({"nodes":nodes.iter().map(|n| json!({"id":n.id,"parent_id":n.parent_id,"kind":n.kind,"name":n.name})).collect::<Vec<_>>(),"conversations":summaries,"recent":recent,"cursor":cursor,"sessions":ws.sessions_for(None),"agents":ws.agents().iter().map(|a|json!({"id":a.id,"name":a.name,"role":a.role})).collect::<Vec<_>>()}),
         ));
     }
     if method == "GET" && target.starts_with("/api/conversation/") {

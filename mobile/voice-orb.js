@@ -42,10 +42,10 @@ function mountVoiceOrb(canvas, isVisible, mode, audioLevel = () => 0) {
     if (!reduced.matches && state === 'thinking') thinkingAngle += elapsed * .000025;
     // Bounded sway avoids the relentless full rotation while idle or speaking.
     angle = reduced.matches ? 0 : thinkingAngle + Math.sin(time * .00045) * .06;
-    const pulse = reduced.matches ? 0 : envelope * 6 + Math.sin(time * .001) * (state === 'thinking' ? 1.8 : .7);
+    const pulse = reduced.matches ? 0 : envelope * 6 + Math.sin(time * .001) * (state === 'thinking' ? 3.5 : state === 'listening' ? 2.5 : 1.2);
     ctx.clearRect(0, 0, 300, 300);
     const glow = ctx.createRadialGradient(150, 150, 80, 150, 150, 148);
-    glow.addColorStop(0, '#287fff06'); glow.addColorStop(.65, '#6e4bff22'); glow.addColorStop(1, '#13142300');
+    glow.addColorStop(0, '#287fff10'); glow.addColorStop(.65, state === 'listening' ? '#40dac43a' : '#804bff40'); glow.addColorStop(1, '#13142300');
     ctx.fillStyle = glow; ctx.fillRect(0, 0, 300, 300);
     ctx.globalCompositeOperation = 'lighter';
     const projected = points.map(p => {
@@ -61,8 +61,8 @@ function mountVoiceOrb(canvas, isVisible, mode, audioLevel = () => 0) {
       const front = (p.z + 1) / 2;
       const purple = .5 + Math.sin((p.x - p.y) * .017 + angle) * .5;
       const rim = 1 - Math.abs(p.z);
-      const red = Math.round(65 + purple * 110 + rim * 40), green = Math.round(207 - purple * 99 + rim * 40);
-      const opacity = p.strand ? .45 + front * .5 : .15 + front * .35 + rim * .3;
+      const red = Math.round((state === 'listening' ? 35 : 65) + purple * 110 + rim * 40), green = Math.round(225 - purple * (state === 'listening' ? 45 : 95) + rim * 25);
+      const opacity = p.strand ? .65 + front * .35 : .22 + front * .42 + rim * .32;
       const size = p.strand ? .65 + front * .6 : .35 + front * .55 + Math.pow(Math.sin(p.phase), 12) * .5;
       if (p.strand && front > .5) {
         const halo = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 4);
@@ -80,6 +80,12 @@ function mountVoiceOrb(canvas, isVisible, mode, audioLevel = () => 0) {
       ctx.fillRect(150 + Math.cos(a) * distance, 150 + Math.sin(a) * distance, 1, 1);
     }
     ctx.globalCompositeOperation = 'source-over';
+    if (state === 'thinking' || state === 'preparing') {
+      ctx.strokeStyle = '#bca0ffb0'; ctx.lineWidth = 1.2;
+      const a = reduced.matches ? -.8 : time * .0018;
+      ctx.beginPath();ctx.arc(150,150,139,a,a+1.05);ctx.stroke();
+      ctx.strokeStyle = '#75e4e38a';ctx.beginPath();ctx.arc(150,150,139,a+Math.PI,a+Math.PI+.65);ctx.stroke();
+    }
     frame = requestAnimationFrame(paint);
   }
   frame = requestAnimationFrame(paint);

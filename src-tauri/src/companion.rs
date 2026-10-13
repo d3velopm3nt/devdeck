@@ -2,7 +2,7 @@
 //! HTTP is deliberately restricted to a chosen loopback/private IPv4 address.
 //! Use only a trusted LAN; remote access needs a separate TLS relay.
 use crate::aiw::state::Workspace;
-use crate::companion_protocol::{valid_id, Pairing};
+use crate::companion_protocol::{valid_id, MessageQueue, Pairing};
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::VecDeque;
@@ -24,7 +24,8 @@ pub struct Bridge {
     clients: AtomicUsize,
     pairing: Mutex<Pairing>,
     events: Mutex<(u64, VecDeque<(u64, Value)>)>,
-    busy: Mutex<bool>,
+    queue: Mutex<MessageQueue>,
+    id: String,
 }
 
 #[derive(Serialize)]
@@ -70,7 +71,8 @@ pub fn companion_start(
         clients: AtomicUsize::new(0),
         pairing: Mutex::new(Pairing::default()),
         events: Mutex::new((0, VecDeque::new())),
-        busy: Mutex::new(false),
+        queue: Mutex::new(MessageQueue::default()),
+        id: crate::aiw::events::new_id("bridge"),
     });
     let code = bridge.pairing.lock().map_err(|e| e.to_string())?.renew();
     let view = PairingView {
@@ -252,6 +254,11 @@ fn serve(mut stream: TcpStream, app: &tauri::AppHandle, b: &Arc<Bridge>) -> std:
     }
     if method == "GET" {
         let asset: Option<(&str, &[u8])> = match target {
+            "/companion.js" => Some((
+                "application/javascript",
+                include_bytes!("../../mobile/companion.js"),
+            )),
+            "/companion.css" => Some(("text/css", include_bytes!("../../mobile/companion.css"))),
             "/voice-client.js" => Some((
                 "application/javascript",
                 include_bytes!("../../mobile/voice-client.js"),
@@ -381,7 +388,7 @@ fn route(
         let recent: Vec<_> = summaries.iter().take(5).filter_map(|s| convs.load(&s.id).ok()).map(|c| json!({"id":c.id,"messages":c.messages.iter().rev().take(30).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>() })).collect();
         return Ok((
             200,
-            json!({"nodes":nodes.iter().map(|n| json!({"id":n.id,"parent_id":n.parent_id,"kind":n.kind,"name":n.name})).collect::<Vec<_>>(),"conversations":summaries,"recent":recent,"cursor":cursor,"sessions":ws.sessions_for(None),"agents":ws.agents().iter().map(|a|json!({"id":a.id,"name":a.name,"role":a.role})).collect::<Vec<_>>()}),
+            json!({"nodes":nodes.iter().map(|n| json!({"id":n.id,"parent_id":n.parent_id,"kind":n.kind,"name":n.name})).collect::<Vec<_>>(),"conversations":summaries,"recent":recent,"cursor":cursor,"sessions":ws.sessions_for(None),"approvals":ws.pending_approvals(),"claims":ws.claims_for(None,true),"queue":b.queue.lock().map_err(|e|e.to_string())?.snapshot(),"bridge_id":b.id,"agents":ws.agents().iter().map(|a|json!({"id":a.id,"name":a.name,"role":a.role})).collect::<Vec<_>>()}),
         ));
     }
     if method == "GET" && target.starts_with("/api/conversation/") {
@@ -462,39 +469,63 @@ fn route(
             return Err("Message must contain 1–8000 bytes".into());
         }
         convs.load(&id)?;
-        let mut busy = b.busy.lock().map_err(|e| e.to_string())?;
+        let mut queue = b.queue.lock().map_err(|e| e.to_string())?;
         let mut pairing = b.pairing.lock().map_err(|e| e.to_string())?;
         // A retry is always acknowledged, even when the original is running.
         if !valid_id(&request_id) {
             return Err("Invalid request ID".into());
         }
         if pairing.known(&request_id) {
+            // Reject ID reuse with another payload before acknowledging a replay.
+            queue.enqueue(&request_id, &id, &text)?;
             if let Some(receipt) = pairing.receipt(&request_id) {
                 b.event(receipt);
             }
             return Ok((202, json!({"accepted":true,"duplicate":true})));
         }
-        if *busy {
-            return Ok((
-                409,
-                json!({"error":"Dev is handling another mobile message. Retry shortly."}),
-            ));
+        // All producers and the consumer use the same queue lock, so there is
+        // exactly one worker and no gap between draining and accepting work.
+        if pairing.request_limit_reached() {
+            return Err("Session request limit reached. Restart pairing.".into());
         }
+        let start_worker = queue.enqueue(&request_id, &id, &text)?;
         pairing.accept(&request_id)?;
-        *busy = true;
-        let app = app.clone();
-        let b = b.clone();
-        let workspace = ws.inner().clone();
-        std::thread::spawn(move || {
-            let result = crate::threads::companion_send(&app, &workspace, &id, &text);
-            let receipt = json!({"kind":"receipt","conversation_id":id,"request_id":request_id,"error":result.err()});
-            b.pairing
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .finish(&request_id, receipt.clone());
-            b.event(receipt);
-            *b.busy.lock().unwrap_or_else(|p| p.into_inner()) = false;
-        });
+        drop(pairing);
+        drop(queue);
+        b.event(json!({"kind":"queue"}));
+        if start_worker {
+            let app = app.clone();
+            let b = b.clone();
+            let workspace = ws.inner().clone();
+            std::thread::spawn(move || loop {
+                if b.stop.load(Ordering::Relaxed) {
+                    break;
+                }
+                let message = b
+                    .queue
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .take_next();
+                let Some(message) = message else { break };
+                b.event(json!({"kind":"queue"}));
+                let result = crate::threads::companion_send(
+                    &app,
+                    &workspace,
+                    &message.conversation_id,
+                    &message.text,
+                );
+                let receipt = json!({"kind":"receipt","conversation_id":message.conversation_id,"request_id":message.request_id,"error":result.err()});
+                b.queue
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .finish(&message.request_id, !receipt["error"].is_null());
+                b.pairing
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .finish(&message.request_id, receipt.clone());
+                b.event(receipt);
+            });
+        }
         return Ok((202, json!({"accepted":true})));
     }
     Ok((404, json!({"error":"Unknown endpoint"})))

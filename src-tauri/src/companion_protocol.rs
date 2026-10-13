@@ -78,6 +78,10 @@ impl Pairing {
         Ok(true)
     }
 
+    pub fn request_limit_reached(&self) -> bool {
+        self.requests.len() >= 4096
+    }
+
     pub fn known(&self, id: &str) -> bool {
         self.requests.contains_key(id)
     }
@@ -141,5 +145,121 @@ mod tests {
         );
         assert!(!valid_id("../../profile"));
         assert!(!valid_id(""));
+    }
+}
+
+/// Bounded FIFO for accepted mobile messages. Delegated agent runs are managed
+/// by the existing desktop runtime; this queue only serializes chat turns.
+#[derive(Clone, serde::Serialize)]
+pub struct QueuedMessage {
+    pub request_id: String,
+    pub conversation_id: String,
+    pub text: String,
+    pub status: String,
+}
+
+#[derive(Default)]
+pub struct MessageQueue {
+    waiting: std::collections::VecDeque<String>,
+    records: HashMap<String, QueuedMessage>,
+    order: Vec<String>,
+    running: bool,
+}
+
+impl MessageQueue {
+    pub fn enqueue(
+        &mut self,
+        request_id: &str,
+        conversation_id: &str,
+        text: &str,
+    ) -> Result<bool, String> {
+        if let Some(old) = self.records.get(request_id) {
+            if old.conversation_id != conversation_id || old.text != text {
+                return Err("Request ID belongs to a different message".into());
+            }
+            return Ok(false);
+        }
+        if self.waiting.len() >= 32 || self.records.len() >= 4096 {
+            return Err("Mobile queue is full. Wait for accepted messages to finish.".into());
+        }
+        self.records.insert(
+            request_id.into(),
+            QueuedMessage {
+                request_id: request_id.into(),
+                conversation_id: conversation_id.into(),
+                text: text.into(),
+                status: "queued".into(),
+            },
+        );
+        self.order.push(request_id.into());
+        self.waiting.push_back(request_id.into());
+        let start = !self.running;
+        self.running = true;
+        Ok(start)
+    }
+
+    pub fn take_next(&mut self) -> Option<QueuedMessage> {
+        match self.waiting.pop_front() {
+            Some(id) => {
+                let message = self.records.get_mut(&id)?;
+                message.status = "running".into();
+                Some(message.clone())
+            }
+            None => {
+                self.running = false;
+                None
+            }
+        }
+    }
+
+    pub fn finish(&mut self, id: &str, failed: bool) {
+        if let Some(message) = self.records.get_mut(id) {
+            message.status = if failed { "failed" } else { "completed" }.into();
+        }
+    }
+
+    pub fn snapshot(&self) -> Vec<QueuedMessage> {
+        self.order
+            .iter()
+            .filter_map(|id| self.records.get(id))
+            .rev()
+            .take(100)
+            .cloned()
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect()
+    }
+}
+
+#[cfg(test)]
+mod queue_tests {
+    use super::*;
+    #[test]
+    fn fifo_replay_and_payload_integrity() {
+        let mut q = MessageQueue::default();
+        assert!(q.enqueue("one", "room", "first").unwrap());
+        assert!(!q.enqueue("two", "room", "second").unwrap());
+        assert!(!q.enqueue("one", "room", "first").unwrap());
+        assert!(q.enqueue("one", "other", "first").is_err());
+        assert_eq!(q.take_next().unwrap().request_id, "one");
+        q.finish("one", false);
+        assert_eq!(q.take_next().unwrap().request_id, "two");
+        q.finish("two", true);
+        assert!(q.take_next().is_none());
+        assert_eq!(q.snapshot()[0].status, "completed");
+        assert_eq!(q.snapshot()[1].status, "failed");
+        assert!(q.enqueue("three", "room", "next worker").unwrap());
+    }
+    #[test]
+    fn bounded_queue_preserves_accepted_work() {
+        let mut q = MessageQueue::default();
+        for i in 0..32 {
+            q.enqueue(&format!("r{i}"), "room", "work").unwrap();
+        }
+        assert!(q.enqueue("overflow", "room", "work").is_err());
+        assert_eq!(q.take_next().unwrap().request_id, "r0");
+        assert!(!q.enqueue("new", "room", "work").unwrap());
+        assert_eq!(q.snapshot().len(), 33);
     }
 }

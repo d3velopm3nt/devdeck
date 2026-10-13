@@ -1,5 +1,5 @@
 /* Local Kokoro voice. No reply text is sent to a voice service. */
-function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange }) {
+function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange, onPreparing = () => {} }) {
   let worker, ready = false, loading = false, busy = false, context, analyser, waveform;
   let generation = 0, activeId = 0, endAt = 0, sources = [], finished = false;
   function update() {
@@ -14,7 +14,7 @@ function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange }) {
     if (busy && worker) worker.postMessage({ type: 'cancel', id: activeId });
     activeId = ++generation;
     for (const source of sources) { source.onended = null; try { source.stop(); } catch { /* Already ended. */ } }
-    sources = []; endAt = 0; onIdle();
+    sources = []; endAt = 0; if(finished)busy=false; onIdle();
     // Keep the worker alive so its downloaded runtime also works with the PC disconnected.
     // In-flight synthesis is ignored; do not queue another request until it completes.
     update();
@@ -60,14 +60,14 @@ function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange }) {
     // AudioContext creation/resume happens directly from the user's read button gesture.
     activeId = ++generation; const id = activeId;
     busy = true; finished = false; endAt = 0;
-    status.textContent = 'Generating speech locally…'; update();
+    status.textContent = 'Generating speech locally…'; onPreparing(); update();
     try {
       context ||= new (window.AudioContext || window.webkitAudioContext)();
       if (!analyser) { analyser = context.createAnalyser(); analyser.fftSize = 256; waveform = new Uint8Array(analyser.fftSize); analyser.connect(context.destination); }
       await context.resume();
       if (id !== activeId) { busy = false; update(); return; }
       getWorker().postMessage({ type: 'speak', id, text });
-    } catch (error) { busy = false; update(); throw error; }
+    } catch (error) { busy = false; onIdle(); update(); throw error; }
   }
   function dispose() { stop(); worker?.terminate(); void context?.close(); }
   update();

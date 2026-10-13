@@ -6,7 +6,7 @@ import path from 'node:path'
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright')
 const history = Array.from({length:70},(_,i)=>({from:i%2?'assistant':'user',text:`History message ${i}`,at:new Date().toISOString()}))
 history.push({from:'user',text:'What is the next step for DevDeck?',at:new Date().toISOString()},{from:'assistant',text:'Your workspace is ready. What would you like to work on?',at:new Date().toISOString()})
-let paired=false, offline=false, cursor=0, executions=0
+let paired=false, offline=false, cursor=0, executions=0, fixtureBridge='bridge-fixture'
 const events=[], accepted=new Map()
 const emit=e=>events.push({cursor:++cursor,event:e})
 const server=http.createServer(async(req,res)=>{
@@ -15,13 +15,14 @@ const server=http.createServer(async(req,res)=>{
   if(url.pathname==='/'){res.setHeader('Content-Type','text/html');return res.end(fs.readFileSync('mobile/index.html','utf8'))}
   if(url.pathname==='/voice-orb.js'){res.setHeader('Content-Type','application/javascript');return res.end(fs.readFileSync('mobile/voice-orb.js','utf8'))}
   if(url.pathname==='/voice-client.js'){res.setHeader('Content-Type','application/javascript');return res.end(fs.readFileSync('mobile/voice-client.js','utf8'))}
+  if(['/companion.js','/companion.css'].includes(url.pathname)){res.setHeader('Content-Type',url.pathname.endsWith('.css')?'text/css':'application/javascript');return res.end(fs.readFileSync('mobile'+url.pathname,'utf8'))}
   if(offline)return json({error:'PC unavailable'},503)
   let raw='';for await(const chunk of req)raw+=chunk
   const input=raw?JSON.parse(raw):{}
   if(url.pathname==='/api/pair'){assert.equal(input.code,'fixture-pair');paired=true;return json({})}
   if(!paired)return json({error:'Pair this device on the desktop'},401)
   if(url.pathname==='/api/unpair'){paired=false;return json({})}
-  if(url.pathname==='/api/snapshot')return json({nodes:[{id:1,parent_id:null,kind:'workspace',name:'Develtech'},{id:2,parent_id:1,kind:'project',name:'DevDeck'},{id:3,parent_id:2,kind:'folder',name:'Mobile companion'}],conversations:[{id:'room-1',title:'Main assistant',preview:'Your workspace is ready.'}],recent:[{id:'room-1',messages:history.slice(-30)}],sessions:[{id:'run-1',agent_id:'builder',status:'working',started_at:'2026-10-10T10:00:00Z'}],agents:[{id:'builder',name:'Builder',role:'developer'}],cursor})
+  if(url.pathname==='/api/snapshot')return json({nodes:[{id:1,parent_id:null,kind:'workspace',name:'Develtech'},{id:2,parent_id:1,kind:'project',name:'DevDeck'},{id:3,parent_id:2,kind:'folder',name:'Mobile companion'}],conversations:[{id:'room-1',title:'Main assistant',preview:'Your workspace is ready.'}],recent:[{id:'room-1',messages:history.slice(-30)}],sessions:[{id:'run-1',agent_id:'builder',agent_name:'Builder',project_id:'devdeck',feature_id:'Mobile polish',summary:'Building mobile views',transcript:[{at:'2026-10-10T10:00:00Z',text:'Implemented home screen'}],files_touched:['mobile/index.html'],status:'working',started_at:'2026-10-10T10:00:00Z'}],bridge_id:fixtureBridge,queue:[...accepted.values()].map(r=>({request_id:r.request_id,conversation_id:r.conversation_id,text:r.text,status:r.status})),approvals:[{id:'approval-1',agent_id:'builder',project_id:'devdeck',summary:'Run the project build',requested_at:new Date().toISOString()}],claims:[],agents:[{id:'builder',name:'Builder',role:'developer'}],cursor})
   if(url.pathname.startsWith('/api/conversation/')){const before=Math.min(Number(url.searchParams.get('before')??history.length),history.length);const start=Math.max(0,before-50);return json({id:'room-1',title:'Main assistant',messages:history.slice(start,before),before:start})}
   if(url.pathname==='/api/node')return json({id:'room-1',title:'DevDeck'})
   if(url.pathname==='/api/conversations')return json({id:'room-1',title:'Main assistant'})
@@ -30,11 +31,11 @@ const server=http.createServer(async(req,res)=>{
     if(accepted.has(input.request_id)){emit(accepted.get(input.request_id));return json({accepted:true,duplicate:true},202)}
     executions++
     history.push({from:'user',text:input.text,at:new Date().toISOString()})
-    const receipt={kind:'receipt',conversation_id:input.conversation_id,request_id:input.request_id,error:null}
+    const receipt={kind:'receipt',conversation_id:input.conversation_id,request_id:input.request_id,error:null,text:input.text,status:'running'}
     accepted.set(input.request_id,receipt)
     emit({kind:'turn',conversation_id:'room-1',done:false,by:'assistant',name:'Dev'})
     setTimeout(()=>emit({kind:'delta',conversation_id:'room-1',text:'I can see your spaces.'}),100)
-    setTimeout(()=>{history.push({from:'assistant',text:'I can see your spaces.',at:new Date().toISOString()});emit({kind:'done',conversation_id:'room-1'});emit(receipt)},250)
+    setTimeout(()=>{receipt.status='completed';history.push({from:'assistant',text:'I can see your spaces.',at:new Date().toISOString()});emit({kind:'done',conversation_id:'room-1'});emit(receipt)},input.text==='Slow task'?900:250)
     return json({accepted:true},202)
   }
   json({error:'Missing fixture route'},404)
@@ -45,6 +46,7 @@ const browser=await chromium.launch({headless:true,args:['--no-sandbox'],...(pro
 const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,timezoneId:'Africa/Johannesburg'})
 await context.addInitScript(() => {
   // Test client transitions against a deterministic voice worker. Model inference is a separate check.
+  window.SpeechRecognition=class {constructor(){window.lastRecognition=this;}start(){this.onstart?.();}stop(){this.onend?.();}};
   window.voiceRequests = [];
   window.Worker = class {
     postMessage(data) {
@@ -67,113 +69,132 @@ page.on('pageerror',e=>errors.push(e.message))
 const shots=process.env.MOBILE_SCREENSHOTS||'/tmp/devdeck-mobile-screenshots'
 fs.mkdirSync(shots,{recursive:true})
 try{
-  await page.goto(base+'/#pair=fixture-pair')
-  await page.getByText('PC connected',{exact:true}).waitFor()
-  assert.equal(new URL(page.url()).hash,'','Pairing secret is removed from history')
-  assert.equal(await page.locator('#transcript').isVisible(),false,'Orb view keeps text chat hidden until requested')
-  assert.ok((await page.locator('#orb').boundingBox()).width>250,'Orb is the main interaction surface')
-  await page.screenshot({path:path.join(shots,'00-orb.png')})
-  await page.getByRole('button',{name:'Show chat',exact:true}).click()
-  await page.locator('.message.assistant').filter({hasText:'Your workspace is ready. What would you like to work on?'}).waitFor()
-  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'No horizontal overflow')
-  const tabs=page.getByRole('navigation',{name:'Mobile views'}).getByRole('button')
-  assert.deepEqual(await tabs.allTextContents(),['Spaces','Folders','Dev','Team','Activity'])
-  const centre=await page.getByRole('button',{name:'Dev',exact:true}).boundingBox()
-  assert.ok(Math.abs(centre.x+centre.width/2-195)<3,'Dev occupies the middle navigation position')
-  await page.getByRole('button',{name:'Dev',exact:true}).click()
-  assert.equal(await page.locator('nav').isVisible(),false,'Focused Dev hides workspace navigation')
-  assert.equal(await page.locator('#transcript').isVisible(),false,'Opening Dev returns to the clean orb page')
-  await page.getByRole('button',{name:'Show chat',exact:true}).click()
-  await page.getByRole('button',{name:'Back to workspace'}).click()
-  assert.equal(await page.locator('nav').isVisible(),true,'Back restores workspace navigation')
-  await page.evaluate(()=>{window.orbToneCount=0;const original=AudioContext.prototype.createOscillator;AudioContext.prototype.createOscillator=function(...args){window.orbToneCount++;return original.apply(this,args)}})
-  await page.getByRole('button',{name:/Play Dev sound/}).click()
-  await page.waitForFunction(()=>window.orbToneCount===2)
-  const composer=await page.getByLabel('Message to Dev').boundingBox()
-  assert.ok(composer.y+composer.height<780,'Composer stays above navigation')
-  assert.equal(await page.getByRole('button',{name:'Read latest reply'}).isDisabled(),true,'Read waits for downloaded model');
+  await page.goto(base+'/#pair=fixture-pair');
+  await page.getByText('PC connected',{exact:true}).waitFor();
+  assert.equal(new URL(page.url()).hash,'');
+  assert.equal(await page.locator('#home').isVisible(),true,'Home starts first');
+  await page.screenshot({path:path.join(shots,'00-home.png')});
+  const tabs=page.locator('nav button');
+  assert.deepEqual(await tabs.allTextContents(),['Home','Folders','Dev','Teams','Activity']);
+  const centre=await page.locator('nav [data-view=chat]').boundingBox();
+  assert.ok(Math.abs(centre.x+centre.width/2-195)<3);
+  await page.locator('#home-dev').click();
+  assert.equal(await page.locator('nav').isVisible(),false);
+  assert.equal(await page.locator('#transcript').isVisible(),false);
+  assert.ok((await page.locator('#orb').boundingBox()).width>250);
+  await page.screenshot({path:path.join(shots,'00-orb.png')});
+  await page.getByRole('button',{name:'Show chat',exact:true}).click();
+  await page.locator('.message.assistant').filter({hasText:'Your workspace is ready. What would you like to work on?'}).waitFor();
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  await page.evaluate(()=>{window.orbToneCount=0;const original=AudioContext.prototype.createOscillator;AudioContext.prototype.createOscillator=function(...args){window.orbToneCount++;return original.apply(this,args)}});
+  await page.getByRole('button',{name:/Play Dev sound/}).click();
+  await page.waitForFunction(()=>window.orbToneCount===2);
+  assert.equal(await page.locator('#read').isDisabled(),true);
   await page.getByRole('button',{name:'Download voice',exact:true}).click();
   await page.getByText('Offline voice ready · Heart',{exact:true}).waitFor({state:'attached'});
-  assert.equal(await page.getByRole('button',{name:'Read latest reply'}).isEnabled(),true);
-  await page.getByRole('button',{name:'Read latest reply'}).click();
+  assert.equal(await page.locator('#read').isEnabled(),true);
+  assert.equal(await page.locator('#mute-voice').isDisabled(),true);
+  await page.locator('#read').click();
+  await page.getByText('Preparing voice…',{exact:true}).waitFor();
   await page.getByText('Speaking…',{exact:true}).waitFor();
-  await page.waitForFunction(()=>localVoice.level()>.05)
-  await page.getByRole('button',{name:'Stop reading aloud'}).click();
+  assert.equal(await page.locator('#read').getAttribute('aria-pressed'),'true');
+  await page.waitForFunction(()=>localVoice.level()>.05);
+  await page.locator('#mute-voice').click();
   await page.getByText('Ready when you are',{exact:true}).waitFor();
-  assert.equal(await page.evaluate(()=>localVoice.level()),0,'Orb returns to silence after speech stops')
-  assert.ok(await page.locator('#transcript').evaluate(el=>el.clientHeight)>250,'Conversation has room for several readable messages')
-  assert.deepEqual(await page.evaluate(()=>window.voiceRequests),['download','speak','cancel']);
-  await page.screenshot({path:path.join(shots,'01-chat.png')})
-  await page.setViewportSize({width:375,height:667})
-  const compactComposer=await page.getByLabel('Message to Dev').boundingBox()
-  const compactNav=await page.getByRole('navigation',{name:'Mobile views'}).boundingBox()
-  assert.ok(compactComposer.y+compactComposer.height<compactNav.y,'Small-phone composer remains reachable')
-  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
-  await page.emulateMedia({reducedMotion:'reduce'})
-  await page.getByRole('button',{name:'Spaces',exact:true}).click()
-  await page.getByRole('button',{name:'Dev',exact:true}).click()
-  await page.emulateMedia({reducedMotion:'no-preference'})
-  await page.getByRole('button',{name:'Back to workspace'}).click()
-  await page.getByRole('button',{name:'Show chat',exact:true}).click()
-  await page.setViewportSize({width:390,height:844})
-  await page.getByRole('button',{name:'Load older messages'}).click()
-  await page.locator('.message.user').filter({hasText:'History message 0'}).waitFor()
-  assert.equal(await page.getByRole('button',{name:'Load older messages'}).isVisible(),false)
-  await page.evaluate(() => { document.getElementById('transcript').scrollTop=80; })
-  const readingPosition=await page.locator('#transcript').evaluate(el=>el.scrollTop)
-  assert.ok(readingPosition>0,'Conversation has a scrollable history')
-  await page.evaluate(() => renderChat())
-  assert.equal(await page.locator('#transcript').evaluate(el=>el.scrollTop),readingPosition,'Updates preserve the position while reading older replies')
-  await page.setViewportSize({width:360,height:540})
-  await page.evaluate(()=>{document.querySelector('.app').scrollTop=10000})
-  const shortComposer=await page.locator('#compose').boundingBox()
-  const shortNav=await page.locator('nav').boundingBox()
-  assert.ok(shortComposer.y+shortComposer.height<shortNav.y,'Whole message box can be scrolled clear of the navigation on a short viewport')
-  await page.setViewportSize({width:390,height:844})
-  await page.getByRole('button',{name:'Spaces',exact:true}).click()
-  await page.getByRole('button',{name:'Develtech workspace',exact:true}).waitFor()
-  await page.screenshot({path:path.join(shots,'02-spaces.png')})
-  await page.getByRole('button',{name:'Folders',exact:true}).click()
-  await page.getByRole('button',{name:/Mobile companion/}).waitFor()
-  await page.screenshot({path:path.join(shots,'02-folders.png')})
-  await page.getByRole('button',{name:/Mobile companion/}).click()
-  await page.getByLabel('Message to Dev').fill('Show my spaces')
-  await page.getByRole('button',{name:'Send',exact:true}).click()
-  await page.getByText('Reply saved in your desktop conversation.',{exact:true}).waitFor()
-  await page.locator('.message.assistant').filter({hasText:'I can see your spaces.'}).waitFor()
-  assert.equal(executions,1)
-  await page.getByRole('button',{name:'Team',exact:true}).click()
-  await page.getByRole('button',{name:/Builder/}).waitFor()
-  await page.screenshot({path:path.join(shots,'03-team.png')})
-  await page.getByRole('button',{name:/Builder/}).click()
-  assert.equal(await page.getByLabel('Message to Dev').inputValue(),'@builder ')
-  await page.getByLabel('Message to Dev').fill('')
-  await page.getByRole('button',{name:'Activity',exact:true}).click()
-  await page.getByText(/No recent checkpoint/).waitFor()
-  await page.screenshot({path:path.join(shots,'03-activity.png')})
-  await page.getByRole('button',{name:'Dev',exact:true}).click()
-  await page.getByRole('button',{name:'Show chat',exact:true}).click()
-  offline=true
-  await page.getByRole('button',{name:'Back to workspace'}).click()
-  await page.getByText('Offline · saved view',{exact:true}).waitFor()
-  await page.getByLabel('Message to Dev').fill('Saved while offline')
-  await page.getByRole('button',{name:'Send',exact:true}).click()
-  await page.getByRole('button',{name:'Retry saved request'}).waitFor()
-  assert.equal(executions,1,'Offline request does not execute')
-  await page.screenshot({path:path.join(shots,'04-offline.png')})
-  await page.reload()
-  await page.getByRole('button',{name:'Show chat',exact:true}).click()
-  await page.getByRole('button',{name:'Retry saved request'}).waitFor()
-  assert.equal(await page.getByRole('button',{name:'Retry saved request'}).isDisabled(),true)
-  offline=false
-  await page.getByText('PC connected',{exact:true}).waitFor()
-  assert.equal(await page.getByText('PC disconnected. Saved history remains available.',{exact:true}).count(),0,'Reconnect clears the stale disconnected warning')
-  await page.getByRole('button',{name:'Retry saved request'}).click()
-  await page.getByText('Reply saved in your desktop conversation.',{exact:true}).waitFor()
-  assert.equal(executions,2,'Saved request executes once on explicit retry')
-  await page.getByRole('button',{name:'Unpair',exact:true}).click()
-  await page.getByRole('heading',{name:'Connect with Dev'}).waitFor()
-  assert.equal(await page.evaluate(()=>localStorage.getItem('devdeck-companion-v1')),null,'Unpair clears private cache')
-  assert.deepEqual(errors,[])
-  console.log('Mobile client: pairing, history, room routing, live replies, stale labels, offline draft/reconnect and unpair passed. Screenshots: '+shots)
+  assert.equal(await page.evaluate(()=>localVoice.level()),0);
+  await page.waitForFunction(()=>localVoice.canSpeak());
+  assert.equal(await page.locator('#mute-voice').isDisabled(),true);
+  assert.ok(await page.locator('#transcript').evaluate(el=>el.clientHeight)>250);
+  await page.screenshot({path:path.join(shots,'01-chat.png')});
+  await page.locator('#load-older').click();
+  await page.locator('.message.user').filter({hasText:'History message 0'}).waitFor();
+  await page.evaluate(()=>document.getElementById('transcript').scrollTop=80);
+  const pos=await page.locator('#transcript').evaluate(el=>el.scrollTop);
+  await page.evaluate(()=>renderChat());
+  assert.equal(await page.locator('#transcript').evaluate(el=>el.scrollTop),pos);
+  for(const [width,height] of [[375,667],[360,540],[320,568]]){
+    await page.setViewportSize({width,height});
+    await page.evaluate(()=>document.querySelector('.app').scrollTop=10000);
+    const c=await page.locator('#compose').boundingBox();
+    assert.ok(c.y+c.height<=height,'Composer reachable on a short screen');
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  }
+  await page.setViewportSize({width:390,height:844});
+  await page.getByRole('button',{name:'Back to workspace'}).click();
+  assert.equal(await page.locator('#home').isVisible(),true);
+  await page.locator('#home-all-spaces').click();
+  await page.locator('#nodes button').filter({hasText:'Develtech'}).first().waitFor();
+  await page.screenshot({path:path.join(shots,'02-spaces.png')});
+  await page.locator('nav [data-view=folders]').click();
+  await page.screenshot({path:path.join(shots,'02-folders.png')});
+  await page.locator('#folder-nodes button').filter({hasText:'Mobile companion'}).click();
+  await page.locator('#text').fill('Show my spaces');
+  await page.locator('#send').click();
+  await page.getByText('Thinking…',{exact:true}).waitFor();
+  await page.getByText('Reply saved in your desktop conversation.',{exact:true}).waitFor();
+  assert.equal(executions,1);
+  assert.equal(await page.evaluate(()=>window.orbToneCount),4,'Accepted message chimes once');
+  await page.locator('#text').fill('Slow task');await page.locator('#send').click();
+  await page.getByText('Thinking…',{exact:true}).waitFor();
+  await page.locator('#text').fill('Keep chatting');
+  assert.equal(await page.locator('#send').isEnabled(),true,'Sending stays available during desktop work');
+  await page.locator('#send').click();
+  await page.waitForFunction(()=>outbox.length===0);
+  assert.equal(executions,3);
+  await page.locator('nav [data-view=team]').click();
+  await page.locator('#team-members button').filter({hasText:'Builder'}).waitFor();
+  await page.getByText('Needs approval',{exact:true}).waitFor();
+  await page.screenshot({path:path.join(shots,'03-team.png')});
+  await page.locator('#team-members button').first().click();
+  assert.equal(await page.locator('#text').inputValue(),'@builder ');
+  await page.locator('#text').fill('');
+  await page.locator('nav [data-view=activity]').click();
+  await page.getByText('Run the project build',{exact:true}).waitFor();
+  await page.locator('#runs button').first().click();
+  await page.getByText(/Implemented home screen/).waitFor();
+  await page.locator('#detail-close').click();
+  await page.locator('[data-filter=done]').click();
+  await page.getByText('No work in this view yet.',{exact:true}).waitFor();
+  await page.locator('[data-filter=all]').click();
+  await page.evaluate(()=>document.querySelector('.app').scrollTop=0);await page.screenshot({path:path.join(shots,'03-activity.png')});
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await page.locator('nav [data-view=chat]').click();
+  await page.getByRole('button',{name:'Show chat',exact:true}).click();
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  offline=true;
+  await page.getByText('PC offline · tasks saved here',{exact:true}).waitFor();
+  await page.locator('#text').fill('Saved while offline');
+  await page.locator('#send').click();
+  assert.equal(executions,3);
+  await page.getByRole('button',{name:'Retry saved request'}).waitFor();
+  await page.screenshot({path:path.join(shots,'04-offline.png')});
+  await page.reload();
+  await page.locator('#home-dev').click();
+  await page.getByRole('button',{name:'Show chat',exact:true}).click();
+  assert.equal(await page.getByRole('button',{name:'Retry saved request'}).isDisabled(),true);
+  offline=false;
+  await page.getByText('PC connected',{exact:true}).waitFor({state:'attached'});
+  await page.getByText('Reply saved in your desktop conversation.',{exact:true}).waitFor();
+  assert.equal(executions,4,'Reconnect automatically sends the saved request once');
+  await page.locator('#mic').click();
+  await page.getByText('Listening…',{exact:true}).waitFor();
+  assert.equal(await page.locator('#mic').getAttribute('aria-pressed'),'true');
+  await page.evaluate(()=>lastRecognition.onresult({resultIndex:0,results:[Object.assign([{transcript:'Voice request'}],{isFinal:true})]}));
+  await page.getByRole('button',{name:'Finish listening',exact:true}).click();
+  await page.waitForFunction(()=>outbox.length===0);
+  assert.equal(executions,5,'Voice input follows the same desktop queue');
+  offline=true;await page.getByText('PC offline · tasks saved here',{exact:true}).waitFor();
+  await page.locator('#text').fill('Check restart safety');await page.locator('#send').click();
+  fixtureBridge='bridge-restarted';offline=false;
+  await page.getByText('Desktop restarted. Check your conversations before retrying saved requests.',{exact:true}).waitFor();
+  assert.equal(executions,5,'A new bridge never automatically replays old work');
+  await page.getByRole('button',{name:'Retry saved request'}).click();
+  await page.waitForFunction(()=>outbox.length===0);
+  assert.equal(executions,6);
+  await page.getByRole('button',{name:'Back to workspace'}).click();
+  await page.locator('#disconnect').click();
+  await page.getByRole('heading',{name:'Connect with Dev'}).waitFor();
+  assert.equal(await page.evaluate(()=>localStorage.getItem('devdeck-companion-v1')),null);
+  assert.deepEqual(errors,[]);
+  console.log('Mobile passed: home, orb/chat, history, voice states, acceptance chime, responsive layouts, Teams/Activity/details, offline automatic reconnect and unpair. Screenshots: '+shots);
 }finally{await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r))}

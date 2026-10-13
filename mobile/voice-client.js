@@ -1,6 +1,6 @@
 /* Local Kokoro voice. No reply text is sent to a voice service. */
 function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange }) {
-  let worker, ready = false, loading = false, busy = false, context;
+  let worker, ready = false, loading = false, busy = false, context, analyser, waveform;
   let generation = 0, activeId = 0, endAt = 0, sources = [], finished = false;
   function update() {
     button.disabled = loading || busy;
@@ -30,7 +30,7 @@ function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange }) {
       } else if (data.type === 'audio' && data.id === activeId) {
         const buffer = context.createBuffer(1, data.samples.length, data.rate);
         buffer.copyToChannel(data.samples, 0);
-        const source = context.createBufferSource(); source.buffer = buffer; source.connect(context.destination);
+        const source = context.createBufferSource(); source.buffer = buffer; source.connect(analyser);
         const start = Math.max(context.currentTime, endAt); endAt = start + buffer.duration;
         sources.push(source); status.textContent = 'Speaking offline · Heart'; onSpeaking();
         source.onended = () => { sources = sources.filter(s => s !== source); idleIfDone(); };
@@ -63,6 +63,7 @@ function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange }) {
     status.textContent = 'Generating speech locally…'; update();
     try {
       context ||= new (window.AudioContext || window.webkitAudioContext)();
+      if (!analyser) { analyser = context.createAnalyser(); analyser.fftSize = 256; waveform = new Uint8Array(analyser.fftSize); analyser.connect(context.destination); }
       await context.resume();
       if (id !== activeId) { busy = false; update(); return; }
       getWorker().postMessage({ type: 'speak', id, text });
@@ -70,5 +71,12 @@ function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange }) {
   }
   function dispose() { stop(); worker?.terminate(); void context?.close(); }
   update();
-  return { speak, stop, dispose, canSpeak: () => ready && !busy };
+  function level() {
+    if (!analyser || sources.length === 0) return 0;
+    analyser.getByteTimeDomainData(waveform);
+    let sum = 0;
+    for (const byte of waveform) { const sample = (byte - 128) / 128; sum += sample * sample; }
+    return Math.min(1, Math.sqrt(sum / waveform.length) * 5);
+  }
+  return { speak, stop, dispose, level, isReady: () => ready, canSpeak: () => ready && !busy };
 }

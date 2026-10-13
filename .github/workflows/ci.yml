@@ -22,6 +22,9 @@ jobs:
       - run: npm ci
       - run: npm install --no-save --package-lock=false playwright@1.62.1
       - run: npx playwright install --with-deps chromium
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check subscription protocol and CLI fixtures
+        run: cargo test --manifest-path harness/rust-core/Cargo.toml --locked
       - name: Check onboarding with mocked native IPC
         run: |
           npx vite --config vite.harness.config.ts --host 127.0.0.1 > /tmp/devdeck-harness.log 2>&1 &
@@ -31,6 +34,8 @@ jobs:
             sleep 1
           done
           node harness/check-beta5.mjs
+          node harness/check-cli-setup.mjs
+          node harness/check-space-switcher.mjs
           node harness/check-onboarding.mjs
           node harness/check-folder-workflows.mjs
           HARNESS_URL=http://127.0.0.1:5199 node harness/check-visibility.mjs

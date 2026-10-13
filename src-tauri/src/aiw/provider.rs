@@ -2513,6 +2513,18 @@ impl ProviderRegistry {
         self.providers.iter().find(|p| p.id() == id).cloned()
     }
 
+    /// Clone handles before probing, so slow CLI health checks never hold the registry lock.
+    pub fn handles(&self) -> Vec<Arc<dyn LLMProvider>> {
+        self.providers.clone()
+    }
+
+    /// Every provider's id, name and health.
+    ///
+    /// Not `#[cfg(test)]` any more: `bots.rs` names the providers a wake
+    /// could have used when it refuses one that does not exist, and that is
+    /// ordinary code. While the gate was on, `cargo test` compiled and the
+    /// *app* did not — the one combination a green suite cannot see, because
+    /// a test build was the only build where the method existed.
     pub fn list(&self) -> Vec<(String, String, ProviderHealth)> {
         self.providers
             .iter()

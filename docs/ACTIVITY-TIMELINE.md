@@ -22,3 +22,9 @@ The Activity board now opens on Timeline, with DevDeck issues and GitHub issues 
 TypeScript and lint pass. The existing browser harness was extended to verify source separation, peer-message deduplication, filtering, message send/refresh, draft URL construction and existing session/error/revision behavior. It uses fictional IPC fixtures; it does not prove Windows filesystem persistence or live GitHub/CLI access.
 
 Manager peer messages currently do not carry explicit project/issue IDs. The view reports their manager home as a scope hint and shows Project not linked; it excludes them from a selected project rather than inventing attribution. Explicit message-to-task linkage and automatic GitHub publishing are follow-up work. This slice does not add autonomous routing, review execution or background wakeups.
+
+## Windows subscription setup and onboarding
+
+This branch also includes the existing Windows Claude/ChatGPT subscription setup and its provider-list production build fix. Core setup now uses the same onboarding Frame and stepper as Voice and later steps; you can go forward to Voice and return to Core. The Settings view still reuses Core setup without the onboarding stepper. Linux-specific setup is excluded.
+
+The 34 production core tests passed, along with TypeScript, lint and the Vite production bundle. Browser checks cover the subscription UI and Core/Voice return flow using mocked CLI/account calls. Actual installation, subscription sign-in and Windows native build remain separate acceptance checks.

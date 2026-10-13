@@ -18,6 +18,11 @@ fixture.visibility_products_save = args => { if(args?.expected!==data.config_raw
 fixture.aiw_all_work = () => [{project_id:'1',project_name:'Home',feature_id:'garden',feature_name:'Garden',status:'planned',items:[{id:'weeds',title:'Clear pool weeds',status:'blocked',areas:[]}] }]
 fixture.aiw_sessions = () => []
 fixture.aiw_agents = () => []
+const peerMessages = [{id:'peer-1',from:'orchestrator',to:'reviewer',kind:'request',subject:'Review context loading',body:'Reuse the existing worker model.',reply_to:null,created_at:now,depth:0}]
+fixture.manager_team = () => ['orchestrator','reviewer'].map(handle => ({bot:{handle,name:handle === 'orchestrator' ? 'Orchestrator' : 'Reviewer',node_id:1},profile:{peers:[handle === 'orchestrator' ? 'reviewer' : 'orchestrator']},pending:0}))
+fixture.manager_messages = () => structuredClone(peerMessages)
+fixture.manager_message_send = args => { const draft = args?.draft as typeof peerMessages[0]; const message = {...draft,id:'peer-2',from:String(args?.from),created_at:now,depth:0}; peerMessages.push(message); return message }
+fixture.open_url = args => { (window as unknown as {__openedUrl:string}).__openedUrl=String(args?.url); return undefined }
 useApp.setState({spaceScopeId:null,nodes:[{id:1,parent_id:null,kind:'workspace',name:'Home',rel_path:'Life/Home',dir:'/state/Life/Home',path:null,sort:1,color:null,label:'Personal'}]})
 Object.assign(window,{__remoteFailure:()=>{remoteFails=true},__externalEdit:()=>{data.config_raw='external-revision'},__checkpoint:async()=>{data.sessions[0].next_action='Verify Windows CI';data.sessions[0].checkpoints.push({at:now,summary:'Handoff ready for Claude',evidence:[]});await emit('aiw:event',{type:'session.checkpointed'})}})
 createRoot(document.getElementById('root')!).render(<ActivityBoard sessionsOnly={new URLSearchParams(location.search).has('sessions')} />)

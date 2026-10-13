@@ -14,6 +14,7 @@ const server=http.createServer(async(req,res)=>{
   const json=(data,status=200)=>{res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(data))}
   if(url.pathname==='/'){res.setHeader('Content-Type','text/html');return res.end(fs.readFileSync('mobile/index.html','utf8'))}
   if(url.pathname==='/voice-orb.js'){res.setHeader('Content-Type','application/javascript');return res.end(fs.readFileSync('mobile/voice-orb.js','utf8'))}
+  if(url.pathname==='/voice-client.js'){res.setHeader('Content-Type','application/javascript');return res.end(fs.readFileSync('mobile/voice-client.js','utf8'))}
   if(offline)return json({error:'PC unavailable'},503)
   let raw='';for await(const chunk of req)raw+=chunk
   const input=raw?JSON.parse(raw):{}
@@ -42,6 +43,24 @@ await new Promise(r=>server.listen(0,'127.0.0.1',r))
 const base=`http://127.0.0.1:${server.address().port}`
 const browser=await chromium.launch({headless:true,args:['--no-sandbox'],...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{})})
 const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,timezoneId:'Africa/Johannesburg'})
+await context.addInitScript(() => {
+  // Test client transitions against a deterministic voice worker. Model inference is a separate check.
+  window.voiceRequests = [];
+  window.Worker = class {
+    postMessage(data) {
+      window.voiceRequests.push(data.type);
+      if (data.type === 'download') {
+        setTimeout(() => this.onmessage({data:{type:'progress',file:'model_quantized.onnx',progress:50}}), 20);
+        setTimeout(() => this.onmessage({data:{type:'ready'}}), 60);
+      }
+      if (data.type === 'speak') {
+        setTimeout(() => this.onmessage({data:{type:'audio',id:data.id,samples:new Float32Array(24000),rate:24000}}), 30);
+        setTimeout(() => this.onmessage({data:{type:'complete',id:data.id}}), 80);
+      }
+    }
+    terminate() {}
+  };
+});
 const page=await context.newPage(), errors=[]
 page.on('pageerror',e=>errors.push(e.message))
 const shots=process.env.MOBILE_SCREENSHOTS||'/tmp/devdeck-mobile-screenshots'
@@ -58,6 +77,15 @@ try{
   assert.ok(Math.abs(centre.x+centre.width/2-195)<3,'Dev occupies the middle navigation position')
   const composer=await page.getByLabel('Message to Dev').boundingBox()
   assert.ok(composer.y+composer.height<780,'Composer stays above navigation')
+  assert.equal(await page.getByRole('button',{name:'Read latest reply'}).isDisabled(),true,'Read waits for downloaded model');
+  await page.getByRole('button',{name:'Download voice',exact:true}).click();
+  await page.getByText('Offline voice ready · Heart',{exact:true}).waitFor();
+  assert.equal(await page.getByRole('button',{name:'Read latest reply'}).isEnabled(),true);
+  await page.getByRole('button',{name:'Read latest reply'}).click();
+  await page.getByText('Speaking…',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'Stop reading aloud'}).click();
+  await page.getByText('Ready when you are',{exact:true}).waitFor();
+  assert.deepEqual(await page.evaluate(()=>window.voiceRequests),['download','speak','cancel']);
   await page.screenshot({path:path.join(shots,'01-chat.png')})
   await page.setViewportSize({width:375,height:667})
   const compactComposer=await page.getByLabel('Message to Dev').boundingBox()

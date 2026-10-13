@@ -137,6 +137,16 @@ fn respond(
     body: &str,
     cookie: Option<&str>,
 ) -> std::io::Result<()> {
+    respond_bytes(stream, status, content_type, body.as_bytes(), cookie)
+}
+
+fn respond_bytes(
+    stream: &mut TcpStream,
+    status: u16,
+    content_type: &str,
+    body: &[u8],
+    cookie: Option<&str>,
+) -> std::io::Result<()> {
     let reason = match status {
         200 => "OK",
         202 => "Accepted",
@@ -147,11 +157,12 @@ fn respond(
         409 => "Conflict",
         _ => "Error",
     };
-    write!(stream, "HTTP/1.1 {status} {reason}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nContent-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'\r\n", body.len())?;
+    write!(stream, "HTTP/1.1 {status} {reason}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nContent-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://huggingface.co https://*.huggingface.co https://*.hf.co; frame-ancestors 'none'\r\n", body.len())?;
     if let Some(token) = cookie {
         write!(stream, "Set-Cookie: devdeck_companion={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200\r\n")?;
     }
-    write!(stream, "\r\n{body}")
+    write!(stream, "\r\n")?;
+    stream.write_all(body)
 }
 
 fn serve(mut stream: TcpStream, app: &tauri::AppHandle, b: &Arc<Bridge>) -> std::io::Result<()> {
@@ -238,6 +249,31 @@ fn serve(mut stream: TcpStream, app: &tauri::AppHandle, b: &Arc<Bridge>) -> std:
             include_str!("../../mobile/voice-orb.js"),
             None,
         );
+    }
+    if method == "GET" {
+        let asset: Option<(&str, &[u8])> = match target {
+            "/voice-client.js" => Some((
+                "application/javascript",
+                include_bytes!("../../mobile/voice-client.js"),
+            )),
+            "/voice-worker.js" => Some((
+                "application/javascript",
+                include_bytes!("../../mobile/dist/voice-worker.js"),
+            )),
+            "/voice-runtime/ort-wasm-simd-threaded.mjs" => Some((
+                "application/javascript",
+                include_bytes!("../../mobile/dist/ort-wasm-simd-threaded.mjs"),
+            )),
+            "/voice-runtime/ort-wasm-simd-threaded.wasm" => Some((
+                "application/wasm",
+                include_bytes!("../../mobile/dist/ort-wasm-simd-threaded.wasm"),
+            )),
+            _ => None,
+        };
+        if let Some((mime, content)) = asset {
+            stream.set_write_timeout(Some(Duration::from_secs(30)))?;
+            return respond_bytes(&mut stream, 200, mime, content, None);
+        }
     }
     let input: Value = if length == 0 {
         Value::Null

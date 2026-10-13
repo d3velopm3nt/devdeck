@@ -15,7 +15,7 @@ This branch adds an opt-in bridge to the running Windows desktop app. It is not 
 - Single-use, cryptographically random pairing codes, two-minute expiry, attempt limit, 12-hour in-memory sessions, and revocation.
 - Same-origin session cookie (HttpOnly/SameSite), exact Host/Origin validation, bounded requests and connections; no generic remote tool RPC.
 - Recent transcript snapshot, paginated older history, live chat events with bounded cursor history, persisted request IDs during the running bridge session, and retry receipts.
-- Chat-first mobile interface with an animated orb, spaces/folders, conversations, recorded activity and optional browser read-aloud.
+- Chat-first mobile interface with an animated orb, spaces/folders, conversations, recorded activity and optional local Kokoro read-aloud.
 - Approved-design alignment: a cyan/purple canvas particle orb, Dev above it, compact transcript and icon controls; five bottom entries place Dev in the centre of Spaces, Folders, Team and Activity. The header chat button opens older conversations. Team displays configured profiles rather than inventing live activity.
 - Local browser cache and explicit retry for offline drafts. Pairing codes are removed from the URL. Unpair clears the cache.
 
@@ -31,3 +31,13 @@ Voice input, installable PWA/offline shell, encrypted remote relay, durable offl
 - `cargo test --manifest-path harness/rust-core/Cargo.toml --locked` includes production pairing/replay tests.
 - `node harness/check-mobile.mjs` uses Playwright and deterministic API fixtures against the real mobile HTML. Fixtures test client behavior, not native Windows integration.
 - Windows CI checks the complete native adapter and produces an installer artifact. A physical Android + Windows end-to-end check remains required.
+
+## Offline voice preview
+
+Builds now stage the Kokoro browser runtime with `npm run mobile:voice` (also included in `npm run dev` and `npm run build`). Run it before direct Cargo checks, as the native bridge embeds its generated worker and ONNX runtime assets.
+
+On the phone, press **Download voice**. This downloads the q8 Kokoro model and Heart voice from Hugging Face and saves them in IndexedDB; reply text stays on the phone. The button reports per-file download progress and only says ready after synthesising a test phrase. Then press the read button for the latest reply; Stop silences playback. Speech runs in a worker using single-threaded WebAssembly, including on the current LAN HTTP origin. No microphone feature is added.
+
+The model download needs internet and storage initially. Generation can run without internet after a successful download. This does not make the AI itself offline or provide a cold offline page launch. Files belong to the PC URL's browser origin: changing IP/port, clearing site data, private browsing or browser eviction may require downloading again. A reload currently requires pressing Download voice to load the saved model; cached files are reused. Device latency, naturalness and memory use still need physical-phone validation.
+
+Verification for this change: the normal mobile harness checks download/read/stop UI transitions with a deterministic voice worker. `VOICE_MODEL_DIR=<model-fixture-directory> node harness/check-mobile-voice.mjs` tests actual Kokoro WASM synthesis with upstream model files, then recreates the worker and blocks external downloads to verify IndexedDB reuse and complete multi-sentence output. Neither check measures physical Android performance.

@@ -54,7 +54,8 @@ await context.addInitScript(() => {
         setTimeout(() => this.onmessage({data:{type:'ready'}}), 60);
       }
       if (data.type === 'speak') {
-        setTimeout(() => this.onmessage({data:{type:'audio',id:data.id,samples:new Float32Array(24000),rate:24000}}), 30);
+        const samples=Float32Array.from({length:24000},(_,i)=>Math.sin(i*2*Math.PI*440/24000)*.2);
+        setTimeout(() => this.onmessage({data:{type:'audio',id:data.id,samples,rate:24000}}), 30);
         setTimeout(() => this.onmessage({data:{type:'complete',id:data.id}}), 80);
       }
     }
@@ -69,6 +70,10 @@ try{
   await page.goto(base+'/#pair=fixture-pair')
   await page.getByText('PC connected',{exact:true}).waitFor()
   assert.equal(new URL(page.url()).hash,'','Pairing secret is removed from history')
+  assert.equal(await page.locator('#transcript').isVisible(),false,'Orb view keeps text chat hidden until requested')
+  assert.ok((await page.locator('#orb').boundingBox()).width>250,'Orb is the main interaction surface')
+  await page.screenshot({path:path.join(shots,'00-orb.png')})
+  await page.getByRole('button',{name:'Show chat',exact:true}).click()
   await page.locator('.message.assistant').filter({hasText:'Your workspace is ready. What would you like to work on?'}).waitFor()
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'No horizontal overflow')
   const tabs=page.getByRole('navigation',{name:'Mobile views'}).getByRole('button')
@@ -77,6 +82,8 @@ try{
   assert.ok(Math.abs(centre.x+centre.width/2-195)<3,'Dev occupies the middle navigation position')
   await page.getByRole('button',{name:'Dev',exact:true}).click()
   assert.equal(await page.locator('nav').isVisible(),false,'Focused Dev hides workspace navigation')
+  assert.equal(await page.locator('#transcript').isVisible(),false,'Opening Dev returns to the clean orb page')
+  await page.getByRole('button',{name:'Show chat',exact:true}).click()
   await page.getByRole('button',{name:'Back to workspace'}).click()
   assert.equal(await page.locator('nav').isVisible(),true,'Back restores workspace navigation')
   await page.evaluate(()=>{window.orbToneCount=0;const original=AudioContext.prototype.createOscillator;AudioContext.prototype.createOscillator=function(...args){window.orbToneCount++;return original.apply(this,args)}})
@@ -86,12 +93,15 @@ try{
   assert.ok(composer.y+composer.height<780,'Composer stays above navigation')
   assert.equal(await page.getByRole('button',{name:'Read latest reply'}).isDisabled(),true,'Read waits for downloaded model');
   await page.getByRole('button',{name:'Download voice',exact:true}).click();
-  await page.getByText('Offline voice ready · Heart',{exact:true}).waitFor();
+  await page.getByText('Offline voice ready · Heart',{exact:true}).waitFor({state:'attached'});
   assert.equal(await page.getByRole('button',{name:'Read latest reply'}).isEnabled(),true);
   await page.getByRole('button',{name:'Read latest reply'}).click();
   await page.getByText('Speaking…',{exact:true}).waitFor();
+  await page.waitForFunction(()=>localVoice.level()>.05)
   await page.getByRole('button',{name:'Stop reading aloud'}).click();
   await page.getByText('Ready when you are',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>localVoice.level()),0,'Orb returns to silence after speech stops')
+  assert.ok(await page.locator('#transcript').evaluate(el=>el.clientHeight)>250,'Conversation has room for several readable messages')
   assert.deepEqual(await page.evaluate(()=>window.voiceRequests),['download','speak','cancel']);
   await page.screenshot({path:path.join(shots,'01-chat.png')})
   await page.setViewportSize({width:375,height:667})
@@ -104,6 +114,7 @@ try{
   await page.getByRole('button',{name:'Dev',exact:true}).click()
   await page.emulateMedia({reducedMotion:'no-preference'})
   await page.getByRole('button',{name:'Back to workspace'}).click()
+  await page.getByRole('button',{name:'Show chat',exact:true}).click()
   await page.setViewportSize({width:390,height:844})
   await page.getByRole('button',{name:'Load older messages'}).click()
   await page.locator('.message.user').filter({hasText:'History message 0'}).waitFor()
@@ -141,6 +152,7 @@ try{
   await page.getByText(/No recent checkpoint/).waitFor()
   await page.screenshot({path:path.join(shots,'03-activity.png')})
   await page.getByRole('button',{name:'Dev',exact:true}).click()
+  await page.getByRole('button',{name:'Show chat',exact:true}).click()
   offline=true
   await page.getByRole('button',{name:'Back to workspace'}).click()
   await page.getByText('Offline · saved view',{exact:true}).waitFor()
@@ -150,6 +162,7 @@ try{
   assert.equal(executions,1,'Offline request does not execute')
   await page.screenshot({path:path.join(shots,'04-offline.png')})
   await page.reload()
+  await page.getByRole('button',{name:'Show chat',exact:true}).click()
   await page.getByRole('button',{name:'Retry saved request'}).waitFor()
   assert.equal(await page.getByRole('button',{name:'Retry saved request'}).isDisabled(),true)
   offline=false

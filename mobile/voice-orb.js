@@ -1,6 +1,6 @@
 // Original canvas renderer, inspired by the approved particle-orb reference.
 // No remote assets, microphone access, or made-up listening state.
-function mountVoiceOrb(canvas, isVisible, mode) {
+function mountVoiceOrb(canvas, isVisible, mode, audioLevel = () => 0) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return () => {};
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
@@ -16,14 +16,15 @@ function mountVoiceOrb(canvas, isVisible, mode) {
   ctx.scale(ratio, ratio);
   function paint(time) {
     if (stopped) return;
-    if (!isVisible() || document.hidden || time - previous < 33) {
+    if (!isVisible() || document.hidden || time - previous < (reduced.matches ? 100 : 33)) {
       frame = requestAnimationFrame(paint); return;
     }
     previous = time;
     const state = mode();
     const speed = state === 'thinking' ? .014 : state === 'speaking' ? .009 : .002;
     if (!reduced.matches) angle += speed;
-    const pulse = reduced.matches ? 0 : Math.sin(time * (state === 'speaking' ? .008 : .0015)) * (state ? 5 : 1.5);
+    const amplitude = state === 'speaking' ? audioLevel() : 0;
+    const pulse = reduced.matches ? 0 : state === 'speaking' ? amplitude * 18 : Math.sin(time * .0015) * (state ? 5 : 1.5);
     ctx.clearRect(0, 0, 300, 300);
     const glow = ctx.createRadialGradient(150, 150, 80, 150, 150, 148);
     glow.addColorStop(0, '#5479ff08'); glow.addColorStop(.65, '#8f62ff30'); glow.addColorStop(1, '#13142300');
@@ -53,7 +54,7 @@ function mountVoiceOrb(canvas, isVisible, mode) {
       ctx.fillRect(150 + Math.cos(a) * distance, 150 + Math.sin(a) * distance, 1, 1);
     }
     ctx.globalCompositeOperation = 'source-over';
-    if (!reduced.matches) frame = requestAnimationFrame(paint);
+    frame = requestAnimationFrame(paint);
   }
   frame = requestAnimationFrame(paint);
   const visibility = () => { if (!document.hidden && !stopped) { cancelAnimationFrame(frame); frame = requestAnimationFrame(paint); } };

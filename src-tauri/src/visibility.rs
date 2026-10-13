@@ -1,7 +1,6 @@
 //! Shared visibility records supplement GitHub's product backlog.
 //! External assistants checkpoint one JSON file per session in the Git vault.
 use crate::db::{self, Db};
-use serde::Serialize;
 use std::{fs, path::PathBuf, time::Duration};
 
 use crate::visibility_model::*;
@@ -111,129 +110,75 @@ pub fn visibility_products_save(
     )
     .map_err(|e| e.to_string())
 }
-#[derive(Serialize)]
-pub struct IssueSnapshot {
-    pub items: Vec<serde_json::Value>,
-    pub fetched_at: String,
-    pub truncated: bool,
-    pub sessions: Vec<SessionRecord>,
-    pub warnings: Vec<String>,
-}
+pub use crate::github_issue_read::IssueSnapshot;
 #[tauri::command(async)]
 pub fn visibility_github_issues(repository: String) -> Result<IssueSnapshot, String> {
+    // Validate before touching credentials or constructing a request.
     if !repository_valid(&repository) {
         return Err("Use owner/repository.".into());
     }
     let token = crate::github::stored_token();
     let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(20))
+        .timeout(crate::github_issue_read::READ_BUDGET)
         .redirect(reqwest::redirect::Policy::none())
         .user_agent("DevDeck")
         .build()
-        .map_err(|e| e.to_string())?;
-    let mut items = vec![];
-    let mut truncated = false;
-    for page in 1..=5 {
-        let endpoint =
-            format!("repos/{repository}/issues?state=all&sort=updated&per_page=100&page={page}");
-        let rows: Vec<serde_json::Value> = if let Some(token) = &token {
-            let response = client
-                .get(format!("https://api.github.com/{endpoint}"))
-                .bearer_auth(token)
-                .header("Accept", "application/vnd.github+json")
-                .send()
-                .map_err(|_| "Could not reach GitHub.".to_string())?;
-            if !response.status().is_success() {
-                return Err(format!("GitHub returned {} for {repository}. Check repository access and account permissions.", response.status().as_u16()));
-            }
-            response
-                .json()
-                .map_err(|_| "GitHub returned unreadable issues.".to_string())?
-        } else {
-            // Reuse gh's authenticated API without extracting its credentials.
-            let mut command = std::process::Command::new("gh");
-            command
-                .args(["api", "--hostname", "github.com", &endpoint])
-                .stdin(std::process::Stdio::null());
-            #[cfg(windows)]
-            {
-                use std::os::windows::process::CommandExt;
-                command.creation_flags(0x0800_0000);
-            }
-            let response = command
-                .output()
-                .map_err(|_| "Connect GitHub in Settings or sign in with gh first.".to_string())?;
-            if !response.status.success() {
-                return Err(format!(
-                    "GitHub CLI could not read {repository}. Check sign-in and repository access."
-                ));
-            }
-            serde_json::from_slice(&response.stdout)
-                .map_err(|_| "GitHub CLI returned unreadable issues.".to_string())?
-        };
-        let len = rows.len();
-        // Retain only the fields used by the overview, not full issue bodies.
-        items.extend(rows.into_iter().map(|v| serde_json::json!({"number":v["number"],"title":v["title"],"state":v["state"],"url":v["html_url"],"updated_at":v["updated_at"],"assignees":v["assignees"].as_array().map(|a| a.iter().filter_map(|a| a["login"].as_str()).collect::<Vec<_>>()).unwrap_or_default(),"pull_request":v.get("pull_request").is_some()})));
-        if len < 100 {
-            break;
-        }
-        if page == 5 {
-            truncated = true;
-        }
-    }
-    let mut comments = vec![];
-    let mut warnings = vec![];
-    for page in 1..=5 {
-        let endpoint = format!("repos/{repository}/issues/comments?sort=created&direction=desc&per_page=100&page={page}");
-        match github_get(&endpoint) {
-            Ok(value) => {
-                let rows = value
-                    .as_array()
-                    .ok_or("GitHub returned unreadable comments.")?;
-                let count = rows.len();
-                comments.extend(rows.clone());
-                if count < 100 {
-                    break;
+        .map_err(|_| "GitHub HTTP client could not be initialized.".to_string())?;
+    crate::github_issue_read::read(
+        &repository,
+        crate::github_issue_read::READ_BUDGET,
+        |endpoint, timeout| {
+            if let Some(token) = &token {
+                let response = client
+                    .get(format!("https://api.github.com/{endpoint}"))
+                    .timeout(timeout)
+                    .bearer_auth(token)
+                    .header("Accept", "application/vnd.github+json")
+                    .send()
+                    .map_err(|e| {
+                        if e.is_timeout() {
+                            "GitHub request timed out. Check your network connection and retry."
+                                .to_string()
+                        } else {
+                            "Could not reach GitHub. Check your network, proxy or TLS connection."
+                                .to_string()
+                        }
+                    })?;
+                if !response.status().is_success() {
+                    let status = response.status().as_u16();
+                    return Err(match status {
+                    401 => "GitHub returned 401. The saved token may be expired or revoked.".into(),
+                    403 => "GitHub returned 403. Check repository permissions, organization authorization and rate limits.".into(),
+                    404 => format!("GitHub returned 404 for {repository}. Check the repository name and token access."),
+                    429 => "GitHub returned 429. Rate limit reached; wait before retrying.".into(),
+                    _ => format!("GitHub returned {status} for {repository}. Retry later."),
+                });
                 }
-                if page == 5 {
-                    warnings.push(
-                        "Session history is limited to the 500 latest repository comments.".into(),
-                    );
+                response.json().map_err(|e| {
+                    if e.is_timeout() {
+                        "GitHub response timed out.".to_string()
+                    } else {
+                        "GitHub returned unreadable data.".to_string()
+                    }
+                })
+            } else {
+                let mut command = std::process::Command::new("gh");
+                command
+                    .args(["api", "--hostname", "github.com", endpoint])
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::null());
+                #[cfg(windows)]
+                {
+                    use std::os::windows::process::CommandExt;
+                    command.creation_flags(0x0800_0000);
                 }
+                let bytes = crate::github_issue_read::command_output(&mut command, timeout)?;
+                serde_json::from_slice(&bytes)
+                    .map_err(|_| "GitHub CLI returned unreadable data.".into())
             }
-            Err(e) => {
-                return Err(format!(
-                    "Issues were read but session comments could not be read: {e}"
-                ));
-            }
-        }
-    }
-    let (mut sessions, parse_warnings) = comment_sessions(&repository, &comments);
-    for session in &mut sessions {
-        let ticket_number = session
-            .ticket_url
-            .rsplit('/')
-            .next()
-            .and_then(|s| s.parse::<u64>().ok());
-        if let Some(item) = items.iter().find(|i| {
-            i["number"]
-                .as_u64()
-                .is_some_and(|number| Some(number) == ticket_number)
-        }) {
-            session.ticket_url = item["url"]
-                .as_str()
-                .unwrap_or(&session.ticket_url)
-                .to_string();
-        }
-    }
-    warnings.extend(parse_warnings);
-    Ok(IssueSnapshot {
-        items,
-        fetched_at: chrono::Utc::now().to_rfc3339(),
-        truncated,
-        sessions,
-        warnings,
-    })
+        },
+    )
 }
 
 /// GitHub reads and mutations keep tokens off command lines and reject redirects.

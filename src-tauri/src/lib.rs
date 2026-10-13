@@ -78,6 +78,7 @@ mod subscription_process;
 mod team;
 mod threads;
 mod vault;
+mod github_issue_read;
 mod visibility;
 mod visibility_model;
 mod workers;

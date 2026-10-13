@@ -34,4 +34,4 @@ The DevDeck window exposes a service control panel: running/stopped/paused/unrea
 - Agent/worker heartbeats distinguish running, paused, stale and finished.
 - Show the exact runtime boundary when the app is closed.
 
-Known prerequisite: the GitHub issue-fetch timeout mismatch remains unresolved. Fix and verify actual account/repository reads before relying on background monitoring.
+GitHub fetch implementation now uses one 15-second operation budget below the UI deadline, bounded CLI reads, and optional comment enrichment that preserves issues. Core and mocked browser checks cover failure recovery; actual Windows account/repository reads still need acceptance before relying on background monitoring.

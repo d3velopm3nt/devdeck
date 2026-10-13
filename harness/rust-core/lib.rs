@@ -64,3 +64,7 @@ pub mod cli_setup_model;
 pub mod subscription_model;
 #[path = "../../src-tauri/src/subscription_process.rs"]
 pub mod subscription_process;
+
+#[path = "../../src-tauri/src/github_issue_read.rs"]
+pub mod github_issue_read;
+

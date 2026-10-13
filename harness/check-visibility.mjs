@@ -31,6 +31,11 @@ try {
   await page.getByLabel('Project filter').selectOption('')
   fs.mkdirSync('docs/screenshots/visibility',{recursive:true})
   await page.screenshot({path:'docs/screenshots/visibility/activity.png'})
+  await page.evaluate(()=>window.__commentFailure())
+  await page.getByRole('button',{name:'Refresh',exact:true}).click()
+  await page.getByText(/Issues loaded; checkpoint comments could not be refreshed/).waitFor()
+  await page.getByRole('button',{name:/#8 Activity board/}).waitFor()
+  assert.equal(await page.getByRole('alert').count(),0,'comment enrichment failure does not fail issue loading')
   await page.evaluate(()=>window.__remoteFailure())
   await page.getByRole('button',{name:'Refresh',exact:true}).click()
   await page.getByRole('alert').getByText(/Repository read failed/).waitFor()
@@ -86,4 +91,3 @@ try {
   assert.deepEqual(errors,[])
   console.log('PASS: GitHub + Personal work, unclaimed issues, product/assistant/session filters, checkpoint refresh, stale sessions, error preserves work, revision guard, no page errors.')
 } finally { await browser.close() }
-

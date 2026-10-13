@@ -95,7 +95,7 @@ pub fn cli_setup_status(tool: CliTool) -> CliStatus {
         version: String::new(),
         auth: "signed-out".into(),
         detail: "CLI not installed or could not be started".into(),
-        setup_supported: cfg!(windows),
+        setup_supported: cfg!(any(windows, target_os = "linux")),
     };
     match version {
         Ok((true, text)) => {
@@ -136,9 +136,9 @@ pub fn cli_setup_status(tool: CliTool) -> CliStatus {
 /// uses the existing interactive terminal, including browser login prompts.
 #[tauri::command(async)]
 pub fn cli_setup_plan(tool: CliTool, action: CliAction) -> Result<SetupPlan, String> {
-    if !cfg!(windows) {
+    if !cfg!(any(windows, target_os = "linux")) {
         return Err(
-            "In-app CLI setup currently supports Windows. Use the provider's installer on this OS."
+            "In-app CLI setup supports Windows and Linux. Use the provider's installer on this OS."
                 .into(),
         );
     }
@@ -146,6 +146,18 @@ pub fn cli_setup_plan(tool: CliTool, action: CliAction) -> Result<SetupPlan, Str
         .ok_or("Home directory unavailable")?
         .to_string_lossy()
         .into_owned();
+    if cfg!(target_os = "linux") {
+        if matches!(action, CliAction::SignIn) && !cli_setup_status(tool).installed {
+            return Err("Install the CLI before signing in".into());
+        }
+        let script = crate::cli_setup_model::linux_setup_script(tool, action, &resolve_cli(tool));
+        return Ok(SetupPlan {
+            title: format!("{} setup", tool.label()),
+            command: format!("/bin/sh -c {}", crate::cli_setup_model::sh_literal(&script)),
+            shell: "/bin/sh".into(),
+            cwd,
+        });
+    }
     let script = match action {
         CliAction::Install => format!(
             "$ErrorActionPreference = 'Stop'; try {{ Invoke-RestMethod {} | Invoke-Expression; Write-Host 'Installer finished. Check status in DevDeck to verify installation.' }} catch {{ Write-Error $_; exit 1 }}",

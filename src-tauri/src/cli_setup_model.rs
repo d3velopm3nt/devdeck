@@ -57,6 +57,41 @@ pub fn ps_literal(text: &str) -> String {
     format!("'{}'", text.replace('\'', "''"))
 }
 
+/// POSIX shell literal; paths may contain spaces, quotes, or shell syntax.
+pub fn sh_literal(text: &str) -> String {
+    format!("'{}'", text.replace('\'', "'\"'\"'"))
+}
+
+/// Linux setup is also usable from the headless harness. No desktop dependency.
+pub fn linux_setup_script(tool: CliTool, action: CliAction, program: &str) -> String {
+    match action {
+        CliAction::Install => {
+            let (url, interpreter) = match tool {
+                CliTool::Codex => ("https://chatgpt.com/codex/install.sh", "sh"),
+                CliTool::ClaudeCode => ("https://claude.ai/install.sh", "bash"),
+            };
+            // Download first: a failed curl must never look like a successful installer.
+            format!("set -eu; installer=$(mktemp); trap 'rm -f \"$installer\"' EXIT; curl -fsSL {} -o \"$installer\"; {} \"$installer\"", sh_literal(url), interpreter)
+        }
+        CliAction::SignIn => {
+            let (remove, args) = match tool {
+                CliTool::Codex => (
+                    "OPENAI_API_KEY CODEX_API_KEY CODEX_ACCESS_TOKEN OPENAI_BASE_URL",
+                    "login --device-auth",
+                ),
+                CliTool::ClaudeCode => (
+                    "ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN",
+                    "auth login",
+                ),
+            };
+            format!(
+                "set -eu; unset {remove}; exec {} {args}",
+                sh_literal(program)
+            )
+        }
+    }
+}
+
 /// Never return the raw auth response: it can contain account details.
 pub fn auth_mode(tool: CliTool, success: bool, output: &str) -> &'static str {
     if !success {
@@ -92,6 +127,48 @@ pub fn auth_mode(tool: CliTool, success: bool, output: &str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn linux_login_quotes_program_and_removes_api_credentials() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("devdeck-login-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let program = dir.join("codex ' $literal");
+        std::fs::write(&program, "#!/bin/sh\n[ -z \"${OPENAI_API_KEY+x}${CODEX_API_KEY+x}${CODEX_ACCESS_TOKEN+x}${OPENAI_BASE_URL+x}\" ] || exit 7\n[ \"$1\" = login ] && [ \"$2\" = --device-auth ]\n").unwrap();
+        std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let script =
+            linux_setup_script(CliTool::Codex, CliAction::SignIn, program.to_str().unwrap());
+        let status = std::process::Command::new("/bin/sh")
+            .args(["-c", &script])
+            .env("OPENAI_API_KEY", "fixture")
+            .env("CODEX_API_KEY", "fixture")
+            .env("CODEX_ACCESS_TOKEN", "fixture")
+            .env("OPENAI_BASE_URL", "fixture")
+            .status()
+            .unwrap();
+        std::fs::remove_dir_all(dir).unwrap();
+        assert!(status.success());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn linux_install_propagates_download_failure() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("devdeck-install-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let curl = dir.join("curl");
+        std::fs::write(&curl, "#!/bin/sh\nexit 22\n").unwrap();
+        std::fs::set_permissions(&curl, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let script = linux_setup_script(CliTool::Codex, CliAction::Install, "codex");
+        let status = std::process::Command::new("/bin/sh")
+            .args(["-c", &script])
+            .env("PATH", format!("{}:/usr/bin:/bin", dir.display()))
+            .status()
+            .unwrap();
+        std::fs::remove_dir_all(dir).unwrap();
+        assert_eq!(status.code(), Some(22));
+    }
 
     #[test]
     fn does_not_accept_arbitrary_programs_or_actions() {

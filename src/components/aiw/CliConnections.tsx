@@ -5,8 +5,8 @@ import { openTerminalPanel } from '../../lib/dock'
 import { Mark } from './providerDefs'
 
 const TOOLS: { id: CliTool; name: string; cli: string; mark: string; installer: string }[] = [
-  { id: 'claude-code', name: 'Claude', cli: 'Claude Code', mark: 'anthropic', installer: 'claude.ai/install.ps1' },
-  { id: 'codex', name: 'ChatGPT', cli: 'Codex CLI', mark: 'openai', installer: 'chatgpt.com/codex/install.ps1' },
+  { id: 'claude-code', name: 'Claude', cli: 'Claude Code', mark: 'anthropic', installer: 'claude.ai' },
+  { id: 'codex', name: 'ChatGPT', cli: 'Codex CLI', mark: 'openai', installer: 'chatgpt.com/codex' },
 ]
 
 export function CliConnections({ onChanged }: { onChanged?: () => void }) {
@@ -130,7 +130,7 @@ function CliConnection({ tool, onChanged }: { tool: typeof TOOLS[number]; onChan
         {pending && <button className="btn-ghost text-[11px]" onClick={() => { setPending(null); setMessage('Status monitoring stopped. The terminal remains open; use Ctrl+C there to cancel setup.') }}>Stop monitoring</button>}
       </div>
       {!status?.installed && <p className="mt-2 text-[10.5px] text-muted">Install from {tool.installer}. Provider terms apply.</p>}
-      {status && !status.setup_supported && <p className="mt-2 text-[11px] text-muted">In-app setup currently supports Windows.</p>}
+      {status && !status.setup_supported && <p className="mt-2 text-[11px] text-muted">In-app setup supports Windows and Linux.</p>}
       {message && <p role="status" className="mt-2 text-[11px] leading-5 text-dim">{message}</p>}
       {error && <p role="alert" className="mt-2 text-[11px] text-err">{error}</p>}
     </article>

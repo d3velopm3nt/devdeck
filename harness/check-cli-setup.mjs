@@ -40,7 +40,7 @@ try {
   assert.equal((await calls()).filter(c => c.command === 'plan').length, 1)
   console.log('PASS: stopping monitoring does not claim cancellation or installation success')
   await page.goto(`${base}/harness/cli-setup.html?scenario=unsupported`)
-  await page.getByText('In-app setup currently supports Windows.').first().waitFor()
+  await page.getByText('In-app setup supports Windows and Linux.').first().waitFor()
   assert.equal(await page.getByRole('button', { name: 'Install Codex CLI' }).isDisabled(), true)
   console.log('PASS: unsupported platforms cannot start Windows installers')
   for (const scenario of ['core', 'settings']) {

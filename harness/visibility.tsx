@@ -23,7 +23,7 @@ fixture.manager_team = () => ['orchestrator','reviewer'].map(handle => ({bot:{ha
 fixture.manager_messages = () => new URLSearchParams(location.search).has('slow-inbox') ? new Promise(() => {}) : structuredClone(peerMessages)
 fixture.manager_message_send = args => { const draft = args?.draft as typeof peerMessages[0]; const message = {...draft,id:'peer-2',from:String(args?.from),created_at:now,depth:0}; peerMessages.push(message); return message }
 let chatFails = false
-const conversations: Record<string, {at:string;from:string;text:string;by?:string}[]> = {}
+const conversations: Record<string, {at:string;from:string;text:string;by?:string;tool?:string;ok?:boolean}[]> = {}
 fixture.manager_conversation = args => structuredClone(conversations[String(args?.handle)] || [])
 fixture.manager_turn = args => {
  if(chatFails) throw Error('Fixture manager unavailable')
@@ -37,5 +37,9 @@ fixture.open_url = args => { (window as unknown as {__openedUrl:string}).__opene
 useApp.setState({spaceScopeId:null,nodes:[{id:1,parent_id:null,kind:'workspace',name:'Home',rel_path:'Life/Home',dir:'/state/Life/Home',path:null,sort:1,color:null,label:'Personal'}]})
 Object.assign(window,{__remoteFailure:()=>{remoteFails=true},__externalEdit:()=>{data.config_raw='external-revision'},__checkpoint:async()=>{data.sessions[0].next_action='Verify Windows CI';data.sessions[0].checkpoints.push({at:now,summary:'Handoff ready for Claude',evidence:[]});await emit('aiw:event',{type:'session.checkpointed'})}})
 if (new URLSearchParams(location.search).has('no-repositories')) data.products = []
+if (new URLSearchParams(location.search).has('summary')) {
+ data.sessions[0].checkpoints[0].evidence = ['https://github.com/d3velopm3nt/devdeck/pull/16', 'https://github.com/d3velopm3nt/devdeck/pull/19', 'https://github.com/d3velopm3nt/devdeck/pull/16#discussion', 'https://github.com/d3velopm3nt/devdeck/actions/runs/123']
+ conversations.orchestrator = [{at:now,from:'user',text:'Verify linked work'}, {at:now,from:'tool',tool:'files.read',ok:true,text:'Read the requirements'}, {at:now,from:'tool',tool:'tests.run',ok:false,text:'One verification failed'}, {at:now,from:'assistant',by:'orchestrator',text:'Two checks recorded.'}]
+}
 createRoot(document.getElementById('root')!).render(<ActivityBoard sessionsOnly={new URLSearchParams(location.search).has('sessions')} />)
 

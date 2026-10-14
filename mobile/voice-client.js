@@ -55,9 +55,13 @@ function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange, onPr
     try { getWorker().postMessage({ type: 'download' }); }
     catch (error) { loading = false; status.textContent = error.message; update(); }
   };
+  async function unlock() {
+    context ||= new (window.AudioContext || window.webkitAudioContext)();
+    await context.resume();
+  }
   async function speak(text) {
     if (!ready || busy) return;
-    // AudioContext creation/resume happens directly from the user's read button gesture.
+    // The microphone gesture unlocks audio before the asynchronous reply arrives.
     activeId = ++generation; const id = activeId;
     busy = true; finished = false; endAt = 0;
     status.textContent = 'Generating speech locally…'; onPreparing(); update();
@@ -78,5 +82,5 @@ function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange, onPr
     for (const byte of waveform) { const sample = (byte - 128) / 128; sum += sample * sample; }
     return Math.min(1, Math.sqrt(sum / waveform.length) * 5);
   }
-  return { speak, stop, dispose, level, isReady: () => ready, canSpeak: () => ready && !busy };
+  return { speak, stop, unlock, dispose, level, isReady: () => ready, canSpeak: () => ready && !busy };
 }

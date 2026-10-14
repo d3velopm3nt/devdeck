@@ -35,7 +35,7 @@ const server=http.createServer(async(req,res)=>{
     accepted.set(input.request_id,receipt)
     emit({kind:'turn',conversation_id:'room-1',done:false,by:'assistant',name:'Dev'})
     setTimeout(()=>emit({kind:'delta',conversation_id:'room-1',text:'I can see your spaces.'}),100)
-    setTimeout(()=>{receipt.status='completed';history.push({from:'assistant',text:'I can see your spaces.',at:new Date().toISOString()});emit({kind:'done',conversation_id:'room-1'});emit(receipt)},input.text==='Slow task'?900:250)
+    setTimeout(()=>{receipt.status='completed';history.push({from:'assistant',text:'I can see your spaces.',at:new Date().toISOString()});emit({kind:'done',conversation_id:'room-1'});emit({kind:'receipt',conversation_id:receipt.conversation_id,request_id:receipt.request_id,error:null})},input.text==='Slow task'?900:250)
     return json({accepted:true},202)
   }
   json({error:'Missing fixture route'},404)
@@ -66,8 +66,8 @@ await context.addInitScript(() => {
       }
       if (data.type === 'speak') {
         const samples=Float32Array.from({length:24000},(_,i)=>Math.sin(i*2*Math.PI*440/24000)*.2);
-        setTimeout(() => this.onmessage({data:{type:'audio',id:data.id,samples,rate:24000}}), 200);
-        setTimeout(() => this.onmessage({data:{type:'complete',id:data.id}}), 250);
+        setTimeout(() => this.onmessage({data:{type:'audio',id:data.id,samples,rate:24000}}), 1000);
+        setTimeout(() => this.onmessage({data:{type:'complete',id:data.id}}), 1050);
       }
     }
     terminate() {}
@@ -115,15 +115,19 @@ try{
   await page.locator('#mic').click();
   await page.waitForTimeout(150);
   assert.equal(await page.locator('#orb').getAttribute('data-state'),'idle','Cancelling startup ignores late recognition events');
-  assert.equal(await page.locator('#read').isDisabled(),true);
+  assert.equal(await page.locator('#read').count(),0);
   await page.getByRole('button',{name:'Download voice',exact:true}).click();
   await page.getByText('Offline voice ready · Heart',{exact:true}).waitFor({state:'attached'});
-  assert.equal(await page.locator('#read').isEnabled(),true);
+  
   assert.equal(await page.locator('#mute-voice').isDisabled(),true);
-  await page.locator('#read').click();
+  await page.locator('#mic').click();
+  await page.getByText('Listening…',{exact:true}).waitFor();
+  await page.evaluate(()=>lastRecognition.onresult({resultIndex:0,results:[Object.assign([{transcript:'Read my reply'}],{isFinal:true})]}));
+  await page.locator('#mic').click();
   await page.getByText('Preparing voice…',{exact:true}).waitFor();
   await page.getByText('Speaking…',{exact:true}).waitFor();
-  assert.equal(await page.locator('#read').getAttribute('aria-pressed'),'true');
+  assert.equal(await page.evaluate(()=>voiceRequests.filter(x=>x==='speak').length),1,'Voice replies speak automatically once');
+  executions=0;await page.evaluate(()=>window.orbToneCount=0);
   await page.waitForFunction(()=>localVoice.level()>.05);
   await page.locator('#mute-voice').click();
   await page.getByText('Ready when you are',{exact:true}).waitFor();
@@ -159,6 +163,7 @@ try{
   await page.getByText('Thinking…',{exact:true}).waitFor();
   await page.getByText('Reply saved in your desktop conversation.',{exact:true}).waitFor();
   assert.equal(executions,1);
+  await page.waitForFunction(()=>window.orbToneCount===2);
   assert.equal(await page.evaluate(()=>window.orbToneCount),2,'Accepted message chimes once');
   await page.locator('#text').fill('Slow task');await page.locator('#send').click();
   await page.getByText('Thinking…',{exact:true}).waitFor();
@@ -226,3 +231,4 @@ try{
   assert.deepEqual(errors,[]);
   console.log('Mobile passed: home, orb/chat, history, LAN recognition attempts, denied-permission recovery, startup cancellation, voice states, acceptance chime, responsive layouts, Teams/Activity/details, offline automatic reconnect and unpair. Screenshots: '+shots);
 }finally{await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r))}
+

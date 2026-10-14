@@ -1,171 +1,62 @@
-<div align="center">
+# DevDeck
 
-# ❯_ DevDeck
-
-**A local-first development command center for Windows.**
-
-Start your whole stack, watch every service, and jump into any terminal.
-Then hand the work itself to a team that keeps going while you sleep.
+A local-first Windows workspace for services, terminals, conversations and reviewable agent work.
 
 [![CI](https://github.com/d3velopm3nt/devdeck/actions/workflows/ci.yml/badge.svg)](https://github.com/d3velopm3nt/devdeck/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%202-24C8DB)](https://tauri.app)
-[![Buy Me A Coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-FFDD00?logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/d3velopm3nt)
 
-</div>
+## Start here
 
----
+**Development documentation:** this checkout includes the unmerged work in [PR #25](https://github.com/d3velopm3nt/devdeck/pull/25), based on the mobile-companion branch. Library creation, reusable teams and automatic issue dispatch described here are implemented on that branch; this is not a claim that the latest installer includes them.
 
-## What it is
+- [User guide: agents → teams → workflows → review](docs/USER-GUIDE.md)
+- [Windows setup and checks](CONTRIBUTING.md)
+- [CLI and subscription setup](docs/CLI-SUBSCRIPTION-SETUP.md)
+- [Phone pairing, HTTPS and voice](mobile/README.md)
+- [Documentation index and current scope](docs/README.md)
 
-If you work in a monorepo or juggle several apps at once, starting your day
-means opening six terminals and remembering six commands. DevDeck turns that
-into one click.
+## What you can do
 
-It has since grown a second half. A **manager** holds a goal, wakes on a
-rhythm, reads the space, decides the next piece of work and hands it to a
-**worker**, which builds it on a branch with its tests. You read what happened
-on one page and say yes or no. Nothing is merged without you.
+- Organize spaces and repositories, run services and commands, and use persistent terminal sessions.
+- Talk to **Dev** through Chat, or use the paired phone companion while the desktop is running.
+- Open **Agents** to configure workers and specialists, create or import shared skills and agent templates, and assemble reusable teams.
+- Open **Work → Team workflows** to define steps, map team roles to configured agents, route an issue and review results.
+- Opt into the GitHub issue monitor and dispatch. Dev chooses an existing workflow; the host starts eligible workers using their existing permissions and limits.
+- Follow local work, linked GitHub issues and explicit session checkpoints in Activity. A recorded status is not proof that an external assistant is still running.
+- Use Mail, Calendar, Stash, Connections and Machine tools with their own configured accounts and prerequisites.
 
-It's a desktop app: a Rust/Tauri backend with a React frontend. Your work lives
-in plain files on your disk and an SQLite database beside them.
+Dev coordinates workers directly. Independent work can run concurrently; dependent steps wait for human acceptance. Saving a library definition or team starts nothing. Workflow acceptance does not merge code, publish changes or update a GitHub issue automatically. Separate worker worktrees do not automatically receive one another's unmerged output.
 
-**DevDeck has no backend of its own and reports nothing about you.** It reaches
-the network only where you connect it — your mail server, your model provider,
-GitHub — and the AI half runs with no API key at all on a built-in mock
-provider, which refuses to answer where it cannot answer honestly.
+The app has a Rust/Tauri backend and a React frontend. Files and local stores hold its state; connected providers, GitHub, mail and imported sources use the network when invoked. The mobile bridge is hosted by your desktop, not an always-on cloud service.
 
-## Running your stack
+## Install or build
 
-- **Spaces** — organize work as `Workspace → Project → Folder`. A project is an
-  app/repo root with a base path; folders are locations inside it. Commands,
-  services, and terminals all run in the right directory automatically.
-- **Services** — define long-running processes (dev servers, workers) once, then
-  start / stop / restart them with live status, CPU, memory, uptime and ports.
-  Give one a port and DevDeck adds one-click **open in browser**.
-- **Interactive terminals** — real PTYs (ConPTY) rendered with xterm.js, docked
-  as tabs. Sessions live in the backend, so they survive UI reloads.
-- **Command Widget** — an always-on-top floating window (global hotkey) that
-  collapses to a small icon. Run anything without leaving your editor.
-- **Dockable layout** — drag, split, tab, float and resize any panel; layouts
-  autosave and restore.
-- **Launch profiles** — boot a whole stack (services + terminals + layout) in
-  one action.
-- **Git, at a glance** — branch, ahead/behind, changes and fetch per project.
-- **Machine** — what is installed, via winget and scoop, and what is missing.
-
-## Getting work done
-
-- **Goals** — a goal is a page, not a chat: the standing instruction at the top
-  is the sentence a manager actually reads when it wakes, so editing it is how
-  you steer. Under it sit the features it owns, their work items, and every
-  question anybody is waiting on — each one a button on the thing it is about.
-- **Managers** — a manager holds a goal, wakes on a rhythm, reads the space and
-  keeps the plan. It proposes work; nothing starts until you agree.
-- **Workers** — yours, not a space's: a name, a brief, the skills it may use,
-  where it may write, and what it must never do. A worker gets its own git
-  worktree and branch, and **never pushes and never merges**.
-- **Built, then done** — a worker gets an item to **built**: the files exist, on
-  a branch, with its tests, and it stops there. **done** means the work is on
-  the main line, which is a merge, which is you pressing a button.
-- **Permission you can give in advance** — narrowly. A worker's file may name
-  the commands it can run unasked inside its own worktree, with a date the
-  permission runs out. Everything else still stops and asks, in the room, with
-  ninety seconds to answer.
-- **Work items, features and decisions** live as Markdown in the space's own
-  `.devdeck` folder. Readable, diffable, and yours if you ever delete the app.
-- **Mail, Calendar, Contacts** — IMAP/SMTP with Windows Credential Manager,
-  never a password in the database.
-- **Stash** — clipboard capture with a classifier that flags secret-shaped
-  clips and refuses to write their values to disk.
-- **Connections** — run queries against Postgres / SQLite / SQL Server through
-  the CLIs you already have, with history.
-- **Knowledge** — what a space knows, indexed and searchable, and given to an
-  agent as context rather than left for it to guess.
-
-## What changed
-
-DevDeck started as a launcher for services and terminals. Everything in
-*Getting work done* above came after, and the last of it is recent:
-
-- **A goal is a page, and the chat is gone.** Goals, Features and Work were
-  three lists that all opened the same feature thread, and almost nothing in
-  that thread was conversation — a worker's question, a wake report, a receipt,
-  each *about a work item* and flattened into prose with the subject lost. Every
-  one of those now renders on the thing it belongs to, as something you can
-  press.
-- **`built` and `done` are two different words.** They used to be one, and a
-  plan could read "done" over a repository that had none of the work: the item
-  was on a branch nobody had merged. A worker cannot reach `done` any more —
-  though an agent session and a manager's own `work.done` still can, which is
-  half a job and is written down as one.
-- **One branch per goal, not per work item.** Work accumulates on it, so the
-  second item starts from the first one's commits instead of re-creating the
-  same files from the main line and conflicting with its own siblings.
-- **A manager takes the space's feature** instead of inventing a container
-  named after itself, so it works *on* the product rather than beside it.
-- **A manager woken by a clock arrives as itself** — its goal, its standing
-  instructions and its worker travel into the session, which they did not before.
-- **A review point reads the act, not the sentence about it.** `stop_at: before
-  any push` no longer fires on a message that merely contains the word "push".
-- **Speed.** Most of the shell stopped re-rendering on every store write, and
-  most commands came off the UI thread. Both are held by a ratchet in
-  `npm run lint` so the numbers only come down.
-
-## Install
-
-Grab the latest `DevDeck_x.y.z_x64-setup.exe` from
-[Releases](https://github.com/d3velopm3nt/devdeck/releases), or build it yourself.
-
-## Build from source
-
-Requires [Rust](https://rustup.rs) (1.77.2+) and Node.js 20+.
+Published installers are on [Releases](https://github.com/d3velopm3nt/devdeck/releases). Check their release notes for included features. To test PR #25, check out its source branch explicitly:
 
 ```bash
 git clone https://github.com/d3velopm3nt/devdeck.git
 cd devdeck
-npm install
-npm run tauri dev      # run in development
-npm run tauri build    # release exe + installer in src-tauri/target/release
+git switch feature/folder-workflow-routing
+npm ci
+npm run tauri dev
 ```
 
-Checks, all of which CI runs:
+Use Windows, Node.js 22 (the CI version), current stable Rust, the MSVC build tools/Windows SDK and WebView2. The manifest declares Rust 1.77.2, but CI tests current stable rather than that minimum. See [contributing](CONTRIBUTING.md) for verification commands and build output.
 
-```bash
-npx tsc -b                                   # typecheck (never `tsc -p`)
-npm run lint                                 # oxlint + the performance ratchets
-cd src-tauri && cargo clippy --workspace --all-targets -- -D warnings
-cd src-tauri && cargo test --workspace
-```
+Pull-request CI validates the app with `--no-bundle`; it does **not** package or upload a Windows installer. Main-branch and manual CI can package installers. Release publication is a separate workflow.
 
-## Usage
+## Data and permission boundaries
 
-| Action | How |
+| Store | Purpose |
 |---|---|
-| Summon the floating widget | `Ctrl+Shift+Space` (configurable in Settings) |
-| Add a project | Explorer → right-click a workspace → **New project**, pick its repo root |
-| Add a service | Right-click a project → **New service** (e.g. `pnpm dev:web`, port `3000`) |
-| Start everything | Dashboard → click a space → **▶ Start all** |
-| Open a running app | Click its port, or the 🌐 button, anywhere it appears |
-| Open a terminal there | Right-click any project/folder → **Open terminal here** |
-| Steer a manager | Team → Goals → pick one → edit the instruction at the top |
-| Agree to proposed work | The violet banner on a goal, or per item |
-| Ship what a worker built | **Merge** on the goal — it puts the branch on the main line |
+| `%APPDATA%\devdeck\devdeck.sqlite` | Local application database, including settings and configured services |
+| Selected vault and its `.devdeck` folders | Shared work, workflows, issue snapshots and external session checkpoints |
+| `%APPDATA%\devdeck\assistant\` | Personal conversations, configured workers, shared library and run receipts |
+| Windows Credential Manager / protected credential storage | Secrets used by connected services |
 
-## Where things live
+Vault files and a linked source repository serve different purposes. DevDeck reads the local vault; another assistant's GitHub edits require normal sync before they appear locally. Back up the database, vault and personal store. Do not assume the database can be recreated without losing settings.
 
-Three places, and the split is deliberate:
-
-| | |
-|---|---|
-| `%APPDATA%\devdeck\devdeck.sqlite` | the index — spaces, commands, services, profiles, settings |
-| `<your vault>/<space>/.devdeck/` | what a space knows: features, work items, decisions, managers. Kept **beside** a repository, never inside it |
-| `%APPDATA%\devdeck\assistant\` | what is *yours*: conversations, memory, workers, run receipts. Refuses to be created inside a git repository at all |
-
-Credentials are never in any of them — they go to Windows Credential Manager.
-
-Back up the vault and the personal store; the SQLite file is an index and can
-be rebuilt from the tree.
+Imported and generated definitions are text. Review them before selecting them for an agent; importing does not grant tool access. The same shared skill ID can serve several agents, while each profile explicitly chooses its own skills and tools. External CLI runtimes may also discover their own global or project instructions; this library is not a sandbox for that discovery.
 
 ## Shared DevDeck state skill
 
@@ -191,54 +82,14 @@ Keep this file as the canonical version when changing the workflow, and update
 installed copies where applicable. The vault remains useful through GitHub even
 without DevDeck desktop or either assistant skill.
 
-## Architecture
+## Current limits and next work
 
-```
-src/              React 19 + TypeScript (Vite, Tailwind 4, Zustand, dockview)
-  components/     panels & pages
-  shell/          the rail, top bar, bottom bar — fixed chrome, not dock panels
-  widget/         the always-on-top Command Widget window
-  lib/            typed IPC, dock controller, tree/space helpers
-src-tauri/src/    Rust backend
-  db.rs           SQLite (rusqlite) — nodes, commands, services, profiles
-  pty.rs          interactive terminals (portable-pty / ConPTY)
-  services.rs     service lifecycle & log capture
-  monitor.rs      CPU / memory / port sampling (sysinfo + GetExtendedTcpTable)
-  git.rs          branch, ahead/behind, fetch, ff-only pull
-  mail.rs         IMAP sync, MIME parsing, SMTP send
-  creds.rs        Windows Credential Manager — the only place a password exists
-  bots.rs         managers: goal, rhythm, plan, who they hand work to
-  workers.rs      one worker doing one job is one run, in its own worktree
-  schedule.rs     the clock: reminders, routines, wakes
-  team.rs         the board — every goal in every space, in one read
-  aiw/            the AI Workspace
-src-tauri/ask/    devdeck-ask — a tiny separate binary a sealed worker asks
-                  through, so a live run never locks the app's own executable
-```
+Windows is the native target; the mobile companion is a paired web interface. Live desktop worker execution, restart recovery and real phone microphone behavior still require end-to-end acceptance on those devices. Passing mocked browser fixtures and native CI builds does not complete that acceptance.
 
-The frontend never spawns a process or touches the filesystem directly —
-everything goes through typed Tauri commands. Agents reach the machine only
-through a permission matrix that fails closed, and an approval genuinely asks a
-person rather than quietly refusing.
+Proactive briefings, notification sounds/spoken hints and phone push are tracked in [issue #26](https://github.com/d3velopm3nt/devdeck/issues/26). Schedule/routine triggers for this issue-workflow dispatcher, dedicated lead sessions and generic nested team delegation are not delivered by PR #25. Existing manager schedules are a separate path.
 
-## Platform support
+See [current scope and historical design notes](ROADMAP.md), [architecture](docs/ARCHITECTURE.md) and [contributing](CONTRIBUTING.md).
 
-Windows only, for now. The Windows-specific bits are isolated (ConPTY,
-`cmd.exe`, `taskkill`, `explorer.exe`, Credential Manager, WinRT OCR), and a
-macOS/Linux port is a very welcome contribution.
+## License and support
 
-## Contributing
-
-Issues and PRs are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for setup,
-project layout, and the data model. [ROADMAP.md](ROADMAP.md) is what is shipped,
-designed and next.
-
-## Support
-
-DevDeck is free and MIT-licensed. If it saves you time, you can
-[buy me a coffee](https://www.buymeacoffee.com/d3velopm3nt) ☕ — appreciated, never
-expected.
-
-## License
-
-[MIT](LICENSE) © Develtech
+[MIT](LICENSE) © Develtech. Contributions and focused bug reports are welcome. If DevDeck helps your work, you can [buy me a coffee](https://www.buymeacoffee.com/d3velopm3nt).

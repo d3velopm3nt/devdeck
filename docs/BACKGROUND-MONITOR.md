@@ -1,6 +1,21 @@
 # Background monitoring requirements
 
-Status: agreed product direction, not implemented as an app-wide service. The current Activity refresh preference controls checks only while that page is mounted and visible. It does not run with DevDeck exited.
+## Implemented subset in PR #25 (unmerged)
+
+The GitHub issue monitor runs while the desktop process is alive, independently
+of the Activity page. It persists polling timestamps and snapshots and can opt
+into workflow dispatch through repository/folder bindings and Full workflow
+permission. It does not run after the app exits. See the
+[current workflow reference](folder-workflow-routing.md).
+
+## Remaining product direction
+
+The cross-source service described below remains a design, not an implemented
+app-wide service. Existing mail sync, page refreshes, manager schedules and the
+new issue monitor are separate paths. A dedicated always-on host, consolidated
+source controls and proactive mobile/desktop delivery are not provided by this
+monitor. Notification requirements are tracked in
+[issue #26](https://github.com/d3velopm3nt/devdeck/issues/26).
 
 ## Sources
 

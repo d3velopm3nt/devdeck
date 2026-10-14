@@ -7,7 +7,9 @@ assistant and session filters, then select a card to read checkpoints and next a
 
 ## Connect a product
 
-Open **Activity board → Product connections**. Add a stable ID, product name,
+Open **Activity board → GitHub issues → Connect repository** when there are no
+connections, or use **Add business / product** to add a product through the
+existing company setup. The Product connections form takes a stable ID, product name,
 space, vault-relative folder, `owner/repository`, and optionally the GitHub Project
 URL. Save, then Refresh. GitHub uses the account connected in Settings. Errors
 remain visible and do not hide local work. The last successful read is dated.
@@ -18,6 +20,10 @@ activity for an open ticket, otherwise issues appear in Queued and PRs in Review
 These activity columns do not modify the GitHub Project status. GitHub assignees
 and linked sessions are shown separately. Clicking the project link
 opens the authoritative product backlog.
+
+The separate [issue monitor](folder-workflow-routing.md) can poll without leaving
+Activity open. Its dispatch authority is explicitly configured; the Activity
+refresh preference itself does not start workers.
 
 ## Record an external session
 

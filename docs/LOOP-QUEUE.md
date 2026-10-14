@@ -1,5 +1,9 @@
 # The loop queue — the night of 27/28 September
 
+> Historical design/verification record. Claims, screenshots and navigation below
+> apply to the revision described here, not necessarily the current product.
+> Use the [documentation index](README.md) for current setup and scope.
+
 Working state for an unattended run. **Read this file at the top of every
 iteration and update it at the bottom.** Nothing about progress is kept in the
 model's head: a long session gets compacted, and a queue remembered rather than

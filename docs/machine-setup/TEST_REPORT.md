@@ -1,5 +1,9 @@
 # Machine Setup — Test Report
 
+> Historical design/verification record. Claims, screenshots and navigation below
+> apply to the revision described here, not necessarily the current product.
+> Use the [documentation index](../README.md) for current setup and scope.
+
 **Feature:** a new **Machine Setup** section in DevDeck to install and track dev
 software via **winget / scoop**, pick one-click **bundles**, and **export/import
 a machine manifest** so a fresh Windows install can be rebuilt in a couple of

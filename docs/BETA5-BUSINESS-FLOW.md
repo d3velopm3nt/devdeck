@@ -1,5 +1,9 @@
 # Beta five: business setup and one agent team
 
+> Historical design/verification record. Claims, screenshots and navigation below
+> apply to the revision described here, not necessarily the current product.
+> Use the [documentation index](README.md) for current setup and scope.
+
 Core setup is available before the personal onboarding steps and in Settings for existing users. State storage, the default assistant model and GitHub can be connected independently. Manual use remains available without agents.
 
 “Add a space” keeps Business and Personal. Personal setup hides business/product starters. The business Code step now lets each agreed product select an existing repository and Project, or explicitly create them. Repository creation is private by default. Project creation is separate, so a permission error does not discard a successful repository creation. Connecting the repository also registers the product in Activity. The advanced connection editor remains available for existing metadata.

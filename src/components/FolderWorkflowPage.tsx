@@ -134,7 +134,7 @@ ${data.raw}` : ''
     {editing ? <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-5">
       <p className="text-[12px] text-muted">Use existing worker handles and target folder IDs below. Each step can depend on other step IDs. Markdown after the header gives every worker the shared context.</p>
       <div className="grid grid-cols-2 gap-3 text-[12px]">
-        <div><b>Workers</b><p>{workers.map(w => `${w.handle} (${w.name})`).join(', ') || 'Create a worker in Team before starting.'}</p></div>
+        <div><b>Workers</b><p>{workers.map(w => `${w.handle} (${w.name})`).join(', ') || 'Create and configure an agent under Agents before starting.'}</p></div>
         <div><b>Target folders</b><p>{nodes.map(n => `${n.id}: ${n.name}`).join(' · ')}</p></div>
       </div>
       <details className="rounded border border-line p-3"><summary className="cursor-pointer text-[12px] text-info">Technical team template</summary>

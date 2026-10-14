@@ -1,57 +1,47 @@
-# DevDeck roadmap
+# DevDeck scope and roadmap
 
-Living document — what's shipped, what's designed, what's next. Update it as
-things land so we never have to reconstruct state from memory.
+Current source documentation is in the [user guide](docs/USER-GUIDE.md) and
+[documentation index](docs/README.md). GitHub issues are the active backlog;
+the historical planning material below is retained for rationale, not as a
+current release checklist.
 
-**Current version:** v0.3.1 released · scoop bucket at 0.3.1
-**Current branch:** `main` carries the workers-and-managers arc (merged as
-`20aad66`); `claude/friendly-feynman-mwb9mp` is ahead of it with the lag work,
-the asker binary and the monitor fixes
+## In review: PR #25
 
-> ✅ **The distribution blocker is gone.** This document led with it for weeks:
-> the repo was private, so auto-update, `scoop update devdeck` and the website's
-> download links were all silently broken. Checked on 27 Sep 2026 and every part
-> of it is now true the other way — the repo is **public**, **v0.3.1** is
-> published, `releases/latest/download/latest.json` answers **HTTP 200**, and
-> `bucket/devdeck.json` points at 0.3.1. It had been fixed for a while and
-> nobody crossed it off, which is its own lesson: a warning nobody re-checks
-> becomes a lie that outranks the truth, because it is the first thing anyone
-> reads.
+[PR #25](https://github.com/d3velopm3nt/devdeck/pull/25) builds on the mobile
+companion branch. It is unmerged. Its source includes:
 
----
+- Named folder workflows, duplicate-safe issue intake, explicit monitor/dispatch
+  controls and direct Dev-to-worker orchestration.
+- Shared custom/imported/conversational skills and agent templates, configured
+  agents, reusable teams and role-to-step mapping.
+- Existing permission, dependency and human-review gates, isolated issue progress,
+  and independent worker concurrency.
+- Voice transcript normalization and a one-time accepted-message acknowledgement.
 
-## In development: beta five business flow
+Windows build/native checks and browser fixtures passed for `f016757` in CI186.
+Real Windows worker execution/recovery and Android HTTPS/microphone behavior
+remain acceptance work in [#23](https://github.com/d3velopm3nt/devdeck/issues/23).
+Neither a green PR build nor this guide claims those device tests passed.
 
-Core setup, product repository/Project picks, a unified Agents directory and
-GitHub comment checkpoints. [Scope and verification](docs/BETA5-BUSINESS-FLOW.md).
-Windows native build and real-agent acceptance remain release gates.
+## Next and deferred
 
----
+- [#24: technical ticket lifecycle](https://github.com/d3velopm3nt/devdeck/issues/24):
+  generic nested delegation, shared team conversations, rework and authorized
+  external progress updates remain beyond the direct coordinator increment.
+- [#26: proactive briefings and notifications](https://github.com/d3velopm3nt/devdeck/issues/26):
+  schedules, mobile push, category sounds, optional spoken hints and later call-like
+  invitations. Scheduler hosting and platform behavior still need implementation.
+- [#27: documentation refresh](https://github.com/d3velopm3nt/devdeck/issues/27):
+  this separate documentation change follows PR #25; it does not release it.
+- Existing manager schedules are not a schedule-to-issue-workflow integration.
+  Dedicated lead sessions are deferred by agreement.
 
-## In development: folder workflows
+## Historical planning archive
 
-`feature/folder-workflows` adds a Workflow label to existing vault folders,
-Markdown instructions and durable progress, explicit worker starts, dependency
-gates and human review. Reuses the Explorer, worker launcher and event bus.
-No automatic label triggers or separate hierarchy. Not released.
-
-[Setup, scope and verification](docs/FOLDER-WORKFLOWS.md).
-
----
-
-## In review: Life, Personal and Business manager teams
-
-`feature/space-manager-teams` builds on `feature/deck-widget`; draft PR #3.
-Adds persistent space navigation, a top-right switch for existing themes,
-explicit manager roles and specialist pools, and durable peer messages on the
-existing event bus. Work output now waits for human review and explicit merge
-or acceptance. Community and diagnostic surfaces move out of the daily path.
-
-Implementation, screenshots, sandbox test boundaries, and the real-agent
-Windows checklist: [Manager teams verification](docs/MANAGER-TEAMS-VERIFICATION.md).
-Not released; live-provider validation remains part of the Windows handoff.
-
----
+The sections below describe earlier designs, experiments and measurements.
+Labels such as “built”, “next” and “not built”, old version/branch references,
+and navigation names are historical to those entries. They must not override
+current source, the linked user guide or GitHub issue acceptance status.
 
 ## The turn — DevDeck manages, it does not type
 

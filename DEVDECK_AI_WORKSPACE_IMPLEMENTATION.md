@@ -1,5 +1,9 @@
 # DevDeck AI Workspace — implementation
 
+> Historical AI Workspace implementation record. Old demo navigation and future
+> plans below are not the current product guide. See [current architecture](docs/ARCHITECTURE.md)
+> and the [user guide](docs/USER-GUIDE.md), including PR #25 release boundaries.
+
 Humans and AI agents working on the same project, coordinated through events
 and a small, Git-versioned, per-feature context.
 

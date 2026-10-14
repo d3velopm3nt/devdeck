@@ -1,5 +1,9 @@
 # Chat hub design
 
+> Historical design/verification record. Claims, screenshots and navigation below
+> apply to the revision described here, not necessarily the current product.
+> Use the [documentation index](README.md) for current setup and scope.
+
 Status: agreed design, not yet implemented. The dedicated Chat page is the next implementation stage. The Activity timeline cleanup is separate and preserves the existing manager chat until the replacement is available.
 
 ## Conversation identity

@@ -1,5 +1,9 @@
 # State repository onboarding recovery — 7 October 2026
 
+> Historical design/verification record. Claims, screenshots and navigation below
+> apply to the revision described here, not necessarily the current product.
+> Use the [documentation index](README.md) for current setup and scope.
+
 Recovered the uncommitted state onboarding changes on `fix/state-repo-onboarding`.
 
 ## Behavior

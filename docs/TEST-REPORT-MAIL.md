@@ -1,5 +1,9 @@
 # Mail module — test report
 
+> Historical design/verification record. Claims, screenshots and navigation below
+> apply to the revision described here, not necessarily the current product.
+> Use the [documentation index](README.md) for current setup and scope.
+
 **Date:** 6 September 2026 · **Branch:** `claude/email-manager-contacts-xrr32d`
 
 What was built, what was actually verified, and — the part that matters — what

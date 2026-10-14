@@ -1,5 +1,9 @@
 # Deck design correction — 6 October 2026
 
+> Historical design/verification record. Claims, screenshots and navigation below
+> apply to the revision described here, not necessarily the current product.
+> Use the [documentation index](README.md) for current setup and scope.
+
 Reference: the user's saved “DevDeck floating widget: three UI states.png” design from 29 September. The previous implementation used a letter launcher, generic narrow cards, and opened the old command view on first run.
 
 The revised production components use the split-D mark, floating pill navigation, navy glass surfaces and violet controls. Today has workspace filters, view tabs, timeline dots and chips, focus entry, a recent update and command/service shortcuts. Focus is a separate compact card with a circular indicator, progress bar and pause/finish controls. Actual calendar, focus and update data remain connected; example people, sync status and session counts from the mockup are not presented as live facts.

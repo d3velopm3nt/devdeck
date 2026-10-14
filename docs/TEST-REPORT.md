@@ -1,5 +1,9 @@
 # DevDeck — test report
 
+> Historical design/verification record. Claims, screenshots and navigation below
+> apply to the revision described here, not necessarily the current product.
+> Use the [documentation index](README.md) for current setup and scope.
+
 What was built, how each piece was actually verified, and — just as
 importantly — what was **not** verified and why.
 

@@ -1,6 +1,9 @@
 # Folder workflows and issue intake
 
-This implements folder workflows, issue intake, and direct Dev-to-worker orchestration for issue #24. These are DevDeck workflows, not GitHub Actions workflows.
+Development reference for **unmerged PR #25**, checked at `f016757`. These are
+DevDeck workflows, not GitHub Actions workflows. Start with the
+[user guide](USER-GUIDE.md) for a complete example; [architecture](ARCHITECTURE.md)
+explains shared definitions, host callbacks and permission boundaries.
 
 ## Use
 
@@ -8,7 +11,7 @@ Open **Work → Team workflows**, choose a folder, and select or create a named 
 
 Existing `WORKFLOW.md` is the default workflow. Additional workflows are stored at `<folder>/.devdeck/workflows/<id>.md`. Each is Markdown with a YAML header describing steps, worker handles, target folder IDs and dependencies. Existing receipts remain on their original workflow.
 
-In the workflow editor, expand **Technical team template**, assign the lead, developer, tester and reviewer workers, and use the template. This creates the reusable process **plan → implement → test → review**. Save the definition before routing a ticket.
+In the workflow editor, expand **Technical team template**, assign the planning, developer, tester and reviewer workers, and use the template. This creates the reusable process **plan → implement → test → review**. Save the definition before routing a ticket. The template’s Lead field is an ordinary planning worker; it does not create a persistent per-issue lead session. A reusable team can instead map saved agents to these steps.
 
 **Route GitHub issue** selects an open issue from a connected project and instantiates the selected workflow. The resulting file has a stable ID based on repository and issue number. Routing the same ticket in the same folder opens the existing run, preserving progress. Each new ticket begins with pending steps and no copied run receipts. Routing alone starts no worker.
 
@@ -34,7 +37,7 @@ The paired companion's Activity view shows connected GitHub issues and folder wo
 
 ## Remaining stages of issue #24
 
-1. Foundation and monitor implementation: present in this change; full native/Windows verification remains.
+1. Foundation and monitor implementation: present in this change. Native compilation/tests pass in Windows CI; interactive desktop/device acceptance remains.
 2. Direct orchestration is implemented: Dev chooses an existing workflow and the host starts eligible workers. Dedicated per-issue lead sessions are deferred by agreement.
 3. Generic nested delegation and scoped authority: subagents may delegate further without expanding their parent's authority. Routine agent reviews and user-required approvals remain distinct.
 4. One shared communication system, with a team conversation per workflow run visible on desktop and mobile. A manager is a coordinating agent, not a separate messaging architecture. Preserve existing manager communication while integrating it.
@@ -48,7 +51,7 @@ The paired companion's Activity view shows connected GitHub issues and folder wo
 - Core Rust suite includes workflow path isolation, traversal/symlink rejection, fresh ticket receipts, dependency/review gates, duplicate issue intake, persisted poll timing, selection boundaries, backward-compatible opt-in, and durable selection claims.
 - Desktop browser harness covers manual worker starts, stale-edit rejection, named workflow isolation, the technical template, duplicate-safe routing, monitor enable/pause, and independent per-repository dispatch controls.
 - Mobile browser harness covers issue visibility, linked workflow status, refresh-error retention, existing voice/chat behavior, offline reconnect and unpairing.
-- Full native app compilation is not verified in this container: its Linux GTK/pkg-config development dependencies are unavailable. Live GitHub polling from the desktop, worker execution, Windows packaging and real phone microphone behavior still require native/device verification.
+- Windows CI run 186 passed for `f016757`: native tests, Clippy, formatting, frontend checks, browser fixtures and the app build. The Linux container cannot compile the full native shell without GTK/pkg-config development dependencies. Live GitHub polling, real worker execution/restart recovery and real phone microphone behavior still require device acceptance. PR builds deliberately skip installer packaging.
 
 ## Voice verification boundary
 

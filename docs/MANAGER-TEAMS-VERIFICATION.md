@@ -1,5 +1,9 @@
 # Space manager teams: implementation and verification
 
+> Historical design/verification record. Claims, screenshots and navigation below
+> apply to the revision described here, not necessarily the current product.
+> Use the [documentation index](README.md) for current setup and scope.
+
 Branch: `feature/space-manager-teams`
 
 Draft PR: https://github.com/d3velopm3nt/devdeck/pull/3

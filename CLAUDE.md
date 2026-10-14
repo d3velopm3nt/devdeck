@@ -4,8 +4,10 @@ A local-first development command center for Windows. Run every service, watch
 what's live, track each repo's git state, and jump into any terminal — from one
 window or a floating widget.
 
-**Read `ROADMAP.md` first** for what's shipped / designed / next. Design mocks
-live in `design/*.html` — open them in a browser, they're clickable.
+**Read `docs/README.md` and `docs/ARCHITECTURE.md` first** for current source scope,
+release boundaries and permissions. `ROADMAP.md` retains older designs in a clearly
+marked archive; its historical checkboxes are not current acceptance status.
+Design mocks are historical proposals, not authoritative current navigation.
 
 ## Stack
 
@@ -49,7 +51,7 @@ src/
 Navigation is **fixed chrome**, not dock panels — this removed a whole class of
 layout-corruption bugs:
 
-- **Rail** — Home · Projects · Mail · Stash · Connections · Machine · Settings
+- **Rail** — Today · Work · Chat · Agents · Spaces, with existing tools and Settings
 - **Sidebar** — contextual; the Explorer tree on Projects, filters on Stash. No tab chrome.
 - **Surface** — dockview, hosting **only real documents**: terminals, space pages,
   service pages, project setup, welcome
@@ -103,32 +105,18 @@ unknown agent gets nothing; `read` refuses writes; `approval` blocks the
 agent's turn and prompts a human, denying on timeout. The orchestrator is an
 agent like any other — it appears in the matrix and can be revoked.
 
-**A bot is a manager, and the thread is the unit.** Built 2 Sep 2026
-(`design/node-thread/`, and the "Bots as teammates" entry in ROADMAP.md). A
-bot holds a goal, wakes on a rhythm, and gets its space's work done: it keeps
-the plan (`work.add/list/done/drop` — the one tool a bot may use without a row
-in the permission matrix, because a plan is files in the deck, not the
-machine), puts its team on items (`@name take "…"`, which starts a session and
-posts a receipt), passes an item to a manager below it in the tree (`@handle
-take "…"`, which lands on *their* plan and is announced in *their* thread, and
-starts nobody — a manager is not a pair of hands), and, when it names an agent,
-takes an item itself (`@me take "…"`, in a real session with the same receipt
-and the same permissions as anyone else). You talk to it in a thread, not a
-form. Three threads, one message model — a **node's** thread at any level of
-the tree (a parent sees its children as headlines and says it has no
-repository, because context anchors to a commit and a parent has none), a
-**feature's** thread (the feature *is* the room: `@name` pulls someone in for
-free, `@name take "item"` transfers the claim through the delegate gate, and a
-session started from a thread reports back into it), and **`@you`**, which is
-the Inbox. First view is **Team**, opening on **Goals**, with Features, Work
-and Bots as tabs; second is **Spaces** — the tree, reaching into the
-repository, with folders chipped by the feature whose work items name them.
-Config is a sentence with a receipt; `stop_at:` is a review point the runtime
-honours, and it is deliberately *not* a permission.
+**Managers and issue workflows are different existing paths.** Managers retain
+node/feature conversations and scheduled behavior. The unified Agents directory
+exposes manager, worker and specialist configurations. For PR #25 issue workflows,
+Dev coordinates configured workers directly through `workflow` host callbacks;
+there is no dedicated lead session per issue. Shared library text and saved teams
+grant no tools and start no work. Read `docs/ARCHITECTURE.md` before changing
+routing, claims, permissions or team resolution. Old node-thread design notes
+are historical and do not define current navigation.
 
-**The mock is a provider, not a bypass.** Everything works with no API key and
-no network, and the mock refuses an empty context so a broken assembly cannot
-hide behind it. Where it cannot answer honestly, it says so.
+**The mock is a provider, not a bypass.** It supports local fixtures without API
+credentials; it does not establish that live model, GitHub, worker or mobile
+connections function. Where it cannot answer honestly, it says so.
 
 ## Conventions that matter
 
@@ -238,7 +226,7 @@ artifacts for release builds only, so CI/PR builds don't need the key.
 
 ## Product context
 
-Goal is a paid product: repo public for discovery, **source-available licence**
+Historical commercial direction (not a licence change): repo public for discovery, **source-available licence**
 (free personal, paid commercial) on future versions, with team-shareable machine
 manifests as the paid wedge. Distribution (auto-update, scoop, website download
 links) all depend on the GitHub repo being **public**, which it now is — checked

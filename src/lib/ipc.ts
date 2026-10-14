@@ -2384,17 +2384,28 @@ export interface FolderWorkflowStep {
 }
 export interface FolderWorkflow {
   raw: string
-  definition: { title: string; steps: FolderWorkflowStep[] }
+  definition: { title: string; ticket_url?: string; steps: FolderWorkflowStep[] }
   body: string
   path: string
 }
-export const folderWorkflowGet = (node: number) => invoke<FolderWorkflow>('folder_workflow_get', { node })
-export const folderWorkflowSave = (node: number, expected: string, raw: string) =>
-  invoke<FolderWorkflow>('folder_workflow_save', { node, expected, raw })
-export const folderWorkflowStart = (node: number, step: string, expected: string) =>
-  invoke<FolderWorkflow>('folder_workflow_start', { node, step, expected })
-export const folderWorkflowReview = (node: number, step: string, expected: string, accept: boolean, evidence: string) =>
-  invoke<FolderWorkflow>('folder_workflow_review', { node, step, expected, accept, evidence })
+export interface WorkflowSummary { id: string; title: string; steps: number; done: number; error: string | null }
+export const folderWorkflowList = (node: number) => invoke<WorkflowSummary[]>('folder_workflow_list', { node })
+export const folderWorkflowGet = (node: number, workflow = 'default') => invoke<FolderWorkflow>('folder_workflow_get', { node, workflow })
+export const folderWorkflowSave = (node: number, expected: string, raw: string, workflow = 'default') =>
+  invoke<FolderWorkflow>('folder_workflow_save', { node, expected, raw, workflow })
+export const folderWorkflowStart = (node: number, step: string, expected: string, workflow = 'default') =>
+  invoke<FolderWorkflow>('folder_workflow_start', { node, step, expected, workflow })
+export const folderWorkflowReview = (node: number, step: string, expected: string, accept: boolean, evidence: string, workflow = 'default') =>
+  invoke<FolderWorkflow>('folder_workflow_review', { node, step, expected, accept, evidence, workflow })
 
-export const folderWorkflowCheckpoint = (node: number, step: string, expected: string, actor: string, evidence: string, nextAction: string, submit: boolean) =>
-  invoke<FolderWorkflow>('folder_workflow_checkpoint', { node, step, expected, actor, evidence, nextAction, submit })
+export const folderWorkflowCheckpoint = (node: number, step: string, expected: string, actor: string, evidence: string, nextAction: string, submit: boolean, workflow = 'default') =>
+  invoke<FolderWorkflow>('folder_workflow_checkpoint', { node, step, expected, actor, evidence, nextAction, submit, workflow })
+
+export const folderWorkflowRoute = (node: number, source: string, expected: string, repository: string, number: number, title: string) =>
+  invoke<{ id: string; duplicate: boolean; workflow: FolderWorkflow }>('folder_workflow_route', { node, source, expected, repository, number, title })
+
+export interface MonitoredSource { repository: string; items: import('./visibility').GithubIssue[]; fetched_at: string; last_attempt: string; error: string; warnings: string[]; truncated: boolean }
+export interface IssueMonitorView { raw: string; enabled: boolean; sources: MonitoredSource[]; warnings: string[] }
+export const issueMonitorGet = () => invoke<IssueMonitorView>('issue_monitor_get')
+export const issueMonitorSave = (expected: string, enabled: boolean) => invoke<IssueMonitorView>('issue_monitor_save', { expected, enabled })
+export const issueMonitorRefresh = () => invoke<IssueMonitorView>('issue_monitor_refresh')

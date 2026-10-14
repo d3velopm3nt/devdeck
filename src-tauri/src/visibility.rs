@@ -4,7 +4,7 @@ use crate::db::{self, Db};
 use std::{fs, path::PathBuf, time::Duration};
 
 use crate::visibility_model::*;
-fn root(db: &Db) -> Result<PathBuf, String> {
+pub(crate) fn root(db: &Db) -> Result<PathBuf, String> {
     db::setting_get_conn(&db.conn(), crate::vault::ROOT_KEY)?
         .filter(|s| !s.trim().is_empty())
         .map(PathBuf::from)
@@ -125,7 +125,7 @@ pub async fn visibility_github_issues(repository: String) -> Result<IssueSnapsho
         .map_err(|_| "GitHub issue reader stopped unexpectedly. Retry the refresh.".to_string())?
 }
 
-fn github_issues_blocking(repository: &str) -> Result<IssueSnapshot, String> {
+pub(crate) fn github_issues_blocking(repository: &str) -> Result<IssueSnapshot, String> {
     let token = crate::github::stored_token();
     let client = reqwest::blocking::Client::builder()
         .timeout(crate::github_issue_read::READ_BUDGET)
@@ -340,4 +340,32 @@ pub(crate) fn set_project_url(db: &Db, repository: &str, url: &str) -> Result<()
         serde_json::to_string_pretty(&links).map_err(|e| e.to_string())?,
     )
     .map_err(|e| e.to_string())
+}
+
+/// Paired companion reads only repositories explicitly connected on the desktop.
+pub(crate) fn companion_issues(db: &Db, product: &str) -> Result<IssueSnapshot, String> {
+    let raw = read_optional(&root(db)?.join(".devdeck/activity-products.json"))?;
+    let links: Vec<ProductLink> =
+        serde_json::from_str(&raw).map_err(|_| "Connect a project on the desktop first.")?;
+    let link = links
+        .iter()
+        .find(|p| p.id == product)
+        .ok_or("Connected project not found.")?;
+    if !repository_valid(&link.repository) {
+        return Err("Invalid connected repository.".into());
+    }
+    github_issues_blocking(&link.repository)
+}
+
+pub(crate) fn connected_products(db: &Db) -> Result<Vec<ProductLink>, String> {
+    let raw = read_optional(&root(db)?.join(".devdeck/activity-products.json"))?;
+    if raw.is_empty() {
+        return Ok(vec![]);
+    }
+    let products: Vec<ProductLink> =
+        serde_json::from_str(&raw).map_err(|e| format!("Product links could not be read: {e}"))?;
+    if products.iter().any(|p| !repository_valid(&p.repository)) {
+        return Err("A connected repository is invalid.".into());
+    }
+    Ok(products)
 }

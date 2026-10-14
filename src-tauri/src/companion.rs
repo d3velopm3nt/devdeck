@@ -394,12 +394,28 @@ fn route(
         let orb_preferences = crate::db::setting_get_conn(&db.conn(), "dev.orb.preferences")?
             .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
             .unwrap_or(Value::Null);
+        let shared = crate::visibility::visibility_snapshot(app.state::<crate::db::Db>());
+        let (products, visibility_warnings) = match shared {
+            Ok(s) => (s.products, s.warnings),
+            Err(e) => (vec![], vec![e]),
+        };
+        let workflows = crate::folder_workflows::snapshot(&db);
+        let intake = crate::issue_monitor::view(&db).ok();
         let summaries = convs.list();
         // Initial paint contains only the newest rooms and 30 recent messages.
         let recent: Vec<_> = summaries.iter().take(5).filter_map(|s| convs.load(&s.id).ok()).map(|c| json!({"id":c.id,"messages":c.messages.iter().rev().take(30).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>() })).collect();
         return Ok((
             200,
-            json!({"nodes":nodes.iter().map(|n| json!({"id":n.id,"parent_id":n.parent_id,"kind":n.kind,"name":n.name})).collect::<Vec<_>>(),"conversations":summaries,"recent":recent,"cursor":cursor,"sessions":ws.sessions_for(None),"approvals":ws.pending_approvals(),"claims":ws.claims_for(None,true),"queue":b.queue.lock().map_err(|e|e.to_string())?.snapshot(),"bridge_id":b.id,"orb_preferences":orb_preferences,"agents":ws.agents().iter().map(|a|json!({"id":a.id,"name":a.name,"role":a.role})).collect::<Vec<_>>()}),
+            json!({"issue_monitor":intake,"products":products,"visibility_warnings":visibility_warnings,"workflows":workflows,"nodes":nodes.iter().map(|n| json!({"id":n.id,"parent_id":n.parent_id,"kind":n.kind,"name":n.name})).collect::<Vec<_>>(),"conversations":summaries,"recent":recent,"cursor":cursor,"sessions":ws.sessions_for(None),"approvals":ws.pending_approvals(),"claims":ws.claims_for(None,true),"queue":b.queue.lock().map_err(|e|e.to_string())?.snapshot(),"bridge_id":b.id,"orb_preferences":orb_preferences,"agents":ws.agents().iter().map(|a|json!({"id":a.id,"name":a.name,"role":a.role})).collect::<Vec<_>>()}),
+        ));
+    }
+    if method == "GET" && target.starts_with("/api/issues/") {
+        let product = target.trim_start_matches("/api/issues/");
+        // Product IDs use the existing config IDs; no arbitrary proxy target.
+        let issues = crate::visibility::companion_issues(&app.state::<crate::db::Db>(), product)?;
+        return Ok((
+            200,
+            serde_json::to_value(issues).map_err(|e| e.to_string())?,
         ));
     }
     if method == "GET" && target.starts_with("/api/conversation/") {

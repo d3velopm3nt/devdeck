@@ -49,6 +49,8 @@ mod execution_policy;
 mod files;
 mod focus;
 mod folder_workflows;
+mod issue_monitor;
+mod issue_monitor_model;
 mod gauth;
 mod git;
 mod github;
@@ -948,6 +950,7 @@ pub fn run() {
             }
 
             folder_workflows::install(app.handle());
+            issue_monitor::install(app.handle());
 
             // Give the AI Workspace bus a way out to the UI. The closure lives
             // here, in the shell, so the bus itself stays free of Tauri — which
@@ -1317,6 +1320,11 @@ pub fn run() {
             workers::worker_starters,
             workers::worker_plan,
             workers::worker_start,
+            issue_monitor::issue_monitor_get,
+            issue_monitor::issue_monitor_save,
+            issue_monitor::issue_monitor_refresh,
+            folder_workflows::folder_workflow_route,
+            folder_workflows::folder_workflow_list,
             folder_workflows::folder_workflow_get,
             folder_workflows::folder_workflow_save,
             folder_workflows::folder_workflow_start,

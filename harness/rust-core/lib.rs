@@ -71,3 +71,6 @@ pub mod github_issue_read;
 #[path = "../../src-tauri/src/companion_protocol.rs"]
 pub mod companion_protocol;
 
+
+#[path = "../../src-tauri/src/issue_monitor_model.rs"]
+pub mod issue_monitor_model;

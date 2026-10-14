@@ -2,7 +2,7 @@
 //! the event bus announces them. A worker receipt is not human acceptance.
 use crate::aiw::deck::{parse_doc, write_doc, Doc};
 use crate::aiw::events::{in_space, say, EventType};
-use crate::workflow_model::{ready, receipt_status, validate, Definition, Status};
+use crate::workflow_model::{ready, receipt_status, validate, workflow_path, Definition, Status};
 use crate::{db, db::Db, workers};
 use serde::Serialize;
 use std::fs;
@@ -22,22 +22,85 @@ pub struct View {
     pub path: String,
 }
 
-fn path(db: &Db, node: i64) -> Result<PathBuf, String> {
+fn directory(db: &Db, node: i64) -> Result<PathBuf, String> {
     let conn = db.conn();
     let n = db::node_by_id(&conn, node).map_err(|e| e.to_string())?;
-    if !n
-        .label
-        .as_deref()
-        .unwrap_or_default()
-        .eq_ignore_ascii_case("workflow")
-    {
-        return Err("Add the Workflow label to this folder first.".into());
-    }
     let dir = db::node_deck_dir(&conn, &n).ok_or("This folder is not in the vault.")?;
     if !dir.is_dir() {
         return Err("The workspace folder is missing.".into());
     }
-    Ok(dir.join(FILE))
+    Ok(dir)
+}
+fn path(db: &Db, node: i64, workflow: Option<&str>) -> Result<PathBuf, String> {
+    workflow_path(&directory(db, node)?, workflow.unwrap_or("default"))
+}
+#[derive(Serialize)]
+pub struct Summary {
+    pub id: String,
+    pub title: String,
+    pub steps: usize,
+    pub done: usize,
+    pub error: Option<String>,
+}
+fn list(db: &Db, node: i64) -> Result<Vec<Summary>, String> {
+    let dir = directory(db, node)?;
+    let mut ids = vec![];
+    if dir.join(FILE).is_file() {
+        ids.push("default".to_string());
+    }
+    let at = dir.join(".devdeck/workflows");
+    match fs::read_dir(at) {
+        Ok(entries) => {
+            for entry in entries {
+                let entry = entry.map_err(|e| e.to_string())?;
+                if !entry.file_type().map_err(|e| e.to_string())?.is_file() {
+                    continue;
+                }
+                if entry.path().extension().and_then(|x| x.to_str()) == Some("md") {
+                    if let Some(id) = entry.path().file_stem().and_then(|x| x.to_str()) {
+                        ids.push(id.to_string());
+                    }
+                }
+            }
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e.to_string()),
+    }
+    ids.sort();
+    ids.dedup();
+    Ok(ids
+        .into_iter()
+        .map(|id| {
+            match path(db, node, Some(&id))
+                .and_then(|p| read(&p))
+                .and_then(|raw| parse(&raw))
+            {
+                Ok(doc) => Summary {
+                    id,
+                    title: doc.meta.title,
+                    steps: doc.meta.steps.len(),
+                    done: doc
+                        .meta
+                        .steps
+                        .iter()
+                        .filter(|s| s.status == Status::Done)
+                        .count(),
+                    error: None,
+                },
+                Err(e) => Summary {
+                    title: id.clone(),
+                    id,
+                    steps: 0,
+                    done: 0,
+                    error: Some(e),
+                },
+            }
+        })
+        .collect())
+}
+#[tauri::command(async)]
+pub fn folder_workflow_list(db: tauri::State<Db>, node: i64) -> Result<Vec<Summary>, String> {
+    list(&db, node)
 }
 fn read(p: &Path) -> Result<String, String> {
     match fs::read_to_string(p) {
@@ -55,6 +118,8 @@ fn save(p: &Path, doc: &Doc<Definition>) -> Result<String, String> {
     let raw = write_doc(doc)?;
     // Same-directory rename replaces the whole document, including on Windows.
     // Sync before replacement: a partial write must never look like an empty plan.
+    fs::create_dir_all(p.parent().ok_or("Invalid workflow directory")?)
+        .map_err(|e| e.to_string())?;
     let tmp = p.with_extension("md.tmp");
     let result = (|| {
         let mut f = fs::File::create(&tmp).map_err(|e| e.to_string())?;
@@ -121,9 +186,9 @@ fn reconcile(doc: &mut Doc<Definition>) -> Result<bool, String> {
     }
     Ok(dirty)
 }
-fn get(app: &tauri::AppHandle, db: &Db, node: i64) -> Result<View, String> {
+fn get(app: &tauri::AppHandle, db: &Db, node: i64, workflow: Option<&str>) -> Result<View, String> {
     let guard = TRANSITION.lock().map_err(|e| e.to_string())?;
-    let p = path(db, node)?;
+    let p = path(db, node, workflow)?;
     let mut raw = read(&p)?;
     let mut dirty = false;
     if !raw.is_empty() {
@@ -145,19 +210,21 @@ pub fn folder_workflow_get(
     app: tauri::AppHandle,
     db: tauri::State<Db>,
     node: i64,
+    workflow: Option<String>,
 ) -> Result<View, String> {
-    get(&app, &db, node)
+    get(&app, &db, node, workflow.as_deref())
 }
 #[tauri::command(async)]
 pub fn folder_workflow_save(
     app: tauri::AppHandle,
     db: tauri::State<Db>,
     node: i64,
+    workflow: Option<String>,
     expected: String,
     raw: String,
 ) -> Result<View, String> {
     let guard = TRANSITION.lock().map_err(|e| e.to_string())?;
-    let p = path(&db, node)?;
+    let p = path(&db, node, workflow.as_deref())?;
     let old = read(&p)?;
     if old != expected {
         return Err("This workflow changed. Reload before saving.".into());
@@ -169,7 +236,7 @@ pub fn folder_workflow_save(
             .iter()
             .any(|s| s.status != Status::Pending)
     {
-        return Err("This workflow has started. Keep its receipt intact; use another folder for a new workflow.".into());
+        return Err("This workflow has started. Keep its receipt intact; create another named workflow for a new run.".into());
     }
     let doc = parse(&raw)?;
     if doc.meta.steps.iter().any(|s| {
@@ -194,11 +261,12 @@ pub fn folder_workflow_start(
     app: tauri::AppHandle,
     db: tauri::State<Db>,
     node: i64,
+    workflow: Option<String>,
     step: String,
     expected: String,
 ) -> Result<View, String> {
     let guard = TRANSITION.lock().map_err(|e| e.to_string())?;
-    let p = path(&db, node)?;
+    let p = path(&db, node, workflow.as_deref())?;
     let raw = read(&p)?;
     if raw != expected {
         return Err("The workflow changed. Reload before starting.".into());
@@ -215,7 +283,8 @@ pub fn folder_workflow_start(
     }
     let s = &doc.meta.steps[i];
     let claim = format!(
-        "workflow:{node}:{}:{}",
+        "workflow:{node}:{}:{}:{}",
+        workflow.as_deref().unwrap_or("default"),
         s.id,
         chrono::Utc::now().timestamp_micros()
     );
@@ -233,7 +302,11 @@ pub fn folder_workflow_start(
         workers::plan(&conn, &s.worker, s.target, "", &claim, &s.title, &intent)?
     };
     if plan.is_repo {
-        plan.branch = format!("devdeck/workflow-{node}-{}", s.id);
+        plan.branch = format!(
+            "devdeck/workflow-{node}-{}-{}",
+            workflow.as_deref().unwrap_or("default"),
+            s.id
+        );
     }
     if !plan.ready {
         return Err(plan.note);
@@ -270,6 +343,7 @@ pub fn folder_workflow_review(
     app: tauri::AppHandle,
     db: tauri::State<Db>,
     node: i64,
+    workflow: Option<String>,
     step: String,
     expected: String,
     accept: bool,
@@ -279,7 +353,7 @@ pub fn folder_workflow_review(
         return Err("Record what you reviewed and where the accepted output is available.".into());
     }
     let guard = TRANSITION.lock().map_err(|e| e.to_string())?;
-    let p = path(&db, node)?;
+    let p = path(&db, node, workflow.as_deref())?;
     let raw = read(&p)?;
     if raw != expected {
         return Err("The workflow changed. Reload before reviewing.".into());
@@ -328,6 +402,7 @@ pub fn folder_workflow_checkpoint(
     app: tauri::AppHandle,
     db: tauri::State<Db>,
     node: i64,
+    workflow: Option<String>,
     step: String,
     expected: String,
     actor: String,
@@ -336,7 +411,7 @@ pub fn folder_workflow_checkpoint(
     submit: bool,
 ) -> Result<View, String> {
     let guard = TRANSITION.lock().map_err(|e| e.to_string())?;
-    let p = path(&db, node)?;
+    let p = path(&db, node, workflow.as_deref())?;
     let raw = read(&p)?;
     if raw != expected {
         return Err("The workflow changed. Reload before recording progress.".into());
@@ -394,7 +469,14 @@ pub fn install(app: &tauri::AppHandle) {
                     else {
                         return Ok(());
                     };
-                    get(&h, &h.state::<Db>(), node)?;
+                    // Claims created before named workflows used workflow:node:step:time.
+                    let parts: Vec<_> = r.item.split(':').collect();
+                    let id = if parts.len() >= 5 {
+                        Some(parts[2])
+                    } else {
+                        None
+                    };
+                    get(&h, &h.state::<Db>(), node, id)?;
                     Ok(())
                 })();
                 if let Err(e) = result {
@@ -422,6 +504,7 @@ mod persistence_tests {
         let mut doc = Doc {
             meta: Definition {
                 title: "Campaign".into(),
+                ticket_url: String::new(),
                 steps: vec![Step {
                     id: "draft".into(),
                     title: "Draft".into(),
@@ -452,4 +535,95 @@ mod persistence_tests {
         assert!(parse("---\ntitle: Empty\nsteps: []\n---\n").is_err());
         assert!(parse("---\ntitle: Unknown\nsteps: []\nunsupported: true\n---\n").is_err());
     }
+}
+
+/// Same file-backed state for desktop and phone. Reading does not start workers.
+pub(crate) fn snapshot(db: &Db) -> serde_json::Value {
+    let nodes = match db::nodes_on(&db.conn()) {
+        Ok(n) => n,
+        Err(e) => return serde_json::json!({"items":[],"warnings":[e]}),
+    };
+    let mut items = vec![];
+    let mut warnings = vec![];
+    for node in nodes {
+        if node.rel_path.is_empty() {
+            continue;
+        }
+        match list(db, node.id) {
+            Ok(workflows) => {
+                for workflow in workflows {
+                    match path(db, node.id, Some(&workflow.id)).and_then(|p| read(&p)).and_then(|raw| parse(&raw)) {
+                    Ok(doc) => items.push(serde_json::json!({"node":node.id,"folder":node.name,"id":workflow.id,"definition":doc.meta,"body":doc.body})),
+                    Err(e) => warnings.push(format!("{} / {}: {e}", node.name, workflow.id)),
+                }
+                }
+            }
+            Err(e) => warnings.push(format!("{}: {e}", node.name)),
+        }
+    }
+    serde_json::json!({"items":items,"warnings":warnings})
+}
+
+#[derive(Serialize)]
+pub struct Routed {
+    pub id: String,
+    pub duplicate: bool,
+    pub workflow: View,
+}
+
+/// Route the issue to a selected reusable process. Intake alone starts no agent.
+#[tauri::command(async)]
+#[allow(clippy::too_many_arguments)]
+pub fn folder_workflow_route(
+    app: tauri::AppHandle,
+    db: tauri::State<Db>,
+    node: i64,
+    source: String,
+    expected: String,
+    repository: String,
+    number: u64,
+    title: String,
+) -> Result<Routed, String> {
+    use sha2::{Digest, Sha256};
+    let guard = TRANSITION.lock().map_err(|e| e.to_string())?;
+    let template_path = path(&db, node, Some(&source))?;
+    let raw = read(&template_path)?;
+    if raw != expected {
+        return Err("The workflow template changed. Reload before routing.".into());
+    }
+    let template = parse(&raw)?;
+    let definition =
+        crate::workflow_model::for_ticket(&template.meta, &repository, number, &title)?;
+    let digest = format!("{:x}", Sha256::digest(repository.as_bytes()));
+    let id = format!("issue-{}-{number}", &digest[..16]);
+    let p = path(&db, node, Some(&id))?;
+    let previous = read(&p)?;
+    if !previous.is_empty() {
+        let existing = parse(&previous)?;
+        if existing.meta.ticket_url != definition.ticket_url {
+            return Err("Workflow ID collision; inspect existing issue routing.".into());
+        }
+        return Ok(Routed {
+            id,
+            duplicate: true,
+            workflow: view(&p, previous)?,
+        });
+    }
+    let doc = Doc {
+        meta: definition,
+        body: format!(
+            "{}\n\n## Originating ticket\n\n{}\n\n{}\n",
+            template.body,
+            title.trim(),
+            format!("https://github.com/{repository}/issues/{number}")
+        ),
+    };
+    let raw = save(&p, &doc)?;
+    drop(guard);
+    changed(&app, node);
+    Ok(Routed {
+        id,
+        duplicate: false,
+        workflow: view(&p, raw)?,
+    })
 }

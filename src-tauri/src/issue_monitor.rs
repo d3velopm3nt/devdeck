@@ -150,10 +150,22 @@ pub fn issue_monitor_save(
     if config(&db)?.0 != expected {
         return Err("Issue monitor settings changed. Reload before saving.".into());
     }
-    let bindings = bindings.unwrap_or(config(&db)?.1.bindings);
+    let previous = config(&db)?.1.bindings;
+    let bindings = bindings.unwrap_or_else(|| previous.clone());
     let connected = crate::visibility::connected_products(&db)?;
     let mut seen = std::collections::HashSet::new();
     for binding in &bindings {
+        // Retained assignments must never prevent pausing when a folder/repo
+        // was removed. Validate only newly assigned targets.
+        if previous
+            .iter()
+            .any(|old| old.repository == binding.repository && old.node == binding.node)
+        {
+            if !seen.insert(binding.repository.clone()) {
+                return Err("Assign each connected repository at most once".into());
+            }
+            continue;
+        }
         if !connected.iter().any(|p| p.repository == binding.repository)
             || !seen.insert(binding.repository.clone())
         {

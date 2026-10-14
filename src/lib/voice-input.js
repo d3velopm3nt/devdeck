@@ -41,12 +41,24 @@
       return run.level;
     }
     function cancel() { const old = current; current = null; clear(); if (old) { stopMeter(old); try { old.instance.abort(); } catch {} } change('idle'); }
+    function transcript(run) {
+      const segments = [];
+      for (const part of run.parts.values()) {
+        const text = part.text.trim();
+        if (!text) continue;
+        const previous = segments.at(-1);
+        // Some Android engines return growing hypotheses at new result indices.
+        // Collapse only strict prefix extensions; keep intentional repeated words.
+        if (previous && text.toLowerCase().startsWith(previous.toLowerCase() + ' ')) segments[segments.length - 1] = text;
+        else segments.push(text);
+      }
+      return segments.join(' ').trim();
+    }
     function complete(run) {
       if (current !== run) return;
       current = null; clear(); stopMeter(run); change('idle');
       try { run.instance.abort(); } catch {}
-      const parts = [...run.parts.values()];
-      const text = parts.map(p => p.text).join(' ').trim();
+      const text = transcript(run);
       if (text) { onCaption(text); void Promise.resolve(onText(text)).catch(e => onError(e.message || String(e))); }
       else onError('No speech was detected. Tap the microphone and try again.');
     }
@@ -70,7 +82,7 @@
         for (let i = 0; i < event.results.length; i++) run.parts.set(run.offset + i, { text: event.results[i][0].transcript, final: event.results[i].isFinal });
         // Replace updated results rather than appending repeated hypotheses.
         for (const i of run.parts.keys()) if (i >= run.offset + event.results.length) run.parts.delete(i);
-        onCaption([...run.parts.values()].map(p => p.text).join(' ').trim());
+        onCaption(transcript(run));
         clearTimeout(silenceTimer); silenceTimer = setTimeout(finish, 3200);
       };
       instance.onend = () => {

@@ -351,6 +351,7 @@ pub fn all_workers() -> Result<Vec<Worker>, String> {
 }
 
 pub fn save_worker(w: &Worker) -> Result<Worker, String> {
+    let creating = w.meta.handle.trim().is_empty();
     let mut w = w.clone();
     if w.meta.category.is_empty() {
         w.meta.category = "worker".into();
@@ -390,12 +391,25 @@ pub fn save_worker(w: &Worker) -> Result<Worker, String> {
         meta: w.meta.clone(),
         body: w.body.clone(),
     };
-    std::fs::write(
-        dir.join(format!("{}.md", w.meta.handle)),
-        crate::aiw::deck::write_doc(&doc)?,
-    )
-    .map_err(err)?;
+    write_worker_definition(
+        &dir.join(format!("{}.md", w.meta.handle)),
+        &crate::aiw::deck::write_doc(&doc)?,
+        creating,
+    )?;
     Ok(w)
+}
+
+fn write_worker_definition(path: &Path, raw: &str, creating: bool) -> Result<(), String> {
+    use std::io::Write;
+    if creating {
+        let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(path)
+            .map_err(|e| if e.kind() == std::io::ErrorKind::AlreadyExists {
+                "An agent with that name already exists. Edit the saved agent or choose a different name.".to_string()
+            } else { e.to_string() })?;
+        file.write_all(raw.as_bytes()).map_err(err)
+    } else {
+        std::fs::write(path, raw).map_err(err)
+    }
 }
 
 pub fn read_run(id: &str) -> Result<Option<Run>, String> {
@@ -2416,6 +2430,23 @@ pub fn run_decide(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn creating_a_same_named_agent_never_overwrites_its_configuration() {
+        let p = std::env::temp_dir().join(format!(
+            "devdeck-agent-create-{}-{}.md",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap()
+        ));
+        super::write_worker_definition(&p, "existing permissions and skills", true).unwrap();
+        assert!(super::write_worker_definition(&p, "new template defaults", true).is_err());
+        assert_eq!(
+            std::fs::read_to_string(&p).unwrap(),
+            "existing permissions and skills"
+        );
+        super::write_worker_definition(&p, "explicit edit", false).unwrap();
+        assert_eq!(std::fs::read_to_string(&p).unwrap(), "explicit edit");
+        std::fs::remove_file(p).unwrap();
+    }
     use super::*;
 
     fn plan_for(skills: &[&str], is_repo: bool) -> Plan {

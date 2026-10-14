@@ -35,7 +35,7 @@ function mount(canvas, isVisible, mode, audioLevel = () => 0, preferences = () =
     const t = elapsedTime / 1000 * config.movement, state = mode();
     const rgb = hex => hex.match(/\w\w/g).map(v=>parseInt(v,16)).join(',');
     const primary = rgb(config.primary.slice(1)), secondary = rgb(config.secondary.slice(1));
-    const level = state === 'speaking' ? Math.max(0, Math.min(1, audioLevel())) : 0;
+    const level = state === 'speaking' || state === 'listening' ? Math.max(0, Math.min(1, audioLevel())) : 0;
     envelope += (level - envelope) * (1 - Math.exp(-dt / (level > envelope ? 65 : 200)));
     const radius = 119 + (reduced.matches ? 0 : Math.sin(t * 1.4) * 2.4 + envelope * 14);
     const rotation = reduced.matches ? 0 : t * (state === 'thinking' ? .24 : .085);
@@ -98,7 +98,7 @@ function mount(canvas, isVisible, mode, audioLevel = () => 0, preferences = () =
       ctx.strokeStyle = `rgba(${primary},.9)`; ctx.beginPath(); ctx.arc(centre, centre, 153, a + Math.PI, a + Math.PI + .7); ctx.stroke();
     } else if (listening || state === 'speaking') {
       ctx.strokeStyle = listening ? '#75ffe2a0' : '#95b0ff80'; ctx.lineWidth = 1.5;
-      const r = reduced.matches ? 146 : 144 + (listening ? (Math.sin(t * 3) + 1) * 4 : envelope * 9);
+      const r = reduced.matches ? 146 : 144 + envelope * 9;
       ctx.beginPath(); ctx.arc(centre, centre, r, 0, Math.PI * 2); ctx.stroke();
     }
     frame = requestAnimationFrame(paint);

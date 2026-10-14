@@ -234,13 +234,13 @@ try{
   assert.equal(await page.locator('#send').isDisabled(),true);
   await page.locator('#mic').click();await page.getByText('Listening…',{exact:true}).waitFor();
   await page.evaluate(()=>{lastRecognition.onresult({resultIndex:0,results:[Object.assign([{transcript:'Interim only Android message'}],{isFinal:false})]});lastRecognition.onend();});
-  await page.waitForFunction(()=>outbox.length===0);
+  await page.waitForFunction(()=>outbox.length===0&&document.getElementById('orb').dataset.state!=='listening');
   assert.equal(executions,7,'Interim-only speech reaches the same desktop endpoint with chat hidden');
   assert.ok([...accepted.values()].some(r=>r.text==='Interim only Android message'));
   await page.getByText('Speaking…',{exact:true}).waitFor();await page.locator('#mute-voice').click();
   await page.locator('#mic').click();await page.getByText('Listening…',{exact:true}).waitFor();
   await page.evaluate(()=>{const result=(text,final)=>({resultIndex:0,results:[Object.assign([{transcript:text}],{isFinal:final})]});lastRecognition.onresult(result('Repeated guess',false));lastRecognition.onresult(result('Final voice message',true));lastRecognition.onresult(result('Final voice message',true));lastRecognition.onend();lastRecognition.onend();});
-  await page.waitForFunction(()=>outbox.length===0);
+  await page.waitForFunction(()=>outbox.length===0&&document.getElementById('orb').dataset.state!=='listening');
   assert.equal(executions,8,'Repeated recognition results and end events deliver exactly once');
   assert.ok([...accepted.values()].some(r=>r.text==='Final voice message'));
   await page.getByText('Speaking…',{exact:true}).waitFor();await page.locator('#mute-voice').click();

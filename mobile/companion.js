@@ -110,7 +110,7 @@ $('mic').onclick=()=>{
 };
 $('voice-help').textContent=recognitionAvailable?'Tap the orb or microphone to talk. Pause to send.':'Voice input is unavailable in this browser. Use keyboard dictation or open in a browser with speech recognition.';
 const localVoice=createOfflineVoice({button:$('download-voice'),status:$('voice-status'),onPreparing:()=>{preparingVoice=true;speaking=false;updateOrb();},onSpeaking:()=>{preparingVoice=false;speaking=true;updateOrb();updateControls();},onIdle:()=>{preparingVoice=false;speaking=false;updateOrb();updateControls();},onChange:()=>queueMicrotask(()=>{window.localVoiceReady=true;document.querySelector('.app').classList.toggle('voice-ready',localVoice.isReady());updateControls();})});
-const stopOrb=mountVoiceOrb($('voice-orb'),() => !$('chat').hidden,() => orbMode,() => localVoice.level());
+const stopOrb=mountVoiceOrb($('voice-orb'),() => !$('chat').hidden,() => orbMode,() => orbMode==='listening'?voiceInput.level():localVoice.level());
 const controller=new AbortController();window.addEventListener('pageshow',e=>{if(e.persisted)location.reload();});window.addEventListener('pagehide',()=>{disposed=true;navObserver.disconnect();void chimeContext?.close();controller.abort();stopOrb();localVoice.dispose();stopListening();clearInterval(syncTimer);});
 let syncTimer=setInterval(()=>{if(!disposed&&!authLost&&paired)void refresh().catch(()=>connection(false));},5000);
 renderLists();renderChat();renderDraft();connection(false);view('home');

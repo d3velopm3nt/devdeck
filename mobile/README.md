@@ -53,7 +53,9 @@ Verification for this change: the normal mobile harness checks download/read/sto
 
 ## Voice regression correction
 
-The orb and centre microphone now start/finish listening. Connecting, Listening, Thinking, Preparing voice and Speaking follow recognition, desktop work and playback events. Cancelling startup discards callbacks; errors reset the state and remain retryable. Unsupported recognition and a disconnected desktop disable input. Download voice enables read-aloud separately. The renderer uses continuous luminous ribbons, depth and a bounded playback envelope; listening animation indicates recognition state rather than measured microphone volume. Reduced motion freezes ambient motion.
+The orb and centre microphone now start/finish listening. Connecting, Listening, Thinking, Preparing voice and Speaking follow recognition, desktop work and playback events. Cancelling startup discards callbacks; errors reset the state and remain retryable. Unsupported recognition and a disconnected desktop disable input. Download voice enables read-aloud separately. The renderer uses continuous luminous ribbons, depth and a bounded audio envelope. Listening uses measured microphone amplitude when raw microphone access is available; speaking uses playback amplitude. Reduced motion freezes ambient motion.
+
+Voice capture waits 3.2 seconds after the latest transcript update before submission. Browser recognition endings during that window resume capture and preserve the preceding segment. The microphone button can still finish immediately. Metering uses a separate local audio stream, stops its tracks at finish/cancel/disposal, and never uploads that stream. Browser speech recognition retains its existing provider behavior. If raw audio access is unavailable, capture still works with a zero meter level.
 
 The deterministic browser harness includes an insecure-origin recognition fixture, denied-permission recovery and startup cancellation. It does not prove speech recognition works on an actual HTTP Android browser.
 

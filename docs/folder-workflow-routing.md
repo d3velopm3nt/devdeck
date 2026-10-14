@@ -1,6 +1,6 @@
 # Folder workflows and issue intake
 
-This is the first two implementation stages of issue #24. These are DevDeck workflows, not GitHub Actions workflows.
+This implements folder workflows, issue intake, and direct Dev-to-worker orchestration for issue #24. These are DevDeck workflows, not GitHub Actions workflows.
 
 ## Use
 
@@ -20,7 +20,13 @@ Connect repositories through the existing Activity project settings. Expand **Gi
 
 The monitor writes human-readable configuration to the vault's `.devdeck/issue-monitor.json` and issue snapshots under `.devdeck/issues/`. Stable issue numbers deduplicate intake per repository; pull requests are excluded. A failed fetch preserves the previous successful snapshot and records the error. Bounded or partial history is labelled. Pausing monitoring stops subsequent scheduled fetches; a request already in flight may finish.
 
-Intake does not start an agent, choose a workflow, change the GitHub issue, or claim that work is underway. It is active only while DevDeck desktop is open, using its existing GitHub connection. The underlying reader covers up to the 500 most recently updated issue/PR records, so this is a bounded polling monitor, not a guaranteed historical import or webhook service.
+Monitoring alone remains read-only. To opt into dispatch, assign a workflow folder for each repository using **Enable dispatch here**, enable monitoring, and grant Dev **Full** permission for the `workflow` tool in agent permissions. Existing open issues are included. Approval-only permission blocks unattended starts and shows why; it never silently grants authority.
+
+Dev selects from reusable templates in the assigned folder using its configured model, with no executable tools during selection. The host validates that choice, creates the issue workflow, and starts ready pending steps through the same runtime as manual starts. Independent steps and issues can run concurrently. Dedicated lead sessions are deferred. A worker finishing moves to review; only human acceptance unlocks its dependencies. Failed steps are not automatically retried.
+
+Dispatch records persist in `.devdeck/issue-dispatches.json`. A claim is saved before model selection. Interrupted or failed selections require **Retry selection**; an existing issue workflow is reused on retry. Pausing monitoring or disabling a repository's dispatch prevents new starts, while already-running workers continue. Revoking Full workflow permission also stops new automatic starts. Changing an assignment preserves previously routed work rather than duplicating it.
+
+Monitor rows show selection, running, review, blocked and done states with errors. Workflow files remain the detailed source of step receipts. Automatic dispatch does not modify GitHub issues, merge or publish code. It is active only while DevDeck desktop is open, using its existing GitHub connection. The underlying reader covers up to the 500 most recently updated issue/PR records, so this is a bounded polling monitor, not a guaranteed historical import or webhook service.
 
 ## Mobile
 
@@ -29,7 +35,7 @@ The paired companion's Activity view shows connected GitHub issues and folder wo
 ## Remaining stages of issue #24
 
 1. Foundation and monitor implementation: present in this change; full native/Windows verification remains.
-2. Orchestrator selects an appropriate team/workflow and creates/resumes an independent lead session per issue, allowing concurrent tickets with isolated context and workspaces.
+2. Direct orchestration is implemented: Dev chooses an existing workflow and the host starts eligible workers. Dedicated per-issue lead sessions are deferred by agreement.
 3. Generic nested delegation and scoped authority: subagents may delegate further without expanding their parent's authority. Routine agent reviews and user-required approvals remain distinct.
 4. One shared communication system, with a team conversation per workflow run visible on desktop and mobile. A manager is a coordinating agent, not a separate messaging architecture. Preserve existing manager communication while integrating it.
 5. Testing, review, rework, evidence and authorized GitHub progress/result updates.
@@ -39,7 +45,11 @@ The paired companion's Activity view shows connected GitHub issues and folder wo
 
 - Production frontend build and TypeScript check.
 - Existing lint checks; existing warnings retained.
-- Core Rust suite includes workflow path isolation, traversal/symlink rejection, fresh ticket receipts, dependency/review gates, duplicate issue intake and persisted poll timing.
-- Desktop browser harness covers manual worker starts, stale-edit rejection, named workflow isolation, the technical template, duplicate-safe routing and monitor enable/pause controls.
+- Core Rust suite includes workflow path isolation, traversal/symlink rejection, fresh ticket receipts, dependency/review gates, duplicate issue intake, persisted poll timing, selection boundaries, backward-compatible opt-in, and durable selection claims.
+- Desktop browser harness covers manual worker starts, stale-edit rejection, named workflow isolation, the technical template, duplicate-safe routing, monitor enable/pause, and independent per-repository dispatch controls.
 - Mobile browser harness covers issue visibility, linked workflow status, refresh-error retention, existing voice/chat behavior, offline reconnect and unpairing.
 - Full native app compilation is not verified in this container: its Linux GTK/pkg-config development dependencies are unavailable. Live GitHub polling from the desktop, worker execution, Windows packaging and real phone microphone behavior still require native/device verification.
+
+## Voice verification boundary
+
+The transcript normalizer preserves recognition restart boundaries and intentional single prefix pairs. It only folds repeated growing hypotheses within one recognition generation. Three or more deliberately repeated growing phrases can still be indistinguishable from cumulative Android recognition output; verify real speech on the phone before claiming the duplication issue fully resolved. Spoken acceptance has a one-time chime fallback on synthesis failure, suppressed when cancelled or the user changes conversation/starts listening.

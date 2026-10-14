@@ -1,7 +1,7 @@
 /* Local Kokoro voice. No reply text is sent to a voice service. */
 function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange, onPreparing = () => {} }) {
   let worker, ready = false, loading = false, busy = false, context, analyser, waveform;
-  let queuedText = null;
+  let queuedText = null, activeError = null;
   let generation = 0, activeId = 0, endAt = 0, sources = [], finished = false;
   function update() {
     button.disabled = loading || busy || ready;
@@ -13,7 +13,7 @@ function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange, onPr
     if (finished && sources.length === 0) { busy = false; status.textContent = 'Offline voice ready · Heart'; onIdle(); update(); drain(); }
   }
   function stop() {
-    queuedText=null;
+    queuedText=null; activeError=null;
     if (busy && worker) worker.postMessage({ type: 'cancel', id: activeId });
     activeId = ++generation;
     for (const source of sources) { source.onended = null; try { source.stop(); } catch { /* Already ended. */ } }
@@ -31,6 +31,7 @@ function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange, onPr
       } else if (data.type === 'ready') {
         ready = true; loading = false; status.textContent = 'Offline voice ready · Heart'; update();
       } else if (data.type === 'audio' && data.id === activeId) {
+        activeError=null;
         const buffer = context.createBuffer(1, data.samples.length, data.rate);
         buffer.copyToChannel(data.samples, 0);
         const source = context.createBufferSource(); source.buffer = buffer; source.connect(analyser);
@@ -40,15 +41,18 @@ function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange, onPr
         source.start(start);
       } else if (data.type === 'complete') {
         if (data.id !== activeId) { busy = false; update(); drain(); }
-        else { finished = true; idleIfDone(); }
+        else { activeError=null; finished = true; idleIfDone(); }
       } else if (data.type === 'error') {
-        loading = false; busy = false; ready = false; stop(); status.textContent = data.message; update();
+        if (data.id && data.id !== activeId) return;
+        const notify=activeError;
+        loading = false; busy = false; ready = false; stop(); status.textContent = data.message; update(); notify?.();
       }
     };
     worker.onerror = () => {
+      const notify=activeError;
       loading = false; busy = false; ready = false; stop();
       worker.terminate(); worker = undefined;
-      status.textContent = 'Voice could not load. Reconnect to the PC and retry.'; update();
+      status.textContent = 'Voice could not load. Reconnect to the PC and retry.'; update(); notify?.();
     };
     return worker;
   }
@@ -62,12 +66,12 @@ function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange, onPr
     context ||= new (window.AudioContext || window.webkitAudioContext)();
     await context.resume();
   }
-  async function speak(text) {
+  async function speak(text, onError = null) {
     if (!ready) return;
     if(busy){queuedText=text;status.textContent='Waiting for local voice…';onPreparing();update();return;}
     // The microphone gesture unlocks audio before the asynchronous reply arrives.
     activeId = ++generation; const id = activeId;
-    busy = true; finished = false; endAt = 0;
+    busy = true; finished = false; endAt = 0; activeError=onError;
     status.textContent = 'Generating speech locally…'; onPreparing(); update();
     try {
       context ||= new (window.AudioContext || window.webkitAudioContext)();
@@ -75,7 +79,7 @@ function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange, onPr
       await context.resume();
       if (id !== activeId) { busy = false; update(); drain(); return; }
       getWorker().postMessage({ type: 'speak', id, text });
-    } catch (error) { busy = false; onIdle(); update(); throw error; }
+    } catch (error) { activeError=null; busy = false; onIdle(); update(); throw error; }
   }
   function dispose() { stop(); worker?.terminate(); void context?.close(); }
   update();

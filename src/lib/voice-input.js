@@ -42,16 +42,25 @@
     }
     function cancel() { const old = current; current = null; clear(); if (old) { stopMeter(old); try { old.instance.abort(); } catch {} } change('idle'); }
     function transcript(run) {
-      const segments = [];
+      const segments = [], chain = [];
+      let growth = 0, generation = -1;
+      const flush = () => {
+        // A single prefix pair can be genuine speech ("yes", "yes please").
+        // Only a repeated growing hypothesis sequence is normalized.
+        if (growth >= 2) segments.push(chain.at(-1));
+        else segments.push(...chain);
+        chain.length = 0; growth = 0;
+      };
       for (const part of run.parts.values()) {
         const text = part.text.trim();
         if (!text) continue;
-        const previous = segments.at(-1);
-        // Some Android engines return growing hypotheses at new result indices.
-        // Collapse only strict prefix extensions; keep intentional repeated words.
-        if (previous && text.toLowerCase().startsWith(previous.toLowerCase() + ' ')) segments[segments.length - 1] = text;
-        else segments.push(text);
+        if (generation !== part.generation) { flush(); generation = part.generation; }
+        const previous = chain.at(-1);
+        if (previous && text.toLowerCase() !== previous.toLowerCase() && !text.toLowerCase().startsWith(previous.toLowerCase() + ' ')) flush();
+        else if (previous && text.toLowerCase() !== previous.toLowerCase()) growth++;
+        chain.push(text);
       }
+      flush();
       return segments.join(' ').trim();
     }
     function complete(run) {
@@ -79,7 +88,7 @@
       instance.onstart = () => { if (current !== run) return; clearTimeout(startTimer); change('listening'); };
       instance.onresult = event => {
         if (current !== run) return;
-        for (let i = 0; i < event.results.length; i++) run.parts.set(run.offset + i, { text: event.results[i][0].transcript, final: event.results[i].isFinal });
+        for (let i = 0; i < event.results.length; i++) run.parts.set(run.offset + i, { text: event.results[i][0].transcript, final: event.results[i].isFinal, generation: run.offset });
         // Replace updated results rather than appending repeated hypotheses.
         for (const i of run.parts.keys()) if (i >= run.offset + event.results.length) run.parts.delete(i);
         onCaption(transcript(run));

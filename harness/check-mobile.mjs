@@ -186,9 +186,13 @@ try{
   await page.locator('nav [data-view=activity]').click();
   await page.locator('#issue-list').getByText('#23 · Verify the orb',{exact:true}).waitFor();
   assert.equal(await page.locator('#issue-list').getByText('Not an issue',{exact:true}).count(),0);
-  await page.locator('#issue-list').getByText('Technical ticket · Plan the ticket · pending',{exact:true}).waitFor();
-  await page.locator('#workflow-list').getByText('Plan the ticket · @lead · pending',{exact:true}).waitFor();
+  await page.locator('#issue-list').getByText('Technical ticket · 0/1 accepted · Waiting for next step',{exact:true}).waitFor();
+  await page.locator('#workflow-list').getByText('Plan the ticket · @lead · pending · No update yet',{exact:true}).waitFor();
   assert.equal(await page.locator('#issue-list a').getAttribute('href'),'https://github.com/owner/devdeck/issues/23');
+  await page.evaluate(()=>{snapshot.workflows.items[0].definition.steps[0].status='done';renderIssues();});
+  await page.locator('#issue-list').getByText('Technical ticket · 1/1 accepted · Completed',{exact:true}).waitFor();
+  await page.evaluate(()=>{snapshot.workflows.items[0].definition.steps[0].status='pending';renderIssues();});
+
   issueRefreshFails=true;await page.locator('#refresh-issues').click();
   await page.locator('#issue-status').filter({hasText:'Refresh failed: GitHub unavailable'}).waitFor();
   await page.locator('#issue-list').getByText('#23 · Verify the orb',{exact:true}).waitFor();

@@ -23,7 +23,7 @@ try{
   await page.screenshot({path:'/tmp/devdeck-orb-settings.png'});
   await page.reload();assert.equal(await page.getByLabel('primary orb color').inputValue(),'#12bb88');
   await page.getByRole('button',{name:'Conversation',exact:true}).click();
-  await page.getByPlaceholder('Ask the assistant…').fill('Typed still works');await page.getByRole('button',{name:'Send',exact:true}).click();
+  await page.getByPlaceholder('Message Dev…').fill('Typed still works');await page.getByRole('button',{name:'Send',exact:true}).click();
   await page.getByText('Received Typed still works',{exact:true}).waitFor();
   await page.getByRole('button',{name:'Talk to Dev',exact:true}).click();
   await page.getByRole('button',{name:'Download voice',exact:true}).click();
@@ -38,7 +38,8 @@ try{
   await page.getByRole('button',{name:'Mute spoken replies',exact:true}).click();
   assert.equal(await page.getByRole('button',{name:'Enable spoken replies',exact:true}).getAttribute('aria-pressed'),'true');
   await page.getByRole('button',{name:'Show chat',exact:true}).first().click();
-  await page.getByPlaceholder('Ask the assistant…').fill('Typed after voice');await page.getByRole('button',{name:'Send',exact:true}).click();
+  await page.getByText('Received Desktop spoken message',{exact:true}).waitFor();
+  await page.getByPlaceholder('Message Dev…').fill('Typed after voice');await page.getByRole('button',{name:'Send',exact:true}).click();
   await page.getByText('Received Typed after voice',{exact:true}).waitFor();
   assert.deepEqual(errors,[]);console.log('Shared orb: appearance save/reload, preview states, desktop typed and spoken delivery through one command, automatic local speech, mute and return to chat passed.');
 }finally{await browser.close()}

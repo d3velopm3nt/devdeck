@@ -52,6 +52,7 @@ export type RailView =
   /// page, just not the first one.
   | 'home'
   | 'inbox'
+  | 'chat'
   /// Team: goals, features and work. Which of the three is open is the
   /// rail's sub-menu, so it is state here rather than inside the page.
   | 'team'
@@ -491,6 +492,7 @@ const RAIL_VIEWS: readonly RailView[] = [
   'today',
   'home',
   'inbox',
+  'chat',
   'team',
   'activity',
   'sessions',

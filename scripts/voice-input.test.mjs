@@ -86,3 +86,17 @@ test('a late microphone permission result after cancel stops the new stream', as
   f.input.cancel(); resolveStream({ getTracks: () => [{ stop() { stopped++ } }] })
   await new Promise(setImmediate); assert.equal(stopped, 1); assert.equal(f.input.level(), 0)
 })
+
+test('Android growing hypotheses at separate indices produce one sentence', () => {
+  const f = fixture()
+  const words = ['okay', 'okay but', "okay but why", "okay but why can't you pick up my voice"]
+  f.recognition.onresult({ results: words.map(text => Object.assign([{ transcript: text }], { isFinal: true })) })
+  f.tick(3200)
+  assert.deepEqual(f.sent, [words.at(-1)])
+})
+test('genuine repeated words and independent segments are preserved', () => {
+  const f = fixture()
+  f.recognition.onresult({ results: ['very very good', 'yes', 'yes'].map(text => Object.assign([{ transcript: text }], { isFinal: true })) })
+  f.input.finish()
+  assert.deepEqual(f.sent, ['very very good yes yes'])
+})

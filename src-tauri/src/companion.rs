@@ -254,6 +254,14 @@ fn serve(mut stream: TcpStream, app: &tauri::AppHandle, b: &Arc<Bridge>) -> std:
     }
     if method == "GET" {
         let asset: Option<(&str, &[u8])> = match target {
+            "/voice-input.js" => Some((
+                "application/javascript",
+                include_bytes!("../../src/lib/voice-input.js"),
+            )),
+            "/orb-engine.js" => Some((
+                "application/javascript",
+                include_bytes!("../../src/lib/orb-engine.js"),
+            )),
             "/companion.js" => Some((
                 "application/javascript",
                 include_bytes!("../../mobile/companion.js"),
@@ -383,12 +391,15 @@ fn route(
         let cursor = b.events.lock().map_err(|e| e.to_string())?.0;
         let db = app.state::<crate::db::Db>();
         let nodes = crate::db::nodes_on(&db.conn())?;
+        let orb_preferences = crate::db::setting_get_conn(&db.conn(), "dev.orb.preferences")?
+            .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+            .unwrap_or(Value::Null);
         let summaries = convs.list();
         // Initial paint contains only the newest rooms and 30 recent messages.
         let recent: Vec<_> = summaries.iter().take(5).filter_map(|s| convs.load(&s.id).ok()).map(|c| json!({"id":c.id,"messages":c.messages.iter().rev().take(30).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>() })).collect();
         return Ok((
             200,
-            json!({"nodes":nodes.iter().map(|n| json!({"id":n.id,"parent_id":n.parent_id,"kind":n.kind,"name":n.name})).collect::<Vec<_>>(),"conversations":summaries,"recent":recent,"cursor":cursor,"sessions":ws.sessions_for(None),"approvals":ws.pending_approvals(),"claims":ws.claims_for(None,true),"queue":b.queue.lock().map_err(|e|e.to_string())?.snapshot(),"bridge_id":b.id,"agents":ws.agents().iter().map(|a|json!({"id":a.id,"name":a.name,"role":a.role})).collect::<Vec<_>>()}),
+            json!({"nodes":nodes.iter().map(|n| json!({"id":n.id,"parent_id":n.parent_id,"kind":n.kind,"name":n.name})).collect::<Vec<_>>(),"conversations":summaries,"recent":recent,"cursor":cursor,"sessions":ws.sessions_for(None),"approvals":ws.pending_approvals(),"claims":ws.claims_for(None,true),"queue":b.queue.lock().map_err(|e|e.to_string())?.snapshot(),"bridge_id":b.id,"orb_preferences":orb_preferences,"agents":ws.agents().iter().map(|a|json!({"id":a.id,"name":a.name,"role":a.role})).collect::<Vec<_>>()}),
         ));
     }
     if method == "GET" && target.starts_with("/api/conversation/") {

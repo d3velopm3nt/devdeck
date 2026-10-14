@@ -6,23 +6,24 @@ import path from 'node:path'
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright')
 const history = Array.from({length:70},(_,i)=>({from:i%2?'assistant':'user',text:`History message ${i}`,at:new Date().toISOString()}))
 history.push({from:'user',text:'What is the next step for DevDeck?',at:new Date().toISOString()},{from:'assistant',text:'Your workspace is ready. What would you like to work on?',at:new Date().toISOString()})
-let paired=false, offline=false, cursor=0, executions=0, fixtureBridge='bridge-fixture'
+let paired=false, offline=false, cursor=0, executions=0, fixtureBridge='bridge-fixture', orbPreferences=null
 const events=[], accepted=new Map()
 const emit=e=>events.push({cursor:++cursor,event:e})
 const server=http.createServer(async(req,res)=>{
   const url=new URL(req.url,'http://localhost')
   const json=(data,status=200)=>{res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(data))}
   if(url.pathname==='/'){res.setHeader('Content-Type','text/html');return res.end(fs.readFileSync('mobile/index.html','utf8'))}
+  if(['/orb-engine.js','/voice-input.js'].includes(url.pathname)){res.setHeader('Content-Type','application/javascript');return res.end(fs.readFileSync('src/lib'+url.pathname,'utf8'))}
   if(url.pathname==='/voice-orb.js'){res.setHeader('Content-Type','application/javascript');return res.end(fs.readFileSync('mobile/voice-orb.js','utf8'))}
   if(url.pathname==='/voice-client.js'){res.setHeader('Content-Type','application/javascript');return res.end(fs.readFileSync('mobile/voice-client.js','utf8'))}
-  if(['/companion.js','/companion.css'].includes(url.pathname)){res.setHeader('Content-Type',url.pathname.endsWith('.css')?'text/css':'application/javascript');return res.end(fs.readFileSync('mobile'+url.pathname,'utf8'))}
+  if(['/companion.js','/companion.css'].includes(url.pathname)){res.setHeader('Content-Type',url.pathname.endsWith('.css')?'text/css':'application/javascript');return res.end(fs.readFileSync(url.pathname==='/companion.js'&&process.env.MOBILE_CONTROLLER?process.env.MOBILE_CONTROLLER:'mobile'+url.pathname,'utf8'))}
   if(offline)return json({error:'PC unavailable'},503)
   let raw='';for await(const chunk of req)raw+=chunk
   const input=raw?JSON.parse(raw):{}
   if(url.pathname==='/api/pair'){assert.equal(input.code,'fixture-pair');paired=true;return json({})}
   if(!paired)return json({error:'Pair this device on the desktop'},401)
   if(url.pathname==='/api/unpair'){paired=false;return json({})}
-  if(url.pathname==='/api/snapshot')return json({nodes:[{id:1,parent_id:null,kind:'workspace',name:'Develtech'},{id:2,parent_id:1,kind:'project',name:'DevDeck'},{id:3,parent_id:2,kind:'folder',name:'Mobile companion'}],conversations:[{id:'room-1',title:'Main assistant',preview:'Your workspace is ready.'}],recent:[{id:'room-1',messages:history.slice(-30)}],sessions:[{id:'run-1',agent_id:'builder',agent_name:'Builder',project_id:'devdeck',feature_id:'Mobile polish',summary:'Building mobile views',transcript:[{at:'2026-10-10T10:00:00Z',text:'Implemented home screen'}],files_touched:['mobile/index.html'],status:'working',started_at:'2026-10-10T10:00:00Z'}],bridge_id:fixtureBridge,queue:[...accepted.values()].map(r=>({request_id:r.request_id,conversation_id:r.conversation_id,text:r.text,status:r.status})),approvals:[{id:'approval-1',agent_id:'builder',project_id:'devdeck',summary:'Run the project build',requested_at:new Date().toISOString()}],claims:[],agents:[{id:'builder',name:'Builder',role:'developer'}],cursor})
+  if(url.pathname==='/api/snapshot')return json({nodes:[{id:1,parent_id:null,kind:'workspace',name:'Develtech'},{id:2,parent_id:1,kind:'project',name:'DevDeck'},{id:3,parent_id:2,kind:'folder',name:'Mobile companion'}],conversations:[{id:'room-1',title:'Main assistant',preview:'Your workspace is ready.'}],recent:[{id:'room-1',messages:history.slice(-30)}],sessions:[{id:'run-1',agent_id:'builder',agent_name:'Builder',project_id:'devdeck',feature_id:'Mobile polish',summary:'Building mobile views',transcript:[{at:'2026-10-10T10:00:00Z',text:'Implemented home screen'}],files_touched:['mobile/index.html'],status:'working',started_at:'2026-10-10T10:00:00Z'}],bridge_id:fixtureBridge,orb_preferences:orbPreferences,queue:[...accepted.values()].map(r=>({request_id:r.request_id,conversation_id:r.conversation_id,text:r.text,status:r.status})),approvals:[{id:'approval-1',agent_id:'builder',project_id:'devdeck',summary:'Run the project build',requested_at:new Date().toISOString()}],claims:[],agents:[{id:'builder',name:'Builder',role:'developer'}],cursor})
   if(url.pathname.startsWith('/api/conversation/')){const before=Math.min(Number(url.searchParams.get('before')??history.length),history.length);const start=Math.max(0,before-50);return json({id:'room-1',title:'Main assistant',messages:history.slice(start,before),before:start})}
   if(url.pathname==='/api/node')return json({id:'room-1',title:'DevDeck'})
   if(url.pathname==='/api/conversations')return json({id:'room-1',title:'Main assistant'})
@@ -56,7 +57,7 @@ await context.addInitScript(() => {
     stop(){clearTimeout(this.startTimer);this.onend?.();}
     abort(){clearTimeout(this.startTimer);this.onend?.();}
   };
-  window.voiceRequests = [];
+  window.voiceTexts = [];window.voiceRequests = [];
   window.Worker = class {
     postMessage(data) {
       window.voiceRequests.push(data.type);
@@ -65,6 +66,7 @@ await context.addInitScript(() => {
         setTimeout(() => this.onmessage({data:{type:'ready'}}), 60);
       }
       if (data.type === 'speak') {
+        window.voiceTexts.push(data.text);
         const samples=Float32Array.from({length:24000},(_,i)=>Math.sin(i*2*Math.PI*440/24000)*.2);
         setTimeout(() => this.onmessage({data:{type:'audio',id:data.id,samples,rate:24000}}), 1000);
         setTimeout(() => this.onmessage({data:{type:'complete',id:data.id}}), 1050);
@@ -224,6 +226,38 @@ try{
   await page.getByRole('button',{name:'Retry saved request'}).click();
   await page.waitForFunction(()=>outbox.length===0);
   assert.equal(executions,6);
+  // Regression: capture is independent of the hidden composer and disabled Send.
+  await page.getByRole('button',{name:'Hide chat',exact:true}).click();
+  await page.getByRole('button',{name:'Download voice',exact:true}).click();
+  await page.getByText('Offline voice ready · Heart',{exact:true}).waitFor({state:'attached'});
+  assert.equal(await page.locator('#compose').isVisible(),false);
+  assert.equal(await page.locator('#send').isDisabled(),true);
+  await page.locator('#mic').click();await page.getByText('Listening…',{exact:true}).waitFor();
+  await page.evaluate(()=>{lastRecognition.onresult({resultIndex:0,results:[Object.assign([{transcript:'Interim only Android message'}],{isFinal:false})]});lastRecognition.onend();});
+  await page.waitForFunction(()=>outbox.length===0);
+  assert.equal(executions,7,'Interim-only speech reaches the same desktop endpoint with chat hidden');
+  assert.ok([...accepted.values()].some(r=>r.text==='Interim only Android message'));
+  await page.getByText('Speaking…',{exact:true}).waitFor();await page.locator('#mute-voice').click();
+  await page.locator('#mic').click();await page.getByText('Listening…',{exact:true}).waitFor();
+  await page.evaluate(()=>{const result=(text,final)=>({resultIndex:0,results:[Object.assign([{transcript:text}],{isFinal:final})]});lastRecognition.onresult(result('Repeated guess',false));lastRecognition.onresult(result('Final voice message',true));lastRecognition.onresult(result('Final voice message',true));lastRecognition.onend();lastRecognition.onend();});
+  await page.waitForFunction(()=>outbox.length===0);
+  assert.equal(executions,8,'Repeated recognition results and end events deliver exactly once');
+  assert.ok([...accepted.values()].some(r=>r.text==='Final voice message'));
+  await page.getByText('Speaking…',{exact:true}).waitFor();await page.locator('#mute-voice').click();
+  await page.locator('#mic').click();await page.getByText('Listening…',{exact:true}).waitFor();
+  await page.evaluate(()=>{lastRecognition.stop=()=>{};lastRecognition.onresult({resultIndex:0,results:[Object.assign([{transcript:'Missing end event'}],{isFinal:true})]});});
+  await page.waitForFunction(()=>outbox.length===0&&document.getElementById('voice-caption').textContent==='Missing end event'&&document.getElementById('orb').dataset.state!=='listening');
+  assert.equal(executions,9,'A captured transcript still delivers if the browser omits end');
+  await page.getByText('Speaking…',{exact:true}).waitFor();await page.locator('#mute-voice').click();
+  await page.waitForFunction(()=>localVoice.canSpeak());
+  await page.evaluate(async()=>{const old=localVoice.speak('Obsolete reply');localVoice.stop();await localVoice.speak('Replacement reply');await old;});
+  await page.getByText('Speaking…',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>voiceTexts.at(-1)),'Replacement reply','Cancelled synthesis does not swallow a new spoken reply');
+  await page.locator('#mute-voice').click();
+  orbPreferences={style:'ribbons',primary:'#12bb88',secondary:'#b87aff',glow:1.5,size:.7,movement:.5};
+  await page.evaluate(()=>refresh());
+  assert.equal(await page.evaluate(()=>snapshot.orb_preferences.primary),'#12bb88');
+  assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--orb-size')),'231px','Desktop appearance from snapshot changes mobile sizing');
   await page.getByRole('button',{name:'Back to workspace'}).click();
   await page.locator('#disconnect').click();
   await page.getByRole('heading',{name:'Connect with Dev'}).waitFor();

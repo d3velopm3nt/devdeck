@@ -7,11 +7,13 @@
 
 import { useEffect, useState } from 'react'
 import { aiw } from '../../lib/aiw'
+import { DesktopDev } from '../orb/DesktopDev'
 import { Thread } from './Thread'
 
 export function AssistantThread() {
   const [id, setId] = useState<string | null>(null)
   const [err, setErr] = useState('')
+  const [voiceView, setVoiceView] = useState(false)
 
   useEffect(() => {
     void aiw
@@ -34,13 +36,13 @@ export function AssistantThread() {
   return (
     <div className="flex h-full min-h-0 flex-col bg-page">
       <div className="shrink-0 border-b border-line px-5 py-3">
-        <div className="text-[14px] font-semibold text-ink">Assistant</div>
+        <div className="flex items-center justify-between"><span className="text-[14px] font-semibold text-ink">Dev</span><button className="btn-ghost" aria-pressed={voiceView} onClick={()=>setVoiceView(v=>!v)}>{voiceView?'Show chat':'Talk to Dev'}</button></div>
         <div className="text-[10.5px] text-muted">
           The orchestrator. It can put an agent on a feature and leave a bot behind, and it asks
           before anything that changes your machine.
         </div>
       </div>
-      <div className="min-h-0 flex-1 px-5 py-3">
+      <div className="min-h-0 flex-1 px-5 py-3" hidden={voiceView}>
         <Thread
           reloadKey={id}
           load={() => aiw.conversation(id)}
@@ -50,6 +52,7 @@ export function AssistantThread() {
           footnote="Conversations and anything it remembers are kept outside every repository."
         />
       </div>
+      {voiceView&&<div className="min-h-0 flex-1 p-4"><DesktopDev conversationId={id} onChat={()=>setVoiceView(false)}/></div>}
     </div>
   )
 }

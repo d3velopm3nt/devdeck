@@ -7,3 +7,10 @@ for (const name of ['ort-wasm-simd-threaded.mjs', 'ort-wasm-simd-threaded.wasm']
   await copyFile('node_modules/onnxruntime-web/dist/' + name, out + '/' + name);
 }
 console.log('Mobile offline voice runtime staged.');
+
+// The desktop uses the same worker and local synthesis engine as mobile.
+await mkdir('public/voice-runtime', { recursive: true });
+await copyFile(out + '/voice-worker.js', 'public/voice-worker.js');
+for (const name of ['ort-wasm-simd-threaded.mjs', 'ort-wasm-simd-threaded.wasm']) {
+  await copyFile(out + '/' + name, 'public/voice-runtime/' + name);
+}

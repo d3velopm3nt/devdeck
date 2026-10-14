@@ -24,3 +24,5 @@ body:not(.text-mode) .hero #orb{width:min(370px,90vw);height:min(370px,90vw);mar
 @media(max-height:690px){body:not(.text-mode) .hero #orb{width:260px;height:260px}}
 @media(prefers-reduced-motion:reduce){#orb-state{transition:none}}
 
+
+body:not(.text-mode) .hero #orb{width:min(var(--orb-size,330px),83vw);height:min(var(--orb-size,330px),83vw)}

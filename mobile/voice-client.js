@@ -1,16 +1,19 @@
 /* Local Kokoro voice. No reply text is sent to a voice service. */
 function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange, onPreparing = () => {} }) {
   let worker, ready = false, loading = false, busy = false, context, analyser, waveform;
+  let queuedText = null;
   let generation = 0, activeId = 0, endAt = 0, sources = [], finished = false;
   function update() {
     button.disabled = loading || busy || ready;
     button.textContent = loading ? 'Preparing voice…' : ready ? 'Voice ready' : 'Download voice';
     onChange();
   }
+  function drain(){if(!busy&&queuedText){const text=queuedText;queuedText=null;void speak(text).catch(error=>{status.textContent=error.message;});}}
   function idleIfDone() {
-    if (finished && sources.length === 0) { busy = false; status.textContent = 'Offline voice ready · Heart'; onIdle(); update(); }
+    if (finished && sources.length === 0) { busy = false; status.textContent = 'Offline voice ready · Heart'; onIdle(); update(); drain(); }
   }
   function stop() {
+    queuedText=null;
     if (busy && worker) worker.postMessage({ type: 'cancel', id: activeId });
     activeId = ++generation;
     for (const source of sources) { source.onended = null; try { source.stop(); } catch { /* Already ended. */ } }
@@ -36,7 +39,7 @@ function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange, onPr
         source.onended = () => { sources = sources.filter(s => s !== source); idleIfDone(); };
         source.start(start);
       } else if (data.type === 'complete') {
-        if (data.id !== activeId) { busy = false; update(); }
+        if (data.id !== activeId) { busy = false; update(); drain(); }
         else { finished = true; idleIfDone(); }
       } else if (data.type === 'error') {
         loading = false; busy = false; ready = false; stop(); status.textContent = data.message; update();
@@ -60,7 +63,8 @@ function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange, onPr
     await context.resume();
   }
   async function speak(text) {
-    if (!ready || busy) return;
+    if (!ready) return;
+    if(busy){queuedText=text;status.textContent='Waiting for local voice…';onPreparing();update();return;}
     // The microphone gesture unlocks audio before the asynchronous reply arrives.
     activeId = ++generation; const id = activeId;
     busy = true; finished = false; endAt = 0;
@@ -69,7 +73,7 @@ function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange, onPr
       context ||= new (window.AudioContext || window.webkitAudioContext)();
       if (!analyser) { analyser = context.createAnalyser(); analyser.fftSize = 256; waveform = new Uint8Array(analyser.fftSize); analyser.connect(context.destination); }
       await context.resume();
-      if (id !== activeId) { busy = false; update(); return; }
+      if (id !== activeId) { busy = false; update(); drain(); return; }
       getWorker().postMessage({ type: 'speak', id, text });
     } catch (error) { busy = false; onIdle(); update(); throw error; }
   }
@@ -84,3 +88,5 @@ function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange, onPr
   }
   return { speak, stop, unlock, dispose, level, isReady: () => ready, canSpeak: () => ready && !busy };
 }
+// A shared adapter: ESM desktop imports and classic mobile scripts use one engine.
+globalThis.createOfflineVoice = createOfflineVoice;

@@ -3,6 +3,7 @@ import { Icon } from '../lib/icons'
 import * as ipc from '../lib/ipc'
 import { DECK_DEFAULTS, loadDeckSettings, saveDeckSettings, type DeckEventKind, type DeckSettings as Preferences } from '../lib/deck'
 import { useApp } from '../store'
+import { OrbSettings } from './orb/OrbSettings'
 import { MobilePairing } from './MobilePairing'
 
 const KINDS: DeckEventKind[] = ['info', 'alert', 'approval', 'blocker']
@@ -68,6 +69,7 @@ export function DeckSettings() {
         <p className="text-[12px] text-dim">Choose when Deck appears and how it notifies you. It follows the app theme.</p></div>
       {!ready ? <p className="text-dim">Loading…</p> : <>
         <MobilePairing />
+        <OrbSettings />
         <section className={section}>
           <h2 className="mb-3 text-[13px] font-semibold text-ink">Shared spaces</h2>
           <div className="flex flex-wrap items-center gap-x-6 gap-y-3">

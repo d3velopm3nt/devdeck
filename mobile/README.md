@@ -56,3 +56,14 @@ Verification for this change: the normal mobile harness checks download/read/sto
 The orb and centre microphone now start/finish listening. Connecting, Listening, Thinking, Preparing voice and Speaking follow recognition, desktop work and playback events. Cancelling startup discards callbacks; errors reset the state and remain retryable. Unsupported recognition and a disconnected desktop disable input. Download voice enables read-aloud separately. The renderer uses continuous luminous ribbons, depth and a bounded playback envelope; listening animation indicates recognition state rather than measured microphone volume. Reduced motion freezes ambient motion.
 
 The deterministic browser harness includes an insecure-origin recognition fixture, denied-permission recovery and startup cancellation. It does not prove speech recognition works on an actual HTTP Android browser.
+
+## Shared orb and voice architecture
+
+- `src/lib/orb-engine.js` owns rendering, styles and bounded appearance preferences. Mobile's `voice-orb.js` and React's `DevOrb` only host it.
+- `src/lib/voice-input.js` owns browser capture and emits a completed transcript once. It handles interim-only results, revised results, cancellation and missing end events. It never submits a hidden form.
+- Both mobile typed and spoken messages enter `submitMessage` → the existing outbox → `/api/send` → desktop conversation/delegation. Desktop voice and the existing typed `Thread` both call `aiw.sendMessage`.
+- Both hosts use `mobile/voice-client.js` and the same staged Kokoro worker for local spoken replies. Cancelled synthesis queues the replacement reply rather than dropping it. Speech recognition is still provided by the browser, whose permission and service availability need testing on real devices.
+- Desktop **Settings → Deck settings → Dev orb library** previews Flowing sphere and Light ribbons. Save stores `dev.orb.preferences` in the existing local profile settings. The companion snapshot reads that key and applies changes on its next refresh.
+- Open the desktop assistant conversation and select **Talk to Dev** to use the live voice orb. **Show chat** preserves the existing typed conversation.
+
+Regression coverage: `harness/check-mobile.mjs` exercises hidden-composer speech delivery, interim/final revisions, omitted end events, shared preferences from snapshots and cancelled speech replacement. `harness/check-orb.mjs` uses the real desktop components with a native IPC fixture to check settings save/reload, previews, typed→voice→typed delivery and automatic local read-aloud. These are boundary fixtures, not physical Windows/Android microphone tests.

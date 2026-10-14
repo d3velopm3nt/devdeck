@@ -38,3 +38,7 @@ src-tauri/binaries/
 
 # Standalone sandbox Rust tests
 harness/rust-core/target/
+
+# Shared desktop speech runtime staged from npm dependencies.
+/public/voice-worker.js
+/public/voice-runtime/

@@ -68,3 +68,6 @@ pub mod subscription_process;
 #[path = "../../src-tauri/src/github_issue_read.rs"]
 pub mod github_issue_read;
 
+#[path = "../../src-tauri/src/companion_protocol.rs"]
+pub mod companion_protocol;
+

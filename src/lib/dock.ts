@@ -95,18 +95,9 @@ export function openAgentSettings(id: string) {
   useAiw.getState().openAgent(id)
 }
 
-/// Open (or focus) the Assistant's own conversation as a document.
+/// Open Dev's conversation in the shared Chat page.
 export function openAssistant() {
-  if (!api) return
-  useApp.getState().setRailView('projects')
-  const id = 'assistant-thread'
-  const existing = api.getPanel(id)
-  if (existing) {
-    existing.api.setActive()
-    return
-  }
-  addToMain({ id, component: 'assistant-thread', title: 'Assistant' })
-  api.getPanel(id)?.api.setActive()
+  useApp.getState().setRailView('chat')
 }
 
 /// Open (or focus) the learn run.

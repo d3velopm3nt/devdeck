@@ -260,6 +260,8 @@ export function Rail() {
 
       <RailButton label="Work" icon="check" active={railView === 'team'} expanded={expanded} live={working}
         onClick={() => setRailView('team')} />
+      <RailButton label="Chat" icon="ai" active={railView === 'chat'} expanded={expanded}
+        onClick={() => setRailView('chat')} />
       <RailButton label="Agents" icon="tool" active={railView === 'workers'} expanded={expanded}
         onClick={() => setRailView('workers')} />
 

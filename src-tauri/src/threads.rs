@@ -478,6 +478,38 @@ fn seat_managers(app: &tauri::AppHandle, ws: &Arc<Workspace>, conv_id: &str, nod
     }
 }
 
+/// The companion enters the same room and permission gate as the desktop.
+/// Only text is accepted remotely; approvals still happen on the desktop.
+pub fn companion_send(
+    app: &tauri::AppHandle,
+    ws: &Arc<Workspace>,
+    conv_id: &str,
+    text: &str,
+) -> Result<AssistantReply, String> {
+    let convs = ws.convs()?;
+    let conv = convs.load(conv_id)?;
+    let who = if let Some(node_id) = conv.node {
+        register(app, ws, node_id)?;
+        let name = {
+            let db = app.state::<Db>();
+            let conn = db.conn();
+            db::node_by_id(&conn, node_id)?.name
+        };
+        node_persona(app, ws, node_id, &name)?
+    } else {
+        persona_for_thread(app, ws, &conv)?
+    };
+    let named = pull_in_bots(app, ws, conv_id, text);
+    let progress = app.clone();
+    let sink = move |event: ChatEvent| {
+        let _ = progress.emit("aiw:chat", event);
+    };
+    let reply = Assistant::send_as(ws, convs, conv_id, text, &sink, &who)?;
+    also_answer(app, ws, conv_id, text, named, &who.agent_id);
+    answer_as_agents(app, ws, conv_id, text, &who.agent_id);
+    Ok(reply)
+}
+
 #[tauri::command(async)]
 pub async fn node_thread_send(
     app: tauri::AppHandle,

@@ -133,6 +133,18 @@ pub fn item_path(it: &Item) -> Result<PathBuf, String> {
     })
 }
 
+/// Add metadata only to a run's copy of plain custom/Community instructions.
+/// The shared source remains byte-for-byte unchanged and existing frontmatter wins.
+pub fn runtime_skill_text(item: &Item, raw: &str) -> Result<String, String> {
+    if raw.trim_start().starts_with("---") {
+        return Ok(raw.to_string());
+    }
+    crate::aiw::deck::write_doc(&crate::aiw::deck::Doc {
+        meta: serde_json::json!({"name": item.id, "description": if item.what.is_empty() { &item.name } else { &item.what }}),
+        body: raw.to_string(),
+    })
+}
+
 /// A skill's folder, which is what a session gets a copy of.
 pub fn skill_dir(id: &str) -> Result<PathBuf, String> {
     Ok(dir()?.join("skills").join(id))
@@ -724,6 +736,22 @@ pub fn library_remove(id: String, kind: String) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn plain_shared_skill_is_wrapped_only_for_its_runtime_copy() {
+        let item = Item {
+            id: "evidence-checks".into(),
+            name: "Evidence checks".into(),
+            what: "Verify claims: report evidence".into(),
+            ..Default::default()
+        };
+        let source = "Check each acceptance criterion and cite the result.";
+        let copy = runtime_skill_text(&item, source).unwrap();
+        let parsed = crate::aiw::deck::parse_doc::<serde_json::Value>(&copy).unwrap();
+        assert_eq!(parsed.meta["name"], "evidence-checks");
+        assert_eq!(parsed.meta["description"], item.what);
+        assert_eq!(parsed.body.trim(), source);
+        assert_eq!(runtime_skill_text(&item, &copy).unwrap(), copy);
+    }
 
     /// The bug this exists to stop: ECC keeps `code-reviewer` four times over
     /// — once for real, once under `.kiro` for another editor, and once per

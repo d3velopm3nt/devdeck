@@ -255,6 +255,7 @@ pub fn machine() -> Result<Machine, String> {
 /// carries must not change underneath it because you edited your own setup
 /// this afternoon.
 pub fn take(paths: &[String]) -> Result<crate::library::Added, String> {
+    let _guard = crate::library::WRITE.lock().map_err(|e| e.to_string())?;
     let m = machine()?;
     let mut out = crate::library::Added::default();
     let mut ix = crate::library::read_index()?;
@@ -293,6 +294,16 @@ pub fn take(paths: &[String]) -> Result<crate::library::Added, String> {
             added_at: crate::aiw::events::now_iso(),
             chars: text.chars().count() as i64,
         };
+        if let Some(existing) = ix
+            .items
+            .iter()
+            .find(|x| x.id == item.id && x.kind == item.kind)
+        {
+            if existing.repo != item.repo || existing.path != item.path {
+                out.missed.push(format!("{} already belongs to {}. No replacement made; use a distinct ID or deliberately remove the old definition.", item.id, existing.repo));
+                continue;
+            }
+        }
         let p = crate::library::item_path(&item)?;
         std::fs::create_dir_all(p.parent().unwrap()).map_err(err)?;
         // A skill is a folder, and the rest of it matters: scripts it refers

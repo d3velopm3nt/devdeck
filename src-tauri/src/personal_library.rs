@@ -22,7 +22,7 @@ pub fn save_item(
         || body.trim().is_empty()
         || body.len() > 200_000
     {
-        return Err("Use a lowercase ID, choose skill or brief, and provide a name and instructions (up to 200 KB).".into());
+        return Err("Use a lowercase ID, choose a skill or agent template, and provide a name and instructions (up to 200 KB).".into());
     }
     let mut ix = library::read_index()?;
     let existing = ix.items.iter().find(|it| it.id == id && it.kind == kind);

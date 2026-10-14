@@ -1171,6 +1171,7 @@ fn lay_out_skills(cwd: &Path, ids: &[String]) -> Result<usize, String> {
     if ids.is_empty() {
         return Ok(0);
     }
+    let library = crate::library::read_index()?;
     let dest = cwd.join(".claude").join("skills");
     std::fs::create_dir_all(&dest).map_err(err)?;
     let mut n = 0;
@@ -1185,7 +1186,21 @@ fn lay_out_skills(cwd: &Path, ids: &[String]) -> Result<usize, String> {
             let p = e.path();
             if p.is_file() {
                 let name = p.file_name().unwrap_or_default();
-                std::fs::copy(&p, to.join(name)).map_err(err)?;
+                if name == "SKILL.md" {
+                    let item = library
+                        .items
+                        .iter()
+                        .find(|it| it.id == *id && it.kind == "skill")
+                        .ok_or_else(|| format!("Skill '{id}' is no longer in the library"))?;
+                    let raw = std::fs::read_to_string(&p).map_err(err)?;
+                    std::fs::write(
+                        to.join(name),
+                        crate::library::runtime_skill_text(item, &raw)?,
+                    )
+                    .map_err(err)?;
+                } else {
+                    std::fs::copy(&p, to.join(name)).map_err(err)?;
+                }
             }
         }
         n += 1;

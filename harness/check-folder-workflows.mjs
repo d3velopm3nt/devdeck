@@ -27,7 +27,7 @@ try {
   await page.getByRole('button', { name: /STEP 1/ }).click()
   await page.getByLabel('Review evidence').fill('Reviewed claims and saved accepted draft in campaign.md.')
   await button('Accept step').click()
-  await page.getByText('1 of 2 accepted · Manual start').waitFor()
+  await page.getByText('1 of 2 accepted · Starts follow dependencies and permissions').waitFor()
   await page.getByRole('button', { name: /STEP 2/ }).click()
   await button('Start step').waitFor()
   assert.equal(await page.evaluate(() => window.__workflowCalls.filter(c => c.command === 'start').length), 1, 'acceptance does not silently start another worker')

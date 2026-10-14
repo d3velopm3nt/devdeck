@@ -626,3 +626,53 @@ pub fn folder_workflow_route(
         workflow: view(&p, raw)?,
     })
 }
+
+/// AIW bridge: use the same transition locks and revision checks as the UI.
+/// No review action is exposed; acceptance remains a human decision.
+pub fn assistant_action(
+    app: &tauri::AppHandle,
+    node: i64,
+    action: &str,
+    args: &serde_json::Value,
+) -> Result<String, String> {
+    use tauri::Manager;
+    let db = app.state::<Db>();
+    let required = |key: &str| -> Result<String, String> {
+        args.get(key)
+            .and_then(|v| v.as_str())
+            .map(str::to_owned)
+            .ok_or_else(|| format!("Missing {key}"))
+    };
+    let workflow = args
+        .get("workflow")
+        .and_then(|v| v.as_str())
+        .map(str::to_owned);
+    let value = match action {
+        "list" => serde_json::to_value(folder_workflow_list(db, node)?),
+        "get" => serde_json::to_value(folder_workflow_get(app.clone(), db, node, workflow)?),
+        "route" => serde_json::to_value(folder_workflow_route(
+            app.clone(),
+            db,
+            node,
+            required("source")?,
+            required("expected")?,
+            required("repository")?,
+            args.get("number")
+                .and_then(|v| v.as_u64())
+                .filter(|n| *n > 0)
+                .ok_or("Invalid issue number")?,
+            required("title")?,
+        )?),
+        "start" => serde_json::to_value(folder_workflow_start(
+            app.clone(),
+            db,
+            node,
+            workflow,
+            required("step")?,
+            required("expected")?,
+        )?),
+        _ => return Err("Unknown workflow action".into()),
+    }
+    .map_err(|e| e.to_string())?;
+    Ok(value.to_string())
+}

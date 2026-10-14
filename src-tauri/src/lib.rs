@@ -949,6 +949,12 @@ pub fn run() {
                 }));
             }
 
+            {
+                let handle = app.handle().clone();
+                aiw_for_setup.set_workflow_handler(Box::new(move |node, action, args| {
+                    folder_workflows::assistant_action(&handle, node, action, args)
+                }));
+            }
             folder_workflows::install(app.handle());
             issue_monitor::install(app.handle());
 

@@ -251,6 +251,7 @@ pub const TOOL_MEMORY: &str = "memory";
 pub const TOOL_SKILL: &str = "skill";
 /// A manager's own plan: the work items of the feature it manages.
 pub const TOOL_WORK: &str = "work";
+pub const TOOL_WORKFLOW: &str = "workflow";
 
 /// Tools the assistant executes itself rather than handing to a project's
 /// `ToolService`.
@@ -267,6 +268,7 @@ pub fn is_assistant_tool(tool: &str) -> bool {
         || tool == TOOL_ROUTINE
         || tool == TOOL_SKILL
         || tool == TOOL_WORK
+        || tool == TOOL_WORKFLOW
 }
 
 /// Of those, the ones a session genuinely cannot run.
@@ -663,6 +665,21 @@ pub fn registry() -> Vec<ToolInfo> {
                     &["what", "every"],
                 ),
             )],
+        },
+        ToolInfo {
+            id: TOOL_WORKFLOW.into(),
+            name: "Folder workflows".into(),
+            description: "Discover workflows, route issues, and coordinate independent workers directly. Read current state before each mutation. Human review remains required.".into(),
+            actions: vec![
+                act("list", "List workflows in this conversation's folder.", Access::Read, schema(serde_json::json!({}), &[])),
+                act("get", "Read a workflow and current dependency/review state; returns raw revision for expected.", Access::Read, schema(serde_json::json!({"workflow":{"type":"string"}}), &[])),
+                act("route", "Create an issue's isolated workflow from a selected template. Repeated routing returns the existing issue workflow.", Access::Write, schema(serde_json::json!({
+                    "source":{"type":"string"}, "expected":{"type":"string"}, "repository":{"type":"string"}, "number":{"type":"integer","minimum":1}, "title":{"type":"string"}
+                }), &["source","expected","repository","number","title"])),
+                act("start", "Start one ready step using its configured worker. Returns immediately; independent steps can run concurrently. Never bypasses dependencies or human review. Refresh state before starting another step.", Access::Write, schema(serde_json::json!({
+                    "workflow":{"type":"string"}, "step":{"type":"string"}, "expected":{"type":"string"}
+                }), &["step","expected"])),
+            ],
         },
         ToolInfo {
             id: TOOL_WORK.into(),

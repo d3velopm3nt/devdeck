@@ -32,7 +32,7 @@ use super::runtime::{AgentRuntime, LiveSession, StartAgentCommand};
 use super::state::Workspace;
 use super::tools::{
     is_assistant_tool, ToolCall, TOOL_BOTS, TOOL_DELEGATE, TOOL_MEMORY, TOOL_ROUTINE, TOOL_SKILL,
-    TOOL_WORK,
+    TOOL_WORK, TOOL_WORKFLOW,
 };
 
 /// The built-in orchestrator's agent id. It is a real entry in the agent list
@@ -2051,6 +2051,7 @@ impl Assistant {
                 TOOL_BOTS => Self::make_bot(ws, conv, me, call, scope, cause),
                 TOOL_ROUTINE => Self::make_routine(ws, conv, me, call, scope, cause),
                 TOOL_SKILL => Self::save_skill(ws, call),
+                TOOL_WORKFLOW => Self::workflow(ws, conv, me, call, scope, cause),
                 TOOL_WORK => Self::plan_work(ws, conv, persona_plan, call),
                 _ => (false, format!("unknown assistant tool '{}'", call.tool)),
             };
@@ -2160,6 +2161,54 @@ impl Assistant {
     /// after the conversation ends. And refused outright when nobody is
     /// watching — a run started by a clock that quietly adds more clock rows
     /// is how a machine fills up with things nobody remembers agreeing to.
+    fn workflow(
+        ws: &Arc<Workspace>,
+        conv: &ConversationMeta,
+        me: &str,
+        call: &ToolCall,
+        scope: &EventScope,
+        cause: &DomainEvent,
+    ) -> (bool, String) {
+        use super::tools::Permission;
+        let write = match call.action.as_str() {
+            "list" | "get" => false,
+            "route" | "start" => true,
+            _ => return (false, "Unknown workflow action".into()),
+        };
+        let node = conv
+            .node
+            .or_else(|| conv.project_id.as_deref().and_then(|id| id.parse().ok()));
+        let Some(node) = node else {
+            return (
+                false,
+                "Select a folder or project for this conversation first".into(),
+            );
+        };
+        let permission = ws.permission_matrix().get(me, TOOL_WORKFLOW);
+        if permission == Permission::None || (write && permission == Permission::Read) {
+            return (
+                false,
+                "Workflow action is denied by your tool permissions".into(),
+            );
+        }
+        if permission == Permission::Approval && write && scope.unattended {
+            return (
+                false,
+                "Workflow action needs approval; this run is unattended".into(),
+            );
+        }
+        if permission == Permission::Approval
+            && write
+            && !ws.ask_approval(me, call, scope, cause).allows()
+        {
+            return (false, "Workflow action was not approved".into());
+        }
+        match ws.workflow(node, &call.action, &call.args) {
+            Ok(result) => (true, result),
+            Err(error) => (false, error),
+        }
+    }
+
     fn make_routine(
         ws: &Arc<Workspace>,
         conv: &ConversationMeta,
@@ -2836,6 +2885,60 @@ fn action_name(a: &AgentAction) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn workflow_bridge_enforces_permissions_and_keeps_folder_scope() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let ws = Arc::new(Workspace::with_approval_timeout(
+            std::time::Duration::from_millis(1),
+        ));
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = calls.clone();
+        ws.set_workflow_handler(Box::new(move |node, action, _| {
+            assert_eq!(node, 42);
+            assert!(matches!(action, "list" | "start"));
+            seen.fetch_add(1, Ordering::SeqCst);
+            Ok("ok".into())
+        }));
+        let conv = ConversationMeta {
+            node: Some(42),
+            project_id: Some("7".into()),
+            ..Default::default()
+        };
+        let scope = EventScope {
+            unattended: true,
+            ..Default::default()
+        };
+        let cause = DomainEvent::new(
+            EventType::ToolApprovalRequested,
+            scope.clone(),
+            serde_json::json!({}),
+        );
+        let invoke = |action| {
+            Assistant::workflow(
+                &ws,
+                &conv,
+                ASSISTANT_ID,
+                &ToolCall::new(TOOL_WORKFLOW, action, serde_json::json!({})),
+                &scope,
+                &cause,
+            )
+            .0
+        };
+        assert!(invoke("list"));
+        assert!(!invoke("start")); // unattended approval cannot start a worker
+        ws.set_permission(ASSISTANT_ID, TOOL_WORKFLOW, "read")
+            .unwrap();
+        assert!(!invoke("start"));
+        ws.set_permission(ASSISTANT_ID, TOOL_WORKFLOW, "none")
+            .unwrap();
+        assert!(!invoke("list"));
+        ws.set_permission(ASSISTANT_ID, TOOL_WORKFLOW, "full")
+            .unwrap();
+        assert!(invoke("start"));
+        assert!(!invoke("review")); // model cannot accept its own work
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
 
     struct Tmp(std::path::PathBuf);
     impl Tmp {

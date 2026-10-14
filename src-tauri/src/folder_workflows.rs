@@ -612,10 +612,9 @@ pub fn folder_workflow_route(
     let doc = Doc {
         meta: definition,
         body: format!(
-            "{}\n\n## Originating ticket\n\n{}\n\n{}\n",
+            "{}\n\n## Originating ticket\n\n{}\n\nhttps://github.com/{repository}/issues/{number}\n",
             template.body,
-            title.trim(),
-            format!("https://github.com/{repository}/issues/{number}")
+            title.trim()
         ),
     };
     let raw = save(&p, &doc)?;

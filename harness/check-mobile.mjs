@@ -254,9 +254,10 @@ try{
   await page.getByText('Speaking…',{exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>voiceTexts.at(-1)),'Replacement reply','Cancelled synthesis does not swallow a new spoken reply');
   await page.locator('#mute-voice').click();
-  orbPreferences={style:'ribbons',primary:'#12bb88',secondary:'#b87aff',glow:1.5,size:.7,movement:.5};
+  orbPreferences={style:'particles',primary:'#12bb88',secondary:'#b87aff',glow:1.5,size:.7,movement:.5};
   await page.evaluate(()=>refresh());
   assert.equal(await page.evaluate(()=>snapshot.orb_preferences.primary),'#12bb88');
+  assert.equal(await page.evaluate(()=>DevOrb.normalize(snapshot.orb_preferences).style),'particles');
   assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--orb-size')),'231px','Desktop appearance from snapshot changes mobile sizing');
   await page.getByRole('button',{name:'Back to workspace'}).click();
   await page.locator('#disconnect').click();

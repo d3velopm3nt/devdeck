@@ -1,5 +1,9 @@
 # Mobile companion · operations home and Dev
 
+The Dev orb library includes **Particle surface**, adapted from [Voice Orb / Ship Notes](https://aqualang89.github.io/shipnotes-components/components/voice-orb/demo.html) under its MIT license. Choose it in desktop Deck settings and save to sync it to the connected phone. Its default palette follows the live state: lavender idle, mint listening, amber thinking/preparing, and pink/violet speaking. Custom primary/secondary colors override that palette. It uses WebGL particles with a Canvas fallback and the existing audio-level signal; it does not claim separate frequency-band analysis. Glow, size, movement and reduced-motion preferences apply.
+
+Desktop settings and chat share an interactive `OrbStage`. **Play orb sample** produces local audio and drives the same analyser/renderer path in both views, without microphone access or downloading voice. The state picker simulates varying input levels for Listening/Speaking. In the desktop WebView, browser recognition may reject input with `not-allowed`; the voice view then explains how to use Windows dictation (Windows + H) in its message field and Send through the normal conversation command. Local reply playback remains separate from recognition.
+
 This branch adds an opt-in bridge to the running Windows desktop app. It is not a cloud-hosted mobile app or a finished WhatsApp-style sync service.
 
 ## Try it

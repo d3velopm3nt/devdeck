@@ -1,5 +1,5 @@
 export type OrbMode = 'idle' | 'connecting' | 'listening' | 'thinking' | 'preparing' | 'speaking' | 'offline'
-export interface OrbPreferences { style: 'flow' | 'ribbons'; primary: string; secondary: string; glow: number; size: number; movement: number }
+export interface OrbPreferences { style: 'flow' | 'ribbons' | 'particles'; primary: string; secondary: string; glow: number; size: number; movement: number }
 declare global {
   var DevOrb: {
     defaults: OrbPreferences

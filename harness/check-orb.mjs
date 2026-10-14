@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import path from 'node:path';
+import {tmpdir} from 'node:os';
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE||'playwright');
 const browser=await chromium.launch({headless:true,args:['--no-sandbox'],...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{})});
 const context=await browser.newContext({viewport:{width:1280,height:900}});
@@ -20,12 +22,38 @@ try{
   await page.getByText('Orb saved. Your connected phone picks it up automatically.',{exact:true}).waitFor();
   const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('dev.orb.preferences')));
   assert.equal(saved.style,'ribbons');assert.equal(saved.primary,'#12bb88');assert.equal(saved.glow,1.5);assert.equal(saved.size,1.2);
-  await page.screenshot({path:'/tmp/devdeck-orb-settings.png'});
+  await page.screenshot({path:path.join(tmpdir(),'devdeck-orb-settings.png')});
   await page.reload();assert.equal(await page.getByLabel('primary orb color').inputValue(),'#12bb88');
+  await page.getByRole('button',{name:/Particle surface/}).click();
+  await page.getByLabel('primary orb color',{exact:true}).fill('#54ddff');
+  await page.getByRole('button',{name:'Save orb',exact:true}).click();
+  await page.getByText('Orb saved. Your connected phone picks it up automatically.',{exact:true}).waitFor();
+  await page.reload();
+  assert.equal(await page.getByRole('button',{name:/Particle surface/}).getAttribute('aria-pressed'),'true');
+  assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('dev.orb.preferences')).style),'particles');
+  for(const state of ['idle','listening','thinking','preparing','speaking']){
+    await page.getByLabel('Orb preview state',{exact:true}).selectOption(state);
+    await page.waitForFunction(()=>{
+      const canvas=[...document.querySelectorAll('[aria-label="Orb appearance"] canvas')].at(-1);
+      return canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data.some(v=>v>0);
+    });
+  }
+  await page.screenshot({path:path.join(tmpdir(),'devdeck-particle-orb.png')});
+  const previewCanvas=page.locator('[aria-label="Interactive Dev orb"] canvas');
+  const idleFrame=await previewCanvas.evaluate(c=>c.toDataURL());
+  await page.waitForTimeout(400);
+  assert.notEqual(await previewCanvas.evaluate(c=>c.toDataURL()),idleFrame,'Preview canvas actually animates');
+  await page.getByRole('button',{name:'Play orb sample',exact:true}).click();
+  await page.getByText('Sample · Speaking…',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'Stop sample',exact:true}).click();
+  await page.getByRole('button',{name:'Play orb sample',exact:true}).waitFor();
   await page.getByRole('button',{name:'Conversation',exact:true}).click();
   await page.getByPlaceholder('Message Dev…').fill('Typed still works');await page.getByRole('button',{name:'Send',exact:true}).click();
   await page.getByText('Received Typed still works',{exact:true}).waitFor();
   await page.getByRole('button',{name:'Talk to Dev',exact:true}).click();
+  await page.getByRole('button',{name:'Play orb sample',exact:true}).click();
+  await page.getByText('Sample · Speaking…',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'Stop sample',exact:true}).click();
   await page.getByRole('button',{name:'Download voice',exact:true}).click();
   await page.getByText('Local voice ready · automatic replies',{exact:true}).waitFor();
   await page.getByRole('button',{name:'Start voice input',exact:true}).click();
@@ -34,9 +62,16 @@ try{
   await page.getByText('Speaking…',{exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>spokenText),'Received Desktop spoken message');
   const calls=await page.evaluate(()=>__orbCalls);assert.deepEqual(calls.map(c=>[c.conversationId,c.text]),[['orb-thread','Typed still works'],['orb-thread','Desktop spoken message']]);
-  await page.screenshot({path:'/tmp/devdeck-desktop-orb.png'});
+  await page.screenshot({path:path.join(tmpdir(),'devdeck-desktop-orb.png')});
   await page.getByRole('button',{name:'Mute spoken replies',exact:true}).click();
   assert.equal(await page.getByRole('button',{name:'Enable spoken replies',exact:true}).getAttribute('aria-pressed'),'true');
+  await page.getByRole('button',{name:'Start voice input',exact:true}).click();
+  await page.evaluate(()=>capture.onerror({error:'not-allowed'}));
+  await page.getByText(/desktop speech service rejected voice input/).waitFor();
+  await page.getByLabel('Message Dev in voice view',{exact:true}).fill('Dictated desktop message');
+  await page.getByRole('button',{name:'Send',exact:true}).last().click();
+  await page.getByText('Received Dictated desktop message',{exact:true}).waitFor();
+  assert.deepEqual((await page.evaluate(()=>__orbCalls)).at(-1),{conversationId:'orb-thread',text:'Dictated desktop message'});
   await page.getByRole('button',{name:'Show chat',exact:true}).first().click();
   await page.getByText('Received Desktop spoken message',{exact:true}).waitFor();
   await page.getByPlaceholder('Message Dev…').fill('Typed after voice');await page.getByRole('button',{name:'Send',exact:true}).click();

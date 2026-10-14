@@ -7,7 +7,8 @@ import { subtreeIds } from '../../lib/tree'
 import { ManagerWorkspace } from './AgentsPage'
 import { Settings } from '../aiw/Settings'
 import { WorkerEditor } from '../workers/WorkerEditor'
-import { useLibrary } from '../workers/LibraryPanel'
+import { ReusableTeams } from './ReusableTeams'
+import { LibraryPanel, useLibrary } from '../workers/LibraryPanel'
 import { startWorker } from '../workers/StartWorker'
 
 type Role = 'manager' | 'worker' | 'specialist'
@@ -40,6 +41,7 @@ export function AgentDirectory() {
   const [busy, setBusy] = useState(false)
   const [editing, setEditing] = useState<ipc.Worker | null>(null)
   const [settings, setSettings] = useState(false)
+  const [section, setSection] = useState<'agents'|'library'|'teams'>('agents')
   const reload = useCallback(async () => {
     try {
       const [t, w, r] = await Promise.all([ipc.managerTeam(), ipc.workersList(), ipc.runsList(0)])
@@ -85,9 +87,14 @@ export function AgentDirectory() {
   return <div className="flex h-full min-h-0 flex-col bg-page">
     <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-6 py-5">
       <div><h1 className="text-xl font-semibold text-ink">Agents</h1><p className="mt-1 text-sm text-muted">Your agents, roles and teams in one place.</p></div>
-      <div className="flex gap-2"><button className="btn-ghost" onClick={() => setSettings(!settings)}>{settings ? 'Back to agents' : 'AI & permissions'}</button><button className="btn-primary" onClick={() => { setSettings(false); setAdding(true) }}>Add agent</button></div>
+      <div className="flex gap-2"><button className="btn-ghost" onClick={() => setSettings(!settings)}>{settings ? 'Back to agents' : 'AI & permissions'}</button><button className="btn-primary" onClick={() => { setSettings(false); setSection('agents'); setAdding(true) }}>Add agent</button></div>
     </header>
     {settings ? <Settings /> : <div className="min-h-0 flex-1 space-y-5 overflow-auto p-6">
+      <nav aria-label="Agent library sections" className="flex gap-2">{(['agents','library','teams'] as const).map(tab=><button key={tab} aria-pressed={section===tab} className={section===tab?'btn-primary':'btn-ghost'} onClick={()=>setSection(tab)}>{tab==='agents'?'Configured agents':tab==='library'?'Library':'Reusable teams'}</button>)}</nav>
+      {section === 'library' && <LibraryPanel items={lib.items} reload={lib.reload} onConfigure={item=>{const w=blank('worker','Custom',nodeId);setEditing({...w,name:item.name || item.id,what:item.what,brief:item.id});}}/>}
+      {section === 'teams' && <ReusableTeams workers={workers} onAgents={()=>{setSection('agents');setAdding(true)}}/>}
+      {lib.err && <p role="alert" className="text-sm text-err">{lib.err}</p>}
+      {section === 'agents' && <>
       {error && <p role="alert" className="text-sm text-err">{error}</p>}
       {adding && <section className="space-y-3 rounded-xl border border-line bg-panel p-4" aria-label="Add agent">
         <div className="grid gap-3 sm:grid-cols-3">
@@ -105,6 +112,7 @@ export function AgentDirectory() {
         <td className="px-4 py-3"><button className="btn-ghost" onClick={() => { if(r.id.startsWith('manager:')) setSelected(r.id); else if(r.id.startsWith('worker:')) setEditing(workers.find(w => `worker:${w.handle}` === r.id) || null); else setSettings(true) }}>Configure</button>{r.id.startsWith('worker:') && <button className="btn-ghost" onClick={() => startWorker({handle: r.id.slice(7), nodeId: scope ?? undefined})}>Assign task</button>}</td>
       </tr>)}</tbody></table>{!rows.length && <p className="p-6 text-sm text-muted">Add your first agent to start building a team.</p>}</div>
       {member && <ManagerWorkspace key={member.bot.handle} member={member} team={team} workers={workers} onChanged={reload} />}
+      </>}
     </div>}
     {editing && <WorkerEditor worker={editing} library={lib.items} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void reload() }} />}
   </div>

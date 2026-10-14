@@ -334,7 +334,7 @@ function Pills({
   const [q, setQ] = useState('')
   const long = all.length > 14
   const match = all.filter(
-    (i) => !q.trim() || i.id.toLowerCase().includes(q.toLowerCase()) || i.what.toLowerCase().includes(q.toLowerCase()),
+    (i) => !q.trim() || i.id.toLowerCase().includes(q.toLowerCase()) || i.name.toLowerCase().includes(q.toLowerCase()) || i.what.toLowerCase().includes(q.toLowerCase()),
   )
   // The chosen ones stay in sight whatever is typed: losing the thing you
   // picked because you searched for something else reads as having lost it.
@@ -357,7 +357,7 @@ function Pills({
         {shown.map((s) => (
           <button
             key={s.id}
-            title={s.what}
+            title={`${s.what} · ${s.repo} · ${s.id}`}
             className={`rounded-full border px-2.5 py-0.5 font-mono text-[11px] ${
               chosen.includes(s.id)
                 ? 'border-indigo-500 bg-indigo-500/10 text-ink'
@@ -365,7 +365,7 @@ function Pills({
             }`}
             onClick={() => onToggle(s.id)}
           >
-            {s.id}
+            {s.name || s.id}
           </button>
         ))}
         {all.length === 0 && <span className="text-[11px] text-faint">{empty}</span>}

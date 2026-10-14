@@ -32,6 +32,7 @@ type Tab = 'services' | 'commands' | 'profiles'
 
 export function SpaceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
   const [dashboard, setDashboard] = useState(false)
+  const [showWorkflows, setShowWorkflows] = useState(false)
   const projectId = props.params.id
   const nodes = useApp((s) => s.nodes)
   const services = useApp((s) => s.services)
@@ -88,8 +89,8 @@ export function SpaceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
     )
   }
 
-  if (project.label?.trim().toLowerCase() === 'workflow' && !dashboard) {
-    return <FolderWorkflowPage key={projectId} node={projectId} name={project.name} onDashboard={() => setDashboard(true)} />
+  if (showWorkflows || (project.label?.trim().toLowerCase() === 'workflow' && !dashboard)) {
+    return <FolderWorkflowPage key={projectId} node={projectId} name={project.name} onDashboard={() => { setDashboard(true); setShowWorkflows(false) }} />
   }
 
   const act = async (id: number, fn: () => Promise<unknown>) => {
@@ -165,7 +166,7 @@ export function SpaceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
 
   return (
     <div className="flex h-full flex-col overflow-auto bg-page text-body">
-      {project.label?.trim().toLowerCase() === 'workflow' && <button className="border-b border-line p-2 text-left text-[12px] text-info" onClick={() => setDashboard(false)}>Open workflow</button>}
+      <button className="border-b border-line p-2 text-left text-[12px] text-info" onClick={() => { setDashboard(false); setShowWorkflows(true) }}>Workflows</button>
       {/* Hero */}
       <div
         className="relative border-b border-line px-5 pb-4 pt-5"

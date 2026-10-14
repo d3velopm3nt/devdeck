@@ -13,13 +13,17 @@ import { CAPTURE_LIBRARY } from '../../lib/devCapture'
 export function LibraryPanel({
   items,
   reload,
+  onConfigure,
 }: {
   items: ipc.LibraryItem[]
   reload: () => void
+  onConfigure?: (item: ipc.LibraryItem) => void
 }) {
   const [adding, setAdding] = useState(!!CAPTURE_LIBRARY)
   const [reading, setReading] = useState<{ item: ipc.LibraryItem; text: string } | null>(null)
   const [err, setErr] = useState('')
+  const [custom, setCustom] = useState<{id:string; kind:string; name:string; what:string; body:string; expected:string|null} | null>(null)
+  const [saving, setSaving] = useState(false)
 
   const skills = items.filter((i) => i.kind === 'skill')
   const briefs = items.filter((i) => i.kind === 'brief')
@@ -37,11 +41,14 @@ export function LibraryPanel({
     <div key={`${it.kind}-${it.id}`} className="group flex items-start gap-2 border-t border-line px-3 py-2 first:border-t-0">
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
-          <span className="truncate font-mono text-[11.5px] text-ink">{it.id}</span>
+          <span className="truncate text-[11.5px] font-semibold text-ink">{it.name || it.id}</span>
           <span className="shrink-0 text-[10px] text-faint">{it.repo}</span>
         </div>
+        <div className="text-[10px] font-mono text-faint">{it.id}</div>
         {it.what && <div className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-muted">{it.what}</div>}
       </div>
+      {it.kind === 'brief' && onConfigure && <button className="btn-ghost text-[11px]" onClick={() => onConfigure(it)}>Configure agent</button>}
+      {it.repo === 'personal' && <button className="btn-ghost text-[11px]" onClick={() => { void ipc.libraryRead(it.id, it.kind).then(body => setCustom({id:it.id, kind:it.kind, name:it.name, what:it.what, body, expected:body})).catch(e=>setErr(String(e))) }}>Edit</button>}
       <button className="btn-ghost shrink-0 text-[11px] opacity-0 group-hover:opacity-100" onClick={() => void read(it)}>
         Read
       </button>
@@ -63,11 +70,23 @@ export function LibraryPanel({
           {skills.length} skill{skills.length === 1 ? '' : 's'} · {briefs.length} brief{briefs.length === 1 ? '' : 's'}
         </span>
         <span className="flex-1" />
+        <button className="btn-ghost text-[11px]" disabled={saving} onClick={() => setCustom({id:'',kind:'skill',name:'',what:'',body:'',expected:null})}>Create custom</button>
         <button className="btn-ghost text-[11px]" onClick={() => setAdding(true)}>
           <Icon name="add" size={12} /> Add from GitHub
         </button>
       </div>
 
+      <p className="text-xs text-muted">Reusable text definitions. Import from GitHub or write your own. Only explicitly selected skills and tools reach an agent; importing or saving starts nothing.</p>
+      {!onConfigure && <p className="text-xs text-muted">After importing or creating an agent template, open Agents → Library → Configure agent to choose its skills, runtime and permissions.</p>}
+      {custom && <section aria-label="Custom library definition" className="space-y-3 rounded-xl border border-line bg-panel p-4">
+        <label className="block text-sm">Definition type<select aria-label="Definition type" disabled={custom.expected !== null} className="input ml-2" value={custom.kind} onChange={e=>setCustom({...custom,kind:e.target.value})}><option value="skill">Skill</option><option value="brief">Agent template</option></select></label>
+        <p className="text-xs text-muted">Use lowercase letters, numbers, hyphens or underscores for the ID. Existing IDs are never silently replaced.</p>
+        <label className="block text-sm">ID<input aria-label="Definition ID" className="input mt-1 w-full" disabled={custom.expected !== null} value={custom.id} placeholder="research-checklist" onChange={e=>setCustom({...custom,id:e.target.value})}/></label>
+        <label className="block text-sm">Name<input aria-label="Definition name" className="input mt-1 w-full" value={custom.name} onChange={e=>setCustom({...custom,name:e.target.value})}/></label>
+        <label className="block text-sm">Purpose<input aria-label="Definition purpose" className="input mt-1 w-full" value={custom.what} onChange={e=>setCustom({...custom,what:e.target.value})}/></label>
+        <label className="block text-sm">Instructions<textarea aria-label="Definition instructions" rows={8} className="input mt-1 w-full font-mono" value={custom.body} onChange={e=>setCustom({...custom,body:e.target.value})}/></label>
+        <div className="flex gap-2"><button className="btn-primary" disabled={saving} onClick={() => { setSaving(true); setErr(''); void ipc.librarySaveCustom(custom.id,custom.kind,custom.name,custom.what,custom.body,custom.expected).then(()=>{setCustom(null);reload()}).catch(e=>setErr(String(e))).finally(()=>setSaving(false)) }}>Save definition</button><button className="btn-ghost" disabled={saving} onClick={()=>setCustom(null)}>Cancel</button></div>
+      </section>}
       {err && <div className="rounded border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11.5px] text-err">{err}</div>}
 
       {items.length === 0 ? (
@@ -94,7 +113,7 @@ export function LibraryPanel({
           {briefs.length > 0 && (
             <div className="overflow-hidden rounded-[10px] border border-line bg-panel">
               <div className="border-b border-line bg-raise px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
-                Briefs
+                Agent templates (briefs)
               </div>
               {briefs.map(row)}
             </div>

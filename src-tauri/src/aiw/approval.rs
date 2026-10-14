@@ -174,6 +174,16 @@ pub fn describe(tool: &str, action: &str, args: &serde_json::Value) -> String {
                 format!("run \"{what}\" {every} at {at}")
             }
         }
+        ("library", "create") => format!(
+            "save the {} \"{}\" ({}) as inactive library text",
+            if s("kind") == "brief" {
+                "agent template"
+            } else {
+                "skill"
+            },
+            s("name"),
+            s("id")
+        ),
         ("skill", "save") => format!("save the skill \"{}\"", s("name")),
         ("tests", _) => {
             let c = s("command");

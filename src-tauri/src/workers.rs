@@ -351,6 +351,7 @@ pub fn all_workers() -> Result<Vec<Worker>, String> {
 }
 
 pub fn save_worker(w: &Worker) -> Result<Worker, String> {
+    let creating = w.meta.handle.trim().is_empty();
     let mut w = w.clone();
     if w.meta.category.is_empty() {
         w.meta.category = "worker".into();
@@ -390,12 +391,25 @@ pub fn save_worker(w: &Worker) -> Result<Worker, String> {
         meta: w.meta.clone(),
         body: w.body.clone(),
     };
-    std::fs::write(
-        dir.join(format!("{}.md", w.meta.handle)),
-        crate::aiw::deck::write_doc(&doc)?,
-    )
-    .map_err(err)?;
+    write_worker_definition(
+        &dir.join(format!("{}.md", w.meta.handle)),
+        &crate::aiw::deck::write_doc(&doc)?,
+        creating,
+    )?;
     Ok(w)
+}
+
+fn write_worker_definition(path: &Path, raw: &str, creating: bool) -> Result<(), String> {
+    use std::io::Write;
+    if creating {
+        let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(path)
+            .map_err(|e| if e.kind() == std::io::ErrorKind::AlreadyExists {
+                "An agent with that name already exists. Edit the saved agent or choose a different name.".to_string()
+            } else { e.to_string() })?;
+        file.write_all(raw.as_bytes()).map_err(err)
+    } else {
+        std::fs::write(path, raw).map_err(err)
+    }
 }
 
 pub fn read_run(id: &str) -> Result<Option<Run>, String> {
@@ -1171,6 +1185,7 @@ fn lay_out_skills(cwd: &Path, ids: &[String]) -> Result<usize, String> {
     if ids.is_empty() {
         return Ok(0);
     }
+    let library = crate::library::read_index()?;
     let dest = cwd.join(".claude").join("skills");
     std::fs::create_dir_all(&dest).map_err(err)?;
     let mut n = 0;
@@ -1185,7 +1200,21 @@ fn lay_out_skills(cwd: &Path, ids: &[String]) -> Result<usize, String> {
             let p = e.path();
             if p.is_file() {
                 let name = p.file_name().unwrap_or_default();
-                std::fs::copy(&p, to.join(name)).map_err(err)?;
+                if name == "SKILL.md" {
+                    let item = library
+                        .items
+                        .iter()
+                        .find(|it| it.id == *id && it.kind == "skill")
+                        .ok_or_else(|| format!("Skill '{id}' is no longer in the library"))?;
+                    let raw = std::fs::read_to_string(&p).map_err(err)?;
+                    std::fs::write(
+                        to.join(name),
+                        crate::library::runtime_skill_text(item, &raw)?,
+                    )
+                    .map_err(err)?;
+                } else {
+                    std::fs::copy(&p, to.join(name)).map_err(err)?;
+                }
             }
         }
         n += 1;
@@ -2401,6 +2430,23 @@ pub fn run_decide(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn creating_a_same_named_agent_never_overwrites_its_configuration() {
+        let p = std::env::temp_dir().join(format!(
+            "devdeck-agent-create-{}-{}.md",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap()
+        ));
+        super::write_worker_definition(&p, "existing permissions and skills", true).unwrap();
+        assert!(super::write_worker_definition(&p, "new template defaults", true).is_err());
+        assert_eq!(
+            std::fs::read_to_string(&p).unwrap(),
+            "existing permissions and skills"
+        );
+        super::write_worker_definition(&p, "explicit edit", false).unwrap();
+        assert_eq!(std::fs::read_to_string(&p).unwrap(), "explicit edit");
+        std::fs::remove_file(p).unwrap();
+    }
     use super::*;
 
     fn plan_for(skills: &[&str], is_repo: bool) -> Plan {

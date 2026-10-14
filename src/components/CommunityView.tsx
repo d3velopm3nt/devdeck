@@ -15,6 +15,7 @@
 // So Installed leads with reach, and says "no agent can use this yet" in the
 // place a green tick would otherwise go.
 
+import { LibraryPanel, useLibrary } from './workers/LibraryPanel'
 import { useCallback, useEffect, useState } from 'react'
 import * as ipc from '../lib/ipc'
 import { Icon, type IconName } from '../lib/icons'
@@ -22,7 +23,7 @@ import { useAiw } from '../lib/aiwStore'
 import { CAPTURE_COMMUNITY } from '../lib/devCapture'
 import { aiw, type PermissionRow } from '../lib/aiw'
 
-type Tab = 'browse' | 'bundles' | 'discover' | 'installed' | 'trending' | 'permissions' | 'models'
+type Tab = 'library' | 'browse' | 'bundles' | 'discover' | 'installed' | 'trending' | 'permissions' | 'models'
 
 /// Screenshot harness guard; see the effect in CommunityView.
 ///
@@ -59,6 +60,9 @@ const LICENCE: Record<string, { label: string; tone: string; why: string }> = {
 }
 
 export function CommunityView() {
+  const library = useLibrary()
+  const [librarySource, setLibrarySource] = useState('')
+  const [imported, setImported] = useState('')
   const [tab, setTab] = useState<Tab>('browse')
   const [rows, setRows] = useState<ipc.CommunityListing[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -162,7 +166,7 @@ export function CommunityView() {
           </p>
         </div>
         <div className="mt-2.5 flex items-center gap-1">
-          {(['browse', 'bundles', 'discover', 'installed', 'trending', 'permissions', 'models'] as Tab[]).map((t) => (
+          {(['browse', 'library', 'bundles', 'discover', 'installed', 'trending', 'permissions', 'models'] as Tab[]).map((t) => (
             <button
               key={t}
               className={`rounded-md px-2.5 py-1 text-[12px] capitalize ${
@@ -222,6 +226,7 @@ export function CommunityView() {
           </div>
         )}
 
+        {openId === null && tab === 'library' && <div className="space-y-3">{library.err && <p role="alert" className="text-sm text-err">{library.err}</p>}<section className="space-y-2 rounded-xl border border-line bg-panel p-4"><h2 className="font-semibold">Import a Community definition</h2><p className="text-xs text-muted">Select and read a text definition before adding it to your personal library. Importing does not configure an agent or grant tools.</p><select aria-label="Community library source" className="input w-full" value={librarySource} onChange={e=>{setLibrarySource(e.target.value);setImported('')}}><option value="">Choose a skill or agent template</option>{(rows || []).filter(r=>r.kind==='skill'||r.kind==='agent').map(r=><option key={r.id} value={r.id}>{r.name} · {r.kind} · {r.source}</option>)}</select>{(rows || []).filter(r=>r.id===librarySource).map(r=><div key={r.id}><p className="text-sm">{r.summary}</p><p className="text-xs text-muted">{r.source} · {r.licence} · {r.version}</p><details><summary className="cursor-pointer text-xs text-info">Read definition</summary><pre className="max-h-60 overflow-auto whitespace-pre-wrap text-xs">{r.body || 'No text supplied; open the source repository with Add from GitHub.'}</pre></details></div>)}<button className="btn-primary" disabled={!librarySource || busy!==null} onClick={()=>void act(librarySource,async()=>{const item=await ipc.communityLibraryImport(librarySource);library.reload();setImported(`${item.name} is in your library. Configure agent templates from Agents → Library.`)})}>Import text to library</button>{imported && <p role="status" className="text-xs text-ok">{imported}</p>}</section><LibraryPanel items={library.items} reload={library.reload}/></div>}
         {openId === null && tab === 'bundles' && (
           <Bundles busy={busy} onDone={() => void load()} onGrant={onGrant} />
         )}

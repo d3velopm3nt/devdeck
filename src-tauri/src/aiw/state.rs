@@ -324,9 +324,13 @@ pub type CallLog = Box<dyn Fn(CallRecord) + Send + Sync>;
 /// an `AppHandle` and `aiw` must not.
 pub type LogSink = Box<dyn Fn(&str, &str, String) + Send + Sync>;
 
-/// Making a routine writes a `schedules` row and a line in a file, neither of
-/// which `aiw` knows anything about. Same arrangement as [`BotMaker`]: the
-/// outer app hands one over, and a build that does not simply cannot.
+/// Text-only personal library access supplied by the host, with no activation.
+pub type LibraryHandler =
+    Box<dyn Fn(&str, &serde_json::Value) -> Result<String, String> + Send + Sync>;
+
+pub type WorkflowHandler =
+    Box<dyn Fn(i64, &str, &serde_json::Value) -> Result<String, String> + Send + Sync>;
+
 pub type RoutineMaker = Box<dyn Fn(RoutineDraft) -> Result<String, String> + Send + Sync>;
 
 pub type ManagerMessenger = Box<dyn Fn(&str, &str) -> Result<String, String> + Send + Sync>;
@@ -368,6 +372,8 @@ pub struct Workspace {
     /// build, where asking for a bot fails honestly rather than pretending.
     bot_maker: std::sync::OnceLock<BotMaker>,
     routine_maker: std::sync::OnceLock<RoutineMaker>,
+    workflow_handler: std::sync::OnceLock<WorkflowHandler>,
+    library_handler: std::sync::OnceLock<LibraryHandler>,
     call_log: std::sync::OnceLock<CallLog>,
     log_sink: std::sync::OnceLock<LogSink>,
     pub providers: Mutex<ProviderRegistry>,
@@ -408,6 +414,8 @@ impl Workspace {
             approvals: Arc::new(ApprovalBroker::new(timeout)),
             bot_maker: std::sync::OnceLock::new(),
             routine_maker: std::sync::OnceLock::new(),
+            workflow_handler: std::sync::OnceLock::new(),
+            library_handler: std::sync::OnceLock::new(),
             manager_messenger: std::sync::OnceLock::new(),
             call_log: std::sync::OnceLock::new(),
             log_sink: std::sync::OnceLock::new(),
@@ -1282,6 +1290,15 @@ impl Workspace {
                         system.push_str(&format!("\n\n# {name}\n\n{}", body.trim()));
                     }
                 }
+                let mut permissions = d.meta.permissions;
+                if d.meta.id == super::assistant::ASSISTANT_ID {
+                    permissions
+                        .entry("workflow".into())
+                        .or_insert_with(|| "approval".into());
+                    permissions
+                        .entry("library".into())
+                        .or_insert_with(|| "approval".into());
+                }
                 AgentDef {
                     id: d.meta.id,
                     name: d.meta.name,
@@ -1297,7 +1314,7 @@ impl Workspace {
                         d.meta.model
                     },
                     system,
-                    permissions: d.meta.permissions,
+                    permissions,
                     skills: d.meta.skills,
                 }
             })
@@ -1482,6 +1499,31 @@ impl Workspace {
         }
     }
 
+    pub fn set_library_handler(&self, f: LibraryHandler) {
+        let _ = self.library_handler.set(f);
+    }
+
+    pub fn library(&self, action: &str, args: &serde_json::Value) -> Result<String, String> {
+        self.library_handler
+            .get()
+            .ok_or("Library is unavailable in this runtime")?(action, args)
+    }
+
+    pub fn set_workflow_handler(&self, f: WorkflowHandler) {
+        let _ = self.workflow_handler.set(f);
+    }
+
+    pub fn workflow(
+        &self,
+        node: i64,
+        action: &str,
+        args: &serde_json::Value,
+    ) -> Result<String, String> {
+        self.workflow_handler
+            .get()
+            .ok_or("Workflow runtime is unavailable")?(node, action, args)
+    }
+
     pub fn set_routine_maker(&self, f: RoutineMaker) {
         let _ = self.routine_maker.set(f);
     }
@@ -1639,6 +1681,8 @@ pub fn default_agents() -> Vec<AgentDef> {
             skills: Vec::new(),
             permissions: perms(&[
                 ("delegate", "full"),
+                ("workflow", "approval"),
+                ("library", "approval"),
                 ("memory", "full"),
                 ("knowledge", "full"),
                 ("files", "read"),

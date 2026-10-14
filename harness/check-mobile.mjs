@@ -6,7 +6,7 @@ import path from 'node:path'
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright')
 const history = Array.from({length:70},(_,i)=>({from:i%2?'assistant':'user',text:`History message ${i}`,at:new Date().toISOString()}))
 history.push({from:'user',text:'What is the next step for DevDeck?',at:new Date().toISOString()},{from:'assistant',text:'Your workspace is ready. What would you like to work on?',at:new Date().toISOString()})
-let paired=false, offline=false, cursor=0, executions=0, fixtureBridge='bridge-fixture', orbPreferences=null
+let paired=false, offline=false, cursor=0, executions=0, fixtureBridge='bridge-fixture', orbPreferences=null, issueRefreshFails=false
 const events=[], accepted=new Map()
 const emit=e=>events.push({cursor:++cursor,event:e})
 const server=http.createServer(async(req,res)=>{
@@ -23,7 +23,8 @@ const server=http.createServer(async(req,res)=>{
   if(url.pathname==='/api/pair'){assert.equal(input.code,'fixture-pair');paired=true;return json({})}
   if(!paired)return json({error:'Pair this device on the desktop'},401)
   if(url.pathname==='/api/unpair'){paired=false;return json({})}
-  if(url.pathname==='/api/snapshot')return json({nodes:[{id:1,parent_id:null,kind:'workspace',name:'Develtech'},{id:2,parent_id:1,kind:'project',name:'DevDeck'},{id:3,parent_id:2,kind:'folder',name:'Mobile companion'}],conversations:[{id:'room-1',title:'Main assistant',preview:'Your workspace is ready.'}],recent:[{id:'room-1',messages:history.slice(-30)}],sessions:[{id:'run-1',agent_id:'builder',agent_name:'Builder',project_id:'devdeck',feature_id:'Mobile polish',summary:'Building mobile views',transcript:[{at:'2026-10-10T10:00:00Z',text:'Implemented home screen'}],files_touched:['mobile/index.html'],status:'working',started_at:'2026-10-10T10:00:00Z'}],bridge_id:fixtureBridge,orb_preferences:orbPreferences,queue:[...accepted.values()].map(r=>({request_id:r.request_id,conversation_id:r.conversation_id,text:r.text,status:r.status})),approvals:[{id:'approval-1',agent_id:'builder',project_id:'devdeck',summary:'Run the project build',requested_at:new Date().toISOString()}],claims:[],agents:[{id:'builder',name:'Builder',role:'developer'}],cursor})
+  if(url.pathname==='/api/snapshot')return json({products:[{id:'devdeck',name:'DevDeck',repository:'owner/devdeck'}],issue_monitor:{enabled:false,sources:[]},workflows:{items:[{id:'ticket-23',folder:'DevDeck',definition:{title:'Technical ticket',ticket_url:'https://github.com/owner/devdeck/issues/23',steps:[{id:'plan',title:'Plan the ticket',worker:'lead',status:'pending',instructions:'Define acceptance criteria',evidence:'',next_action:''}]}}],warnings:[]},nodes:[{id:1,parent_id:null,kind:'workspace',name:'Develtech'},{id:2,parent_id:1,kind:'project',name:'DevDeck'},{id:3,parent_id:2,kind:'folder',name:'Mobile companion'}],conversations:[{id:'room-1',title:'Main assistant',preview:'Your workspace is ready.'}],recent:[{id:'room-1',messages:history.slice(-30)}],sessions:[{id:'run-1',agent_id:'builder',agent_name:'Builder',project_id:'devdeck',feature_id:'Mobile polish',summary:'Building mobile views',transcript:[{at:'2026-10-10T10:00:00Z',text:'Implemented home screen'}],files_touched:['mobile/index.html'],status:'working',started_at:'2026-10-10T10:00:00Z'}],bridge_id:fixtureBridge,orb_preferences:orbPreferences,queue:[...accepted.values()].map(r=>({request_id:r.request_id,conversation_id:r.conversation_id,text:r.text,status:r.status})),approvals:[{id:'approval-1',agent_id:'builder',project_id:'devdeck',summary:'Run the project build',requested_at:new Date().toISOString()}],claims:[],agents:[{id:'builder',name:'Builder',role:'developer'}],cursor})
+  if(url.pathname==='/api/issues/devdeck')return issueRefreshFails?json({error:'GitHub unavailable'},503):json({items:[{number:23,title:'Verify the orb',state:'open',url:'https://github.com/owner/devdeck/issues/23',updated_at:'2026-10-14T18:00:00Z',assignees:[],pull_request:false},{number:24,title:'Not an issue',pull_request:true}],fetched_at:'2026-10-14T18:00:00Z',warnings:[],truncated:false});
   if(url.pathname.startsWith('/api/conversation/')){const before=Math.min(Number(url.searchParams.get('before')??history.length),history.length);const start=Math.max(0,before-50);return json({id:'room-1',title:'Main assistant',messages:history.slice(start,before),before:start})}
   if(url.pathname==='/api/node')return json({id:'room-1',title:'DevDeck'})
   if(url.pathname==='/api/conversations')return json({id:'room-1',title:'Main assistant'})
@@ -128,7 +129,8 @@ try{
   await page.locator('#mic').click();
   await page.getByText('Preparing voice…',{exact:true}).waitFor();
   await page.getByText('Speaking…',{exact:true}).waitFor();
-  assert.equal(await page.evaluate(()=>voiceRequests.filter(x=>x==='speak').length),1,'Voice replies speak automatically once');
+  assert.equal(await page.evaluate(()=>voiceTexts.filter(x=>x==='Got it.').length),1,'Accepted voice message is acknowledged once');
+  assert.equal(await page.evaluate(()=>voiceTexts.filter(x=>x!=='Got it.').length),1,'Voice reply speaks automatically once after acknowledgement');
   executions=0;await page.evaluate(()=>window.orbToneCount=0);
   await page.waitForFunction(()=>localVoice.level()>.05);
   await page.locator('#mute-voice').click();
@@ -182,6 +184,20 @@ try{
   assert.equal(await page.locator('#text').inputValue(),'@builder ');
   await page.locator('#text').fill('');
   await page.locator('nav [data-view=activity]').click();
+  await page.locator('#issue-list').getByText('#23 · Verify the orb',{exact:true}).waitFor();
+  assert.equal(await page.locator('#issue-list').getByText('Not an issue',{exact:true}).count(),0);
+  await page.locator('#issue-list').getByText('Technical ticket · 0/1 accepted · Waiting for next step',{exact:true}).waitFor();
+  await page.locator('#workflow-list').getByText('Plan the ticket · @lead · pending · No update yet',{exact:true}).waitFor();
+  assert.equal(await page.locator('#issue-list a').getAttribute('href'),'https://github.com/owner/devdeck/issues/23');
+  await page.evaluate(()=>{snapshot.workflows.items[0].definition.steps[0].status='done';renderIssues();});
+  await page.locator('#issue-list').getByText('Technical ticket · 1/1 accepted · Completed',{exact:true}).waitFor();
+  await page.evaluate(()=>{snapshot.workflows.items[0].definition.steps[0].status='pending';renderIssues();});
+
+  issueRefreshFails=true;await page.locator('#refresh-issues').click();
+  await page.locator('#issue-status').filter({hasText:'Refresh failed: GitHub unavailable'}).waitFor();
+  await page.locator('#issue-list').getByText('#23 · Verify the orb',{exact:true}).waitFor();
+  issueRefreshFails=false;
+
   await page.getByText('Run the project build',{exact:true}).waitFor();
   await page.locator('#runs button').first().click();
   await page.getByText(/Implemented home screen/).waitFor();

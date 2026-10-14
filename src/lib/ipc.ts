@@ -2367,6 +2367,7 @@ export const managerConversation = (handle: string) => invoke<import('./aiw').Ch
 export const managerTurn = (handle: string, text: string) => invoke<import('./aiw').AssistantReply>('manager_turn',{handle,text})
 
 export interface FolderWorkflowStep {
+  role?: string
   actor?: string
   next_action?: string
   updated_at?: string
@@ -2384,17 +2385,40 @@ export interface FolderWorkflowStep {
 }
 export interface FolderWorkflow {
   raw: string
-  definition: { title: string; steps: FolderWorkflowStep[] }
+  definition: { title: string; team?: string; ticket_url?: string; steps: FolderWorkflowStep[] }
   body: string
   path: string
 }
-export const folderWorkflowGet = (node: number) => invoke<FolderWorkflow>('folder_workflow_get', { node })
-export const folderWorkflowSave = (node: number, expected: string, raw: string) =>
-  invoke<FolderWorkflow>('folder_workflow_save', { node, expected, raw })
-export const folderWorkflowStart = (node: number, step: string, expected: string) =>
-  invoke<FolderWorkflow>('folder_workflow_start', { node, step, expected })
-export const folderWorkflowReview = (node: number, step: string, expected: string, accept: boolean, evidence: string) =>
-  invoke<FolderWorkflow>('folder_workflow_review', { node, step, expected, accept, evidence })
+export interface WorkflowSummary { id: string; title: string; steps: number; done: number; error: string | null }
+export const folderWorkflowList = (node: number) => invoke<WorkflowSummary[]>('folder_workflow_list', { node })
+export const folderWorkflowGet = (node: number, workflow = 'default') => invoke<FolderWorkflow>('folder_workflow_get', { node, workflow })
+export const folderWorkflowSave = (node: number, expected: string, raw: string, workflow = 'default') =>
+  invoke<FolderWorkflow>('folder_workflow_save', { node, expected, raw, workflow })
+export const folderWorkflowStart = (node: number, step: string, expected: string, workflow = 'default') =>
+  invoke<FolderWorkflow>('folder_workflow_start', { node, step, expected, workflow })
+export const folderWorkflowReview = (node: number, step: string, expected: string, accept: boolean, evidence: string, workflow = 'default') =>
+  invoke<FolderWorkflow>('folder_workflow_review', { node, step, expected, accept, evidence, workflow })
 
-export const folderWorkflowCheckpoint = (node: number, step: string, expected: string, actor: string, evidence: string, nextAction: string, submit: boolean) =>
-  invoke<FolderWorkflow>('folder_workflow_checkpoint', { node, step, expected, actor, evidence, nextAction, submit })
+export const folderWorkflowCheckpoint = (node: number, step: string, expected: string, actor: string, evidence: string, nextAction: string, submit: boolean, workflow = 'default') =>
+  invoke<FolderWorkflow>('folder_workflow_checkpoint', { node, step, expected, actor, evidence, nextAction, submit, workflow })
+
+export const folderWorkflowRoute = (node: number, source: string, expected: string, repository: string, number: number, title: string) =>
+  invoke<{ id: string; duplicate: boolean; workflow: FolderWorkflow }>('folder_workflow_route', { node, source, expected, repository, number, title })
+
+export interface MonitoredSource { repository: string; items: import('./visibility').GithubIssue[]; fetched_at: string; last_attempt: string; error: string; warnings: string[]; truncated: boolean }
+export interface IssueDispatchBinding { repository: string; node: number }
+export interface IssueDispatch { repository: string; number: number; node: number; workflow: string; status: string; message: string }
+export interface IssueMonitorView { raw: string; enabled: boolean; sources: MonitoredSource[]; warnings: string[]; bindings: IssueDispatchBinding[]; dispatches: IssueDispatch[] }
+export const issueMonitorGet = () => invoke<IssueMonitorView>('issue_monitor_get')
+export const issueMonitorSave = (expected: string, enabled: boolean, bindings?: IssueDispatchBinding[]) => invoke<IssueMonitorView>('issue_monitor_save', { expected, enabled, bindings })
+export const issueMonitorRetry = (repository: string, number: number) => invoke<IssueMonitorView>('issue_monitor_retry', { repository, number })
+export const issueMonitorRefresh = () => invoke<IssueMonitorView>('issue_monitor_refresh')
+
+export interface ReusableTeam { id: string; name: string; description: string; roles: { name: string; worker: string }[]; revision: number }
+export const reusableTeamsList = () => invoke<ReusableTeam[]>('reusable_teams_list')
+export const reusableTeamSave = (team: ReusableTeam) => invoke<ReusableTeam>('reusable_team_save', { team })
+export const librarySaveCustom = (id: string, kind: string, name: string, what: string, body: string, expected: string | null) => invoke<LibraryItem>('library_save_custom', { id, kind, name, what, body, expected })
+export const folderWorkflowParse = (raw: string) => invoke<FolderWorkflow['definition']>('folder_workflow_parse', { raw })
+export const folderWorkflowTeamDraft = (raw: string, team: string, roles: Record<string, string>) => invoke<string>('folder_workflow_team_draft', { raw, team, roles })
+
+export const communityLibraryImport = (id: string) => invoke<LibraryItem>('community_library_import', { id })

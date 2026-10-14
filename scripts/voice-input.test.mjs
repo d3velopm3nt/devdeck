@@ -86,3 +86,62 @@ test('a late microphone permission result after cancel stops the new stream', as
   f.input.cancel(); resolveStream({ getTracks: () => [{ stop() { stopped++ } }] })
   await new Promise(setImmediate); assert.equal(stopped, 1); assert.equal(f.input.level(), 0)
 })
+
+test('Android growing hypotheses at separate indices produce one sentence', () => {
+  const f = fixture()
+  const words = ['okay', 'okay but', "okay but why", "okay but why can't you pick up my voice"]
+  f.recognition.onresult({ results: words.map(text => Object.assign([{ transcript: text }], { isFinal: true })) })
+  f.tick(3200)
+  assert.deepEqual(f.sent, [words.at(-1)])
+})
+test('genuine repeated words and independent segments are preserved', () => {
+  const f = fixture()
+  f.recognition.onresult({ results: ['very very good', 'yes', 'yes'].map(text => Object.assign([{ transcript: text }], { isFinal: true })) })
+  f.input.finish()
+  assert.deepEqual(f.sent, ['very very good yes yes'])
+})
+
+test('a genuine final prefix pair is not erased', () => {
+  const f = fixture()
+  f.recognition.onresult({ results: ['yes', 'yes please'].map(text => Object.assign([{ transcript: text }], { isFinal: true })) })
+  f.input.finish()
+  assert.deepEqual(f.sent, ['yes yes please'])
+})
+test('prefix extensions across browser restarts remain distinct speech', () => {
+  const f = fixture()
+  for (const text of ['go', 'go now', 'go now please']) {
+    f.result(text)
+    f.recognition.onend()
+  }
+  f.input.finish()
+  assert.deepEqual(f.sent, ['go go now go now please'])
+})
+
+test('failed acknowledgement synthesis falls back once, cancellation stays silent', async () => {
+  const voiceSource = readFileSync(new URL('../mobile/voice-client.js', import.meta.url), 'utf8')
+  let worker, activeId
+  class Worker {
+    constructor() { worker = this }
+    postMessage(data) { if (data.type === 'speak') activeId = data.id }
+  }
+  class AudioContext {
+    async resume() {}
+    createAnalyser() { return { connect() {}, fftSize: 256 } }
+  }
+  const context = vm.createContext({ Worker, window: { AudioContext }, Uint8Array })
+  vm.runInContext(voiceSource, context)
+  const button = {}, status = {}, idle = () => {}
+  const voice = context.createOfflineVoice({ button, status, onSpeaking: idle, onIdle: idle, onChange: idle })
+  button.onclick(); worker.onmessage({ data: { type: 'ready' } })
+  let fallbacks = 0
+  await voice.speak('Got it.', () => fallbacks++)
+  worker.onmessage({ data: { type: 'error', id: activeId, message: 'Synthesis failed' } })
+  worker.onmessage({ data: { type: 'error', id: activeId, message: 'Duplicate failure' } })
+  assert.equal(fallbacks, 1)
+  worker.onmessage({ data: { type: 'ready' } })
+  await voice.speak('Got it.', () => fallbacks++)
+  voice.stop()
+  worker.onmessage({ data: { type: 'error', id: activeId, message: 'Cancelled request' } })
+  assert.equal(fallbacks, 1)
+  assert.equal(voice.canSpeak(), true, 'Cancelled synthesis errors release the voice for the next request')
+})

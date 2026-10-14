@@ -33,6 +33,7 @@ import { FeaturesList } from './FeaturesTab'
 import { WorkList } from './WorkTab'
 import { GoalPage } from './GoalPage'
 import { BotsPage } from '../BotsPage'
+import { FolderWorkflowPage } from '../FolderWorkflowPage'
 import { CAPTURE_GOAL } from '../../lib/devCapture'
 
 const TABS: { id: TeamTab; label: string }[] = [
@@ -66,6 +67,8 @@ export function TeamPage() {
   const tab = useApp((s) => s.teamTab)
   const setTab = useApp((s) => s.setTeamTab)
   const [board, setBoard] = useState<Board>({ rows: [], error: null, loaded: false })
+  const [workflowFolder, setWorkflowFolder] = useState<number | null>(null)
+  const [workflowsOpen, setWorkflowsOpen] = useState(false)
   const [picked, setPicked] = useState<string | null>(CAPTURE_GOAL || null)
   const refreshBots = useApp((s) => s.refreshBots)
 
@@ -116,6 +119,14 @@ export function TeamPage() {
   const current =
     picked == null ? visibleBoard.rows[0] : visibleBoard.rows.find((g) => key(g) === picked)
 
+  if (workflowsOpen) {
+    const folders = nodes.filter(n => !scopeIds || scopeIds.has(n.id))
+    const folder = folders.find(n => n.id === workflowFolder) || folders[0]
+    return <div className="flex h-full min-h-0 flex-col bg-page">
+      <div className="flex items-center gap-3 border-b border-line px-5 py-3"><button className="btn-ghost" onClick={() => setWorkflowsOpen(false)}>Back to Work</button><label className="text-[12px] text-muted">Folder <select aria-label="Workflow folder" value={folder?.id || ''} onChange={e => setWorkflowFolder(Number(e.target.value))}>{folders.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}</select></label></div>
+      <div className="min-h-0 flex-1">{folder ? <FolderWorkflowPage key={folder.id} node={folder.id} name={folder.name} onDashboard={() => setWorkflowsOpen(false)}/> : <p className="p-5 text-muted">Add a workspace folder first.</p>}</div>
+    </div>
+  }
   return (
     <div className="flex h-full min-h-0 flex-col bg-page">
       <div className="flex shrink-0 items-center gap-3 border-b border-line px-5 py-3">
@@ -133,6 +144,7 @@ export function TeamPage() {
               {moving} moving · {waiting} waiting on you · {scopeName}
             </span>
           )}
+          <button className="btn-ghost text-[12px]" onClick={() => setWorkflowsOpen(true)}>Team workflows</button>
           <button
             className="text-muted hover:text-ink"
             title="Read it again"

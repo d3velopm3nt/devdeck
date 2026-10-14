@@ -2051,3 +2051,23 @@ mod tests {
         assert_eq!(rows[0].command, "");
     }
 }
+
+/// Text-only import. Does not install a runtime or grant capabilities.
+#[tauri::command(async)]
+pub fn community_library_import(
+    db: tauri::State<Db>,
+    id: String,
+) -> Result<crate::library::Item, String> {
+    let conn = db.conn();
+    let feeds: Vec<(String, Vec<Item>)> = crate::community_index::SOURCES
+        .iter()
+        .map(|src| {
+            let f = crate::community_index::cached(&conn, src);
+            (f.source, f.items)
+        })
+        .collect();
+    let (entry, _) = find_item(&id, &catalog(), &feeds)
+        .ok_or("Community definition not found. Refresh the catalogue.")?;
+    drop(conn);
+    crate::personal_library::import_community(&entry)
+}

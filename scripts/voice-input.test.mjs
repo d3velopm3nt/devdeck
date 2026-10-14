@@ -143,4 +143,5 @@ test('failed acknowledgement synthesis falls back once, cancellation stays silen
   voice.stop()
   worker.onmessage({ data: { type: 'error', id: activeId, message: 'Cancelled request' } })
   assert.equal(fallbacks, 1)
+  assert.equal(voice.canSpeak(), true, 'Cancelled synthesis errors release the voice for the next request')
 })

@@ -2,7 +2,7 @@
 function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange, onPreparing = () => {} }) {
   let worker, ready = false, loading = false, busy = false, context, analyser, waveform;
   let queuedText = null, activeError = null;
-  let generation = 0, activeId = 0, endAt = 0, sources = [], finished = false;
+  let generation = 0, activeId = 0, workerRequestId = 0, endAt = 0, sources = [], finished = false;
   function update() {
     button.disabled = loading || busy || ready;
     button.textContent = loading ? 'Preparing voice…' : ready ? 'Voice ready' : 'Download voice';
@@ -43,7 +43,8 @@ function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange, onPr
         if (data.id !== activeId) { busy = false; update(); drain(); }
         else { activeError=null; finished = true; idleIfDone(); }
       } else if (data.type === 'error') {
-        if (data.id && data.id !== activeId) return;
+        if (data.id && data.id !== workerRequestId) return;
+        if (data.id && data.id !== activeId) { busy=false; update(); drain(); return; }
         const notify=activeError;
         loading = false; busy = false; ready = false; stop(); status.textContent = data.message; update(); notify?.();
       }
@@ -78,6 +79,7 @@ function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange, onPr
       if (!analyser) { analyser = context.createAnalyser(); analyser.fftSize = 256; waveform = new Uint8Array(analyser.fftSize); analyser.connect(context.destination); }
       await context.resume();
       if (id !== activeId) { busy = false; update(); drain(); return; }
+      workerRequestId=id;
       getWorker().postMessage({ type: 'speak', id, text });
     } catch (error) { activeError=null; busy = false; onIdle(); update(); throw error; }
   }

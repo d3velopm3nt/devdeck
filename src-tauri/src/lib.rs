@@ -1329,6 +1329,7 @@ pub fn run() {
             issue_monitor::issue_monitor_get,
             issue_monitor::issue_monitor_save,
             issue_monitor::issue_monitor_refresh,
+            issue_monitor::issue_monitor_retry,
             folder_workflows::folder_workflow_route,
             folder_workflows::folder_workflow_list,
             folder_workflows::folder_workflow_get,

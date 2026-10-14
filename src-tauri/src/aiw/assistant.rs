@@ -2157,10 +2157,7 @@ impl Assistant {
 
     /// Turn a sentence into a routine.
     ///
-    /// Asked first, always, for the same reason a bot is: it keeps happening
-    /// after the conversation ends. And refused outright when nobody is
-    /// watching — a run started by a clock that quietly adds more clock rows
-    /// is how a machine fills up with things nobody remembers agreeing to.
+    /// Workflow mutations use the shared runtime and its dependency gates.
     fn workflow(
         ws: &Arc<Workspace>,
         conv: &ConversationMeta,
@@ -2209,6 +2206,10 @@ impl Assistant {
         }
     }
 
+    /// Asked first, always, for the same reason a bot is: it keeps happening
+    /// after the conversation ends. And refused outright when nobody is
+    /// watching — a run started by a clock that quietly adds more clock rows
+    /// is how a machine fills up with things nobody remembers agreeing to.
     fn make_routine(
         ws: &Arc<Workspace>,
         conv: &ConversationMeta,

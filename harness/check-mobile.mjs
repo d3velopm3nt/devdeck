@@ -129,7 +129,8 @@ try{
   await page.locator('#mic').click();
   await page.getByText('Preparing voice…',{exact:true}).waitFor();
   await page.getByText('Speaking…',{exact:true}).waitFor();
-  assert.equal(await page.evaluate(()=>voiceRequests.filter(x=>x==='speak').length),1,'Voice replies speak automatically once');
+  assert.equal(await page.evaluate(()=>voiceTexts.filter(x=>x==='Got it.').length),1,'Accepted voice message is acknowledged once');
+  assert.equal(await page.evaluate(()=>voiceTexts.filter(x=>x!=='Got it.').length),1,'Voice reply speaks automatically once after acknowledgement');
   executions=0;await page.evaluate(()=>window.orbToneCount=0);
   await page.waitForFunction(()=>localVoice.level()>.05);
   await page.locator('#mute-voice').click();

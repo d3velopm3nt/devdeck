@@ -142,8 +142,9 @@ function renderIssues(){
     const meta=document.createElement('p');meta.textContent=`${issue.state} · ${issue.assignees?.length?issue.assignees.join(', '):'Unassigned'} · ${timeLabel(issue.updated_at)}`;
     const progress=document.createElement('p');
     const linked=(snapshot.workflows?.items||[]).find(w=>w.definition.ticket_url===issue.url);
-    const step=linked?.definition.steps.find(s=>s.status!=='done');
-    progress.textContent=linked?`${linked.definition.title} · ${step?step.title+' · '+step.status:'Completed'}`:'No workflow linked';
+    const steps=linked?.definition.steps||[];
+    const active=steps.filter(s=>['running','starting','review','blocked'].includes(s.status));
+    progress.textContent=linked?`${linked.definition.title} · ${steps.filter(s=>s.status==='done').length}/${steps.length} accepted · ${active.length?active.map(s=>s.title+' · '+s.status).join('; '):'Waiting for next step'}`:'No workflow linked';
     card.append(title,meta,progress);
     // Construct GitHub link from trusted connected repository and numeric issue ID.
     const product=(snapshot.products||[]).find(p=>p.id===issueProject);
@@ -171,7 +172,7 @@ function renderWorkflows(){
     const title=document.createElement('strong');title.textContent=w.definition.title;
     const folder=document.createElement('p');folder.textContent=w.folder;
     card.append(title,folder);
-    for(const step of w.definition.steps){const details=document.createElement('details');const summary=document.createElement('summary');summary.textContent=`${step.title} · @${step.worker} · ${step.status}`;details.append(summary);const body=document.createElement('p');body.textContent=[step.evidence,step.next_action].filter(Boolean).join(' · ')||step.instructions;details.append(body);card.append(details);}
+    for(const step of w.definition.steps){const details=document.createElement('details');const summary=document.createElement('summary');summary.textContent=`${step.title} · @${step.worker} · ${step.status} · ${step.updated_at?timeLabel(step.updated_at):'No update yet'}`;details.append(summary);const body=document.createElement('p');body.textContent=[step.run?'Run: '+step.run:'',step.evidence,step.next_action].filter(Boolean).join(' · ')||step.instructions;details.append(body);card.append(details);}
     return card;
   }));
   if(!workflows.length)empty($('workflow-list'),'No workflows configured yet. Create one in a folder on the desktop.');

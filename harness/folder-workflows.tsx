@@ -1,7 +1,7 @@
 import { createRoot } from 'react-dom/client'
 import '../src/index.css'
 import { FolderWorkflowPage } from '../src/components/FolderWorkflowPage'
-import type { FolderWorkflow } from '../src/lib/ipc'
+import type { FolderWorkflow, IssueMonitorView } from '../src/lib/ipc'
 import { SEED } from './seed'
 import { emit } from './mockTauri'
 
@@ -33,9 +33,10 @@ fixture.folder_workflow_route = args => {
   if (!duplicate) { const run = copy(); run.definition.title = '#23 · Orb test'; run.definition.ticket_url = 'https://github.com/owner/devdeck/issues/23'; run.raw = 'issue-revision'; named.set(id, run) }
   return { id, duplicate, workflow: structuredClone(named.get(id)) }
 }
-let monitor = { raw: '', enabled: false, sources: [{ repository: 'owner/devdeck', items: [], fetched_at: '', last_attempt: '', error: '', warnings: [], truncated: false }], warnings: [] }
+let monitor: IssueMonitorView = { bindings: [], dispatches: [], raw: '', enabled: false, sources: [{ repository: 'owner/devdeck', items: [], fetched_at: '', last_attempt: '', error: '', warnings: [], truncated: false }], warnings: [] }
+fixture.tree_list = () => [{ id: 7, name: 'Marketing', dir: 'C:/State/Marketing', kind: 'folder', parent_id: null }]
 fixture.issue_monitor_get = () => structuredClone(monitor)
-fixture.issue_monitor_save = args => { if (args?.expected !== monitor.raw) throw new Error('Issue monitor settings changed. Reload before saving.'); monitor = { ...monitor, raw: 'monitor-revision', enabled: !!args.enabled }; return structuredClone(monitor) }
+fixture.issue_monitor_save = args => { if (args?.expected !== monitor.raw) throw new Error('Issue monitor settings changed. Reload before saving.'); monitor = { ...monitor, raw: 'monitor-revision', enabled: !!args.enabled, bindings: (args.bindings as IssueMonitorView['bindings'] | undefined) || monitor.bindings }; return structuredClone(monitor) }
 fixture.issue_monitor_refresh = () => { monitor.sources[0].fetched_at = '2026-10-14T18:00:00Z'; return structuredClone(monitor) }
 fixture.workers_list = () => [{ handle: 'writer', name: 'Writer' }]
 fixture.worker_plan = args => {

@@ -2405,7 +2405,10 @@ export const folderWorkflowRoute = (node: number, source: string, expected: stri
   invoke<{ id: string; duplicate: boolean; workflow: FolderWorkflow }>('folder_workflow_route', { node, source, expected, repository, number, title })
 
 export interface MonitoredSource { repository: string; items: import('./visibility').GithubIssue[]; fetched_at: string; last_attempt: string; error: string; warnings: string[]; truncated: boolean }
-export interface IssueMonitorView { raw: string; enabled: boolean; sources: MonitoredSource[]; warnings: string[] }
+export interface IssueDispatchBinding { repository: string; node: number }
+export interface IssueDispatch { repository: string; number: number; node: number; workflow: string; status: string; message: string }
+export interface IssueMonitorView { raw: string; enabled: boolean; sources: MonitoredSource[]; warnings: string[]; bindings: IssueDispatchBinding[]; dispatches: IssueDispatch[] }
 export const issueMonitorGet = () => invoke<IssueMonitorView>('issue_monitor_get')
-export const issueMonitorSave = (expected: string, enabled: boolean) => invoke<IssueMonitorView>('issue_monitor_save', { expected, enabled })
+export const issueMonitorSave = (expected: string, enabled: boolean, bindings?: IssueDispatchBinding[]) => invoke<IssueMonitorView>('issue_monitor_save', { expected, enabled, bindings })
+export const issueMonitorRetry = (repository: string, number: number) => invoke<IssueMonitorView>('issue_monitor_retry', { repository, number })
 export const issueMonitorRefresh = () => invoke<IssueMonitorView>('issue_monitor_refresh')

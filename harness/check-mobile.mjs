@@ -46,7 +46,16 @@ const browser=await chromium.launch({headless:true,args:['--no-sandbox'],...(pro
 const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,timezoneId:'Africa/Johannesburg'})
 await context.addInitScript(() => {
   // Test client transitions against a deterministic voice worker. Model inference is a separate check.
-  window.SpeechRecognition=class {constructor(){window.lastRecognition=this;}start(){this.onstart?.();}stop(){this.onend?.();}};
+  // Reproduce the LAN regression: the browser exposes recognition although the
+  // origin is not flagged secure. This fixture proves we attempt it; physical
+  // browser permission and transcription still require device testing.
+  Object.defineProperty(window,'isSecureContext',{value:false,configurable:true});
+  window.SpeechRecognition=class {
+    constructor(){window.lastRecognition=this;}
+    start(){this.startTimer=setTimeout(()=>this.onstart?.(),80);}
+    stop(){clearTimeout(this.startTimer);this.onend?.();}
+    abort(){clearTimeout(this.startTimer);this.onend?.();}
+  };
   window.voiceRequests = [];
   window.Worker = class {
     postMessage(data) {
@@ -87,8 +96,25 @@ try{
   await page.locator('.message.assistant').filter({hasText:'Your workspace is ready. What would you like to work on?'}).waitFor();
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   await page.evaluate(()=>{window.orbToneCount=0;const original=AudioContext.prototype.createOscillator;AudioContext.prototype.createOscillator=function(...args){window.orbToneCount++;return original.apply(this,args)}});
-  await page.getByRole('button',{name:/Play Dev sound/}).click();
-  await page.waitForFunction(()=>window.orbToneCount===2);
+  assert.equal(await page.evaluate(()=>window.isSecureContext),false);
+  assert.equal(await page.locator('#mic').isEnabled(),true,'LAN origin must not pre-disable exposed recognition');
+  await page.locator('#orb').click();
+  await page.getByText('Starting microphone…',{exact:true}).waitFor();
+  await page.getByText('Listening…',{exact:true}).waitFor();
+  await page.locator('#mic').click();
+  await page.getByText('Ready when you are',{exact:true}).waitFor();
+  await page.locator('#mic').click();
+  await page.getByText('Listening…',{exact:true}).waitFor();
+  await page.evaluate(()=>lastRecognition.onerror({error:'not-allowed'}));
+  await page.getByText(/The browser denied microphone access/).waitFor();
+  assert.equal(await page.locator('#mic').getAttribute('aria-pressed'),'false');
+  assert.equal(await page.locator('#mic').isEnabled(),true,'A denied attempt stays retryable');
+  await page.evaluate(()=>lastRecognition.onend());
+  await page.locator('#mic').click();
+  await page.getByText('Starting microphone…',{exact:true}).waitFor();
+  await page.locator('#mic').click();
+  await page.waitForTimeout(150);
+  assert.equal(await page.locator('#orb').getAttribute('data-state'),'idle','Cancelling startup ignores late recognition events');
   assert.equal(await page.locator('#read').isDisabled(),true);
   await page.getByRole('button',{name:'Download voice',exact:true}).click();
   await page.getByText('Offline voice ready · Heart',{exact:true}).waitFor({state:'attached'});
@@ -133,7 +159,7 @@ try{
   await page.getByText('Thinking…',{exact:true}).waitFor();
   await page.getByText('Reply saved in your desktop conversation.',{exact:true}).waitFor();
   assert.equal(executions,1);
-  assert.equal(await page.evaluate(()=>window.orbToneCount),4,'Accepted message chimes once');
+  assert.equal(await page.evaluate(()=>window.orbToneCount),2,'Accepted message chimes once');
   await page.locator('#text').fill('Slow task');await page.locator('#send').click();
   await page.getByText('Thinking…',{exact:true}).waitFor();
   await page.locator('#text').fill('Keep chatting');
@@ -163,6 +189,7 @@ try{
   await page.emulateMedia({reducedMotion:'no-preference'});
   offline=true;
   await page.getByText('PC offline · tasks saved here',{exact:true}).waitFor();
+  assert.equal(await page.locator('#mic').isDisabled(),true,'Disconnected desktop cannot accept voice');
   await page.locator('#text').fill('Saved while offline');
   await page.locator('#send').click();
   assert.equal(executions,3);
@@ -180,7 +207,8 @@ try{
   await page.getByText('Listening…',{exact:true}).waitFor();
   assert.equal(await page.locator('#mic').getAttribute('aria-pressed'),'true');
   await page.evaluate(()=>lastRecognition.onresult({resultIndex:0,results:[Object.assign([{transcript:'Voice request'}],{isFinal:true})]}));
-  await page.getByRole('button',{name:'Finish listening',exact:true}).click();
+  await page.locator('#mic').click();
+  await page.getByText('Thinking…',{exact:true}).waitFor();
   await page.waitForFunction(()=>outbox.length===0);
   assert.equal(executions,5,'Voice input follows the same desktop queue');
   offline=true;await page.getByText('PC offline · tasks saved here',{exact:true}).waitFor();
@@ -196,5 +224,5 @@ try{
   await page.getByRole('heading',{name:'Connect with Dev'}).waitFor();
   assert.equal(await page.evaluate(()=>localStorage.getItem('devdeck-companion-v1')),null);
   assert.deepEqual(errors,[]);
-  console.log('Mobile passed: home, orb/chat, history, voice states, acceptance chime, responsive layouts, Teams/Activity/details, offline automatic reconnect and unpair. Screenshots: '+shots);
+  console.log('Mobile passed: home, orb/chat, history, LAN recognition attempts, denied-permission recovery, startup cancellation, voice states, acceptance chime, responsive layouts, Teams/Activity/details, offline automatic reconnect and unpair. Screenshots: '+shots);
 }finally{await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r))}

@@ -53,3 +53,35 @@ The paired companion's Activity view shows connected GitHub issues and folder wo
 ## Voice verification boundary
 
 The transcript normalizer preserves recognition restart boundaries and intentional single prefix pairs. It only folds repeated growing hypotheses within one recognition generation. Three or more deliberately repeated growing phrases can still be indistinguishable from cumulative Android recognition output; verify real speech on the phone before claiming the duplication issue fully resolved. Spoken acceptance has a one-time chime fallback on synthesis failure, suppressed when cancelled or the user changes conversation/starts listening.
+
+## Shared library, agents and reusable teams
+
+Agents now has Configured agents, Library and Reusable teams. Community is an
+optional entry point into the same Library: import a catalogue text definition
+with its source/licence metadata, or use Add from GitHub for supported agent
+briefs and SKILL.md files. Custom creation is available directly in Library.
+Dev can also propose `library.create` from chat or voice; the exact definition
+is reviewed before it is saved. A saved definition is text, not a running agent.
+
+Configure an agent from an agent template, choose its shared skill IDs and set
+its existing runtime/space limits. Skills remain shared library references;
+several agents can use the same skill without copying its definition. Merely
+having a skill or tool installed does not attach it to every agent. Imported
+IDs from different sources cannot silently replace one another. Custom edits
+use the last-read text as a revision check; imported originals retain provenance.
+
+Reusable teams map unique named roles to saved worker handles. Saving a team
+validates missing agents and referenced skills/templates, grants no authority
+and starts no work. In a workflow editor, open Reusable team and step roles,
+read the draft, choose a team, map each step, apply, then save. Direct worker
+assignments remain supported. The saved workflow records `team`, each step's
+`role`, and the resolved `worker`. New issue routes resolve the latest saved
+team; existing issue workflows retain their assigned workers and receipts.
+Changing a saved worker's profile affects future executions, not an already
+running process. Dependencies, human review and runtime permissions still gate
+starts. Dev remains the direct coordinator; no dedicated lead session is created.
+
+The initial Community catalogue import is idempotent and does not update a
+previously imported definition silently. GitHub imports can explicitly update
+the same source/path; changing source requires a distinct identity or deliberate
+removal. This is source identity protection, not semantic deduplication.

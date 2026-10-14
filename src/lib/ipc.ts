@@ -2367,6 +2367,7 @@ export const managerConversation = (handle: string) => invoke<import('./aiw').Ch
 export const managerTurn = (handle: string, text: string) => invoke<import('./aiw').AssistantReply>('manager_turn',{handle,text})
 
 export interface FolderWorkflowStep {
+  role?: string
   actor?: string
   next_action?: string
   updated_at?: string
@@ -2384,7 +2385,7 @@ export interface FolderWorkflowStep {
 }
 export interface FolderWorkflow {
   raw: string
-  definition: { title: string; ticket_url?: string; steps: FolderWorkflowStep[] }
+  definition: { title: string; team?: string; ticket_url?: string; steps: FolderWorkflowStep[] }
   body: string
   path: string
 }
@@ -2412,3 +2413,12 @@ export const issueMonitorGet = () => invoke<IssueMonitorView>('issue_monitor_get
 export const issueMonitorSave = (expected: string, enabled: boolean, bindings?: IssueDispatchBinding[]) => invoke<IssueMonitorView>('issue_monitor_save', { expected, enabled, bindings })
 export const issueMonitorRetry = (repository: string, number: number) => invoke<IssueMonitorView>('issue_monitor_retry', { repository, number })
 export const issueMonitorRefresh = () => invoke<IssueMonitorView>('issue_monitor_refresh')
+
+export interface ReusableTeam { id: string; name: string; description: string; roles: { name: string; worker: string }[]; revision: number }
+export const reusableTeamsList = () => invoke<ReusableTeam[]>('reusable_teams_list')
+export const reusableTeamSave = (team: ReusableTeam) => invoke<ReusableTeam>('reusable_team_save', { team })
+export const librarySaveCustom = (id: string, kind: string, name: string, what: string, body: string, expected: string | null) => invoke<LibraryItem>('library_save_custom', { id, kind, name, what, body, expected })
+export const folderWorkflowParse = (raw: string) => invoke<FolderWorkflow['definition']>('folder_workflow_parse', { raw })
+export const folderWorkflowTeamDraft = (raw: string, team: string, roles: Record<string, string>) => invoke<string>('folder_workflow_team_draft', { raw, team, roles })
+
+export const communityLibraryImport = (id: string) => invoke<LibraryItem>('community_library_import', { id })

@@ -38,6 +38,8 @@ pub fn workflow_path(dir: &Path, id: &str) -> Result<PathBuf, String> {
 pub struct Definition {
     pub title: String,
     #[serde(default)]
+    pub team: String,
+    #[serde(default)]
     pub ticket_url: String,
     pub steps: Vec<Step>,
 }
@@ -46,6 +48,9 @@ pub struct Definition {
 pub struct Step {
     pub id: String,
     pub title: String,
+    #[serde(default)]
+    pub role: String,
+    #[serde(default)]
     pub worker: String,
     /// Existing target node, never a path guessed from the workflow's location.
     pub target: i64,
@@ -97,7 +102,7 @@ pub(crate) fn validate(d: &Definition) -> Result<(), String> {
             return Err("Step IDs must be unique words using letters, numbers, - or _.".into());
         }
         if s.title.trim().is_empty()
-            || s.worker.trim().is_empty()
+            || (s.worker.trim().is_empty() && (s.role.is_empty() || d.team.is_empty()))
             || s.target <= 0
             || s.instructions.trim().is_empty()
         {
@@ -186,6 +191,7 @@ mod tests {
         Definition {
             title: "Ship".into(),
             ticket_url: String::new(),
+            team: String::new(),
             steps: vec![
                 Step {
                     id: "build".into(),

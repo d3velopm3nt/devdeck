@@ -32,6 +32,8 @@ fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
 
+pub(crate) static WRITE: Mutex<()> = Mutex::new(());
+
 /// One thing in the library.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct Item {
@@ -116,7 +118,9 @@ fn write_index(ix: &Index) -> Result<(), String> {
         meta: ix.clone(),
         body: "Skills and briefs you installed. Words only: nothing here runs.\n".into(),
     };
-    std::fs::write(&p, crate::aiw::deck::write_doc(&doc)?).map_err(err)
+    let tmp = p.with_extension("md.tmp");
+    std::fs::write(&tmp, crate::aiw::deck::write_doc(&doc)?).map_err(err)?;
+    std::fs::rename(tmp, p).map_err(err)
 }
 
 /// Where one item's text lives.
@@ -524,6 +528,7 @@ pub fn install_cands(
     licence: &str,
     picks: &[Candidate],
 ) -> Result<Added, String> {
+    let _guard = WRITE.lock().map_err(|e| e.to_string())?;
     let c = client()?;
     let mut ix = read_index()?;
     let mut out = Added::default();
@@ -553,6 +558,16 @@ pub fn install_cands(
     });
 
     for (i, cand) in picks.iter().enumerate() {
+        if let Some(existing) = ix
+            .items
+            .iter()
+            .find(|it| it.id == cand.id && it.kind == cand.kind)
+        {
+            if existing.repo != repo || existing.path != cand.path {
+                out.missed.push(format!("{} already belongs to {}. No replacement made; remove it deliberately or create a custom definition with a distinct ID.", cand.id, existing.repo));
+                continue;
+            }
+        }
         let text = match texts[i].lock().unwrap().clone() {
             Some(Ok(t)) => t,
             Some(Err(e)) => {
@@ -687,6 +702,7 @@ pub fn library_kits() -> Result<Vec<KitRef>, String> {
 
 #[tauri::command(async)]
 pub fn library_remove(id: String, kind: String) -> Result<(), String> {
+    let _guard = WRITE.lock().map_err(|e| e.to_string())?;
     let mut ix = read_index()?;
     if let Some(it) = ix
         .items

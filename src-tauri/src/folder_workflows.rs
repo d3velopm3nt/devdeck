@@ -238,7 +238,8 @@ pub fn folder_workflow_save(
     {
         return Err("This workflow has started. Keep its receipt intact; create another named workflow for a new run.".into());
     }
-    let doc = parse(&raw)?;
+    let mut doc = parse(&raw)?;
+    crate::personal_library::resolve_definition(&mut doc.meta)?;
     if doc.meta.steps.iter().any(|s| {
         s.status != Status::Pending
             || !s.run.is_empty()
@@ -282,6 +283,7 @@ pub fn folder_workflow_start(
         return Err("This step is already claimed or its dependencies are not accepted.".into());
     }
     let s = &doc.meta.steps[i];
+    crate::personal_library::validate_worker(&s.worker)?;
     let claim = format!(
         "workflow:{node}:{}:{}:{}",
         workflow.as_deref().unwrap_or("default"),
@@ -505,6 +507,7 @@ mod persistence_tests {
             meta: Definition {
                 title: "Campaign".into(),
                 ticket_url: String::new(),
+                team: String::new(),
                 steps: vec![Step {
                     id: "draft".into(),
                     title: "Draft".into(),
@@ -592,7 +595,7 @@ pub fn folder_workflow_route(
         return Err("The workflow template changed. Reload before routing.".into());
     }
     let template = parse(&raw)?;
-    let definition =
+    let mut definition =
         crate::workflow_model::for_ticket(&template.meta, &repository, number, &title)?;
     let digest = format!("{:x}", Sha256::digest(repository.as_bytes()));
     let id = format!("issue-{}-{number}", &digest[..16]);
@@ -609,6 +612,7 @@ pub fn folder_workflow_route(
             workflow: view(&p, previous)?,
         });
     }
+    crate::personal_library::resolve_definition(&mut definition)?;
     let doc = Doc {
         meta: definition,
         body: format!(
@@ -779,4 +783,27 @@ pub fn advance_issue(
         "blocked"
     }
     .into())
+}
+
+/// Preview only: does not save, start, or grant anything.
+#[tauri::command(async)]
+pub fn folder_workflow_parse(raw: String) -> Result<Definition, String> {
+    Ok(parse(&raw)?.meta)
+}
+#[tauri::command(async)]
+pub fn folder_workflow_team_draft(
+    raw: String,
+    team: String,
+    roles: std::collections::HashMap<String, String>,
+) -> Result<String, String> {
+    let mut doc = parse(&raw)?;
+    if doc.meta.steps.iter().any(|s| s.status != Status::Pending) {
+        return Err("Keep started workflows intact. Create a new workflow to change teams.".into());
+    }
+    doc.meta.team = team;
+    for step in &mut doc.meta.steps {
+        step.role = roles.get(&step.id).cloned().unwrap_or_default();
+    }
+    crate::personal_library::resolve_definition(&mut doc.meta)?;
+    write_doc(&doc)
 }

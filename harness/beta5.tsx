@@ -26,7 +26,13 @@ f.aiw_models = () => ({models:[], cached:false, source:'fixture'})
 f.aiw_model_check = () => ({ok:scenario !== 'model-failed',detail:'Fixture verification failed'})
 f.aiw_provider_defaults = () => ({provider:'openai',model:'fixture-model',inherited:[]})
 f.aiw_default_provider_set = record('default-provider',null)
-f.library_list = () => []
+const library: {id:string;kind:string;name:string;what:string;body:string;repo:string;commit:string;licence:string;path:string;added_at:string;chars:number}[]=[]
+const teams: import('../src/lib/ipc').ReusableTeam[]=[]
+f.library_list = () => structuredClone(library)
+f.library_read = args => library.find(i=>i.id===args?.id)?.body || ''
+f.library_save_custom = args => {calls.push({command:'save-definition',args}); const item={...args,repo:'personal',commit:'',licence:'Personal definition',path:'',added_at:'',chars:20} as typeof library[number];library.push(item);return item}
+f.reusable_teams_list = () => structuredClone(teams)
+f.reusable_team_save = args => {calls.push({command:'save-team',args});const team=structuredClone(args?.team) as typeof teams[number];team.revision++;teams.push(team);return team}
 f.library_kits = () => []
 f.runs_list = () => []
 f.aiw_agents = () => [{id:'assistant',name:'Assistant',role:'Assistant',provider:'openai',model:'fixture-model',system:'',permissions:{},skills:[]},{id:'qa',name:'QA agent',role:'QA',provider:'openai',model:'fixture-model',system:'',permissions:{},skills:[]}]

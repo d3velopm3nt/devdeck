@@ -66,6 +66,7 @@ mod manager_team;
 mod managers;
 mod mcp;
 mod monitor;
+mod personal_library;
 mod product_github;
 mod provider_defaults;
 mod pty;
@@ -81,6 +82,7 @@ mod stash;
 mod subscription_model;
 mod subscription_process;
 mod team;
+mod team_library_model;
 mod threads;
 mod vault;
 mod visibility;
@@ -955,6 +957,23 @@ pub fn run() {
                     folder_workflows::assistant_action(&handle, node, action, args)
                 }));
             }
+            aiw_for_setup.set_library_handler(Box::new(|action, args| {
+                let text = |key: &str| -> Result<String, String> {
+                    args.get(key).and_then(serde_json::Value::as_str)
+                        .map(str::to_string).ok_or_else(|| format!("Missing library field: {key}"))
+                };
+                let value = match action {
+                    "list" => serde_json::json!({"items": library::library_list()?, "reference_only": true}),
+                    "read" => serde_json::json!({"body": library::library_read(text("id")?, text("kind")?)?, "reference_only": true}),
+                    "create" => serde_json::json!({
+                        "item": personal_library::save_item(text("id")?, text("kind")?, text("name")?, text("what")?, text("body")?, None)?,
+                        "active": false,
+                        "next": "Saved for reuse. Configure an agent in the agent editor to use this definition. No tools or permissions were granted."
+                    }),
+                    _ => return Err("Unknown library action".into()),
+                };
+                serde_json::to_string(&value).map_err(|e| e.to_string())
+            }));
             folder_workflows::install(app.handle());
             issue_monitor::install(app.handle());
 
@@ -1236,6 +1255,7 @@ pub fn run() {
             community::community_catalog,
             community::community_installed,
             community::community_install,
+            community::community_library_import,
             community::community_uninstall,
             community::community_grant,
             community::community_servers,
@@ -1310,6 +1330,9 @@ pub fn run() {
             business::business_pipeline,
             business::business_stage_set,
             library::library_list,
+            personal_library::library_save_custom,
+            personal_library::reusable_teams_list,
+            personal_library::reusable_team_save,
             library::library_read,
             library::library_look,
             library::library_install,
@@ -1332,6 +1355,8 @@ pub fn run() {
             issue_monitor::issue_monitor_retry,
             folder_workflows::folder_workflow_route,
             folder_workflows::folder_workflow_list,
+            folder_workflows::folder_workflow_parse,
+            folder_workflows::folder_workflow_team_draft,
             folder_workflows::folder_workflow_get,
             folder_workflows::folder_workflow_save,
             folder_workflows::folder_workflow_start,

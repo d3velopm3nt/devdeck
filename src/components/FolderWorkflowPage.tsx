@@ -118,7 +118,7 @@ ${data.raw}` : ''
     <header className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-4">
       <div className="min-w-0 flex-1"><div className="text-[11px] uppercase tracking-wider text-muted">{name} / Workflow</div>
         <h1 className="text-xl font-semibold text-ink">{data?.definition.title || 'Set up a workflow'}</h1>
-        <p className="mt-1 text-[12px] text-muted">{steps.filter(s => s.status === 'done').length} of {steps.length} accepted · Starts follow dependencies and permissions</p>
+        <p className="mt-1 text-[12px] text-muted">{data?.definition.team ? `Team: ${data.definition.team} · ` : ''}{steps.filter(s => s.status === 'done').length} of {steps.length} accepted · Starts follow dependencies and permissions</p>
       </div>
       <button className={button} onClick={onDashboard}>Folder dashboard</button>
       <button className={button} disabled={busy} onClick={() => void refresh()}>Refresh</button>
@@ -142,6 +142,7 @@ ${data.raw}` : ''
         <div className="grid grid-cols-2 gap-2">{['lead', 'developer', 'tester', 'reviewer'].map(role => <label key={role} className="text-[12px] capitalize">{role}<select aria-label={`${role} worker`} className={field} value={roles[role] || workers[0]?.handle || ''} onChange={e => setRoles(r => ({ ...r, [role]: e.target.value }))}>{workers.map(w => <option key={w.handle} value={w.handle}>{w.name}</option>)}</select></label>)}</div>
         <button className={`${button} mt-3`} disabled={!workers.length} onClick={() => setDraft(technicalTemplate(node, Object.fromEntries(['lead', 'developer', 'tester', 'reviewer'].map(role => [role, roles[role] || workers[0].handle]))))}>Use technical template</button>
       </details>
+      <WorkflowTeamMapping draft={draft} onApply={setDraft} workers={workers}/>
       <textarea aria-label="Workflow Markdown" className={`${field} min-h-72 flex-1 font-mono`} value={draft} onChange={e => setDraft(e.target.value)} spellCheck={false} />
       <div className="flex gap-2"><button className={button} disabled={busy} onClick={() => void act(() => ipc.folderWorkflowSave(node, editExpected, draft, workflow))}>Save workflow</button><button className={button} disabled={busy} onClick={() => setEditing(false)}>Cancel</button></div>
     </div> : data && steps.length === 0 ? <div className="m-5 rounded-xl border border-dashed border-line2 p-8">
@@ -152,7 +153,7 @@ ${data.raw}` : ''
         {steps.map((s, i) => <button key={s.id} onClick={() => { setSelected(s.id); setPlan(null); setEvidence(''); setProgress(''); setNextAction('') }} className={`w-full rounded-xl border p-4 text-left ${step?.id === s.id ? 'border-indigo-400 bg-indigo-500/10' : 'border-line bg-panel hover:bg-hover'}`}>
           <div className="flex justify-between gap-2"><span className="text-[11px] text-muted">STEP {i + 1}</span><span className={`text-[11px] uppercase ${s.status === 'done' ? 'text-ok' : s.status === 'blocked' ? 'text-err' : 'text-info'}`}>{s.status === 'review' ? 'Needs review' : s.status}</span></div>
           <h2 className="mt-2 text-[14px] font-semibold text-ink">{s.title}</h2>
-          <p className="mt-1 text-[12px] text-dim">@{s.worker} · {nodes.find(n => n.id === s.target)?.name ?? `Folder ${s.target}`}</p>
+          <p className="mt-1 text-[12px] text-dim">{s.role ? `${s.role} → ` : ''}{workers.find(w=>w.handle===s.worker)?.name || `@${s.worker}`} · {nodes.find(n => n.id === s.target)?.name ?? `Folder ${s.target}`}</p>
           <p className="mt-2 text-[11px] text-muted">{s.needs.length ? `After acceptance: ${s.needs.join(', ')}` : 'No dependencies'}</p>
         </button>)}
       </section>
@@ -241,4 +242,38 @@ function IssueRouting({ node, source, onRouted }: { node: number; source: string
     {error && <p role="alert" className="text-[12px] text-err">{error}</p>}
     <button className={button} disabled={busy || !picked} onClick={() => void route()}>Route issue to workflow</button>
   </section>
+}
+
+function WorkflowTeamMapping({ draft, onApply, workers }: { draft: string; onApply: (raw: string) => void; workers: ipc.Worker[] }) {
+  const [teams, setTeams] = useState<ipc.ReusableTeam[]>([])
+  const [teamId, setTeamId] = useState('')
+  const [steps, setSteps] = useState<ipc.FolderWorkflowStep[]>([])
+  const [roles, setRoles] = useState<Record<string,string>>({})
+  const [loaded, setLoaded] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  useEffect(()=>{void ipc.reusableTeamsList().then(setTeams).catch(e=>setError(String(e)))},[])
+  const team = teams.find(t=>t.id===teamId)
+  const read = async () => {
+    setBusy(true);setError('')
+    try { const d=await ipc.folderWorkflowParse(draft);setSteps(d.steps);setRoles(Object.fromEntries(d.steps.map(s=>[s.id,s.role || ''])));setTeamId(d.team || '');setLoaded(draft) }
+    catch(e){setError(String(e))}finally{setBusy(false)}
+  }
+  const apply = async () => {
+    setBusy(true);setError('')
+    try { const raw=await ipc.folderWorkflowTeamDraft(draft,teamId,roles);const d=await ipc.folderWorkflowParse(raw);onApply(raw);setLoaded(raw);setSteps(d.steps);setRoles(Object.fromEntries(d.steps.map(s=>[s.id,s.role || ''])));setTeamId(d.team || '') }
+    catch(e){setError(String(e))}finally{setBusy(false)}
+  }
+  return <details className="rounded border border-line p-3"><summary className="cursor-pointer text-sm text-info">Reusable team and step roles</summary>
+    <p className="my-2 text-xs text-muted">Read the current draft, select a saved team, then choose each step’s role. Apply updates the draft; Save workflow commits it. Existing issue runs keep their assigned agents when a team changes.</p>
+    <button className={button} disabled={busy} onClick={()=>void read()}>Read draft steps</button>
+    {!teams.length && <p className="mt-2 text-xs text-muted">Create a reusable team under Agents → Reusable teams first.</p>}
+    {steps.length>0 && <div className="mt-3 space-y-3">
+      <label className="block text-sm">Reusable team<select aria-label="Workflow team" className={field} value={teamId} onChange={e=>{setTeamId(e.target.value);setRoles({})}}><option value="">Direct agent assignments</option>{teamId && !team && <option value={teamId}>Missing team: {teamId}</option>}{teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
+      {steps.map(step=><label key={step.id} className="block text-sm">{step.title}<select aria-label={`Team role for ${step.id}`} className={field} value={roles[step.id] || ''} onChange={e=>setRoles({...roles,[step.id]:e.target.value})}><option value="">Keep direct agent: {workers.find(w=>w.handle===step.worker)?.name || step.worker}</option>{roles[step.id] && !team?.roles.some(r=>r.name===roles[step.id]) && <option value={roles[step.id]}>Missing role: {roles[step.id]}</option>}{team?.roles.map(r=><option key={r.name} value={r.name}>{r.name} → {workers.find(w=>w.handle===r.worker)?.name || `Missing agent: ${r.worker}`}</option>)}</select></label>)}
+      {loaded!==draft && <p className="text-xs text-warn">Draft changed. Read the steps again before applying mappings.</p>}
+      <button className={button} disabled={busy || loaded!==draft} onClick={()=>void apply()}>Apply team to draft</button>
+    </div>}
+    {error && <p role="alert" className="mt-2 text-xs text-err">{error}</p>}
+  </details>
 }

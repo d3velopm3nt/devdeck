@@ -38,6 +38,9 @@ fixture.tree_list = () => [{ id: 7, name: 'Marketing', dir: 'C:/State/Marketing'
 fixture.issue_monitor_get = () => structuredClone(monitor)
 fixture.issue_monitor_save = args => { if (args?.expected !== monitor.raw) throw new Error('Issue monitor settings changed. Reload before saving.'); monitor = { ...monitor, raw: 'monitor-revision', enabled: !!args.enabled, bindings: (args.bindings as IssueMonitorView['bindings'] | undefined) || monitor.bindings }; return structuredClone(monitor) }
 fixture.issue_monitor_refresh = () => { monitor.sources[0].fetched_at = '2026-10-14T18:00:00Z'; return structuredClone(monitor) }
+fixture.reusable_teams_list = () => [{id:'writing',name:'Writing team',description:'Editorial work',revision:1,roles:[{name:'writer',worker:'writer'}]}]
+fixture.folder_workflow_parse = () => structuredClone(data.definition)
+fixture.folder_workflow_team_draft = args => { calls.push({command:'team-draft',args}); return 'team-draft' }
 fixture.workers_list = () => [{ handle: 'writer', name: 'Writer' }]
 fixture.worker_plan = args => {
   calls.push({ command: 'plan', args })

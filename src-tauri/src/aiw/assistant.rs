@@ -31,8 +31,8 @@ use super::provider::{AgentAction, AgentRequest, AgentResponse, ChatTurn, Observ
 use super::runtime::{AgentRuntime, LiveSession, StartAgentCommand};
 use super::state::Workspace;
 use super::tools::{
-    is_assistant_tool, ToolCall, TOOL_BOTS, TOOL_DELEGATE, TOOL_MEMORY, TOOL_ROUTINE, TOOL_SKILL,
-    TOOL_WORK, TOOL_WORKFLOW,
+    is_assistant_tool, ToolCall, TOOL_BOTS, TOOL_DELEGATE, TOOL_LIBRARY, TOOL_MEMORY, TOOL_ROUTINE,
+    TOOL_SKILL, TOOL_WORK, TOOL_WORKFLOW,
 };
 
 /// The built-in orchestrator's agent id. It is a real entry in the agent list
@@ -2051,6 +2051,7 @@ impl Assistant {
                 TOOL_BOTS => Self::make_bot(ws, conv, me, call, scope, cause),
                 TOOL_ROUTINE => Self::make_routine(ws, conv, me, call, scope, cause),
                 TOOL_SKILL => Self::save_skill(ws, call),
+                TOOL_LIBRARY => Self::library(ws, me, call, scope, cause),
                 TOOL_WORKFLOW => Self::workflow(ws, conv, me, call, scope, cause),
                 TOOL_WORK => Self::plan_work(ws, conv, persona_plan, call),
                 _ => (false, format!("unknown assistant tool '{}'", call.tool)),
@@ -2152,6 +2153,42 @@ impl Assistant {
         }) {
             Ok(note) => (true, note),
             Err(e) => (false, e),
+        }
+    }
+
+    /// Saving reusable text is always reviewed, even with Full permission.
+    /// Library contents never grant authority or activate runtime configuration.
+    fn library(
+        ws: &Arc<Workspace>,
+        me: &str,
+        call: &ToolCall,
+        scope: &EventScope,
+        cause: &DomainEvent,
+    ) -> (bool, String) {
+        use super::tools::Permission;
+        let write = match call.action.as_str() {
+            "list" | "read" => false,
+            "create" => true,
+            _ => return (false, "Unknown library action".into()),
+        };
+        let permission = ws.permission_matrix().get(me, TOOL_LIBRARY);
+        if permission == Permission::None || (write && permission == Permission::Read) {
+            return (
+                false,
+                "Library action is denied by your tool permissions".into(),
+            );
+        }
+        if write {
+            if scope.unattended {
+                return (false, "Saving a library definition needs a person to review it; this run is unattended".into());
+            }
+            if !ws.ask_approval(me, call, scope, cause).allows() {
+                return (false, "Library definition was not approved".into());
+            }
+        }
+        match ws.library(&call.action, &call.args) {
+            Ok(result) => (true, result),
+            Err(error) => (false, error),
         }
     }
 
@@ -2885,6 +2922,110 @@ fn action_name(a: &AgentAction) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn library_bridge_requires_review_and_never_grants_activation() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let ws = Arc::new(Workspace::with_approval_timeout(
+            std::time::Duration::from_millis(1),
+        ));
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = calls.clone();
+        ws.set_library_handler(Box::new(move |action, _| {
+            assert!(matches!(action, "list" | "read"));
+            seen.fetch_add(1, Ordering::SeqCst);
+            Ok("reference only".into())
+        }));
+        let invoke = |action, unattended| {
+            let scope = EventScope {
+                unattended,
+                ..Default::default()
+            };
+            let cause = DomainEvent::new(
+                EventType::ToolApprovalRequested,
+                scope.clone(),
+                serde_json::json!({}),
+            );
+            Assistant::library(
+                &ws,
+                ASSISTANT_ID,
+                &ToolCall::new(TOOL_LIBRARY, action, serde_json::json!({})),
+                &scope,
+                &cause,
+            )
+            .0
+        };
+        assert!(invoke("list", true));
+        assert!(!invoke("create", true));
+        ws.set_permission(ASSISTANT_ID, TOOL_LIBRARY, "read")
+            .unwrap();
+        assert!(invoke("read", true));
+        assert!(!invoke("create", false));
+        ws.set_permission(ASSISTANT_ID, TOOL_LIBRARY, "none")
+            .unwrap();
+        assert!(!invoke("list", false));
+        ws.set_permission(ASSISTANT_ID, TOOL_LIBRARY, "full")
+            .unwrap();
+        assert!(!invoke("create", true));
+        assert!(!invoke("create", false)); // review timeout denies, even with Full
+        assert!(!invoke("activate", false));
+        assert!(!invoke("remove", false));
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn library_approval_reviews_the_exact_definition_before_saving() {
+        let ws = Arc::new(Workspace::with_approval_timeout(
+            std::time::Duration::from_secs(5),
+        ));
+        let body = "Review the change and report evidence. Never bypass approval.";
+        ws.set_library_handler(Box::new(move |action, args| {
+            assert_eq!(action, "create");
+            assert_eq!(args["body"], body);
+            Ok("Saved as inactive reference text".into())
+        }));
+        let reviewer = {
+            let ws = ws.clone();
+            std::thread::spawn(move || {
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(4);
+                loop {
+                    if let Some(request) = ws.pending_approvals().into_iter().next() {
+                        assert_eq!(request.tool, TOOL_LIBRARY);
+                        assert!(request.detail.contains(body));
+                        ws.resolve_approval(&request.id, super::super::approval::Decision::Allow)
+                            .unwrap();
+                        break;
+                    }
+                    assert!(
+                        std::time::Instant::now() < deadline,
+                        "No review was requested"
+                    );
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+            })
+        };
+        let scope = EventScope::default();
+        let cause = DomainEvent::new(
+            EventType::ToolApprovalRequested,
+            scope.clone(),
+            serde_json::json!({}),
+        );
+        let result = Assistant::library(
+            &ws,
+            ASSISTANT_ID,
+            &ToolCall::new(
+                TOOL_LIBRARY,
+                "create",
+                serde_json::json!({
+                    "id":"reviewer", "kind":"brief", "name":"Reviewer", "what":"Review changes", "body":body
+                }),
+            ),
+            &scope,
+            &cause,
+        );
+        reviewer.join().unwrap();
+        assert!(result.0, "{}", result.1);
+    }
 
     #[test]
     fn workflow_bridge_enforces_permissions_and_keeps_folder_scope() {

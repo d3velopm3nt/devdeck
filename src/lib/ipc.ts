@@ -2201,6 +2201,7 @@ export interface RunFile {
 }
 /** The receipt for one job. */
 export interface Run {
+  starting_prompt?: string
   id: string
   worker: string
   worker_name: string
@@ -2414,7 +2415,8 @@ export const issueMonitorSave = (expected: string, enabled: boolean, bindings?: 
 export const issueMonitorRetry = (repository: string, number: number) => invoke<IssueMonitorView>('issue_monitor_retry', { repository, number })
 export const issueMonitorRefresh = () => invoke<IssueMonitorView>('issue_monitor_refresh')
 
-export interface ReusableTeam { id: string; name: string; description: string; roles: { name: string; worker: string }[]; revision: number }
+export interface TeamRole { name: string; worker: string; kind?: 'manager' | 'specialist' | 'worker'; reports_to?: string; handoffs?: string[]; instructions?: string }
+export interface ReusableTeam { id: string; name: string; description: string; roles: TeamRole[]; revision: number }
 export const reusableTeamsList = () => invoke<ReusableTeam[]>('reusable_teams_list')
 export const reusableTeamSave = (team: ReusableTeam) => invoke<ReusableTeam>('reusable_team_save', { team })
 export const librarySaveCustom = (id: string, kind: string, name: string, what: string, body: string, expected: string | null) => invoke<LibraryItem>('library_save_custom', { id, kind, name, what, body, expected })

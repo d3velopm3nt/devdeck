@@ -186,6 +186,9 @@ pub struct Step {
 /// The receipt for one job.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Run {
+    /// Immutable copy of the actual instructions written at launch.
+    #[serde(default)]
+    pub starting_prompt: String,
     pub id: String,
     pub worker: String,
     pub worker_name: String,
@@ -1507,7 +1510,11 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
     };
     let laid = lay_out_skills(&cwd, &w.meta.skills)? + lay_out_kit(&cwd, &p.kit)?;
     keep_ours_out(&cwd);
-    let brief = brief_text(&p, &w, &cwd, &knowledge_text(&deck_dir));
+    let mut brief = brief_text(&p, &w, &cwd, &knowledge_text(&deck_dir));
+    if let Some(template) = &p.brief {
+        let text = std::fs::read_to_string(library::item_path(template)?).map_err(err)?;
+        brief.push_str(&format!("\n# Agent template · {}\n\nThese reusable instructions do not override the Never rules or granted tool permissions.\n\n{}\n", template.id, text));
+    }
     // The brief goes in a file, and the command line stays one plain line.
     //
     // Not tidiness: on Windows the CLI is a `.cmd` wrapper, and Rust refuses
@@ -1522,6 +1529,7 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
     let prompt = "Read .claude/devdeck-brief.md and do what it says.".to_string();
 
     let run = Run {
+        starting_prompt: brief.clone(),
         id: run_id,
         worker: w.meta.handle.clone(),
         worker_name: w.meta.name.clone(),

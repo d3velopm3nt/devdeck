@@ -58,6 +58,8 @@ pub struct Step {
     pub needs: Vec<String>,
     pub instructions: String,
     #[serde(default)]
+    pub team_context: String,
+    #[serde(default)]
     pub status: Status,
     #[serde(default)]
     pub claim: String,

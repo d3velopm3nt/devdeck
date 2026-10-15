@@ -298,7 +298,7 @@ pub fn folder_workflow_start(
         .map(|d| format!("{}: {} (run {})", d.title, d.evidence, d.run))
         .collect::<Vec<_>>()
         .join("\n");
-    let intent = format!("Workflow source: {}\n\n{}\n\n{}\n\nPrevious review: {}\n\nAccepted dependencies:\n{}\n\nReport results and verification for human review. Do not change workflow state or publish.", p.display(), doc.body, s.instructions, s.evidence, dependencies);
+    let intent = format!("Workflow source: {}\n\n{}\n\n{}\n\n{}\n\nPrevious review: {}\n\nAccepted dependencies:\n{}\n\nReport results and verification for human review. Do not change workflow state or publish.", p.display(), doc.body, s.instructions, s.team_context, s.evidence, dependencies);
     let mut plan = {
         let conn = db.conn();
         workers::plan(&conn, &s.worker, s.target, "", &claim, &s.title, &intent)?

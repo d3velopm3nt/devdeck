@@ -89,10 +89,10 @@ export function AgentDirectory() {
       <div><h1 className="text-xl font-semibold text-ink">Agents</h1><p className="mt-1 text-sm text-muted">Your agents, roles and teams in one place.</p></div>
       <div className="flex gap-2"><button className="btn-ghost" onClick={() => setSettings(!settings)}>{settings ? 'Back to agents' : 'AI & permissions'}</button><button className="btn-primary" onClick={() => { setSettings(false); setSection('agents'); setAdding(true) }}>Add agent</button></div>
     </header>
-    {settings ? <Settings /> : <div className="min-h-0 flex-1 space-y-5 overflow-auto p-6">
+    {settings && <Settings />}<div hidden={settings} className="min-h-0 flex-1 space-y-5 overflow-auto p-6">
       <nav aria-label="Agent library sections" className="flex gap-2">{(['agents','library','teams'] as const).map(tab=><button key={tab} aria-pressed={section===tab} className={section===tab?'btn-primary':'btn-ghost'} onClick={()=>setSection(tab)}>{tab==='agents'?'Configured agents':tab==='library'?'Library':'Reusable teams'}</button>)}</nav>
       {section === 'library' && <LibraryPanel items={lib.items} reload={lib.reload} onConfigure={item=>{const w=blank('worker','Custom',nodeId);setEditing({...w,name:item.name || item.id,what:item.what,brief:item.id});}}/>}
-      {section === 'teams' && <ReusableTeams workers={workers} onAgents={()=>{setSection('agents');setAdding(true)}}/>}
+      <div hidden={section !== 'teams'}><ReusableTeams workers={workers} onEdit={setEditing} onAgents={()=>{setSection('agents');setAdding(true)}}/></div>
       {lib.err && <p role="alert" className="text-sm text-err">{lib.err}</p>}
       {section === 'agents' && <>
       {error && <p role="alert" className="text-sm text-err">{error}</p>}
@@ -113,7 +113,7 @@ export function AgentDirectory() {
       </tr>)}</tbody></table>{!rows.length && <p className="p-6 text-sm text-muted">Add your first agent to start building a team.</p>}</div>
       {member && <ManagerWorkspace key={member.bot.handle} member={member} team={team} workers={workers} onChanged={reload} />}
       </>}
-    </div>}
+    </div>
     {editing && <WorkerEditor worker={editing} library={lib.items} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void reload() }} />}
   </div>
 }

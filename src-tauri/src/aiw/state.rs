@@ -1277,7 +1277,7 @@ impl Workspace {
             .iter()
             .find(|d| d.meta.id == super::assistant::ASSISTANT_ID)
             .map(|d| (d.meta.provider.clone(), d.meta.model.clone()))
-            .unwrap_or(("mock".into(), "mock-1".into()));
+            .unwrap_or_default();
         let agents: Vec<AgentDef> = docs
             .into_iter()
             .map(|d| {
@@ -1670,8 +1670,8 @@ pub fn default_agents() -> Vec<AgentDef> {
             id: super::assistant::ASSISTANT_ID.into(),
             name: "Assistant".into(),
             role: "orchestrator".into(),
-            provider: "mock".into(),
-            model: "mock-1".into(),
+            provider: if cfg!(test) { "mock" } else { "" }.into(),
+            model: if cfg!(test) { "mock-1" } else { "" }.into(),
             // The voice is the first line and it is yours; the duties below it
             // are the job. Seeded plain because a first run has not happened
             // yet — the moment it does, this file is rewritten from what you
@@ -1696,8 +1696,8 @@ pub fn default_agents() -> Vec<AgentDef> {
             id: "architect".into(),
             name: "Architect".into(),
             role: "architect".into(),
-            provider: "mock".into(),
-            model: "mock-1".into(),
+            provider: if cfg!(test) { "mock" } else { "" }.into(),
+            model: if cfg!(test) { "mock-1" } else { "" }.into(),
             system: "You set direction and record decisions. You do not write application code."
                 .into(),
             skills: Vec::new(),
@@ -1714,8 +1714,8 @@ pub fn default_agents() -> Vec<AgentDef> {
             id: "dev-a".into(),
             name: "Developer A".into(),
             role: "developer".into(),
-            provider: "mock".into(),
-            model: "mock-1".into(),
+            provider: if cfg!(test) { "mock" } else { "" }.into(),
+            model: if cfg!(test) { "mock-1" } else { "" }.into(),
             system: "You implement work items and keep the shared interfaces coherent.".into(),
             skills: Vec::new(),
             permissions: perms(&[
@@ -1737,8 +1737,8 @@ pub fn default_agents() -> Vec<AgentDef> {
             id: "dev-b".into(),
             name: "Developer B".into(),
             role: "developer".into(),
-            provider: "mock".into(),
-            model: "mock-1".into(),
+            provider: if cfg!(test) { "mock" } else { "" }.into(),
+            model: if cfg!(test) { "mock-1" } else { "" }.into(),
             system: "You implement UI work items.".into(),
             skills: Vec::new(),
             permissions: perms(&[
@@ -1760,8 +1760,8 @@ pub fn default_agents() -> Vec<AgentDef> {
             id: "qa".into(),
             name: "QA Agent".into(),
             role: "qa".into(),
-            provider: "mock".into(),
-            model: "mock-1".into(),
+            provider: if cfg!(test) { "mock" } else { "" }.into(),
+            model: if cfg!(test) { "mock-1" } else { "" }.into(),
             system: "You verify behaviour. You run the app and the tests; you do not fix code."
                 .into(),
             skills: Vec::new(),
@@ -1785,8 +1785,8 @@ pub fn default_agents() -> Vec<AgentDef> {
             id: "reviewer".into(),
             name: "Reviewer".into(),
             role: "reviewer".into(),
-            provider: "mock".into(),
-            model: "mock-1".into(),
+            provider: if cfg!(test) { "mock" } else { "" }.into(),
+            model: if cfg!(test) { "mock-1" } else { "" }.into(),
             system: "You check the implementation against the requirements and decisions.".into(),
             skills: Vec::new(),
             permissions: perms(&[

@@ -284,6 +284,10 @@ impl AgentRuntime {
         let Some(agent) = ws.agent(&cmd.agent_id) else {
             return Err(format!("unknown agent '{}'", cmd.agent_id));
         };
+        #[cfg(not(test))]
+        if agent.provider.is_empty() || agent.provider == "mock" {
+            return Err("Set up this agent with a real provider before starting work.".into());
+        }
         let deck = project.deck();
         if !deck.feature_md(&cmd.feature_id).is_file() {
             return Err(format!(

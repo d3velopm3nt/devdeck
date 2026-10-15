@@ -1044,6 +1044,10 @@ impl Assistant {
         let agent = ws
             .agent(&persona.runs_as)
             .ok_or_else(|| format!("no '{}' agent", persona.runs_as))?;
+        #[cfg(not(test))]
+        if agent.provider.is_empty() || agent.provider == "mock" {
+            return Err("Set up an agent in Settings → Assistant before chatting.".into());
+        }
         let me: &str = &persona.agent_id;
 
         // The first thing said names the conversation. Better than "New

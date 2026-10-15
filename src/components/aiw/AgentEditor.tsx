@@ -36,7 +36,7 @@ export function AgentEditor({ id, onClose }: { id: string; onClose: () => void }
   useEffect(() => {
     setError(null)
     setDirty(false)
-    aiw.agentFile(id).then(setFile).catch((e) => setError(String(e)))
+    aiw.agentFile(id).then(f => setFile(f.provider === 'mock' ? { ...f, provider: '', model: '' } : f)).catch((e) => setError(String(e)))
     aiw.skills().then(setSkills).catch(() => setSkills([]))
   }, [id])
 
@@ -112,7 +112,7 @@ export function AgentEditor({ id, onClose }: { id: string; onClose: () => void }
                 onChange={(e) => edit({ name: e.target.value })}
               />
             </Field>
-            <Field label="Role" hint="Drives the mock's script; free text otherwise.">
+            <Field label="Role" hint="Describe this agent’s responsibility.">
               <input
                 className="input w-full text-[12px]"
                 value={file.role}
@@ -140,7 +140,7 @@ export function AgentEditor({ id, onClose }: { id: string; onClose: () => void }
                   {/* An empty list is the honest state when nothing is set up.
                       It used to open on the mock, so the quickest thing to do
                       was pick something that cannot do the work. */}
-                  {providers.length === 0 && <option value="">No provider set up yet</option>}
+                  <option value="">Choose a provider</option>
                   {withCurrent(providers, file.provider).map(([id, label]) => (
                     <option key={id} value={id}>
                       {label}
@@ -160,12 +160,12 @@ export function AgentEditor({ id, onClose }: { id: string; onClose: () => void }
               </div>
             </Field>
             <Field label="Model">
-              <ModelPicker
+              {file.provider ? <ModelPicker
                 key={file.provider}
                 providerId={file.provider}
                 value={file.model}
                 onChange={(model) => edit({ model })}
-              />
+              /> : <p className="text-sm text-muted">Select a provider first.</p>}
             </Field>
           </div>
 

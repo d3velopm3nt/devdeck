@@ -67,7 +67,7 @@ export function AgentDirectory() {
     }),
     ...agents.filter(a => a.id !== 'assistant').map(a => {
       const latest = sessions.filter(s => s.agent_id === a.id).sort((a,b) => b.started_at.localeCompare(a.started_at))[0]
-      return { id: `agent:${a.id}`, name: a.name, role: 'specialist', profile: a.role, space: 'Available across spaces', task: latest?.summary || latest?.feature_id || 'No task yet', status: latest?.status || 'Ready', engine: `${a.provider} · ${a.model}`, parent: visibleTeam.filter(t => t.bot.team.includes(a.id)).map(t => t.bot.name).join(', ') }
+      return { id: `agent:${a.id}`, name: a.name, role: 'specialist', profile: a.role, space: 'Available across spaces', task: latest?.summary || latest?.feature_id || 'No task yet', status: latest?.status || 'Ready', engine: !a.provider || a.provider === 'mock' ? 'Set up required' : `${a.provider} · ${a.model}`, parent: visibleTeam.filter(t => t.bot.team.includes(a.id)).map(t => t.bot.name).join(', ') }
     }),
   ].filter(r => filter === 'all' || r.role === filter)
   const member = team.find(t => `manager:${t.bot.handle}` === selected)

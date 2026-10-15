@@ -256,16 +256,15 @@ export function Chat() {
 
   const conv = a.conversation
   const assistant = a.agents.find((x) => x.id === 'assistant')
-  const onMock = !assistant || assistant.provider === 'mock'
+  const onMock = !assistant?.provider || assistant.provider === 'mock'
   // Connecting a provider points the *assistant* at it, and nothing else.
   // The specialists stay on the mock until each is moved, so "I've put
   // Developer A on it" can be a true sentence about a scripted agent
   // producing fixture output. This is the only place that would say so.
-  const scripted = a.agents.filter((x) => x.id !== 'assistant' && x.provider === 'mock')
 
   const submit = () => {
     const text = draft.trim()
-    if (!text || a.sending) return
+    if (!text || a.sending || onMock) return
     setDraft('')
     void a.send(text)
     box.current?.focus()
@@ -330,13 +329,8 @@ export function Chat() {
           <div className="flex shrink-0 items-start gap-2.5 border-b border-line bg-raise px-5 py-2.5">
             <Icon name="info" size={12} className="mt-px shrink-0 text-indigo-400" />
             <div className="text-[11px] leading-[1.55] text-dim">
-              Running on the <span className="text-ink">mock provider</span> — the assistant can
-              coordinate and delegate, but not think. Ask it to start work on a feature, or to
-              remember something. Connect a real provider under{' '}
-              <button className="text-indigo-300 underline-offset-2 hover:underline" onClick={() => a.setPage('settings')}>
-                Settings
-              </button>{' '}
-              for an actual conversation.
+              Set up an agent to start chatting. Your local workspace is ready to use.{' '}
+              <button className="btn-ghost" onClick={() => a.setPage('settings')}>Set up agent</button>
             </div>
           </div>
         )}
@@ -362,31 +356,6 @@ export function Chat() {
             >
               Retry
             </button>
-          </div>
-        )}
-
-        {!onMock && scripted.length > 0 && (
-          <div className="flex shrink-0 items-start gap-2.5 border-b border-amber-500/25 bg-amber-500/[0.06] px-5 py-2.5">
-            <Icon name="alert" size={12} className="mt-px shrink-0 text-warn" />
-            <div className="text-[11px] leading-[1.55] text-dim">
-              <span className="text-warn">
-                {scripted.length === a.agents.length - 1
-                  ? 'Every agent I delegate to is'
-                  : `${scripted.length} of the agents I delegate to ${
-                      scripted.length === 1 ? 'is' : 'are'
-                    }`}{' '}
-                still on the mock provider
-              </span>{' '}
-              &mdash; work handed to {scripted.map((x) => x.name).join(', ')} runs a script and
-              produces fixture output, not real code. Point them at a provider under{' '}
-              <button
-                className="text-indigo-300 underline-offset-2 hover:underline"
-                onClick={() => a.setPage('settings')}
-              >
-                Settings &rarr; Agents
-              </button>
-              .
-            </div>
           </div>
         )}
 
@@ -424,7 +393,7 @@ export function Chat() {
               className="input max-h-40 min-h-[34px] flex-1 resize-none py-2 text-[12.5px]"
               placeholder="Ask the assistant…"
               value={draft}
-              disabled={!conv}
+              disabled={!conv || onMock}
               onChange={(e) => {
                 setDraft(e.target.value)
                 // Grow with the text rather than scrolling a one-line box.
@@ -442,7 +411,7 @@ export function Chat() {
             />
             <button
               className="btn-primary h-[34px] px-3.5 text-[12px]"
-              disabled={!conv || !draft.trim() || a.sending}
+              disabled={!conv || onMock || !draft.trim() || a.sending}
               onClick={submit}
             >
               {a.sending ? '…' : 'Send'}

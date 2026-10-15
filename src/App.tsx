@@ -1,3 +1,4 @@
+import { SetupBanner } from './components/setup/SetupBanner'
 import { useEffect, useRef, useState } from 'react'
 import { Dock, buildDefaultLayout } from './Dock'
 import { BottomBar } from './components/BottomBar'
@@ -741,7 +742,7 @@ export default function App() {
     )
   }
 
-  if ((!met || CAPTURE_MEET_STEP || setupAt) && !CAPTURE_MET) {
+  if ((CAPTURE_MEET_STEP || setupAt) && !CAPTURE_MET) {
     return (
       <div className="flex h-screen flex-col bg-app text-body">
         <Meet
@@ -1057,6 +1058,7 @@ export default function App() {
       {/* An agent stopped mid-turn is on a 90-second clock, and the Assistant
           is no longer a place you sit — so the prompt lives above every view
           rather than on one of them. */}
+      <SetupBanner />
       <ApprovalBar />
 
       {/* Shell: rail → contextual sidebar → view surface */}

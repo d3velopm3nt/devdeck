@@ -1,0 +1,17 @@
+{
+  "live": true,
+  "dispatches": [
+    {
+      "repository": "d3velopm3nt/devdeck",
+      "number": 33,
+      "node": 3,
+      "workflow": "issue-0ded5f2043696299-33",
+      "status": "blocked",
+      "message": "`claude` is not on PATH. Install the CLI, or put it somewhere this machine can find it."
+    }
+  ],
+  "execution": "not started",
+  "review": "not reached",
+  "monitoring": "paused",
+  "temporary_permission": "restored"
+}

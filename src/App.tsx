@@ -1,3 +1,4 @@
+import { GitHubPage } from './components/GitHubPage'
 import { SetupBanner } from './components/setup/SetupBanner'
 import { useEffect, useRef, useState } from 'react'
 import { Dock, buildDefaultLayout } from './Dock'
@@ -1091,6 +1092,7 @@ export default function App() {
         )}
         <main className="min-w-0 flex-1">
           {railView === 'today' && <Today />}
+          {railView === 'github' && <GitHubPage />}
           {railView === 'home' && <Home />}
           {/* The Dock stays mounted (terminals live in it) — just hidden when
               another rail view is showing. */}

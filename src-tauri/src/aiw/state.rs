@@ -87,6 +87,8 @@ pub struct TranscriptEntry {
 /// One agent run.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Session {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_snapshot: Option<AgentDef>,
     pub id: String,
     pub agent_id: String,
     pub agent_name: String,

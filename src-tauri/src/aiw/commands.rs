@@ -1530,6 +1530,49 @@ pub async fn aiw_send_message(
     .await?
 }
 
+pub(crate) fn ensure_team_planner(workspace: &super::state::Workspace) -> Result<super::state::AgentDef, String> {
+        const ID: &str = "team-planner";
+        if workspace.agent(ID).is_none() {
+            let mut doc = workspace.agent_doc(super::assistant::ASSISTANT_ID)?;
+            doc.meta.id = ID.into();
+            doc.meta.name = "Team Builder".into();
+            doc.meta.role = "team-planner".into();
+            doc.meta.builtin = false;
+            doc.meta.skills.clear();
+            doc.meta.permissions.clear();
+            doc.body = "You are DevDeck's Team Builder. Help the user design an AI team from its goals, workload, and constraints. Use previous answers. Ask at most one focused question at a time and no more than two clarification rounds before proposing a useful first team. Propose roles, responsibilities, skills, tools, and reporting relationships. State assumptions. Treat a request to propose now as a request for a draft, not more questions. Never claim a team has been created or work has started. You plan only.".into();
+            workspace.save_agent(&doc)?;
+        }
+        let mut doc = workspace.agent_doc(ID)?;
+        if doc.meta.name == "Team Planner" {
+            doc.meta.name = "Team Builder".into();
+            doc.body = doc.body.replacen("DevDeck's Team Planner", "DevDeck's Team Builder", 1);
+            workspace.save_agent(&doc)?;
+        }
+        workspace.agent(ID).ok_or_else(|| "Team Builder could not be loaded.".to_string())
+}
+
+/// A dedicated, persisted planner persona. Planning never grants tool access.
+#[tauri::command]
+pub async fn aiw_team_planner_send(
+    app: tauri::AppHandle,
+    ws: Ws<'_>,
+    conversation_id: String,
+    text: String,
+) -> Result<AssistantReply, String> {
+    if text.trim().is_empty() || text.len() > 12000 {
+        return Err("Write a team-planning request of up to 12000 characters.".into());
+    }
+    let workspace = ws.inner().clone();
+    blocking(move || {
+        let agent = ensure_team_planner(&workspace)?;
+        let mut persona = super::assistant::Persona::agent_in_thread(&agent, "Team planning");
+        persona.system = format!("{}\n\nResponse format: return only JSON with message (a user-facing string), choices (2-4 short answers when asking a question, otherwise an empty array), and proposal (null while clarifying, otherwise an object with name, description, and members). Each member has role (unique lowercase letters/numbers/hyphens, max 40 characters), name, kind (manager/specialist/worker), reports_to (another manager role or empty for the single lead manager), and instructions (concrete responsibilities). Propose between 1 and 20 members. The interface provides Other and a Create team button. Propose a first draft early; the user reviews it before creation. Do not claim that saving or execution has occurred. Suggest missing skills/tools in the message; do not claim they are installed.", agent.system);
+        let sink = move |event: ChatEvent| { let _ = app.emit("aiw:chat", event); };
+        Assistant::send_as(&workspace, workspace.convs()?, &conversation_id, &text, &sink, &persona)
+    }).await?
+}
+
 /// Where your conversations and notes actually live.
 ///
 /// Surfaced rather than kept internal: the store split is only reassuring if

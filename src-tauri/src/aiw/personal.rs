@@ -321,7 +321,17 @@ impl PersonalStore {
     /// failing the lot — one hand-edited file with bad YAML should not cost you
     /// the rest of your team.
     pub fn agents(&self) -> Vec<Doc<AgentMeta>> {
-        let mut out = self.read_dir_docs::<AgentMeta>(&self.agents_dir());
+        let legacy = self.read_dir_docs::<AgentMeta>(&self.agents_dir());
+        for doc in &legacy {
+            if let Err(error) = crate::agent_library::from_runtime(doc).and_then(|definition| crate::agent_library::save(self.root(), &definition, true)) {
+                eprintln!("Agent library migration failed: {error}");
+                return legacy;
+            }
+        }
+        let mut out = match crate::agent_library::list(self.root()) {
+            Ok(definitions) => definitions.iter().filter(|definition| definition.execution == "model").filter_map(|definition| crate::agent_library::runtime(definition).ok()).collect::<Vec<_>>(),
+            Err(error) => { eprintln!("Agent library read failed: {error}"); return legacy; }
+        };
         out.sort_by(|a, b| a.meta.name.cmp(&b.meta.name));
         out
     }
@@ -330,13 +340,12 @@ impl PersonalStore {
         if doc.meta.id.trim().is_empty() {
             return Err("an agent needs an id".into());
         }
-        let p = self.agent_md(&doc.meta.id);
-        self.write_doc_at(&p, doc)?;
-        Ok(p)
+        crate::agent_library::save(self.root(), &crate::agent_library::from_runtime(doc)?, false)?;
+        Ok(self.root().join("library").join("agents.sqlite"))
     }
 
     pub fn forget_agent(&self, id: &str) -> bool {
-        std::fs::remove_file(self.agent_md(id)).is_ok()
+        crate::agent_library::remove(self.root(), &format!("runtime:{id}")).is_ok()
     }
 
     pub fn skills(&self) -> Vec<Doc<SkillMeta>> {

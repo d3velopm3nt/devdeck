@@ -60,6 +60,7 @@ export type RailView =
   /// The hands: workers you own, the skills they draw on, and their runs.
   | 'workers'
   /// What the AI is costing, across every space.
+  | 'github'
   | 'activity'
   | 'sessions'
   | 'analytics'
@@ -494,6 +495,7 @@ const RAIL_VIEWS: readonly RailView[] = [
   'inbox',
   'chat',
   'team',
+  'github',
   'activity',
   'sessions',
   'workers',

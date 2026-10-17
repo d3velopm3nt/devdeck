@@ -1,119 +1,75 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { ArrowLeft, BookOpen, Bot, Compass, Network, Plus, Search, Settings2, Sparkles, X } from 'lucide-react'
 import * as ipc from '../../lib/ipc'
 import { useApp } from '../../store'
-import { useAiw } from '../../lib/aiwStore'
-import { aiw } from '../../lib/aiw'
-import { subtreeIds } from '../../lib/tree'
-import { ManagerWorkspace } from './AgentsPage'
 import { Settings } from '../aiw/Settings'
 import { WorkerEditor } from '../workers/WorkerEditor'
 import { ReusableTeams } from './ReusableTeams'
 import { LibraryPanel, useLibrary } from '../workers/LibraryPanel'
-import { startWorker } from '../workers/StartWorker'
+import { CommunityView } from '../CommunityView'
+import { TeamBuild } from './TeamBuild'
+import './workforce.css'
 
-type Role = 'manager' | 'worker' | 'specialist'
-const blank = (role: Role, profile: string, nodeId: number): ipc.Worker => ({
-  handle: '', name: '', category: role === 'specialist' ? role : 'worker', profile,
-  what: profile === 'Developer' ? 'Implement an agreed task and return a reviewable change' : profile === 'QA' ? 'Verify agreed behavior and report reproducible findings' : profile === 'Researcher' ? 'Research a question and return sources and findings' : profile === 'Writer' ? 'Draft requested content for review' : '',
-  brief: '', skills: [], kit: '', runner: 'claude-code', model: 'sonnet', writes: profile === 'Developer' ? 'branch' : 'folder', minutes: 20, usd: 2,
-  spaces: nodeId ? [nodeId] : [], unattended: false, allow: [], allow_until: '', created_at: '', body: profile === 'Developer' ? 'Implement only the agreed task. Run relevant checks and return a change for human review.' : profile === 'QA' ? 'Check the acceptance criteria. Report reproducible failures and evidence; do not claim untested behavior passes.' : profile === 'Researcher' ? 'Use relevant sources. Separate verified facts from assumptions and cite evidence.' : profile === 'Writer' ? 'Follow the requested audience, tone and format. Return a draft for review.' : '',
+const blank = (nodeId: number, item?: ipc.LibraryItem): ipc.Worker => ({
+  handle: '', name: item?.name || '', category: 'worker', profile: 'Custom',
+  what: item?.what || '', brief: item?.id || '', skills: [], kit: '',
+  runner: 'claude-code', model: 'sonnet', writes: 'branch', minutes: 20, usd: 2,
+  spaces: nodeId ? [nodeId] : [], unattended: false, allow: [], allow_until: '',
+  created_at: '', body: '',
 })
 
 export function AgentDirectory() {
-  const nodes = useApp(s => s.nodes)
   const scope = useApp(s => s.spaceScopeId)
-  const refreshBots = useApp(s => s.refreshBots)
-  const agents = useAiw(s => s.agents)
-  const sessions = useAiw(s => s.sessions)
-  const reloadAgents = useAiw(s => s.reloadAgents)
   const lib = useLibrary()
-  const [team, setTeam] = useState<ipc.TeamMember[]>([])
+  const [builtTeam, setBuiltTeam] = useState<ipc.ReusableTeam | null>(null)
   const [workers, setWorkers] = useState<ipc.Worker[]>([])
-  const [runs, setRuns] = useState<ipc.Run[]>([])
-  const [selected, setSelected] = useState('')
-  const [filter, setFilter] = useState('all')
   const [error, setError] = useState('')
-  const [adding, setAdding] = useState(false)
-  const [role, setRole] = useState<Role>('worker')
-  const [profile, setProfile] = useState('Developer')
-  const [name, setName] = useState('')
-  const [nodeId, setNodeId] = useState(scope ?? 0)
-  const [busy, setBusy] = useState(false)
   const [editing, setEditing] = useState<ipc.Worker | null>(null)
   const [settings, setSettings] = useState(false)
-  const [section, setSection] = useState<'agents'|'library'|'teams'>('agents')
+  const [section, setSection] = useState<'build' | 'library' | 'teams' | 'discover'>('teams')
+  const [choosing, setChoosing] = useState(false)
+  const [search, setSearch] = useState('')
+  const assignment = useRef<((worker: ipc.Worker) => void) | null>(null)
   const reload = useCallback(async () => {
-    try {
-      const [t, w, r] = await Promise.all([ipc.managerTeam(), ipc.workersList(), ipc.runsList(0)])
-      setTeam(t); setWorkers(w); setRuns(r)
-    } catch (e) { setError(String(e)) }
+    try { setWorkers(await ipc.workersList()); setError('') }
+    catch (e) { setError(String(e)) }
   }, [])
-  useEffect(() => {
-    void reload(); void reloadAgents()
-    const stop = aiw.onEvent(e => { if (e.type.startsWith('manager.') || e.type.startsWith('session.')) void reload() })
-    const workerStop = ipc.onWorker({ done: () => void reload(), asking: () => void reload() })
-    return () => { void stop.then(off => off()); void workerStop.then(off => off()) }
-  }, [reload, reloadAgents])
-  const scopeIds = scope == null ? null : new Set(subtreeIds(nodes, scope))
-  const spaceName = (id: number) => nodes.find(n => n.id === id)?.name || 'Unassigned'
-  const visibleTeam = team.filter(t => !scopeIds || scopeIds.has(t.bot.node_id) || t.bot.businesses?.some(id => scopeIds.has(id)))
-  const visibleWorkers = workers.filter(w => !scopeIds || !w.spaces.length || w.spaces.some(id => scopeIds.has(id)))
-  const rows = [
-    ...visibleTeam.map(t => ({ id: `manager:${t.bot.handle}`, name: t.bot.name, role: 'manager', profile: t.profile.role || 'Manager', space: spaceName(t.bot.node_id), task: t.bot.goal, status: t.pending ? `${t.pending} messages` : 'Ready', engine: t.bot.agent || 'Default assistant', parent: '' })),
-    ...visibleWorkers.map(w => {
-      const latest = runs.filter(r => r.worker === w.handle).sort((a,b) => b.started_at.localeCompare(a.started_at))[0]
-      const parents = visibleTeam.filter(t => t.profile.workers.includes(w.handle) || t.bot.worker === w.handle).map(t => t.bot.name)
-      return { id: `worker:${w.handle}`, name: w.name, role: w.category || 'worker', profile: w.profile || w.what || 'Custom', space: w.spaces.length ? w.spaces.map(spaceName).join(', ') : 'Available across spaces', task: latest?.title || 'No task yet', status: latest?.status || 'Ready', engine: `${w.runner} · ${w.model || 'runner default'}`, parent: parents.join(', ') }
-    }),
-    ...agents.filter(a => a.id !== 'assistant').map(a => {
-      const latest = sessions.filter(s => s.agent_id === a.id).sort((a,b) => b.started_at.localeCompare(a.started_at))[0]
-      return { id: `agent:${a.id}`, name: a.name, role: 'specialist', profile: a.role, space: 'Available across spaces', task: latest?.summary || latest?.feature_id || 'No task yet', status: latest?.status || 'Ready', engine: !a.provider || a.provider === 'mock' ? 'Set up required' : `${a.provider} · ${a.model}`, parent: visibleTeam.filter(t => t.bot.team.includes(a.id)).map(t => t.bot.name).join(', ') }
-    }),
-  ].filter(r => filter === 'all' || r.role === filter)
-  const member = team.find(t => `manager:${t.bot.handle}` === selected)
-  const create = async () => {
-    if (role !== 'manager') { setEditing(blank(role, profile, nodeId)); setAdding(false); return }
-    if (!name.trim() || !nodeId) { setError('Name your manager and choose its space.'); return }
-    setBusy(true); setError('')
-    try {
-      const bot = await ipc.botCreate({ nodeId, templateId: '', name: name.trim(), goal: 'Coordinate agreed tasks and report blockers', every: '', atMin: 480, days: '', withPlan: false })
-      // Keep the created manager selected if profile persistence fails, so retry never creates a duplicate.
-      setSelected(`manager:${bot.handle}`); setAdding(false)
-      await ipc.managerProfileSave(bot.handle, { revision: 0, domain: 'business', role: profile, responsibilities: ['Coordinate agreed tasks', 'Assign the team and report blockers', 'Return evidence for review'], boundaries: ['Ask before publishing or merging', 'Stay within assigned space permissions'], peers: [], workers: [] })
-      await refreshBots(); await reload()
-    } catch(e) { setError(String(e)); await refreshBots(); await reload() }
-    finally { setBusy(false) }
-  }
-  return <div className="flex h-full min-h-0 flex-col bg-page">
-    <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-6 py-5">
-      <div><h1 className="text-xl font-semibold text-ink">Agents</h1><p className="mt-1 text-sm text-muted">Your agents, roles and teams in one place.</p></div>
-      <div className="flex gap-2"><button className="btn-ghost" onClick={() => setSettings(!settings)}>{settings ? 'Back to agents' : 'AI & permissions'}</button><button className="btn-primary" onClick={() => { setSettings(false); setSection('agents'); setAdding(true) }}>Add agent</button></div>
+  useEffect(() => { void reload() }, [reload, lib.items])
+  const configure = (item?: ipc.LibraryItem) => { setChoosing(false); setEditing(blank(scope ?? 0, item)) }
+  const closePicker = () => { setChoosing(false); assignment.current = null }
+  const templates = lib.items.filter(item => item.kind === 'brief' && `${item.name} ${item.what}`.toLowerCase().includes(search.toLowerCase()))
+  return <div className="workforce">
+    <div id="repository-page-host" />
+    <header className="wf-header">
+      <div className="wf-brand"><span className="wf-brand-icon"><Network size={20} /></span><h1>Workforce</h1></div>
+      <button className="wf-icon-button" aria-label={settings ? 'Back to workforce' : 'AI & permissions'} title={settings ? 'Back to workforce' : 'AI & permissions'} onClick={() => setSettings(!settings)}>{settings ? <ArrowLeft size={19} /> : <Settings2 size={19} />}</button>
     </header>
-    {settings && <Settings />}<div hidden={settings} className="min-h-0 flex-1 space-y-5 overflow-auto p-6">
-      <nav aria-label="Agent library sections" className="flex gap-2">{(['agents','library','teams'] as const).map(tab=><button key={tab} aria-pressed={section===tab} className={section===tab?'btn-primary':'btn-ghost'} onClick={()=>setSection(tab)}>{tab==='agents'?'Configured agents':tab==='library'?'Library':'Reusable teams'}</button>)}</nav>
-      {section === 'library' && <LibraryPanel items={lib.items} reload={lib.reload} onConfigure={item=>{const w=blank('worker','Custom',nodeId);setEditing({...w,name:item.name || item.id,what:item.what,brief:item.id});}}/>}
-      <div hidden={section !== 'teams'}><ReusableTeams workers={workers} onEdit={setEditing} onAgents={()=>{setSection('agents');setAdding(true)}}/></div>
-      {lib.err && <p role="alert" className="text-sm text-err">{lib.err}</p>}
-      {section === 'agents' && <>
-      {error && <p role="alert" className="text-sm text-err">{error}</p>}
-      {adding && <section className="space-y-3 rounded-xl border border-line bg-panel p-4" aria-label="Add agent">
-        <div className="grid gap-3 sm:grid-cols-3">
-          <label className="text-sm text-dim">Role<select aria-label="Role" className="input mt-1 w-full" value={role} onChange={e => { const v=e.target.value as Role; setRole(v); setProfile(v === 'manager' ? 'Delivery manager' : 'Developer') }}><option value="manager">Manager</option><option value="worker">Worker</option><option value="specialist">Specialist</option></select></label>
-          <label className="text-sm text-dim">Role profile<select aria-label="Role profile" className="input mt-1 w-full" value={profile} onChange={e => setProfile(e.target.value)}>{(role === 'manager' ? ['Delivery manager', 'Business manager', 'Custom'] : ['Developer', 'QA', 'Researcher', 'Writer', 'Custom']).map(p => <option key={p}>{p}</option>)}</select></label>
-          <label className="text-sm text-dim">Space<select aria-label="Space" className="input mt-1 w-full" value={nodeId} onChange={e => setNodeId(Number(e.target.value))}><option value={0}>Choose a space</option>{nodes.filter(n => n.kind === 'workspace' || n.kind === 'project').map(n => <option key={n.id} value={n.id}>{n.name}</option>)}</select></label>
-        </div>
-        {role === 'manager' && <label className="block text-sm text-dim">Name<input aria-label="Name" className="input mt-1 w-full" value={name} onChange={e => setName(e.target.value)} /></label>}
-        <p className="text-xs text-muted">{role === 'manager' ? 'Uses the default assistant for conversations. Scheduling is configured separately.' : 'Next, choose its name, skills and execution connection. Coding workers use a CLI connection.'}</p>
-        <div className="flex gap-2"><button className="btn-primary" disabled={busy} onClick={() => void create()}>{role === 'manager' ? 'Create manager' : 'Continue'}</button><button className="btn-ghost" onClick={() => setAdding(false)}>Cancel</button></div>
-      </section>}
-      <label className="block text-sm text-dim">Role filter<select className="input ml-3" value={filter} onChange={e => setFilter(e.target.value)}><option value="all">All agents</option><option value="manager">Managers</option><option value="worker">Workers</option><option value="specialist">Specialists</option></select></label>
-      <div className="overflow-auto rounded-xl border border-line bg-panel"><table className="w-full text-left text-sm"><thead className="bg-soft text-muted"><tr>{['Agent / profile', 'Role', 'Team / space', 'Task / status', 'Connection', ''].map((h,i) => <th className="px-4 py-3" key={i}>{h}</th>)}</tr></thead><tbody>{rows.map(r => <tr key={r.id} className="border-t border-line">
-        <td className="px-4 py-3"><span className="font-semibold text-ink">{r.name}</span><div className="text-xs text-muted">{r.profile}</div></td><td className="px-4 py-3 capitalize text-body">{r.role}</td><td className="px-4 py-3 text-dim">{r.parent && <div className="text-xs">Reports to {r.parent}</div>}{r.space}</td><td className="max-w-60 px-4 py-3 text-dim"><div className="truncate">{r.task}</div><span className="text-xs text-muted">{r.status}</span></td><td className="px-4 py-3 text-xs text-muted">{r.engine}</td>
-        <td className="px-4 py-3"><button className="btn-ghost" onClick={() => { if(r.id.startsWith('manager:')) setSelected(r.id); else if(r.id.startsWith('worker:')) setEditing(workers.find(w => `worker:${w.handle}` === r.id) || null); else setSettings(true) }}>Configure</button>{r.id.startsWith('worker:') && <button className="btn-ghost" onClick={() => startWorker({handle: r.id.slice(7), nodeId: scope ?? undefined})}>Assign task</button>}</td>
-      </tr>)}</tbody></table>{!rows.length && <p className="p-6 text-sm text-muted">Add your first agent to start building a team.</p>}</div>
-      {member && <ManagerWorkspace key={member.bot.handle} member={member} team={team} workers={workers} onChanged={reload} />}
-      </>}
+    {settings && <div className="wf-content"><Settings /></div>}
+    <div hidden={settings} className="wf-main">
+      <nav aria-label="Workforce sections" className="wf-navigation">
+        <button aria-pressed={section === 'build'} onClick={() => setSection('build')}><Sparkles size={18} />Build<span>Plan your team</span></button>
+        <button aria-pressed={section === 'teams'} onClick={() => setSection('teams')}><Network size={18} />Teams<span>Build & coordinate</span></button>
+        <button aria-pressed={section === 'library'} onClick={() => { setSection('library'); lib.reload() }}><BookOpen size={18} />Library<span>Agents & skills</span></button>
+        <button aria-pressed={section === 'discover'} onClick={() => setSection('discover')}><Compass size={18} />Discover<span>Community & trending</span></button>
+      </nav>
+      <main className="wf-content">
+        {(error || lib.err) && <p role="alert" className="text-sm text-err">{error || lib.err}</p>}
+        <div hidden={section !== 'build'}><TeamBuild workers={workers} onCreated={team => { void ipc.reusableTeamsList().then(teams => { setBuiltTeam(teams.find(t => t.id === team.id) || team); setSection('teams'); void reload(); void lib.reload() }).catch(e => setError(String(e))) }} /></div>
+        <div hidden={section !== 'teams'}><ReusableTeams openedTeam={builtTeam} workers={workers} onEdit={w => { assignment.current = null; setEditing(w) }} onAgents={() => { assignment.current = null; setChoosing(true) }} onCreate={assign => { assignment.current = assign; setSearch(''); setChoosing(true) }} /></div>
+        <div hidden={section !== 'library'}><LibraryPanel items={lib.items} reload={lib.reload} /></div>
+        {section === 'discover' && <CommunityView discoveryOnly />}
+      </main>
     </div>
-    {editing && <WorkerEditor worker={editing} library={lib.items} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void reload() }} />}
+    {choosing && <div className="wf-overlay" onClick={closePicker} onKeyDown={e => { if (e.key === 'Escape') closePicker() }}>
+      <section className="wf-picker" role="dialog" aria-modal="true" aria-label="Add a team member" onClick={e => e.stopPropagation()}>
+        <header><div><span className="wf-eyebrow">BUILD YOUR TEAM</span><h2>Add a team member</h2><p>Start with a template, then choose its model and skills.</p></div><button autoFocus className="wf-icon-button" aria-label="Close agent picker" onClick={closePicker}><X size={18} /></button></header>
+        <label className="wf-search"><Search size={17} /><input aria-label="Search agent templates" placeholder="Find an agent template…" value={search} onChange={e => setSearch(e.target.value)} /></label>
+        <div className="wf-picker-grid"><button className="wf-template" onClick={() => configure()}><span className="wf-tile-icon"><Plus size={22} /></span><strong>Start from scratch</strong><p>Give your agent a purpose, model, and tools.</p></button>
+          {templates.map(item => <button className="wf-template" key={item.id} onClick={() => configure(item)}><span className="wf-tile-icon"><Bot size={22} /></span><strong>{item.name || item.id}</strong><p>{item.what || 'A reusable agent template, ready to personalize.'}</p><span className="wf-link">Use template <Sparkles size={13} /></span></button>)}
+        </div>
+        {!templates.length && <p className="wf-muted">{search ? 'No matching templates. Try another search or start from scratch.' : 'Your library is empty. Create a member from scratch, or add templates in Library.'}</p>}
+      </section>
+    </div>}
+    {editing && <WorkerEditor key={editing.handle || editing.brief || 'new'} worker={editing} library={lib.items} onClose={() => { setEditing(null); assignment.current = null }} onSaved={saved => { void lib.reload(); if (saved) { setWorkers(current => [...current.filter(w => w.handle !== saved.handle), saved]); assignment.current?.(saved) } else { void reload() } assignment.current = null; setEditing(null) }} />}
   </div>
 }

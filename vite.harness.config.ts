@@ -22,5 +22,5 @@ export default defineConfig({
       { find: /^@tauri-apps\/plugin-updater$/, replacement: mock },
     ],
   },
-  server: { port: 5199, strictPort: true },
+  server: { port: 5199, strictPort: true, watch: { ignored: ['**/src-tauri/**'] } },
 })

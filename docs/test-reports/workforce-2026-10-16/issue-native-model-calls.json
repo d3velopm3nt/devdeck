@@ -1,0 +1,82 @@
+[
+  {
+    "session": "ses_1a14452c78d2",
+    "speaker": "assistant",
+    "provider": "chatgpt-subscription",
+    "model": "default",
+    "turn": 0,
+    "ok": 1,
+    "ms": 15253,
+    "error": ""
+  },
+  {
+    "session": "ses_1a14452c78d2",
+    "speaker": "assistant",
+    "provider": "chatgpt-subscription",
+    "model": "default",
+    "turn": 1,
+    "ok": 1,
+    "ms": 17102,
+    "error": ""
+  },
+  {
+    "session": "ses_1a14452c78d2",
+    "speaker": "assistant",
+    "provider": "chatgpt-subscription",
+    "model": "default",
+    "turn": 2,
+    "ok": 1,
+    "ms": 19992,
+    "error": ""
+  },
+  {
+    "session": "ses_1a14452c78d2",
+    "speaker": "assistant",
+    "provider": "chatgpt-subscription",
+    "model": "default",
+    "turn": 3,
+    "ok": 1,
+    "ms": 15110,
+    "error": ""
+  },
+  {
+    "session": "ses_1a14452c78d2",
+    "speaker": "assistant",
+    "provider": "chatgpt-subscription",
+    "model": "default",
+    "turn": 4,
+    "ok": 1,
+    "ms": 16903,
+    "error": ""
+  },
+  {
+    "session": "ses_1a14452c78d2",
+    "speaker": "assistant",
+    "provider": "chatgpt-subscription",
+    "model": "default",
+    "turn": 5,
+    "ok": 1,
+    "ms": 46014,
+    "error": ""
+  },
+  {
+    "session": "ses_1a14452c78d2",
+    "speaker": "assistant",
+    "provider": "chatgpt-subscription",
+    "model": "default",
+    "turn": 6,
+    "ok": 1,
+    "ms": 21038,
+    "error": ""
+  },
+  {
+    "session": "ses_1a14452c78d2",
+    "speaker": "assistant",
+    "provider": "chatgpt-subscription",
+    "model": "default",
+    "turn": 7,
+    "ok": 1,
+    "ms": 20745,
+    "error": ""
+  }
+]

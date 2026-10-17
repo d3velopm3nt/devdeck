@@ -2,6 +2,7 @@
 function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange, onPreparing = () => {} }) {
   let worker, ready = false, loading = false, busy = false, context, analyser, waveform;
   let queuedText = null, activeError = null;
+  let preparation = null, prepared, preparationFailed;
   let generation = 0, activeId = 0, workerRequestId = 0, endAt = 0, sources = [], finished = false;
   function update() {
     button.disabled = loading || busy || ready;
@@ -28,8 +29,10 @@ function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange, onPr
     worker.onmessage = ({ data }) => {
       if (data.type === 'progress') {
         status.textContent = data.file ? 'Downloading ' + data.file + (Number.isFinite(data.progress) ? ' · ' + Math.round(data.progress) + '%' : '') : 'Preparing voice…';
+        onChange();
       } else if (data.type === 'ready') {
         ready = true; loading = false; status.textContent = 'Offline voice ready · Heart'; update();
+        prepared?.(); preparation = null; prepared = preparationFailed = null;
       } else if (data.type === 'audio' && data.id === activeId) {
         activeError=null;
         const buffer = context.createBuffer(1, data.samples.length, data.rate);
@@ -46,23 +49,30 @@ function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange, onPr
         if (data.id && data.id !== workerRequestId) return;
         if (data.id && data.id !== activeId) { busy=false; update(); drain(); return; }
         const notify=activeError;
+        preparationFailed?.(new Error(data.message)); preparation = null; prepared = preparationFailed = null;
         loading = false; busy = false; ready = false; stop(); status.textContent = data.message; update(); notify?.();
       }
     };
     worker.onerror = () => {
       const notify=activeError;
+      preparationFailed?.(new Error('Local voice could not load. Retry voice setup.')); preparation = null; prepared = preparationFailed = null;
       loading = false; busy = false; ready = false; stop();
       worker.terminate(); worker = undefined;
       status.textContent = 'Voice could not load. Reconnect to the PC and retry.'; update(); notify?.();
     };
     return worker;
   }
-  button.onclick = () => {
-    if (ready || loading || busy) return;
-    loading = true; status.textContent = 'Downloading voice files. Internet is needed for the first download.'; update();
+  function prepare() {
+    if (ready) return Promise.resolve();
+    if (preparation) return preparation;
+    preparation = new Promise((resolve, reject) => { prepared = resolve; preparationFailed = reject; });
+    const result = preparation;
+    loading = true; status.textContent = 'Preparing voice files · only missing files need internet.'; update();
     try { getWorker().postMessage({ type: 'download' }); }
-    catch (error) { loading = false; status.textContent = error.message; update(); }
-  };
+    catch (error) { loading = false; status.textContent = error.message; update(); preparationFailed?.(error); preparation = null; prepared = preparationFailed = null; }
+    return result;
+  }
+  button.onclick = () => { void prepare().catch(error => { status.textContent = error.message; }); };
   async function unlock() {
     context ||= new (window.AudioContext || window.webkitAudioContext)();
     await context.resume();
@@ -83,7 +93,7 @@ function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange, onPr
       getWorker().postMessage({ type: 'speak', id, text });
     } catch (error) { activeError=null; busy = false; onIdle(); update(); throw error; }
   }
-  function dispose() { stop(); worker?.terminate(); void context?.close(); }
+  function dispose() { preparationFailed?.(new Error('Voice view closed.')); preparation = null; prepared = preparationFailed = null; stop(); worker?.terminate(); void context?.close(); }
   update();
   function level() {
     if (!analyser || sources.length === 0) return 0;
@@ -92,7 +102,7 @@ function createOfflineVoice({ button, status, onSpeaking, onIdle, onChange, onPr
     for (const byte of waveform) { const sample = (byte - 128) / 128; sum += sample * sample; }
     return Math.min(1, Math.sqrt(sum / waveform.length) * 5);
   }
-  return { speak, stop, unlock, dispose, level, isReady: () => ready, canSpeak: () => ready && !busy };
+  return { prepare, speak, stop, unlock, dispose, level, isReady: () => ready, canSpeak: () => ready && !busy };
 }
 // A shared adapter: ESM desktop imports and classic mobile scripts use one engine.
 globalThis.createOfflineVoice = createOfflineVoice;

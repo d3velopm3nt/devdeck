@@ -1048,6 +1048,24 @@ impl Assistant {
         if agent.provider.is_empty() || agent.provider == "mock" {
             return Err("Set up an agent in Settings → Assistant before chatting.".into());
         }
+        // Conversation agents keep their launch configuration across turns and reloads.
+        // A manager turn is a separate run: its current coordination context must stay live.
+        let snapshot_key = if persona.manager_handle.is_some() {
+            format!("manager-turn:{}:{}:{}", conversation_id, persona.agent_id, conv.messages.len())
+        } else {
+            format!("conversation:{}:{}", conversation_id, persona.agent_id)
+        };
+        let (mut pinned_agent, pinned_system): (super::state::AgentDef, String) = crate::agent_library::snapshot(convs.store().root(), &snapshot_key, &(agent.clone(), persona.system.clone()))?;
+        // Snapshotting configuration must never restore revoked permissions.
+        pinned_agent.permissions = agent.permissions;
+        let agent = pinned_agent;
+        let mut pinned_persona = persona.clone();
+        pinned_persona.system = pinned_system;
+        let persona = &pinned_persona;
+        #[cfg(not(test))]
+        if agent.provider.is_empty() || agent.provider == "mock" {
+            return Err("Set up an agent in Settings → Assistant before chatting.".into());
+        }
         let me: &str = &persona.agent_id;
 
         // The first thing said names the conversation. Better than "New

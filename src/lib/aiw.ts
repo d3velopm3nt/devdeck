@@ -736,6 +736,8 @@ export const aiw = {
     invoke<ConversationMeta>('aiw_focus_conversation', { id, projectId }),
   sendMessage: (conversationId: string, text: string) =>
     invoke<AssistantReply>('aiw_send_message', { conversationId, text }),
+  teamPlannerSend: (conversationId: string, text: string) =>
+    invoke<AssistantReply>('aiw_team_planner_send', { conversationId, text }),
 
   /** Live progress for the assistant. Separate from `onEvent`, deliberately. */
   onChat: (cb: (e: ChatEvent) => void): Promise<UnlistenFn> =>

@@ -10,6 +10,7 @@ const calls:unknown[]=[]
 Object.assign(window,{__orbCalls:calls})
 fixture.setting_get=args=>localStorage.getItem(String(args?.key))
 fixture.setting_set=args=>{localStorage.setItem(String(args?.key),String(args?.value));return null}
+fixture.aiw_agents=()=>[{id:'assistant',name:'Dev',provider:'chatgpt-subscription',model:'default',role:'orchestrator',skills:[],permissions:{},system:''}]
 fixture.thread_context=()=>({parts:[],tools:[],system_tokens:0,context_tokens:0,tool_tokens:0,history_turns:0,history_tokens:0,total_tokens:0})
 fixture.aiw_conversations=()=>[{id:'orb-thread',title:'Dev',preview:'Ready',node:null,bot_node:null,feature:null}]
 fixture.aiw_conversation=()=>({id:'orb-thread',title:'Dev',participants:[],messages:[...messages]})

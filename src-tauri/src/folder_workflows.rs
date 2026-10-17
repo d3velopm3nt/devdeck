@@ -161,7 +161,9 @@ fn view(p: &Path, raw: String) -> Result<View, String> {
 fn reconcile(doc: &mut Doc<Definition>) -> Result<bool, String> {
     let mut dirty = false;
     for s in &mut doc.meta.steps {
-        if !matches!(s.status, Status::Starting | Status::Running) {
+        if !matches!(s.status, Status::Starting | Status::Running)
+            && !(s.status == Status::Review && !s.run.is_empty()
+                && s.actor.is_empty() && s.evidence == "Session ended with no summary.") {
             continue;
         }
         let r = if s.run.is_empty() {
@@ -734,6 +736,7 @@ pub fn advance_issue(
     node: i64,
     workflow: &str,
     repository: &str,
+    number: u64,
 ) -> Result<String, String> {
     let db = app.state::<Db>();
     let initial = get(app, &db, node, Some(workflow))?;
@@ -746,7 +749,7 @@ pub fn advance_issue(
         .map(|(_, step)| step.id.clone())
         .collect();
     for step in steps {
-        crate::issue_monitor::dispatch_allowed(app, node, repository)?;
+        crate::issue_monitor::dispatch_allowed(app, node, repository, number)?;
         let current = get(app, &db, node, Some(workflow))?;
         folder_workflow_start(
             app.clone(),

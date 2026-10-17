@@ -43,17 +43,19 @@ function AgentProviders() {
 
   useEffect(() => {
     void invoke<ProviderDefaults>('aiw_provider_defaults').then(d => setInherited(d.inherited)).catch(e => setError(String(e)))
-    aiw.providers().then(setProviders).catch(() => setProviders([]))
+    aiw.providers().then(ps => setProviders(ps.filter(([id]) => id !== 'mock'))).catch(e => { setProviders([]); setError(String(e)) })
   }, [])
 
   const draftFor = (ag: AgentDef) =>
-    drafts[ag.id] ?? { provider: ag.provider, model: ag.model }
+    drafts[ag.id] ?? { provider: ag.provider === 'mock' ? '' : ag.provider, model: ag.provider === 'mock' ? '' : ag.model }
 
   const apply = async (ag: AgentDef) => {
     const d = draftFor(ag)
     setSaving(ag.id)
     setError(null)
     try {
+      const check = await aiw.modelCheck(d.provider, d.model)
+      if (!check.ok) throw new Error(check.detail)
       await aiw.setAgentProvider(ag.id, d.provider, d.model)
       // The agent list, not the project refresh: that one is per-project and
       // never reloaded agents, so the row kept showing the old value with
@@ -68,7 +70,7 @@ function AgentProviders() {
     }
   }
 
-  const realCount = a.agents.filter((x) => x.provider !== 'mock').length
+  const realCount = a.agents.filter((x) => x.provider && x.provider !== 'mock').length
 
   return (
     <>
@@ -102,8 +104,8 @@ function AgentProviders() {
 
         {a.agents.map((ag) => {
           const d = draftFor(ag)
-          const dirty = d.provider !== ag.provider || d.model !== ag.model
-          const isMock = ag.provider === 'mock'
+          const dirty = d.provider !== (ag.provider === 'mock' ? '' : ag.provider) || d.model !== (ag.provider === 'mock' ? '' : ag.model)
+          const isMock = !ag.provider || ag.provider === 'mock'
           return (
             <div key={ag.id} className="border-b border-line last:border-0">
               <div className="grid grid-cols-[minmax(0,1fr)_170px_minmax(0,220px)_88px] items-center">
@@ -125,9 +127,10 @@ function AgentProviders() {
                   className="input w-full text-[11.5px]"
                   value={d.provider}
                   onChange={(e) =>
-                    setDrafts({ ...drafts, [ag.id]: { ...d, provider: e.target.value } })
+                    setDrafts({ ...drafts, [ag.id]: { ...d, provider: e.target.value, model: '' } })
                   }
                 >
+                  <option value="">Choose a provider</option>
                   {providers.map(([id, label, health]) => (
                     <option key={id} value={id} disabled={!health.configured && id !== 'mock'}>
                       {label}
@@ -141,7 +144,7 @@ function AgentProviders() {
                 {/* Keyed on the provider so switching one resets the list —
                     otherwise you keep an OpenRouter id after moving the agent
                     to Anthropic, and it fails on the first turn. */}
-                <ModelPicker
+                {d.provider ? <ModelPicker
                   key={`${ag.id}:${d.provider}`}
                   compact
                   providerId={d.provider}
@@ -154,21 +157,21 @@ function AgentProviders() {
                       prev[ag.id]?.verdict === verdict ? prev : { ...prev, [ag.id]: { verdict, retry } },
                     )
                   }
-                />
+                /> : <span className="text-xs text-muted">Select a provider first</span>}
               </div>
 
               <div className="px-3 py-2.5">
                 {dirty ? (
                   <button
                     className="btn-primary w-full text-[11px]"
-                    disabled={saving === ag.id}
+                    disabled={saving !== null || !d.provider || !d.model}
                     onClick={() => void apply(ag)}
                   >
-                    {saving === ag.id ? '…' : 'Apply'}
+                    {saving === ag.id ? 'Verifying…' : 'Verify & save'}
                   </button>
                 ) : (
                   <span className="block text-center text-[10.5px] text-faint">
-                    {isMock ? 'mock' : 'live'}
+                    {isMock || !ag.provider ? 'Set up' : 'Configured'}
                   </span>
                 )}
                 </div>

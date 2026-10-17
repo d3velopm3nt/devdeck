@@ -69,16 +69,29 @@ pub fn library_save_custom(
     save_item(id, kind, name, what, body, expected)
 }
 
+pub(crate) fn team_connection(root: &std::path::Path) -> Result<rusqlite::Connection, String> {
+    let db = crate::agent_library::connection(root)?;
+    db.execute_batch("CREATE TABLE IF NOT EXISTS reusable_teams (id TEXT PRIMARY KEY, definition TEXT NOT NULL); CREATE TABLE IF NOT EXISTS team_build_requests (id TEXT PRIMARY KEY, request TEXT NOT NULL, result TEXT NOT NULL);").map_err(|e| e.to_string())?;
+    let legacy = root.join("library/teams.json");
+    if legacy.exists() {
+        let teams: Vec<Team> = serde_json::from_slice(&fs::read(legacy).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+        for team in teams {
+            db.execute("INSERT OR IGNORE INTO reusable_teams(id,definition) VALUES (?1,?2)", rusqlite::params![team.id, serde_json::to_string(&team).map_err(|e| e.to_string())?]).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(db)
+}
+
 #[tauri::command(async)]
 pub fn reusable_teams_list() -> Result<Vec<Team>, String> {
-    let p = library::dir()?.join("teams.json");
-    match fs::read_to_string(p) {
-        Ok(raw) => serde_json::from_str(&raw).map_err(|e| e.to_string()),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(vec![]),
-        Err(e) => Err(e.to_string()),
-    }
+    let store = crate::aiw::personal::PersonalStore::open()?;
+    let db = team_connection(store.root())?;
+    let mut query = db.prepare("SELECT definition FROM reusable_teams ORDER BY id").map_err(|e| e.to_string())?;
+    let rows = query.query_map([], |row| row.get::<_, String>(0)).map_err(|e| e.to_string())?;
+    rows.map(|row| serde_json::from_str(&row.map_err(|e| e.to_string())?).map_err(|e| e.to_string())).collect()
 }
 pub fn validate_worker(handle: &str) -> Result<(), String> {
+    if handle.starts_with("agent:") { return crate::native_workflow::definition(handle).map(|_| ()); }
     if !team_library_model::valid_id(handle) {
         return Err(format!("Invalid agent handle '{handle}'."));
     }
@@ -118,27 +131,16 @@ pub fn reusable_team_save(mut team: Team) -> Result<Team, String> {
     for role in &team.roles {
         validate_worker(&role.worker).map_err(|e| format!("Role '{}': {e}", role.name))?;
     }
-    let mut teams = reusable_teams_list()?;
-    let revision = teams
-        .iter()
-        .find(|t| t.id == team.id)
-        .map(|t| t.revision)
-        .unwrap_or(0);
-    if revision != team.revision {
-        return Err("This team changed. Reload before saving.".into());
-    }
+    let store = crate::aiw::personal::PersonalStore::open()?;
+    let mut db = team_connection(store.root())?;
+    let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate).map_err(|e| e.to_string())?;
+    use rusqlite::OptionalExtension;
+    let existing: Option<String> = tx.query_row("SELECT definition FROM reusable_teams WHERE id=?1", [&team.id], |row| row.get(0)).optional().map_err(|e| e.to_string())?;
+    let revision = existing.map(|raw| serde_json::from_str::<Team>(&raw).map(|t| t.revision)).transpose().map_err(|e| e.to_string())?.unwrap_or(0);
+    if revision != team.revision { return Err("This team changed. Reload before saving.".into()); }
     team.revision += 1;
-    teams.retain(|t| t.id != team.id);
-    teams.push(team.clone());
-    let p = library::dir()?.join("teams.json");
-    fs::create_dir_all(p.parent().ok_or("Invalid library path")?).map_err(|e| e.to_string())?;
-    let tmp = p.with_extension("json.tmp");
-    fs::write(
-        &tmp,
-        serde_json::to_vec_pretty(&teams).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.to_string())?;
-    fs::rename(tmp, p).map_err(|e| e.to_string())?;
+    tx.execute("INSERT INTO reusable_teams(id,definition) VALUES (?1,?2) ON CONFLICT(id) DO UPDATE SET definition=excluded.definition", rusqlite::params![team.id, serde_json::to_string(&team).map_err(|e| e.to_string())?]).map_err(|e| e.to_string())?;
+    tx.commit().map_err(|e| e.to_string())?;
     Ok(team)
 }
 pub fn resolve_definition(d: &mut crate::workflow_model::Definition) -> Result<(), String> {

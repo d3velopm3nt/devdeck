@@ -8,6 +8,10 @@ use std::collections::HashSet;
 pub struct Config {
     pub enabled: bool,
     #[serde(default)]
+    pub briefings: bool,
+    #[serde(default)]
+    pub dispatch_enabled: bool,
+    #[serde(default)]
     pub bindings: Vec<Binding>,
 }
 #[derive(Default, Serialize, Deserialize)]
@@ -19,6 +23,10 @@ pub struct Source {
     pub error: String,
     pub warnings: Vec<String>,
     pub truncated: bool,
+    #[serde(default)]
+    pub activity: crate::repository_monitor::ActivitySnapshot,
+    #[serde(default)]
+    pub briefing: crate::repository_monitor::Briefing,
 }
 pub fn normalize(items: Vec<Value>) -> Vec<Value> {
     let mut seen = HashSet::new();
@@ -73,6 +81,14 @@ mod tests {
 pub struct Binding {
     pub repository: String,
     pub node: i64,
+    /// Empty preserves existing all-open-issues behavior.
+    #[serde(default)]
+    pub issues: Vec<u64>,
+}
+impl Binding {
+    pub fn includes(&self, number: u64) -> bool {
+        number > 0 && (self.issues.is_empty() || self.issues.contains(&number))
+    }
 }
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct Dispatch {
@@ -105,6 +121,15 @@ pub fn selected_template(raw: &str, allowed: &[String]) -> Result<String, String
 #[cfg(test)]
 mod dispatch_tests {
     use super::*;
+    #[test]
+    fn issue_scope_survives_reload_and_excludes_other_issues() {
+        let scoped: Binding = serde_json::from_str(r#"{"repository":"owner/repo","node":1,"issues":[33]}"#).unwrap();
+        assert!(scoped.includes(33));
+        assert!(!scoped.includes(31));
+        assert!(!scoped.includes(0));
+        let old: Binding = serde_json::from_str(r#"{"repository":"owner/repo","node":1}"#).unwrap();
+        assert!(old.includes(31));
+    }
     #[test]
     fn selection_cannot_escape_the_offered_templates() {
         let allowed = vec!["technical".into()];

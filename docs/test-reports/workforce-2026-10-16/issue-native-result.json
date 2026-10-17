@@ -1,0 +1,41 @@
+{
+  "issue": "https://github.com/d3velopm3nt/devdeck/issues/33",
+  "workflow": "issue-0ded5f2043696299-33",
+  "run": "native_1a14452c7801",
+  "session": "ses_1a14452c78d2",
+  "agent": "assistant",
+  "agent_name": "Devel",
+  "provider": "chatgpt-subscription",
+  "model": "default",
+  "started_at": "2026-10-16T10:47:20.669Z",
+  "ended_at": "2026-10-16T10:50:18.466Z",
+  "duration_seconds": 177,
+  "successful_model_turns": 8,
+  "workflow_status": "review",
+  "accepted_steps": 0,
+  "output": {
+    "path": "docs/issue-intake-smoke-test.md",
+    "bytes": 6276,
+    "sha256": "ec083c0b07b7f74842a245a0496065769f87d355de6ae3a77d2042e45e69b081"
+  },
+  "monitor_enabled": false,
+  "scope": [
+    33
+  ],
+  "permissions_restored": true,
+  "physical_phone_tested": false,
+  "live_mobile_bridge_tested": true,
+  "merge": false,
+  "deployment": false,
+  "push": false,
+  "notes": [
+    "Native runtime used main agent existing ChatGPT connection. No Claude Code worker.",
+    "Draft records source inspection and historical blocked-test artifacts; latest live verification is in this report.",
+    "Original receipt used generic completion text; final message is recorded in transcript and recovered on read by the fix."
+  ],
+  "restart_review_verified": true,
+  "final_native_build": "passed",
+  "focused_native_tests_passed": 19,
+  "typescript_project_build": "passed",
+  "report_images_verified": 11
+}

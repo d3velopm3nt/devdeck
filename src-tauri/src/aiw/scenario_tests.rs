@@ -3424,9 +3424,8 @@ impl crate::aiw::provider::LLMProvider for AsksForNotes {
         }
         Ok(AgentResponse {
             message: "Noted.".into(),
-            actions: vec![AgentAction::Done {
-                summary: "wrote one note".into(),
-            }],
+            // Subscription-style completion: the final message is the summary.
+            actions: vec![],
             complete: true,
             usage: None,
         })
@@ -3549,6 +3548,7 @@ process.stdin.on("data", (d) => { buf += d; let i;
     // 3. The same agent, the same session shape, and this time it runs.
     let done = crate::aiw::runtime::AgentRuntime::run(&w, &cmd).unwrap();
     assert_eq!(done.refused, 0, "granted, so nothing is refused now");
+    assert_eq!(done.summary, "Noted.", "completion preserves the provider's final reply");
     // The transcript records that a tool ran, by name.
     let session = w.session(&done.session_id).unwrap();
     let text = format!("{:?}", session.transcript);
@@ -3607,4 +3607,43 @@ fn nothing_from_a_business_is_lent_into_a_personal_space_and_its_manager_is_lent
     assert!(ws.may_work_in(None, "8").is_ok());
     // Business to business is the ordinary case and untouched.
     assert!(ws.may_work_in(Some("3"), "4").is_ok());
+}
+
+#[test]
+fn agent_run_definition_is_saved_and_does_not_change_with_library_edits() {
+    let t = Tmp::new("agent-snapshot");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex.clone());
+    let cmd: StartAgentCommand = serde_json::from_value(serde_json::json!({"project_id":"tyrex","feature_id":"offline-synchronisation","agent_id":"dev-a"})).unwrap();
+    let live = AgentRuntime::begin(&w, &cmd).unwrap();
+    let saved = w.session(&live.session_id).unwrap().agent_snapshot.unwrap();
+    let path = w.project("tyrex").unwrap().deck().feature_sessions("offline-synchronisation").join(format!("{}.agent.json", live.session_id));
+    let persisted: super::state::AgentDef = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+    assert_eq!(persisted.system, saved.system);
+    assert_eq!(persisted.model, saved.model);
+    w.set_agent_provider("dev-a", "mock", "updated-model").unwrap();
+    assert_ne!(w.agent("dev-a").unwrap().model, saved.model);
+    assert_eq!(w.session(&live.session_id).unwrap().agent_snapshot.unwrap().model, saved.model);
+    assert_eq!(w.session(&live.session_id).unwrap().agent_snapshot.unwrap().system, saved.system);
+}
+
+#[test]
+fn cancelled_native_run_releases_claim_without_invoking_tools() {
+    let t = Tmp::new("cancel-native-workflow");
+    let (tyrex, _) = seed_demo(&t.0).unwrap();
+    let w = ws();
+    w.register_project("tyrex", "TyreX", tyrex.clone(), tyrex);
+    let cmd: StartAgentCommand = serde_json::from_value(serde_json::json!({
+        "project_id":"tyrex", "feature_id":"offline-synchronisation", "agent_id":"dev-a"
+    })).unwrap();
+    let live = AgentRuntime::begin(&w, &cmd).unwrap();
+    let session_id = live.session_id.clone();
+    let stop = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let outcome = AgentRuntime::drive_cancellable(&w, live, stop).unwrap();
+    assert_eq!(outcome.status, "Failed");
+    assert!(outcome.files_touched.is_empty());
+    assert!(!saw(&w, EventType::ToolExecuted));
+    assert!(saw(&w, EventType::WorkReleased));
+    assert!(w.session(&session_id).unwrap().summary.unwrap().contains("stopped"));
 }

@@ -31,6 +31,7 @@ type Item = { view: RailView; icon: IconName; label: string }
 
 // Shared destinations remain available regardless of the selected space.
 const SHARED: Item[] = [
+  { view: 'github', icon: 'github', label: 'GitHub' },
   { view: 'activity', icon: 'history', label: 'Activity board' },
   { view: 'sessions', icon: 'agent', label: 'Sessions' },
   { view: 'calendar', icon: 'schedule', label: 'Calendar' },
@@ -262,7 +263,7 @@ export function Rail() {
         onClick={() => setRailView('team')} />
       <RailButton label="Chat" icon="ai" active={railView === 'chat'} expanded={expanded}
         onClick={() => setRailView('chat')} />
-      <RailButton label="Agents" icon="tool" active={railView === 'workers'} expanded={expanded}
+      <RailButton label="Workforce" icon="tool" active={railView === 'workers'} expanded={expanded}
         onClick={() => setRailView('workers')} />
 
       {/* The tree of everything: areas, folders, clients and projects. Called

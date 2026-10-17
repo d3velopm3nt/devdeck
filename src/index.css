@@ -258,8 +258,11 @@ html[data-window='toast'] #root {
    the layout here means every caller gets it right, and callers that add
    `inline-flex items-center gap-1` themselves are simply redundant now. */
 .btn-primary {
-  @apply inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded bg-indigo-600 px-2.5 py-1 text-white hover:bg-indigo-500 disabled:opacity-50;
+  @apply inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded px-2.5 py-1 disabled:opacity-50;
+  background: var(--c-accent);
+  color: var(--c-page);
 }
+.btn-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--c-accent) 85%, var(--c-ink)); }
 .btn-ghost {
   @apply inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded border border-line2 bg-soft px-2.5 py-1 text-body hover:border-line3 hover:text-ink disabled:opacity-50;
 }

@@ -95,6 +95,7 @@ export function RunView({ id }: { id: string }) {
   }
 
   const running = run.status === 'running'
+  const nativeAgent = run.worker.startsWith('agent:')
   // `tick` is named so the dependency is honest: this clock re-reads on every
   // tick, and `+ tick * 0` was a way of saying that which added zero and read
   // as a mistake. Referencing it plainly says the same thing.
@@ -213,7 +214,7 @@ export function RunView({ id }: { id: string }) {
           <div className="min-h-0 flex-1 overflow-auto px-5 py-3">
             <div className="mb-2 flex items-center gap-2">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">What it did</span>
-              <span className="text-[10.5px] text-faint">every step as Claude Code reported it</span>
+              <span className="text-[10.5px] text-faint">{nativeAgent ? 'native agent messages and tool activity' : 'every step as Claude Code reported it'}</span>
             </div>
             {live.map((s, i) => (
               <div key={i} className="flex gap-3 border-t border-line py-2 first:border-t-0">
@@ -286,12 +287,12 @@ export function RunView({ id }: { id: string }) {
               <div className="mt-1 text-[10px] text-faint">of {run.minutes_limit} min</div>
             </div>
             <div className="rounded-[10px] border border-line bg-panel px-3 py-2">
-              <div className="text-[10px] text-faint">Spent</div>
-              <div className="text-[16px] font-semibold tabular-nums text-ink">${run.usd.toFixed(2)}</div>
-              <div className="mt-1 h-[3px] overflow-hidden rounded-full bg-raise">
+              <div className="text-[10px] text-faint">{nativeAgent ? 'Model connection' : 'Spent'}</div>
+              <div className="text-[16px] font-semibold tabular-nums text-ink">{nativeAgent ? 'Existing' : `$${run.usd.toFixed(2)}`}</div>
+              {!nativeAgent && <div className="mt-1 h-[3px] overflow-hidden rounded-full bg-raise">
                 <span className="block h-full bg-emerald-500" style={{ width: `${spent}%` }} />
-              </div>
-              <div className="mt-1 text-[10px] text-faint">of ${run.usd_limit.toFixed(2)}</div>
+              </div>}
+              <div className="mt-1 text-[10px] text-faint">{nativeAgent ? 'Cost not reported here' : `of $${run.usd_limit.toFixed(2)}`}</div>
             </div>
           </div>
 

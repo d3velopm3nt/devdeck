@@ -44,7 +44,7 @@ export function ProviderChip() {
   }, [open])
 
   if (!agent) return null
-  const mock = agent.provider === 'mock'
+  const mock = !agent.provider || agent.provider === 'mock'
   const dirty = draft.provider !== agent.provider || draft.model !== agent.model
 
   const apply = async () => {
@@ -74,11 +74,11 @@ export function ProviderChip() {
             ? 'border-amber-500/35 bg-amber-500/[0.08] text-warn'
             : 'border-line2 bg-page text-dim hover:text-ink'
         }`}
-        title={mock ? 'Running a fixed script, not a model' : `${agent.provider} · ${agent.model}`}
+        title={mock ? 'Set up an agent to start chatting' : `${agent.provider} · ${agent.model}`}
         onClick={() => setOpen(!open)}
       >
         <span className={`h-[6px] w-[6px] rounded-full ${mock ? 'bg-amber-400' : 'bg-emerald-400'}`} />
-        <span className="max-w-[190px] truncate">{mock ? 'Mock (no AI)' : agent.model || agent.provider}</span>
+        <span className="max-w-[190px] truncate">{mock ? 'Set up agent' : agent.model || agent.provider}</span>
         <Icon name="chevron-down" size={11} />
       </button>
 

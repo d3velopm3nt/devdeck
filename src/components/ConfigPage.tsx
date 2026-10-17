@@ -1,3 +1,4 @@
+import { CoreSetup } from './setup/CoreSetup'
 // Settings page (opens as a main-window tab): global behavior and
 // detected shells. Editing individual commands / services / profiles
 // lives in their own dedicated editor pages, opened from the side lists.
@@ -115,7 +116,7 @@ export function ConfigPage() {
   const [vaultBusy, setVaultBusy] = useState(false)
   const [labelDraft, setLabelDraft] = useState('')
   const [labelMsg, setLabelMsg] = useState('')
-  const [tab, setTab] = useState(() => { const saved = CAPTURE_SETTINGS_TAB || localStorage.getItem(TAB_KEY) || 'general'; return saved === 'core' ? 'assistant' : saved })
+  const [tab, setTab] = useState(() => { const saved = CAPTURE_SETTINGS_TAB || localStorage.getItem(TAB_KEY) || 'general'; return saved })
 
   // Something elsewhere asked for a particular tab — the calendar's New
   // button, which needs the routines form. Consumed once, so coming back to
@@ -123,7 +124,7 @@ export function ConfigPage() {
   const settingsTab = useApp((s) => s.settingsTab)
   useEffect(() => {
     if (!settingsTab) return
-    setTab(settingsTab === 'core' ? 'assistant' : settingsTab)
+    setTab(settingsTab)
     useApp.getState().setSettingsTab(null)
   }, [settingsTab])
   useEffect(() => localStorage.setItem(TAB_KEY, tab), [tab])
@@ -314,6 +315,7 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
             {/* What the team is made of, as opposed to what it is doing: which
                 model each agent runs on, what each may touch, what you have
                 pre-authorised. Talking to them is Team. */}
+            <button className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] ${tab === 'core' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50'}`} onClick={() => setTab('core')}><Icon name="settings" size={14} />Setup</button>
             <button
               key="assistant"
               className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
@@ -356,6 +358,7 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
       ) : (
       <div className="min-w-0 flex-1 overflow-y-auto px-7 py-6">
         <div className="max-w-2xl space-y-6">
+        {tab === 'core' && <CoreSetup />}
         {tab === 'assistant' && <>
           <AgentSettings />
           <details className="border-t border-line pt-4"><summary className="cursor-pointer text-sm text-muted">Advanced integrations</summary>
@@ -368,6 +371,7 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
             <div className="mb-5">
               <h2 className="text-[16px] font-semibold text-ink">General</h2>
               <p className="text-[12px] text-muted">How DevDeck behaves and looks.</p>
+              <button className="btn-ghost mt-2" onClick={() => setTab('core')}>Set up capabilities</button>
             </div>
         <section>
           <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted">

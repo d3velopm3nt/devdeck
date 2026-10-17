@@ -1,3 +1,4 @@
+import { GitHubBriefing } from './GitHubPage'
 // Today — the front door.
 //
 // Home counted services, repos behind and crashed processes. All true, none of
@@ -274,7 +275,7 @@ export function Today() {
 
   const heading =
     needs === 0
-      ? 'Nothing is waiting on you.'
+      ? 'Your day, with Dev.'
       : `${needs} thing${needs === 1 ? '' : 's'} want${needs === 1 ? 's' : ''} you. Everything else is ticking over.`
 
   return (
@@ -327,6 +328,7 @@ export function Today() {
       <div className="flex min-h-0 flex-1 gap-5 overflow-auto px-7 pb-6">
         <div className="flex min-w-0 flex-1 flex-col gap-5">
           <section>
+            <GitHubBriefing taskAttention={waiting + approvals.length + blockers.length} working={workingBots.length + workingRuns.length} unreadMail={app.mailCounts?.unread ?? null} />
             <LifeSpaces />
             {/* The rest of setup, for anyone who met the assistant before
                 these steps existed. Goes away once Home is a space. */}
@@ -337,6 +339,7 @@ export function Today() {
               <span className="text-[10.5px] text-faint">the people, kept on this machine</span>
             </div>
             <TodayBusinesses />
+
             <Head title="Needs you" note="approvals, questions, a reply" />
             {needs === 0 ? (
               <Card>

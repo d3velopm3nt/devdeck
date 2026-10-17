@@ -46,6 +46,7 @@ mod creds;
 mod db;
 mod deck;
 mod eventlog;
+mod notifications;
 mod events;
 mod execution_policy;
 mod files;
@@ -908,7 +909,7 @@ pub fn run() {
 
             // The log's own connection, on its own thread. Started before the
             // sink is attached, so the first event of the run is kept too.
-            eventlog::start_writer();
+            eventlog::start_writer(app.handle().clone());
 
             {
                 let h = app.handle().clone();
@@ -1175,6 +1176,13 @@ pub fn run() {
             bots::bot_delete,
             bots::bot_set_worker,
             eventlog::events_history,
+            notifications::notifications_list,
+            notifications::notification_read,
+            notifications::notification_test,
+            notifications::notification_popup_push,
+            notifications::notification_popup_list,
+            notifications::notification_popup_dismiss,
+            notifications::notification_popup_layout,
             eventlog::events_count,
             bots::work_agree,
             bots::work_decline,

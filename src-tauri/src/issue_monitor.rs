@@ -149,6 +149,10 @@ fn poll(app: &tauri::AppHandle, db: &Db, force: bool) -> Result<(), String> {
                 }
                 Err(error) => s.briefing.error = error,
             }
+            if s.briefing.error.is_empty() {
+                crate::aiw::events::say(app, crate::aiw::events::EventType::FileChanged, Default::default(),
+                    serde_json::json!({"source":"repository_briefing","repository":s.repository,"summary":s.briefing.text}));
+            }
             // Save only to the vault captured before the network/model request.
             write(&saved_path, &serde_json::to_string_pretty(&s).map_err(|e|e.to_string())?)?;
         }

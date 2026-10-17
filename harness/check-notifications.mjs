@@ -1,0 +1,34 @@
+import {mkdir} from 'node:fs/promises';
+const {chromium}=await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH,headless:true});
+try{
+ const page=await browser.newPage({viewport:{width:1100,height:780}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.clock.install();
+ await page.goto('http://localhost:5199/harness/notifications.html');await page.getByRole('button',{name:'Notifications',exact:true}).waitFor();await page.bringToFront();
+ await page.getByRole('button',{name:'Notifications',exact:true}).click();await page.getByRole('button',{name:'Test alert',exact:true}).click();await page.locator('.notification-stack article').waitFor();await page.getByRole('button',{name:'Close notifications'}).click();
+ await mkdir('test-results/notifications',{recursive:true});await page.screenshot({path:'test-results/notifications/alert.png'});
+ await page.getByRole('button',{name:'Dismiss alert'}).click();await page.getByRole('button',{name:'Notifications',exact:true}).click();
+ await page.getByRole('button',{name:'Mark read',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.notification-history article[data-unread=true]'));
+ await page.reload();await page.getByRole('button',{name:'Notifications',exact:true}).click();await page.locator('.notification-history article').waitFor();
+ if(await page.getByRole('button',{name:'Mark read',exact:true}).count())throw Error('Read state lost');
+ await page.getByLabel('Notification level').selectOption('off');await page.waitForFunction(()=>JSON.parse(localStorage.getItem('deck.settings')).notificationLevel==='off');
+ await page.evaluate(()=>window.pushNotice('approval','another/project'));await page.waitForFunction(()=>document.querySelectorAll('.notification-history article').length===2);
+ if(await page.locator('.notification-stack article').count())throw Error('Off still alerts');
+ await mkdir('test-results/notifications',{recursive:true});await page.screenshot({path:'test-results/notifications/desktop.png'});
+ await page.setViewportSize({width:390,height:844});await page.screenshot({path:'test-results/notifications/narrow.png'});
+ if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw Error('Narrow overflow');
+ await page.getByLabel('Notification level').selectOption('attention');
+ await page.evaluate(()=>window.pushNotice('info','info-only'));await page.waitForFunction(()=>document.querySelectorAll('.notification-history article').length===3);
+ if(await page.locator('.notification-stack article').count())throw Error('Info interrupted attention mode');
+ await page.locator('.notification-history article').filter({hasText:'another/project'}).getByRole('button',{name:'Mute source'}).click();
+ await page.evaluate(()=>window.pushNotice('blocker','another/project'));await page.waitForFunction(()=>document.querySelectorAll('.notification-history article').length===4);
+ if(await page.locator('.notification-stack article').count())throw Error('Muted source alerted');
+ await page.evaluate(()=>{const s=JSON.parse(localStorage.getItem('deck.settings'));s.quietHours=true;s.quietFrom='00:00';s.quietTo='23:59';localStorage.setItem('deck.settings',JSON.stringify(s));return window.pushNotice('blocker','quiet-test')});
+ await page.waitForFunction(()=>document.querySelectorAll('.notification-history article').length===5);
+ if(await page.locator('.notification-stack article').count())throw Error('Quiet hours alerted');
+ await page.evaluate(()=>{const s=JSON.parse(localStorage.getItem('deck.settings'));s.quietHours=false;localStorage.setItem('deck.settings',JSON.stringify(s))});
+ await page.getByLabel('Notification level').selectOption('summary');await page.evaluate(()=>window.pushNotice('info','digest'));
+ await page.waitForFunction(()=>document.querySelectorAll('.notification-history article').length===6);await page.clock.fastForward(15*60_000);
+ await page.locator('.notification-stack article').waitFor();
+ if(errors.length)throw Error(errors.join('\n'));console.log('PASS: alert, dismissal preserves history, mark read, reload, off retains history without alerts, narrow layout');
+}finally{await browser.close()}

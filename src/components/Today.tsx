@@ -1,4 +1,6 @@
-import { GitHubBriefing } from './GitHubPage'
+import { DashboardActivity, DashboardConnections } from './DashboardActivity'
+import './today-desktop.css'
+import { GitHubBriefing, RepositoryActivityProvider } from './GitHubPage'
 // Today — the front door.
 //
 // Home counted services, repos behind and crashed processes. All true, none of
@@ -231,9 +233,8 @@ export function Today() {
 
   const approvals = a.approvals.filter((r) => inArea(nodeIdOf(r.project_id)))
   const blockers = a.conflicts.filter((c) => !c.resolved && inArea(nodeIdOf(c.project_id)))
-  const unreadMail = app.mailCounts?.unread ?? 0
   const waiting = Object.values(asks).reduce((n, q) => n + q.length, 0)
-  const needs = waiting + approvals.length + blockers.length + (todayArea == null && unreadMail > 0 ? 1 : 0)
+  const needs = waiting + approvals.length + blockers.length
 
   // -- the day --------------------------------------------------------------
 
@@ -273,24 +274,15 @@ export function Today() {
   const workingRuns = runs.filter((r) => r.status === 'running').filter((r) => inArea(r.node_id))
   const nobodyWorking = workingBots.length === 0 && workingRuns.length === 0
 
-  const heading =
-    needs === 0
-      ? 'Your day, with Dev.'
-      : `${needs} thing${needs === 1 ? '' : 's'} want${needs === 1 ? 's' : ''} you. Everything else is ticking over.`
-
   return (
-    <div className="flex h-full min-h-0 flex-col bg-page">
+    <RepositoryActivityProvider><div className="today-desktop flex h-full min-h-0 flex-col bg-page">
       <div className="shrink-0 px-7 pb-3 pt-5">
         <div className="flex items-end gap-3">
           <div>
             <h1 className="text-[20px] font-semibold tracking-[-0.01em] text-ink">
-              {new Date().toLocaleDateString(undefined, {
-                weekday: 'long',
-                day: 'numeric',
-                month: 'long',
-              })}
+              Today
             </h1>
-            <p className="mt-1 text-[12.5px] text-dim">{heading}</p>
+            <p className="mt-1 text-[12.5px] text-dim">{new Date().toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long'})}</p>
           </div>
           <div className="flex-1" />
         </div>
@@ -320,37 +312,17 @@ export function Today() {
             </button>
           ))}
           <span className="ml-2 text-[10.5px] text-faint">
-            shared with Work and Agents
+            Workspace scope
           </span>
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 gap-5 overflow-auto px-7 pb-6">
+      <div className="today-columns flex min-h-0 flex-1 gap-5 overflow-auto px-7 pb-6">
         <div className="flex min-w-0 flex-1 flex-col gap-5">
           <section>
             <GitHubBriefing taskAttention={waiting + approvals.length + blockers.length} working={workingBots.length + workingRuns.length} unreadMail={app.mailCounts?.unread ?? null} />
-            <LifeSpaces />
-            {/* The rest of setup, for anyone who met the assistant before
-                these steps existed. Goes away once Home is a space. */}
-            <div className="mb-3 flex items-center gap-2">
-              <button className="btn-ghost text-[11.5px]" onClick={() => openLife()}>
-                <Icon name="contacts" size={12} /> Your life
-              </button>
-              <span className="text-[10.5px] text-faint">the people, kept on this machine</span>
-            </div>
-            <TodayBusinesses />
-
-            <Head title="Needs you" note="approvals, questions, a reply" />
-            {needs === 0 ? (
-              <Card>
-                <Row>
-                  <Dot tone="bg-line2" />
-                  <span className="text-[12px] text-muted">
-                    Nothing here. That is the normal state, not an empty one.
-                  </span>
-                </Row>
-              </Card>
-            ) : (
+            {needs > 0 && <Head title="Needs you" note="agent approvals and questions" />}
+            {needs > 0 && (
               <Card>
                 {/* Above the approvals, because a worker's question expires in
                     ninety seconds and an approval does not. */}
@@ -446,19 +418,12 @@ export function Today() {
                     </span>
                   </Row>
                 ))}
-                {todayArea == null && unreadMail > 0 && (
-                  <Row onClick={() => app.setRailView('mail')}>
-                    <Icon name="mail" size={14} className="shrink-0 text-info" />
-                    <span className="min-w-0 flex-1 text-[12.5px] text-ink">
-                      {unreadMail} unread {unreadMail === 1 ? 'message' : 'messages'}
-                    </span>
-                    <span className="shrink-0 text-[10.5px] text-muted">Mail</span>
-                  </Row>
-                )}
+
               </Card>
             )}
           </section>
 
+          <DashboardActivity runs={runs.filter(r=>inArea(r.node_id))} />
           <section>
             <Head title="The day" note="from your calendar" />
             {items === null ? (
@@ -496,7 +461,7 @@ export function Today() {
                           ? 'bg-emerald-400'
                           : i.past
                             ? 'bg-line2'
-                            : 'bg-indigo-400'
+                            : 'bg-accent'
                       }
                     />
                     <span className="min-w-0 flex-1">
@@ -549,13 +514,13 @@ export function Today() {
           )}
         </div>
 
-        <div className="flex w-[330px] shrink-0 flex-col gap-5">
+        <div className="today-aside flex w-[290px] shrink-0 flex-col gap-5">
           <section>
-            <Head title="Ticking over" note="nothing to do here" />
+            <Head title="In progress" note="Live agent work" />
             <Card>
               {workingRuns.slice(0, 3).map((r) => (
                 <Row key={r.id} onClick={() => openRun(r.id, r.title)}>
-                  <Dot tone="bg-indigo-400" />
+                  <Dot tone="bg-accent" />
                   <span className="min-w-0 flex-1 truncate text-[12px] text-body">
                     {r.worker_name} &middot; {r.title}
                   </span>
@@ -576,7 +541,7 @@ export function Today() {
               {nobodyWorking && (
                 <Row>
                   <Dot tone="bg-line2" />
-                  <span className="flex-1 text-[12px] text-muted">Nobody is working</span>
+                  <span className="flex-1 text-[12px] text-muted">No active runs</span>
                 </Row>
               )}
               {behind.slice(0, 3).map(([id, g]) => (
@@ -602,23 +567,23 @@ export function Today() {
             </Card>
           </section>
 
-          <section>
-            <Head title="Ask anything" />
-            <button
-              className="flex w-full items-center gap-2 rounded-lg border border-line bg-panel px-3 py-2.5 text-left hover:bg-hover/40"
-              onClick={() => {
-                const first = areas.find((n) => n.id === todayArea) ?? areas[0]
-                if (first) openNodeThread(first.id, first.name)
-              }}
-            >
-              <Icon name="ai" size={14} className="shrink-0 text-indigo-400" />
-              <span className="flex-1 truncate text-[11.5px] text-muted">
-                What needs me before this afternoon?
-              </span>
-            </button>
-          </section>
+          <DashboardConnections />
+          <details className="today-setup"><summary>Workspace &amp; personal setup</summary>            <LifeSpaces />
+            {/* The rest of setup, for anyone who met the assistant before
+                these steps existed. Goes away once Home is a space. */}
+            <div className="mb-3 flex items-center gap-2">
+              <button className="btn-ghost text-[11.5px]" onClick={() => openLife()}>
+                <Icon name="contacts" size={12} /> Your life
+              </button>
+              <span className="text-[10.5px] text-faint">the people, kept on this machine</span>
+            </div>
+            <TodayBusinesses />
+
+</details>
+
         </div>
       </div>
-    </div>
+      <div className="today-composer-wrap"><button className="today-composer" onClick={()=>app.setRailView('chat')}><Icon name="ai" size={18}/><span>Ask Dev, or tell me what to work on…</span><Icon name="chevron-right" size={17}/></button></div>
+    </div></RepositoryActivityProvider>
   )
 }

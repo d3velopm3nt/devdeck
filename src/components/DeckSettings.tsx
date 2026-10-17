@@ -1,34 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Icon } from '../lib/icons'
 import * as ipc from '../lib/ipc'
-import { DECK_DEFAULTS, loadDeckSettings, saveDeckSettings, type DeckEventKind, type DeckSettings as Preferences } from '../lib/deck'
+import { DECK_DEFAULTS, loadDeckSettings, saveDeckSettings, type DeckSettings as Preferences } from '../lib/deck'
 import { useApp } from '../store'
 import { OrbSettings } from './orb/OrbSettings'
 import { MobilePairing } from './MobilePairing'
-
-const KINDS: DeckEventKind[] = ['info', 'alert', 'approval', 'blocker']
-const FREQUENCIES: Record<DeckEventKind, number[]> = {
-  info: [660], alert: [740, 560], approval: [660, 880], blocker: [440, 330],
-}
-
-function preview(kind: DeckEventKind) {
-  const context = new AudioContext()
-  const start = context.currentTime
-  FREQUENCIES[kind].forEach((frequency, index) => {
-    const oscillator = context.createOscillator()
-    const volume = context.createGain()
-    const at = start + index * 0.14
-    oscillator.type = 'sine'
-    oscillator.frequency.value = frequency
-    volume.gain.setValueAtTime(0.0001, at)
-    volume.gain.exponentialRampToValueAtTime(0.055, at + 0.015)
-    volume.gain.exponentialRampToValueAtTime(0.0001, at + 0.12)
-    oscillator.connect(volume).connect(context.destination)
-    oscillator.start(at)
-    oscillator.stop(at + 0.13)
-  })
-  window.setTimeout(() => void context.close(), 600)
-}
 
 function Check({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return <label className="flex cursor-pointer items-center gap-2 text-[12px] text-body">
@@ -56,7 +32,8 @@ export function DeckSettings() {
   const save = async () => {
     setMessage('')
     try {
-      await saveDeckSettings(value)
+      const current=await loadDeckSettings()
+      await saveDeckSettings({...current,watch:value.watch,intervalMin:value.intervalMin,focusMinutes:value.focusMinutes,focusInterrupt:value.focusInterrupt,mutedSpaces:value.mutedSpaces})
       void ipc.emitDeckSettingsChanged()
       setMessage('Deck settings saved.')
     } catch (e) { setMessage(String(e)) }
@@ -66,7 +43,7 @@ export function DeckSettings() {
   return <div className="h-full overflow-y-auto bg-page px-7 py-6 text-body">
     <div className="mx-auto max-w-4xl space-y-4">
       <div><h1 className="text-[20px] font-semibold text-ink">Deck settings</h1>
-        <p className="text-[12px] text-dim">Choose when Deck appears and how it notifies you. It follows the app theme.</p></div>
+        <p className="text-[12px] text-dim">Configure your widget, shared spaces and focus sessions.</p></div>
       {!ready ? <p className="text-dim">Loading…</p> : <>
         <MobilePairing />
         <OrbSettings />
@@ -87,27 +64,7 @@ export function DeckSettings() {
           <p className="mt-1 text-[11px] text-muted">Deck watches the same state folder as the Explorer. Connect or switch your repository in Storage settings.</p>
           {watchStatus && <p className="mt-1 text-[11px] text-dim">Last check: {watchStatus}</p>}
         </section>
-        <section className={section}>
-          <h2 className="mb-3 text-[13px] font-semibold text-ink">Notifications</h2>
-          <div className="flex flex-wrap gap-x-6 gap-y-3">
-            <Check checked={value.windowsNotifications} onChange={(windowsNotifications) => update({ windowsNotifications })} label="Windows notifications" />
-            <Check checked={value.popups} onChange={(popups) => update({ popups })} label="Deck pop-ups" />
-            <Check checked={value.groupUpdates} onChange={(groupUpdates) => update({ groupUpdates })} label="Group related changes" />
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-line pt-3">
-            <Check checked={value.quietHours} onChange={(quietHours) => update({ quietHours })} label="Quiet hours" />
-            {value.quietHours && <><input type="time" className={select} value={value.quietFrom} onChange={(e) => update({ quietFrom: e.target.value })} /><span>to</span><input type="time" className={select} value={value.quietTo} onChange={(e) => update({ quietTo: e.target.value })} /></>}
-          </div>
-        </section>
-        <section className={section}>
-          <h2 className="mb-2 text-[13px] font-semibold text-ink">Sounds</h2>
-          <div className="divide-y divide-line">
-            {KINDS.map((kind) => <div key={kind} className="flex items-center justify-between py-2">
-              <Check checked={value.sounds[kind]} onChange={(enabled) => update({ sounds: { ...value.sounds, [kind]: enabled } })} label={kind[0].toUpperCase() + kind.slice(1)} />
-              <button className="btn-ghost flex items-center gap-1" onClick={() => preview(kind)} title={`Play ${kind} sound`}><Icon name="run" size={12} /> Play</button>
-            </div>)}
-          </div>
-        </section>
+        <button className="flex w-full items-center gap-3 border-y border-line py-4 text-left" onClick={()=>{useApp.getState().setSettingsTab('notifications')}}><Icon name="history" size={18}/><span className="flex-1"><strong className="block text-sm">Notifications &amp; sounds</strong><small className="text-muted">Delivery, quiet hours and sound preferences</small></span><Icon name="chevron-right" size={14}/></button>
         <section className={section}>
           <h2 className="mb-3 text-[13px] font-semibold text-ink">Focus</h2>
           <div className="flex flex-wrap items-center gap-5 text-[12px]">

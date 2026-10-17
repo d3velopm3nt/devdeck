@@ -103,7 +103,7 @@ function RailButton({
     >
       {active && (
         <span
-          className={`absolute w-[2.5px] rounded bg-indigo-500 ${
+          className={`absolute w-[2.5px] rounded bg-accent ${
             expanded ? '-left-[5px] top-1.5 bottom-1.5' : '-left-[7px] top-2 bottom-2'
           }`}
         />

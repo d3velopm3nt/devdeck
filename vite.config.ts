@@ -11,7 +11,7 @@ export default defineConfig({
     strictPort: true,
     watch: {
       // cargo writes here constantly; watching it crashes vite (EBUSY)
-      ignored: ['**/src-tauri/**'],
+      ignored: ['**/src-tauri/**', '**/docs/test-reports/**', '**/test-results/**'],
     },
   },
   build: {

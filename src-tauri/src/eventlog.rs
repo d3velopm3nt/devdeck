@@ -100,7 +100,7 @@ pub struct Kept {
 static POST: OnceLock<Sender<crate::aiw::events::DomainEvent>> = OnceLock::new();
 
 /// Open the log's own connection and start draining. Called once, at startup.
-pub fn start_writer() {
+pub fn start_writer(app: tauri::AppHandle) {
     POST.get_or_init(|| {
         let (tx, rx) = channel::<crate::aiw::events::DomainEvent>();
         std::thread::spawn(move || {
@@ -111,7 +111,7 @@ pub fn start_writer() {
             };
             let _ = conn.busy_timeout(std::time::Duration::from_secs(5));
             let _ = conn.execute_batch(SCHEMA);
-            drain(&conn, rx);
+            drain(&conn, rx, Some(&app));
         });
         tx
     });
@@ -122,9 +122,15 @@ pub fn start_writer() {
 fn drain(
     conn: &rusqlite::Connection,
     rx: std::sync::mpsc::Receiver<crate::aiw::events::DomainEvent>,
+    app: Option<&tauri::AppHandle>,
 ) {
     for ev in rx {
         keep(conn, &ev);
+        match crate::notifications::keep(conn, &ev) {
+            Ok(Some(notice)) => { if let Some(app) = app { use tauri::Emitter; let _ = app.emit("devdeck:notification", notice); } },
+            Err(error) => eprintln!("[notifications] {error}"),
+            _ => {}
+        }
     }
 }
 
@@ -345,7 +351,8 @@ mod tests {
             let held = held.clone();
             std::thread::spawn(move || {
                 let conn = held.lock().unwrap();
-                drain(&conn, rx);
+                conn.execute_batch(crate::notifications::SCHEMA).unwrap();
+                drain(&conn, rx, None);
             })
         };
 

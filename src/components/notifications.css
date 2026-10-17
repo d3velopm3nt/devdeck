@@ -1,0 +1,25 @@
+.notification-root{position:relative;font-size:12px;color:var(--c-ink)}
+.notification-root button,.notification-root select{border:1px solid var(--c-line);border-radius:5px;padding:4px 8px;background:var(--c-panel);color:inherit;cursor:pointer;font:inherit}
+.notification-root button:hover{background:var(--c-hover)}
+.notification-root b{margin-left:6px;color:var(--c-accent)}
+.notification-panel{position:absolute;right:0;top:32px;z-index:90;width:min(420px,calc(100vw - 24px));border:1px solid var(--c-line);border-radius:10px;background:var(--c-panel);box-shadow:0 16px 50px #0005;overflow:hidden}
+.notification-panel header,.notification-controls{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border-bottom:1px solid var(--c-line)}
+.notification-panel header span{display:flex;align-items:center;gap:6px;color:var(--c-muted)}
+.notification-panel>small{display:block;padding:8px 12px;color:var(--c-muted)}
+.notification-history{max-height:60vh;overflow:auto}.notification-history article{padding:12px;border-top:1px solid var(--c-line)}
+.notification-history article[data-unread=true]{border-left:2px solid var(--c-accent)}
+.notification-history article>div{display:flex;justify-content:space-between;gap:8px}.notification-history time{font-size:10px;color:var(--c-muted)}
+.notification-root p{white-space:pre-wrap;overflow-wrap:anywhere;margin:6px 0 10px}.notification-history p{max-height:140px;overflow:auto}
+.notification-history footer{display:flex;gap:6px}.notification-root small{color:var(--c-muted)}
+.notification-stack{position:fixed;right:18px;bottom:36px;width:min(350px,calc(100vw - 36px));z-index:100;display:flex;flex-direction:column;gap:8px}
+.notification-stack article{position:relative;border:1px solid var(--c-line);border-left:3px solid var(--c-accent);border-radius:9px;background:var(--c-panel);box-shadow:0 8px 30px #0004;padding:12px 14px}
+.notification-stack strong,.notification-stack small{display:block;padding-right:24px}.notification-stack strong{margin-top:6px}.notification-stack p{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.notification-dismiss{position:absolute;right:6px;top:6px}
+
+.notification-root{display:flex;align-items:center;gap:8px}
+
+.notification-history footer{flex-wrap:wrap}
+
+.notification-overlay{display:block;padding:8px;width:100%;box-sizing:border-box}.notification-overlay .notification-stack{position:relative;right:auto;bottom:auto;width:100%}
+/* Shared notification identity and quiet desktop actions. */
+.notice-identity{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--c-accent)}.notice-alert{color:var(--c-err,#dc8585)}.notice-blocker{color:var(--c-warn,#c9a566)}.notice-info{color:var(--c-muted)}.notice-byline{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--c-muted);margin-bottom:10px}.notice-byline small,.notice-kind{margin-left:auto;font-size:10px}.notice-title{display:flex;align-items:center;gap:8px}.notice-title strong{font-weight:550;font-size:13px;margin:0;padding:0}.notification-stack article{border-left:1px solid var(--c-line);padding:14px 16px;border-radius:11px}.notification-stack .notice-byline{padding-right:20px}.notification-stack p{margin:8px 0 5px;padding-left:26px;font-size:12px;color:var(--c-muted);line-height:1.6}.notification-stack .notice-source{padding-left:26px;font-size:10px}.notification-root .notice-action{display:flex;align-items:center;gap:3px;margin:10px 0 0 21px;border:0;background:transparent;color:var(--c-accent);padding:3px 5px}.notification-root .notification-dismiss{border:0;background:transparent;color:var(--c-muted);padding:5px}.notification-root>button{display:flex;align-items:center;border:0;background:transparent}.notification-history article>div{align-items:center;justify-content:initial}.notification-history time{margin-left:auto}.notification-history footer button{border:0;background:transparent;color:var(--c-muted)}.notification-history footer button:first-child{color:var(--c-accent)}.notification-root button:focus-visible{outline:2px solid var(--c-accent);outline-offset:2px}

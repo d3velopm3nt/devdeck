@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { DeckLogo } from '../widget/DeckLogo'
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import * as ipc from '../lib/ipc'
 import { useApp } from '../store'
@@ -17,9 +18,9 @@ export function GitHubBriefing({ taskAttention = 0, working = 0, unreadMail = nu
   const waiting = data?.dispatches.filter(attention) || []
   const failures = data?.sources.filter(s => s.error) || []
   return <section className="dev-briefing" aria-label="Dev’s briefing">
-    <div className="gh-byline"><span className="gh-dev"><Icon name="ai" size={17} /></span><h2>Dev’s briefing</h2><span className="gh-subtle">From your saved activity</span></div>
-    <p className="gh-lead">Your repositories, mail, and work in one place.</p>
-    <p className="gh-muted">{waiting.length ? `${waiting.length} repository item${waiting.length === 1 ? '' : 's'} need attention. ` : ''}{taskAttention ? `${taskAttention} task approvals or blockers need you. ` : ''}{working ? `${working} agent run${working === 1 ? ' is' : 's are'} active.` : 'Review what needs you, then pick up your next task.'}</p>
+    <div className="gh-byline"><span className="gh-dev"><DeckLogo size={22} /></span><h2>Dev’s briefing</h2><span className="gh-subtle">From your saved activity</span></div>
+    <p className="gh-lead">{waiting.length+taskAttention ? `${waiting.length+taskAttention} item${waiting.length+taskAttention===1?' needs':'s need'} your attention.` : 'Your day, with Dev.'}</p>
+    <p className="gh-muted">{taskAttention ? `${taskAttention} task approvals or blockers need you. ` : ''}{working ? `${working} agent run${working === 1 ? ' is' : 's are'} active.` : 'Review what needs you, then pick up your next task.'}</p>
     {error && <p role="alert" className="text-err">Repository activity unavailable: {error}</p>}
     {data?.sources.filter(s => s.briefing?.text).sort((a,b) => (b.briefing?.generated_at || '').localeCompare(a.briefing?.generated_at || '')).slice(0, 2).map(s => <div className="gh-brief-row" key={`brief:${s.repository}`}><Icon name="ai" size={16} /><div><strong>{s.repository} {s.briefing?.unread && <span className="gh-status">New</span>}</strong><p className="gh-detail-copy">{s.briefing?.text}</p><small>{date(s.briefing?.generated_at || '')}{s.briefing?.error ? ' · Latest assessment unavailable; showing saved briefing' : ''}</small></div><button className="gh-action" onClick={() => { sessionStorage.setItem('devdeck.github.selection', `${s.repository}:briefing`); navigate('github') }}>Open briefing <Icon name="chevron-right" size={13} /></button></div>)}
     {waiting.slice(0, 2).map(d => <div className="gh-brief-row" key={`${d.repository}:${d.number}`}><Icon name={d.status === 'review' ? 'view' : 'alert'} size={16} /><div><strong>{d.repository} #{d.number}</strong><small>{statusLabel(d.status)}{d.message ? ` · ${d.message}` : ''}</small></div><button className="gh-action" onClick={() => { sessionStorage.setItem('devdeck.github.selection', `${d.repository}:${d.number}`); navigate('github') }}>View details <Icon name="chevron-right" size={13} /></button></div>)}
@@ -94,10 +95,11 @@ export function GitHubPage() {
 }
 
 // Both surfaces read the monitor's persisted snapshot, never a second GitHub poller.
-function useRepositoryActivity() {
+function useRepositorySnapshot(enabled = true) {
   const [data, setData] = useState<ipc.IssueMonitorView | null>(null)
   const [error, setError] = useState('')
   useEffect(() => {
+    if (!enabled) return
     let active = true
     let loading = false
     const load = async () => {
@@ -112,6 +114,17 @@ function useRepositoryActivity() {
     const off = listen('aiw:event', () => void load())
     void off.catch(() => {})
     return () => { active = false; clearInterval(timer); void off.then(f => f()).catch(() => {}) }
-  }, [])
+  }, [enabled])
   return { data, error, setData }
+}
+
+const RepositoryContext=createContext<ReturnType<typeof useRepositorySnapshot>|null>(null)
+export function RepositoryActivityProvider({children}:{children:ReactNode}) {
+ const snapshot=useRepositorySnapshot()
+ return <RepositoryContext.Provider value={snapshot}>{children}</RepositoryContext.Provider>
+}
+export function useRepositoryActivity(){
+ const shared=useContext(RepositoryContext)
+ const local=useRepositorySnapshot(!shared)
+ return shared||local
 }

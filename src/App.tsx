@@ -1,3 +1,5 @@
+import { DeckLogo } from './widget/DeckLogo'
+import { NotificationCenter } from './components/NotificationCenter'
 import { GitHubPage } from './components/GitHubPage'
 import { SetupBanner } from './components/setup/SetupBanner'
 import { useEffect, useRef, useState } from 'react'
@@ -25,7 +27,7 @@ import { ClockToast } from './components/ClockToast'
 import { Rail } from './shell/Rail'
 import { WindowControls } from './shell/WindowControls'
 import { ThemeSwitch } from './shell/ThemeSwitch'
-import { AgentCluster, NotificationBell, AccountChip } from './shell/TopBarStatus'
+import { AgentCluster, AccountChip } from './shell/TopBarStatus'
 import { Home } from './components/Home'
 import { Today } from './components/Today'
 import { Explorer } from './components/Explorer'
@@ -778,7 +780,7 @@ export default function App() {
         <Menu
           label={
             <span className="inline-flex items-center gap-1.5">
-              <span className="text-indigo-400">❯_</span> DevDeck
+              <DeckLogo size={20} /> DevDeck
             </span>
           }
         >
@@ -1020,7 +1022,7 @@ export default function App() {
           />
           <div className="h-4 w-px bg-line" />
           <ThemeSwitch />
-          <NotificationBell />
+          <NotificationCenter />
           <AccountChip />
         </div>
 

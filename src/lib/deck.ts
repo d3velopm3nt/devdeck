@@ -4,6 +4,8 @@ export type DeckEventKind = 'info' | 'alert' | 'approval' | 'blocker'
 export type FocusInterrupt = 'none' | 'urgent' | 'all'
 
 export interface DeckSettings {
+  notificationLevel: 'off' | 'attention' | 'summary' | 'all'
+  mutedNotifications: string[]
   watch: boolean
   intervalMin: number
   windowsNotifications: boolean
@@ -19,6 +21,8 @@ export interface DeckSettings {
 }
 
 export const DECK_DEFAULTS: DeckSettings = {
+  notificationLevel: 'attention',
+  mutedNotifications: [],
   watch: true,
   intervalMin: 1,
   windowsNotifications: true,
@@ -43,6 +47,8 @@ export async function loadDeckSettings(): Promise<DeckSettings> {
     return {
       ...DECK_DEFAULTS,
       ...value,
+      notificationLevel: ['off', 'attention', 'summary', 'all'].includes(value.notificationLevel ?? '') ? value.notificationLevel! : 'attention',
+      mutedNotifications: Array.isArray(value.mutedNotifications) ? value.mutedNotifications.filter((s): s is string => typeof s === 'string') : [],
       intervalMin: Math.max(1, Math.min(60, Number(value.intervalMin) || 1)),
       focusMinutes: Math.max(1, Math.min(120, Number(value.focusMinutes) || 25)),
       sounds: { ...DECK_DEFAULTS.sounds, ...value.sounds },
@@ -55,6 +61,7 @@ export async function loadDeckSettings(): Promise<DeckSettings> {
 
 export async function saveDeckSettings(settings: DeckSettings): Promise<void> {
   await ipc.settingSet(KEY, JSON.stringify(settings))
+  await ipc.emitDeckSettingsChanged()
 }
 
 export function inQuietHours(settings: DeckSettings, now = new Date()): boolean {

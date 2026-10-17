@@ -40,7 +40,8 @@ export function playDeckSound(kind: DeckEventKind) {
 }
 
 export async function announceUpdates(updates: DeckUpdate[], settings: DeckSettings, focusing: boolean) {
-  const eligible = updates.filter((u) => !focusing || mayInterruptFocus(u.kind, settings.focusInterrupt))
+  if (settings.notificationLevel === 'off' || settings.notificationLevel === 'summary') return
+  const eligible = updates.filter(u => settings.notificationLevel === 'all' || u.kind !== 'info').filter((u) => !focusing || mayInterruptFocus(u.kind, settings.focusInterrupt))
   if (!eligible.length || inQuietHours(settings)) return
   const strongest = eligible.find((u) => u.kind === 'blocker') ?? eligible.find((u) => u.kind === 'approval') ?? eligible.find((u) => u.kind === 'alert') ?? eligible[0]
   if (settings.sounds[strongest.kind]) playDeckSound(strongest.kind)

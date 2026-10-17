@@ -62,7 +62,7 @@ export function AgentCluster() {
 // What needs you
 // ---------------------------------------------------------------------------
 
-export function NotificationBell() {
+export function NeedsYouBell() {
   const a = useAiw()
   const activity = useApp((s) => s.activity)
   const inboxRead = useApp((s) => s.inboxRead)

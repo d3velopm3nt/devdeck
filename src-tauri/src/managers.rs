@@ -11,7 +11,8 @@
 //! A manager lives at the vault root — `.devdeck/team/<handle>.md`, one file
 //! each. Not in a space, since it belongs to none of them; not in the personal
 //! store, which is for things about *you*, and your team is not a preference.
-//! Files stay the truth, the team travels with the vault, and nothing lands
+//! Structured definitions live in `.devdeck/library/agents.sqlite`; old Markdown files
+//! are migration backups. The team travels with the vault, and nothing lands
 //! inside a repository.
 //!
 //! **A manager owns features, never spaces.** Owning a folder was the trap.
@@ -27,10 +28,6 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::db;
-
-fn err(e: impl std::fmt::Display) -> String {
-    e.to_string()
-}
 
 /// One manager: who they are, when they wake, and who they may put to work.
 ///
@@ -185,6 +182,7 @@ fn parse(handle: &str, raw: &str) -> Manager {
     m
 }
 
+#[cfg(test)]
 fn serialise(m: &Manager) -> String {
     let mut out = String::from("---\n");
     out.push_str(&format!("name: {}\n", m.name.trim()));
@@ -247,16 +245,21 @@ fn serialise(m: &Manager) -> String {
     out
 }
 
+fn stored_definition(manager: &Manager, root: &std::path::Path) -> Result<crate::agent_library::AgentDefinition, String> {
+    let mut definition = crate::agent_library::from_manager(manager, root)?;
+    // The database travels with the vault; its internal identity must not contain a path.
+    definition.id = format!("manager:{}", manager.handle);
+    definition.configuration.as_object_mut().unwrap().remove("vault");
+    Ok(definition)
+}
+
 /// Everyone, by handle. An unreadable file is skipped rather than fatal: one
 /// bad manager must not empty the team.
 pub fn all(conn: &Connection) -> Vec<Manager> {
     let Some(d) = dir(conn) else {
         return Vec::new();
     };
-    let Ok(entries) = fs::read_dir(&d) else {
-        return Vec::new();
-    };
-    let mut out: Vec<Manager> = entries
+    let mut out: Vec<Manager> = fs::read_dir(&d).into_iter().flatten()
         .filter_map(|e| e.ok())
         .filter(|e| e.path().extension().is_some_and(|x| x == "md"))
         .filter_map(|e| {
@@ -265,32 +268,36 @@ pub fn all(conn: &Connection) -> Vec<Manager> {
             Some(parse(&handle, &raw))
         })
         .collect();
+    let root = d.parent().expect("team directory has a parent");
+    let migrated = (|| -> Result<Vec<Manager>, String> {
+        for manager in &out {
+            crate::agent_library::save(root, &stored_definition(manager, root)?, true)?;
+        }
+        crate::agent_library::list(root)?.iter().filter(|d| d.execution == "manager").map(crate::agent_library::manager).collect()
+    })();
+    match migrated { Ok(managers) => out = managers, Err(error) => eprintln!("Vault agent migration failed: {error}") }
     out.sort_by_key(|a| a.name.to_lowercase());
     out
 }
 
 pub fn get(conn: &Connection, handle: &str) -> Option<Manager> {
-    let d = dir(conn)?;
-    let raw = fs::read_to_string(d.join(format!("{handle}.md"))).ok()?;
-    Some(parse(handle, &raw))
+    all(conn).into_iter().find(|manager| manager.handle == handle)
 }
 
 pub fn save(conn: &Connection, m: &Manager) -> Result<(), String> {
     let d = dir(conn).ok_or("No vault folder has been chosen yet.")?;
-    fs::create_dir_all(&d).map_err(err)?;
-    if m.handle.trim().is_empty() {
-        return Err("A manager needs a handle.".into());
+    if m.handle.trim().is_empty() || m.handle.contains(['/', '\\']) {
+        return Err("A manager needs a valid handle.".into());
     }
-    fs::write(d.join(format!("{}.md", m.handle.trim())), serialise(m)).map_err(err)
+    let root = d.parent().ok_or("Invalid vault directory.")?;
+    crate::agent_library::save(root, &stored_definition(m, root)?, false)
 }
 
 pub fn delete(conn: &Connection, handle: &str) -> Result<(), String> {
-    let Some(d) = dir(conn) else { return Ok(()) };
-    let p = d.join(format!("{handle}.md"));
-    if p.is_file() {
-        fs::remove_file(&p).map_err(err)?;
-    }
-    Ok(())
+    let Some(manager) = get(conn, handle) else { return Ok(()) };
+    let d = dir(conn).ok_or("Choose a vault first.")?;
+    let root = d.parent().ok_or("Invalid vault directory.")?;
+    crate::agent_library::remove(root, &stored_definition(&manager, root)?.id)
 }
 
 /// Who owns what, read from the features themselves.
@@ -397,7 +404,7 @@ pub fn migrate_from_bots(conn: &Connection) -> Vec<String> {
     let Some(d) = dir(conn) else { return done };
     // Already a team? Then this has happened, or you have built one by hand.
     // Either way it is not ours to overwrite.
-    if !all(conn).is_empty() {
+    if !all(conn).is_empty() || d.parent().is_some_and(|root| crate::agent_library::has_history(root).unwrap_or(true)) {
         return done;
     }
 
@@ -457,6 +464,38 @@ pub fn migrate_from_bots(conn: &Connection) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn structured_managers_preserve_vault_state_and_do_not_resurrect_backups() {
+        let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let root = std::env::temp_dir().join(format!("devdeck-manager-{nonce}"));
+        let team = root.join(".devdeck/team");
+        fs::create_dir_all(&team).unwrap();
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);").unwrap();
+        db::setting_set_conn(&conn, "vault_root", &root.to_string_lossy()).unwrap();
+        let source = Manager { handle: "lead".into(), name: "Lead".into(), goal: "Deliver".into(), worker: "reviewer".into(), home: 42, every: "daily".into(), skills: vec!["review".into()], ..Default::default() };
+        fs::write(team.join("lead.md"), serialise(&source)).unwrap();
+        let mut loaded = get(&conn, "lead").unwrap();
+        loaded.body = "Updated through Library".into();
+        save(&conn, &loaded).unwrap();
+        let loaded = get(&conn, "lead").unwrap();
+        assert_eq!(loaded.body, "Updated through Library");
+        assert_eq!(loaded.home, 42);
+        assert_eq!(loaded.worker, "reviewer");
+        assert_eq!(loaded.every, "daily");
+        assert_eq!(loaded.skills, source.skills);
+        assert!(team.join("lead.md").exists());
+        let moved = root.with_extension("moved");
+        fs::rename(&root, &moved).unwrap();
+        db::setting_set_conn(&conn, "vault_root", &moved.to_string_lossy()).unwrap();
+        assert_eq!(all(&conn).len(), 1);
+        save(&conn, &loaded).unwrap();
+        assert_eq!(all(&conn).len(), 1);
+        delete(&conn, "lead").unwrap();
+        assert!(all(&conn).is_empty());
+        fs::remove_dir_all(moved).unwrap();
+    }
 
     #[test]
     fn a_handle_is_typeable() {

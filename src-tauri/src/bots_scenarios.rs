@@ -48,16 +48,12 @@ impl World {
         bot_on_node(&self.conn, node_id).expect("a manager for that space")
     }
 
-    /// The file a manager lives in — at the vault root, not in a folder.
-    fn team_file(&self, node_id: i64) -> PathBuf {
-        let m = crate::managers::all(&self.conn)
-            .into_iter()
-            .find(|m| m.home == node_id)
-            .expect("a manager for that space");
-        self.root
-            .join(".devdeck")
-            .join("team")
-            .join(format!("{}.md", m.handle))
+    /// Read the durable structured record independently of the manager runtime.
+    fn team_definition(&self, node_id: i64) -> crate::agent_library::AgentDefinition {
+        let m = crate::managers::all(&self.conn).into_iter().find(|m| m.home == node_id).expect("a manager for that space");
+        let db = Connection::open_with_flags(self.root.join(".devdeck/library/agents.sqlite"), rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+        let raw: String = db.query_row("SELECT definition FROM agent_definitions WHERE id=?1 AND deleted=0", [format!("manager:{}",m.handle)], |r| r.get(0)).unwrap();
+        serde_json::from_str(&raw).unwrap()
     }
 
     /// The heartbeat row for the manager whose memory lives on this node.
@@ -203,10 +199,7 @@ fn the_website_bot_from_nothing_to_deleted() {
         "starter skills are written on"
     );
     assert!(!bot.feature.is_empty(), "a plan means a feature");
-    assert!(
-        w.team_file(2).is_file(),
-        "the manager is a file at the vault root"
-    );
+    assert_eq!(w.team_definition(2).configuration["template"], "website", "the configured manager is durable in the vault database");
     assert!(
         !w.dir("Business/Marketing site").join(FILE).is_file(),
         "and not one in the folder it works on"
@@ -906,7 +899,8 @@ fn two_bots_keep_their_own_work_and_their_own_memory() {
     delete_into(&w.conn, &w.mind, 2).unwrap();
     assert!(w.hb(3).is_some());
     assert_eq!(w.work(3).len(), 7);
-    assert!(w.team_file(3).is_file(), "each manager has its own file");
+    assert_eq!(w.team_definition(3).configuration["home"], 3, "the other manager keeps its own durable identity");
+    assert!(crate::managers::all(&w.conn).iter().all(|m| m.home != 2));
 }
 
 // ---------------------------------------------------------------------------
@@ -1028,12 +1022,7 @@ fn naming_an_agent_is_written_down_and_survives_a_save() {
     let back = w.bot(2);
     assert_eq!(back.agent, "release-checker");
     assert!(back.wake_intent.contains("version files"));
-    assert!(
-        std::fs::read_to_string(w.team_file(2))
-            .unwrap()
-            .contains("agent: release-checker"),
-        "it is in the file, so it travels with the vault"
-    );
+    assert_eq!(w.team_definition(2).configuration["agent"], "release-checker", "the assignment is durable and travels with the vault");
 
     // And taking it away again puts the bot back to only watching.
     save_into(
@@ -1052,9 +1041,7 @@ fn naming_an_agent_is_written_down_and_survives_a_save() {
     )
     .unwrap();
     assert_eq!(w.bot(2).agent, "");
-    assert!(!std::fs::read_to_string(w.team_file(2))
-        .unwrap()
-        .contains("agent:"));
+    assert_eq!(w.team_definition(2).configuration["agent"], "");
 }
 
 /// The half-made feature guard has to cover *both* ways a slug is chosen. The

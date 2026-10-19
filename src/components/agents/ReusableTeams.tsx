@@ -9,9 +9,11 @@ import {
   Layers,
   ArrowRight,
   X,
+  Search, LayoutGrid, List, Users, Activity,
 } from "lucide-react";
 import * as ipc from "../../lib/ipc";
 import "./team-builder.css";
+import "./workforce.css";
 
 const empty = (): ipc.ReusableTeam => ({
   id: "",
@@ -44,15 +46,23 @@ function descendants(roles: ipc.TeamRole[], name: string): Set<string> {
 }
 
 export function ReusableTeams({
+  openedTeam,
   workers,
   onAgents,
   onEdit,
+  onCreate,
 }: {
+  openedTeam?: ipc.ReusableTeam | null;
   workers: ipc.Worker[];
   onAgents: () => void;
   onEdit?: (worker: ipc.Worker) => void;
+  onCreate?: (assign: (worker: ipc.Worker) => void) => void;
 }) {
   const [teams, setTeams] = useState<ipc.ReusableTeam[]>([]);
+  const [search, setSearch] = useState('');
+  const [view, setView] = useState<'cards' | 'table'>('cards');
+  const [filter, setFilter] = useState('all');
+  const [sort, setSort] = useState('name');
   const [draft, setDraft] = useState<ipc.ReusableTeam | null>(null);
   const [selected, setSelected] = useState("lead");
   const [roleNameDraft, setRoleNameDraft] = useState("lead");
@@ -82,6 +92,14 @@ export function ReusableTeams({
   useEffect(() => {
     void reload();
   }, []);
+  useEffect(() => {
+    if (!openedTeam) return;
+    void reload();
+    setDraft(normalize(openedTeam));
+    setSelected(openedTeam.roles.find(r => !r.reports_to)?.name || openedTeam.roles[0].name);
+    setDirty(false);
+    setTab('details');
+  }, [openedTeam]);
   useEffect(() => {
     let active = true;
     const refresh = () => {
@@ -174,6 +192,8 @@ export function ReusableTeams({
   };
   const save = async () => {
     if (!draft) return;
+    const missing = draft.roles.find(r => !r.worker);
+    if (missing) { setSelected(missing.name); setTab('settings'); setError(`Choose or create an agent for ${missing.name} before saving your team.`); return; }
     setBusy(true);
     setError("");
     try {
@@ -247,30 +267,32 @@ export function ReusableTeams({
       </li>
     );
   };
+  const working = (t: ipc.ReusableTeam) => runs.some(r => r.status === 'running' && t.roles.some(role => role.worker === r.worker));
+  const shown = teams.filter(t => `${t.name} ${t.description}`.toLowerCase().includes(search.toLowerCase()) && (filter === 'all' || (filter === 'active' ? working(t) : t.roles.length === 1))).sort((a, b) => sort === 'size' ? b.roles.length - a.roles.length : a.name.localeCompare(b.name));
+  const createTeam = () => { open(empty()); setTab('settings'); };
   if (!draft)
     return (
       <section aria-label="Reusable teams" className="space-y-4">
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="wf-section-heading">
           <div className="flex-1">
-            <h2 className="text-lg font-semibold">Reusable teams</h2>
+            <h2>Your teams <span className="wf-badge">{teams.length}</span></h2>
             <p className="mt-1 text-sm text-muted">
-              Build a team around a lead manager, then add managers, specialists
-              and workers.
+              A focused team for every kind of work. Start with one agent and grow from there.
             </p>
           </div>
           <button
-            className="btn-primary"
+            className="wf-primary"
             disabled={loading}
-            onClick={() => {
-              open(empty());
-              setTab("settings");
-            }}
+            onClick={createTeam}
           >
             <Plus size={16} /> Create team
           </button>
-          <button className="btn-ghost" onClick={onAgents}>
-            Configure agents
-          </button>
+        </div>
+        <div className="wf-toolbar">
+          <label className="wf-search"><Search size={17} /><input aria-label="Search teams" placeholder="Search your teams…" value={search} onChange={e => setSearch(e.target.value)} /></label>
+          <div className="wf-segment" aria-label="Filter teams">{[['all','All teams'],['active','Working'],['solo','Solo']].map(([value,label]) => <button key={value} aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}</button>)}</div>
+          <select className="wf-filter" aria-label="Sort teams" value={sort} onChange={e => setSort(e.target.value)}><option value="name">Name A–Z</option><option value="size">Largest team</option></select>
+          <div className="wf-segment wf-view-toggle" aria-label="Team view"><button aria-label="Team card view" aria-pressed={view === 'cards'} title="Cards" onClick={() => setView('cards')}><LayoutGrid size={16} /></button><button aria-label="Team table view" aria-pressed={view === 'table'} title="Table" onClick={() => setView('table')}><List size={16} /></button></div>
         </div>
         {error && (
           <p role="alert" className="text-sm text-err">
@@ -281,35 +303,34 @@ export function ReusableTeams({
           <p className="text-muted">Loading teams…</p>
         ) : (
           !teams.length && (
-            <div className="team-empty">
+            <div className="wf-empty">
               <Network size={36} />
               <h3>Your first team starts with a lead</h3>
               <p>
                 Add agents from your library and connect them to the people they
                 report to.
               </p>
+              <button className="wf-primary" onClick={createTeam}><Plus size={16} />Build your first team</button>
             </div>
           )
         )}
-        <div className="grid gap-3 md:grid-cols-2">
-          {teams.map((t) => (
+        {teams.length > 0 && !shown.length && <div className="wf-empty"><Search size={28} /><h3>No teams found</h3><p>Try another search or show all teams.</p><button className="wf-secondary" onClick={() => { setSearch(''); setFilter('all') }}>Clear filters</button></div>}
+        {view === 'cards' ? <div className="wf-grid">
+          {shown.map((t) => (
             <article
               key={t.id}
-              className="rounded-xl border border-line bg-panel p-5"
+              className="wf-card"
             >
-              <Network className="mb-3 text-violet-400" size={24} />
+              <div className="wf-card-top"><span className="wf-tile-icon"><Network size={23} /></span><span className="wf-badge" data-tone={working(t) ? 'active' : undefined}>{working(t) ? <><Activity size={11} />Working</> : 'Idle'}</span></div>
               <h3 className="font-semibold">{t.name}</h3>
-              <p className="mt-1 text-sm text-muted">{t.description}</p>
-              <p className="my-3 text-xs text-muted">
-                {t.roles.length} agents ·{" "}
-                {t.roles.filter((r) => r.kind === "manager").length} managers
-              </p>
-              <button className="btn-ghost" onClick={() => open(t)}>
+              <p>{t.description || 'A team ready for its next assignment.'}</p>
+              <div className="wf-avatars">{t.roles.slice(0,5).map(r => <span key={r.name} title={workers.find(w => w.handle === r.worker)?.name || r.name}>{(workers.find(w => w.handle === r.worker)?.name || r.name).slice(0,2).toUpperCase()}</span>)}{t.roles.length > 5 && <span>+{t.roles.length - 5}</span>}</div>
+              <div className="wf-card-footer"><Users size={13} /><span className="wf-muted">{t.roles.length} {t.roles.length === 1 ? 'member' : 'members'}</span><button className="wf-link" onClick={() => open(t)}>
                 Open team <ArrowRight size={14} />
-              </button>
+              </button></div>
             </article>
           ))}
-        </div>
+        </div> : shown.length > 0 && <div className="wf-table-wrap"><table className="wf-table"><thead><tr><th>Team</th><th>Members</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr></thead><tbody>{shown.map(t => <tr key={t.id}><td><strong>{t.name}</strong><p>{t.description}</p></td><td>{t.roles.length}</td><td><span className="wf-badge" data-tone={working(t) ? 'active' : undefined}>{working(t) ? 'Working' : 'Idle'}</span></td><td><button className="wf-link" onClick={() => open(t)}>Open team <ArrowRight size={14} /></button></td></tr>)}</tbody></table></div>}
       </section>
     );
   const forbiddenParents = role
@@ -378,6 +399,41 @@ export function ReusableTeams({
           {error}
         </p>
       )}
+      <details className="team-info-panel">
+        <summary>Team details <span>{draft.name || 'New team'}</span></summary>
+        <fieldset disabled={busy} className="team-info-fields team-fields">
+                <label>
+                  Team name
+                  <input
+                    aria-label="Team name"
+                    className="input"
+                    value={draft.name}
+                    onChange={(e) => change({ ...draft, name: e.target.value })}
+                  />
+                </label>
+                <label>
+                  Team ID
+                  <input
+                    aria-label="Team ID"
+                    className="input"
+                    disabled={draft.revision > 0}
+                    value={draft.id}
+                    placeholder="development"
+                    onChange={(e) => change({ ...draft, id: e.target.value })}
+                  />
+                </label>
+                <label>
+                  Purpose
+                  <input
+                    className="input"
+                    value={draft.description}
+                    onChange={(e) =>
+                      change({ ...draft, description: e.target.value })
+                    }
+                  />
+                </label>
+        </fieldset>
+      </details>
       <div className="team-layout">
         <div className="team-canvas-wrap">
           <div className="team-canvas-label">
@@ -520,37 +576,8 @@ export function ReusableTeams({
                 disabled={busy}
                 className="team-detail-content team-fields"
               >
-                <h4>Team</h4>
-                <label>
-                  Team name
-                  <input
-                    aria-label="Team name"
-                    className="input"
-                    value={draft.name}
-                    onChange={(e) => change({ ...draft, name: e.target.value })}
-                  />
-                </label>
-                <label>
-                  Team ID
-                  <input
-                    aria-label="Team ID"
-                    className="input"
-                    disabled={draft.revision > 0}
-                    value={draft.id}
-                    placeholder="development"
-                    onChange={(e) => change({ ...draft, id: e.target.value })}
-                  />
-                </label>
-                <label>
-                  Purpose
-                  <input
-                    className="input"
-                    value={draft.description}
-                    onChange={(e) =>
-                      change({ ...draft, description: e.target.value })
-                    }
-                  />
-                </label>
+                <div className="team-member-save"><h4>Member settings</h4><button className="btn-primary" disabled={busy || !dirty} onClick={() => void save()}>{busy ? 'Saving...' : 'Save team changes'}</button></div>
+                <p className="text-xs text-muted">Role changes are saved with the team. Edit the agent profile below to change its model, skills, or instructions.</p>
                 <h4>Agent role</h4>
                 <label>
                   Role ID
@@ -594,6 +621,7 @@ export function ReusableTeams({
                     <option value="worker">Worker</option>
                   </select>
                 </label>
+                {(!role.reports_to || draft.roles.some(r => r.reports_to === role.name)) && <p className="text-xs text-muted">{!role.reports_to ? 'The team lead must remain a manager.' : 'Reassign this manager’s direct reports before changing their type.'}</p>}
                 <p className="text-xs text-muted">
                   Choose a configured workflow agent. Manager roles coordinate
                   through Dev; this does not start a separate manager session.
@@ -619,11 +647,12 @@ export function ReusableTeams({
                     ))}
                   </select>
                 </label>
-                {!workers.length && (
-                  <button className="btn-ghost" onClick={onAgents}>
-                    Configure your first agent
-                  </button>
-                )}
+                <button className="wf-secondary" onClick={() => {
+                  if (!onCreate) { onAgents(); return; }
+                  const roleName = role.name;
+                  onCreate(saved => { setDraft(current => current ? { ...current, roles: current.roles.map(r => r.name === roleName ? { ...r, worker: saved.handle } : r) } : current); setDirty(true); setError(''); });
+                }}><Plus size={14} />Create member from library</button>
+                {worker && onEdit && <button className="wf-link" onClick={() => onEdit(worker)}>Edit model, skills & instructions <ArrowRight size={13} /></button>}
                 <label>
                   Reports to
                   <select aria-label="Reports to"

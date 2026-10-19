@@ -1,0 +1,50 @@
+{
+  "transport": "Live loopback companion, paired browser at 390x844; not physical phone",
+  "dispatches": [
+    {
+      "message": "",
+      "node": 3,
+      "number": 33,
+      "repository": "d3velopm3nt/devdeck",
+      "status": "review",
+      "workflow": "issue-0ded5f2043696299-33"
+    }
+  ],
+  "workflows": [
+    {
+      "node": 3,
+      "id": "issue-0ded5f2043696299-33",
+      "steps": [
+        {
+          "id": "write-checklist",
+          "status": "review",
+          "run": "native_1a14452c7801",
+          "worker": "agent:assistant"
+        }
+      ]
+    },
+    {
+      "node": 3,
+      "id": "issue-smoke-test",
+      "steps": [
+        {
+          "id": "write-checklist",
+          "status": "pending",
+          "run": "",
+          "worker": "agent:assistant"
+        }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "ses_1a14452c78d2",
+      "agent_id": "assistant",
+      "status": "completed",
+      "summary": "Session ended with no summary.",
+      "files_touched": [
+        "docs/issue-intake-smoke-test.md"
+      ]
+    }
+  ]
+}

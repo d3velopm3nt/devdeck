@@ -2070,6 +2070,15 @@ export interface LibraryItem {
   added_at: string
   chars: number
 }
+export interface LibraryAgent {
+  id: string
+  name: string
+  instructions: string
+  skills: string[]
+  execution: 'model' | 'cli' | 'manager'
+  configuration: Record<string, unknown>
+}
+export const libraryAgents = () => invoke<LibraryAgent[]>('library_agents')
 /** Something a repository holds that the library could hold. */
 export interface LibraryCandidate {
   id: string
@@ -2406,12 +2415,15 @@ export const folderWorkflowCheckpoint = (node: number, step: string, expected: s
 export const folderWorkflowRoute = (node: number, source: string, expected: string, repository: string, number: number, title: string) =>
   invoke<{ id: string; duplicate: boolean; workflow: FolderWorkflow }>('folder_workflow_route', { node, source, expected, repository, number, title })
 
-export interface MonitoredSource { repository: string; items: import('./visibility').GithubIssue[]; fetched_at: string; last_attempt: string; error: string; warnings: string[]; truncated: boolean }
-export interface IssueDispatchBinding { repository: string; node: number }
+export interface RepositoryActivity { commits: { sha: string; title: string; updated_at: string; author: string }[]; pulls: { number: number; title: string; state: string; updated_at: string; head: string; reviewers: string[]; checks: string; check_error: string; draft: boolean }[]; fetched_at: string; last_attempt: string; error: string; warnings: string[] }
+export interface RepositoryBriefing { fingerprint: string; attempted: string; attempted_at: string; generated_at: string; text: string; error: string; unread: boolean }
+export interface MonitoredSource { repository: string; items: import('./visibility').GithubIssue[]; fetched_at: string; last_attempt: string; error: string; warnings: string[]; truncated: boolean; activity?: RepositoryActivity; briefing?: RepositoryBriefing }
+export interface IssueDispatchBinding { repository: string; node: number; issues?: number[] }
 export interface IssueDispatch { repository: string; number: number; node: number; workflow: string; status: string; message: string }
-export interface IssueMonitorView { raw: string; enabled: boolean; sources: MonitoredSource[]; warnings: string[]; bindings: IssueDispatchBinding[]; dispatches: IssueDispatch[] }
+export interface IssueMonitorView { raw: string; enabled: boolean; briefings?: boolean; dispatch_enabled?: boolean; sources: MonitoredSource[]; warnings: string[]; bindings: IssueDispatchBinding[]; dispatches: IssueDispatch[] }
 export const issueMonitorGet = () => invoke<IssueMonitorView>('issue_monitor_get')
-export const issueMonitorSave = (expected: string, enabled: boolean, bindings?: IssueDispatchBinding[]) => invoke<IssueMonitorView>('issue_monitor_save', { expected, enabled, bindings })
+export const issueMonitorSave = (expected: string, enabled: boolean, bindings?: IssueDispatchBinding[], briefings?: boolean, dispatchEnabled?: boolean) => invoke<IssueMonitorView>('issue_monitor_save', { expected, enabled, bindings, briefings, dispatchEnabled })
+export const repositoryBriefingRead = (repository: string, retry = false, expected = '') => invoke<IssueMonitorView>('repository_briefing_read', { repository, retry, expected })
 export const issueMonitorRetry = (repository: string, number: number) => invoke<IssueMonitorView>('issue_monitor_retry', { repository, number })
 export const issueMonitorRefresh = () => invoke<IssueMonitorView>('issue_monitor_refresh')
 
@@ -2424,3 +2436,27 @@ export const folderWorkflowParse = (raw: string) => invoke<FolderWorkflow['defin
 export const folderWorkflowTeamDraft = (raw: string, team: string, roles: Record<string, string>) => invoke<string>('folder_workflow_team_draft', { raw, team, roles })
 
 export const communityLibraryImport = (id: string) => invoke<LibraryItem>('community_library_import', { id })
+
+export const libraryManagerSave = (expected: LibraryAgent, name: string, instructions: string, goal: string) => invoke<void>('library_manager_save', { expected, name, instructions, goal })
+
+export interface TeamProposalMember { role: string; name: string; kind: 'manager' | 'specialist' | 'worker'; reports_to: string; instructions: string; worker: string }
+export interface TeamProposal { id: string; name: string; description: string; members: TeamProposalMember[] }
+export const teamBuilderCreate = (proposal: TeamProposal) => invoke<ReusableTeam>('team_builder_create', { proposal })
+
+// Bundled design packages and revision-checked, vault-backed project selection.
+export interface ProjectDesignSystem {
+  id: string
+  version: number
+  name: string
+  description: string
+  font: string
+  radius: number
+  spacing: number[]
+  modes: Record<string, Record<string, string>>
+  guidelines: string[]
+}
+export interface DesignAssignment { design_id: string | null; version: number; revision: number }
+export const designSystemsList = () => invoke<ProjectDesignSystem[]>('design_systems_list')
+export const designSystemAssignment = (nodeId: number) => invoke<DesignAssignment | null>('design_system_assignment', { nodeId })
+export const designSystemAssign = (nodeId: number, designId: string | null, expected: DesignAssignment | null) =>
+  invoke<DesignAssignment>('design_system_assign', { nodeId, designId, expected })

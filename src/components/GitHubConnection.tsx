@@ -21,7 +21,7 @@ export function GitHubConnection({ onConnected, showRefreshSettings = false }: {
   connectedRef.current = onConnected
   const refresh = useCallback(async () => {
     setError(''); setChecking(true)
-    try { const result = await ipc.githubStateRepos(); setLogin(result.signed_in ? result.login : ''); if (result.signed_in) connectedRef.current?.() }
+    try { const result = await ipc.githubStateRepos(); setLogin(result.signed_in ? result.login : ''); if (result.signed_in) { connectedRef.current?.(); window.dispatchEvent(new Event('devdeck:github-connected')) } }
     catch (e) { setError(String(e)) }
     finally { setChecking(false); setChecked(true) }
   }, [])

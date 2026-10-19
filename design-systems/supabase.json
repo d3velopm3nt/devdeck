@@ -1,0 +1,48 @@
+{
+  "id": "supabase-inspired",
+  "version": 1,
+  "name": "Supabase Inspired",
+  "description": "Neutral surfaces, subtle borders and emerald accents. An independent concept, not an official Supabase specification.",
+  "font": "system-ui, sans-serif",
+  "radius": 6,
+  "spacing": [
+    4,
+    8,
+    12,
+    16,
+    24,
+    32
+  ],
+  "modes": {
+    "dark": {
+      "background": "#121212",
+      "surface": "#191919",
+      "raised": "#232323",
+      "border": "#303030",
+      "text": "#ededed",
+      "muted": "#a1a1a1",
+      "brand": "#3ecf8e",
+      "onBrand": "#082b1b"
+    },
+    "light": {
+      "background": "#fafafa",
+      "surface": "#ffffff",
+      "raised": "#f2f2f2",
+      "border": "#dedede",
+      "text": "#202020",
+      "muted": "#626262",
+      "brand": "#3ecf8e",
+      "onBrand": "#082b1b"
+    }
+  },
+  "guidelines": [
+    "Use semantic CSS variables for colours; keep light and dark modes complete.",
+    "Use 14px body text, 24px section headings and 12px captions.",
+    "Use 4px spacing increments and 6px control radii.",
+    "Use brand fill for primary actions with onBrand text; use surface and border tokens for secondary controls.",
+    "Provide visible keyboard focus, associated input labels and explicit loading, empty and error states.",
+    "Check text contrast; use text or an accessible darker green for small text on light surfaces.",
+    "Use generic reusable buttons, forms, cards and tables. Do not copy DevDeck branding into the project.",
+    "Keep design choices independent of permissions and workflow instructions."
+  ]
+}

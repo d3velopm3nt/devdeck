@@ -1,0 +1,118 @@
+.repo-discovery { margin-bottom:20px; padding:16px 20px; }
+.repo-search { display:flex; align-items:center; border:1px solid var(--c-line2); border-radius:12px; background:var(--c-panel); padding:4px 6px 4px 10px; }
+.repo-search:focus-within { border-color:var(--c-accent); }
+.repo-search input { border:0; background:transparent; box-shadow:none; }
+.repo-search-submit { display:grid; place-items:center; width:32px; height:32px; border-radius:8px; color:var(--c-accent); }
+.repo-search-submit:hover { background:var(--c-hover); }
+.repo-inspect { display:flex; align-items:center; gap:6px; padding:5px 8px; font-size:11px; color:var(--c-accent); border-radius:6px; }
+.repo-inspect:hover { background:var(--c-hover); }
+.repo-workbench { display:grid; grid-template-columns:190px minmax(250px,1fr) 230px; margin-top:20px; border:1px solid var(--c-line); border-radius:10px; overflow:hidden; }
+.repo-files,.repo-assistant { padding:12px; background:var(--c-panel); min-width:0; }
+.repo-file-list { max-height:430px; overflow:auto; margin-top:10px; }
+.repo-file-list button { display:block; width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left; padding:6px; font-size:11px; color:var(--c-dim); border-radius:4px; }
+.repo-file-list button[aria-pressed=true] { background:var(--c-hover); color:var(--c-accent); }
+.repo-code { min-width:0; border-inline:1px solid var(--c-line); }
+.repo-code-title { padding:10px; font-size:11px; overflow-wrap:anywhere; border-bottom:1px solid var(--c-line); }
+.repo-code-title span { color:var(--c-muted); margin-left:8px; }
+.repo-assistant h3 { font-size:13px; font-weight:600; }
+.repo-assistant p { font-size:11px; color:var(--c-muted); margin:8px 0; }
+.repo-assistant textarea { width:100%; min-height:90px; background:var(--c-page); border:1px solid var(--c-line); border-radius:6px; padding:8px; font-size:12px; margin-bottom:8px; }
+.repo-answer { white-space:pre-wrap; font-size:12px; line-height:1.6; max-height:300px; overflow:auto; margin-top:12px; }
+@media(max-width:1050px) { .repo-workbench { grid-template-columns:160px minmax(0,1fr); } .repo-assistant { grid-column:1/-1; border-top:1px solid var(--c-line); } }
+@media(max-width:600px) { .repo-workbench { display:block; } .repo-file-list { max-height:140px; } }
+.workforce { position:relative; }
+#repository-page-host:not(:empty) { position:absolute; inset:0; z-index:25; background:var(--c-page); overflow:auto; }
+.repo-inspection-page { min-height:100%; padding:20px 24px; background:var(--c-page); }
+.repo-back { display:inline-flex; align-items:center; gap:8px; font-size:12px; color:var(--c-dim); padding:6px 0; margin-bottom:18px; }
+.repo-back:hover { color:var(--c-accent); }
+.repo-inspection-page .repo-workbench { min-height:calc(100vh - 290px); grid-template-columns:220px minmax(250px,1fr) 280px; }
+.repo-editor-host { height: max(430px, calc(100vh - 330px)); }
+.repo-inspection-page .repo-file-list { max-height:calc(100vh - 340px); }
+.repo-search-submit { flex:0 0 32px; overflow:hidden; }
+@media(max-width:1050px) { .repo-inspection-page .repo-workbench { grid-template-columns:180px minmax(0,1fr); } }
+@media(max-width:600px) { .repo-inspection-page { padding:14px; } .repo-inspection-page .repo-file-list { max-height:140px; } }
+.repo-page-header { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.repo-kicker { color:var(--c-muted); font-size:10px; letter-spacing:.12em; }
+.repo-page-header h1 { font-size:22px; font-weight:600; letter-spacing:-.025em; color:var(--c-ink); overflow-wrap:anywhere; }
+.repo-metadata { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 18px; }
+.repo-metadata span { font-size:11px; padding:4px 8px; background:var(--c-panel); border:1px solid var(--c-line); border-radius:5px; color:var(--c-dim); }
+.repo-page-tabs { display:flex; gap:24px; border-bottom:1px solid var(--c-line); }
+.repo-page-tabs button { padding:10px 0; font-size:12px; border-bottom:2px solid transparent; color:var(--c-dim); }
+.repo-page-tabs button[aria-pressed=true] { color:var(--c-accent); border-color:var(--c-accent); }
+.repo-inspection-page [hidden] { display:none!important; }
+.repo-code-actions { display:flex; align-items:center; gap:12px; margin-top:8px; }
+.repo-code-actions button { font-size:11px; color:var(--c-accent); }
+.repo-capabilities { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-top:18px; }
+.repo-capabilities button { display:flex; align-items:center; gap:12px; text-align:left; padding:18px; background:var(--c-panel); border:1px solid var(--c-line); border-radius:10px; }
+.repo-capabilities strong { font-size:22px; color:var(--c-accent); }
+.repo-capabilities span { font-size:12px; color:var(--c-dim); }
+/* Discovery uses the same theme and rows across every source. */
+.community-view .btn-primary { background:var(--c-accent); color:var(--c-page); }
+.community-view .btn-primary:hover { background:color-mix(in srgb,var(--c-accent) 85%,var(--c-ink)); }
+.wf-content:has(> .community-view) { padding:8px 20px 0; }
+.repo-discovery-hidden { padding:0; margin:0; }
+.repository-search-heading { padding:12px 0 20px; }
+.repository-search-heading h2 { font-size:24px; font-weight:600; letter-spacing:-.035em; color:var(--c-ink); margin:6px 0; }
+.repository-search-heading p { font-size:12px; color:var(--c-muted); }
+.repo-discovery:has(.repository-search-heading:not([hidden])) { padding:8px 0 16px; }
+.repository-results { margin-top:20px; border:1px solid var(--c-line); border-radius:10px; overflow:hidden; }
+.repository-row { display:flex; align-items:flex-start; gap:12px; padding:14px 16px; border-bottom:1px solid var(--c-line); background:var(--c-panel); }
+.repository-row:last-child { border-bottom:0; }
+.repository-row:hover { background:var(--c-hover); }
+.repository-row > img,.repository-avatar { width:34px; height:34px; border-radius:8px; border:1px solid var(--c-line); flex-shrink:0; }
+.repository-avatar { display:grid; place-items:center; background:var(--c-raise); color:var(--c-accent); }
+.repository-row-body { min-width:0; flex:1; }
+.repository-name { font-size:13px; font-weight:600; text-align:left; color:var(--c-ink); overflow-wrap:anywhere; }
+.repository-name:hover { color:var(--c-accent); }
+.repository-row-body p { font-size:12px; color:var(--c-dim); line-height:1.5; margin:4px 0 6px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.repository-meta { display:flex; align-items:center; flex-wrap:wrap; gap:10px; font-size:10px; color:var(--c-muted); }
+.repository-row-actions { display:flex; align-items:center; gap:6px; flex-shrink:0; }
+.community-view > div:first-child button { white-space:nowrap; }
+@media(max-width:600px) { .repository-row { padding:12px; gap:8px; } .repository-row-actions { flex-direction:column; } .repository-search-heading h2 { font-size:20px; } }
+.repository-search-heading { padding:22px 0 20px; max-width:700px; }
+.repository-search-heading h2 { font-size:30px; line-height:1.2; margin:10px 0; }
+.repo-discovery:has(.repository-search-heading:not([hidden])) { max-width:1120px; margin-inline:auto; }
+.repo-search { min-height:52px; padding-inline:14px 8px; border-radius:14px; background:linear-gradient(100deg,color-mix(in srgb,var(--c-accent) 5%,var(--c-panel)),var(--c-panel)); box-shadow:0 4px 20px #00000008; }
+.repo-search input { font-size:14px; }
+.repo-search-submit { width:36px; height:36px; flex-basis:36px; background:color-mix(in srgb,var(--c-accent) 12%,transparent); }
+.repo-topics { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:14px 0 24px; font-size:11px; }
+.repo-topics > span { color:var(--c-muted); margin-right:4px; }
+.repo-topics button,.repo-recent-items button { border:1px solid var(--c-line); border-radius:7px; padding:6px 10px; color:var(--c-dim); }
+.repo-topics button:hover,.repo-recent-items button:hover { color:var(--c-accent); border-color:var(--c-accent); background:var(--c-panel); }
+.repo-recents { border-top:1px solid var(--c-line); padding-top:16px; }
+.repo-recents-title { display:flex; align-items:center; justify-content:space-between; font-size:11px; color:var(--c-muted); }
+.repo-recents-title button { font-size:10px; }
+.repo-recents-title button:hover { color:var(--c-accent); }
+.repo-recent-items { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+.repo-recent-items button { display:flex; align-items:center; gap:8px; max-width:100%; font-size:12px; }
+.repo-recent-items span { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.repo-results-heading { display:flex; justify-content:space-between; margin-top:24px; font-size:11px; color:var(--c-muted); }
+.repo-results-heading strong { font-weight:500; color:var(--c-body); }
+@media(max-width:600px) { .repository-search-heading h2 { font-size:24px; } }
+.repo-overview-layout { display:grid; grid-template-columns:minmax(0,1fr) 260px; gap:24px; padding-top:24px; }
+.repo-use-cases h2,.repo-readme h2 { font-size:19px; font-weight:600; color:var(--c-ink); margin:5px 0; }
+.repo-use-cases p { font-size:12px; color:var(--c-muted); }
+.repo-use-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:18px 0 24px; }
+.repo-use-grid button { display:flex; flex-direction:column; gap:8px; text-align:left; padding:18px; border:1px solid var(--c-line); border-radius:12px; background:var(--c-panel); }
+.repo-use-grid button:hover { border-color:var(--c-accent); background:var(--c-hover); }
+.repo-use-grid strong { font-size:14px; font-weight:600; color:var(--c-ink); }
+.repo-use-grid span { font-size:12px; line-height:1.6; color:var(--c-muted); }
+.repo-use-grid em { font-style:normal; font-size:11px; color:var(--c-accent); margin-top:auto; padding-top:8px; }
+.repo-overview-aside section { padding:16px; border:1px solid var(--c-line); border-radius:10px; margin-bottom:12px; }
+.repo-overview-aside h3 { font-size:12px; font-weight:600; margin-bottom:10px; }
+.repo-overview-aside p { font-size:11px; line-height:1.6; color:var(--c-muted); margin-top:8px; }
+.repo-overview-aside button { display:block; font-size:12px; color:var(--c-accent); margin:10px 0; text-align:left; }
+.repo-readme { border:1px solid var(--c-line); border-radius:12px; padding:22px; font-size:13px; line-height:1.7; overflow-wrap:anywhere; }
+.repo-readme header { padding-bottom:16px; border-bottom:1px solid var(--c-line); margin-bottom:18px; }
+.repo-readme header span { color:var(--c-muted); font-size:11px; }
+.repo-readme p,.repo-readme ul,.repo-readme ol { margin-block:12px; }
+.repo-readme ul { padding-left:22px; list-style:disc; }
+.repo-readme ol { padding-left:22px; list-style:decimal; }
+.repo-readme pre { overflow:auto; background:var(--c-panel); padding:14px; border-radius:8px; }
+.repo-readme h1 { font-size:23px; font-weight:600; }
+.repo-readme h3 { font-size:16px; font-weight:600; }
+.repo-readme-link { color:var(--c-accent); text-align:left; text-decoration:underline; }
+@media(max-width:900px) { .repo-overview-layout { grid-template-columns:1fr; } .repo-overview-aside { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; } }
+@media(max-width:600px) { .repo-use-grid { grid-template-columns:1fr; } }
+.repo-project-identity { display:flex; align-items:center; gap:14px; min-width:0; }
+.repo-project-identity > img { width:56px; height:56px; flex-shrink:0; object-fit:cover; border-radius:12px; border:1px solid var(--c-line); }

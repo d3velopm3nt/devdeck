@@ -241,8 +241,7 @@ export function ProviderCards({ onChanged }: { onChanged?: () => void }) {
           <div className="overflow-hidden rounded-md border border-line bg-raise">
             {live.length === 0 && (
               <div className="px-3 py-3 text-[11.5px] leading-5 text-muted">
-                Nothing registered — which shouldn&rsquo;t happen, since Mock is always available.
-                That points at a failed read rather than an empty list.
+                No providers available. Connect a provider or refresh to retry loading connections.
               </div>
             )}
             {live.map(([id, label, health]) => (

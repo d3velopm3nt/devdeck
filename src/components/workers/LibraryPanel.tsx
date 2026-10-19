@@ -6,12 +6,17 @@
 // hooks, MCP configs and install scripts are not importable.
 
 import { useEffect, useState } from 'react'
+import { DesignSystemsPanel } from '../design-systems/DesignSystemsPanel'
 import * as ipc from '../../lib/ipc'
 import { Icon } from '../../lib/icons'
 import { CAPTURE_LIBRARY } from '../../lib/devCapture'
+import { AgentEditor } from '../aiw/AgentEditor'
+import { WorkerEditor } from './WorkerEditor'
+import { Bot, Sparkles, Search, LayoutGrid, List, Plus, Download, BookOpen, Pencil, Trash2 } from 'lucide-react'
+import '../agents/workforce.css'
 
 export function LibraryPanel({
-  items,
+  items: templates,
   reload,
   onConfigure,
 }: {
@@ -19,69 +24,86 @@ export function LibraryPanel({
   reload: () => void
   onConfigure?: (item: ipc.LibraryItem) => void
 }) {
-  const [libraryTab, setLibraryTab] = useState<'brief' | 'skill'>('brief')
+  const [agents, setAgents] = useState<ipc.LibraryAgent[]>([])
+  const [managerEditing, setManagerEditing] = useState<{ original: ipc.LibraryAgent; name: string; instructions: string; goal: string } | null>(null)
+  const [agentEditing, setAgentEditing] = useState<string | null>(null)
+  const [workerEditing, setWorkerEditing] = useState<ipc.Worker | null>(null)
+  const loadAgents = () => { void ipc.libraryAgents().then(setAgents).catch(e => setErr(String(e))) }
+  useEffect(loadAgents, [templates])
+  const items: ipc.LibraryItem[] = [...agents.map(agent => ({ id: agent.id, kind: 'brief', name: agent.name, what: agent.execution === 'manager' ? 'Vault manager · coordination' : agent.execution === 'model' ? 'Configured agent · model conversation' : 'Configured agent · CLI execution', repo: agent.execution === 'manager' ? 'vault' : 'personal', commit: '', licence: '', path: '', added_at: '', chars: agent.instructions.length })), ...templates]
+  const configured = (item: ipc.LibraryItem) => agents.find(agent => agent.id === item.id)
+  const [libraryTab, setLibraryTab] = useState<'brief' | 'skill' | 'design'>('brief')
   const [search, setSearch] = useState('')
+  const [view, setView] = useState<'cards' | 'table'>('cards')
+  const [origin, setOrigin] = useState('all')
+  const [sort, setSort] = useState('name')
   const [adding, setAdding] = useState(!!CAPTURE_LIBRARY)
   const [reading, setReading] = useState<{ item: ipc.LibraryItem; text: string } | null>(null)
   const [err, setErr] = useState('')
   const [custom, setCustom] = useState<{id:string; kind:string; name:string; what:string; body:string; expected:string|null} | null>(null)
   const [saving, setSaving] = useState(false)
+  const [removing, setRemoving] = useState<ipc.LibraryItem | null>(null)
 
-  const filtered = items.filter(i => `${i.name} ${i.what} ${i.id}`.toLowerCase().includes(search.toLowerCase()))
+  const filtered = items.filter(i => `${i.name} ${i.what} ${i.id}`.toLowerCase().includes(search.toLowerCase()) && (origin === 'all' || (origin === 'imported' ? !['personal', 'vault'].includes(i.repo) : i.repo === origin))).sort((a,b) => sort === 'name' ? (a.name || a.id).localeCompare(b.name || b.id) : a.repo.localeCompare(b.repo))
   const skills = filtered.filter((i) => i.kind === 'skill')
   const briefs = filtered.filter((i) => i.kind === 'brief')
 
   const read = async (it: ipc.LibraryItem) => {
     setErr('')
     try {
-      setReading({ item: it, text: await ipc.libraryRead(it.id, it.kind) })
+      setReading({ item: it, text: configured(it)?.instructions ?? await ipc.libraryRead(it.id, it.kind) })
     } catch (e) {
       setErr(String(e))
     }
   }
 
-  const row = (it: ipc.LibraryItem) => (
-    <div key={`${it.kind}-${it.id}`} className="group flex items-start gap-2 border-t border-line px-3 py-2 first:border-t-0">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-2">
-          <span className="truncate text-[11.5px] font-semibold text-ink">{it.name || it.id}</span>
-          <span className="shrink-0 text-[10px] text-faint">{it.repo}</span>
-        </div>
-        <div className="text-[10px] font-mono text-faint">{it.id}</div>
-        {it.what && <div className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-muted">{it.what}</div>}
-      </div>
-      {it.kind === 'brief' && onConfigure && <button className="btn-ghost text-[11px]" onClick={() => onConfigure(it)}>Configure agent</button>}
-      {it.repo === 'personal' && <button className="btn-ghost text-[11px]" onClick={() => { void ipc.libraryRead(it.id, it.kind).then(body => setCustom({id:it.id, kind:it.kind, name:it.name, what:it.what, body, expected:body})).catch(e=>setErr(String(e))) }}>Edit</button>}
-      <button className="btn-ghost shrink-0 text-[11px] opacity-0 group-hover:opacity-100" onClick={() => void read(it)}>
-        Read
-      </button>
-      <button
-        className="shrink-0 text-[11px] text-muted opacity-0 hover:text-err group-hover:opacity-100"
-        title="Remove from the library"
-        onClick={() => void ipc.libraryRemove(it.id, it.kind).then(reload)}
-      >
-        <Icon name="delete" size={12} />
-      </button>
-    </div>
-  )
-
+  const edit = (it: ipc.LibraryItem) => {
+    const agent = configured(it)
+    if (agent?.execution === 'manager') { setManagerEditing({ original: agent, name: agent.name, instructions: agent.instructions, goal: String(agent.configuration.goal ?? '') }); return }
+    if (agent?.execution === 'model') { setAgentEditing(String(agent.configuration.id)); return }
+    if (agent?.execution === 'cli') {
+      void ipc.workersList().then(workers => { const worker = workers.find(w => w.handle === agent.configuration.handle); if (worker) setWorkerEditing(worker); else setErr('Agent could not be loaded.') }).catch(e => setErr(String(e)))
+      return
+    }
+    void ipc.libraryRead(it.id, it.kind).then(body => setCustom({id:it.id,kind:it.kind,name:it.name,what:it.what,body,expected:body})).catch(e => setErr(String(e)))
+  }
+  const remove = async (it: ipc.LibraryItem) => {
+    try { await ipc.libraryRemove(it.id,it.kind); setRemoving(null); reload() } catch(e) { setErr(String(e)) }
+  }
+  const actions = (it: ipc.LibraryItem) => <>
+    <button className="wf-icon-button" title="Read instructions" aria-label={'Read ' + (it.name || it.id)} onClick={() => void read(it)}><BookOpen size={15} /></button>
+    {(configured(it) || it.repo === 'personal') && <button className="wf-icon-button" title="Edit definition" aria-label={'Edit ' + (it.name || it.id)} onClick={() => edit(it)}><Pencil size={15} /></button>}
+    {!configured(it) && <button className="wf-icon-button" title="Remove from library" aria-label={'Remove ' + (it.name || it.id)} onClick={() => setRemoving(it)}><Trash2 size={15} /></button>}
+    {it.kind === 'brief' && !configured(it) && onConfigure && <button className="wf-link" onClick={() => onConfigure(it)}>Configure agent</button>}
+  </>
+  const visible = libraryTab === 'brief' ? briefs : skills
   return (
     <div className="flex min-h-0 flex-col gap-3">
-      <div className="flex items-center gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">The library</span>
-        <span className="text-[10.5px] text-faint">
-          {skills.length} skill{skills.length === 1 ? '' : 's'} · {briefs.length} brief{briefs.length === 1 ? '' : 's'}
-        </span>
-        <span className="flex-1" />
-        <button className="btn-ghost text-[11px]" disabled={saving} onClick={() => setCustom({id:'',kind:libraryTab,name:'',what:'',body:'',expected:null})}>Create custom</button>
-        <button className="btn-ghost text-[11px]" onClick={() => setAdding(true)}>
-          <Icon name="add" size={12} /> Add from GitHub
-        </button>
+      {managerEditing && <div className="wf-overlay"><section className="wf-picker" role="dialog" aria-modal="true" aria-label="Edit vault manager">
+        <h2>Vault manager</h2><p className="wf-muted">Saved with the current vault. Existing responsibilities, schedule, permissions, and worker assignments are preserved.</p>
+        <label>Name<input aria-label="Manager name" className="input w-full" value={managerEditing.name} onChange={e => setManagerEditing({ ...managerEditing, name: e.target.value })} /></label>
+        <label>Goal<textarea aria-label="Manager goal" className="input w-full" value={managerEditing.goal} onChange={e => setManagerEditing({ ...managerEditing, goal: e.target.value })} /></label>
+        <label>Instructions<textarea aria-label="Manager instructions" rows={10} className="input w-full" value={managerEditing.instructions} onChange={e => setManagerEditing({ ...managerEditing, instructions: e.target.value })} /></label>
+        {err && <p role="alert" className="text-err">{err}</p>}
+        <div className="wf-actions"><button className="wf-primary" disabled={saving || !managerEditing.name.trim()} onClick={() => { setSaving(true); setErr(''); void ipc.libraryManagerSave(managerEditing.original, managerEditing.name, managerEditing.instructions, managerEditing.goal).then(() => { setManagerEditing(null); loadAgents(); reload() }).catch(e => setErr(String(e))).finally(() => setSaving(false)) }}>Save manager</button><button className="wf-secondary" disabled={saving} onClick={() => { setManagerEditing(null); setErr('') }}>Cancel</button></div>
+      </section></div>}
+      {agentEditing && <div className="wf-overlay"><section className="wf-picker"><AgentEditor id={agentEditing} onClose={() => { setAgentEditing(null); loadAgents(); reload() }} /></section></div>}
+      {workerEditing && <WorkerEditor worker={workerEditing} library={templates} onClose={() => setWorkerEditing(null)} onSaved={() => { setWorkerEditing(null); loadAgents(); reload() }} />}
+      <div className="wf-section-heading">
+        <div><h2>{libraryTab === 'design' ? 'Design system library' : <>Your library <span className="wf-badge">{items.length}</span></>}</h2><p>{libraryTab === 'design' ? 'Reusable visual foundations for your projects.' : 'The personalities and capabilities behind your teams.'}</p></div>
+        {libraryTab !== 'design' && <div className="wf-actions"><button className="wf-secondary" onClick={() => setAdding(true)}><Download size={15} />Import</button><button className="wf-primary" disabled={saving} onClick={() => setCustom({id:'',kind:libraryTab,name:'',what:'',body:'',expected:null})}><Plus size={16} />Create {libraryTab === 'brief' ? 'template' : 'skill'}</button></div>}
       </div>
-
-      <div className="flex flex-wrap items-center gap-3"><nav aria-label="Library categories" className="flex gap-2">{(['brief', 'skill'] as const).map(t => <button key={t} aria-pressed={libraryTab === t} className={libraryTab === t ? 'btn-primary' : 'btn-ghost'} onClick={() => setLibraryTab(t)}>{t === 'brief' ? 'Agents' : 'Skills'}</button>)}</nav><input className="input ml-auto" aria-label="Search library" placeholder="Search library…" value={search} onChange={e => setSearch(e.target.value)}/></div>
-      <p className="text-xs text-muted">Reusable text definitions. Import from GitHub or write your own. Only explicitly selected skills and tools reach an agent; importing or saving starts nothing.</p>
-      {!onConfigure && <p className="text-xs text-muted">After importing or creating an agent template, open Agents → Library → Configure agent to choose its skills, runtime and permissions.</p>}
+      <div className="wf-toolbar">
+        <nav aria-label="Library categories" className="wf-segment"><button aria-pressed={libraryTab === 'brief'} onClick={() => setLibraryTab('brief')}><Bot size={15} />Agents<span>{items.filter(i => i.kind === 'brief').length}</span></button><button aria-pressed={libraryTab === 'skill'} onClick={() => setLibraryTab('skill')}><Sparkles size={15} />Skills<span>{items.filter(i => i.kind === 'skill').length}</span></button><button aria-pressed={libraryTab === 'design'} onClick={() => setLibraryTab('design')}>Design systems</button></nav>
+        {libraryTab !== 'design' && <><label className="wf-search"><Search size={16} /><input aria-label="Search library" placeholder="Search your library…" value={search} onChange={e => setSearch(e.target.value)} /></label>
+        <select className="wf-filter" aria-label="Filter library source" value={origin} onChange={e => setOrigin(e.target.value)}><option value="all">All sources</option><option value="personal">Personal</option><option value="vault">Current vault</option><option value="imported">Imported</option></select>
+        <select className="wf-filter" aria-label="Sort library" value={sort} onChange={e => setSort(e.target.value)}><option value="name">Name A–Z</option><option value="source">Source</option></select>
+        <div className="wf-segment wf-view-toggle" aria-label="Library view"><button aria-label="Library card view" title="Cards" aria-pressed={view === 'cards'} onClick={() => setView('cards')}><LayoutGrid size={16} /></button><button aria-label="Library table view" title="Table" aria-pressed={view === 'table'} onClick={() => setView('table')}><List size={16} /></button></div>
+        </>}
+      </div>
+      {libraryTab === 'design' ? <DesignSystemsPanel /> : <>
+      <p className="wf-muted">{libraryTab === 'brief' ? 'Your saved agents and reusable templates. Editing a configured agent updates it everywhere it is used; roles and reporting stay with each team.' : 'Reusable instructions that give your team members specific capabilities.'}</p>
+      {removing && <div role="alert" className="wf-actions rounded-xl border border-line bg-panel p-4"><span className="wf-muted">Remove {removing.name || removing.id} from your library?</span><button className="wf-secondary" onClick={() => void remove(removing)}>Remove definition</button><button className="wf-secondary" onClick={() => setRemoving(null)}>Keep definition</button></div>}
       {custom && <section aria-label="Custom library definition" className="space-y-3 rounded-xl border border-line bg-panel p-4">
         <label className="block text-sm">Definition type<select aria-label="Definition type" disabled={custom.expected !== null} className="input ml-2" value={custom.kind} onChange={e=>setCustom({...custom,kind:e.target.value})}><option value="skill">Skill</option><option value="brief">Agent template</option></select></label>
         <p className="text-xs text-muted">Use lowercase letters, numbers, hyphens or underscores for the ID. Existing IDs are never silently replaced.</p>
@@ -93,39 +115,9 @@ export function LibraryPanel({
       </section>}
       {err && <div className="rounded border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11.5px] text-err">{err}</div>}
 
-      {items.length === 0 ? (
-        <div className="rounded-[10px] border border-dashed border-line2 px-4 py-6 text-center">
-          <div className="text-[12.5px] text-ink">Nothing in the library yet</div>
-          <p className="mx-auto mt-1 max-w-[380px] text-[11.5px] leading-relaxed text-muted">
-            A worker with no skills is Claude Code with a job description. Add a few, and every worker you lend them to
-            gets better at once.
-          </p>
-          <button className="btn-primary mt-3 text-[11.5px]" onClick={() => setAdding(true)}>
-            <Icon name="add" size={12} /> Add from GitHub
-          </button>
-        </div>
-      ) : (
-        <div className="flex min-h-0 flex-col gap-3 overflow-auto pr-1">
-          {libraryTab === 'skill' && skills.length > 0 && (
-            <div className="overflow-hidden rounded-[10px] border border-line bg-panel">
-              <div className="border-b border-line bg-raise px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
-                Skills
-              </div>
-              {skills.map(row)}
-            </div>
-          )}
-          {libraryTab === 'brief' && briefs.length > 0 && (
-            <div className="overflow-hidden rounded-[10px] border border-line bg-panel">
-              <div className="border-b border-line bg-raise px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
-                Agent templates
-              </div>
-              {briefs.map(row)}
-            </div>
-          )}
-        </div>
-      )}
-
-      {items.length > 0 && (libraryTab === 'brief' ? briefs : skills).length === 0 && <p className="rounded-lg border border-dashed border-line p-6 text-center text-sm text-muted">{search ? 'No matching definitions.' : `No ${libraryTab === 'brief' ? 'agents' : 'skills'} yet. Create your own or import from GitHub or Community.`}</p>}
+      {!visible.length ? <div className="wf-empty"><span className="wf-tile-icon">{libraryTab === 'brief' ? <Bot size={24} /> : <Sparkles size={24} />}</span><h3>{search || origin !== 'all' ? 'No matches found' : libraryTab === 'brief' ? 'Give your next agent a head start' : 'Build your team’s toolkit'}</h3><p>{search || origin !== 'all' ? 'Try a different search or source filter.' : 'Create a reusable definition or import one from GitHub. It will be ready when you build your next team.'}</p>{(search || origin !== 'all') ? <button className="wf-secondary" onClick={() => { setSearch(''); setOrigin('all') }}>Clear filters</button> : <button className="wf-secondary" onClick={() => setAdding(true)}><Download size={15} />Explore imports</button>}</div>
+      : view === 'cards' ? <div className="wf-grid">{visible.map(it => <article key={it.kind + it.id} className="wf-card"><div className="wf-card-top"><span className="wf-tile-icon">{it.kind === 'brief' ? <Bot size={23} /> : <Sparkles size={23} />}</span><span className="wf-badge">{configured(it)?.execution === 'manager' ? 'Vault agent' : configured(it) ? 'Personal agent' : it.kind === 'brief' ? 'Agent template' : it.repo === 'personal' ? 'Created by you' : 'Imported'}</span></div><h3>{it.name || it.id}</h3><p>{it.what || 'Ready to customize for your team.'}</p><div className="wf-card-footer">{actions(it)}</div></article>)}</div>
+      : <div className="wf-table-wrap"><table className="wf-table"><thead><tr><th>Name</th><th>Source</th><th>Actions</th></tr></thead><tbody>{visible.map(it => <tr key={it.kind + it.id}><td><strong>{it.name || it.id}</strong><p>{it.what}</p></td><td><span className="wf-badge">{it.repo === 'personal' ? 'Personal' : it.repo === 'vault' ? 'Current vault' : it.repo}</span></td><td><div className="wf-actions">{actions(it)}</div></td></tr>)}</tbody></table></div>}
       {adding && (
         <AddFromGitHub
           onClose={() => setAdding(false)}
@@ -157,6 +149,7 @@ export function LibraryPanel({
           </div>
         </div>
       )}
+      </>}
     </div>
   )
 }
@@ -180,8 +173,8 @@ function kitWords(k: ipc.LibraryKit) {
   }
 }
 
-function AddFromGitHub({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
-  const [repo, setRepo] = useState(CAPTURE_LIBRARY)
+export function AddFromGitHub({ onClose, onAdded, initialRepo = '' }: { onClose: () => void; onAdded: () => void; initialRepo?: string }) {
+  const [repo, setRepo] = useState(initialRepo || CAPTURE_LIBRARY)
   const [src, setSrc] = useState<ipc.LibrarySource | null>(null)
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState<'' | 'look' | 'install'>('')
@@ -250,7 +243,7 @@ function AddFromGitHub({ onClose, onAdded }: { onClose: () => void; onAdded: () 
 
   // Screenshot harness: read the repository without a mouse.
   useEffect(() => {
-    if (CAPTURE_LIBRARY) void look()
+    if (initialRepo || CAPTURE_LIBRARY) void look()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -315,9 +308,9 @@ function AddFromGitHub({ onClose, onAdded }: { onClose: () => void; onAdded: () 
         onClick={(e) => e.stopPropagation()}
       >
         <div className="border-b border-line px-5 py-4">
-          <div className="text-[15px] font-semibold text-ink">Add from GitHub</div>
+          <div className="text-[15px] font-semibold text-ink">{initialRepo ? 'Inspect repository' : 'Add from GitHub'}</div>
           <p className="mt-1 max-w-[600px] text-[12px] leading-relaxed text-muted">
-            Open-source instructions your workers can use. Paste a repository and DevDeck reads what it holds.
+            Find reusable skills and agent definitions. Inspection reads the repository without installing or running its code.
           </p>
           <div className="mt-3 flex items-center gap-2">
             <input

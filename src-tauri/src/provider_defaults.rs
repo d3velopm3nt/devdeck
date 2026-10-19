@@ -31,7 +31,7 @@ pub fn aiw_default_provider_set(
     provider: String,
     model: String,
 ) -> Result<(), String> {
-    if provider == "mock" || model.trim().is_empty() {
+    if provider.trim().is_empty() || provider == "mock" || model.trim().is_empty() {
         return Err("Choose and verify a real assistant provider and model.".into());
     }
     ws.set_agent_provider(ASSISTANT_ID, &provider, &model)?;
@@ -39,7 +39,9 @@ pub fn aiw_default_provider_set(
     let store = convs.store();
     for mut doc in store.agents() {
         // Upgrade only previously unconfigured agents. Explicit overrides stay intact.
-        if doc.meta.id != ASSISTANT_ID && doc.meta.provider == "mock" {
+        if doc.meta.id != ASSISTANT_ID
+            && (doc.meta.provider == "mock" || doc.meta.provider.is_empty())
+        {
             doc.meta.provider = "default".into();
             doc.meta.model.clear();
             store.save_agent(&doc)?;

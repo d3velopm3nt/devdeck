@@ -2449,11 +2449,19 @@ impl Default for ProviderRegistry {
 }
 
 impl ProviderRegistry {
-    /// Mock is always present — that is what makes the product work with no
-    /// key at all.
+    /// Scripted providers exist only in tests. Production starts unconfigured.
     pub fn new() -> Self {
         Self {
-            providers: vec![Arc::new(MockProvider)],
+            providers: {
+                #[cfg(test)]
+                {
+                    vec![Arc::new(MockProvider)]
+                }
+                #[cfg(not(test))]
+                {
+                    Vec::new()
+                }
+            },
             openai: Vec::new(),
             anthropic: Vec::new(),
         }

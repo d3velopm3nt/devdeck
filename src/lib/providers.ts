@@ -30,7 +30,7 @@ export function useProviders(reload?: unknown): ProviderOption[] {
     void aiw
       .providers()
       .then((ps) => {
-        if (alive && ps.length > 0) setList(ps.map(([id, name]) => [id, name]))
+        if (alive) setList(ps.filter(([id]) => id !== 'mock').map(([id, name]) => [id, name]))
       })
       // The fallback above is never empty, so a failed lookup still leaves an
       // agent somewhere to be pointed at rather than an empty dropdown.
@@ -46,6 +46,6 @@ export function useProviders(reload?: unknown): ProviderOption[] {
 /// keeps the dropdown honest about what the agent actually says, instead of
 /// silently showing the first option as though that were the truth.
 export function withCurrent(list: ProviderOption[], current: string): ProviderOption[] {
-  if (!current || list.some(([id]) => id === current)) return list
+  if (!current || current === 'mock' || list.some(([id]) => id === current)) return list
   return [...list, [current, `${current} — no longer configured`]]
 }

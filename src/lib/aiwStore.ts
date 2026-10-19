@@ -393,6 +393,11 @@ export const useAiw = create<AiwState>((set, get) => ({
     const conv = get().conversation
     if (!conv || !text.trim() || get().sending) return
 
+    const assistant = get().agents.find(agent => agent.id === 'assistant')
+    if (!assistant?.provider || assistant.provider === 'mock') {
+      set({ chatError: 'Set up an agent in Settings → Assistant before chatting.' })
+      return
+    }
     // Show what was said before the round-trip. The reply can take a while —
     // several provider turns, possibly an approval prompt — and a message that
     // vanishes until then reads as a dropped one.

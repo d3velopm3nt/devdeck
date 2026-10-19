@@ -14,6 +14,8 @@ static CONFIG: Mutex<()> = Mutex::new(());
 pub struct View {
     pub raw: String,
     pub enabled: bool,
+    pub briefings: bool,
+    pub dispatch_enabled: bool,
     pub sources: Vec<Source>,
     pub warnings: Vec<String>,
     pub bindings: Vec<Binding>,
@@ -85,6 +87,8 @@ pub fn view(db: &Db) -> Result<View, String> {
     Ok(View {
         raw,
         enabled: cfg.enabled,
+        briefings: cfg.briefings,
+        dispatch_enabled: cfg.dispatch_enabled,
         sources,
         warnings,
         bindings: cfg.bindings,
@@ -95,11 +99,14 @@ fn poll(app: &tauri::AppHandle, db: &Db, force: bool) -> Result<(), String> {
     let Ok(_guard) = POLL.try_lock() else {
         return Err("Issue refresh already running.".into());
     };
+    let root = crate::visibility::root(db)?;
     let snapshot = view(db)?;
     if !force && !snapshot.enabled {
         return Ok(());
     }
     for mut s in snapshot.sources {
+        if crate::visibility::root(db)? != root { return Err("Vault changed during refresh".into()); }
+        let saved_path = cache_path(db, &s.repository)?;
         if !force && !config(db)?.1.enabled {
             break;
         }
@@ -119,18 +126,41 @@ fn poll(app: &tauri::AppHandle, db: &Db, force: bool) -> Result<(), String> {
                 s.error = e;
             } // Keep last successfully read issues.
         }
+        let activity_due = chrono::DateTime::parse_from_rfc3339(&s.activity.last_attempt)
+            .map(|at| chrono::Utc::now().timestamp() - at.timestamp() >= 300).unwrap_or(true);
+        if force || activity_due { crate::repository_monitor::refresh(&s.repository, &mut s.activity); }
+        if crate::visibility::root(db)? != root { return Err("Vault changed during refresh".into()); }
         write(
-            &cache_path(db, &s.repository)?,
+            &saved_path,
             &serde_json::to_string_pretty(&s).map_err(|e| e.to_string())?,
         )?;
-        if s.error.is_empty() && config(db)?.1.enabled {
+        if config(db)?.1.briefings && (force || config(db)?.1.enabled) && crate::repository_monitor::should_assess(&s, false) {
+            s.briefing.attempted = crate::repository_monitor::fingerprint(&s);
+            s.briefing.attempted_at = chrono::Utc::now().to_rfc3339();
+            s.briefing.error = "Briefing in progress; if interrupted, refresh with Retry briefing.".into();
+            write(&saved_path, &serde_json::to_string_pretty(&s).map_err(|e|e.to_string())?)?;
+            match crate::repository_monitor::assess(app, &s) {
+                Ok(text) => {
+                    s.briefing.text = text;
+                    s.briefing.generated_at = chrono::Utc::now().to_rfc3339();
+                    s.briefing.fingerprint = s.briefing.attempted.clone();
+                    s.briefing.error.clear();
+                    s.briefing.unread = true;
+                }
+                Err(error) => s.briefing.error = error,
+            }
+            // Save only to the vault captured before the network/model request.
+            write(&saved_path, &serde_json::to_string_pretty(&s).map_err(|e|e.to_string())?)?;
+        }
+        if crate::visibility::root(db)? != root { return Err("Vault changed during refresh".into()); }
+        if s.error.is_empty() && config(db)?.1.enabled && config(db)?.1.dispatch_enabled {
             dispatch_source(app, db, &s)?;
         }
         crate::aiw::events::say(
             app,
             crate::aiw::events::EventType::FileChanged,
             Default::default(),
-            serde_json::json!({"source":"issue_monitor","repository":s.repository,"summary":"Issue intake refreshed","ok":s.error.is_empty()}),
+            serde_json::json!({"source":"issue_monitor","repository":s.repository,"summary":"Repository activity refreshed","ok":s.error.is_empty() && s.activity.error.is_empty()}),
         );
     }
     Ok(())
@@ -145,16 +175,24 @@ pub fn issue_monitor_save(
     expected: String,
     enabled: bool,
     bindings: Option<Vec<Binding>>,
+    briefings: Option<bool>,
+    dispatch_enabled: Option<bool>,
 ) -> Result<View, String> {
     let _guard = CONFIG.lock().map_err(|e| e.to_string())?;
     if config(&db)?.0 != expected {
         return Err("Issue monitor settings changed. Reload before saving.".into());
     }
-    let previous = config(&db)?.1.bindings;
+    let previous_cfg = config(&db)?.1;
+    let ai_briefings = briefings.unwrap_or(previous_cfg.briefings);
+    let dispatch_enabled = dispatch_enabled.unwrap_or(previous_cfg.dispatch_enabled);
+    let previous = previous_cfg.bindings;
     let bindings = bindings.unwrap_or_else(|| previous.clone());
     let connected = crate::visibility::connected_products(&db)?;
     let mut seen = std::collections::HashSet::new();
     for binding in &bindings {
+        if binding.issues.iter().any(|n| *n == 0) || binding.issues.len() > 100 {
+            return Err("Choose up to 100 positive issue numbers".into());
+        }
         // Retained assignments must never prevent pausing when a folder/repo
         // was removed. Validate only newly assigned targets.
         if previous
@@ -175,8 +213,31 @@ pub fn issue_monitor_save(
     }
     write(
         &crate::visibility::root(&db)?.join(".devdeck/issue-monitor.json"),
-        &serde_json::to_string_pretty(&Config { enabled, bindings }).map_err(|e| e.to_string())?,
+        &serde_json::to_string_pretty(&Config { enabled, bindings, briefings: ai_briefings, dispatch_enabled }).map_err(|e| e.to_string())?,
     )?;
+    view(&db)
+}
+/// Read acknowledgement or explicit retry never starts workflow dispatch.
+#[tauri::command(async)]
+pub fn repository_briefing_read(app: tauri::AppHandle, db: tauri::State<Db>, repository: String, retry: bool, expected: String) -> Result<View, String> {
+    let _guard = POLL.try_lock().map_err(|_| "Repository refresh running; try again shortly")?;
+    if !crate::visibility::connected_products(&db)?.iter().any(|p| p.repository == repository) { return Err("Repository is no longer connected".into()); }
+    let path = cache_path(&db, &repository)?;
+    let mut s = source(&db, &repository)?;
+    if s.briefing.generated_at != expected { return Err("A newer briefing arrived. Read it before marking it read or retrying.".into()); }
+    if retry {
+        if !config(&db)?.1.briefings { return Err("Enable Dev briefings first".into()); }
+        if !crate::repository_monitor::should_assess(&s, true) { return Err("Refresh repository activity successfully before retrying".into()); }
+        s.briefing.attempted = crate::repository_monitor::fingerprint(&s);
+        s.briefing.attempted_at = chrono::Utc::now().to_rfc3339();
+        s.briefing.error = "Briefing in progress; retry if interrupted.".into();
+        write(&path,&serde_json::to_string_pretty(&s).map_err(|e|e.to_string())?)?;
+        match crate::repository_monitor::assess(&app,&s) {
+            Ok(text) => { s.briefing.text=text; s.briefing.generated_at=chrono::Utc::now().to_rfc3339(); s.briefing.fingerprint=s.briefing.attempted.clone(); s.briefing.error.clear(); s.briefing.unread=true; }
+            Err(error) => s.briefing.error=error,
+        }
+    } else { s.briefing.unread=false; }
+    write(&path,&serde_json::to_string_pretty(&s).map_err(|e|e.to_string())?)?;
     view(&db)
 }
 #[tauri::command(async)]
@@ -208,15 +269,15 @@ fn save_dispatches(db: &Db, rows: &[Dispatch]) -> Result<(), String> {
         &serde_json::to_string_pretty(rows).map_err(|e| e.to_string())?,
     )
 }
-pub fn dispatch_allowed(app: &tauri::AppHandle, node: i64, repository: &str) -> Result<(), String> {
+pub fn dispatch_allowed(app: &tauri::AppHandle, node: i64, repository: &str, number: u64) -> Result<(), String> {
     use crate::aiw::{assistant::ASSISTANT_ID, state::Workspace, tools::Permission};
     use std::sync::Arc;
     let cfg = config(&app.state::<Db>())?.1;
-    if !cfg.enabled
+    if !cfg.enabled || !cfg.dispatch_enabled
         || !cfg
             .bindings
             .iter()
-            .any(|b| b.node == node && b.repository == repository)
+            .any(|b| b.node == node && b.repository == repository && b.includes(number))
     {
         return Err("Automatic dispatch is paused or this folder is no longer assigned".into());
     }
@@ -238,6 +299,7 @@ fn dispatch_source(app: &tauri::AppHandle, db: &Db, source: &Source) -> Result<(
     let mut rows = dispatches(db)?;
     for issue in source.items.iter().filter(|i| dispatchable(i)) {
         let number = issue["number"].as_u64().ok_or("Invalid issue number")?;
+        if !binding.includes(number) { continue; }
         let index = rows
             .iter()
             .position(|d| d.repository == source.repository && d.number == number)
@@ -259,7 +321,7 @@ fn dispatch_source(app: &tauri::AppHandle, db: &Db, source: &Source) -> Result<(
         if rows[index].status == "done" {
             continue;
         }
-        if let Err(error) = dispatch_allowed(app, binding.node, &source.repository) {
+        if let Err(error) = dispatch_allowed(app, binding.node, &source.repository, number) {
             rows[index].message = error;
             save_dispatches(db, &rows)?;
             continue;
@@ -280,7 +342,7 @@ fn dispatch_source(app: &tauri::AppHandle, db: &Db, source: &Source) -> Result<(
             save_dispatches(db, &rows)?; // durable claim before inference
             let result = (|| -> Result<String, String> {
                 let selected = crate::folder_workflows::select_for_issue(app, binding.node, issue)?;
-                dispatch_allowed(app, binding.node, &source.repository)?;
+                dispatch_allowed(app, binding.node, &source.repository, number)?;
                 let template = crate::folder_workflows::folder_workflow_get(
                     app.clone(),
                     app.state::<Db>(),
@@ -320,6 +382,7 @@ fn dispatch_source(app: &tauri::AppHandle, db: &Db, source: &Source) -> Result<(
             binding.node,
             &rows[index].workflow,
             &source.repository,
+            number,
         ) {
             Ok(status) => {
                 rows[index].status = status;

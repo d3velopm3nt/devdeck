@@ -5,8 +5,23 @@ const {chromium}=await import(process.env.PLAYWRIGHT_MODULE||'playwright');
 const browser=await chromium.launch({headless:true,args:['--no-sandbox'],...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{})});
 const context=await browser.newContext({viewport:{width:1280,height:900}});
 await context.addInitScript(()=>{
-  window.SpeechRecognition=class{constructor(){window.capture=this}start(){this.onstart?.()}stop(){this.onend?.()}abort(){this.onend?.()}};
-  window.Worker=class{postMessage(data){if(data.type==='download')setTimeout(()=>this.onmessage({data:{type:'ready'}}),20);if(data.type==='speak'){window.spokenText=data.text;const samples=new Float32Array(24000).fill(.1);setTimeout(()=>this.onmessage({data:{type:'audio',id:data.id,samples,rate:24000}}),100);setTimeout(()=>this.onmessage({data:{type:'complete',id:data.id}}),150)}}terminate(){}};
+  navigator.mediaDevices.getUserMedia=async()=>{
+    if(window.denyMic)throw new DOMException('Denied','NotAllowedError');
+    const context=new AudioContext();await context.resume();const oscillator=context.createOscillator();const output=context.createMediaStreamDestination();oscillator.connect(output);oscillator.start();return output.stream;
+  };
+  window.Worker=class{
+    constructor(url){this.url=url}
+    postMessage(data){
+      if(data.type==='load'||data.type==='download'){
+        const name=data.type==='load'?'devdeck-local-input-v1':'devdeck-local-voice-v1';
+        const request=indexedDB.open(name,1);request.onupgradeneeded=()=>request.result.createObjectStore('files');
+        request.onsuccess=()=>{const db=request.result,tx=db.transaction('files','readwrite');tx.objectStore('files').put(true,'ready');tx.oncomplete=()=>{db.close();this.onmessage?.({data:{type:'ready',id:data.id}})}};
+      }
+      if(data.type==='transcribe')setTimeout(()=>this.onmessage?.({data:{type:'text',id:data.id,text:'Desktop spoken message'}}),20);
+      if(data.type==='speak'){window.spokenText=data.text;const samples=new Float32Array(24000).fill(.1);setTimeout(()=>this.onmessage?.({data:{type:'audio',id:data.id,samples,rate:24000}}),100);setTimeout(()=>this.onmessage?.({data:{type:'complete',id:data.id}}),150)}
+    }
+    terminate(){}
+  };
 });
 const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
 try{
@@ -54,20 +69,19 @@ try{
   await page.getByRole('button',{name:'Play orb sample',exact:true}).click();
   await page.getByText('Sample · Speaking…',{exact:true}).waitFor();
   await page.getByRole('button',{name:'Stop sample',exact:true}).click();
-  await page.getByRole('button',{name:'Download voice',exact:true}).click();
-  await page.getByText('Local voice ready · automatic replies',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'Set up voice',exact:true}).click();
+  await page.getByText('Voice ready · microphone and speaker',{exact:true}).waitFor();
   await page.getByRole('button',{name:'Start voice input',exact:true}).click();
   await page.getByText('Listening…',{exact:true}).waitFor();
-  await page.evaluate(()=>{capture.onresult({results:[Object.assign([{transcript:'Desktop spoken message'}],{isFinal:false})]});capture.onend()});
+  await page.waitForTimeout(1500);await page.getByRole('button',{name:'Finish listening',exact:true}).last().click();
   await page.getByText('Speaking…',{exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>spokenText),'Received Desktop spoken message');
   const calls=await page.evaluate(()=>__orbCalls);assert.deepEqual(calls.map(c=>[c.conversationId,c.text]),[['orb-thread','Typed still works'],['orb-thread','Desktop spoken message']]);
   await page.screenshot({path:path.join(tmpdir(),'devdeck-desktop-orb.png')});
   await page.getByRole('button',{name:'Mute spoken replies',exact:true}).click();
   assert.equal(await page.getByRole('button',{name:'Enable spoken replies',exact:true}).getAttribute('aria-pressed'),'true');
-  await page.getByRole('button',{name:'Start voice input',exact:true}).click();
-  await page.evaluate(()=>capture.onerror({error:'not-allowed'}));
-  await page.getByText(/desktop speech service rejected voice input/).waitFor();
+  await page.evaluate(()=>{window.denyMic=true});await page.getByRole('button',{name:'Start voice input',exact:true}).click();
+  await page.getByText(/Microphone access was denied/).waitFor();
   await page.getByLabel('Message Dev in voice view',{exact:true}).fill('Dictated desktop message');
   await page.getByRole('button',{name:'Send',exact:true}).last().click();
   await page.getByText('Received Dictated desktop message',{exact:true}).waitFor();
@@ -76,5 +90,5 @@ try{
   await page.getByText('Received Desktop spoken message',{exact:true}).waitFor();
   await page.getByPlaceholder('Message Dev…').fill('Typed after voice');await page.getByRole('button',{name:'Send',exact:true}).click();
   await page.getByText('Received Typed after voice',{exact:true}).waitFor();
-  assert.deepEqual(errors,[]);console.log('Shared orb: appearance save/reload, preview states, desktop typed and spoken delivery through one command, automatic local speech, mute and return to chat passed.');
+  await page.getByRole('button',{name:'Talk to Dev',exact:true}).click();await page.getByText('Voice ready · microphone and speaker',{exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'Set up voice',exact:true}).count(),0);assert.deepEqual(errors,[]);console.log('Shared orb: appearance save/reload, preview states, desktop typed and spoken delivery through one command, automatic local speech, mute and return to chat passed.');
 }finally{await browser.close()}

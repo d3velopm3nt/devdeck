@@ -1,0 +1,19 @@
+   Compiling devdeck-design-system-checks v0.1.0 (/workspace/scratch/814cb0ade982/devdeck/harness/design-system-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.27s
+     Running unittests ../../src-tauri/src/design_system_model.rs (harness/design-system-core/target/debug/deps/devdeck_design_system_checks-2a4133afe001d026)
+
+running 6 tests
+test tests::persists_and_briefs_exact_version ... ok
+test tests::failed_write_preserves_existing_assignment ... ok
+test tests::competing_saves_reject_stale_revision ... ok
+test tests::clear_is_versioned_and_projects_are_isolated ... ok
+test tests::stale_unknown_and_corrupt_fail_closed ... ok
+test tests::unavailable_version_blocks_launch ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+   Doc-tests devdeck_design_system_checks
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

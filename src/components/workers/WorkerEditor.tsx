@@ -19,7 +19,7 @@ export function WorkerEditor({
   worker: ipc.Worker
   library: ipc.LibraryItem[]
   onClose: () => void
-  onSaved: () => void
+  onSaved: (worker?: ipc.Worker) => void
 }) {
   const nodes = useApp((s) => s.nodes)
   const [w, setW] = useState<ipc.Worker>(worker)
@@ -41,8 +41,8 @@ export function WorkerEditor({
     setErr('')
     setBusy(true)
     try {
-      await ipc.workerSave(w)
-      onSaved()
+      const saved = await ipc.workerSave(w)
+      onSaved(saved)
     } catch (e) {
       setErr(String(e))
     } finally {
@@ -284,7 +284,7 @@ export function WorkerEditor({
 
         <div className="flex items-center gap-2 border-t border-line bg-raise px-5 py-3">
           <button className="btn-primary text-[12px]" disabled={busy || !w.name.trim()} onClick={() => void save()}>
-            {busy ? 'Saving…' : isNew ? 'Make it' : 'Save'}
+            {busy ? 'Saving…' : isNew ? 'Create agent' : 'Save agent'}
           </button>
           <button className="btn-ghost text-[12px]" onClick={onClose}>
             Cancel
@@ -296,7 +296,7 @@ export function WorkerEditor({
                 <span className="text-[11px] text-muted">Remove {w.name}? Its past runs stay.</span>
                 <button
                   className="btn-danger text-[11.5px]"
-                  onClick={() => void ipc.workerDelete(w.handle).then(onSaved)}
+                  onClick={() => void ipc.workerDelete(w.handle).then(() => onSaved()).catch(e => setErr(String(e)))}
                 >
                   Remove
                 </button>

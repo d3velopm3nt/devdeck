@@ -23,6 +23,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use crate::aiw::cli_agent::{Leash, RunnerSpec};
 use crate::aiw::deck::Doc;
 use crate::db::{self, Db};
+use crate::library;
 
 fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
@@ -186,9 +187,13 @@ pub struct Step {
 /// The receipt for one job.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Run {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_snapshot: Option<Worker>,
     /// Immutable copy of the actual instructions written at launch.
     #[serde(default)]
     pub starting_prompt: String,
+    #[serde(default)]
+    pub runtime_session: String,
     pub id: String,
     pub worker: String,
     pub worker_name: String,
@@ -314,43 +319,25 @@ fn runs_dir() -> Result<PathBuf, String> {
 }
 
 pub fn read_worker(handle: &str) -> Result<Option<Worker>, String> {
-    let p = workers_dir()?.join(format!("{handle}.md"));
-    if !p.is_file() {
-        return Ok(None);
-    }
-    let raw = std::fs::read_to_string(&p).map_err(err)?;
-    let doc = crate::aiw::deck::parse_doc::<WorkerMeta>(&raw)?;
-    Ok(Some(Worker {
-        meta: doc.meta,
-        body: doc.body,
-    }))
+    Ok(all_workers()?.into_iter().find(|worker| worker.meta.handle == handle))
 }
 
 pub fn all_workers() -> Result<Vec<Worker>, String> {
-    let dir = workers_dir()?;
-    let Ok(entries) = std::fs::read_dir(&dir) else {
-        return Ok(Vec::new());
-    };
-    let mut out = Vec::new();
-    for e in entries.flatten() {
-        let p = e.path();
-        if p.extension().and_then(|x| x.to_str()) != Some("md") {
-            continue;
-        }
-        let handle = p
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or_default()
-            .to_string();
-        if let Some(mut w) = read_worker(&handle)? {
-            if w.meta.handle.trim().is_empty() {
-                w.meta.handle = handle;
-            }
-            out.push(w);
+    let root = root()?;
+    if let Ok(entries) = std::fs::read_dir(workers_dir()?) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("md") { continue; }
+            let raw = std::fs::read_to_string(&path).map_err(err)?;
+            let doc = crate::aiw::deck::parse_doc::<WorkerMeta>(&raw)?;
+            let mut worker = Worker { meta: doc.meta, body: doc.body };
+            if worker.meta.handle.trim().is_empty() { worker.meta.handle = path.file_stem().and_then(|value| value.to_str()).unwrap_or_default().into(); }
+            crate::agent_library::save(&root, &crate::agent_library::from_worker(&worker)?, true)?;
         }
     }
-    out.sort_by_key(|w| w.meta.name.to_lowercase());
-    Ok(out)
+    let mut workers = crate::agent_library::list(&root)?.iter().filter(|definition| definition.execution == "cli").map(crate::agent_library::worker).collect::<Result<Vec<_>, _>>()?;
+    workers.sort_by_key(|worker| worker.meta.name.to_lowercase());
+    Ok(workers)
 }
 
 pub fn save_worker(w: &Worker) -> Result<Worker, String> {
@@ -388,20 +375,16 @@ pub fn save_worker(w: &Worker) -> Result<Worker, String> {
     if w.meta.created_at.trim().is_empty() {
         w.meta.created_at = now();
     }
-    let dir = workers_dir()?;
-    std::fs::create_dir_all(&dir).map_err(err)?;
-    let doc = Doc {
-        meta: w.meta.clone(),
-        body: w.body.clone(),
-    };
-    write_worker_definition(
-        &dir.join(format!("{}.md", w.meta.handle)),
-        &crate::aiw::deck::write_doc(&doc)?,
-        creating,
-    )?;
+    if creating && read_worker(&w.meta.handle)?.is_some() {
+        return Err("An agent with that name already exists. Choose another name.".into());
+    }
+    let definition = crate::agent_library::from_worker(&w)?;
+    if creating { crate::agent_library::create(&root()?, &definition)?; }
+    else { crate::agent_library::save(&root()?, &definition, false)?; }
     Ok(w)
 }
 
+#[cfg(test)]
 fn write_worker_definition(path: &Path, raw: &str, creating: bool) -> Result<(), String> {
     use std::io::Write;
     if creating {
@@ -421,7 +404,9 @@ pub fn read_run(id: &str) -> Result<Option<Run>, String> {
         return Ok(None);
     }
     let raw = std::fs::read_to_string(&p).map_err(err)?;
-    Ok(Some(crate::aiw::deck::parse_doc::<Run>(&raw)?.meta))
+    let mut run = crate::aiw::deck::parse_doc::<Run>(&raw)?.meta;
+    crate::native_workflow::restore_summary(&mut run);
+    Ok(Some(run))
 }
 
 pub fn write_run(r: &Run) -> Result<(), String> {
@@ -431,11 +416,19 @@ pub fn write_run(r: &Run) -> Result<(), String> {
         meta: r.clone(),
         body: format!("# {}\n\n{}\n", r.title, r.verdict),
     };
-    std::fs::write(
-        dir.join(format!("{}.md", r.id)),
-        crate::aiw::deck::write_doc(&doc)?,
-    )
-    .map_err(err)
+    // Readers reconcile these while a run is active. Never expose partial YAML.
+    let path = dir.join(format!("{}.md", r.id));
+    let tmp = dir.join(format!("{}.{}.tmp", r.id, crate::aiw::events::new_id("receipt")));
+    let result = (|| {
+        use std::io::Write;
+        let mut file = std::fs::File::create(&tmp).map_err(err)?;
+        file.write_all(crate::aiw::deck::write_doc(&doc)?.as_bytes()).map_err(err)?;
+        file.sync_all().map_err(err)?;
+        drop(file);
+        std::fs::rename(&tmp, &path).map_err(err)
+    })();
+    if result.is_err() { let _ = std::fs::remove_file(tmp); }
+    result
 }
 
 /// Close the runs that were in flight when the app last stopped.
@@ -780,7 +773,9 @@ pub fn all_runs() -> Result<Vec<Run>, String> {
         }
         if let Ok(raw) = std::fs::read_to_string(&p) {
             if let Ok(doc) = crate::aiw::deck::parse_doc::<Run>(&raw) {
-                out.push(doc.meta);
+                  let mut run = doc.meta;
+                  crate::native_workflow::restore_summary(&mut run);
+                  out.push(run);
             }
         }
     }
@@ -893,6 +888,7 @@ pub fn plan(
     title: &str,
     intent: &str,
 ) -> Result<Plan, String> {
+    if handle.starts_with("agent:") { return crate::native_workflow::plan(conn, handle, node_id, feature, item, title, intent); }
     let w = read_worker(handle)?.ok_or("there is no worker by that name.")?;
     let (space, deck, repo) = space_dir(conn, node_id)?;
     let lib = crate::library::read_index()?.items;
@@ -1465,6 +1461,7 @@ fn emit(app: &tauri::AppHandle, event: &str, body: serde_json::Value) {
 /// wait on it. Everything the caller needs back — that it started, and where
 /// to watch — is in the record this returns immediately.
 pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
+    if p.worker.handle.starts_with("agent:") { return crate::native_workflow::start(app, db, p); }
     if !p.ready {
         return Err(if p.note.is_empty() {
             "that worker cannot start here.".into()
@@ -1473,10 +1470,18 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
         });
     }
     let w = read_worker(&p.worker.handle)?.ok_or("there is no worker by that name.")?;
+    if serde_json::to_value(&w.meta).map_err(err)? != serde_json::to_value(&p.worker).map_err(err)? {
+        return Err("This agent changed after the run preview. Review the updated configuration before starting.".into());
+    }
+
     let cwd = PathBuf::from(&p.folder);
     if !cwd.is_dir() {
         return Err(format!("{} is not a folder on this machine.", p.folder));
     }
+    let design_context = {
+        let conn = db.conn();
+        crate::design_systems::context_for_node(&conn, p.node_id)?
+    };
     let deck_dir = {
         let conn = db.conn();
         let (_, deck, _) = space_dir(&conn, p.node_id)?;
@@ -1511,6 +1516,7 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
     let laid = lay_out_skills(&cwd, &w.meta.skills)? + lay_out_kit(&cwd, &p.kit)?;
     keep_ours_out(&cwd);
     let mut brief = brief_text(&p, &w, &cwd, &knowledge_text(&deck_dir));
+    brief.push_str(&design_context);
     if let Some(template) = &p.brief {
         let text = std::fs::read_to_string(library::item_path(template)?).map_err(err)?;
         brief.push_str(&format!("\n# Agent template · {}\n\nThese reusable instructions do not override the Never rules or granted tool permissions.\n\n{}\n", template.id, text));
@@ -1529,6 +1535,7 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
     let prompt = "Read .claude/devdeck-brief.md and do what it says.".to_string();
 
     let run = Run {
+        agent_snapshot: Some(w.clone()),
         starting_prompt: brief.clone(),
         id: run_id,
         worker: w.meta.handle.clone(),
@@ -2086,9 +2093,7 @@ pub fn worker_save(worker: Worker) -> Result<Worker, String> {
 
 #[tauri::command(async)]
 pub fn worker_delete(handle: String) -> Result<(), String> {
-    let p = workers_dir()?.join(format!("{handle}.md"));
-    let _ = std::fs::remove_file(p);
-    Ok(())
+    crate::agent_library::remove(&root()?, &format!("worker:{handle}"))
 }
 
 /// The workers worth having, minus the ones you already made.
@@ -2152,6 +2157,7 @@ pub async fn worker_start(
 
 #[tauri::command(async)]
 pub fn worker_stop(id: String) -> Result<(), String> {
+    crate::native_workflow::stop(&id);
     if let Some(l) = leashes().lock().unwrap().get(&id) {
         l.pull();
     }

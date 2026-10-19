@@ -122,7 +122,7 @@ ${data.raw}` : ''
       </div>
       <button className={button} onClick={onDashboard}>Folder dashboard</button>
       <button className={button} disabled={busy} onClick={() => void refresh()}>Refresh</button>
-      {data && editable && !editing && <button className={button} onClick={() => { setEditExpected(data.raw); setDraft(data.raw || template(node, workers[0]?.handle ?? 'choose-worker')); setEditing(true); setPlan(null) }}>{data.raw ? 'Edit workflow' : 'Create workflow'}</button>}
+      {data && editable && !editing && <button className={button} onClick={() => { setEditExpected(data.raw); setDraft(data.raw || template(node, 'agent:assistant')); setEditing(true); setPlan(null) }}>{data.raw ? 'Edit workflow' : 'Create workflow'}</button>}
     </header>
     {error && <div role="alert" className="border-b border-line bg-red-500/10 px-5 py-3 text-[13px] text-err">{error}</div>}
     {data && steps.length > 0 && <details className="border-b border-line px-5 py-3">
@@ -132,7 +132,8 @@ ${data.raw}` : ''
     </details>}
     {!data && !error && <p className="p-5 text-muted">Loading workflow…</p>}
     {editing ? <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-5">
-      <p className="text-[12px] text-muted">Use existing worker handles and target folder IDs below. Each step can depend on other step IDs. Markdown after the header gives every worker the shared context.</p>
+      <p className="text-[12px] text-muted">Use agent:assistant for the main agent’s saved model connection, or an existing worker handle. Each step can depend on other step IDs. Markdown after the header provides shared context.</p>
+      <div><button className={button} onClick={() => setDraft(template(node, 'agent:assistant'))}>Use main agent template</button><p className="mt-2 text-[12px] text-muted">Uses the main agent’s Library settings and native DevDeck tools. No separate CLI worker or team is required.</p></div>
       <div className="grid grid-cols-2 gap-3 text-[12px]">
         <div><b>Workers</b><p>{workers.map(w => `${w.handle} (${w.name})`).join(', ') || 'Create a worker in Team before starting.'}</p></div>
         <div><b>Target folders</b><p>{nodes.map(n => `${n.id}: ${n.name}`).join(' · ')}</p></div>
@@ -150,10 +151,10 @@ ${data.raw}` : ''
       <p className="mt-2 max-w-xl text-[13px] text-muted">Add steps for a roadmap, marketing campaign, documentation or development. Each workflow has its own Markdown file, instructions and progress. Creating a workflow starts no agents.</p>
     </div> : data && <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[minmax(220px,2fr)_minmax(260px,3fr)] overflow-auto">
       <section aria-label="Workflow steps" className="space-y-3 border-r border-line p-4">
-        {steps.map((s, i) => <button key={s.id} onClick={() => { setSelected(s.id); setPlan(null); setEvidence(''); setProgress(''); setNextAction('') }} className={`w-full rounded-xl border p-4 text-left ${step?.id === s.id ? 'border-indigo-400 bg-indigo-500/10' : 'border-line bg-panel hover:bg-hover'}`}>
+        {steps.map((s, i) => <button key={s.id} onClick={() => { setSelected(s.id); setPlan(null); setEvidence(''); setProgress(''); setNextAction('') }} className={`w-full rounded-xl border p-4 text-left ${step?.id === s.id ? 'border-accent bg-accent/10' : 'border-line bg-panel hover:bg-hover'}`}>
           <div className="flex justify-between gap-2"><span className="text-[11px] text-muted">STEP {i + 1}</span><span className={`text-[11px] uppercase ${s.status === 'done' ? 'text-ok' : s.status === 'blocked' ? 'text-err' : 'text-info'}`}>{s.status === 'review' ? 'Needs review' : s.status}</span></div>
           <h2 className="mt-2 text-[14px] font-semibold text-ink">{s.title}</h2>
-          <p className="mt-1 text-[12px] text-dim">{s.role ? `${s.role} → ` : ''}{workers.find(w=>w.handle===s.worker)?.name || `@${s.worker}`} · {nodes.find(n => n.id === s.target)?.name ?? `Folder ${s.target}`}</p>
+          <p className="mt-1 text-[12px] text-dim">{s.role ? `${s.role} → ` : ''}{s.worker === 'agent:assistant' ? 'Main agent' : workers.find(w=>w.handle===s.worker)?.name || `@${s.worker}`} · {nodes.find(n => n.id === s.target)?.name ?? `Folder ${s.target}`}</p>
           <p className="mt-2 text-[11px] text-muted">{s.needs.length ? `After acceptance: ${s.needs.join(', ')}` : 'No dependencies'}</p>
         </button>)}
       </section>
@@ -175,13 +176,13 @@ ${data.raw}` : ''
           </div>
         </details>}
         {step.previous_runs.length > 0 && <details><summary className="cursor-pointer text-[12px] text-muted">Previous attempts</summary>{step.previous_runs.map(id => <button key={id} className={`${button} mt-2 mr-2`} onClick={() => openRun(id, step.title)}>{id}</button>)}</details>}
-        {step.run && <button className={button} onClick={() => openRun(step.run, step.title)}>Open worker receipt</button>}
-        {['running', 'starting'].includes(step.status) && <button className={button} disabled={busy || !step.run} onClick={() => { void ipc.workerStop(step.run).catch(e => setError(String(e))) }}>Stop worker</button>}
+        {step.run && <button className={button} onClick={() => openRun(step.run, step.title)}>{step.worker.startsWith('agent:') ? 'Open agent receipt' : 'Open worker receipt'}</button>}
+        {['running', 'starting'].includes(step.status) && <button className={button} disabled={busy || !step.run} onClick={() => { void ipc.workerStop(step.run).catch(e => setError(String(e))) }}>{step.worker.startsWith('agent:') ? 'Stop agent' : 'Stop worker'}</button>}
         {canRun && !plan && <button className="btn-primary text-[12px]" disabled={busy} onClick={() => void preview()}>{steps.every(s => s.status === 'pending') ? 'Start workflow' : step.status === 'blocked' ? 'Review retry' : 'Start step'}</button>}
         {plan && <div className="space-y-3 rounded-xl border border-line2 bg-panel p-4">
           <h3 className="font-semibold text-ink">Start {plan.worker.name}?</h3>
           <p className="break-all text-[12px]">Working folder: {plan.folder}</p>
-          <p className="text-[12px]">{plan.minutes} minute limit · ${plan.usd} budget · {plan.is_repo ? 'Separate branch and worktree' : 'Writes in the target workspace folder'}</p>
+          <p className="text-[12px]">{plan.minutes} minute limit · {plan.worker.handle.startsWith('agent:') ? 'Existing model connection' : `$${plan.usd} budget`} · {plan.is_repo ? 'Separate branch and worktree' : 'Writes in the target workspace folder'}</p>
           <p className="text-[12px]">Skills: {plan.skills.map(s => s.name).join(', ') || 'None selected'}</p>
           {plan.note && <p className="text-[12px] text-warn">{plan.note}</p>}
           <button className="btn-primary text-[12px]" disabled={busy || !plan.ready || !canRun} onClick={() => void act(() => ipc.folderWorkflowStart(node, step.id, planRevision, workflow))}>Start this step</button>

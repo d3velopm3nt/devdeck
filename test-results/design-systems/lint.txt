@@ -1,0 +1,48 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> devdeck@0.4.0-beta.5 lint
+> oxlint && node scripts/check-store-selectors.mjs && node scripts/check-sync-commands.mjs
+
+src/components/FocusBar.tsx:34:17: warning react(only-export-components): Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components.
+src/components/business/TeamStep.tsx:54:10: warning react-hooks(exhaustive-deps): React Hook useEffect has a missing dependency: 'view' help: Either include it or remove the dependency array.
+src/components/business/shared.tsx:21:14: warning react(only-export-components): Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components.
+src/components/business/shared.tsx:24:17: warning react(only-export-components): Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components.
+src/components/business/shared.tsx:38:14: warning react(only-export-components): Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components.
+src/components/business/shared.tsx:40:17: warning react(only-export-components): Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components.
+src/components/business/shared.tsx:235:17: warning react(only-export-components): Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components.
+src/components/business/TodayBusinesses.tsx:10:14: warning react(only-export-components): Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components.
+src/components/business/TodayBusinesses.tsx:13:14: warning react(only-export-components): Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components.
+src/components/aiw/SpaceViews.tsx:347:53: warning react-hooks(exhaustive-deps): React Hook useEffect has a missing dependency: 'a' help: Either include it or remove the dependency array.
+src/Dock.tsx:165:17: warning react(only-export-components): Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components.
+src/components/aiw/ModelPicker.tsx:34:17: warning react(only-export-components): Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components.
+src/components/RepositoryFiles.tsx:28:20: warning react-hooks(exhaustive-deps): The ref's value `.current` is accessed directly in the effect cleanup function. help: The ref value will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by react, copy it to a variable inside the effect and use that variable in the cleanup function.
+src/components/RepositoryFiles.tsx:25:231: warning react-hooks(exhaustive-deps): React Hook useEffect has a missing dependency: 'theme' help: Either include it or remove the dependency array.
+src/components/agents/TeamBuild.tsx:8:17: warning react(only-export-components): Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components.
+src/components/FileViewer.tsx:73:38: warning react-hooks(exhaustive-deps): React Hook useEffect has a missing dependency: 'theme' help: Either include it or remove the dependency array.
+src/components/bot/BotGrants.tsx:38:17: warning react(only-export-components): Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components.
+src/components/aiw/providerDefs.tsx:91:14: warning react(only-export-components): Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components.
+src/components/SignInModal.tsx:126:7: warning react-hooks(exhaustive-deps): React Hook useEffect has a complex expression in the dependency array. help: Extract the expression to a separate variable so it can be statically checked.
+src/components/SignInModal.tsx:115:9: warning react-hooks(exhaustive-deps): React Hook useEffect has a missing dependency: 'stage.s' help: Either include it or remove the dependency array.
+src/components/RepositoryDiscovery.tsx:13:17: warning react(only-export-components): Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components.
+harness/github.tsx:11:10: warning react(only-export-components): Fast refresh only works when a file has exports. Move your component(s) to a separate file.
+src/components/thread/Pill.tsx:115:17: warning react(only-export-components): Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components.
+src/components/thread/Pill.tsx:102:14: warning react(only-export-components): Fast refresh only works when a file only exports components. Move your React context(s) to a separate file.
+src/components/thread/Pill.tsx:105:14: warning react(only-export-components): Fast refresh only works when a file only exports components. Move your React context(s) to a separate file.
+harness/orb.tsx:18:10: warning react(only-export-components): Fast refresh only works when a file has exports. Move your component(s) to a separate file.
+src/lib/icons.tsx:283:17: warning react(only-export-components): Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components.
+harness/onboarding.tsx:66:10: warning react(only-export-components): Fast refresh only works when a file has exports. Move your component(s) to a separate file.
+harness/onboarding.tsx:51:55: warning eslint(no-unsafe-optional-chaining): Unsafe usage of optional chaining help: If this short-circuits with 'undefined' the evaluation will throw TypeError
+src/components/workers/LibraryPanel.tsx:486:17: warning react(only-export-components): Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components.
+harness/main.tsx:23:10: warning react(only-export-components): Fast refresh only works when a file has exports. Move your component(s) to a separate file.
+src/components/workers/StartWorker.tsx:15:14: warning react(only-export-components): Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components.
+mobile/voice-orb.js:2:10: warning eslint(no-unused-vars): Function 'mountVoiceOrb' is declared but never used. help: Consider removing this declaration.
+25 whole-store subscriptions, at the baseline.
+Commands on the UI thread went up: 70, baseline 68.
+
+A sync `#[tauri::command]` runs on the webview's thread, so the window
+cannot paint while it works. Use `#[tauri::command(async)]` unless the
+order of calls matters.
+
+New ones:
+  src-tauri/src/pty.rs:200 pty_scrollback
+  src-tauri/src/pty.rs:208 pty_list

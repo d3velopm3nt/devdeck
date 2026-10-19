@@ -21,6 +21,8 @@
 )]
 
 mod activity;
+mod agent_library;
+mod team_builder;
 mod aiw;
 mod asks;
 mod botcatalog;
@@ -56,9 +58,13 @@ mod github_issue_read;
 mod inbox;
 mod installed;
 mod issue_monitor;
+mod repository_monitor;
+mod native_workflow;
 mod issue_monitor_model;
 mod legacy;
 mod library;
+mod design_system_model;
+mod design_systems;
 mod machine;
 mod mail;
 mod mailfiles;
@@ -1330,6 +1336,12 @@ pub fn run() {
             business::business_pipeline,
             business::business_stage_set,
             library::library_list,
+            design_systems::design_systems_list,
+            design_systems::design_system_assignment,
+            design_systems::design_system_assign,
+            agent_library::library_agents,
+            agent_library::library_manager_save,
+            team_builder::team_builder_create,
             personal_library::library_save_custom,
             personal_library::reusable_teams_list,
             personal_library::reusable_team_save,
@@ -1353,6 +1365,7 @@ pub fn run() {
             issue_monitor::issue_monitor_save,
             issue_monitor::issue_monitor_refresh,
             issue_monitor::issue_monitor_retry,
+            issue_monitor::repository_briefing_read,
             folder_workflows::folder_workflow_route,
             folder_workflows::folder_workflow_list,
             folder_workflows::folder_workflow_parse,
@@ -1490,6 +1503,7 @@ pub fn run() {
             aiw::commands::aiw_delete_conversation,
             aiw::commands::aiw_focus_conversation,
             aiw::commands::aiw_send_message,
+            aiw::commands::aiw_team_planner_send,
             files::node_files,
             files::file_text,
             files::vault_files,

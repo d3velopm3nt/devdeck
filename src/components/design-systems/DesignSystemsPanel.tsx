@@ -1,14 +1,25 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useState } from 'react'
 import * as ipc from '../../lib/ipc'
 import type { TreeNode } from '../../lib/types'
 import './design-systems.css'
+
+// Render the original files: each design owns its layout, controls and themes.
+const htmlFiles = import.meta.glob<string>('../../../design-systems/*-design-system.html', {
+  query: '?raw', import: 'default', eager: true,
+})
+
+const catalogFiles = import.meta.glob<{ id: string }>('../../../design-systems/*.json', {
+  import: 'default', eager: true,
+})
+const designHtmlFiles = Object.fromEntries(Object.entries(catalogFiles).map(([path, design]) => [
+  design.id, { path: path.replace(/\.json$/, '-design-system.html'), html: htmlFiles[path.replace(/\.json$/, '-design-system.html')] },
+]))
 
 export function DesignSystemsPanel() {
   const [designs, setDesigns] = useState<ipc.ProjectDesignSystem[]>([])
   const [projects, setProjects] = useState<TreeNode[]>([])
   const [selected, setSelected] = useState('')
   const [search, setSearch] = useState('')
-  const [mode, setMode] = useState('dark')
   const [project, setProject] = useState('')
   const [assignment, setAssignment] = useState<ipc.DesignAssignment | null>(null)
   const [loading, setLoading] = useState(true)
@@ -60,8 +71,8 @@ export function DesignSystemsPanel() {
     </aside>
     <div className="min-w-0 space-y-4">
       {design && <>
-        <header className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-xl font-semibold">{design.name}</h2><p className="mt-1 max-w-xl text-sm text-muted">{design.description}</p></div><div className="wf-segment" aria-label="Preview appearance">{Object.keys(design.modes).map(m => <button key={m} aria-pressed={mode === m} onClick={() => setMode(m)}>{m === 'dark' ? 'Dark' : 'Light'}</button>)}</div></header>
-        <DesignSpecimens design={design} mode={mode} />
+        <header className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-xl font-semibold">{design.name}</h2><p className="mt-1 max-w-xl text-sm text-muted">{design.description}</p></div></header>
+        <DesignHtmlPreview key={design.id} design={design} />
         <details className="rounded-lg border border-line p-4"><summary className="cursor-pointer text-sm font-medium">Agent guidelines</summary><ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-muted">{design.guidelines.map(g => <li key={g}>{g}</li>)}</ul></details>
       </>}
       <div className="ds-assignment">
@@ -78,14 +89,26 @@ export function DesignSystemsPanel() {
   </section>
 }
 
-function DesignSpecimens({ design, mode }: { design: ipc.ProjectDesignSystem; mode: string }) {
-  const tokens = design.modes[mode] ?? design.modes.dark
-  const style = { ...Object.fromEntries(Object.entries(tokens).map(([k,v]) => [`--ds-${k}`,v])), '--ds-radius': `${design.radius}px`, fontFamily: design.font } as CSSProperties
-  return <div className="ds-specimens" style={style}>
-    <section><h3>Colours</h3><div className="ds-swatches">{Object.entries(tokens).filter(([k]) => k !== 'onBrand').map(([key,value]) => <div key={key}><div className="ds-swatch" style={{background:value}} /><span>{key}</span><code>{value.toUpperCase()}</code></div>)}</div></section>
-    <section><h3>Typography</h3><p className="ds-heading">Heading example <small>24px</small></p><p>Body text for clear, readable interfaces. <small>14px</small></p><p className="ds-caption">Caption and helper text · 12px</p></section>
-    <section><h3>Components</h3><div className="ds-controls"><button className="ds-primary" type="button">Primary action</button><button type="button">Secondary</button><button disabled>Disabled</button></div><div className="ds-fields"><label>Name<input placeholder="Enter a name" /></label><label>Option<select defaultValue="one"><option value="one">Option one</option><option value="two">Option two</option></select></label></div><label className="ds-check"><input type="checkbox" /> Enable feature</label></section>
-    <section><h3>Table</h3><table><thead><tr><th>Name</th><th>Status</th></tr></thead><tbody><tr><td>Item one</td><td>Active</td></tr><tr><td>Item two</td><td>Draft</td></tr></tbody></table></section>
-    <section><h3>Spacing & shape</h3><p>{design.spacing.map(n => `${n}px`).join(' · ')} · Radius {design.radius}px</p><p className="ds-caption">Interactive specimens only; these controls do not save project data.</p></section>
+function DesignHtmlPreview({ design }: { design: ipc.ProjectDesignSystem }) {
+  const [showSource, setShowSource] = useState(false)
+  const preview = designHtmlFiles[design.id]
+  const html = preview?.html
+  if (!html) return <p role="alert">No HTML preview is available for {design.name}.</p>
+
+  return <div className="space-y-3">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <span className="text-xs text-muted">{preview.path.split('/').pop()}</span>
+      <button type="button" className="wf-secondary" aria-expanded={showSource}
+        aria-controls="design-html-source" onClick={() => setShowSource(value => !value)}>
+        {showSource ? 'Close raw HTML' : 'Open raw HTML'}
+      </button>
+    </div>
+    {showSource && <section id="design-html-source" aria-label="Raw HTML source"
+      className="rounded-lg border border-line bg-panel p-4">
+      <pre tabIndex={0} className="max-h-96 overflow-auto text-xs"><code>{html}</code></pre>
+    </section>}
+    <iframe title={`${design.name} design preview`} srcDoc={html}
+      sandbox="allow-scripts" className="w-full rounded-lg border border-line"
+      style={{ height: '75vh', minHeight: 480 }} />
   </div>
 }

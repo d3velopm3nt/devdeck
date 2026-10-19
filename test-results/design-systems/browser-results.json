@@ -10,6 +10,10 @@
       "status": "passed"
     },
     {
+      "name": "original HTML preview and exact raw source",
+      "status": "passed"
+    },
+    {
       "name": "browser-fixture reopen persistence and project isolation",
       "status": "passed"
     },

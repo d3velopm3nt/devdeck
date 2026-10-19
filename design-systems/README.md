@@ -5,8 +5,8 @@ Open **Workforce → Library → Design systems**, preview the bundled Supabase-
 ## Source of truth
 
 - `supabase.json`: versioned design tokens and agent guidelines, bundled into the desktop binary.
-- `supabase-design-system.html`: original standalone visual reference.
-- `src/components/design-systems/`: generic interactive React specimens.
+- `supabase-design-system.html`: standalone visual reference rendered directly in the Library preview. Its own controls manage light/dark mode.
+- `src/components/design-systems/`: HTML preview host and raw-source viewer; no duplicate specimen layout.
 - `src-tauri/src/design_system_model.rs`: portable assignment persistence and briefing.
 - `src-tauri/src/design_systems.rs`: desktop commands and nearest-ancestor lookup.
 
@@ -19,3 +19,13 @@ This first milestone provides project assignments only. Applying a theme to DevD
 ## Evidence
 
 See [verification report](../test-results/design-systems/README.md) for checks, screenshots, limitations, and the Windows acceptance steps.
+
+## HTML previews
+
+Each catalog `<name>.json` is paired with its own `<name>-design-system.html` file.
+The catalog ID selects that pair (for example `supabase.json` / `supabase-design-system.html`).
+The Library loads that file unchanged, including its CSS and interactive theme controls,
+in a sandboxed iframe. **Open raw HTML** reveals the exact source used by the preview.
+Editing the HTML updates the preview through Vite during development; packaged desktop
+builds need rebuilding to include changed files. This is not a runtime HTML editor/importer.
+JSON still supplies the existing agent tokens/guidelines and assignment metadata.

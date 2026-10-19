@@ -2442,3 +2442,21 @@ export const libraryManagerSave = (expected: LibraryAgent, name: string, instruc
 export interface TeamProposalMember { role: string; name: string; kind: 'manager' | 'specialist' | 'worker'; reports_to: string; instructions: string; worker: string }
 export interface TeamProposal { id: string; name: string; description: string; members: TeamProposalMember[] }
 export const teamBuilderCreate = (proposal: TeamProposal) => invoke<ReusableTeam>('team_builder_create', { proposal })
+
+// Bundled design packages and revision-checked, vault-backed project selection.
+export interface ProjectDesignSystem {
+  id: string
+  version: number
+  name: string
+  description: string
+  font: string
+  radius: number
+  spacing: number[]
+  modes: Record<string, Record<string, string>>
+  guidelines: string[]
+}
+export interface DesignAssignment { design_id: string | null; version: number; revision: number }
+export const designSystemsList = () => invoke<ProjectDesignSystem[]>('design_systems_list')
+export const designSystemAssignment = (nodeId: number) => invoke<DesignAssignment | null>('design_system_assignment', { nodeId })
+export const designSystemAssign = (nodeId: number, designId: string | null, expected: DesignAssignment | null) =>
+  invoke<DesignAssignment>('design_system_assign', { nodeId, designId, expected })

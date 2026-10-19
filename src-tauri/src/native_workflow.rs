@@ -106,6 +106,10 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
     if agent.provider != doc.meta.provider || agent.model != doc.meta.model {
         return Err("Agent connection changed; reload the agent before starting".into());
     }
+    let design_context = {
+        let conn = db.conn();
+        crate::design_systems::context_for_node(&conn, p.node_id)?
+    };
     let (node, root, deck_root) = {
         let conn = db.conn();
         let node = db::node_by_id(&conn, p.node_id).map_err(|e| e.to_string())?;
@@ -131,7 +135,7 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
     }
     let id = crate::aiw::events::new_id("native");
     let deck = project.deck();
-    let goal = format!("{}\n\n{}\n\nExecute this workflow step using your existing model connection and native DevDeck tools. Read the relevant source before writing. Preserve unrelated edits. Do not modify workflow state, install tools, execute shell commands, commit, push, merge, publish or deploy. Verify the resulting files by reading them and report evidence and limitations for human review.", p.title, p.intent);
+    let goal = format!("{}\n\n{}{}\n\nExecute this workflow step using your existing model connection and native DevDeck tools. Read the relevant source before writing. Preserve unrelated edits. Do not modify workflow state, install tools, execute shell commands, commit, push, merge, publish or deploy. Verify the resulting files by reading them and report evidence and limitations for human review.", p.title, p.intent, design_context);
     let feature = deck.create_feature(&id, &goal, &[])?;
     let live = AgentRuntime::begin(
         &ws,

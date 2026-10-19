@@ -1,0 +1,34 @@
+{
+  "boundary": "Real React UI and typed IPC wrappers; simulated Tauri persistence via localStorage, not native Windows evidence.",
+  "results": [
+    {
+      "name": "catalog, search and unselected-project guard",
+      "status": "passed"
+    },
+    {
+      "name": "assign and light/dark preview",
+      "status": "passed"
+    },
+    {
+      "name": "browser-fixture reopen persistence and project isolation",
+      "status": "passed"
+    },
+    {
+      "name": "failed write stays unsaved and reload recovers",
+      "status": "passed"
+    },
+    {
+      "name": "stale revision is visible and requires reload",
+      "status": "passed"
+    },
+    {
+      "name": "clear selection",
+      "status": "passed"
+    },
+    {
+      "name": "390px no horizontal overflow",
+      "status": "passed"
+    }
+  ],
+  "errors": []
+}

@@ -6,6 +6,7 @@
 // hooks, MCP configs and install scripts are not importable.
 
 import { useEffect, useState } from 'react'
+import { DesignSystemsPanel } from '../design-systems/DesignSystemsPanel'
 import * as ipc from '../../lib/ipc'
 import { Icon } from '../../lib/icons'
 import { CAPTURE_LIBRARY } from '../../lib/devCapture'
@@ -31,7 +32,7 @@ export function LibraryPanel({
   useEffect(loadAgents, [templates])
   const items: ipc.LibraryItem[] = [...agents.map(agent => ({ id: agent.id, kind: 'brief', name: agent.name, what: agent.execution === 'manager' ? 'Vault manager · coordination' : agent.execution === 'model' ? 'Configured agent · model conversation' : 'Configured agent · CLI execution', repo: agent.execution === 'manager' ? 'vault' : 'personal', commit: '', licence: '', path: '', added_at: '', chars: agent.instructions.length })), ...templates]
   const configured = (item: ipc.LibraryItem) => agents.find(agent => agent.id === item.id)
-  const [libraryTab, setLibraryTab] = useState<'brief' | 'skill'>('brief')
+  const [libraryTab, setLibraryTab] = useState<'brief' | 'skill' | 'design'>('brief')
   const [search, setSearch] = useState('')
   const [view, setView] = useState<'cards' | 'table'>('cards')
   const [origin, setOrigin] = useState('all')
@@ -89,16 +90,18 @@ export function LibraryPanel({
       {agentEditing && <div className="wf-overlay"><section className="wf-picker"><AgentEditor id={agentEditing} onClose={() => { setAgentEditing(null); loadAgents(); reload() }} /></section></div>}
       {workerEditing && <WorkerEditor worker={workerEditing} library={templates} onClose={() => setWorkerEditing(null)} onSaved={() => { setWorkerEditing(null); loadAgents(); reload() }} />}
       <div className="wf-section-heading">
-        <div><h2>Your library <span className="wf-badge">{items.length}</span></h2><p>The personalities and capabilities behind your teams.</p></div>
-        <div className="wf-actions"><button className="wf-secondary" onClick={() => setAdding(true)}><Download size={15} />Import</button><button className="wf-primary" disabled={saving} onClick={() => setCustom({id:'',kind:libraryTab,name:'',what:'',body:'',expected:null})}><Plus size={16} />Create {libraryTab === 'brief' ? 'template' : 'skill'}</button></div>
+        <div><h2>{libraryTab === 'design' ? 'Design system library' : <>Your library <span className="wf-badge">{items.length}</span></>}</h2><p>{libraryTab === 'design' ? 'Reusable visual foundations for your projects.' : 'The personalities and capabilities behind your teams.'}</p></div>
+        {libraryTab !== 'design' && <div className="wf-actions"><button className="wf-secondary" onClick={() => setAdding(true)}><Download size={15} />Import</button><button className="wf-primary" disabled={saving} onClick={() => setCustom({id:'',kind:libraryTab,name:'',what:'',body:'',expected:null})}><Plus size={16} />Create {libraryTab === 'brief' ? 'template' : 'skill'}</button></div>}
       </div>
       <div className="wf-toolbar">
-        <nav aria-label="Library categories" className="wf-segment"><button aria-pressed={libraryTab === 'brief'} onClick={() => setLibraryTab('brief')}><Bot size={15} />Agents<span>{items.filter(i => i.kind === 'brief').length}</span></button><button aria-pressed={libraryTab === 'skill'} onClick={() => setLibraryTab('skill')}><Sparkles size={15} />Skills<span>{items.filter(i => i.kind === 'skill').length}</span></button></nav>
-        <label className="wf-search"><Search size={16} /><input aria-label="Search library" placeholder="Search your library…" value={search} onChange={e => setSearch(e.target.value)} /></label>
+        <nav aria-label="Library categories" className="wf-segment"><button aria-pressed={libraryTab === 'brief'} onClick={() => setLibraryTab('brief')}><Bot size={15} />Agents<span>{items.filter(i => i.kind === 'brief').length}</span></button><button aria-pressed={libraryTab === 'skill'} onClick={() => setLibraryTab('skill')}><Sparkles size={15} />Skills<span>{items.filter(i => i.kind === 'skill').length}</span></button><button aria-pressed={libraryTab === 'design'} onClick={() => setLibraryTab('design')}>Design systems</button></nav>
+        {libraryTab !== 'design' && <><label className="wf-search"><Search size={16} /><input aria-label="Search library" placeholder="Search your library…" value={search} onChange={e => setSearch(e.target.value)} /></label>
         <select className="wf-filter" aria-label="Filter library source" value={origin} onChange={e => setOrigin(e.target.value)}><option value="all">All sources</option><option value="personal">Personal</option><option value="vault">Current vault</option><option value="imported">Imported</option></select>
         <select className="wf-filter" aria-label="Sort library" value={sort} onChange={e => setSort(e.target.value)}><option value="name">Name A–Z</option><option value="source">Source</option></select>
         <div className="wf-segment wf-view-toggle" aria-label="Library view"><button aria-label="Library card view" title="Cards" aria-pressed={view === 'cards'} onClick={() => setView('cards')}><LayoutGrid size={16} /></button><button aria-label="Library table view" title="Table" aria-pressed={view === 'table'} onClick={() => setView('table')}><List size={16} /></button></div>
+        </>}
       </div>
+      {libraryTab === 'design' ? <DesignSystemsPanel /> : <>
       <p className="wf-muted">{libraryTab === 'brief' ? 'Your saved agents and reusable templates. Editing a configured agent updates it everywhere it is used; roles and reporting stay with each team.' : 'Reusable instructions that give your team members specific capabilities.'}</p>
       {removing && <div role="alert" className="wf-actions rounded-xl border border-line bg-panel p-4"><span className="wf-muted">Remove {removing.name || removing.id} from your library?</span><button className="wf-secondary" onClick={() => void remove(removing)}>Remove definition</button><button className="wf-secondary" onClick={() => setRemoving(null)}>Keep definition</button></div>}
       {custom && <section aria-label="Custom library definition" className="space-y-3 rounded-xl border border-line bg-panel p-4">
@@ -146,6 +149,7 @@ export function LibraryPanel({
           </div>
         </div>
       )}
+      </>}
     </div>
   )
 }

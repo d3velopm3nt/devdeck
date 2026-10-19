@@ -63,6 +63,8 @@ mod native_workflow;
 mod issue_monitor_model;
 mod legacy;
 mod library;
+mod design_system_model;
+mod design_systems;
 mod machine;
 mod mail;
 mod mailfiles;
@@ -1334,6 +1336,9 @@ pub fn run() {
             business::business_pipeline,
             business::business_stage_set,
             library::library_list,
+            design_systems::design_systems_list,
+            design_systems::design_system_assignment,
+            design_systems::design_system_assign,
             agent_library::library_agents,
             agent_library::library_manager_save,
             team_builder::team_builder_create,

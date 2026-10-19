@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 
 pub struct Output {
     pub success: bool,
+    pub exit_code: Option<i32>,
     pub stdout: String,
     pub stderr: String,
 }
@@ -109,6 +110,7 @@ pub fn run(
             if streams_done == 2 {
                 break Ok(Output {
                     success: s.success(),
+                    exit_code: s.code(),
                     stdout,
                     stderr,
                 });

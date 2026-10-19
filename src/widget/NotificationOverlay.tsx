@@ -1,4 +1,4 @@
-import { DeckLogo } from './DeckLogo'
+import { DevAvatar } from '../components/DevAvatar'
 import { Icon } from '../lib/icons'
 import { NoticeIdentity, noticeIdentity } from '../components/NoticeIdentity'
 import { useEffect, useRef, useState } from 'react'
@@ -49,7 +49,7 @@ export function NotificationOverlay() {
   return <div className="notification-root notification-overlay" ref={panel}>
     <div className="notification-stack" aria-live="polite">{cards.map(n=><article key={n.id}>
       <button className="notification-dismiss" aria-label="Dismiss alert" onClick={()=>void invoke('notification_popup_dismiss',{id:n.id})} title="Dismiss alert"><Icon name="close" size={14} /></button>
-      <div className="notice-byline"><DeckLogo size={17} /><span>Dev</span><span className="notice-kind">{(noticeIdentity[n.kind] || noticeIdentity.info).label}</span></div><div className="notice-title"><NoticeIdentity kind={n.kind} /><strong>{n.title}</strong></div><p>{n.body}</p><small className="notice-source">{n.source}</small>
+      <div className="notice-byline"><DevAvatar size={26} /><span>Dev</span><span className="notice-kind">{(noticeIdentity[n.kind] || noticeIdentity.info).label}</span></div><div className="notice-title"><NoticeIdentity kind={n.kind} /><strong>{n.title}</strong></div><p>{n.body}</p><small className="notice-source">{n.source}</small>
       <button className="notice-action" onClick={()=>void open(n)}>{(noticeIdentity[n.kind] || noticeIdentity.info).action}<Icon name="chevron-right" size={13} /></button>
     </article>)}</div>
   </div>

@@ -1,3 +1,5 @@
+import { DesignSystemsPanel } from '../design-systems/DesignSystemsPanel'
+import { FilterTabs } from '../ui/DesignSystem'
 // The library: the skills and briefs you installed, and the way to add more.
 //
 // Words only. A skill is instructions a worker is given; a brief is who it
@@ -11,8 +13,11 @@ import { Icon } from '../../lib/icons'
 import { CAPTURE_LIBRARY } from '../../lib/devCapture'
 import { AgentEditor } from '../aiw/AgentEditor'
 import { WorkerEditor } from './WorkerEditor'
-import { Bot, Sparkles, Search, LayoutGrid, List, Plus, Download, BookOpen, Pencil, Trash2 } from 'lucide-react'
+import { Bot, Sparkles, Search, Plus, Download, BookOpen, Pencil, Trash2 } from 'lucide-react'
 import '../agents/workforce.css'
+import { TeamPackageImport } from '../agents/TeamPackageImport'
+import { RepositoryInstructionsImport } from '../agents/RepositoryInstructionsImport'
+import { instructionOrigin } from '../../lib/repositoryInstructions'
 
 export function LibraryPanel({
   items: templates,
@@ -24,33 +29,54 @@ export function LibraryPanel({
   onConfigure?: (item: ipc.LibraryItem) => void
 }) {
   const [agents, setAgents] = useState<ipc.LibraryAgent[]>([])
+  const [teamTemplates, setTeamTemplates] = useState<ipc.TeamPackagePreview[]>([])
+  const [teamFilter, setTeamFilter] = useState('all')
+  const [teamReading, setTeamReading] = useState<ipc.TeamPackagePreview | null>(null)
+  const loadTeams = () => { void ipc.teamPackageTemplates().then(setTeamTemplates).catch(e => setErr(String(e))) }
+  useEffect(loadTeams, [templates])
   const [managerEditing, setManagerEditing] = useState<{ original: ipc.LibraryAgent; name: string; instructions: string; goal: string } | null>(null)
   const [agentEditing, setAgentEditing] = useState<string | null>(null)
   const [workerEditing, setWorkerEditing] = useState<ipc.Worker | null>(null)
   const loadAgents = () => { void ipc.libraryAgents().then(setAgents).catch(e => setErr(String(e))) }
   useEffect(loadAgents, [templates])
-  const items: ipc.LibraryItem[] = [...agents.map(agent => ({ id: agent.id, kind: 'brief', name: agent.name, what: agent.execution === 'manager' ? 'Vault manager · coordination' : agent.execution === 'model' ? 'Configured agent · model conversation' : 'Configured agent · CLI execution', repo: agent.execution === 'manager' ? 'vault' : 'personal', commit: '', licence: '', path: '', added_at: '', chars: agent.instructions.length })), ...templates]
+  const packageItems: ipc.LibraryItem[] = teamTemplates.flatMap(pkg => pkg.texts.map(text => ({ id: `${pkg.team.id}:${text.id}`, kind: text.kind, name: text.name, what: text.description, repo: `team:${pkg.team.id}`, commit: pkg.fingerprint, licence: '', path: text.path, added_at: '', chars: text.content.length })))
+  const items: ipc.LibraryItem[] = [...agents.map(agent => ({ id: agent.id, kind: 'brief', name: agent.name, what: agent.execution === 'manager' ? 'Vault manager · coordination' : agent.execution === 'model' ? 'Configured agent · model conversation' : 'Configured agent · CLI execution', repo: agent.execution === 'manager' ? 'vault' : instructionOrigin(agent.instructions)?.repo || 'personal', commit: instructionOrigin(agent.instructions)?.commit || '', licence: '', path: instructionOrigin(agent.instructions)?.path || '', added_at: '', chars: agent.instructions.length })), ...templates, ...packageItems]
   const configured = (item: ipc.LibraryItem) => agents.find(agent => agent.id === item.id)
-  const [libraryTab, setLibraryTab] = useState<'brief' | 'skill'>('brief')
+  const sourceTeam = (item: ipc.LibraryItem) => teamTemplates.find(team => item.repo === 'team:' + team.team.id)?.team.name
+  const sourceLabel = (item: ipc.LibraryItem) => item.repo.startsWith('local:') ? `Local package · ${item.repo.split(/[\\/]/).pop() || 'local'}` : item.repo
+  const sourceBadge = (item: ipc.LibraryItem) => {
+    if (['personal', 'vault'].includes(item.repo)) return null
+    const localId = item.repo.startsWith('local:') ? item.repo.split(/[\\/]/).pop() : null
+    const team = teamTemplates.find(t => item.repo === `team:${t.team.id}` || (localId && t.team.id === localId))
+    const github = /^[\w.-]+\/[\w.-]+$/.test(item.repo)
+    const label = team?.team.name || sourceLabel(item)
+    return <div className="wf-card-source"><button type="button" className="wf-badge wf-source-badge" title={github ? `Open ${item.repo} on GitHub` : `Read source: ${label}`} onClick={() => { if (team) setTeamReading(team); else if (github) void ipc.openUrl(`https://github.com/${item.repo}`).catch(e => setErr(String(e))); else void read(item) }}>
+      <Icon name={github ? 'github' : 'folder'} size={12} className="shrink-0" /><span>{label}</span>
+    </button></div>
+  }
+  const [libraryTab, setLibraryTab] = useState<'brief' | 'skill' | 'team' | 'design'>('brief')
   const [search, setSearch] = useState('')
   const [view, setView] = useState<'cards' | 'table'>('cards')
   const [origin, setOrigin] = useState('all')
+  const repositories = [...new Set(items.map(item => item.repo).filter(repo => /^[\w.-]+\/[\w.-]+$/.test(repo)))].sort()
   const [sort, setSort] = useState('name')
   const [adding, setAdding] = useState(!!CAPTURE_LIBRARY)
+  const [importingTeam, setImportingTeam] = useState(false)
   const [reading, setReading] = useState<{ item: ipc.LibraryItem; text: string } | null>(null)
   const [err, setErr] = useState('')
   const [custom, setCustom] = useState<{id:string; kind:string; name:string; what:string; body:string; expected:string|null} | null>(null)
   const [saving, setSaving] = useState(false)
   const [removing, setRemoving] = useState<ipc.LibraryItem | null>(null)
 
-  const filtered = items.filter(i => `${i.name} ${i.what} ${i.id}`.toLowerCase().includes(search.toLowerCase()) && (origin === 'all' || (origin === 'imported' ? !['personal', 'vault'].includes(i.repo) : i.repo === origin))).sort((a,b) => sort === 'name' ? (a.name || a.id).localeCompare(b.name || b.id) : a.repo.localeCompare(b.repo))
+  const filtered = items.filter(i => `${i.name} ${i.what} ${i.id}`.toLowerCase().includes(search.toLowerCase()) && (teamFilter === 'all' || i.repo === `team:${teamFilter}`) && (origin === 'all' || (origin === 'imported' ? !['personal', 'vault'].includes(i.repo) : i.repo === origin.replace(/^repo:/, '')))).sort((a,b) => sort === 'name' ? (a.name || a.id).localeCompare(b.name || b.id) : a.repo.localeCompare(b.repo))
   const skills = filtered.filter((i) => i.kind === 'skill')
   const briefs = filtered.filter((i) => i.kind === 'brief')
 
   const read = async (it: ipc.LibraryItem) => {
     setErr('')
     try {
-      setReading({ item: it, text: configured(it)?.instructions ?? await ipc.libraryRead(it.id, it.kind) })
+      const pkg = teamTemplates.find(t => it.repo === `team:${t.team.id}`)
+      setReading({ item: it, text: pkg?.texts.find(t => t.path === it.path)?.content ?? configured(it)?.instructions ?? await ipc.libraryRead(it.id, it.kind) })
     } catch (e) {
       setErr(String(e))
     }
@@ -72,10 +98,11 @@ export function LibraryPanel({
   const actions = (it: ipc.LibraryItem) => <>
     <button className="wf-icon-button" title="Read instructions" aria-label={'Read ' + (it.name || it.id)} onClick={() => void read(it)}><BookOpen size={15} /></button>
     {(configured(it) || it.repo === 'personal') && <button className="wf-icon-button" title="Edit definition" aria-label={'Edit ' + (it.name || it.id)} onClick={() => edit(it)}><Pencil size={15} /></button>}
-    {!configured(it) && <button className="wf-icon-button" title="Remove from library" aria-label={'Remove ' + (it.name || it.id)} onClick={() => setRemoving(it)}><Trash2 size={15} /></button>}
-    {it.kind === 'brief' && !configured(it) && onConfigure && <button className="wf-link" onClick={() => onConfigure(it)}>Configure agent</button>}
+    {!configured(it) && !it.repo.startsWith('team:') && <button className="wf-icon-button" title="Remove from library" aria-label={'Remove ' + (it.name || it.id)} onClick={() => setRemoving(it)}><Trash2 size={15} /></button>}
+    {it.kind === 'brief' && !configured(it) && !it.repo.startsWith('team:') && onConfigure && <button className="wf-link" onClick={() => onConfigure(it)}>Configure agent</button>}
   </>
   const visible = libraryTab === 'brief' ? briefs : skills
+  const visibleTeams = teamTemplates.filter(t => `${t.team.name} ${t.team.description}`.toLowerCase().includes(search.toLowerCase()) && (teamFilter === 'all' || teamFilter === t.team.id) && (origin === 'all' || origin === 'imported'))
   return (
     <div className="flex min-h-0 flex-col gap-3">
       {managerEditing && <div className="wf-overlay"><section className="wf-picker" role="dialog" aria-modal="true" aria-label="Edit vault manager">
@@ -89,17 +116,19 @@ export function LibraryPanel({
       {agentEditing && <div className="wf-overlay"><section className="wf-picker"><AgentEditor id={agentEditing} onClose={() => { setAgentEditing(null); loadAgents(); reload() }} /></section></div>}
       {workerEditing && <WorkerEditor worker={workerEditing} library={templates} onClose={() => setWorkerEditing(null)} onSaved={() => { setWorkerEditing(null); loadAgents(); reload() }} />}
       <div className="wf-section-heading">
-        <div><h2>Your library <span className="wf-badge">{items.length}</span></h2><p>The personalities and capabilities behind your teams.</p></div>
-        <div className="wf-actions"><button className="wf-secondary" onClick={() => setAdding(true)}><Download size={15} />Import</button><button className="wf-primary" disabled={saving} onClick={() => setCustom({id:'',kind:libraryTab,name:'',what:'',body:'',expected:null})}><Plus size={16} />Create {libraryTab === 'brief' ? 'template' : 'skill'}</button></div>
+        <div><h2>Your library <span className="wf-badge">{items.length + teamTemplates.length}</span></h2><p>The personalities and capabilities behind your teams.</p></div>
+        <div className="wf-actions"><button className="wf-secondary" onClick={() => setImportingTeam(true)}>Import team package</button><button className="wf-secondary" onClick={() => setAdding(true)}><Download size={15} />Import</button>{libraryTab !== 'team' && libraryTab !== 'design' && <button className="wf-primary" disabled={saving} onClick={() => setCustom({id:'',kind:libraryTab,name:'',what:'',body:'',expected:null})}><Plus size={16} />Create {libraryTab === 'brief' ? 'template' : 'skill'}</button>}</div>
       </div>
       <div className="wf-toolbar">
-        <nav aria-label="Library categories" className="wf-segment"><button aria-pressed={libraryTab === 'brief'} onClick={() => setLibraryTab('brief')}><Bot size={15} />Agents<span>{items.filter(i => i.kind === 'brief').length}</span></button><button aria-pressed={libraryTab === 'skill'} onClick={() => setLibraryTab('skill')}><Sparkles size={15} />Skills<span>{items.filter(i => i.kind === 'skill').length}</span></button></nav>
-        <label className="wf-search"><Search size={16} /><input aria-label="Search library" placeholder="Search your library…" value={search} onChange={e => setSearch(e.target.value)} /></label>
-        <select className="wf-filter" aria-label="Filter library source" value={origin} onChange={e => setOrigin(e.target.value)}><option value="all">All sources</option><option value="personal">Personal</option><option value="vault">Current vault</option><option value="imported">Imported</option></select>
+        <select className="wf-filter" aria-label="Filter by team template" value={teamFilter} onChange={e => setTeamFilter(e.target.value)}><option value="all">All team templates</option>{teamTemplates.map(t => <option key={t.team.id} value={t.team.id}>{t.team.name}</option>)}</select>
+        <FilterTabs label="Library categories" value={libraryTab} onChange={setLibraryTab} options={[{id:'brief',label:'Agents',icon:'agent',count:briefs.length},{id:'skill',label:'Skills',icon:'ai',count:skills.length},{id:'team',label:'Teams',icon:'agent',count:visibleTeams.length},{id:'design',label:'Design systems',icon:'palette'}]}/>
+        {libraryTab !== 'design' && <><label className="wf-search"><Search size={16} /><input aria-label="Search library" placeholder="Search your library…" value={search} onChange={e => setSearch(e.target.value)} /></label>
+        <select className="wf-filter" aria-label="Filter library source" value={origin} onChange={e => { setOrigin(e.target.value); if (e.target.value.startsWith('repo:')) setTeamFilter('all') }}><option value="all">All sources</option><option value="personal">Personal</option><option value="vault">Current vault</option><option value="imported">Imported</option>{!!repositories.length && <optgroup label="Repositories">{repositories.map(repo => <option key={repo} value={`repo:${repo}`}>{repo}</option>)}</optgroup>}</select>
         <select className="wf-filter" aria-label="Sort library" value={sort} onChange={e => setSort(e.target.value)}><option value="name">Name A–Z</option><option value="source">Source</option></select>
-        <div className="wf-segment wf-view-toggle" aria-label="Library view"><button aria-label="Library card view" title="Cards" aria-pressed={view === 'cards'} onClick={() => setView('cards')}><LayoutGrid size={16} /></button><button aria-label="Library table view" title="Table" aria-pressed={view === 'table'} onClick={() => setView('table')}><List size={16} /></button></div>
+        <FilterTabs label="Library view" value={view} onChange={setView} options={[{id:'cards',label:'Cards',accessibleLabel:'Library card view',icon:'layout'},{id:'table',label:'Table',accessibleLabel:'Library table view',icon:'list'}]}/> </>}
       </div>
-      <p className="wf-muted">{libraryTab === 'brief' ? 'Your saved agents and reusable templates. Editing a configured agent updates it everywhere it is used; roles and reporting stay with each team.' : 'Reusable instructions that give your team members specific capabilities.'}</p>
+      {libraryTab === 'design' ? <DesignSystemsPanel/> : <>
+      <p className="wf-muted">{libraryTab === 'brief' ? 'Your saved agents and reusable templates. Editing a configured agent updates it everywhere it is used; roles and reporting stay with each team.' : libraryTab === 'team' ? 'Reusable team packages. Browse their agents and skills without creating a working team.' : 'Reusable instructions that give your team members specific capabilities.'}</p>
       {removing && <div role="alert" className="wf-actions rounded-xl border border-line bg-panel p-4"><span className="wf-muted">Remove {removing.name || removing.id} from your library?</span><button className="wf-secondary" onClick={() => void remove(removing)}>Remove definition</button><button className="wf-secondary" onClick={() => setRemoving(null)}>Keep definition</button></div>}
       {custom && <section aria-label="Custom library definition" className="space-y-3 rounded-xl border border-line bg-panel p-4">
         <label className="block text-sm">Definition type<select aria-label="Definition type" disabled={custom.expected !== null} className="input ml-2" value={custom.kind} onChange={e=>setCustom({...custom,kind:e.target.value})}><option value="skill">Skill</option><option value="brief">Agent template</option></select></label>
@@ -112,11 +141,17 @@ export function LibraryPanel({
       </section>}
       {err && <div className="rounded border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11.5px] text-err">{err}</div>}
 
-      {!visible.length ? <div className="wf-empty"><span className="wf-tile-icon">{libraryTab === 'brief' ? <Bot size={24} /> : <Sparkles size={24} />}</span><h3>{search || origin !== 'all' ? 'No matches found' : libraryTab === 'brief' ? 'Give your next agent a head start' : 'Build your team’s toolkit'}</h3><p>{search || origin !== 'all' ? 'Try a different search or source filter.' : 'Create a reusable definition or import one from GitHub. It will be ready when you build your next team.'}</p>{(search || origin !== 'all') ? <button className="wf-secondary" onClick={() => { setSearch(''); setOrigin('all') }}>Clear filters</button> : <button className="wf-secondary" onClick={() => setAdding(true)}><Download size={15} />Explore imports</button>}</div>
-      : view === 'cards' ? <div className="wf-grid">{visible.map(it => <article key={it.kind + it.id} className="wf-card"><div className="wf-card-top"><span className="wf-tile-icon">{it.kind === 'brief' ? <Bot size={23} /> : <Sparkles size={23} />}</span><span className="wf-badge">{configured(it)?.execution === 'manager' ? 'Vault agent' : configured(it) ? 'Personal agent' : it.kind === 'brief' ? 'Agent template' : it.repo === 'personal' ? 'Created by you' : 'Imported'}</span></div><h3>{it.name || it.id}</h3><p>{it.what || 'Ready to customize for your team.'}</p><div className="wf-card-footer">{actions(it)}</div></article>)}</div>
-      : <div className="wf-table-wrap"><table className="wf-table"><thead><tr><th>Name</th><th>Source</th><th>Actions</th></tr></thead><tbody>{visible.map(it => <tr key={it.kind + it.id}><td><strong>{it.name || it.id}</strong><p>{it.what}</p></td><td><span className="wf-badge">{it.repo === 'personal' ? 'Personal' : it.repo === 'vault' ? 'Current vault' : it.repo}</span></td><td><div className="wf-actions">{actions(it)}</div></td></tr>)}</tbody></table></div>}
+      {libraryTab === 'team' ? <>
+        {!visibleTeams.length && <div className="wf-empty"><h3>No team templates found</h3><p>Import a team package to keep its agents, skills and reporting lines together in your Library.</p></div>}
+        <div className="wf-grid">{visibleTeams.map(pkg => <article className="wf-card" key={pkg.team.id}><span className="wf-badge">Team template</span><h3>{pkg.team.name}</h3><p>{pkg.team.description}</p><p>{pkg.team.roles.length} agents · {pkg.texts.filter(t => t.kind === 'skill').length} skills</p><div className="wf-actions"><button className="wf-secondary" onClick={() => setTeamReading(pkg)}>Read team template</button><button className="wf-secondary" onClick={() => { setTeamFilter(pkg.team.id); setLibraryTab('brief') }}>Browse agents</button><button className="wf-secondary" onClick={() => { setTeamFilter(pkg.team.id); setLibraryTab('skill') }}>Browse skills</button></div></article>)}</div>
+      </> : !visible.length ? <div className="wf-empty"><span className="wf-tile-icon">{libraryTab === 'brief' ? <Bot size={24} /> : <Sparkles size={24} />}</span><h3>{search || origin !== 'all' ? 'No matches found' : libraryTab === 'brief' ? 'Give your next agent a head start' : 'Build your team’s toolkit'}</h3><p>{search || origin !== 'all' ? 'Try a different search or source filter.' : 'Create a reusable definition or import one from GitHub. It will be ready when you build your next team.'}</p>{(search || origin !== 'all' || teamFilter !== 'all') ? <button className="wf-secondary" onClick={() => { setSearch(''); setOrigin('all'); setTeamFilter('all') }}>Clear filters</button> : <button className="wf-secondary" onClick={() => setAdding(true)}><Download size={15} />Explore imports</button>}</div>
+      : view === 'cards' ? <div className="wf-grid">{visible.map(it => <article key={it.kind + it.id} className="wf-card"><div className="wf-card-top"><span className="wf-tile-icon">{it.kind === 'brief' ? <Bot size={23} /> : <Sparkles size={23} />}</span><span className="wf-badge">{configured(it)?.execution === 'manager' ? 'Vault agent' : configured(it) ? 'Personal agent' : it.kind === 'brief' ? 'Agent template' : it.repo === 'personal' ? 'Created by you' : 'Imported'}</span></div><h3>{it.name || it.id}</h3><p>{it.what || 'Ready to customize for your team.'}</p>{sourceBadge(it)}<div className="wf-card-footer">{actions(it)}</div></article>)}</div>
+      : <div className="wf-table-wrap"><table className="wf-table"><thead><tr><th>Name</th><th>Source</th><th>Actions</th></tr></thead><tbody>{visible.map(it => <tr key={it.kind + it.id}><td><strong>{it.name || it.id}</strong><p>{it.what}</p></td><td><span className="wf-badge">{it.repo === 'personal' ? 'Personal' : it.repo === 'vault' ? 'Current vault' : sourceTeam(it) ? 'From ' + sourceTeam(it) : it.repo}</span></td><td><div className="wf-actions">{actions(it)}</div></td></tr>)}</tbody></table></div>}
+      {importingTeam && <TeamPackageImport onClose={() => setImportingTeam(false)} onImported={() => { setImportingTeam(false); setLibraryTab('team'); loadTeams(); reload() }} />}
+      {teamReading && <div className="wf-overlay"><section className="wf-picker" role="dialog" aria-modal="true" aria-label="Read team template"><h2>{teamReading.team.name}</h2><p>{teamReading.team.description}</p><p>Reusable template only. No working agents have been created from this import.</p><div className="wf-table-wrap"><table className="wf-table"><thead><tr><th>Role</th><th>Reports to</th><th>Skills</th></tr></thead><tbody>{teamReading.team.roles.map(role => <tr key={role.name}><td><strong>{teamReading.texts.find(t => t.kind === 'brief' && t.id === role.worker)?.name || role.name}</strong><p>{role.kind}</p></td><td>{role.reports_to || 'Team lead'}</td><td>{(teamReading.skills[role.name] || []).join(', ')}<p>Handoffs: {(role.handoffs || []).join(', ') || 'None'}</p></td></tr>)}</tbody></table></div><button className="wf-secondary" onClick={() => setTeamReading(null)}>Close</button></section></div>}
       {adding && (
         <AddFromGitHub
+          onChanged={reload}
           onClose={() => setAdding(false)}
           onAdded={() => {
             setAdding(false)
@@ -146,6 +181,7 @@ export function LibraryPanel({
           </div>
         </div>
       )}
+      </>}
     </div>
   )
 }
@@ -169,7 +205,7 @@ function kitWords(k: ipc.LibraryKit) {
   }
 }
 
-export function AddFromGitHub({ onClose, onAdded, initialRepo = '' }: { onClose: () => void; onAdded: () => void; initialRepo?: string }) {
+export function AddFromGitHub({ onClose, onAdded, onChanged, initialRepo = '' }: { onClose: () => void; onAdded: () => void; onChanged?: () => void; initialRepo?: string }) {
   const [repo, setRepo] = useState(initialRepo || CAPTURE_LIBRARY)
   const [src, setSrc] = useState<ipc.LibrarySource | null>(null)
   const [picked, setPicked] = useState<Set<string>>(new Set())
@@ -253,8 +289,8 @@ export function AddFromGitHub({ onClose, onAdded, initialRepo = '' }: { onClose:
   // A repository's own sets first; the copies it keeps for other editors are
   // the same thing again, so they wait behind a line rather than doubling the
   // choice.
-  const main = (src?.kits ?? []).filter((k) => !k.folder.startsWith('.'))
-  const copies = (src?.kits ?? []).filter((k) => k.folder.startsWith('.'))
+  const main = (src?.kits ?? []).filter((k) => k.folder === '.' || !k.folder.startsWith('.'))
+  const copies = (src?.kits ?? []).filter((k) => k.folder !== '.' && k.folder.startsWith('.'))
 
   const kitCard = (k: ipc.LibraryKit) => {
     const w = kitWords(k)
@@ -269,7 +305,7 @@ export function AddFromGitHub({ onClose, onAdded, initialRepo = '' }: { onClose:
             <span className="text-[13.5px] font-semibold text-ink">
               {k.picks.length} {w.what}
             </span>
-            <span className="truncate font-mono text-[10px] text-faint">{k.folder}/</span>
+            <span className="truncate font-mono text-[10px] text-faint">{k.folder === '.' ? 'Repository root' : `${k.folder}/`}</span>
           </div>
           <p className="m-0 mt-0.5 text-[11.5px] leading-relaxed text-muted">{w.why}</p>
           {k.have > 0 && (
@@ -339,6 +375,7 @@ export function AddFromGitHub({ onClose, onAdded, initialRepo = '' }: { onClose:
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
+              <RepositoryInstructionsImport key={`${src.repo}:${src.commit}`} source={src} onChanged={onChanged}/>
               {main.length > 0 ? (
                 <>
                   <div className="mb-2 text-[12px] text-dim">What this repository holds</div>

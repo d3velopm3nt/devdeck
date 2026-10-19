@@ -9,9 +9,6 @@
 .wf-header p,.wf-picker p { font-size:13px; color:var(--c-dim); margin-top:4px; }
 .wf-main { flex:1; min-height:0; display:flex; flex-direction:column; }
 .wf-navigation { display:flex; gap:28px; padding:0 36px; border-bottom:1px solid var(--c-line); }
-.wf-navigation button { display:flex; align-items:center; gap:8px; padding:12px 0; border-bottom:2px solid transparent; font-size:13px; font-weight:600; color:var(--c-dim); }
-.wf-navigation button span { font-size:11px; font-weight:400; color:var(--c-muted); margin-left:5px; }
-.wf-navigation button[aria-pressed=true] { color:var(--c-accent); border-bottom-color:var(--c-accent); }
 .wf-content { padding:28px 36px; overflow:auto; min-height:0; flex:1; }
 .wf-section-heading { display:flex; align-items:center; justify-content:space-between; gap:20px; margin-bottom:24px; }
 .wf-section-heading h2 { font-size:21px; font-weight:650; color:var(--c-ink); letter-spacing:-.025em; }
@@ -43,6 +40,11 @@
 .wf-card-footer .wf-link { margin-left:auto; }
 .wf-link { display:inline-flex; gap:7px; align-items:center; color:var(--c-accent); font-size:12px; font-weight:600; }
 .wf-badge { display:inline-flex; align-items:center; gap:5px; border-radius:20px; padding:4px 9px; font-size:10px; color:var(--c-dim); background:var(--c-soft); white-space:nowrap; }
+.wf-card-source { display:flex; margin-top:auto; padding-top:14px; }
+.wf-source-badge { max-width:100%; width:fit-content; cursor:pointer; border:1px solid transparent; text-align:left; }
+.wf-source-badge span { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.wf-source-badge:hover { color:var(--c-accent); border-color:var(--c-line); }
+.wf-source-badge:focus-visible { outline:2px solid var(--c-accent); outline-offset:3px; }
 .wf-badge[data-tone=active] { color:var(--c-ok); background:color-mix(in srgb,var(--c-ok) 10%,transparent); }
 .wf-avatars { display:flex; padding:14px 0 0; margin-top:auto; }
 .wf-avatars span { display:grid; place-items:center; width:29px; height:29px; border-radius:50%; border:2px solid var(--c-panel); background:var(--c-hover); color:var(--c-accent); font-size:10px; font-weight:600; margin-left:-5px; }
@@ -109,3 +111,6 @@
 .build-member-list article p { font-size:12px; margin:6px 0; }
 .build-member-list label { display:grid; align-content:start; gap:6px; font-size:11px; min-width:180px; }
 @media(max-width:700px) { .build-member-list article { flex-direction:column; } .build-proposal { padding:12px; } }
+
+/* Section navigation stays on one compact line at every window width. */
+.wf-navigation.ds-compact-tabs { flex-wrap: nowrap; gap: 12px; }

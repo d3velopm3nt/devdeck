@@ -22,9 +22,12 @@ fn text(e: &DomainEvent, field: &str) -> String {
 }
 
 pub fn project(e: &DomainEvent) -> Option<Notice> {
+    // Issue intake emits the canonical review/blocker with the owning work-item link.
+    if matches!(e.kind.as_str(), "work.updated" | "work.released") && text(e, "attention_owner") == "issue-intake" { return None; }
     let status = text(e, "status");
     let (kind, title) = match e.kind.as_str() {
         "notification.test" => (match e.payload["kind"].as_str() { Some("info")=>"info", Some("alert")=>"alert", Some("blocker")=>"blocker", _=>"approval" }, "Test notification"),
+        "inbox.requested" => (if text(e,"kind")=="review" {"approval"} else {"blocker"}, "Dev needs your input"),
         "tool.approval.requested" => ("approval", "Dev needs your approval"),
         "conflict.detected" => ("blocker", "Work needs your input"),
         "agent.failed" | "process.failed" | "test.failed" => ("alert", "Work needs attention"),
@@ -37,11 +40,12 @@ pub fn project(e: &DomainEvent) -> Option<Notice> {
     };
     let repo = text(e, "repository");
     let run = text(e, "run");
+    let work_target = text(e, "target");
     let source = if !repo.is_empty() { repo.clone() } else { e.scope.project_id.clone().unwrap_or_else(|| "DevDeck".into()) };
     let entity = if !run.is_empty() { run.clone() } else { e.scope.work_item_id.clone().or(e.scope.session_id.clone()).unwrap_or_else(|| if !repo.is_empty() { repo.clone() } else { e.id.clone() }) };
     let body = [text(e, "title"), text(e, "summary"), text(e, "error")].into_iter().find(|s| !s.is_empty()).unwrap_or_else(|| title.into());
     Some(Notice { id: format!("{}:{}:{}:{}", e.scope.workspace_id.as_deref().unwrap_or(""), source, entity, kind), event_id:e.id.clone(), source,
-        title:title.into(), body, kind:kind.into(), target: if !repo.is_empty() { format!("repo:{repo}") } else if !run.is_empty() { format!("run:{run}") } else { "inbox".into() }, at:e.timestamp.clone(), count:1, unread:true })
+        title:title.into(), body, kind:kind.into(), target: if e.kind=="inbox.requested" && work_target.starts_with("work-item:") { work_target } else if e.kind=="inbox.requested" { "inbox".into() } else if !repo.is_empty() { format!("repo:{repo}") } else if !run.is_empty() { format!("run:{run}") } else { "inbox".into() }, at:e.timestamp.clone(), count:1, unread:true })
 }
 
 pub fn keep(conn: &Connection, e: &DomainEvent) -> Result<Option<Notice>, String> {
@@ -141,6 +145,22 @@ mod tests {
         let mut e=DomainEvent::new(EventType::FileChanged,Default::default(),serde_json::json!({"source":"issue_monitor"}));
         assert!(project(&e).is_none()); e.kind="work.updated".into(); e.payload=serde_json::json!({"status":"needs-review"});
         assert_eq!(project(&e).unwrap().kind,"approval");
+    }
+    #[test]
+    fn workflow_attention_opens_its_owning_work_item() {
+        let mut e=DomainEvent::new(EventType::FileChanged,EventScope::project("3"),serde_json::json!({"kind":"review","target":"work-item:github:owner/repo:36"}));
+        e.kind="inbox.requested".into();
+        assert_eq!(project(&e).unwrap().target,"work-item:github:owner/repo:36");
+    }
+    #[test]
+    fn issue_intake_owns_review_notification_but_direct_work_still_notifies() {
+        let mut event = DomainEvent::new(EventType::WorkUpdated, EventScope::project("3"), serde_json::json!({"status":"needs-review","attention_owner":"issue-intake"}));
+        assert!(project(&event).is_none());
+        event.payload["attention_owner"] = serde_json::json!("runtime");
+        assert_eq!(project(&event).unwrap().kind, "approval");
+        event.kind = "inbox.requested".into();
+        event.payload = serde_json::json!({"kind":"review","target":"work-item:github:owner/repo:37","title":"Current issue plan"});
+        assert_eq!(project(&event).unwrap().body, "Current issue plan");
     }
     #[test]
     fn history_and_read_state_survive_reopen() {

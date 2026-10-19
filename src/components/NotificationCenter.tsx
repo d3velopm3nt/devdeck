@@ -79,7 +79,8 @@ export function NotificationCenter() {
     if(n.target==='notifications'){setOpen(true);return}
     void read(n).catch(e=>setError(String(e)))
     setOpen(false)
-    if(n.target.startsWith('run:'))openRun(n.target.slice(4),n.title)
+    if(n.target.startsWith('work-item:'))useApp.getState().focusWorkItem(n.target.slice(10))
+    else if(n.target.startsWith('run:'))openRun(n.target.slice(4),n.title)
     else if(n.target.startsWith('repo:')){sessionStorage.setItem('devdeck.github.selection',n.target.slice(5)+':briefing');useApp.getState().setRailView('github')}
     else useApp.getState().setRailView('inbox')
   }
@@ -101,7 +102,7 @@ export function NotificationCenter() {
     <NeedsYouBell />
     <button aria-label="Notifications" aria-expanded={open} onClick={()=>setOpen(!open)} title="Notification centre"><Icon name="history" size={16} />{rows.some(n=>n.unread)&&<b>{rows.filter(n=>n.unread).length}</b>}</button>
     {open&&<section className="notification-panel" aria-label="Notification centre">
-      <header><strong>Dev’s updates</strong><span>Saved history</span><button aria-label="Close notifications" onClick={()=>setOpen(false)}>×</button></header>
+      <header><strong>Dev’s updates</strong><span>Saved history</span><button aria-label="Close notifications" onClick={()=>setOpen(false)}><Icon name="close" size={16}/></button></header>
       <div className="notification-controls"><select aria-label="Notification level" value={level} onChange={e=>run(changeLevel(e.target.value))}><option value="off">Off</option><option value="attention">Needs my attention</option><option value="summary">Summary · 15 minutes</option><option value="all">All activity</option></select><button onClick={()=>{setOpen(false);useApp.getState().setSettingsTab('notifications');useApp.getState().setRailView('settings')}}>Settings</button></div>
       <small><select aria-label="Test alert category" value={testKind} onChange={e=>setTestKind(e.target.value)}><option value="info">Information</option><option value="alert">Failure</option><option value="approval">Approval</option><option value="blocker">Blocker</option></select> <button onClick={()=>run(invoke('notification_test',{kind:testKind}))}>Test alert</button> <button onClick={()=>run(invoke('notification_test',{kind:testKind,delaySeconds:5}).then(()=>setTestStatus('Test scheduled in 5 seconds. You can minimize DevDeck.')))}>Test in 5s</button><span role="status">{testStatus}</span> History stays available when alerts are muted. <button onClick={()=>run(requestPermission().then(result=>{if(result!=='granted')setError('Windows notifications are not permitted. History and in-app alerts remain available.')}))}>Enable Windows alerts</button></small>
       {error&&<p role="alert">{error}</p>}

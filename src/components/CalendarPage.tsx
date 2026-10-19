@@ -1,3 +1,4 @@
+import { FilterTabs, StateBadge } from './ui/DesignSystem'
 // Time, across every space.
 //
 // Four views over one query. Day, week, month and year differ in the window
@@ -316,12 +317,11 @@ export function CalendarPage() {
           </button>
         )}
 
-        <span className="ml-auto flex shrink-0 items-center gap-1.5">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
           <Segmented
             options={VIEWS}
             value={view}
             onChange={(v) => app.setCalView(v)}
-            accent
           />
           {view === 'day' && (
             <Segmented
@@ -354,7 +354,7 @@ export function CalendarPage() {
             <Icon name="add" size={12} />
             New
           </button>
-        </span>
+        </div>
       </div>
 
       {view === 'day' && !openItem && <DayStats items={shown} day={from} />}
@@ -412,36 +412,15 @@ function Segmented<T extends string | number>({
   options,
   value,
   onChange,
-  accent,
   title,
 }: {
   options: Array<[T, string]>
   value: T
   onChange: (v: T) => void
-  accent?: boolean
   title?: string
 }) {
   return (
-    <span
-      className="flex items-center gap-0.5 rounded-lg border border-line bg-panel p-0.5"
-      title={title}
-    >
-      {options.map(([v, label]) => (
-        <button
-          key={String(v)}
-          className={`rounded-md px-2.5 py-0.5 text-[11px] ${
-            v === value
-              ? accent
-                ? 'bg-indigo-500 font-medium text-white'
-                : 'bg-hover text-ink'
-              : 'text-muted hover:text-dim'
-          }`}
-          onClick={() => onChange(v)}
-        >
-          {label}
-        </button>
-      ))}
-    </span>
+<FilterTabs label={title ?? 'Calendar view'} value={String(value)} onChange={id=>{const option=options.find(([v])=>String(v)===id);if(option)onChange(option[0])}} options={options.map(([v,label])=>({id:String(v),label,icon:typeof v==='number'?'clock':'schedule'}))}/>
   )
 }
 
@@ -1185,9 +1164,7 @@ function YearGrid({
               </span>
               <span className="min-w-0 flex-1 truncate text-[11.5px] text-ink">{i.title}</span>
               <span className="shrink-0 text-[10.5px] text-muted">{i.space}</span>
-              <span className="w-[80px] shrink-0 text-right text-[10.5px] text-faint">
-                {i.status}
-              </span>
+              <StateBadge state={i.status}/>
             </button>
           ))
         )}

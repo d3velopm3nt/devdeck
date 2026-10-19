@@ -1,3 +1,4 @@
+import { StateIcon } from './ui/DesignSystem'
 // Connections' contextual sidebar: the connections themselves, each with its
 // saved queries nested underneath. Fixed chrome, like the Explorer.
 
@@ -13,15 +14,7 @@ const ENGINE_LABEL: Record<string, string> = {
 
 /** Reachability, shown the way a service's status is. */
 function StatusDot({ state }: { state: 'ok' | 'bad' | 'unknown' | 'testing' }) {
-  const cls =
-    state === 'ok'
-      ? 'bg-emerald-400'
-      : state === 'bad'
-        ? 'bg-red-400'
-        : state === 'testing'
-          ? 'bg-amber-400 animate-pulse'
-          : 'bg-faint'
-  return <span className={`h-[7px] w-[7px] shrink-0 rounded-full ${cls}`} />
+  return <StateIcon state={{ok:'connected',bad:'failed',unknown:'unknown',testing:'running'}[state]} label={{ok:'Connected',bad:'Connection failed',unknown:'Not checked',testing:'Testing connection'}[state]}/>
 }
 
 export function ConnectionsSidebar() {

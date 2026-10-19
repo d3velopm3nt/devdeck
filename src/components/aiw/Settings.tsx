@@ -1,3 +1,4 @@
+import { FilterTabs } from '../ui/DesignSystem'
 // Assistant settings.
 //
 // Everything you configure once lives here, so the rail's sidebar stays a list
@@ -7,7 +8,7 @@
 
 import { CAPTURE_SETTINGS_TAB } from '../../lib/devCapture'
 import { Grants } from './Grants'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Icon, type IconName } from '../../lib/icons'
 import { useAiw } from '../../lib/aiwStore'
 import { aiw, type AgentDef, type ModelCheck, type ProviderHealth } from '../../lib/aiw'
@@ -41,10 +42,24 @@ function AgentProviders() {
     Record<string, { verdict: ModelCheck | undefined; retry: () => void }>
   >({})
 
+  const [loadingProviders, setLoadingProviders] = useState(false)
+  const reloadProviders = useCallback(async () => {
+    setLoadingProviders(true)
+    try {
+      const list = await aiw.providers()
+      setProviders(list.filter(([id]) => id !== 'mock'))
+      setError(null)
+    } catch (e) { setError(String(e)) }
+    finally { setLoadingProviders(false) }
+  }, [])
   useEffect(() => {
     void invoke<ProviderDefaults>('aiw_provider_defaults').then(d => setInherited(d.inherited)).catch(e => setError(String(e)))
-    aiw.providers().then(ps => setProviders(ps.filter(([id]) => id !== 'mock'))).catch(e => { setProviders([]); setError(String(e)) })
-  }, [])
+    void reloadProviders()
+    const refresh = () => { void reloadProviders() }
+    window.addEventListener('focus', refresh)
+    window.addEventListener('devdeck:capabilities-changed', refresh)
+    return () => { window.removeEventListener('focus', refresh); window.removeEventListener('devdeck:capabilities-changed', refresh) }
+  }, [reloadProviders])
 
   const draftFor = (ag: AgentDef) =>
     drafts[ag.id] ?? { provider: ag.provider === 'mock' ? '' : ag.provider, model: ag.provider === 'mock' ? '' : ag.model }
@@ -93,6 +108,10 @@ function AgentProviders() {
         </div>
       )}
 
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="text-xs text-muted" role="status">{loadingProviders ? 'Loading providers…' : `${providers.filter(([, , health]) => health.configured).length} connected providers`}</span>
+        <button className="btn-ghost" disabled={loadingProviders} onClick={() => void reloadProviders()}>Refresh providers</button>
+      </div>
       <div className="overflow-hidden rounded-md border border-line bg-raise">
         <div className="grid grid-cols-[minmax(0,1fr)_170px_minmax(0,220px)_88px] border-b border-line bg-soft">
           {['Agent', 'Provider', 'Model', ''].map((h, i) => (
@@ -110,12 +129,12 @@ function AgentProviders() {
             <div key={ag.id} className="border-b border-line last:border-0">
               <div className="grid grid-cols-[minmax(0,1fr)_170px_minmax(0,220px)_88px] items-center">
               <div className="min-w-0 px-3 py-2.5">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[12.5px] text-ink">{ag.name}</span>{inherited.includes(ag.id) && <span className="text-xs text-muted">Default</span>}
-                  {ag.id !== 'assistant' && <button className="btn-ghost text-xs" disabled={saving !== null} onClick={() => {
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[12.5px] text-ink">{ag.name}</span>{inherited.includes(ag.id) && <span className="text-xs text-muted">Uses shared settings</span>}
+                  {ag.id !== 'assistant' && !inherited.includes(ag.id) && <button className="btn-ghost text-xs" disabled={saving !== null} onClick={() => {
                     setSaving(ag.id); setError(null)
                     void invoke('aiw_agent_use_default', {agentId: ag.id}).then(async () => { await a.reloadAgents(); setInherited(ids => [...new Set([...ids, ag.id])]); setDrafts(ds => { const next = {...ds}; delete next[ag.id]; return next }) }).catch(e => setError(String(e))).finally(() => setSaving(null))
-                  }}>Use default</button>}
+                  }}>Use shared settings</button>}
 
                   {!isMock && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />}
                 </div>
@@ -125,12 +144,14 @@ function AgentProviders() {
               <div className="px-3 py-2.5">
                 <select
                   className="input w-full text-[11.5px]"
+                  aria-label={`${ag.name} provider`}
                   value={d.provider}
                   onChange={(e) =>
                     setDrafts({ ...drafts, [ag.id]: { ...d, provider: e.target.value, model: '' } })
                   }
                 >
-                  <option value="">Choose a provider</option>
+                  <option value="">{loadingProviders ? 'Loading providers…' : 'Choose a provider'}</option>
+                  {d.provider && !providers.some(([id]) => id === d.provider) && <option value={d.provider} disabled>{d.provider === 'chatgpt-subscription' ? 'ChatGPT subscription' : d.provider === 'claude-subscription' ? 'Claude subscription' : d.provider} — {loadingProviders ? 'checking connection' : 'connection unavailable'}</option>}
                   {providers.map(([id, label, health]) => (
                     <option key={id} value={id} disabled={!health.configured && id !== 'mock'}>
                       {label}
@@ -319,23 +340,7 @@ export function Settings() {
             Which AI services you use, who uses them, and what they&rsquo;re allowed to do.
           </div>
         </div>
-        <div className="flex gap-0.5">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              className={`flex items-center gap-1.5 whitespace-nowrap px-2.5 py-1.5 text-[12px] ${
-                tab === t.id
-                  ? 'font-semibold text-ink shadow-[inset_0_-2px_0_theme(colors.indigo.500)]'
-                  : 'text-muted hover:text-ink'
-              }`}
-              onClick={() => setTab(t.id)}
-              title={t.blurb}
-            >
-              <Icon name={t.icon} size={13} />
-              {t.label}
-            </button>
-          ))}
-        </div>
+<div className="ds-view-switch"><FilterTabs label="Assistant settings" value={tab} onChange={setTab} options={TABS.map(t=>({...t,description:t.blurb}))}/></div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto p-5">

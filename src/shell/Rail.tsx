@@ -1,3 +1,5 @@
+import { useWorkData } from '../components/work/useWorkData'
+import { assembleWork, workState } from '../lib/workHub'
 // The app's primary navigation, and the solution picker.
 //
 // Solutions live here rather than in the Explorer for one reason: with a
@@ -17,6 +19,8 @@
 // is the question this rail exists to answer.
 
 import { useEffect, useMemo, useState } from 'react'
+import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import { useApp, type RailView } from '../store'
 import { approvalItem, conflictItem, unread, unreadFailures } from '../lib/inbox'
 import { openBot, openNodeThread } from '../lib/dock'
@@ -26,20 +30,27 @@ import { avatarLabel, nodeColor } from '../lib/spaces'
 import { findNode, subtreeIds } from '../lib/tree'
 import type { TreeNode } from '../lib/types'
 import { SpaceSwitcher } from './SpaceSwitcher'
+import { DEFAULT_RAIL_WIDTH, MIN_RAIL_WIDTH, useRailWidth } from './useRailWidth'
+import './rail.css'
+import { TeamsNavigation } from './TeamsNavigation'
+import { useChatWorkspace } from '../lib/chatWorkspace'
+import { openTeamView, useTeamNavigation } from '../lib/teamNavigation'
 
 type Item = { view: RailView; icon: IconName; label: string }
 
 // Shared destinations remain available regardless of the selected space.
 const SHARED: Item[] = [
   { view: 'github', icon: 'github', label: 'GitHub' },
-  { view: 'activity', icon: 'history', label: 'Activity board' },
-  { view: 'sessions', icon: 'agent', label: 'Sessions' },
+
   { view: 'calendar', icon: 'schedule', label: 'Calendar' },
   { view: 'mail', icon: 'mail', label: 'Mail' },
 ]
 
 // Advanced surfaces stay behind one expandable entry.
 const TOOLS: Item[] = [
+  { view: 'workers', icon: 'agent', label: 'Agent Library' },
+  { view: 'activity', icon: 'history', label: 'Activity history' },
+  { view: 'sessions', icon: 'agent', label: 'Sessions' },
   { view: 'home', icon: 'home', label: 'Operations' },
   { view: 'connections', icon: 'database', label: 'Connections' },
   { view: 'analytics', icon: 'history', label: 'Analytics' },
@@ -67,7 +78,7 @@ function RailButton({
   dot,
   count,
   alarm,
-  live,
+  workCounts,
   onClick,
 }: {
   label: string
@@ -87,14 +98,16 @@ function RailButton({
   alarm?: boolean
   /// How many are working right now. Green, because it is good news, and a
   /// number for the same reason `count` is.
-  live?: number
+  workCounts?: { blocked: number; review: number; working: number }
   onClick: () => void
 }) {
   const height = mini ? (expanded ? 'h-7' : 'h-8') : expanded ? 'h-9' : 'h-10'
 
   return (
     <button
-      className={`relative flex items-center rounded-lg transition-colors ${height} ${
+      aria-label={label}
+      aria-current={active ? 'page' : undefined}
+      className={`ds-navigation-item relative flex items-center rounded-lg transition-colors ${height} ${
         expanded ? 'w-full gap-2.5 px-2.5 text-[13px]' : 'w-10 justify-center'
       } ${active ? 'bg-raise text-ink' : 'text-muted hover:bg-hover/50 hover:text-dim'}`}
       // Expanded, the label is on screen — a tooltip repeating it is noise.
@@ -123,19 +136,16 @@ function RailButton({
         <Icon name={icon ?? 'project'} size={expanded ? 15 : 17} className="shrink-0" />
       )}
       {expanded && <span className="min-w-0 flex-1 truncate text-left">{label}</span>}
-      {!!live && live > 0 && (
-        <span
-          className={`shrink-0 text-[10px] font-semibold text-ok ${
-            expanded ? 'ml-auto' : 'absolute right-1 top-0.5'
-          }`}
-        >
-          {live}
-        </span>
-      )}
+      {workCounts && <span className={expanded ? 'ml-auto flex items-center gap-1' : 'absolute -right-1 -top-0.5'}>
+        {(['blocked', 'review', 'working'] as const).filter(state => workCounts[state] > 0).slice(0, expanded ? 3 : 1).map(state => <span key={state}
+          className="rail-work-count" data-state={state} title={`${workCounts[state]} ${state === 'review' ? 'awaiting review' : state} work items`} aria-label={`${workCounts[state]} ${state} work items`}>
+          {workCounts[state] > 99 ? '99+' : workCounts[state]}
+        </span>)}
+      </span>}
       {!!count && count > 0 && (
         <span
           className={`shrink-0 rounded-full px-1.5 text-[9.5px] font-bold text-white ${
-            alarm ? 'bg-red-500' : 'bg-indigo-500'
+            alarm ? 'bg-err text-page' : 'bg-accent text-page'
           } ${
             expanded ? 'ml-auto' : 'absolute right-0.5 top-1 border-2 border-app'
           }`}
@@ -161,6 +171,8 @@ function Rule({ expanded }: { expanded: boolean }) {
 }
 
 export function Rail() {
+  const { ref, width, max, setWidth } = useRailWidth()
+  const [dragging, setDragging] = useState(false)
   const {
     railView,
     setRailView,
@@ -182,6 +194,18 @@ export function Rail() {
     bots,
   } = useApp()
   const aiw = useAiw()
+  const [requestCount, setRequestCount] = useState(0)
+  useEffect(() => {
+    let alive = true
+    const refresh = async () => {
+      try { const rows = await invoke<{ status: string }[]>('inbox_requests'); if (alive) setRequestCount(rows.filter(r => r.status === 'needs-you').length) }
+      catch { if (alive) setRequestCount(0) }
+    }
+    setRequestCount(0)
+    const off = listen('devdeck:inbox', () => { void refresh() })
+    void off.then(() => refresh()).catch(() => { if (alive) setRequestCount(0) })
+    return () => { alive = false; void off.then(fn => fn()) }
+  }, [activeWorkspaceId])
   const anyRunning = Object.values(svcStates).some((s) => s.status === 'running')
   // What the Inbox holds, which is only what needs you: an agent stopped on a
   // clock, work that cannot continue, something that ran and failed.
@@ -198,13 +222,16 @@ export function Rail() {
     aiw.conflicts.filter((c) => !c.resolved && unread(conflictItem(c.id), Date.now(), marks))
       .length
   const broken = unreadFailures(activity, marks).length
-  const unreadCount = waiting + broken
-  // What is moving, so the rail says so without being opened: items held by
-  // a live claim under Work, agents mid-session under Bots. Green counts
-  // rather than the Inbox's badge, because these are good news.
-  const working = new Set(
-    aiw.sessions.filter((s) => s.status === 'working' || s.status === 'planning').map((s) => s.agent_id),
-  ).size
+  const unreadCount = waiting + broken + requestCount
+  // Work counts describe work-item states; team entries show live agents.
+  const { data: workData } = useWorkData(nodes)
+  const workScope = spaceScopeId == null ? null : new Set(subtreeIds(nodes, spaceScopeId))
+  const workCounts = { blocked: 0, review: 0, working: 0 }
+  for (const card of assembleWork(workData.records, workData.legacy, workData.monitor, workData.workflows, workData.claims)) {
+    if (workScope && !workScope.has(card.record.node)) continue
+    const state = workState(card)
+    if (state === 'blocked' || state === 'review' || state === 'working') workCounts[state]++
+  }
 
   const [expanded, setExpanded] = useState(() => localStorage.getItem(KEY) !== '0')
   useEffect(() => localStorage.setItem(KEY, expanded ? '1' : '0'), [expanded])
@@ -244,11 +271,15 @@ export function Rail() {
 
   return (
     <nav
-      className={`flex shrink-0 flex-col border-r border-line bg-app ${
-        expanded ? 'w-[188px] items-stretch gap-1 px-3 py-3' : 'w-[52px] items-center gap-1 py-2'
+      ref={ref}
+      aria-label="Primary navigation"
+      style={{ width: expanded ? width : 52 }}
+      className={`app-rail flex shrink-0 flex-col border-r border-line bg-app ${
+        expanded ? 'items-stretch py-3' : 'items-center py-2'
       }`}
     >
-      <div className="mb-3 w-full">
+      <div className={`app-rail-scroll w-full ${expanded ? 'px-3' : 'items-center'}`}>
+      <div className="mb-3 w-full shrink-0">
         <SpaceSwitcher spaces={nodes.filter(n => n.parent_id == null)} value={spaceScopeId} expanded={expanded} onChange={setSpaceScope} />
       </div>
       <RailButton
@@ -259,12 +290,11 @@ export function Rail() {
         onClick={() => setRailView('today')}
       />
 
-      <RailButton label="Work" icon="check" active={railView === 'team'} expanded={expanded} live={working}
-        onClick={() => setRailView('team')} />
+      <RailButton label="Work" icon="check" active={railView === 'team'} expanded={expanded} workCounts={workCounts}
+        onClick={() => openTeamView('', 'work')} />
       <RailButton label="Chat" icon="ai" active={railView === 'chat'} expanded={expanded}
         onClick={() => setRailView('chat')} />
-      <RailButton label="Workforce" icon="tool" active={railView === 'workers'} expanded={expanded}
-        onClick={() => setRailView('workers')} />
+      <TeamsNavigation expanded={expanded}/>
 
       {/* The tree of everything: areas, folders, clients and projects. Called
           Spaces again now the workspace tabs are gone — the word meant two
@@ -328,11 +358,11 @@ export function Rail() {
           // not something the team is waiting on you for, which is what the
           // numbered badge above means.
           dot={it.view === 'mail' && (mailCounts?.unread ?? 0) > 0}
-          onClick={() => setRailView(it.view)}
+          onClick={() => { setRailView(it.view); if (it.view === 'workers') useTeamNavigation.setState({ directory:'library' }) }}
         />
       ))}
 
-      <div className="flex-1" />
+      <div className="rail-spacer" />
 
       {/* A hairline rather than a gap: the two groups are different kinds of
           destination, and with only whitespace between them the bottom rows
@@ -379,6 +409,7 @@ export function Rail() {
             onClick={() => {
               localStorage.setItem(LAST_TOOL_KEY, t.view)
               setLastTool(t.view)
+              if (t.view === 'workers') { useChatWorkspace.setState({ designerTeam:undefined }); useTeamNavigation.setState({ directory:'library' }) }
               setRailView(t.view)
             }}
           >
@@ -398,11 +429,13 @@ export function Rail() {
         onClick={() => setRailView('settings')}
       />
 
+      </div>
+
       {/* The toggle is chrome, not a destination, so it sits below the
           hairline that separates destinations from the app itself. */}
       <button
-        className={`mt-0.5 flex items-center rounded-lg text-muted transition-colors hover:bg-hover/50 hover:text-dim ${
-          expanded ? 'h-7 w-full gap-2 px-2' : 'h-8 w-10 justify-center'
+        className={`mt-1 flex shrink-0 items-center rounded-lg text-muted transition-colors hover:bg-hover/50 hover:text-dim ${
+          expanded ? 'mx-3 h-7 gap-2 px-2' : 'h-8 w-10 justify-center'
         }`}
         title={expanded ? 'Collapse to icons' : 'Expand the menu'}
         aria-label={expanded ? 'Collapse the navigation' : 'Expand the navigation'}
@@ -416,6 +449,33 @@ export function Rail() {
         />
         {expanded && <span className="min-w-0 flex-1 truncate text-left text-[11.5px]">Collapse</span>}
       </button>
+      {expanded && <div role="separator" aria-label="Resize navigation sidebar" aria-orientation="vertical"
+        aria-valuemin={MIN_RAIL_WIDTH} aria-valuemax={max} aria-valuenow={width} aria-valuetext={width + ' pixels'}
+        tabIndex={0} className="rail-resizer" data-dragging={dragging}
+        title="Drag to resize · double-click to reset"
+        onPointerDown={event => {
+          if (event.button !== 0) return
+          event.preventDefault()
+          event.currentTarget.focus()
+          event.currentTarget.setPointerCapture(event.pointerId)
+          setDragging(true)
+        }}
+        onPointerMove={event => {
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) setWidth(event.clientX - (ref.current?.getBoundingClientRect().left ?? 0))
+        }}
+        onPointerUp={event => {
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+          setDragging(false)
+        }}
+        onPointerCancel={() => setDragging(false)} onLostPointerCapture={() => setDragging(false)}
+        onDoubleClick={() => setWidth(DEFAULT_RAIL_WIDTH)}
+        onKeyDown={event => {
+          const next = event.key === 'ArrowLeft' ? width - (event.shiftKey ? 32 : 8)
+            : event.key === 'ArrowRight' ? width + (event.shiftKey ? 32 : 8)
+            : event.key === 'Home' ? MIN_RAIL_WIDTH : event.key === 'End' ? max : null
+          if (next !== null) { event.preventDefault(); setWidth(next) }
+        }}
+      />}
     </nav>
   )
 }

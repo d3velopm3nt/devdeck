@@ -13,7 +13,7 @@ export function SetupBanner() {
     let active = true
     void ipc.settingGet(HIDDEN).then(v => { if (active) setHidden(v === 'true') }).catch(() => { if (active) setHidden(false) })
     const refresh = () => {
-      void ipc.githubStateRepos().then(v => { if (active) setGithub(v.signed_in) }).catch(() => { if (active) setGithub(null) })
+      void ipc.githubUser().then(v => { if (active) setGithub(v.login ? true : null) }).catch(() => { if (active) setGithub(null) })
       void useAiw.getState().reloadAgents()
     }
     const connected = () => { if (active) setGithub(true) }

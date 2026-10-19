@@ -1,3 +1,4 @@
+import { FilterTabs } from './ui/DesignSystem'
 import { RepositoryListRow } from './RepositoryListRow'
 
 // Community — open-source AI your bots can use.
@@ -340,37 +341,7 @@ export function CommunityView({ discoveryOnly = false }: { discoveryOnly?: boole
 
         <div className={`${discoveryOnly ? '' : 'mt-2.5 '}flex items-center gap-1`}>
 
-          {((discoveryOnly ? ['search', 'discover', 'trending'] : ['browse', 'library', 'bundles', 'discover', 'installed', 'trending', 'permissions', 'models']) as Tab[]).map((t) => (
-
-            <button
-
-              key={t}
-
-              className={`rounded-md px-2.5 py-1 text-[12px] capitalize ${
-
-                tab === t ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
-
-              }`}
-
-              onClick={() => setTab(t)}
-
-            >
-
-              {discoveryOnly && t === 'discover' ? 'Top repositories & tools' : t}
-
-              {t === 'installed' && installed.length > 0 && (
-
-                <span className="ml-1.5 text-[10.5px] tabular-nums text-faint">
-
-                  {installed.length}
-
-                </span>
-
-              )}
-
-            </button>
-
-          ))}
+<FilterTabs label="Community views" value={tab} onChange={setTab} options={((discoveryOnly ? ['search','discover','trending'] : ['browse','library','bundles','discover','installed','trending','permissions','models']) as Tab[]).map(t=>({id:t,label:discoveryOnly && t==='discover'?'Top repositories & tools':t[0].toUpperCase()+t.slice(1),icon:({search:'search',discover:'globe',trending:'arrow-up',browse:'layout',library:'folder',bundles:'package',installed:'check',permissions:'secret',models:'ai'} as const)[t],count:t==='installed' ? installed.length || undefined : undefined}))}/>
 
           <span className="flex-1" />
 

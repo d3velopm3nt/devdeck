@@ -225,7 +225,7 @@ export function ModelPicker({
               return (
                 <option key={m.id} value={m.id}>
                   {checks[m.id] ? (checks[m.id].ok ? '✓ ' : '✗ ') : ''}
-                  {m.name}
+                  {m.id === 'default' && providerId.endsWith('-subscription') ? 'Automatic (CLI chooses model)' : m.name}
                   {m.context_window ? ` · ${Math.round(m.context_window / 1000)}k` : ''}
                   {p ? ` · ${p.label}` : ''}
                 </option>

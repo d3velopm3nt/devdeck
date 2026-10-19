@@ -68,6 +68,18 @@ fn source(db: &Db, repo: &str) -> Result<Source, String> {
     }
     Ok(saved)
 }
+
+pub(crate) fn ticket_context(db: &Db, repository: &str, number: u64) -> Result<String, String> {
+    let saved = source(db, repository)?;
+    let issue = saved.items.iter().find(|issue| issue["number"].as_u64() == Some(number))
+        .ok_or("Refresh issue intake before planning: the originating issue is not cached.")?;
+    crate::issue_monitor_model::ticket_brief(repository, number, issue)
+}
+
+pub(crate) fn ticket_title(db: &Db, repository: &str, number: u64) -> Option<String> {
+    source(db, repository).ok()?.items.iter().find(|issue| issue["number"].as_u64() == Some(number))?
+        .get("title")?.as_str().map(str::to_owned)
+}
 pub fn view(db: &Db) -> Result<View, String> {
     let (raw, cfg) = config(db)?;
     let mut sources = vec![];
@@ -84,6 +96,39 @@ pub fn view(db: &Db) -> Result<View, String> {
             Err(e) => warnings.push(e),
         }
     }
+    // Manual routing and human review must remain visible even while automatic
+    // monitoring is paused. Workflow receipts are authoritative for linked work.
+    let mut dispatches = dispatches(db)?;
+    let workflows = crate::folder_workflows::snapshot(db);
+    if let Some(items) = workflows["items"].as_array() {
+        for item in items {
+            let Some(ticket) = item["definition"]["ticket_url"].as_str() else { continue };
+            let Some(path) = ticket.strip_prefix("https://github.com/") else { continue };
+            let Some((repository, number)) = path.split_once("/issues/") else { continue };
+            let Ok(number) = number.parse::<u64>() else { continue };
+            if !sources.iter().any(|s| s.repository == repository) { continue; }
+            let steps: Vec<serde_json::Value> = items.iter()
+                .filter(|other| other["definition"]["ticket_url"].as_str() == Some(ticket))
+                .filter_map(|other| other["definition"]["steps"].as_array())
+                .flatten().cloned().collect();
+            let Some(node) = item["node"].as_i64() else { continue };
+            let Some(workflow) = item["id"].as_str() else { continue };
+            let status = linked_status(&steps);
+            let message = steps.iter().filter(|s| s["status"] == "blocked" || s["status"] == "review")
+                .filter_map(|s| s["evidence"].as_str()).filter(|s| !s.is_empty()).collect::<Vec<_>>().join("\n");
+            if let Some(row) = dispatches.iter_mut().find(|d| d.repository == repository && d.number == number) {
+                // A work item may own several runs. Keep its original dispatch
+                // assignment while aggregating attention across all linked runs.
+                if row.workflow.is_empty() { row.workflow = workflow.into(); }
+                row.status = status.into(); row.message = message;
+            } else {
+                dispatches.push(Dispatch { repository: repository.into(), number, node, workflow: workflow.into(), status: status.into(), message });
+            }
+        }
+    }
+    if let Some(rows) = workflows["warnings"].as_array() {
+        warnings.extend(rows.iter().filter_map(|w| w.as_str().map(str::to_string)));
+    }
     Ok(View {
         raw,
         enabled: cfg.enabled,
@@ -92,8 +137,36 @@ pub fn view(db: &Db) -> Result<View, String> {
         sources,
         warnings,
         bindings: cfg.bindings,
-        dispatches: dispatches(db)?,
+        dispatches,
     })
+}
+pub(crate) fn update_work_attention(db: &Db) -> Result<(), String> {
+    let current = view(db)?;
+    crate::inbox::dispatch_requests(db, &current.dispatches)
+}
+fn linked_status(steps: &[serde_json::Value]) -> &'static str {
+    if !steps.is_empty() && steps.iter().all(|s| s["status"] == "done") { "done" }
+    else if steps.iter().any(|s| s["status"] == "blocked") { "blocked" }
+    else if steps.iter().any(|s| s["status"] == "review") { "review" }
+    else if steps.iter().any(|s| s["status"] == "running" || s["status"] == "starting") { "running" }
+    else { "pending" }
+}
+#[cfg(test)]
+mod linked_work_tests {
+    use super::linked_status;
+    use serde_json::json;
+    #[test]
+    fn manual_work_retains_review_and_dependency_gates_when_monitoring_is_paused() {
+        assert_eq!(linked_status(&[]), "pending");
+        assert_eq!(linked_status(&[json!({"status":"pending"})]), "pending");
+        assert_eq!(linked_status(&[json!({"status":"running"}), json!({"status":"pending"})]), "running");
+        assert_eq!(linked_status(&[json!({"status":"review"}), json!({"status":"pending"})]), "review");
+        assert_eq!(linked_status(&[json!({"status":"done"}), json!({"status":"pending"})]), "pending");
+        assert_eq!(linked_status(&[json!({"status":"blocked"})]), "blocked");
+        assert_eq!(linked_status(&[json!({"status":"done"})]), "done");
+        assert_eq!(linked_status(&[json!({"status":"running"}),json!({"status":"blocked"})]), "blocked");
+        assert_eq!(linked_status(&[json!({"status":"running"}),json!({"status":"review"})]), "review");
+    }
 }
 fn poll(app: &tauri::AppHandle, db: &Db, force: bool) -> Result<(), String> {
     let Ok(_guard) = POLL.try_lock() else {
@@ -223,7 +296,12 @@ pub fn issue_monitor_save(
 }
 /// Read acknowledgement or explicit retry never starts workflow dispatch.
 #[tauri::command(async)]
-pub fn repository_briefing_read(app: tauri::AppHandle, db: tauri::State<Db>, repository: String, retry: bool, expected: String) -> Result<View, String> {
+pub async fn repository_briefing_read(app: tauri::AppHandle, repository: String, retry: bool, expected: String) -> Result<View, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        repository_briefing_read_blocking(app.clone(), app.state::<Db>(), repository, retry, expected)
+    }).await.map_err(|e| format!("Repository briefing stopped: {e}"))?
+}
+fn repository_briefing_read_blocking(app: tauri::AppHandle, db: tauri::State<Db>, repository: String, retry: bool, expected: String) -> Result<View, String> {
     let _guard = POLL.try_lock().map_err(|_| "Repository refresh running; try again shortly")?;
     if !crate::visibility::connected_products(&db)?.iter().any(|p| p.repository == repository) { return Err("Repository is no longer connected".into()); }
     let path = cache_path(&db, &repository)?;
@@ -245,9 +323,14 @@ pub fn repository_briefing_read(app: tauri::AppHandle, db: tauri::State<Db>, rep
     view(&db)
 }
 #[tauri::command(async)]
-pub fn issue_monitor_refresh(app: tauri::AppHandle, db: tauri::State<Db>) -> Result<View, String> {
-    poll(&app, &db, true)?;
-    view(&db)
+pub async fn issue_monitor_refresh(app: tauri::AppHandle) -> Result<View, String> {
+    // GitHub and model clients are blocking. Running them on a Tokio worker
+    // panics when their private runtime is dropped and poisons the poll lock.
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = app.state::<Db>();
+        poll(&app, &db, true)?;
+        view(&db)
+    }).await.map_err(|e| format!("Repository refresh stopped: {e}"))?
 }
 pub fn install(app: &tauri::AppHandle) {
     let app = app.clone();
@@ -271,7 +354,8 @@ fn save_dispatches(db: &Db, rows: &[Dispatch]) -> Result<(), String> {
     write(
         &crate::visibility::root(db)?.join(".devdeck/issue-dispatches.json"),
         &serde_json::to_string_pretty(rows).map_err(|e| e.to_string())?,
-    )
+    )?;
+    crate::inbox::dispatch_requests(db, rows)
 }
 pub fn dispatch_allowed(app: &tauri::AppHandle, node: i64, repository: &str, number: u64) -> Result<(), String> {
     use crate::aiw::{assistant::ASSISTANT_ID, state::Workspace, tools::Permission};

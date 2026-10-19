@@ -185,14 +185,20 @@ pub fn header(raw: &str) -> (String, String) {
     (name.trim().to_string(), what.trim().to_string())
 }
 
-/// `skills/brand-voice/SKILL.md` is the skill `brand-voice`; `agents/x.md` is
+/// `skills/brand-voice/SKILL.md` or `brand-voice/SKILL.md` is the skill
+/// `brand-voice`; `agents/x.md` is
 /// the brief `x`. Anything else is not something this library can hold.
 pub fn classify(path: &str) -> Option<(String, String)> {
     let p = path.trim_start_matches("./");
     let parts: Vec<&str> = p.split('/').collect();
     if parts.len() >= 2 && parts[parts.len() - 1].eq_ignore_ascii_case("SKILL.md") {
         let folder = parts[parts.len() - 2];
-        let inside = parts.contains(&"skills");
+        let root_skill = parts.len() == 2
+            && !folder.starts_with('.')
+            && !["docs", "agents", "tests", "examples"]
+                .iter()
+                .any(|p| folder.eq_ignore_ascii_case(p));
+        let inside = parts.contains(&"skills") || root_skill;
         if inside && !folder.is_empty() {
             return Some((SKILL.to_string(), folder.to_string()));
         }
@@ -232,6 +238,9 @@ fn rank(path: &str) -> usize {
 pub fn collection(path: &str) -> Option<String> {
     let p = path.trim_start_matches("./");
     let parts: Vec<&str> = p.split('/').collect();
+    if parts.len() == 2 && classify(p).is_some_and(|(kind, _)| kind == SKILL) {
+        return Some(".".into());
+    }
     let at = parts
         .iter()
         .rposition(|s| *s == "agents" || *s == "skills")?;
@@ -486,7 +495,7 @@ pub fn look(input: &str) -> Result<Source, String> {
         note.push_str(" The repository is too large for one listing, so this is part of it.");
     }
     if items.is_empty() {
-        note = "Nothing here is a skill or an agent brief. A library needs skills/<name>/SKILL.md or agents/<name>.md — this repository has neither, so there is nothing to read.".into();
+        note = "Nothing here is a skill or an agent brief. A library needs <name>/SKILL.md, skills/<name>/SKILL.md or agents/<name>.md — this repository has none, so there is nothing to read.".into();
     }
 
     Ok(Source {
@@ -799,6 +808,8 @@ mod tests {
             Some("skills/lead-intelligence/agents")
         );
         assert_eq!(collection("README.md"), None);
+        assert_eq!(collection("new-feature/SKILL.md").as_deref(), Some("."));
+        assert_eq!(collection("code-structure/SKILL.md").as_deref(), Some("."));
     }
 
     #[test]
@@ -815,6 +826,21 @@ mod tests {
 
     #[test]
     fn a_skill_folder_and_an_agent_file_are_the_two_things_a_library_holds() {
+        for id in [
+            "before-and-after",
+            "code-structure",
+            "evidence-driven-testing",
+            "greploop",
+            "greploop-apps",
+            "new-feature",
+            "unslop",
+        ] {
+            assert_eq!(
+                classify(&format!("{id}/SKILL.md")),
+                Some((SKILL.into(), id.into()))
+            );
+        }
+        assert_eq!(classify("AGENTS.md"), None);
         assert_eq!(
             classify("skills/brand-voice/SKILL.md"),
             Some((SKILL.into(), "brand-voice".into()))
@@ -839,7 +865,7 @@ mod tests {
         assert_eq!(
             classify("docs/SKILL.md"),
             None,
-            "a skill lives under skills/"
+            "documentation is not a root skill folder"
         );
     }
 

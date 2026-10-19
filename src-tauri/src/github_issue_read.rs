@@ -67,6 +67,7 @@ pub fn read(
             .ok_or("GitHub returned unreadable issues.")?;
         items.extend(rows.iter().map(|v| json!({
             "number":v["number"], "title":v["title"], "state":v["state"],
+            "body":v["body"].as_str().unwrap_or_default(),
             "url":v["html_url"], "updated_at":v["updated_at"],
             "assignees":v["assignees"].as_array().map(|a| a.iter().filter_map(|a| a["login"].as_str()).collect::<Vec<_>>()).unwrap_or_default(),
             "pull_request":v.get("pull_request").is_some()

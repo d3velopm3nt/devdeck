@@ -49,6 +49,16 @@ pub fn resolve_cli(tool: CliTool) -> String {
 pub fn cli_command(program: &str, args: &[String]) -> Command {
     #[cfg(windows)]
     {
+        // Native executables need no shell. Keep stdin and stderr connected
+        // directly so PowerShell cannot replace a CLI failure with its own exit.
+        if std::path::Path::new(program)
+            .extension()
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
+        {
+            let mut command = Command::new(program);
+            command.args(args);
+            return command;
+        }
         let script = format!(
             "& {} {}",
             ps_literal(program),
@@ -176,4 +186,23 @@ pub fn cli_setup_plan(tool: CliTool, action: CliAction) -> Result<SetupPlan, Str
         shell: "powershell.exe".into(),
         cwd,
     })
+}
+
+#[cfg(all(test, windows))]
+mod launch_tests {
+    use super::*;
+
+    #[test]
+    fn executable_keeps_arguments_without_shell_interpretation() {
+        let args = vec!["literal $value; & text".into(), "a path with spaces".into()];
+        let command = cli_command("C:/Program Files/fixture/agent.exe", &args);
+        assert_eq!(command.get_program(), "C:/Program Files/fixture/agent.exe");
+        assert_eq!(command.get_args().collect::<Vec<_>>(), args.iter().map(std::ffi::OsStr::new).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn script_shim_retains_shell_launcher() {
+        let command = cli_command("agent.cmd", &[]);
+        assert_eq!(command.get_program(), "powershell.exe");
+    }
 }

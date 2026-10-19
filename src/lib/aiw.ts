@@ -388,6 +388,7 @@ export interface ChatMessage {
 }
 
 export interface ConversationMeta {
+  work_item?: string
   id: string
   title: string
   started_at: string
@@ -408,6 +409,7 @@ export interface ConversationMeta {
 }
 
 export interface ConversationSummary {
+  work_item?: string
   id: string
   title: string
   started_at: string
@@ -736,8 +738,8 @@ export const aiw = {
     invoke<ConversationMeta>('aiw_focus_conversation', { id, projectId }),
   sendMessage: (conversationId: string, text: string) =>
     invoke<AssistantReply>('aiw_send_message', { conversationId, text }),
-  teamPlannerSend: (conversationId: string, text: string) =>
-    invoke<AssistantReply>('aiw_team_planner_send', { conversationId, text }),
+  teamPlannerSend: (conversationId: string, text: string, team?: string) =>
+    invoke<AssistantReply>('aiw_team_planner_send', { conversationId, text, team }),
 
   /** Live progress for the assistant. Separate from `onEvent`, deliberately. */
   onChat: (cb: (e: ChatEvent) => void): Promise<UnlistenFn> =>
@@ -798,11 +800,11 @@ export const aiw = {
 export const severityStyle = (s: Severity): { chip: string; border: string } => {
   switch (s) {
     case 'blocking':
-      return { chip: 'bg-red-500/16 text-err', border: 'border-red-500/35' }
+      return { chip: 'bg-err/16 text-err', border: 'border-err/35' }
     case 'high':
-      return { chip: 'bg-amber-500/16 text-warn', border: 'border-amber-500/30' }
+      return { chip: 'bg-warn/16 text-warn', border: 'border-warn/30' }
     case 'warning':
-      return { chip: 'bg-amber-500/12 text-warn', border: 'border-amber-500/20' }
+      return { chip: 'bg-warn/12 text-warn', border: 'border-warn/20' }
     default:
       return { chip: 'bg-slate-500/14 text-dim', border: 'border-line' }
   }
@@ -811,16 +813,16 @@ export const severityStyle = (s: Severity): { chip: string; border: string } => 
 export const sessionStatusStyle = (s: SessionStatus): string => {
   switch (s) {
     case 'working':
-      return 'bg-emerald-500/10 text-ok'
+      return 'bg-info/10 text-info'
     case 'reviewing':
-      return 'bg-violet-500/16 text-viol'
+      return 'bg-warn/16 text-warn'
     case 'blocked':
     case 'failed':
-      return 'bg-red-500/12 text-err'
+      return 'bg-err/12 text-err'
     case 'completed':
-      return 'bg-emerald-500/12 text-ok'
+      return 'bg-ok/12 text-ok'
     case 'planning':
-      return 'bg-sky-500/14 text-info'
+      return 'bg-info/14 text-info'
     default:
       return 'bg-slate-500/14 text-dim'
   }
@@ -829,13 +831,13 @@ export const sessionStatusStyle = (s: SessionStatus): string => {
 export const contextHealthStyle = (h: ContextHealth): string => {
   switch (h) {
     case 'fresh':
-      return 'bg-emerald-500/12 text-ok'
+      return 'bg-ok/12 text-ok'
     case 'changed':
-      return 'bg-sky-500/12 text-info'
+      return 'bg-info/12 text-info'
     case 'stale':
-      return 'bg-amber-500/14 text-warn'
+      return 'bg-warn/14 text-warn'
     default:
-      return 'bg-red-500/12 text-err'
+      return 'bg-err/12 text-err'
   }
 }
 
@@ -844,7 +846,7 @@ export const inclusionStyle = (i: Inclusion): string => {
     case 'inherited':
       return 'bg-indigo-500/16 text-indigo-300'
     case 'manual':
-      return 'bg-sky-500/14 text-info'
+      return 'bg-info/14 text-info'
     case 'generated':
       return 'bg-slate-500/14 text-dim'
     default:
@@ -865,9 +867,9 @@ export const originStyle = (origin: string): string => {
     case 'deck':
       return 'bg-indigo-500/16 text-indigo-300'
     case 'yours':
-      return 'bg-sky-500/14 text-info'
+      return 'bg-info/14 text-info'
     case 'personal':
-      return 'bg-emerald-500/12 text-ok'
+      return 'bg-ok/12 text-ok'
     default:
       return 'bg-slate-500/14 text-dim'
   }
@@ -891,11 +893,11 @@ export const originLabel = (origin: string): string => {
 export const permissionStyle = (p: string): string => {
   switch (p) {
     case 'full':
-      return 'bg-emerald-500/12 text-ok'
+      return 'bg-ok/12 text-ok'
     case 'approval':
-      return 'bg-amber-500/14 text-warn'
+      return 'bg-warn/14 text-warn'
     case 'read':
-      return 'bg-sky-500/14 text-info'
+      return 'bg-info/14 text-info'
     case "manager's own":
       return 'bg-indigo-500/16 text-indigo-300'
     default:
@@ -960,8 +962,12 @@ export const describeEvent = (e: DomainEvent): string => {
       return `${agent} is waiting on you — ${p.summary ?? `${p.tool}.${p.action}`}`
     case 'tool.approval.resolved':
       return `${p.allowed ? 'Approved' : 'Refused'} for ${agent} — ${p.summary ?? p.tool}`
-    case 'file.changed':
-      return `${p.by ?? agent} changed ${p.path}`
+    case 'file.changed': {
+      const actor = p.by || e.agent_id || 'DevDeck'
+      if (typeof p.path === 'string' && p.path.trim()) return `${actor} changed ${p.path}`
+      if (typeof p.summary === 'string' && p.summary.trim()) return p.summary
+      return p.source === 'work_items' ? 'Work items updated' : 'Workspace records updated'
+    }
     case 'context.changed':
       return p.symbol ? `${p.by ?? agent} changed ${p.symbol}` : 'Feature context updated'
     case 'context.reconciled':

@@ -127,6 +127,8 @@ pub struct ConversationMeta {
     /// this is a default rather than a boundary.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub work_item: Option<String>,
     /// The bot this is the thread of, when it is one. A bot's thread is the
     /// same shape as a conversation with the assistant — you, it, and what it
     /// did — so it is the same record, marked rather than duplicated.
@@ -447,6 +449,8 @@ pub struct ConversationSummary {
     pub started_at: String,
     pub updated_at: String,
     pub project_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub work_item: Option<String>,
     pub messages: usize,
     /// The last thing said, for the list.
     pub preview: String,
@@ -520,6 +524,25 @@ impl Conversations {
         change(&mut conv);
         self.save(&conv)?;
         Ok(conv)
+    }
+
+    /// One persistent conversation per work item, under the existing write gate.
+    pub fn for_work(&self, item: &crate::work_conversations::Subject) -> Result<ConversationMeta, String> {
+        let _gate = writing();
+        if let Some(existing) = self.list().into_iter().find(|c| c.work_item.as_deref() == Some(&item.id)) {
+            return self.load(&existing.id);
+        }
+        let now = now_iso();
+        let meta = ConversationMeta {
+            id: new_id("conv"), title: item.title.clone(),
+            started_at: now.clone(), updated_at: now,
+            project_id: (item.node > 0).then(|| item.node.to_string()),
+            work_item: Some(item.id.clone()),
+            messages: vec![ChatMessage::note("work-item", "work.source", true, item.source.clone())],
+            ..Default::default()
+        };
+        self.save(&meta)?;
+        Ok(meta)
     }
 
     pub fn create(&self, project_id: Option<&str>) -> Result<ConversationMeta, String> {
@@ -908,6 +931,7 @@ impl Conversations {
                 started_at: m.started_at,
                 updated_at: m.updated_at,
                 project_id: m.project_id,
+                work_item: m.work_item,
                 bot_node: m.bot_node,
                 bot_handle: m.bot_handle,
                 feature: m.feature,
@@ -2688,6 +2712,9 @@ impl Assistant {
             });
         };
 
+        if let Some(work) = conv.context_edits.get("work_item") {
+            add("work_item", "Linked work item", "work records", "project", work.clone());
+        }
         let profile = convs.store().profile();
         if !profile.body.trim().is_empty() || !profile.meta.preferences.is_empty() {
             let mut s = String::from("## About you (personal, never committed)\n");
@@ -3151,6 +3178,22 @@ mod tests {
         assert_eq!(back.messages[0].text, "line one\nline two");
         assert_eq!(back.messages[1].tool.as_deref(), Some("delegate.start"));
         assert_eq!(back.project_id.as_deref(), Some("tyrex"));
+    }
+
+    #[test]
+    fn work_conversation_is_reused_without_replacing_user_messages() {
+        let t = Tmp::new("work-conversation");
+        let c = convs(&t);
+        let subject = crate::work_conversations::Subject { id:"github:owner/repo:42".into(), title:"Issue title".into(), node:3, source:"Recorded source".into(), context:"Current steps".into() };
+        let first = c.for_work(&subject).unwrap();
+        c.update_meta(&first.id, |m| m.messages.push(ChatMessage::said(Speaker::User,"Keep my reply"))).unwrap();
+        let second = c.for_work(&subject).unwrap();
+        assert_eq!(first.id,second.id);
+        assert_eq!(second.messages.len(),2);
+        assert_eq!(second.messages[1].text,"Keep my reply");
+        assert_eq!(c.list()[0].work_item.as_deref(),Some(subject.id.as_str()));
+        let other = crate::work_conversations::Subject { id:"github:owner/repo:43".into(), ..subject };
+        assert_ne!(c.for_work(&other).unwrap().id,first.id);
     }
 
     #[test]

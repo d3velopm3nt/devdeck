@@ -20,7 +20,18 @@ import { Markdown } from '../thread/Markdown'
 import { useAiw } from '../../lib/aiwStore'
 import { aiw, ago, type ChatMessage } from '../../lib/aiw'
 import { useProjectsByWorkspace } from '../../lib/aiwLabels'
-import { ProviderChip, ContextPeek } from './ChatHeader'
+import { ProviderChip } from './ChatHeader'
+import { useApp } from '../../store'
+import { openUrl } from '../../lib/ipc'
+import { useWorkData } from '../work/useWorkData'
+import { assembleWork, workDisplayState } from '../../lib/workHub'
+import { StateIcon } from '../ui/DesignSystem'
+import { IssueConversation } from './IssueConversation'
+import { PanelResizer } from './PanelResizer'
+import { ChatDetails, ChatInspector } from './ChatDetails'
+import { useChatWorkspace, migrateBuildDiscussion, sendTeamMessage } from '../../lib/chatWorkspace'
+import { parsePlannerReply, plannerPreview } from '../../lib/teamPlanning'
+import './chat-workspace.css'
 
 // ---------------------------------------------------------------------------
 // Transcript
@@ -104,6 +115,7 @@ export function Bubble({
           <Markdown text={m.text} renderText={renderText} dir={dir} nodeId={nodeId} />
         )}
       </div>
+
     </div>
   )
 }
@@ -114,8 +126,14 @@ export function Bubble({
 
 function ConversationList({ onClose }: { onClose: () => void }) {
   const a = useAiw()
+  const nodes = useApp(s => s.nodes)
+  const { data, reload } = useWorkData(nodes)
+  useEffect(() => { const timer = setInterval(() => void reload(), 5000); return () => clearInterval(timer) }, [reload])
+  const workCards = new Map(assembleWork(data.records, data.legacy, data.monitor, data.workflows, data.claims).map(card => [card.record.id, card]))
+  const [search, setSearch] = useState('')
+  const w = useChatWorkspace()
   return (
-    <div className="w-56 shrink-0 border-r border-line bg-app">
+    <div style={{ width: w.listWidth }} className="chat-conversations w-56 shrink-0 border-r border-line bg-app">
       <div className="flex items-center gap-1.5 border-b border-line px-3 py-2">
         <span className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-muted">
           Conversations
@@ -131,24 +149,33 @@ function ConversationList({ onClose }: { onClose: () => void }) {
           <Icon name="chevron-left" size={12} />
         </button>
       </div>
+      <input aria-label="Search conversations" className="input m-2" placeholder="Search conversations…" value={search} onChange={e => setSearch(e.target.value)} />
       <div className="overflow-auto">
-        {a.conversations.map((c) => {
+        {[...a.conversations].filter(c => (c.title + ' ' + c.preview).toLowerCase().includes(search.toLowerCase())).sort((a,b) => Number(w.pinned.includes(b.id)) - Number(w.pinned.includes(a.id))).map((c) => {
           const active = a.conversation?.id === c.id
+          const linkedWork = c.work_item || w.subjects[c.id]?.workItem
+          const workCard = linkedWork ? workCards.get(linkedWork) : undefined
+          const workStatus = workCard ? workDisplayState(workCard) : undefined
+          const issueUrl = workCard?.record.source_url
+          const issueNumber = issueUrl?.match(/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/issues\/(\d+)$/i)?.[1]
           return (
             <div
               key={c.id}
               className={`group flex cursor-pointer items-start gap-1.5 border-b border-line px-3 py-2 ${
                 active ? 'bg-hover' : 'hover:bg-soft'
               }`}
+              role="button" tabIndex={0} aria-current={active ? 'true' : undefined}
+              onKeyDown={e => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); void a.openConversation(c.id) } }}
               onClick={() => void a.openConversation(c.id)}
             >
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[11.5px] text-ink">{c.title}</div>
                 <div className="mt-0.5 truncate text-[10px] text-muted">
-                  {c.preview || 'Nothing said yet'}
+                  {(w.subjects[c.id]?.planning ? plannerPreview(c.preview) : c.preview) || 'Nothing said yet'}
                 </div>
-                <div className="mt-0.5 flex items-center gap-1.5 text-[9.5px] text-faint">
-                  <span>{ago(c.updated_at)}</span>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[9.5px] text-faint">
+                  {linkedWork ? <><StateIcon size={14} state={workStatus ?? 'neutral'} label={workStatus ? undefined : data.loading ? 'Loading status' : 'Status unavailable'}/>{data.errors.length > 0 && <StateIcon state="warning" label="Work status may be out of date"/>}<span>{ago(c.updated_at)}</span></> : <span>{w.subjects[c.id]?.choices?.length && !w.subjects[c.id]?.proposal ? 'Needs input' : w.pending === c.id || (a.sendingConversationId === c.id) ? 'Working' : w.subjects[c.id]?.proposal && !w.subjects[c.id]?.saved ? 'Ready for review' : 'Recent'} · {ago(c.updated_at)}</span>}
+                  {issueNumber && <a href={issueUrl} title={issueUrl} aria-label={`Open GitHub issue ${issueNumber} for ${c.title}`} className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-info hover:underline focus-visible:outline focus-visible:outline-2" onClick={e => { e.preventDefault(); e.stopPropagation(); void openUrl(issueUrl!).catch(error => useAiw.setState({chatError:String(error)})) }}><Icon name="github" size={13}/><span>#{issueNumber}</span></a>}
                   {c.project_id && (
                     <>
                       <span>·</span>
@@ -157,8 +184,9 @@ function ConversationList({ onClose }: { onClose: () => void }) {
                   )}
                 </div>
               </div>
+              <button className="chat-icon-button chat-row-action" title={w.pinned.includes(c.id) ? "Unpin conversation" : "Pin conversation"} aria-pressed={w.pinned.includes(c.id)} aria-label={(w.pinned.includes(c.id) ? 'Unpin ' : 'Pin ') + c.title} onClick={e => { e.stopPropagation(); useChatWorkspace.setState({ pinned: w.pinned.includes(c.id) ? w.pinned.filter(id => id !== c.id) : [...w.pinned, c.id] }) }}><Icon name="pin" size={14}/></button>
               <button
-                className="opacity-0 transition-opacity group-hover:opacity-100"
+                className="chat-icon-button chat-row-action"
                 title="Delete this conversation"
                 onClick={(e) => {
                   e.stopPropagation()
@@ -218,22 +246,27 @@ function Live() {
 export function Chat() {
   const a = useAiw()
   const byWorkspace = useProjectsByWorkspace()
-  const [draft, setDraft] = useState('')
+  const workspace = useChatWorkspace()
+  const conversationId = a.conversation?.id ?? ''
+  const subject = workspace.subjects[conversationId] ?? {}
+  const draft = subject.draft ?? ''
+  const setDraft = (draft: string) => workspace.patch(conversationId, { draft })
+  const planningBusy = workspace.pending === conversationId
+  const container = useRef<HTMLDivElement>(null)
   const [root, setRoot] = useState<string | null>(null)
-  // Hidden by default: as a dock panel the chat already sits beside the
-  // Explorer, and a second list column on the left leaves the conversation
-  // itself in a corridor.
-  const [showList, setShowList] = useState(false)
+  const [showList, setShowList] = useState(() => window.innerWidth > 760)
   const scroller = useRef<HTMLDivElement>(null)
   const box = useRef<HTMLTextAreaElement>(null)
 
   // Load the list once, and open something so the surface is never a dead end.
   useEffect(() => {
     void (async () => {
+      if (!useAiw.getState().ready) await useAiw.getState().bootstrap()
+      await migrateBuildDiscussion()
       await a.loadConversations()
       const { conversations, conversation } = useAiw.getState()
       if (!conversation) {
-        if (conversations.length > 0) await useAiw.getState().openConversation(conversations[0].id)
+        if (conversations.length > 0) await useAiw.getState().openConversation(conversations.find(c => c.id === localStorage.getItem('devdeck.chat.selected'))?.id ?? conversations[0].id)
         else await useAiw.getState().newConversation()
       }
     })()
@@ -243,10 +276,16 @@ export function Chat() {
     // Live progress for the reply being produced right now.
     // Hold the promise, not the resolved unlisten: cleanup can run before it
     // resolves, and a listener captured late is never removed.
+    const conversationTimer = setInterval(() => { void useAiw.getState().loadConversations() }, 15000)
+    const stopEvents = aiw.onEvent(e => useAiw.getState().pushEvent(e))
     const stopChat = aiw.onChat((e) => useAiw.getState().pushChat(e))
-    return () => void stopChat.then((un) => un())
+    return () => { clearInterval(conversationTimer); void stopChat.then((un) => un()); void stopEvents.then(un => un()) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => { if (a.conversation?.work_item) workspace.patch(a.conversation.id, {workItem:a.conversation.work_item}) }, [a.conversation?.id, a.conversation?.work_item])
+
+  useEffect(() => { if (conversationId) localStorage.setItem('devdeck.chat.selected', conversationId) }, [conversationId])
 
   // Before paint, so a long transcript never flashes at the top first.
   useLayoutEffect(() => {
@@ -264,18 +303,19 @@ export function Chat() {
 
   const submit = () => {
     const text = draft.trim()
-    if (!text || a.sending || onMock) return
+    if (!text || a.sending || workspace.pending || onMock) return
     setDraft('')
-    void a.send(text)
+    if (subject.planning) void sendTeamMessage(conversationId, text)
+    else void a.send(text)
     box.current?.focus()
   }
 
   return (
-    <div className="flex h-full min-h-0">
-      {showList && <ConversationList onClose={() => setShowList(false)} />}
+    <div ref={container} className="chat-workspace flex h-full min-h-0">
+      {showList && <><ConversationList onClose={() => setShowList(false)} /><PanelResizer label="Resize conversations" value={workspace.listWidth} min={180} max={360} side="left" onChange={listWidth => useChatWorkspace.setState({ listWidth })}/></>}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="relative flex shrink-0 items-center gap-2 border-b border-line px-3 py-2.5">
+        <div className="chat-toolbar relative flex shrink-0 items-center gap-2 border-b border-line px-3 py-2.5">
           <button
             className={`flex items-center gap-1.5 rounded px-1.5 py-1 text-[11px] ${
               showList ? 'bg-hover text-ink' : 'text-dim hover:bg-hover hover:text-ink'
@@ -315,13 +355,14 @@ export function Chat() {
             ))}
           </select>
           <ProviderChip />
-          <ContextPeek conversationId={conv?.id ?? null} />
+          <button className="chat-icon-button" title="Conversation details" aria-label="Conversation details" aria-pressed={workspace.inspector && !workspace.split} onClick={() => useChatWorkspace.setState({ inspector: workspace.split || !workspace.inspector, split: false })}><Icon name="info" size={17}/></button>
+          <button className="chat-icon-button" title="Workspace panel" aria-label="Split" aria-pressed={workspace.split} onClick={() => useChatWorkspace.setState({ split: !workspace.split })}><Icon name="layout" size={17}/></button>
           <button
-            className="btn-ghost text-[11px]"
+            className="chat-icon-button"
             title="Start a new conversation"
             onClick={() => void a.newConversation()}
           >
-            <Icon name="add" size={12} /> New
+            <Icon name="add" size={17} />
           </button>
         </div>
 
@@ -330,7 +371,7 @@ export function Chat() {
             <Icon name="info" size={12} className="mt-px shrink-0 text-indigo-400" />
             <div className="text-[11px] leading-[1.55] text-dim">
               Set up an agent to start chatting. Your local workspace is ready to use.{' '}
-              <button className="btn-ghost" onClick={() => a.setPage('settings')}>Set up agent</button>
+              Use the Set up agent control above to choose a connection.
             </div>
           </div>
         )}
@@ -364,6 +405,8 @@ export function Chat() {
             <div className="flex h-full items-center justify-center text-[12px] text-muted">
               <Icon name="spinner" size={14} className="mr-2 animate-spin" /> Opening…
             </div>
+          ) : conv.work_item ? (
+            <><IssueConversation key={conv.id} id={conv.id} workItem={conv.work_item} messages={conv.messages} renderMessage={(m,key) => <Bubble key={key} m={m} who={m.by ? a.agents.find(agent => agent.id === m.by)?.name ?? m.by : 'Dev'}/>}/>{a.sending && a.sendingConversationId === conversationId && <Live/>}</>
           ) : conv.messages.length === 0 ? (
             <div className="mx-auto mt-16 max-w-md text-center">
               <Icon name="ai" size={26} className="mx-auto text-indigo-400/50" />
@@ -371,20 +414,21 @@ export function Chat() {
                 What are we working on?
               </div>
               <div className="mt-1.5 text-[12px] leading-[1.6] text-dim">
-                I coordinate the agents. Ask me to start work on a feature and I&rsquo;ll hand it to
-                a developer, or ask what everyone is doing.
+                Work with Dev using skills, discuss a team, or review progress. Open the workspace panel to inspect the team, context and activity.
               </div>
             </div>
           ) : (
             <div className="mx-auto max-w-3xl">
               {conv.messages.map((m, i) => (
-                <Bubble key={`${m.at}-${i}`} m={m} />
+                <Bubble key={`${m.at}-${i}`} m={m.from === 'assistant' && subject.planning ? { ...m, text: parsePlannerReply(m.text).text } : m} who={m.by && m.by !== 'team-planner' ? a.agents.find(agent => agent.id === m.by)?.name ?? m.by : 'Dev'} />
               ))}
-              {a.sending && <Live />}
+              {a.sending && a.sendingConversationId === conversationId && <Live />}{planningBusy && <div role="status" className="text-muted">Dev is refining the team…</div>}
             </div>
           )}
         </div>
 
+        {!!subject.choices?.length && <div className="flex flex-wrap gap-2 px-5 py-2">{subject.choices.map(choice => <button key={choice} className="btn-ghost" disabled={!!workspace.pending || a.sending} onClick={() => void sendTeamMessage(conversationId, choice)}>{choice}</button>)}<button className="btn-ghost" onClick={() => box.current?.focus()}>Write my own reply</button></div>}
+        {subject.error && <p role="alert" className="px-5 text-err">{subject.error}</p>}
         <div className="shrink-0 border-t border-line px-5 py-3">
           <div className="mx-auto flex max-w-3xl items-end gap-2">
             <textarea
@@ -410,11 +454,12 @@ export function Chat() {
               }}
             />
             <button
-              className="btn-primary h-[34px] px-3.5 text-[12px]"
-              disabled={!conv || onMock || !draft.trim() || a.sending}
+              className="btn-primary chat-send-button"
+              aria-label="Send" title="Send message"
+              disabled={!conv || onMock || !draft.trim() || a.sending || !!workspace.pending}
               onClick={submit}
             >
-              {a.sending ? '…' : 'Send'}
+              <Icon name={a.sending || planningBusy ? "spinner" : "send"} size={17} className={a.sending || planningBusy ? "animate-spin" : undefined}/>
             </button>
           </div>
           {root && (
@@ -425,6 +470,11 @@ export function Chat() {
           )}
         </div>
       </div>
+      {!workspace.split && workspace.inspector && conv && <><PanelResizer label="Resize conversation details" value={workspace.inspectorWidth} min={230} max={420} side="right" onChange={inspectorWidth => useChatWorkspace.setState({ inspectorWidth })}/><ChatInspector id={conv.id}/></>}
+      {workspace.split && conv && <>
+        <PanelResizer label="Resize chat details" value={workspace.width} min={360} max={960} side="right" onChange={width => useChatWorkspace.setState({ width })}/>
+        <aside aria-label="Chat details" className="chat-details flex min-h-0 flex-col border-l border-line bg-app" style={{ width: workspace.width }}><button className="btn-ghost chat-details-close" onClick={() => useChatWorkspace.setState({ split: false, ...(window.innerWidth <= 760 ? { inspector: false } : {}) })}>Back to conversation</button><ChatDetails id={conv.id}/></aside>
+      </>}
     </div>
   )
 }

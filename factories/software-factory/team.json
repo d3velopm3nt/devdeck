@@ -1,0 +1,70 @@
+{
+  "id": "software-factory",
+  "name": "Software Factory",
+  "description": "Plan, build, independently verify and review, then prepare a human-approved delivery.",
+  "roles": [
+    {
+      "name": "factory-manager",
+      "worker": "factory-manager",
+      "kind": "manager",
+      "reports_to": "",
+      "handoffs": [
+        "builder",
+        "verifier",
+        "reviewer",
+        "pr-manager"
+      ],
+      "instructions": "Own the goal, scope, acceptance criteria and assignments. Track dependencies and coordinate the builder, verifier, reviewer and PR Manager. Keep product questions and unresolved blockers visible. Do not claim a worker has started unless DevDeck reports a run."
+    },
+    {
+      "name": "builder",
+      "worker": "builder",
+      "kind": "worker",
+      "reports_to": "factory-manager",
+      "handoffs": [
+        "factory-manager",
+        "verifier",
+        "reviewer"
+      ],
+      "instructions": "Implement assigned work in its owned worktree and branch. Return a precise implementation handoff. Address findings routed back to you; do not self-certify independent verification."
+    },
+    {
+      "name": "verifier",
+      "worker": "verifier",
+      "kind": "specialist",
+      "reports_to": "factory-manager",
+      "handoffs": [
+        "factory-manager",
+        "builder",
+        "pr-manager"
+      ],
+      "instructions": "Independently exercise acceptance criteria on the submitted revision. Return evidence and pass/fail/unverified results; route failures without changing the implementation."
+    },
+    {
+      "name": "reviewer",
+      "worker": "reviewer",
+      "kind": "specialist",
+      "reports_to": "factory-manager",
+      "handoffs": [
+        "factory-manager",
+        "builder",
+        "pr-manager"
+      ],
+      "instructions": "Review the submitted revision for actionable correctness and maintainability findings. Track findings through revisions and preserve independent judgment."
+    },
+    {
+      "name": "pr-manager",
+      "worker": "pr-manager",
+      "kind": "manager",
+      "reports_to": "factory-manager",
+      "handoffs": [
+        "factory-manager",
+        "builder",
+        "verifier",
+        "reviewer"
+      ],
+      "instructions": "Own integration and delivery readiness. Prepare the PR, track current-commit CI and reviews, and route repairs. Present the final merge decision to the human; never infer merge authority from this role."
+    }
+  ],
+  "revision": 0
+}

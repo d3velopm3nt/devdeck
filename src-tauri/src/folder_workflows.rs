@@ -134,13 +134,54 @@ fn save(p: &Path, doc: &Doc<Definition>) -> Result<String, String> {
     result?;
     Ok(raw)
 }
-fn changed(app: &tauri::AppHandle, node: i64) {
+pub(crate) fn changed(app: &tauri::AppHandle, node: i64) {
     say(
         app,
         EventType::FileChanged,
         in_space(node, None, None),
         serde_json::json!({"path": FILE, "source": "folder_workflow", "summary": "Workflow state updated"}),
     );
+    if let Err(error) = crate::issue_monitor::update_work_attention(&app.state::<Db>()) {
+        eprintln!("[workflow attention] {error}");
+    }
+}
+
+/// Instantiate a reviewed template without altering its definition or receipts.
+pub(crate) fn copy_for_work(app: &tauri::AppHandle, db: &Db, node: i64, template: &str, expected: &str, workflow: &str, item: &str, title: &str, source: &str, context: &str) -> Result<(View, bool), String> {
+    let _guard = TRANSITION.lock().map_err(|e| e.to_string())?;
+    let suffix = workflow.strip_prefix("work-run-").ok_or("Invalid workflow request")?;
+    if suffix.len() < 16 || suffix.len() > 40 || !suffix.bytes().all(|c| c.is_ascii_hexdigit() || c == b'-') { return Err("Invalid workflow request".into()); }
+    let source_path = path(db, node, Some(template))?;
+    let raw = read(&source_path)?;
+    if raw != expected { return Err("The workflow template changed. Reopen it before attaching.".into()); }
+    let mut doc = parse(&raw)?;
+    if !doc.meta.ticket_url.is_empty() || doc.meta.steps.iter().any(|s| s.status != Status::Pending || !s.run.is_empty() || !s.claim.is_empty() || !s.previous_runs.is_empty()) {
+        return Err("Choose a reusable pending template, not an existing workflow run.".into());
+    }
+    let marker = format!("<!-- devdeck-work-item:{} -->", serde_json::to_string(item).map_err(|e| e.to_string())?);
+    let destination = path(db, node, Some(workflow))?;
+    if destination.exists() {
+        let previous = read(&destination)?; let result = view(&destination, previous)?;
+        if !result.body.starts_with(&marker) { return Err("This run identity belongs to different work.".into()); }
+        return Ok((result, false));
+    }
+    crate::personal_library::resolve_definition(&mut doc.meta)?;
+    doc.meta.title = format!("{} · {}", title, doc.meta.title);
+    doc.meta.ticket_url = source.into();
+    doc.body = format!("{marker}\n\n# Work item\n{title}\n\n{context}\n\n# Workflow snapshot\n\n{}", doc.body);
+    let written = save(&destination, &doc)?;
+    let _ = app; // Events are published only after the work-item link commits.
+    Ok((view(&destination, written)?, true))
+}
+
+pub(crate) fn rollback_work_copy(db: &Db, node: i64, filename: &str, expected: &str) {
+    let Ok(_guard) = TRANSITION.lock() else { return };
+    let candidate = Path::new(filename);
+    let Ok(root) = directory(db, node).and_then(|p| p.canonicalize().map_err(|e| e.to_string())) else { return };
+    let Ok(actual) = candidate.canonicalize() else { return };
+    if actual.starts_with(root.join(".devdeck/workflows")) && read(candidate).is_ok_and(|raw| raw == expected) {
+        let _ = fs::remove_file(candidate);
+    }
 }
 fn view(p: &Path, raw: String) -> Result<View, String> {
     let doc = if raw.is_empty() {
@@ -284,6 +325,7 @@ pub fn folder_workflow_start(
     if !ready(&doc.meta, i) {
         return Err("This step is already claimed or its dependencies are not accepted.".into());
     }
+    crate::work_records::ensure_open(&db, node, workflow.as_deref().unwrap_or("default"), &doc.meta.ticket_url)?;
     let s = &doc.meta.steps[i];
     crate::personal_library::validate_worker(&s.worker)?;
     let claim = format!(
@@ -300,7 +342,13 @@ pub fn folder_workflow_start(
         .map(|d| format!("{}: {} (run {})", d.title, d.evidence, d.run))
         .collect::<Vec<_>>()
         .join("\n");
-    let intent = format!("Workflow source: {}\n\n{}\n\n{}\n\n{}\n\nPrevious review: {}\n\nAccepted dependencies:\n{}\n\nReport results and verification for human review. Do not change workflow state or publish.", p.display(), doc.body, s.instructions, s.team_context, s.evidence, dependencies);
+    // Re-read cached issue scope on retries too, rather than perpetuating a
+    // stale template snapshot from an earlier attempt.
+    let request = if let Some(ticket) = doc.meta.ticket_url.strip_prefix("https://github.com/") {
+        let (repository, number) = ticket.split_once("/issues/").ok_or("Invalid originating ticket")?;
+        crate::issue_monitor::ticket_context(&db, repository, number.parse().map_err(|_| "Invalid issue number")?)?
+    } else { doc.body.clone() };
+    let intent = format!("Workflow source: {}\n\n{}\n\n{}\n\n{}\n\nPrevious review: {}\n\nAccepted dependencies:\n{}\n\nReport results and verification for human review. Do not change workflow state or publish.", p.display(), request, s.instructions, s.team_context, s.evidence, dependencies);
     let mut plan = {
         let conn = db.conn();
         workers::plan(&conn, &s.worker, s.target, "", &claim, &s.title, &intent)?
@@ -617,11 +665,9 @@ pub fn folder_workflow_route(
     crate::personal_library::resolve_definition(&mut definition)?;
     let doc = Doc {
         meta: definition,
-        body: format!(
-            "{}\n\n## Originating ticket\n\n{}\n\nhttps://github.com/{repository}/issues/{number}\n",
-            template.body,
-            title.trim()
-        ),
+        // The current ticket owns scope. Template bodies may contain an old
+        // ticket snapshot; only the reusable step definitions are inherited.
+        body: crate::issue_monitor::ticket_context(&db, &repository, number)?,
     };
     let raw = save(&p, &doc)?;
     drop(guard);
@@ -702,7 +748,8 @@ pub fn select_for_issue(
         let raw = read(&path(&db, node, Some(&item.id))?)?;
         let doc = parse(&raw)?;
         // An issue instance is never a reusable template.
-        if !doc.meta.ticket_url.is_empty() {
+        if item.id.starts_with("work-run-") || !doc.meta.ticket_url.is_empty()
+            || doc.meta.steps.iter().any(|s| s.status != Status::Pending || !s.run.is_empty() || !s.claim.is_empty() || !s.previous_runs.is_empty()) {
             continue;
         }
         ids.push(item.id.clone());
@@ -765,7 +812,7 @@ pub fn advance_issue(
         .definition
         .steps
         .iter()
-        .all(|s| s.status == Status::Done)
+        .all(|s| matches!(s.status, Status::Done | Status::Skipped))
     {
         "done"
     } else if current
@@ -809,4 +856,23 @@ pub fn folder_workflow_team_draft(
     }
     crate::personal_library::resolve_definition(&mut doc.meta)?;
     write_doc(&doc)
+}
+
+/// Validate every linked process before any exclusion; serialize against starts/reviews.
+pub(crate) fn complete_work<T>(db: &Db, links: &[crate::work_records::RunLink], exclusions: &[crate::work_records::Exclusion], reason: &str, persist: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
+    let _guard = TRANSITION.lock().map_err(|e| e.to_string())?;
+    if exclusions.iter().any(|x| !links.iter().any(|l| l.node == x.node && l.workflow == x.workflow)) {
+        return Err("An excluded step does not belong to this work item.".into());
+    }
+    let mut updates = vec![];
+    for link in links {
+        let p = path(db, link.node, Some(&link.workflow))?;
+        let raw = read(&p)?;
+        let mut doc = parse(&raw)?;
+        let excluded = exclusions.iter().filter(|x| x.node == link.node && x.workflow == link.workflow).map(|x| x.step.clone()).collect::<Vec<_>>();
+        crate::workflow_model::finish_scope(&mut doc.meta, &excluded, reason)?;
+        updates.push((p, doc));
+    }
+    for (p, doc) in updates { save(&p, &doc)?; }
+    persist()
 }

@@ -88,6 +88,8 @@ export interface Schedule {
    *  something is not part of the project's record of that thing. */
   feature?: string
   work_item?: string
+  /** True only while native scheduler executes this schedule. */
+  running?: boolean
   next_run: number | null
 }
 
@@ -2127,6 +2129,18 @@ export const libraryList = () => invoke<LibraryItem[]>('library_list')
 export const libraryRead = (id: string, kind: string) => invoke<string>('library_read', { id, kind })
 /** Read a public GitHub repository: its licence, its commit, and what it holds. */
 export const libraryLook = (repo: string) => invoke<LibrarySource>('library_look', { repo })
+export interface TeamPackagePreview {
+  folder: string
+  fingerprint: string
+  team: ReusableTeam
+  texts: { id: string; kind: string; path: string; name: string; description: string; content: string }[]
+  skills: Record<string, string[]>
+  context: string
+}
+export const teamPackageInspect = (folder: string) => invoke<TeamPackagePreview>('team_package_inspect', { folder })
+export const teamPackageCreate = (preview: TeamPackagePreview) => invoke<ReusableTeam>('team_package_create', { preview })
+export const teamPackageSaveTemplate = (preview: TeamPackagePreview) => invoke<TeamPackagePreview>('team_package_save_template', { preview })
+export const teamPackageTemplates = () => invoke<TeamPackagePreview[]>('team_package_templates')
 export const libraryInstall = (source: LibrarySource, ids: string[]) =>
   invoke<LibraryAdded>('library_install', { source, ids })
 /** Take one folder of a repository whole. */
@@ -2364,12 +2378,15 @@ export interface ManagerProfile {
   workers: string[]
 }
 export interface ManagerMessage {
+  source?: "mailbox" | "conversation" | "workflow"; conversation_id?: string | null; project_id?: string | null; outcome?: "recorded" | "failed" | null;
+  team_id?: string | null; task_id?: string | null; run_id?: string | null; task_title?: string | null; activity_status?: string | null; agent_name?: string | null;
   id: string; from: string; to: string; kind: string; subject: string; body: string
   reply_to: string | null; created_at: string; depth: number
 }
 export interface TeamMember { bot: Bot; profile: ManagerProfile; pending: number }
 export const managerTeam = () => invoke<TeamMember[]>('manager_team')
 export const managerProfileSave = (handle: string, profile: ManagerProfile) => invoke<ManagerProfile>('manager_profile_save', {handle,profile})
+export const messageBoard = () => invoke<ManagerMessage[]>('message_board')
 export const managerMessages = (handle: string) => invoke<ManagerMessage[]>('manager_messages', {handle})
 export const managerMessageSend = (from: string, draft: Omit<ManagerMessage,'id'|'from'|'created_at'|'depth'>) => invoke<ManagerMessage>('manager_message_send',{from,draft})
 
@@ -2388,7 +2405,7 @@ export interface FolderWorkflowStep {
   target: number
   needs: string[]
   instructions: string
-  status: 'pending' | 'starting' | 'running' | 'review' | 'done' | 'blocked'
+  status: 'pending' | 'starting' | 'running' | 'review' | 'done' | 'blocked' | 'skipped'
   claim: string
   run: string
   evidence: string
@@ -2400,6 +2417,19 @@ export interface FolderWorkflow {
   path: string
 }
 export interface WorkflowSummary { id: string; title: string; steps: number; done: number; error: string | null }
+export interface WorkRunLink { node: number; workflow: string; template: string }
+export interface WorkRecord {
+  id: string; node: number; title: string; description: string; acceptance: string; goal: string; source_url: string
+  status: 'queued' | 'working' | 'review' | 'blocked' | 'completed'; revision: number; runs: WorkRunLink[]
+  completion_note?: string; github_sync?: string; github_sync_error?: string
+}
+export const workRecordsList = () => invoke<WorkRecord[]>('work_records_list')
+export const workRecordSave = (record: WorkRecord, expected: number) => invoke<WorkRecord>('work_record_save', { record, expected })
+export interface WorkExclusion { node: number; workflow: string; step: string }
+export const workRecordComplete = (record: WorkRecord, expected: number, exclusions: WorkExclusion[], reason: string) => invoke<WorkRecord>('work_record_complete', { record, expected, exclusions, reason })
+export const workRecordSync = (id: string, expected: number) => invoke<WorkRecord>('work_record_sync', { id, expected })
+export const workRecordAttach = (id: string, expected: number, node: number, template: string, templateExpected: string, request: string) =>
+  invoke<WorkRecord>('work_record_attach', { id, expected, node, template, templateExpected, request })
 export const folderWorkflowList = (node: number) => invoke<WorkflowSummary[]>('folder_workflow_list', { node })
 export const folderWorkflowGet = (node: number, workflow = 'default') => invoke<FolderWorkflow>('folder_workflow_get', { node, workflow })
 export const folderWorkflowSave = (node: number, expected: string, raw: string, workflow = 'default') =>
@@ -2440,5 +2470,23 @@ export const communityLibraryImport = (id: string) => invoke<LibraryItem>('commu
 export const libraryManagerSave = (expected: LibraryAgent, name: string, instructions: string, goal: string) => invoke<void>('library_manager_save', { expected, name, instructions, goal })
 
 export interface TeamProposalMember { role: string; name: string; kind: 'manager' | 'specialist' | 'worker'; reports_to: string; instructions: string; worker: string }
-export interface TeamProposal { id: string; name: string; description: string; members: TeamProposalMember[] }
+export interface TeamProposal { id: string; name: string; description: string; members: TeamProposalMember[]; connection?: { provider: string; model: string }; target?: { id: string; revision: number } }
 export const teamBuilderCreate = (proposal: TeamProposal) => invoke<ReusableTeam>('team_builder_create', { proposal })
+
+// Bundled design packages and revision-checked, vault-backed project selection.
+export interface ProjectDesignSystem {
+  id: string
+  version: number
+  name: string
+  description: string
+  font: string
+  radius: number
+  spacing: number[]
+  modes: Record<string, Record<string, string>>
+  guidelines: string[]
+}
+export interface DesignAssignment { design_id: string | null; version: number; revision: number }
+export const designSystemsList = () => invoke<ProjectDesignSystem[]>('design_systems_list')
+export const designSystemAssignment = (nodeId: number) => invoke<DesignAssignment | null>('design_system_assignment', { nodeId })
+export const designSystemAssign = (nodeId: number, designId: string | null, expected: DesignAssignment | null) =>
+  invoke<DesignAssignment>('design_system_assign', { nodeId, designId, expected })

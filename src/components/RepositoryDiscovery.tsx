@@ -1,3 +1,4 @@
+import { FilterTabs } from './ui/DesignSystem'
 import { RepositoryOverview } from './RepositoryOverview'
 import { RepositoryListRow } from './RepositoryListRow'
 import { createPortal } from 'react-dom'
@@ -113,7 +114,7 @@ export function RepositoryDiscovery({ onOpenChange, requestedRepo, showSearch = 
       <header className="repo-page-header"><div className="repo-project-identity"><img src={`https://github.com/${encodeURIComponent(selected.full_name.split('/')[0])}.png?size=160`} alt={`${selected.full_name.split('/')[0]} avatar`} onError={event => { event.currentTarget.style.display = 'none' }} /><div><span className="repo-kicker">REPOSITORY</span><h1>{selected.full_name}</h1></div></div><button className="wf-secondary" onClick={() => setImporting(true)}>Review imports</button></header>
       <p className="mt-1 text-sm text-muted">{selected.description}</p>
       <div className="repo-metadata"><span>{selected.stargazers_count.toLocaleString()} stars</span><span>{selected.license?.spdx_id || 'License not declared'}</span><span>{files.length} files</span><span>Security scan: not run</span></div>
-      <nav className="repo-page-tabs" aria-label="Repository views"><button aria-pressed={pageTab === 'overview'} onClick={() => setPageTab('overview')}>Overview</button><button aria-pressed={pageTab === 'files'} onClick={() => setPageTab('files')}>Files & AI</button></nav>
+      <div className="ds-view-switch"><FilterTabs label="Repository views" value={pageTab} onChange={setPageTab} options={[{id:"overview",label:"Overview",icon:"info"},{id:"files",label:"Files & AI",icon:"folder"}]}/></div>
       {truncated && <p className="mt-2 text-xs text-warn">GitHub returned a partial file list. Some contents may be missing.</p>}
       <div hidden={pageTab !== 'overview'}><RepositoryOverview key={selected.full_name} repo={selected.full_name} revision={revision} files={files} onExplore={() => setPageTab('files')} onImport={() => setImporting(true)} /></div>
       <div hidden={pageTab !== 'files'}><RepositoryFiles key={selected.full_name} repo={selected.full_name} revision={revision} files={files} /></div>

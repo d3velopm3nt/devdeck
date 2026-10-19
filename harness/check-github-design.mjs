@@ -1,0 +1,37 @@
+import assert from 'node:assert/strict'
+import { mkdir } from 'node:fs/promises'
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright')
+const browser = await chromium.launch({executablePath:process.env.CHROMIUM_PATH,headless:true})
+try {
+ const page=await browser.newPage({viewport:{width:1440,height:900}})
+ page.setDefaultTimeout(60000)
+ const errors=[];page.on('pageerror',e=>errors.push(e.message))
+ await page.goto('http://localhost:5199/harness/github.html')
+ await page.getByRole('button',{name:/View details for/}).click()
+ await page.getByRole('group',{name:'Activity filters'}).waitFor()
+ await page.getByRole('button',{name:'PRs',exact:true}).click()
+ await page.getByText('Checks: failed',{exact:false}).waitFor()
+ assert.equal(await page.locator('.gh-detail .ds-state').getAttribute('data-tone'),'danger')
+ await page.getByRole('button',{name:'Issues',exact:true}).click()
+ await page.getByText('Documentation ready for human review.').waitFor()
+ assert.equal(await page.locator('.gh-detail .ds-state').getAttribute('data-tone'),'warning')
+ await page.getByRole('button',{name:'Commits',exact:true}).click()
+ assert.equal(await page.locator('.gh-detail .ds-state').getAttribute('data-tone'),'purple')
+ await page.getByRole('button',{name:'All activity',exact:true}).click()
+ await page.getByPlaceholder('Search activity…').fill('absent')
+ await page.getByText('No matching activity').waitFor()
+ await page.getByPlaceholder('Search activity…').fill('')
+ await mkdir('test-results/github-design',{recursive:true})
+ for(const [theme,width,height] of [['dark',1440,900],['light',1440,900],['dark',900,700],['dark',390,844]]) {
+  await page.setViewportSize({width,height})
+  await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme)
+  await page.screenshot({path:`test-results/github-design/${theme}-${width}.png`,fullPage:true})
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`${theme} ${width} overflow`)
+ }
+ await page.getByRole('button',{name:'Dev’s work',exact:true}).click()
+ await page.getByRole('button',{name:/Dev’s repository briefing/}).click()
+ await page.getByRole('button',{name:'Mark read',exact:true}).click()
+ assert.equal(await page.getByRole('button',{name:'Mark read',exact:true}).isDisabled(),true)
+ assert.deepEqual(errors,[])
+ console.log('PASS: filter selection, failure/review/commit tones, search empty state, briefing acknowledgement, dark/light desktop and narrow layouts, no browser errors. Fixture IPC only.')
+} finally {await browser.close()}

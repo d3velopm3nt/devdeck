@@ -38,10 +38,10 @@ export const EVERY_OPTIONS = [
 /** Status colours, shared so a blocked step is the same red everywhere. */
 export const STATUS_TONE: Record<string, string> = {
   unclaimed: 'bg-soft text-muted',
-  claimed: 'bg-sky-500/15 text-info',
-  'in-progress': 'bg-emerald-500/15 text-ok',
-  blocked: 'bg-red-500/15 text-err',
-  done: 'bg-hover text-faint',
+  claimed: 'bg-info/15 text-info',
+  'in-progress': 'bg-info/15 text-info',
+  blocked: 'bg-err/15 text-err',
+  done: 'bg-ok/15 text-ok',
 }
 
 export const STATUS_LABEL: Record<string, string> = {

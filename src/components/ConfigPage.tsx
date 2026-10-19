@@ -256,11 +256,11 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
       {/* A settings page long enough to scroll is a settings page you hunt
           through. The nav is fixed and the pane scrolls, so where you are
           stays visible while you read. */}
-      <nav className="flex w-[176px] shrink-0 flex-col gap-0.5 border-r border-line bg-panel p-2">
+      <nav aria-label="Settings sections" className="ds-navigation flex w-[176px] shrink-0 flex-col gap-0.5 border-r border-line bg-panel p-2">
         <div className="px-2.5 pb-2 pt-1 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-faint">
           Settings
         </div>
-            <button
+            <button aria-current={tab === 'general' ? 'page' : undefined}
               key="general"
               className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
                 tab === 'general' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
@@ -270,7 +270,7 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
               <Icon name="settings" size={14} className="shrink-0" />
               General
             </button>
-            <button
+            <button aria-current={tab === 'vault' ? 'page' : undefined}
               key="vault"
               className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
                 tab === 'vault' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
@@ -280,7 +280,7 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
               <Icon name="folder" size={14} className="shrink-0" />
               Vault
             </button>
-            <button
+            <button aria-current={tab === 'dev' ? 'page' : undefined}
               key="dev"
               className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
                 tab === 'dev' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
@@ -293,7 +293,7 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
             {/* Routines were a rail entry of their own. They are settings: a
                 clock row that agrees with a line in a bot's file, and the one
                 place both can be read at once. */}
-            <button
+            <button aria-current={tab === 'routines' ? 'page' : undefined}
               key="routines"
               className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
                 tab === 'routines' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
@@ -303,7 +303,7 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
               <Icon name="schedule" size={14} className="shrink-0" />
               Routines
             </button>
-            <button
+            <button aria-current={tab === 'deck' ? 'page' : undefined}
               key="deck"
               className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
                 tab === 'deck' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
@@ -317,8 +317,8 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
             {/* What the team is made of, as opposed to what it is doing: which
                 model each agent runs on, what each may touch, what you have
                 pre-authorised. Talking to them is Team. */}
-            <button className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] ${tab === 'core' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50'}`} onClick={() => setTab('core')}><Icon name="settings" size={14} />Setup</button>
-            <button
+            <button aria-current={tab === 'core' ? 'page' : undefined} className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] ${tab === 'core' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50'}`} onClick={() => setTab('core')}><Icon name="settings" size={14} />Setup</button>
+            <button aria-current={tab === 'assistant' ? 'page' : undefined}
               key="assistant"
               className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
                 tab === 'assistant' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
@@ -328,7 +328,7 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
               <Icon name="ai" size={14} className="shrink-0" />
               AI
             </button>
-            <button
+            <button aria-current={tab === 'stash' ? 'page' : undefined}
               key="stash"
               className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
                 tab === 'stash' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
@@ -338,7 +338,7 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
               <Icon name="stash" size={14} className="shrink-0" />
               Stash
             </button>
-            <button
+            <button aria-current={tab === 'data' ? 'page' : undefined}
               key="data"
               className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
                 tab === 'data' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
@@ -359,7 +359,7 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
         </div>
       ) : (
       <div className="min-w-0 flex-1 overflow-y-auto px-7 py-6">
-        <div className="max-w-2xl space-y-6">
+        <div className={`${tab === 'assistant' ? 'max-w-5xl' : 'max-w-2xl'} space-y-6`}>
         {tab === 'core' && <CoreSetup />}
         {tab === 'assistant' && <>
           <AgentSettings />

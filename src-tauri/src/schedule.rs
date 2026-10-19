@@ -125,6 +125,9 @@ pub struct Schedule {
     /// Filled on read: when this next fires, as a unix ms timestamp.
     #[serde(default)]
     pub next_run: Option<i64>,
+    /// Live scheduler execution, not downstream delegated workers.
+    #[serde(default)]
+    pub running: bool,
 }
 
 /// Public so the calendar can read the same rows without a second mapper —
@@ -153,6 +156,7 @@ pub fn row(r: &rusqlite::Row) -> rusqlite::Result<Schedule> {
         work_item: r.get(18)?,
         manager: r.get(19)?,
         next_run: None,
+        running: false,
     })
 }
 
@@ -300,7 +304,11 @@ fn all(conn: &Connection) -> Result<Vec<Schedule>, String> {
 #[tauri::command(async)]
 pub fn schedules_list(db: tauri::State<Db>) -> Result<Vec<Schedule>, String> {
     let conn = db.conn();
-    all(&conn)
+    let mut schedules = all(&conn)?;
+    for schedule in &mut schedules {
+        schedule.running = schedule_running(schedule.id);
+    }
+    Ok(schedules)
 }
 
 #[tauri::command(async)]
@@ -483,6 +491,30 @@ impl RunSlots {
 
 static RUNS: RunSlots = RunSlots::new(MAX_RUNS);
 
+// Transient evidence: restarting cannot preserve a stale Running state.
+static ACTIVE: std::sync::Mutex<Vec<i64>> = std::sync::Mutex::new(Vec::new());
+fn schedule_running(id: i64) -> bool {
+    ACTIVE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .contains(&id)
+}
+struct ActiveSchedule(i64);
+impl ActiveSchedule {
+    fn start(id: i64) -> Self {
+        ACTIVE.lock().unwrap_or_else(|e| e.into_inner()).push(id);
+        Self(id)
+    }
+}
+impl Drop for ActiveSchedule {
+    fn drop(&mut self) {
+        let mut active = ACTIVE.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(index) = active.iter().position(|id| *id == self.0) {
+            active.swap_remove(index);
+        }
+    }
+}
+
 fn run_one(
     app: &tauri::AppHandle,
     s: &Schedule,
@@ -491,6 +523,7 @@ fn run_one(
     report: Option<String>,
     bot: Option<crate::bots::Bot>,
 ) -> (bool, String) {
+    let _execution = ActiveSchedule::start(s.id);
     let when = if late { " (late)" } else { "" };
 
     let (ok, note) = match s.kind.as_str() {
@@ -1074,6 +1107,7 @@ mod tests {
             feature: String::new(),
             work_item: String::new(),
             next_run: None,
+            running: false,
         }
     }
 
@@ -1178,5 +1212,31 @@ mod run_slots_tests {
             .map(|h| h.join().unwrap())
             .sum();
         assert_eq!(got, 3, "exactly the cap may win, never more");
+    }
+}
+
+#[cfg(test)]
+mod execution_state_tests {
+    use super::*;
+    #[test]
+    fn concurrent_executions_clear_only_after_both_finish() {
+        let id = -90001;
+        assert!(!schedule_running(id));
+        let first = ActiveSchedule::start(id);
+        let second = ActiveSchedule::start(id);
+        assert!(schedule_running(id));
+        drop(first);
+        assert!(schedule_running(id));
+        drop(second);
+        assert!(!schedule_running(id));
+    }
+    #[test]
+    fn panic_clears_execution_evidence() {
+        let id = -90002;
+        let _ = std::panic::catch_unwind(|| {
+            let _active = ActiveSchedule::start(id);
+            panic!("simulated worker failure");
+        });
+        assert!(!schedule_running(id));
     }
 }

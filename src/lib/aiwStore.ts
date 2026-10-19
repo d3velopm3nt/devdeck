@@ -78,6 +78,7 @@ interface AiwState {
   conversations: ConversationSummary[]
   conversation: ConversationMeta | null
   sending: boolean
+  sendingConversationId: string | null
   /// The assistant's own failures.
   ///
   /// Separate from `error` on purpose: that one gates the whole module behind a
@@ -163,6 +164,7 @@ export const useAiw = create<AiwState>((set, get) => ({
   conversations: [],
   conversation: null,
   sending: false,
+  sendingConversationId: null,
   chatError: null,
   streaming: '',
   streamingSteps: [],
@@ -404,6 +406,7 @@ export const useAiw = create<AiwState>((set, get) => ({
     const pending: ChatMessage = { at: new Date().toISOString(), from: 'user', text: text.trim() }
     set({
       sending: true,
+      sendingConversationId: conv.id,
       streaming: '',
       streamingSteps: [],
       conversation: { ...conv, messages: [...conv.messages, pending] },
@@ -418,8 +421,9 @@ export const useAiw = create<AiwState>((set, get) => ({
       // The preview is dropped the moment the record arrives; keeping both
       // would show every reply twice.
       set({
-        conversation: fresh,
+        conversation: get().conversation?.id === conv.id ? fresh : get().conversation,
         sending: false,
+        sendingConversationId: null,
         chatError: null,
         streaming: '',
         streamingSteps: [],
@@ -443,7 +447,7 @@ export const useAiw = create<AiwState>((set, get) => ({
         streaming: '',
         streamingSteps: [],
         chatError: say(e),
-        conversation: current ? { ...current, messages: [...current.messages, failed] } : current,
+        conversation: current?.id === conv.id ? { ...current, messages: [...current.messages, failed] } : current,
       })
     }
   },

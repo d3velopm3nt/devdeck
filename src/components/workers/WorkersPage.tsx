@@ -1,3 +1,4 @@
+import { StateIcon } from '../ui/DesignSystem'
 // Workers — the hands you own.
 //
 // A manager keeps a plan; a worker does one job and hands back a draught. It
@@ -209,12 +210,7 @@ export function WorkersPage() {
                     className="flex w-full items-center gap-2.5 border-b border-line px-3.5 py-2 text-left last:border-b-0 hover:bg-hover/40"
                     onClick={() => window.dispatchEvent(new CustomEvent('devdeck:open-run', { detail: { id: r.id, title: r.title } }))}
                   >
-                    <Icon
-                      name={r.status === 'running' ? 'spinner' : r.ok ? 'check' : 'alert'}
-                      size={13}
-                      spin={r.status === 'running'}
-                      className={r.status === 'running' ? 'text-indigo-400' : r.ok ? 'text-ok' : 'text-warn'}
-                    />
+                    <StateIcon state={r.status==='running'?'running':r.status==='discarded'?'discarded':r.ok?'completed':'failed'} size={16}/>
                     <span className="min-w-0 flex-1 truncate text-[12px] text-ink">{r.title}</span>
                     <span className="shrink-0 text-[11px] text-muted">{r.worker_name}</span>
                     <span className="w-24 shrink-0 truncate text-right text-[11px] text-faint">{r.space}</span>

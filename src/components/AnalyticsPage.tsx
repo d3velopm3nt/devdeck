@@ -1,3 +1,4 @@
+import { FilterTabs } from './ui/DesignSystem'
 // Analytics — what the AI is costing, across every space.
 //
 // The same rows the call log shows one at a time, added up three ways: by
@@ -136,19 +137,7 @@ export function AnalyticsPage() {
           </p>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
-          {WINDOWS.map((w) => (
-            <button
-              key={w.days}
-              className={`rounded-full border px-2.5 py-0.5 text-[11px] ${
-                days === w.days
-                  ? 'border-line2 bg-raise text-ink'
-                  : 'border-line text-muted hover:text-dim'
-              }`}
-              onClick={() => setDays(w.days)}
-            >
-              {w.label}
-            </button>
-          ))}
+<FilterTabs label="Analytics period" value={String(days)} onChange={v=>setDays(Number(v))} options={WINDOWS.map(w=>({id:String(w.days),label:w.label,icon:'history'}))}/>
           <button className="btn-ghost text-[11px]" onClick={() => void load(days)}>
             <Icon name="update" size={12} />
           </button>

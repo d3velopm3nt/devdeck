@@ -1,3 +1,5 @@
+import { statePresentation } from '../ui/states'
+import { FilterTabs, StateBadge } from '../ui/DesignSystem'
 // Three panels a space's page still wants: its features, what its context is
 // made of, and its git changes.
 //
@@ -198,22 +200,7 @@ export function Features() {
       )}
 
       <div className="flex items-center gap-1.5 border-b border-line px-5 py-2">
-        <div className="flex gap-px rounded-md border border-line bg-soft p-0.5">
-          {STATUSES.map((s) => (
-            <button
-              key={s}
-              className={`rounded px-2.5 py-1 text-[11.5px] ${
-                filter === s ? 'bg-raise font-semibold text-ink' : 'text-muted hover:text-ink'
-              }`}
-              onClick={() => setFilter(s)}
-            >
-              {s}
-              <span className="ml-1 text-[10px] text-faint">
-                {s === 'All' ? a.features.length : a.features.filter((f) => f.status === s).length}
-              </span>
-            </button>
-          ))}
-        </div>
+<FilterTabs label="Feature status" value={filter} onChange={setFilter} options={STATUSES.map(s=>({id:s,label:s,icon:s==='All'?'layout':statePresentation(s).icon,count:s==='All'?a.features.length:a.features.filter(f=>f.status===s).length}))}/>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto p-5">
@@ -247,7 +234,7 @@ export function Features() {
                   </div>
                 </div>
                 <div className="px-3 py-2.5">
-                  <Chip className="bg-indigo-500/16 text-indigo-300">{f.status}</Chip>
+                  <StateBadge state={f.status}/>
                 </div>
                 <div className="flex items-center gap-1 px-3 py-2.5">
                   {f.agents.length === 0 ? (
@@ -588,19 +575,7 @@ export function ContextInspector() {
             <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-ink">
               {raw?.path ?? '…'}
             </span>
-            <div className="flex gap-px rounded border border-line bg-soft p-0.5">
-              {(['Raw', 'Rendered'] as const).map((v) => (
-                <button
-                  key={v}
-                  className={`rounded px-2 py-0.5 text-[11px] ${
-                    view === v ? 'bg-raise font-semibold text-ink' : 'text-muted hover:text-ink'
-                  }`}
-                  onClick={() => setView(v)}
-                >
-                  {v}
-                </button>
-              ))}
-            </div>
+<FilterTabs label="Context view" value={view} onChange={setView} options={[{id:'Raw',label:'Raw',icon:'code'},{id:'Rendered',label:'Rendered',icon:'view'}]}/>
           </div>
           <div className="min-h-0 flex-1 overflow-auto p-3">
             {err && <div className="text-[11.5px] text-err">{err}</div>}

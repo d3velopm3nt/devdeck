@@ -30,7 +30,7 @@ import { ThemeSwitch } from './shell/ThemeSwitch'
 import { AgentCluster, AccountChip } from './shell/TopBarStatus'
 import { Home } from './components/Home'
 import { Today } from './components/Today'
-import { Explorer } from './components/Explorer'
+import { ExplorerSidebar } from './shell/ExplorerSidebar'
 import { MachineSetup } from './components/MachineSetup'
 import { CommunityView } from './components/CommunityView'
 import { MailSidebar } from './components/MailSidebar'
@@ -1068,9 +1068,7 @@ export default function App() {
       <div className="flex min-h-0 flex-1">
         <Rail />
         {railView === 'projects' && (
-          <aside className="w-[280px] shrink-0 overflow-hidden border-r border-line">
-            <Explorer />
-          </aside>
+          <ExplorerSidebar />
         )}
         {railView === 'mail' && (
           <aside className="w-[250px] shrink-0 overflow-hidden border-r border-line">

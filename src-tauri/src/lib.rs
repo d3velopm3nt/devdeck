@@ -64,6 +64,8 @@ mod native_workflow;
 mod issue_monitor_model;
 mod legacy;
 mod library;
+mod design_system_model;
+mod design_systems;
 mod machine;
 mod mail;
 mod mailfiles;
@@ -84,10 +86,15 @@ mod setup;
 mod shots;
 mod spaces;
 mod stash;
+mod subscription_diagnostic;
 mod subscription_model;
 mod subscription_process;
 mod team;
 mod team_library_model;
+mod team_package;
+mod work_records;
+mod work_conversations;
+mod github_completion;
 mod threads;
 mod vault;
 mod visibility;
@@ -1168,6 +1175,7 @@ pub fn run() {
             manager_team::manager_profile_save,
             manager_team::manager_messages,
             manager_team::manager_message_send,
+            manager_team::message_board,
             bots::bots_list,
             bots::bots_standing,
             bots::bot_get,
@@ -1342,9 +1350,21 @@ pub fn run() {
             business::business_pipeline,
             business::business_stage_set,
             library::library_list,
+            design_systems::design_systems_list,
+            design_systems::design_system_assignment,
+            design_systems::design_system_assign,
             agent_library::library_agents,
             agent_library::library_manager_save,
             team_builder::team_builder_create,
+            team_package::team_package_inspect,
+            team_package::team_package_create,
+            team_package::team_package_save_template,
+            team_package::team_package_templates,
+            work_records::work_records_list,
+            work_records::work_record_save,
+            work_records::work_record_complete,
+            work_records::work_record_sync,
+            work_records::work_record_attach,
             personal_library::library_save_custom,
             personal_library::reusable_teams_list,
             personal_library::reusable_team_save,
@@ -1431,6 +1451,8 @@ pub fn run() {
             activity::activity_list,
             activity::activity_for,
             calls::calls_list,
+            inbox::inbox_requests,
+            inbox::inbox_request_resolve,
             inbox::inbox_marks,
             inbox::inbox_mark,
             inbox::inbox_floor,

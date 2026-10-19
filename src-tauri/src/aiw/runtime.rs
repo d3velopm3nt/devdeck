@@ -563,7 +563,12 @@ impl AgentRuntime {
                 let Some(p) = p else {
                     return Err(format!("unknown provider '{}'", agent.provider));
                 };
-                p.run(&request)
+                super::provider_retry::run(|| p.run(&request), stopped, |attempt| {
+                    ws.update_session(&session_id, |s| s.transcript.push(TranscriptEntry {
+                        at: now_iso(), kind: "retry".into(),
+                        text: format!("Provider request failed; retrying attempt {attempt} of 3."),
+                    }));
+                })
             };
             // A session is where "it ran and did nothing" happens, so every
             // turn of it is written down: what it was asked, what came back.
@@ -1228,7 +1233,7 @@ impl AgentRuntime {
                     EventType::WorkUpdated
                 },
                 scope.clone(),
-                serde_json::json!({ "claimId": claim_id, "status": if failed.is_some() { "blocked" } else { "needs-review" } }),
+                serde_json::json!({ "claimId": claim_id, "status": if failed.is_some() { "blocked" } else { "needs-review" }, "attention_owner": if cmd.on_behalf_of.as_deref() == Some("Issue intake execution. Complete only this step and return evidence for human review.") { "issue-intake" } else { "runtime" } }),
             )
             .caused_by(claimed),
         );

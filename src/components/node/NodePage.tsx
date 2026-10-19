@@ -1,3 +1,4 @@
+import { FilterTabs } from '../ui/DesignSystem'
 // A node, as a conversation.
 //
 // Every level of the tree has one — a workspace, a folder, a repo-backed
@@ -278,20 +279,7 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
       </div>
 
       <div className="flex shrink-0 items-center gap-1 border-b border-line px-5 pb-2 pt-2">
-        {TABS.filter((t) => t.when).map((t) => (
-          <button
-            key={t.id}
-            className={`rounded-md px-2.5 py-1 text-[12px] ${
-              tab === t.id ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
-            }`}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-            {t.count ? (
-              <span className="ml-1.5 text-[10px] tabular-nums text-faint">{t.count}</span>
-            ) : null}
-          </button>
-        ))}
+<FilterTabs label="Workspace views" value={tab} onChange={setTab} options={TABS.filter(t=>t.when).map(t=>({...t,icon:({team:'contacts',pipeline:'layout',thread:'ai',known:'info',decisions:'decision',conflicts:'conflict',files:'folder',git:'github',services:'service',commands:'terminal',reminders:'schedule',managers:'agent'} as const)[t.id]}))}/>
         <span className="flex-1" />
         {/* Said once, here, rather than as a banner over an empty Git panel.
             A folder without a repository is finished, not broken. */}

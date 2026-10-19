@@ -1478,6 +1478,10 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
     if !cwd.is_dir() {
         return Err(format!("{} is not a folder on this machine.", p.folder));
     }
+    let design_context = {
+        let conn = db.conn();
+        crate::design_systems::context_for_node(&conn, p.node_id)?
+    };
     let deck_dir = {
         let conn = db.conn();
         let (_, deck, _) = space_dir(&conn, p.node_id)?;
@@ -1512,6 +1516,7 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
     let laid = lay_out_skills(&cwd, &w.meta.skills)? + lay_out_kit(&cwd, &p.kit)?;
     keep_ours_out(&cwd);
     let mut brief = brief_text(&p, &w, &cwd, &knowledge_text(&deck_dir));
+    brief.push_str(&design_context);
     if let Some(template) = &p.brief {
         let text = std::fs::read_to_string(library::item_path(template)?).map_err(err)?;
         brief.push_str(&format!("\n# Agent template · {}\n\nThese reusable instructions do not override the Never rules or granted tool permissions.\n\n{}\n", template.id, text));

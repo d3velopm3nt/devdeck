@@ -1,3 +1,4 @@
+import { StateIcon } from '../ui/DesignSystem'
 // A goal, as one page.
 //
 // This replaces the thread that used to sit here. Three lists — Goals,
@@ -31,22 +32,6 @@ import { Icon } from '../../lib/icons'
 import { fmtAgo } from '../../lib/time'
 import type { Board } from './TeamPage'
 
-/// Colour per status. Blocked is the only warm one: it is the only status that
-/// is asking you for something.
-function statusDot(status: string): string {
-  // Violet, and its own colour on purpose: a proposal is not work yet. It is
-  // the one status nothing can start from, so it must not look like the ones
-  // that can.
-  if (status === 'proposed') return 'bg-violet-400'
-  // Built is not done and must not look like it: the files exist on a branch
-  // nobody has read, and the main line has none of them.
-  if (status === 'built') return 'bg-sky-400'
-  if (status === 'done') return 'bg-line3'
-  if (status === 'blocked') return 'bg-amber-400'
-  if (status === 'in-progress') return 'bg-emerald-400'
-  if (status === 'claimed') return 'bg-indigo-400'
-  return 'bg-line2'
-}
 
 /// What a worker is asking for, in one line.
 ///
@@ -445,9 +430,7 @@ export function GoalPage({ goal, board }: { goal: GoalRow; board: Board }) {
                   return (
                     <div key={i.id} className="border-b border-line/60 py-1.5 last:border-0">
                       <div className="flex items-center gap-2">
-                        <span
-                          className={`h-[6px] w-[6px] shrink-0 rounded-full ${statusDot(i.status)}`}
-                        />
+                        <StateIcon state={i.status}/>
                         <span
                           className={`min-w-0 flex-1 text-[12px] ${
                             i.status === 'done' ? 'text-muted line-through' : 'text-body'
@@ -484,7 +467,7 @@ export function GoalPage({ goal, board }: { goal: GoalRow; board: Board }) {
                              belongs to the goal. */
                           <span className="shrink-0 text-[10.5px] text-info">on the branch</span>
                         ) : by ? (
-                          <span className="shrink-0 rounded-full bg-emerald-500/15 px-1.5 text-[9.5px] font-semibold text-ok">
+                          <span className="shrink-0 rounded-full bg-info/15 px-1.5 text-[9.5px] font-semibold text-info">
                             {by}
                           </span>
                         ) : i.assignee ? (

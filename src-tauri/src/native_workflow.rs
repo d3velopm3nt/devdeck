@@ -41,15 +41,22 @@ pub fn definition(handle: &str) -> Result<Doc<AgentMeta>, String> {
                     .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
         })
         .ok_or("Invalid native agent reference")?;
-    let doc = PersonalStore::open()?
-        .agents()
-        .into_iter()
+    let docs = PersonalStore::open()?.agents();
+    let mut doc = docs
+        .iter()
+        .cloned()
         .find(|a| a.meta.id == id)
         .ok_or("Saved model agent not found in Library")?;
+    if doc.meta.provider == "default" {
+        let shared = docs.iter().find(|a| a.meta.id == crate::aiw::assistant::ASSISTANT_ID)
+            .ok_or("Shared agent connection is not configured")?;
+        doc.meta.provider = shared.meta.provider.clone();
+        doc.meta.model = shared.meta.model.clone();
+    }
     if doc.meta.provider.is_empty()
         || matches!(
             doc.meta.provider.as_str(),
-            "mock" | "scripted" | "claude-code"
+            "mock" | "scripted" | "claude-code" | "default"
         )
     {
         return Err("Choose a real model connection for this agent in Library".into());
@@ -63,7 +70,7 @@ fn metadata(doc: &Doc<AgentMeta>) -> WorkerMeta {
         runner: "native-agent".into(),
         model: doc.meta.model.clone(),
         writes: "folder".into(),
-        minutes: 5,
+        minutes: 0,
         ..Default::default()
     }
 }
@@ -82,7 +89,7 @@ pub fn plan(
     let root = db::node_dir(conn, &node).ok_or("Target has no working directory")?;
     Ok(Plan {
         worker: metadata(&doc), node_id, space: node.name, feature: feature.into(), item: item.into(), title: title.into(), intent: intent.into(),
-        folder: root.to_string_lossy().into(), ready: root.is_dir(), model: doc.meta.model.clone(), minutes: 5,
+        folder: root.to_string_lossy().into(), ready: root.is_dir(), model: doc.meta.model.clone(), minutes: 0,
         tools: vec!["Native tools permitted for this agent; execution and publishing commands are blocked".into()],
         never: crate::workers::NEVER.iter().map(|s| s.to_string()).collect(),
         note: format!("Uses {} through {}. Writes in the selected project folder, with live permissions. Stops at human review; no CLI runner. Stop takes effect after the current model request.", doc.meta.name, doc.meta.provider),
@@ -106,6 +113,10 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
     if agent.provider != doc.meta.provider || agent.model != doc.meta.model {
         return Err("Agent connection changed; reload the agent before starting".into());
     }
+    let design_context = {
+        let conn = db.conn();
+        crate::design_systems::context_for_node(&conn, p.node_id)?
+    };
     let (node, root, deck_root) = {
         let conn = db.conn();
         let node = db::node_by_id(&conn, p.node_id).map_err(|e| e.to_string())?;
@@ -131,7 +142,13 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
     }
     let id = crate::aiw::events::new_id("native");
     let deck = project.deck();
-    let goal = format!("{}\n\n{}\n\nExecute this workflow step using your existing model connection and native DevDeck tools. Read the relevant source before writing. Preserve unrelated edits. Do not modify workflow state, install tools, execute shell commands, commit, push, merge, publish or deploy. Verify the resulting files by reading them and report evidence and limitations for human review.", p.title, p.intent);
+    let allow_local_commits = agent.permissions.get("git").is_some_and(|p| p == "full");
+    let git_boundary = if allow_local_commits {
+        "Local commits are permitted only when explicitly authorized by the work item or its latest human handoff. Preserve unrelated changes; do not push, publish or merge."
+    } else {
+        "Do not commit. Local commits require the agent's Git permission and explicit work-item authorization."
+    };
+    let goal = format!("{}\n\n{}{}\n\nExecute this workflow step using your existing model connection and native DevDeck tools. Read the relevant source before writing. Preserve unrelated edits. Do not modify workflow state, install tools, execute shell commands, push, merge, publish or deploy. {git_boundary} Verify the resulting files by reading them and report evidence and limitations for human review.", p.title, p.intent, design_context);
     let feature = deck.create_feature(&id, &goal, &[])?;
     let live = AgentRuntime::begin(
         &ws,
@@ -144,17 +161,19 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
             areas: vec![],
             depends_on: vec![],
             unattended: true,
-            stop_at: vec![
+            stop_at: { let mut boundaries = vec![
                 "before any push".into(),
                 "before any merge".into(),
-                "before any commit".into(),
                 "before any terminal".into(),
                 "before any process".into(),
                 "before any deploy".into(),
-            ],
+            ]; if !allow_local_commits { boundaries.push("before any commit".into()); } boundaries },
             on_behalf_of: Some(
-                "Workflow execution. Complete only this step and return evidence for human review."
-                    .into(),
+                if p.intent.contains("# Current work request\n\n") {
+                    "Issue intake execution. Complete only this step and return evidence for human review.".into()
+                } else {
+                    "Workflow execution. Complete only this step and return evidence for human review.".into()
+                },
             ),
         },
     )?;
@@ -194,14 +213,10 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
         let began = Instant::now();
         let finished = Arc::new(AtomicBool::new(false));
         let watch_done = finished.clone();
-        let watch_stop = stop.clone();
         let watch_ws = ws.clone();
         let mut progress = initial.clone();
         let ticker = std::thread::spawn(move || {
             while !watch_done.load(Ordering::Relaxed) {
-                if began.elapsed() >= Duration::from_secs(300) {
-                    watch_stop.store(true, Ordering::Relaxed);
-                }
                 if let Some(session) = watch_ws.session(&progress.runtime_session) {
                     progress.steps = session
                         .transcript
@@ -263,7 +278,7 @@ pub fn start(app: &tauri::AppHandle, db: &Db, p: Plan) -> Result<Run, String> {
             receipt.ok = false;
             receipt.status = "stopped".into();
             receipt.verdict = format!(
-                "Stopped or timed out. Partial files require review.\n{}",
+                "Stopped. Partial files require review.\n{}",
                 receipt.verdict
             );
         }

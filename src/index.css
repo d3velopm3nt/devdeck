@@ -2,6 +2,7 @@
 @import 'dockview-core/dist/styles/dockview.css';
 
 @import './widget/deck.css';
+@import './components/ui/design-system.css';
 
 /* ---------------------------------------------------------------------------
    Design tokens. The raw values live on :root (the default DevDeck dark

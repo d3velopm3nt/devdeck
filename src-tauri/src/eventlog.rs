@@ -126,6 +126,10 @@ fn drain(
 ) {
     for ev in rx {
         keep(conn, &ev);
+        match crate::inbox::keep_request(conn, &ev) {
+            Ok(true) => { if let Some(app)=app { use tauri::Emitter; let _=app.emit("devdeck:inbox", ()); } },
+            Err(error) => eprintln!("[inbox] {error}"), _ => {}
+        }
         match crate::notifications::keep(conn, &ev) {
             Ok(Some(notice)) => { if let Some(app) = app { use tauri::Emitter; let _ = app.emit("devdeck:notification", notice); } },
             Err(error) => eprintln!("[notifications] {error}"),

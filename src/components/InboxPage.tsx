@@ -1,3 +1,4 @@
+import { FilterTabs } from './ui/DesignSystem'
 // One inbox: what happened, and what is waiting on you, across every space.
 //
 // Nothing here is a new stream. `activity` already collects everything the app
@@ -34,6 +35,7 @@ import { Icon, type IconName } from '../lib/icons'
 import { fmtAgo } from '../lib/time'
 import { findNode, subtreeIds, workspaceOf } from '../lib/tree'
 import { FocusStart } from './FocusBar'
+import { InboxRequests } from './InboxRequests'
 import { activityItem, approvalItem, conflictItem, factItem, unread } from '../lib/inbox'
 import * as ipc from '../lib/ipc'
 import { openAssistant, openSpace } from '../lib/dock'
@@ -267,19 +269,7 @@ export function InboxPage() {
               {waiting} need{waiting === 1 ? 's' : ''} you
             </span>
           )}
-          <span className="flex items-center gap-0.5 rounded-lg border border-line bg-panel p-0.5">
-            {(['all', 'unread'] as const).map((v) => (
-              <button
-                key={v}
-                className={`rounded-md px-2.5 py-0.5 text-[11px] ${
-                  only === v ? 'bg-hover text-ink' : 'text-muted hover:text-dim'
-                }`}
-                onClick={() => setOnly(v)}
-              >
-                {v === 'all' ? 'All' : `Unread${unreadRows.length ? ` ${unreadRows.length}` : ''}`}
-              </button>
-            ))}
-          </span>
+<FilterTabs label="Inbox filters" value={only} onChange={setOnly} options={[{id:'all',label:'All',icon:'inbox'},{id:'unread',label:'Unread',icon:'mail',count:unreadRows.length || undefined}]}/>
           <button
             className="btn-ghost text-[11.5px]"
             disabled={unreadRows.length === 0}
@@ -323,6 +313,7 @@ export function InboxPage() {
       )}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
+        <InboxRequests />
         {shown.length === 0 && !loaded ? (
           <div className="flex h-full items-center justify-center text-[12px] text-muted">
             Reading what happened…
@@ -331,7 +322,7 @@ export function InboxPage() {
           <div className="flex h-full flex-col items-center justify-center gap-2 px-8 text-center">
             <Icon name="inbox" size={26} className="text-faint" />
             <div className="text-[12.5px] text-dim">
-              {only === 'unread' ? 'Nothing unread' : 'Nothing needs you'}
+              {only === 'unread' ? 'No unread activity below' : 'No other items need you'}
             </div>
             <div className="max-w-[380px] text-[11.5px] leading-relaxed text-muted">
               {only === 'unread' ? (

@@ -1,3 +1,4 @@
+import { StateBadge } from './ui/DesignSystem'
 import { useCallback, useEffect, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import * as ipc from '../lib/ipc'
@@ -77,7 +78,7 @@ export function IssueMonitorPanel() {
         {data.bindings?.some(b => b.repository === source.repository) && <button className="btn-ghost" disabled={busy} onClick={() => void assign(source.repository)}>Disable dispatch</button>}
       </div>
       <p className="mt-1 text-muted">Dispatch covers selected issue numbers, or all open issues when blank. Dev selects a template; configured workers run independent steps. Human review still gates dependencies.</p>
-      {(data.dispatches || []).filter(d => d.repository === source.repository).map(d => <p key={d.number} className="mt-1">#{d.number} · {d.status}{d.workflow && ` · ${d.workflow}`} {d.message && `— ${d.message}`}{d.status === 'blocked' && !d.workflow && <button className="btn-ghost ml-2" disabled={busy} onClick={() => void retry(d.repository, d.number)}>Retry selection</button>}</p>)}
+      {(data.dispatches || []).filter(d => d.repository === source.repository).map(d => <p key={d.number} className="mt-1">#{d.number} · <StateBadge state={d.status}/>{d.workflow && ` · ${d.workflow}`} {d.message && `— ${d.message}`}{d.status === 'blocked' && !d.workflow && <button className="btn-ghost ml-2" disabled={busy} onClick={() => void retry(d.repository, d.number)}>Retry selection</button>}</p>)}
       {source.error && <p role="alert" className="mt-2 text-err">Refresh failed: {source.error}. Previous issues are retained.</p>}
       {source.warnings.map(w => <p key={w} className="text-warn">{w}</p>)}
       {source.truncated && <p className="text-warn">Partial issue history</p>}

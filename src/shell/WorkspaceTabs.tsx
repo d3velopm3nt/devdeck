@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 // Workspaces, as tabs.
 //
 // A workspace used to be a dropdown buried in the Explorer, which made it feel
@@ -35,7 +36,7 @@ export function WorkspaceTabs() {
     activeWorkspaceId,
     setActiveWorkspace,
     refreshTree,
-  } = useApp()
+  } = useApp(useShallow(s => ({nodes:s.nodes,services:s.services,svcStates:s.svcStates,gitByNode:s.gitByNode,activeWorkspaceId:s.activeWorkspaceId,setActiveWorkspace:s.setActiveWorkspace,refreshTree:s.refreshTree})))
   const aiw = useAiw()
   const [menu, setMenu] = useState<{ x: number; y: number; id: number } | null>(null)
   const [making, setMaking] = useState(false)
@@ -151,9 +152,10 @@ export function WorkspaceTabs() {
         return (
           <button
             key={w.id}
-            className={`group flex shrink-0 items-center gap-2 border-r border-line px-3 py-1.5 text-left ${
+            aria-current={active ? 'page' : undefined}
+            className={`ds-navigation-item group flex shrink-0 items-center gap-2 border-r border-line px-3 py-1.5 text-left ${
               active
-                ? 'bg-page text-ink shadow-[inset_0_2px_0_theme(colors.indigo.500)]'
+                ? 'bg-page text-ink '
                 : 'text-dim hover:bg-hover/40 hover:text-ink'
             }`}
             title={w.name}
@@ -194,8 +196,8 @@ export function WorkspaceTabs() {
                   <span className="text-faint">Idle</span>
                 )}
                   {running > 0 && (
-                    <span className="flex items-center gap-1 text-ok">
-                      <span className="h-[5px] w-[5px] rounded-full bg-emerald-400" />
+                    <span className="flex items-center gap-1 text-info">
+                      <span className="h-[5px] w-[5px] rounded-full bg-info" />
                       {running} running
                     </span>
                   )}
@@ -228,7 +230,7 @@ export function WorkspaceTabs() {
 
       <button
         className="flex shrink-0 items-center border-r border-line px-2.5 text-faint hover:bg-hover/40 hover:text-dim"
-        title="New space"
+        aria-label="New space" title="New space"
         onClick={() => setMaking(true)}
       >
         <Icon name="add" size={13} />

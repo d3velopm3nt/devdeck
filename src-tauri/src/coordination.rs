@@ -20,6 +20,10 @@ pub struct Profile {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Draft {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub team_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_id: Option<String>,
     pub to: String,
     pub kind: String,
     pub subject: String,
@@ -30,6 +34,10 @@ pub struct Draft {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Message {
+    #[serde(default)]
+    pub team_id: Option<String>,
+    #[serde(default)]
+    pub task_id: Option<String>,
     pub id: String,
     pub from: String,
     pub to: String,
@@ -144,7 +152,7 @@ pub fn send(
     from: &str,
     sender: &Profile,
     recipient: &Profile,
-    draft: Draft,
+    mut draft: Draft,
 ) -> Result<Message, String> {
     let _guard = LOCK.lock().map_err(|e| e.to_string())?;
     if !valid_handle(from) || !valid_handle(&draft.to) || draft.to == from {
@@ -166,6 +174,19 @@ pub fn send(
         );
     }
     let all = messages(dir)?;
+    if let Some(parent_id) = &draft.reply_to {
+        let parent = all.iter().find(|m| &m.id == parent_id).ok_or("The message being answered does not exist.")?;
+        if draft.team_id.as_ref().is_some_and(|v| Some(v) != parent.team_id.as_ref())
+            || draft.task_id.as_ref().is_some_and(|v| Some(v) != parent.task_id.as_ref()) {
+            return Err("A reply must keep the original team and task.".into());
+        }
+        draft.team_id = parent.team_id.clone();
+        draft.task_id = parent.task_id.clone();
+    }
+    if draft.team_id.as_ref().is_some_and(|id| !valid_handle(id))
+        || draft.task_id.as_ref().is_some_and(|id| id.is_empty() || id.len() > 240 || id.chars().any(char::is_control)) {
+        return Err("Invalid team or task reference.".into());
+    }
     let key = serde_json::to_vec(&(from, &draft)).map_err(|e| e.to_string())?;
     let id = format!("{:x}", Sha256::digest(&key));
     if let Some(existing) = all.iter().find(|m| m.id == id) {
@@ -199,6 +220,8 @@ pub fn send(
         return Err("This manager has 100 unanswered messages. Resolve those first.".into());
     }
     let message = Message {
+        team_id: draft.team_id,
+        task_id: draft.task_id,
         id: id.clone(),
         from: from.into(),
         to: draft.to,
@@ -239,6 +262,42 @@ pub fn outgoing(text: &str) -> Result<Option<Draft>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn linked_reply_inherits_context_and_cannot_switch_teams() {
+        let d = dir(); let (a, b) = profiles();
+        let mut request = draft(); request.team_id = Some("research".into()); request.task_id = Some("local:task-one".into());
+        let first = send(&d, "life", &a, &b, request).unwrap();
+        let mut response = draft(); response.to = "life".into(); response.kind = "reply".into(); response.reply_to = Some(first.id.clone()); response.team_id = Some("other-team".into());
+        assert!(send(&d, "business", &b, &a, response.clone()).is_err());
+        response.team_id = None;
+        let sent = send(&d, "business", &b, &a, response.clone()).unwrap();
+        assert_eq!(sent.team_id.as_deref(), Some("research"));
+        assert_eq!(sent.task_id.as_deref(), Some("local:task-one"));
+        assert_eq!(send(&d, "business", &b, &a, response).unwrap().id, sent.id);
+        let reopened = messages(&d).unwrap();
+        assert_eq!(reopened.len(), 2);
+        assert!(reopened.iter().all(|m| m.team_id.as_deref() == Some("research")));
+        fs::remove_dir_all(d).unwrap();
+    }
+    #[test]
+    fn legacy_messages_remain_unscoped() {
+        let raw = serde_json::json!({"id":"old","from":"life","to":"business","kind":"request","subject":"Old request","body":"Keep this","reply_to":null,"created_at":"2026-01-01T00:00:00Z","depth":0});
+        let message: Message = serde_json::from_value(raw).unwrap();
+        assert!(message.team_id.is_none()); assert!(message.task_id.is_none());
+        let serialized = serde_json::to_value(draft()).unwrap();
+        assert!(serialized.get("team_id").is_none());
+        assert!(serialized.get("task_id").is_none());
+    }
+    #[test]
+    fn identical_requests_to_different_teams_are_distinct() {
+        let d = dir(); let (a, b) = profiles(); let mut request = draft();
+        request.team_id = Some("research".into());
+        let first = send(&d, "life", &a, &b, request.clone()).unwrap();
+        request.team_id = Some("engineering".into());
+        let second = send(&d, "life", &a, &b, request).unwrap();
+        assert_ne!(first.id, second.id); assert_eq!(messages(&d).unwrap().len(), 2);
+        fs::remove_dir_all(d).unwrap();
+    }
     fn profiles() -> (Profile, Profile) {
         (
             Profile {
@@ -268,6 +327,7 @@ mod tests {
     }
     fn draft() -> Draft {
         Draft {
+            team_id: None, task_id: None,
             to: "business".into(),
             kind: "request".into(),
             subject: "Tomorrow's priorities".into(),
@@ -288,6 +348,7 @@ mod tests {
             &b,
             &a,
             Draft {
+                team_id: None, task_id: None,
                 to: "life".into(),
                 kind: "reply".into(),
                 subject: "Plan".into(),
@@ -308,6 +369,7 @@ mod tests {
         let (a, b) = profiles();
         let first = send(&d, "life", &a, &b, draft()).unwrap();
         let reply = Draft {
+            team_id: None, task_id: None,
             to: "life".into(),
             kind: "reply".into(),
             subject: "Plan".into(),
@@ -342,6 +404,7 @@ mod tests {
                 sender,
                 recipient,
                 Draft {
+                    team_id: None, task_id: None,
                     to: to.into(),
                     kind: "reply".into(),
                     subject: format!("Response {depth}"),

@@ -43,7 +43,7 @@ pub fn validate(team: &Team) -> Result<(), String> {
     }
     let mut seen = HashSet::new();
     for role in &team.roles {
-        if !valid_id(&role.name) || !seen.insert(&role.name) || !valid_id(&role.worker) {
+        if !valid_id(&role.name) || !seen.insert(&role.name) || !valid_id(role.worker.strip_prefix("agent:").unwrap_or(&role.worker)) {
             return Err(format!(
                 "Role '{}' needs a unique lowercase name and a saved agent.",
                 role.name
@@ -151,6 +151,15 @@ pub fn resolve(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn accepts_native_subscription_agent_references_without_path_escape() {
+        let mut team: Team = serde_json::from_str(r#"{"id":"dev","name":"Dev","roles":[{"name":"lead","worker":"agent:factory-manager"}]}"#).unwrap();
+        assert!(validate(&team).is_ok());
+        team.roles[0].worker = "agent:../escape".into();
+        assert!(validate(&team).is_err());
+        team.roles[0].worker = "agent:".into();
+        assert!(validate(&team).is_err());
+    }
     #[test]
     fn hierarchy_rejects_cycles_and_invalid_links() {
         let mut t: Team = serde_json::from_str(r#"{"id":"dev","name":"Dev","roles":[{"name":"lead","worker":"lead","kind":"manager"},{"name":"engineering","worker":"engineer","kind":"manager","reports_to":"lead"},{"name":"qa","worker":"tester","kind":"specialist","reports_to":"engineering","handoffs":["lead"]}]}"#).unwrap();

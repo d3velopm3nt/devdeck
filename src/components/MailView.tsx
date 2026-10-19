@@ -1,3 +1,4 @@
+import { FilterTabs } from './ui/DesignSystem'
 // Mail — the reading surface: a thread list and a reader, the same shape as
 // Stash's vault. The reader shows what actually arrived: the rendered HTML
 // body, its attachments, the raw headers, and whatever the assistant has said
@@ -207,21 +208,7 @@ function Tabs({
     { key: 'assistant', label: notes > 0 ? `Assistant · ${notes}` : 'Assistant' },
   ]
   return (
-    <div className="flex gap-0.5 border-b border-line px-5">
-      {items.map((it) => (
-        <button
-          key={it.key}
-          className={`border-b-2 px-3 py-1.5 text-[12px] transition ${
-            tab === it.key
-              ? 'border-indigo-400 text-ink'
-              : 'border-transparent text-muted hover:text-body'
-          }`}
-          onClick={() => setTab(it.key)}
-        >
-          {it.label}
-        </button>
-      ))}
-    </div>
+<div className="ds-view-switch"><FilterTabs label="Message views" value={tab} onChange={setTab} options={items.map(it => ({id:it.key,label:it.label,icon:it.key==='message'?'mail':it.key==='files'?'attachment':it.key==='source'?'code':'ai'}))}/></div>
   )
 }
 
@@ -343,19 +330,7 @@ export function MailView() {
         </div>
 
         <div className="flex items-center gap-1.5 border-b border-line px-2.5 py-1.5">
-          {CHIPS.map((c) => (
-            <button
-              key={c.key}
-              className={`rounded-full border px-2 py-[2px] font-mono text-[10px] ${
-                mailQuery.chip === c.key
-                  ? 'border-transparent bg-indigo-500/20 text-indigo-300'
-                  : 'border-line2 text-dim hover:bg-hover/50'
-              }`}
-              onClick={() => void setMailQuery({ chip: c.key })}
-            >
-              {c.label}
-            </button>
-          ))}
+          <FilterTabs label="Mail filters" value={mailQuery.chip} onChange={chip=>void setMailQuery({chip})} options={CHIPS.map(c=>({id:c.key,label:c.label,icon:({all:'inbox',unread:'mail',flagged:'star',files:'attachment'} as const)[c.key]}))}/>
           <span className="ml-auto font-mono text-[9.5px] text-faint">{mailMessages.length}</span>
         </div>
 

@@ -10,3 +10,92 @@
 /* Keep selection and its evidence in view when a real repository has many rows. */
 @media(min-width:1101px){.gh-layout{min-height:0}.gh-feed{display:flex;flex-direction:column;min-height:0}.gh-feed-body{flex:1;min-height:0}.gh-entries,.gh-detail{overflow:auto}.gh-detail-copy{max-height:none;overflow:visible}.gh-heading,.gh-footer,.gh-toolbar{flex-shrink:0}}
 @media(max-width:1100px){.gh-entries{max-height:420px;overflow:auto}.gh-detail{order:-1}.gh-detail-copy{max-height:220px;overflow:auto}}
+/* GitHub consumes the shared state and filter primitives. */
+.gh-workspace { container-type: inline-size; }
+.gh-heading { padding: 22px 24px; }
+.gh-heading h1 { display: flex; align-items: center; gap: 10px; font-size: 25px; letter-spacing: -.6px; }
+.gh-heading p { color: var(--c-dim); font-size: 12px; }
+.gh-workspace .gh-action { min-height: 36px; padding: 7px 10px; border: 1px solid var(--c-line2); border-radius: 8px; background: var(--c-panel); color: var(--c-body); }
+.gh-workspace .gh-action:hover { background: var(--c-hover); }
+.gh-workspace .gh-action:disabled { opacity: .5; cursor: not-allowed; }
+.gh-workspace :is(button,input):focus-visible { outline: 2px solid var(--c-accent); outline-offset: -2px; }
+.gh-layout { grid-template-columns: 196px minmax(0,1fr); }
+.gh-repositories { background: var(--c-panel); padding: 16px 10px; }
+.gh-repositories > button { min-height: 44px; border: 1px solid transparent; border-radius: 8px; padding: 10px; }
+.gh-repositories > button.selected { border-color: color-mix(in srgb,var(--c-accent) 30%,var(--c-line)); background: color-mix(in srgb,var(--c-accent) 9%,var(--c-panel)); }
+.gh-repositories > button > svg { flex-shrink: 0; color: var(--c-dim); }
+.gh-repositories small,.gh-coverage,.gh-eyebrow { color: var(--c-dim); }
+.gh-toolbar { flex-direction: column; align-items: stretch; padding: 14px 16px; gap: 12px; background: var(--c-panel); }
+.gh-search { flex: none; min-height: 38px; padding: 0 10px; border: 1px solid var(--c-line2); border-radius: 8px; background: var(--c-page); }
+.gh-search:focus-within { border-color: var(--c-accent); }
+.gh-search input { font-size: 13px; }
+.gh-feed-body { grid-template-columns: minmax(240px,1fr) minmax(270px,34%); }
+.gh-entry { padding: 16px; gap: 12px; border-left: 3px solid transparent; }
+.gh-entry.selected { border-left-color: var(--c-accent); background: color-mix(in srgb,var(--c-accent) 8%,var(--c-panel)); }
+.gh-entry > svg:first-child { color: var(--ds-state-color); margin-top: 2px; }
+.gh-entry > svg:last-child { color: var(--c-dim); }
+.gh-entry strong { line-height: 1.5; font-weight: 550; }
+.gh-entry small { color: var(--c-dim); margin: 3px 0 8px; }
+.gh-detail { padding: 20px; }
+.gh-detail-title { font-size: 17px; font-weight: 600; line-height: 1.45; }
+.gh-detail-copy { color: var(--c-body); font-size: 13px; line-height: 1.7; }
+.gh-detail-actions { flex-direction: row; flex-wrap: wrap; gap: 8px; }
+.gh-freshness,.gh-footer,.gh-detail > small { color: var(--c-dim); }
+.gh-footer { padding: 12px 18px; }
+@container (max-width: 980px) {
+  .gh-layout { grid-template-columns: 165px minmax(0,1fr); }
+  .gh-feed-body { grid-template-columns: minmax(0,1fr); }
+  .gh-detail { order: -1; border-left: 0; border-bottom: 1px solid var(--c-line); }
+  .gh-detail-copy { max-height: 240px; overflow: auto; }
+  .gh-entries { max-height: 480px; overflow: auto; }
+}
+@container (max-width: 600px) {
+  .gh-layout { display: flex; flex-direction: column; }
+  .gh-repositories { display: flex; flex-wrap: wrap; gap: 4px; border-right: 0; border-bottom: 1px solid var(--c-line); }
+  .gh-repositories > button { width: auto; }
+  .gh-repositories > .gh-eyebrow,.gh-coverage { display: none; }
+  .gh-heading { padding: 16px; gap: 10px; }
+  .gh-heading h1 { font-size: 21px; }
+  .gh-toolbar { padding: 12px; }
+  .gh-heading > div { min-width: 0; }
+  .gh-heading > .gh-action { flex-shrink: 0; }
+}
+
+/* Repository workbench: compact navigation, readable evidence, clear actions. */
+.gh-heading { padding: 18px 20px; flex-wrap: wrap; }
+.gh-heading h1 { font-size: 22px; }
+.gh-header-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.gh-workspace .gh-action { min-height: 32px; padding: 5px 9px; border-radius: 6px; }
+.gh-layout { grid-template-columns: 168px minmax(0,1fr); }
+.gh-repositories { padding: 12px 8px; }
+.gh-repositories > button { min-height: 36px; padding: 8px; }
+.gh-toolbar { padding: 10px 14px 0; gap: 8px; }
+.gh-toolbar .ds-compact-tabs { gap: 2px; }
+.gh-toolbar .ds-compact-tabs > button { padding-inline: 7px; }
+.gh-search { min-height: 32px; border-radius: 6px; }
+.gh-entry { padding: 11px 13px; gap: 9px; }
+.gh-entry strong { font-size: 12px; line-height: 1.5; }
+.gh-entry .ds-state { padding: 2px 5px; font-size: 10px; }
+.gh-entry small { margin-bottom: 5px; }
+.gh-detail { padding: 18px; }
+.gh-detail-title { margin-top: 14px; font-size: 16px; }
+.gh-footer { padding: 8px 16px; }
+.gh-setup { padding: 18px 20px; border-top: 1px solid var(--c-line); background: var(--c-panel); flex-shrink: 0; }
+.gh-setup h2 { font-weight: 600; font-size: 14px; }
+.gh-setup p { font-size: 12px; color: var(--c-dim); margin: 6px 0 12px; }
+.gh-setup label { display: flex; flex-direction: column; gap: 6px; max-width: 680px; margin: 12px 0; font-size: 12px; }
+.gh-setup input,.gh-setup select,.gh-setup textarea { min-width: 0; width: 100%; padding: 8px 10px; border: 1px solid var(--c-line2); border-radius: 6px; background: var(--c-page); color: var(--c-ink); }
+.gh-setup > div { display: flex; gap: 8px; }
+.gh-setup p[role='alert'] { color: var(--c-err); }
+.gh-issue-body { margin: 16px 0; font-size: 12px; }
+.gh-issue-body summary { cursor: pointer; color: var(--c-dim); }
+.gh-issue-body p { margin-top: 10px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.65; }
+@container (max-width: 980px) {
+  .gh-layout { min-height: auto; }
+  .gh-feed-body { flex: none; }
+}
+@container (max-width: 600px) {
+  .gh-header-actions { margin-left: 0; }
+  .gh-heading { padding: 14px; gap: 12px; }
+}
+@media (pointer: coarse) { .gh-workspace .gh-action { min-height: 44px; } }

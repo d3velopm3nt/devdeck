@@ -75,7 +75,7 @@ pub fn read(repository: &str, mut fetch: impl FnMut(&str, Duration) -> Result<Va
     let mut checked = 0;
     for p in list(&pulls)? {
         let Some(number) = p["number"].as_u64().filter(|n| *n > 0) else { continue; };
-        let mut item = json!({"number":number,"title":clipped(&p["title"],500),"state":p["state"],"draft":p["draft"],"updated_at":p["updated_at"],"head":p["head"]["sha"],"reviewers":p["requested_reviewers"].as_array().map(|a| a.iter().filter_map(|u|u["login"].as_str()).take(20).collect::<Vec<_>>()).unwrap_or_default(),"checks":"not_checked","check_error":""});
+        let mut item = json!({"number":number,"title":clipped(&p["title"],500),"state":if p["merged_at"].is_string() { json!("merged") } else { p["state"].clone() },"draft":p["draft"],"updated_at":p["updated_at"],"head":p["head"]["sha"],"reviewers":p["requested_reviewers"].as_array().map(|a| a.iter().filter_map(|u|u["login"].as_str()).take(20).collect::<Vec<_>>()).unwrap_or_default(),"checks":"not_checked","check_error":""});
         let sha = p["head"]["sha"].as_str().unwrap_or_default();
         if p["state"] == "open" && checked < 5 && sha.len() >= 7 && sha.chars().all(|c| c.is_ascii_hexdigit()) {
             checked += 1;
@@ -138,6 +138,16 @@ pub fn assess(app: &tauri::AppHandle, source: &Source) -> Result<String, String>
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test] fn merged_prs_are_distinct_from_unmerged_closed_prs() {
+        let snapshot = read("owner/repo", |url, _| {
+            if url.contains("/pulls?") { Ok(json!([
+                {"number":1,"state":"closed","merged_at":"2026-10-17T12:00:00Z"},
+                {"number":2,"state":"closed","merged_at":null}
+            ])) } else { Ok(json!([])) }
+        }).unwrap();
+        assert_eq!(snapshot.pulls[0]["state"], "merged");
+        assert_eq!(snapshot.pulls[1]["state"], "closed");
+    }
     #[test] fn checks_are_not_success_when_missing_or_partial() {
         assert_eq!(check_state(&json!({"total_count":0}),&json!({"check_runs":[],"total_count":0})).unwrap(),"none");
         assert_eq!(check_state(&json!({"state":"success","total_count":1}),&json!({"check_runs":[],"total_count":4})).unwrap(),"partial");

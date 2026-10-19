@@ -187,3 +187,20 @@ mod recovery_tests {
         assert!(!may_select(&record));
     }
 }
+
+/// The originating issue owns scope; template prose is never supplied here.
+pub(crate) fn ticket_brief(repository: &str, number: u64, issue: &Value) -> Result<String, String> {
+    if issue["number"].as_u64() != Some(number) { return Err("Originating issue mismatch".into()); }
+    Ok(format!("# Current work request\n\n{}\n\nhttps://github.com/{repository}/issues/{number}\n\n{}\n\nThis is the originating request. Follow its scope and acceptance criteria; reusable process steps do not authorize unrelated work.", issue["title"].as_str().unwrap_or("GitHub issue"), issue["body"].as_str().unwrap_or("No description supplied.")))
+}
+#[cfg(test)]
+mod ticket_tests {
+    #[test]
+    fn current_issue_body_is_preserved_and_wrong_snapshot_is_rejected() {
+        let issue = serde_json::json!({"number":37,"title":"Fresh planning test","body":"Planning only. Do not implement. Acceptance: current issue only."});
+        let brief = super::ticket_brief("owner/repo",37,&issue).unwrap();
+        assert!(brief.contains("Planning only. Do not implement."));
+        assert!(brief.contains("https://github.com/owner/repo/issues/37"));
+        assert!(super::ticket_brief("owner/repo",36,&issue).is_err());
+    }
+}

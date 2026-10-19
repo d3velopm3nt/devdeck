@@ -1,3 +1,5 @@
+import { stepState } from '../lib/workHub'
+import { StateBadge } from './ui/DesignSystem'
 import { useCallback, useEffect, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import * as ipc from '../lib/ipc'
@@ -60,7 +62,7 @@ export function FolderWorkflowPage({ node, name, onDashboard }: { node: number; 
   </div>
 }
 
-function WorkflowDetail({ node, name, workflow, onSaved, onDashboard }: { node: number; name: string; workflow: string; onSaved: () => void; onDashboard: () => void }) {
+export function WorkflowDetail({ node, name, workflow, onSaved, onDashboard, backLabel = 'Folder dashboard', initialStep = '' }: { node: number; name: string; workflow: string; onSaved: () => void; onDashboard: () => void; backLabel?: string; initialStep?: string }) {
   const nodes = useApp(s => s.nodes)
   const [data, setData] = useState<ipc.FolderWorkflow | null>(null)
   const [workers, setWorkers] = useState<ipc.Worker[]>([])
@@ -70,7 +72,7 @@ function WorkflowDetail({ node, name, workflow, onSaved, onDashboard }: { node: 
   const [editExpected, setEditExpected] = useState('')
   const [draft, setDraft] = useState('')
   const [roles, setRoles] = useState<Record<string, string>>({})
-  const [selected, setSelected] = useState('')
+  const [selected, setSelected] = useState(initialStep)
   const [evidence, setEvidence] = useState('')
   const [planRevision, setPlanRevision] = useState('')
   const [checkpointExpected, setCheckpointExpected] = useState('')
@@ -120,7 +122,7 @@ ${data.raw}` : ''
         <h1 className="text-xl font-semibold text-ink">{data?.definition.title || 'Set up a workflow'}</h1>
         <p className="mt-1 text-[12px] text-muted">{data?.definition.team ? `Team: ${data.definition.team} · ` : ''}{steps.filter(s => s.status === 'done').length} of {steps.length} accepted · Starts follow dependencies and permissions</p>
       </div>
-      <button className={button} onClick={onDashboard}>Folder dashboard</button>
+      <button className={button} onClick={onDashboard}>{backLabel}</button>
       <button className={button} disabled={busy} onClick={() => void refresh()}>Refresh</button>
       {data && editable && !editing && <button className={button} onClick={() => { setEditExpected(data.raw); setDraft(data.raw || template(node, 'agent:assistant')); setEditing(true); setPlan(null) }}>{data.raw ? 'Edit workflow' : 'Create workflow'}</button>}
     </header>
@@ -152,7 +154,7 @@ ${data.raw}` : ''
     </div> : data && <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[minmax(220px,2fr)_minmax(260px,3fr)] overflow-auto">
       <section aria-label="Workflow steps" className="space-y-3 border-r border-line p-4">
         {steps.map((s, i) => <button key={s.id} onClick={() => { setSelected(s.id); setPlan(null); setEvidence(''); setProgress(''); setNextAction('') }} className={`w-full rounded-xl border p-4 text-left ${step?.id === s.id ? 'border-accent bg-accent/10' : 'border-line bg-panel hover:bg-hover'}`}>
-          <div className="flex justify-between gap-2"><span className="text-[11px] text-muted">STEP {i + 1}</span><span className={`text-[11px] uppercase ${s.status === 'done' ? 'text-ok' : s.status === 'blocked' ? 'text-err' : 'text-info'}`}>{s.status === 'review' ? 'Needs review' : s.status}</span></div>
+          <div className="flex justify-between gap-2"><span className="text-[11px] text-muted">STEP {i + 1}</span><StateBadge state={stepState(s)}/></div>
           <h2 className="mt-2 text-[14px] font-semibold text-ink">{s.title}</h2>
           <p className="mt-1 text-[12px] text-dim">{s.role ? `${s.role} → ` : ''}{s.worker === 'agent:assistant' ? 'Main agent' : workers.find(w=>w.handle===s.worker)?.name || `@${s.worker}`} · {nodes.find(n => n.id === s.target)?.name ?? `Folder ${s.target}`}</p>
           <p className="mt-2 text-[11px] text-muted">{s.needs.length ? `After acceptance: ${s.needs.join(', ')}` : 'No dependencies'}</p>
@@ -160,9 +162,10 @@ ${data.raw}` : ''
       </section>
       {step && <section className="space-y-4 p-5">
         <h2 className="text-lg font-semibold text-ink">{step.title}</h2>
+        {step.status === 'blocked' && step.evidence && <div role="alert" className="rounded-lg border border-err/40 bg-err/5 p-3"><h3 className="text-sm font-semibold text-err">Why this step is blocked</h3><p className="mt-2 whitespace-pre-wrap text-[13px]">{step.evidence}</p></div>}
         <div><h3 className="mb-2 text-[11px] uppercase text-muted">Instructions</h3><p className="whitespace-pre-wrap text-[13px]">{step.instructions}</p></div>
         <details><summary className="cursor-pointer text-[12px] text-muted">Shared workflow context</summary><p className="mt-2 whitespace-pre-wrap text-[13px]">{data.body}</p></details>
-        {step.evidence && <div className="rounded-lg border border-line bg-panel p-3"><h3 className="text-[11px] uppercase text-muted">Result / review notes</h3><p className="mt-2 whitespace-pre-wrap text-[13px]">{step.evidence}</p></div>}
+        {step.evidence && step.status !== 'blocked' && <div className="rounded-lg border border-line bg-panel p-3"><h3 className="text-[11px] uppercase text-muted">Result / review notes</h3><p className="mt-2 whitespace-pre-wrap text-[13px]">{step.evidence}</p></div>}
         {step.actor && <p className="text-[12px] text-muted">Updated by {step.actor}{step.updated_at ? ` · ${step.updated_at}` : ''}</p>}
         {step.next_action && <p className="text-[13px]"><b>Next action:</b> {step.next_action}</p>}
         {canRun && <details className="rounded-xl border border-line p-4">
@@ -178,11 +181,11 @@ ${data.raw}` : ''
         {step.previous_runs.length > 0 && <details><summary className="cursor-pointer text-[12px] text-muted">Previous attempts</summary>{step.previous_runs.map(id => <button key={id} className={`${button} mt-2 mr-2`} onClick={() => openRun(id, step.title)}>{id}</button>)}</details>}
         {step.run && <button className={button} onClick={() => openRun(step.run, step.title)}>{step.worker.startsWith('agent:') ? 'Open agent receipt' : 'Open worker receipt'}</button>}
         {['running', 'starting'].includes(step.status) && <button className={button} disabled={busy || !step.run} onClick={() => { void ipc.workerStop(step.run).catch(e => setError(String(e))) }}>{step.worker.startsWith('agent:') ? 'Stop agent' : 'Stop worker'}</button>}
-        {canRun && !plan && <button className="btn-primary text-[12px]" disabled={busy} onClick={() => void preview()}>{steps.every(s => s.status === 'pending') ? 'Start workflow' : step.status === 'blocked' ? 'Review retry' : 'Start step'}</button>}
+        {canRun && !plan && <button className="btn-primary text-[12px]" disabled={busy} onClick={() => void preview()}>{steps.every(s => s.status === 'pending') ? 'Start workflow' : stepState(step) === 'changes_requested' ? 'Revise step' : step.status === 'blocked' ? 'Review retry' : 'Start step'}</button>}
         {plan && <div className="space-y-3 rounded-xl border border-line2 bg-panel p-4">
           <h3 className="font-semibold text-ink">Start {plan.worker.name}?</h3>
           <p className="break-all text-[12px]">Working folder: {plan.folder}</p>
-          <p className="text-[12px]">{plan.minutes} minute limit · {plan.worker.handle.startsWith('agent:') ? 'Existing model connection' : `$${plan.usd} budget`} · {plan.is_repo ? 'Separate branch and worktree' : 'Writes in the target workspace folder'}</p>
+          <p className="text-[12px]">{plan.minutes > 0 ? `${plan.minutes} minute limit` : 'No overall time limit'} · {plan.worker.handle.startsWith('agent:') ? 'Existing model connection' : `$${plan.usd} budget`} · {plan.is_repo ? 'Separate branch and worktree' : 'Writes in the target workspace folder'}</p>
           <p className="text-[12px]">Skills: {plan.skills.map(s => s.name).join(', ') || 'None selected'}</p>
           {plan.note && <p className="text-[12px] text-warn">{plan.note}</p>}
           <button className="btn-primary text-[12px]" disabled={busy || !plan.ready || !canRun} onClick={() => void act(() => ipc.folderWorkflowStart(node, step.id, planRevision, workflow))}>Start this step</button>

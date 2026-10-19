@@ -87,6 +87,7 @@ pub enum Status {
     Review,
     Done,
     Blocked,
+    Skipped,
 }
 pub(crate) fn validate(d: &Definition) -> Result<(), String> {
     if d.title.trim().is_empty() || d.steps.is_empty() || d.steps.len() > 100 {
@@ -133,6 +134,31 @@ pub(crate) fn validate(d: &Definition) -> Result<(), String> {
         }
     }
 }
+/// Only untouched steps can be excluded. Review and failed work must be resolved.
+pub(crate) fn finish_scope(d: &mut Definition, excluded: &[String], reason: &str) -> Result<(), String> {
+    if !d.steps.iter().any(|s| s.status == Status::Done) {
+        return Err("Accept at least one delivered step before completing this work item.".into());
+    }
+    let pending: HashSet<_> = d.steps.iter().filter(|s| s.status == Status::Pending).map(|s| s.id.clone()).collect();
+    let requested: HashSet<_> = excluded.iter().cloned().collect();
+    if pending != requested || requested.len() != excluded.len() || (!excluded.is_empty() && reason.trim().is_empty()) {
+        return Err("Confirm the exact pending steps outside this request and record why they are excluded.".into());
+    }
+    if d.steps.iter().any(|s| !matches!(s.status, Status::Done | Status::Skipped | Status::Pending)
+        || (s.status == Status::Pending && (!s.run.is_empty() || !s.claim.is_empty() || !s.previous_runs.is_empty() || !s.evidence.is_empty()))) {
+        return Err("Resolve active work, review requests and failed attempts before completing this work item.".into());
+    }
+    for step in &mut d.steps {
+        if requested.contains(&step.id) {
+            step.status = Status::Skipped;
+            step.evidence = format!("Outside request scope: {}", reason.trim());
+            step.next_action = "Excluded at work item completion; this step did not run.".into();
+            step.updated_at = chrono::Utc::now().to_rfc3339();
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn ready(d: &Definition, index: usize) -> bool {
     let s = &d.steps[index];
     matches!(s.status, Status::Pending | Status::Blocked)
@@ -214,6 +240,28 @@ mod tests {
                 },
             ],
         }
+    }
+    #[test]
+    fn scope_completion_never_fakes_acceptance_or_discards_attempts() {
+        let mut d = definition();
+        assert!(finish_scope(&mut d, &["build".into(),"docs".into()], "plan only").is_err());
+        d.steps[0].status = Status::Done;
+        assert!(finish_scope(&mut d, &[], "plan only").is_err());
+        assert!(finish_scope(&mut d, &["docs".into()], "").is_err());
+        for status in [Status::Running,Status::Starting,Status::Blocked,Status::Review] {
+            d.steps[1].status=status;
+            assert!(finish_scope(&mut d, &[], "plan only").is_err());
+        }
+        d.steps[1].status=Status::Pending;
+        d.steps[1].previous_runs=vec!["old".into()];
+        assert!(finish_scope(&mut d, &["docs".into()], "plan only").is_err());
+        d.steps[1].previous_runs.clear();
+        finish_scope(&mut d, &["docs".into()], "plan only").unwrap();
+        assert_eq!(d.steps[0].status,Status::Done);
+        assert_eq!(d.steps[1].status,Status::Skipped);
+        assert!(d.steps[1].evidence.contains("plan only"));
+        assert!(!ready(&d,1));
+        finish_scope(&mut d, &[], "retry local persistence").unwrap();
     }
     #[test]
     fn external_handoff_keeps_dependencies_and_live_claims() {

@@ -7,7 +7,7 @@ export interface SessionRecord {
   checkpoints: { at: string; summary: string; evidence: string[] }[];
 }
 export interface VisibilitySnapshot { products: ProductLink[]; config_raw: string; sessions: SessionRecord[]; warnings: string[] }
-export interface GithubIssue { number: number; title: string; state: string; url: string; updated_at: string; assignees: string[]; pull_request: boolean }
+export interface GithubIssue { body?: string; number: number; title: string; state: string; url: string; updated_at: string; assignees: string[]; pull_request: boolean }
 export interface IssueSnapshot { items: GithubIssue[]; fetched_at: string; truncated: boolean; sessions?: SessionRecord[]; warnings?: string[] }
 export const visibility = {
   snapshot: () => invoke<VisibilitySnapshot>('visibility_snapshot'),

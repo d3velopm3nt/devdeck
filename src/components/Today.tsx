@@ -1,3 +1,4 @@
+import { FilterTabs } from './ui/DesignSystem'
 import { DashboardActivity, DashboardConnections } from './DashboardActivity'
 import './today-desktop.css'
 import { GitHubBriefing, RepositoryActivityProvider } from './GitHubPage'
@@ -275,7 +276,7 @@ export function Today() {
   const nobodyWorking = workingBots.length === 0 && workingRuns.length === 0
 
   return (
-    <RepositoryActivityProvider><div className="today-desktop flex h-full min-h-0 flex-col bg-page">
+    <RepositoryActivityProvider><div className="today-desktop flex h-full min-h-0 min-w-0 flex-col bg-page">
       <div className="shrink-0 px-7 pb-3 pt-5">
         <div className="flex items-end gap-3">
           <div>
@@ -288,29 +289,7 @@ export function Today() {
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          <button
-            className={`h-[24px] rounded-full border px-2.5 text-[11px] ${
-              todayArea == null
-                ? 'border-line2 bg-raise text-ink'
-                : 'border-line2 bg-transparent text-dim hover:bg-hover/50'
-            }`}
-            onClick={() => setSpaceScope(null)}
-          >
-            All
-          </button>
-          {areas.map((n) => (
-            <button
-              key={n.id}
-              className={`h-[24px] rounded-full border px-2.5 text-[11px] ${
-                todayArea === n.id
-                  ? 'border-line2 bg-raise text-ink'
-                  : 'border-line2 bg-transparent text-dim hover:bg-hover/50'
-              }`}
-              onClick={() => setSpaceScope(todayArea === n.id ? null : n.id)}
-            >
-              {n.name}
-            </button>
-          ))}
+<FilterTabs label="Workspace scope" value={todayArea==null?'all':String(todayArea)} onChange={v=>setSpaceScope(v==='all'||Number(v)===todayArea?null:Number(v))} options={[{id:'all',label:'All',icon:'workspace'},...areas.map(n=>({id:String(n.id),label:n.name,icon:'folder' as const}))]}/>
           <span className="ml-2 text-[10.5px] text-faint">
             Workspace scope
           </span>
@@ -318,7 +297,7 @@ export function Today() {
       </div>
 
       <div className="today-columns flex min-h-0 flex-1 gap-5 overflow-auto px-7 pb-6">
-        <div className="flex min-w-0 flex-1 flex-col gap-5">
+        <div className="today-main flex min-w-0 flex-1 flex-col gap-5">
           <section>
             <GitHubBriefing taskAttention={waiting + approvals.length + blockers.length} working={workingBots.length + workingRuns.length} unreadMail={app.mailCounts?.unread ?? null} />
             {needs > 0 && <Head title="Needs you" note="agent approvals and questions" />}
@@ -516,7 +495,7 @@ export function Today() {
 
         <div className="today-aside flex w-[290px] shrink-0 flex-col gap-5">
           <section>
-            <Head title="In progress" note="Live agent work" />
+            <Head title="Dev is working on" note="Live work" />
             <Card>
               {workingRuns.slice(0, 3).map((r) => (
                 <Row key={r.id} onClick={() => openRun(r.id, r.title)}>

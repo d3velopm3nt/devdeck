@@ -1,3 +1,4 @@
+import { statePresentation } from '../ui/states'
 // The plan: what the bot is managing, as work items you can move.
 //
 // These are not the bot's. They live in the project's `.devdeck`, committed,
@@ -9,7 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as ipc from '../../lib/ipc'
 import { Icon } from '../../lib/icons'
-import { STATUS_LABEL, STATUS_TONE, progress } from '../../lib/bots'
+import { STATUS_LABEL, progress } from '../../lib/bots'
 
 export function BotPlan({
   bot,
@@ -228,9 +229,9 @@ export function BotPlan({
             )}
 
             <select
-              className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                STATUS_TONE[w.status] ?? STATUS_TONE.unclaimed
-              }`}
+              className="ds-state ds-state-select"
+              data-tone={statePresentation(w.status).tone}
+              aria-label={`Status for ${w.title}`}
               value={w.status}
               onChange={(e) =>
                 run(() =>

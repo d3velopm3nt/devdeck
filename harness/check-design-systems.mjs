@@ -19,9 +19,16 @@ try {
   await page.getByRole('button',{name:'Assign design',exact:true}).click();
   await page.getByText('Saved design: Supabase Inspired · version 1',{exact:true}).waitFor();
   await page.screenshot({path:'test-results/design-systems/after-dark.png',fullPage:true});
-  await page.getByRole('button',{name:'Light',exact:true}).click();
-  assert.equal(await page.locator('.ds-specimens').evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(250, 250, 250)');
+  const preview = page.frameLocator('iframe[title="Supabase Inspired design preview"]');
+  await preview.getByRole('button',{name:'☀ Light mode',exact:true}).click();
+  assert.equal(await preview.locator('body').evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(250, 250, 250)');
   await page.screenshot({path:'test-results/design-systems/after-light.png',fullPage:true}); passed('assign and light/dark preview');
+  await page.getByRole('button',{name:'Open raw HTML',exact:true}).click();
+  assert.equal(await page.locator('#design-html-source code').textContent(),fs.readFileSync('design-systems/supabase-design-system.html','utf8'));
+  assert.equal(await page.locator('iframe').getAttribute('srcdoc'),fs.readFileSync('design-systems/supabase-design-system.html','utf8'));
+  assert.equal(await page.locator('iframe').getAttribute('sandbox'),'allow-scripts');
+  await page.getByRole('button',{name:'Close raw HTML',exact:true}).click();
+  passed('original HTML preview and exact raw source');
   await page.reload(); await page.getByRole('button',{name:'Design systems',exact:true}).click();
   await page.getByLabel('Assign to project',{exact:true}).selectOption('1');
   await page.getByText('Saved design: Supabase Inspired · version 1',{exact:true}).waitFor();

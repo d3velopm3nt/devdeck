@@ -41,6 +41,9 @@ mod community_index;
 mod companion;
 mod companion_protocol;
 mod conn;
+mod connector_model;
+mod connectors;
+mod feed_reader;
 mod coordination;
 mod creds;
 mod db;
@@ -1313,6 +1316,11 @@ pub fn run() {
             stash::stash_set_retention,
             stash::stash_open_file,
             stash::stash_image,
+            connectors::connectors_feeds,
+            connectors::connectors_add_feed,
+            connectors::connectors_feed_action,
+            connectors::connectors_feed_access,
+            connectors::connectors_test_feed,
             conn::conn_list,
             conn::conn_save,
             conn::conn_delete,

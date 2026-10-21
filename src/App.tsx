@@ -1,3 +1,4 @@
+import { ConnectorsPage } from './components/connectors/ConnectorsPage'
 import { DeckLogo } from './widget/DeckLogo'
 import { NotificationCenter } from './components/NotificationCenter'
 import { GitHubPage } from './components/GitHubPage'
@@ -1101,6 +1102,7 @@ export default function App() {
           </div>
           {railView === 'mail' && (app.mailPane === 'contacts' ? <ContactsView /> : <MailView />)}
           {railView === 'stash' && <StashView />}
+          {railView === 'connectors' && <ConnectorsPage />}
           {railView === 'connections' && <ConnectionsView />}
           {railView === 'community' && <CommunityView />}
           {railView === 'machine' && <MachineSetup />}

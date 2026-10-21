@@ -1,0 +1,33 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const {chromium} = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const out='.artifacts/connectors';fs.mkdirSync(out,{recursive:true});
+const browser=await chromium.launch({headless:true});
+const page=await browser.newPage({viewport:{width:1280,height:1000}});
+const errors=[];page.on('pageerror',e=>errors.push(e.message));const results=[];
+const pass=name=>results.push({name,status:'passed'});
+try {
+  await page.goto('http://127.0.0.1:5217/harness/connectors.html');await page.evaluate(()=>localStorage.clear());await page.reload();
+  await page.getByRole('heading',{name:'Connectors',exact:true}).waitFor();
+  await page.getByText('No saved connections found for this service.',{exact:true}).waitFor();
+  await page.screenshot({path:`${out}/01-catalogue.png`,fullPage:true});
+  await page.getByLabel('Search connectors').fill('no-match');await page.getByText('No matching connectors.',{exact:true}).waitFor();await page.getByLabel('Search connectors').fill('');
+  await page.getByLabel('Connector category').selectOption('Communication');assert.equal(await page.getByRole('navigation',{name:'Connector catalogue'}).getByRole('button').count(),1);await page.getByLabel('Connector category').selectOption('All');pass('catalogue, search and categories');
+  await page.getByLabel('Name',{exact:true}).fill('Public news');await page.getByLabel('Public HTTPS feed URL').fill('https://example.org/feed.xml');await page.getByRole('button',{name:'Add feed',exact:true}).click();
+  await page.getByRole('heading',{name:'Public news',exact:true}).waitFor();await page.getByText('configured',{exact:true}).first().waitFor();assert.equal(await page.getByText('verified',{exact:true}).count(),0);pass('configuration never claims verification');
+  await page.getByRole('button',{name:'Test / read feed',exact:true}).click();await page.getByText('verified',{exact:true}).waitFor();await page.getByText('1 cached titles',{exact:true}).click();await page.getByText('Fixture title <script>never executed</script>',{exact:true}).waitFor();assert.equal(await page.locator('article script').count(),0);pass('mock feed check and inert text rendering');
+  await page.getByLabel('Resource identifier 1').fill('42');await page.getByRole('button',{name:'Add binding',exact:true}).click();await page.getByRole('button',{name:'Revoke',exact:true}).waitFor();
+  await page.getByRole('button',{name:'Pause',exact:true}).click();await page.getByText('paused',{exact:true}).waitFor();assert(await page.getByRole('button',{name:'Test / read feed',exact:true}).isDisabled());
+  await page.getByRole('button',{name:'Reconnect',exact:true}).click();await page.getByRole('button',{name:'Disconnect',exact:true}).click();await page.getByText('disconnected',{exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'Revoke',exact:true}).count(),0);await page.getByText('1 cached titles',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'Reconnect',exact:true}).click();assert.equal(await page.getByRole('button',{name:'Revoke',exact:true}).count(),0);pass('pause, disconnect retains cache, reconnect does not restore grants');
+  await page.reload();await page.getByRole('heading',{name:'Public news',exact:true}).waitFor();await page.getByText('1 cached titles',{exact:true}).waitFor();pass('saved connection reopens');
+  await page.getByRole('button',{name:'Delete cached titles',exact:true}).click();assert.equal(await page.getByText('1 cached titles',{exact:true}).count(),0);pass('cache deletion is separate');
+  await page.evaluate(()=>localStorage.setItem('feed-failure','1'));await page.getByRole('button',{name:'Test / read feed',exact:true}).click();await page.getByText('degraded',{exact:true}).waitFor();pass('failed check is degraded');
+  await page.screenshot({path:`${out}/02-feed-degraded.png`,fullPage:true});
+  await page.getByRole('button',{name:/^GitHub/}).click();await page.getByText('configured',{exact:true}).first().waitFor();await page.getByText(/authentication and gh\/git readiness have not been tested/).waitFor();pass('legacy credential stays configured and readiness is distinct');
+  await page.screenshot({path:`${out}/03-legacy-github.png`,fullPage:true});
+  await page.evaluate(()=>localStorage.setItem('inventory-failure','1'));await page.getByRole('button',{name:'Refresh inventory',exact:true}).click();await page.getByRole('alert').filter({hasText:'RSS / Atom inventory unavailable'}).waitFor();pass('inventory failure is visible');
+  await page.setViewportSize({width:390,height:844});await page.screenshot({path:`${out}/04-narrow.png`,fullPage:true});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));pass('narrow viewport without horizontal overflow');
+  assert.deepEqual(errors,[]);pass('no browser runtime errors');
+} finally { fs.writeFileSync(`${out}/results.json`,JSON.stringify({results,errors},null,2));await browser.close(); }
+console.log(JSON.stringify(results,null,2));

@@ -43,3 +43,7 @@ harness/rust-core/target/
 /public/voice-worker.js
 /public/voice-input-worker.js
 /public/voice-runtime/
+
+# Isolated connector verification outputs
+harness/connector-core/target/
+.artifacts/

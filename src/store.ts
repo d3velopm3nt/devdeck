@@ -74,6 +74,7 @@ export type RailView =
   | 'projects'
   | 'stash'
   | 'connections'
+  | 'connectors'
   /// Open-source skills, agents and tools for your bots. Sits above Machine
   /// because the pairing is the point: Machine installs for you, this
   /// installs for them.
@@ -511,6 +512,7 @@ const RAIL_VIEWS: readonly RailView[] = [
   'projects',
   'stash',
   'connections',
+  'connectors',
   'community',
   'machine',
   'settings',

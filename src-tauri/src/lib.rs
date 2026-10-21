@@ -824,6 +824,15 @@ pub fn run() {
         .manage(aiw_workspace)
         .manage(companion::Companion::default())
         .setup(move |app| {
+            {
+                let handle = app.handle().clone();
+                let ws = app.state::<Arc<aiw::state::Workspace>>();
+                ws.set_feed_consumer(Arc::new(move |id, agent, project| {
+                    let db = handle.state::<db::Db>();
+                    let conn = db.conn();
+                    connector_model::read_cached(&conn, id, agent, project)
+                }));
+            }
             // MCP servers installed from Community, made reachable before any
             // agent asks. Without this an installed server would only wake up
             // after somebody happened to open the Community page, which is a

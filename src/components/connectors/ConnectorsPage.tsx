@@ -37,7 +37,7 @@ export function ConnectorsPage() {
           <p className="mt-2 text-xs text-muted">Last check: {c.lastCheck ? new Date(c.lastCheck < 1e12 ? c.lastCheck * 1000 : c.lastCheck).toLocaleString() : 'Not checked'}</p>
           {c.credentialRef && <p className="mt-1 break-all text-xs text-muted">Credential reference: {c.credentialRef}</p>}
           <p className="mt-1 text-xs text-muted">Used by / bindings: {c.usedBy.join(', ') || 'None reported'}</p>
-          {feed && <><p className="mt-2 break-all text-xs text-dim">{feed.url}</p><div className="mt-3 flex flex-wrap gap-2">
+          {feed && <><p className="mt-2 text-xs text-muted">Connection ID: {feed.id}</p><p className="mt-2 break-all text-xs text-dim">{feed.url}</p><div className="mt-3 flex flex-wrap gap-2">
             <button className="btn-ghost" disabled={busy || ['paused','disconnected'].includes(c.state)} onClick={()=>void run(()=>feeds.read(feed.id))}>Test / read feed</button>
             {c.state !== 'disconnected' && c.state !== 'paused' && <button className="btn-ghost" disabled={busy} onClick={()=>void run(()=>feeds.action(feed.id,'pause'))}>Pause</button>}
             {['paused','disconnected','degraded'].includes(c.state) && <button className="btn-ghost" disabled={busy} onClick={()=>void run(()=>feeds.action(feed.id,'reconnect'))}>Reconnect</button>}
@@ -46,7 +46,7 @@ export function ConnectorsPage() {
           </div><p className="mt-2 text-xs text-muted">Disconnect revokes scoped bindings and keeps cached titles. Reconnect does not restore grants.</p>
           <fieldset disabled={busy || c.state === 'disconnected'} className="mt-3"><legend className="text-xs font-semibold text-dim">Scoped feed.read binding</legend><div className="mt-2 flex flex-wrap gap-2"><select aria-label={`Access scope ${feed.id}`} className="input" value={scope} onChange={e=>setScope(e.target.value as FeedAccess['scope'])}>{['project','space','agent'].map(s=><option key={s}>{s}</option>)}</select><input aria-label={`Resource identifier ${feed.id}`} placeholder="Exact identifier" className="input min-w-0 flex-1" value={resource} onChange={e=>setResource(e.target.value)} /><button className="btn-ghost" disabled={!resource.trim()} onClick={()=>void run(()=>feeds.access(feed.id,scope,resource.trim(),true))}>Add binding</button></div>
             {feed.access.map(a=><div key={`${a.scope}:${a.id}`} className="mt-2 flex items-center justify-between text-xs"><span>{a.scope}: {a.id} · {a.capability}</span><button className="btn-ghost" onClick={()=>void run(()=>feeds.access(feed.id,a.scope,a.id,false))}>Revoke</button></div>)}
-          </fieldset><p className="mt-2 text-xs text-muted">Bindings are explicit and fail closed. Agent runtime consumption is not enabled yet.</p>
+          </fieldset><p className="mt-2 text-xs text-muted">Agent/project bindings enable cached reads only when the agent also has Feed cache tool permission. Space bindings are reserved.</p>
           {feed.entries.length > 0 && <details className="mt-3 text-xs"><summary>{feed.entries.length} cached titles</summary><ul className="mt-2 space-y-1">{feed.entries.map((e,i)=><li key={i}>{e.title}</li>)}</ul></details>}
           <details className="mt-3 text-xs text-muted"><summary>Redacted activity ({feed.activity.length})</summary><ol className="mt-2 space-y-1">{feed.activity.map((a,i)=><li key={i}>{a}</li>)}</ol></details></>}
         </article> })}

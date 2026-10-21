@@ -56,12 +56,30 @@ enclosures or execute content. No background polling is introduced.
 | Delete cached titles | Clear titles separately from connection state |
 
 Bindings name an exact agent, space or project identifier and `feed.read`.
-There is no scope inheritance or default grant. They are stored for future
-consumers; this slice deliberately registers no agent feed tool. The policy
-helper fails closed for unknown states, wrong scopes and absent grants. A future
-runtime bridge must derive the caller identity from the trusted runtime, enforce
-this policy, and preserve the existing tool approval gate. It must not accept a
-caller-supplied agent identity as authorization.
+There is no scope inheritance or default grant. The `feeds_read` agent tool
+reads cached titles through the existing ToolService permission and approval
+gate. It then checks the current saved agent or project binding under the DB
+mutex. Revoke, pause and disconnect affect the next read immediately. A tool
+grant alone does not grant a connection, and a connection binding alone does
+not grant the tool. No existing agent receives the new tool automatically.
+
+The runtime supplies the executing agent identifier and the ToolService's
+registered project identifier. Tool arguments accept only `connection_id`.
+Forged identities in arguments or EventScope cannot select another binding.
+Space bindings remain stored but inactive because this runtime path does not
+provide a trusted space identity. They do not grant access by matching project
+identifiers. The consumer returns cached state and last-check time, performs
+no network requests and cannot add feeds, mutate bindings or delete data.
+Tool activity records the connection identifier and a fixed success message,
+without feed titles. A human refreshes titles using **Test / read feed**.
+
+To use it, add and manually test a public feed, then save an exact agent or
+project binding in Connectors. Separately grant that agent **Feed cache** read
+permission, or approval permission, in the existing tool-permission screen.
+The agent can call `feeds_read` with `{"connection_id":1}`, using the saved
+feed identifier shown by the connection record. It receives JSON containing
+the connection name, state, last-check time and cached text titles. Neither
+setup step supplies or changes credentials.
 
 ## Code and migration boundary
 
@@ -75,6 +93,9 @@ caller-supplied agent identity as authorization.
 - `src-tauri/src/connectors.rs` orchestrates desktop administration commands.
   Network I/O runs outside the database mutex. A result arriving after pause
   or disconnect is discarded.
+- `src-tauri/src/aiw/tools.rs` registers the read-only `feeds_read` operation.
+  `aiw/state.rs` preserves its injected consumer when rebuilding project tool
+  services; app setup supplies access to the current connector store.
 
 Further adapters should define narrow operations such as repository reads or
 mail sending with their own result and permission types. Do not add a generic
@@ -89,13 +110,20 @@ A fresh fetch and `ls-remote` confirmed desktop `9fb0f80`, work-completion
 chosen baseline. The original checkout's uncommitted chat work was preserved.
 
 - TypeScript build check passed with `node node_modules/typescript/bin/tsc -b --pretty false`.
-- Six Rust core tests passed with `cargo test --manifest-path harness/connector-core/Cargo.toml --offline`.
+- Seven Rust core tests passed with `cargo test --manifest-path harness/connector-core/Cargo.toml --offline`.
   They cover additive migration, saved records, grants, lifecycle/cache isolation,
   RSS/Atom text parsing, URL restrictions and public-address filtering.
+- Two native ToolService tests passed with
+  `cargo test --manifest-path src-tauri/Cargo.toml --lib connector_feed --offline`.
+  Production ToolService and the production cache policy read a fixture parsed
+  into in-memory SQLite. Checks cover both gates, successful title consumption,
+  revocation, pause/disconnect, identity spoofing, approval denial, unsupported
+  writes, unchanged default grants and redacted activity. The other 799 native
+  tests were filtered out, not run.
 - Desktop `cargo check --manifest-path src-tauri/Cargo.toml --offline` passed
   after running the existing ask-sidecar and mobile-voice staging scripts.
-  Warnings include the future-consumer policy helper being unused, an existing
-  unused personal-store method, and imap-proto future compatibility.
+  An existing unused personal-store method and imap-proto future compatibility
+  warning remain.
 - The fixture browser suite `harness/check-connectors.mjs` passed 11 checks.
   It covers catalogue filters, truthful configuration state, inert titles,
   lifecycle controls, persistence, cache deletion, degraded checks, GitHub
@@ -114,3 +142,24 @@ merge occurred.
 Screenshots and machine-readable results are in `.artifacts/connectors/` in this
 worktree. They are intentionally ignored by Git. The repeatable UI fixture is
 `harness/connectors.html`; serve it with `vite.harness.config.ts` on port 5217.
+
+## Functional scope versus remaining work
+
+| Requirement | Current implementation |
+| --- | --- |
+| Catalogue, search, categories, existing accounts first | Functional |
+| Service/account/capability separation and credential references | Functional catalogue and feed model; legacy stores remain authoritative |
+| Feed add, test, pause, reconnect, disconnect, separate cache deletion | Functional native commands; regression checks use fixtures, not live HTTP |
+| Agent feed consumption | Functional cached-title operation through tool permission/approval plus a current agent/project binding |
+| Space access | Saved binding only; no effective consumer access yet |
+| Legacy provider agent/space/project connector ACLs | Not added; original tool/provider permissions remain authoritative |
+| Legacy used-by | Inventory projection only: AI agent provider IDs, MCP reported reach, database project IDs, Mail space hint; GitHub points to project repository configuration |
+| Complete dependency enforcement | Deferred; used-by rows do not block legacy disconnect or resolve every transitive consumer |
+| Legacy test/reconnect/pause/disconnect | Existing owner screens; no common central lifecycle enforcement yet |
+| State honesty | Observed configuration, Mail historical sync and errors, reported MCP blockers, feed check results; no fabricated authentication |
+| Redacted activity | Feed lifecycle actions and agent feed tool events; no new consolidated legacy activity stream |
+| Custom MCP | Link to existing Community configuration workflow; no new custom-server editor or arbitrary executor |
+| Subscription adapters | Existing Settings workflow; no new inventory of live CLI sessions |
+
+The agent consumer proves a narrow cached-read path. It does not establish
+live HTTP intake or every legacy provider as an end-to-end connector flow.

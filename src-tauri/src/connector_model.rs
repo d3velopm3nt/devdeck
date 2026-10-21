@@ -24,6 +24,42 @@ pub struct FeedEntry {
     pub title: String,
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub struct FeedSnapshot {
+    pub id: i64,
+    pub name: String,
+    pub state: String,
+    pub last_check: Option<i64>,
+    pub entries: Vec<FeedEntry>,
+}
+
+/// Called with identities from the runtime, never identities in model arguments.
+pub type FeedConsumer =
+    std::sync::Arc<dyn Fn(i64, &str, &str) -> Result<FeedSnapshot, String> + Send + Sync>;
+
+pub fn read_cached(
+    db: &Connection,
+    id: i64,
+    agent: &str,
+    project: &str,
+) -> Result<FeedSnapshot, String> {
+    let feed = get(db, id)?;
+    if agent.is_empty()
+        || !(permitted(&feed, "agent", agent)
+            || (!project.is_empty() && permitted(&feed, "project", project)))
+    {
+        return Err("Feed read denied: an explicit agent or project binding is required".into());
+    }
+    // Space bindings remain reserved until the runtime supplies a trusted space identity.
+    Ok(FeedSnapshot {
+        id: feed.id,
+        name: feed.name,
+        state: feed.state,
+        last_check: feed.last_check,
+        entries: feed.entries,
+    })
+}
+
 pub fn init(db: &Connection) -> Result<(), String> {
     // Additive and idempotent: never rename/rewrite legacy account or permission rows.
     db.execute_batch(
@@ -265,6 +301,32 @@ mod tests {
         assert!(!permitted(&f, "project", "1"));
         transition(&mut f, "delete-cache").unwrap();
         assert!(f.entries.is_empty());
+    }
+    #[test]
+    fn consumer_refuses_space_only_bindings_and_reads_current_revocations() {
+        let db = Connection::open_in_memory().unwrap();
+        let mut f = fixture();
+        f.access.push(Access {
+            scope: "space".into(),
+            id: "p1".into(),
+            capability: "feed.read".into(),
+        });
+        save(&db, &f).unwrap();
+        assert!(read_cached(&db, 1, "reader", "p1").is_err());
+        f.access.push(Access {
+            scope: "agent".into(),
+            id: "reader".into(),
+            capability: "feed.read".into(),
+        });
+        save(&db, &f).unwrap();
+        assert_eq!(
+            read_cached(&db, 1, "reader", "other").unwrap().entries[0].title,
+            "Cached"
+        );
+        assert!(read_cached(&db, 1, "", "p1").is_err());
+        f.access.clear();
+        save(&db, &f).unwrap();
+        assert!(read_cached(&db, 1, "reader", "p1").is_err());
     }
     #[test]
     fn rss_and_atom_text_only() {

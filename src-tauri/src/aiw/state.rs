@@ -338,6 +338,7 @@ pub type RoutineMaker = Box<dyn Fn(RoutineDraft) -> Result<String, String> + Sen
 pub type ManagerMessenger = Box<dyn Fn(&str, &str) -> Result<String, String> + Send + Sync>;
 
 pub struct Workspace {
+    feed_consumer: std::sync::OnceLock<crate::connector_model::FeedConsumer>,
     manager_messenger: std::sync::OnceLock<ManagerMessenger>,
     pub bus: SharedBus,
     pub conflicts: ConflictService,
@@ -409,6 +410,7 @@ impl Workspace {
     /// six-minute one — and a slow suite is one people stop running.
     pub fn with_approval_timeout(timeout: std::time::Duration) -> Self {
         Self {
+            feed_consumer: std::sync::OnceLock::new(),
             bus: Arc::new(EventBus::new()),
             mcp: crate::mcp::Hub::new(),
             mcp_servers: Mutex::new(Vec::new()),
@@ -662,6 +664,7 @@ impl Workspace {
             root: root.clone(),
             deck_root: deck_root.clone(),
             tools: ToolService::new(root, id, matrix)
+                .with_feed_consumer(self.feed_consumer.get().cloned())
                 .with_deck_root(deck_root)
                 .with_approvals(self.approvals.clone())
                 .with_grants(self.grants()),
@@ -996,6 +999,7 @@ impl Workspace {
                     root: old.root.clone(),
                     deck_root: old.deck_root.clone(),
                     tools: ToolService::new(old.root.clone(), &old.id, matrix.clone())
+                        .with_feed_consumer(self.feed_consumer.get().cloned())
                         .with_deck_root(old.deck_root.clone())
                         .with_approvals(self.approvals.clone())
                         .with_grants(self.grants())
@@ -1447,6 +1451,11 @@ impl Workspace {
     /// Teach this workspace how to make a bot. Called once, at startup.
     pub fn set_bot_maker(&self, f: BotMaker) {
         let _ = self.bot_maker.set(f);
+    }
+
+    pub fn set_feed_consumer(&self, consumer: crate::connector_model::FeedConsumer) {
+        let _ = self.feed_consumer.set(consumer);
+        self.rebuild_tool_services();
     }
 
     /// Whether asking for a bot can lead anywhere. The assistant checks before

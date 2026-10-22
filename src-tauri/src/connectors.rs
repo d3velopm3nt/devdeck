@@ -1,9 +1,115 @@
-//! Desktop administration commands; no agent tool is registered by this slice.
+//! Desktop administration commands. Agent consumption lives behind runtime tool permissions.
 use crate::{
     connector_model::{self as model, FeedConnection},
     db::Db,
 };
 use std::time::{SystemTime, UNIX_EPOCH};
+
+#[tauri::command(async)]
+pub fn connectors_controls(
+    db: tauri::State<Db>,
+) -> Result<Vec<crate::connector_policy::Control>, String> {
+    crate::connector_policy::list(&db.conn())
+}
+#[tauri::command(async)]
+pub fn connectors_owner_checks(
+    db: tauri::State<Db>,
+) -> Result<Vec<crate::connector_policy::OwnerCheck>, String> {
+    crate::connector_policy::owner_checks(&db.conn())
+}
+#[tauri::command(async)]
+pub fn connectors_control_save(
+    db: tauri::State<Db>,
+    control: crate::connector_policy::Control,
+    expected: u64,
+) -> Result<(), String> {
+    crate::connector_policy::save(&db.conn(), control, expected)
+}
+#[tauri::command(async)]
+pub fn connectors_provider_bindings(
+    ws: tauri::State<std::sync::Arc<crate::aiw::state::Workspace>>,
+) -> Vec<(String, String, Vec<String>)> {
+    let agents = ws.agents();
+    ws.providers
+        .lock()
+        .unwrap()
+        .handles()
+        .iter()
+        .filter_map(|p| {
+            let uses: Vec<String> = agents
+                .iter()
+                .filter(|a| a.provider == p.id())
+                .map(|a| format!("Agent {}", a.name))
+                .collect();
+            if uses.is_empty() {
+                None
+            } else {
+                Some((p.id().into(), p.name().into(), uses))
+            }
+        })
+        .collect()
+}
+#[tauri::command(async)]
+pub fn connectors_dependencies(
+    db: tauri::State<Db>,
+    ws: tauri::State<std::sync::Arc<crate::aiw::state::Workspace>>,
+    key: String,
+) -> Result<crate::connector_policy::Dependencies, String> {
+    let (uses, coverage) = if key == "github:global" {
+        match crate::visibility::root(&db) {
+            Ok(root)=>{
+                let raw=match std::fs::read_to_string(root.join(".devdeck/activity-products.json")) {Ok(raw)=>raw,Err(e) if e.kind()==std::io::ErrorKind::NotFound=>"[]".into(),Err(_)=>return Err("Saved repository dependencies unavailable".into())};
+                (crate::connector_policy::project_uses(&raw)?,"Saved Activity product/repository links only. Other repositories, CLI usage and in-flight operations are not enumerated.")
+            },
+            Err(_)=>(vec![],"Vault not configured; repository dependencies unavailable. No exhaustive dependency claim is made."),
+        }
+    } else if let Some(id) = key.strip_prefix("ai:") {
+        (ws.agents().into_iter().filter(|a|a.provider==id).map(|a|format!("Agent {}",a.name)).collect(),"Direct runtime agent/provider mappings only. Inherited personal defaults, temporary overrides and external CLI sessions may add consumers.")
+    } else {
+        return Err("No shared dependency report for this connector".into());
+    };
+    Ok(crate::connector_policy::Dependencies {
+        uses,
+        coverage: coverage.into(),
+    })
+}
+#[tauri::command(async)]
+pub fn connectors_check_owner(
+    db: tauri::State<Db>,
+    ws: tauri::State<std::sync::Arc<crate::aiw::state::Workspace>>,
+    key: String,
+) -> Result<crate::connector_policy::OwnerCheck, String> {
+    let (result, summary) = if key == "github:global" {
+        let result = crate::github_transport::request(
+            "user",
+            "GET",
+            None,
+            std::time::Duration::from_secs(15),
+        )
+        .and_then(|v| {
+            if v["login"].as_str().is_some_and(|s| !s.is_empty()) {
+                Ok(())
+            } else {
+                Err("Missing identity".into())
+            }
+        });
+        (
+            result,
+            "Repository transport authenticated. Per-repository permissions were not tested.",
+        )
+    } else if let Some(id) = key.strip_prefix("ai:").filter(|id| !id.is_empty()) {
+        (ws.test_provider(id).map(|_|()),"Existing owner probe passed. API probes make a small configured-model request; CLI health alone does not verify inference.")
+    } else {
+        return Err("No shared owner check for this connection".into());
+    };
+    let ok = result.is_ok();
+    let summary = if ok {
+        summary.to_string()
+    } else {
+        "Owner check failed or was blocked. Credentials and access restrictions were unchanged; use existing account controls for diagnostics.".into()
+    };
+    crate::connector_policy::record_check(&db.conn(), key, ok, summary)
+}
 
 #[tauri::command(async)]
 pub fn connectors_feeds(db: tauri::State<Db>) -> Result<Vec<FeedConnection>, String> {

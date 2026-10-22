@@ -2425,8 +2425,181 @@ impl LLMProvider for OpenAICompatibleProvider {
     }
 }
 
+/// Lifecycle and deny-only access checks surround existing provider adapters.
+struct ControlledProvider {
+    inner: Arc<dyn LLMProvider>,
+    guard: Arc<std::sync::RwLock<Option<crate::connector_policy::Guard>>>,
+    agent: Option<String>,
+    project: Option<String>,
+}
+
+#[cfg(test)]
+mod connector_tests {
+    use super::*;
+    use crate::connector_policy::{self as policy, Control};
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Mutex,
+    };
+    struct FixtureProvider(Arc<AtomicUsize>);
+    impl LLMProvider for FixtureProvider {
+        fn id(&self) -> &str {
+            "fixture"
+        }
+        fn name(&self) -> &str {
+            "Existing fixture"
+        }
+        fn list_models(&self) -> Vec<ModelInfo> {
+            vec![]
+        }
+        fn health(&self) -> ProviderHealth {
+            ProviderHealth {
+                ok: true,
+                configured: true,
+                detail: "fixture only".into(),
+            }
+        }
+        fn run(&self, request: &AgentRequest) -> Result<AgentResponse, String> {
+            assert_eq!(request.model, "saved-model");
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Ok(AgentResponse::default())
+        }
+    }
+    #[test]
+    fn connector_provider_checks_live_policy_without_changing_configuration() {
+        let db = Arc::new(Mutex::new(rusqlite::Connection::open_in_memory().unwrap()));
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut registry = ProviderRegistry::new();
+        registry.register(Box::new(FixtureProvider(calls.clone())));
+        let old_handle = registry.get("fixture").unwrap();
+        let policy_db = db.clone();
+        registry.set_connector_guard(Arc::new(move |key, cap, agent, project| {
+            policy::check(&policy_db.lock().unwrap(), key, cap, agent, project)
+        }));
+        let request = AgentRequest {
+            agent_id: "spoofed-agent".into(),
+            model: "saved-model".into(),
+            ..Default::default()
+        };
+        old_handle.run(&request).unwrap();
+        let control = Control {
+            key: "ai:fixture".into(),
+            state: "active".into(),
+            agents: Some(vec!["trusted".into()]),
+            projects: Some(vec!["p1".into()]),
+            ..Default::default()
+        };
+        policy::save(&db.lock().unwrap(), control.clone(), 0).unwrap();
+        assert!(old_handle.run(&request).is_err());
+        let scoped = registry.get_for("fixture", "trusted", Some("p1")).unwrap();
+        scoped.run(&request).unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        assert_eq!(scoped.id(), "fixture");
+        assert_eq!(scoped.name(), "Existing fixture");
+        let mut paused = control.clone();
+        paused.state = "paused".into();
+        policy::save(&db.lock().unwrap(), paused.clone(), 1).unwrap();
+        assert!(registry.check_connector("fixture").is_err());
+        assert!(scoped
+            .run_streaming(&request, &|_| panic!("denied stream emitted content"))
+            .is_err());
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        paused.state = "disconnected".into();
+        policy::save(&db.lock().unwrap(), paused.clone(), 2).unwrap();
+        assert!(scoped.run(&request).is_err());
+        paused.state = "active".into();
+        policy::save(&db.lock().unwrap(), paused, 3).unwrap();
+        scoped.run(&request).unwrap();
+        assert!(old_handle.run(&request).is_err());
+        assert_eq!(calls.load(Ordering::SeqCst), 3);
+    }
+    #[test]
+    fn connector_provider_refuses_missing_or_forged_project_context() {
+        let mut registry = ProviderRegistry::new();
+        let calls = Arc::new(AtomicUsize::new(0));
+        registry.register(Box::new(FixtureProvider(calls.clone())));
+        registry.set_connector_guard(Arc::new(|_, _, agent, project| {
+            if agent == Some("a") && project == Some("p") {
+                Ok(())
+            } else {
+                Err("restricted".into())
+            }
+        }));
+        let request = AgentRequest {
+            agent_id: "a".into(),
+            model: "saved-model".into(),
+            ..Default::default()
+        };
+        assert!(registry.get("fixture").unwrap().run(&request).is_err());
+        assert!(registry
+            .get_for("fixture", "a", None)
+            .unwrap()
+            .run(&request)
+            .is_err());
+        assert!(registry
+            .get_for("fixture", "a", Some("other"))
+            .unwrap()
+            .run(&request)
+            .is_err());
+        registry
+            .get_for("fixture", "a", Some("p"))
+            .unwrap()
+            .run_streaming(&request, &|_| {})
+            .unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+}
+impl ControlledProvider {
+    fn allowed(&self) -> Result<(), String> {
+        let guard = self
+            .guard
+            .read()
+            .map_err(|_| "Connector guard unavailable")?
+            .clone();
+        if let Some(guard) = guard {
+            guard(
+                &format!("ai:{}", self.id()),
+                "model.infer",
+                self.agent.as_deref(),
+                self.project.as_deref(),
+            )?;
+        }
+        Ok(())
+    }
+}
+impl LLMProvider for ControlledProvider {
+    fn id(&self) -> &str {
+        self.inner.id()
+    }
+    fn name(&self) -> &str {
+        self.inner.name()
+    }
+    fn list_models(&self) -> Vec<ModelInfo> {
+        self.inner.list_models()
+    }
+    fn fetch_models(&self) -> Result<Vec<ModelInfo>, String> {
+        self.inner.fetch_models()
+    }
+    fn health(&self) -> ProviderHealth {
+        self.inner.health()
+    }
+    fn run(&self, request: &AgentRequest) -> Result<AgentResponse, String> {
+        self.allowed()?;
+        self.inner.run(request)
+    }
+    fn run_streaming(
+        &self,
+        request: &AgentRequest,
+        on_delta: &dyn Fn(&str),
+    ) -> Result<AgentResponse, String> {
+        self.allowed()?;
+        self.inner.run_streaming(request, on_delta)
+    }
+}
+
 /// Holds the providers this install knows about.
 pub struct ProviderRegistry {
+    connector_guard: Arc<std::sync::RwLock<Option<crate::connector_policy::Guard>>>,
     /// Arc, not Box, so `get` can hand out a handle and the caller can drop the
     /// registry lock before making a network call.
     ///
@@ -2452,6 +2625,7 @@ impl ProviderRegistry {
     /// Scripted providers exist only in tests. Production starts unconfigured.
     pub fn new() -> Self {
         Self {
+            connector_guard: Arc::new(std::sync::RwLock::new(None)),
             providers: {
                 #[cfg(test)]
                 {
@@ -2518,12 +2692,56 @@ impl ProviderRegistry {
     }
 
     pub fn get(&self, id: &str) -> Option<Arc<dyn LLMProvider>> {
-        self.providers.iter().find(|p| p.id() == id).cloned()
+        self.guarded(id, None, None)
+    }
+
+    pub fn set_connector_guard(&mut self, guard: crate::connector_policy::Guard) {
+        *self.connector_guard.write().unwrap() = Some(guard);
+    }
+
+    /// Explicit owner/model probes have no trusted agent or project context.
+    pub fn check_connector(&self, id: &str) -> Result<(), String> {
+        let guard = self
+            .connector_guard
+            .read()
+            .map_err(|_| "Connector guard unavailable")?
+            .clone();
+        if let Some(guard) = guard {
+            guard(&format!("ai:{id}"), "model.infer", None, None)?;
+        }
+        Ok(())
+    }
+
+    pub fn get_for(
+        &self,
+        id: &str,
+        agent: &str,
+        project: Option<&str>,
+    ) -> Option<Arc<dyn LLMProvider>> {
+        self.guarded(id, Some(agent), project)
+    }
+
+    fn guarded(
+        &self,
+        id: &str,
+        agent: Option<&str>,
+        project: Option<&str>,
+    ) -> Option<Arc<dyn LLMProvider>> {
+        let inner = self.providers.iter().find(|p| p.id() == id)?.clone();
+        Some(Arc::new(ControlledProvider {
+            inner,
+            guard: self.connector_guard.clone(),
+            agent: agent.map(str::to_owned),
+            project: project.map(str::to_owned),
+        }))
     }
 
     /// Clone handles before probing, so slow CLI health checks never hold the registry lock.
     pub fn handles(&self) -> Vec<Arc<dyn LLMProvider>> {
-        self.providers.clone()
+        self.providers
+            .iter()
+            .filter_map(|p| self.get(p.id()))
+            .collect()
     }
 
     /// Every provider's id, name and health.

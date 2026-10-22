@@ -42,6 +42,8 @@ mod companion;
 mod companion_protocol;
 mod conn;
 mod connector_model;
+mod connector_policy;
+mod github_transport;
 mod connectors;
 mod feed_reader;
 mod coordination;
@@ -827,6 +829,14 @@ pub fn run() {
             {
                 let handle = app.handle().clone();
                 let ws = app.state::<Arc<aiw::state::Workspace>>();
+                let policy_handle = handle.clone();
+                let guard: connector_policy::Guard = Arc::new(move |key, capability, agent, project| {
+                    let db = policy_handle.state::<db::Db>();
+                    let conn = db.conn();
+                    connector_policy::check(&conn, key, capability, agent, project)
+                });
+                connector_policy::install(guard.clone());
+                ws.providers.lock().unwrap().set_connector_guard(guard);
                 ws.set_feed_consumer(Arc::new(move |id, agent, project| {
                     let db = handle.state::<db::Db>();
                     let conn = db.conn();
@@ -1325,6 +1335,12 @@ pub fn run() {
             stash::stash_set_retention,
             stash::stash_open_file,
             stash::stash_image,
+            connectors::connectors_provider_bindings,
+            connectors::connectors_dependencies,
+            connectors::connectors_controls,
+            connectors::connectors_owner_checks,
+            connectors::connectors_control_save,
+            connectors::connectors_check_owner,
             connectors::connectors_feeds,
             connectors::connectors_add_feed,
             connectors::connectors_feed_action,

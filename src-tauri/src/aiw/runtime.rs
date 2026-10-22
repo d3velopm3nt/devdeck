@@ -558,7 +558,7 @@ impl AgentRuntime {
                 // this one.
                 let p = {
                     let providers = ws.providers.lock().unwrap();
-                    providers.get(&agent.provider)
+                    providers.get_for(&agent.provider, &agent.id, Some(&project.id))
                 };
                 let Some(p) = p else {
                     return Err(format!("unknown provider '{}'", agent.provider));

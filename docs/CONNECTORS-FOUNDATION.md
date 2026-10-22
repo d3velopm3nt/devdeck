@@ -153,12 +153,12 @@ worktree. They are intentionally ignored by Git. The repeatable UI fixture is
 | Feed add, test, pause, reconnect, disconnect, separate cache deletion | Functional native commands; regression checks use fixtures, not live HTTP |
 | Agent feed consumption | Functional cached-title operation through tool permission/approval plus a current agent/project binding |
 | Space access | Saved binding only; no effective consumer access yet |
-| Legacy provider agent/space/project connector ACLs | Not added; original tool/provider permissions remain authoritative |
-| Legacy used-by | Inventory projection only: AI agent provider IDs, MCP reported reach, database project IDs, Mail space hint; GitHub points to project repository configuration |
+| GitHub / AI connector restrictions | Additive deny-only controls; AI agent/project runtime identity enforced, missing context denied; space restrictions fail closed |
+| Known used-by | Direct AI agent mappings and saved GitHub Activity links with explicit coverage; MCP reach, database project IDs and Mail space remain existing inventory hints |
 | Complete dependency enforcement | Deferred; used-by rows do not block legacy disconnect or resolve every transitive consumer |
-| Legacy test/reconnect/pause/disconnect | Existing owner screens; no common central lifecycle enforcement yet |
+| GitHub / AI lifecycle | Shared central pause, disconnect-use and resume; existing owner checks; credentials, grants and mappings retained |
 | State honesty | Observed configuration, Mail historical sync and errors, reported MCP blockers, feed check results; no fabricated authentication |
-| Redacted activity | Feed lifecycle actions and agent feed tool events; no new consolidated legacy activity stream |
+| Redacted activity | Feed events plus bounded GitHub/AI control changes and fixed owner-check summaries; no general request log |
 | Custom MCP | Link to existing Community configuration workflow; no new custom-server editor or arbitrary executor |
 | Subscription adapters | Existing Settings workflow; no new inventory of live CLI sessions |
 
@@ -205,3 +205,61 @@ the fixed drawer is not misrepresented in a full-page image.
 Broader legacy-adapter consolidation remains pending. The uncertain offline
 `connector_policy.rs` creation was checked and the file was absent; it was not
 replayed as part of this visual task.
+
+## GitHub and AI consolidation, 22 October 2026
+
+Shared controls now wrap existing adapters rather than only projecting inventory.
+No saved connection is imported or rewritten. Two additive SQLite tables hold
+controls and owner checks. No row means existing behavior. Saves use revision
+checks under the existing database mutex, preserve all saved restrictions on
+lifecycle changes, and retain only fixed redacted activity messages.
+
+GitHub issue reads, Activity repository operations, completion checkpoints,
+repository monitoring and business repository listing use one guarded transport.
+It reads the existing app credential by reference, with the existing gh fallback
+where applicable. Read/write capabilities remain separate. Credentials stay off
+process arguments; CLI input and output have bounded process lifetimes. Pause
+and disconnect block new supported requests before credential lookup/transport.
+Ordinary git, external gh sessions, account setup, public Community/catalogue
+requests and the updater are separate owners and are not globally disabled.
+Repository selection remains on projects. Central GitHub lifecycle controls are
+available even when no app credential is saved. GitHub operations currently
+have no trusted agent/project identity; additional identity restrictions deny
+those calls rather than infer a grant.
+
+Every provider obtained from ProviderRegistry is a wrapper around its existing
+adapter. Even handles acquired before a control change check current policy
+before each inference or streaming turn. The assistant and project agent runtime
+supply trusted native agent/project identity. Other existing provider callers
+have no scoped identity and are denied if restrictions require one. AgentRequest
+fields cannot override that identity. Space restrictions deny all use until a
+trusted space context exists. Existing tool permissions and model selection
+continue to apply. In-flight calls are not cancelled by pause/disconnect.
+
+Explicit existing provider/model tests also check the policy. API owner probes
+send a small configured-model request and may incur provider charges; CLI health
+checks may only establish local readiness. No such live probe was performed for
+this implementation. Tests in this pass use in-memory databases, provider and
+transport fixtures, and browser IPC fixtures. Account setup remains with the
+existing GitHub/Settings owners; no new credential forms or automatic grants.
+
+The drawer offers lifecycle controls, exact AI agent/project restrictions,
+explicit owner checks, timestamps, bounded redacted control activity and known
+dependencies. GitHub dependency coverage is saved Activity product/repository
+links; AI coverage is direct agent/provider mappings, including registered
+subscription adapters used by agents. These reports are not exhaustive and do
+not prove external CLI sessions, inherited defaults or transitive dependencies.
+Disconnect-use deliberately retains credentials, mappings, restrictions and
+cache; it is not account sign-out or cached-data deletion. Mail, database and
+MCP remain existing-owner inventory and management links in this slice.
+
+Validation for this pass: TypeScript, scoped oxlint and Vite production build;
+10 standalone Rust connector tests; 15 native connector regression tests; existing
+GitHub reader (5), completion (2), monitor (6) tests; 13 visual browser checks and
+an additional browser controls regression covering persisted restrictions,
+lifecycle changes, reconnect preservation, explicit fixture owner check and
+coverage notes, stale-save recovery and narrow drawer sizing. Browser rendering uses vite.harness.config.ts on port 5217.
+The first browser run used the normal Vite configuration and failed due missing
+native IPC; the corrected fixture configuration passed without weakening tests.
+Known repository-wide lint baselines and existing compiler/build warnings noted
+above remain unchanged.

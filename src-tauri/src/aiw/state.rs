@@ -550,6 +550,10 @@ impl Workspace {
     /// mutex and deadlocks forever. Even without that, a network call under the
     /// registry lock would stall every agent for its duration.
     pub fn test_provider(&self, id: &str) -> Result<String, String> {
+        self.providers
+            .lock()
+            .map_err(|_| "Provider registry unavailable")?
+            .check_connector(id)?;
         enum Probe {
             Openai(super::provider::OpenAICompatibleProvider),
             Anthropic(super::provider::AnthropicProvider),
@@ -598,6 +602,10 @@ impl Workspace {
     /// manage sixteen tokens in half a minute is not one to hand an agent, and
     /// waiting the full two minutes to be told so is its own small cruelty.
     pub fn test_model(&self, id: &str, model: &str) -> Result<String, String> {
+        self.providers
+            .lock()
+            .map_err(|_| "Provider registry unavailable")?
+            .check_connector(id)?;
         if let Some(tool) = crate::subscription_model::tool_for(id) {
             return super::subscription::SubscriptionProvider::new(tool).verify(model);
         }

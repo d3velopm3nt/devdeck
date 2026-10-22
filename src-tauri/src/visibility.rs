@@ -126,67 +126,10 @@ pub async fn visibility_github_issues(repository: String) -> Result<IssueSnapsho
 }
 
 pub(crate) fn github_issues_blocking(repository: &str) -> Result<IssueSnapshot, String> {
-    let token = crate::github::stored_token();
-    let client = reqwest::blocking::Client::builder()
-        .timeout(crate::github_issue_read::READ_BUDGET)
-        .redirect(reqwest::redirect::Policy::none())
-        .user_agent("DevDeck")
-        .build()
-        .map_err(|_| "GitHub HTTP client could not be initialized.".to_string())?;
     crate::github_issue_read::read(
         repository,
         crate::github_issue_read::READ_BUDGET,
-        |endpoint, timeout| {
-            if let Some(token) = &token {
-                let response = client
-                    .get(format!("https://api.github.com/{endpoint}"))
-                    .timeout(timeout)
-                    .bearer_auth(token)
-                    .header("Accept", "application/vnd.github+json")
-                    .send()
-                    .map_err(|e| {
-                        if e.is_timeout() {
-                            "GitHub request timed out. Check your network connection and retry."
-                                .to_string()
-                        } else {
-                            "Could not reach GitHub. Check your network, proxy or TLS connection."
-                                .to_string()
-                        }
-                    })?;
-                if !response.status().is_success() {
-                    let status = response.status().as_u16();
-                    return Err(match status {
-                    401 => "GitHub returned 401. The saved token may be expired or revoked.".into(),
-                    403 => "GitHub returned 403. Check repository permissions, organization authorization and rate limits.".into(),
-                    404 => format!("GitHub returned 404 for {repository}. Check the repository name and token access."),
-                    429 => "GitHub returned 429. Rate limit reached; wait before retrying.".into(),
-                    _ => format!("GitHub returned {status} for {repository}. Retry later."),
-                });
-                }
-                response.json().map_err(|e| {
-                    if e.is_timeout() {
-                        "GitHub response timed out.".to_string()
-                    } else {
-                        "GitHub returned unreadable data.".to_string()
-                    }
-                })
-            } else {
-                let mut command = std::process::Command::new("gh");
-                command
-                    .args(["api", "--hostname", "github.com", endpoint])
-                    .stdin(std::process::Stdio::null())
-                    .stdout(std::process::Stdio::piped())
-                    .stderr(std::process::Stdio::null());
-                #[cfg(windows)]
-                {
-                    use std::os::windows::process::CommandExt;
-                    command.creation_flags(0x0800_0000);
-                }
-                let bytes = crate::github_issue_read::command_output(&mut command, timeout)?;
-                serde_json::from_slice(&bytes)
-                    .map_err(|_| "GitHub CLI returned unreadable data.".into())
-            }
-        },
+        |endpoint, timeout| crate::github_transport::request(endpoint, "GET", None, timeout),
     )
 }
 
@@ -196,76 +139,7 @@ pub(crate) fn github_request(
     method: &str,
     body: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
-    let token = crate::github::stored_token();
-    if let Some(token) = token {
-        let client = reqwest::blocking::Client::builder()
-            .timeout(Duration::from_secs(20))
-            .redirect(reqwest::redirect::Policy::none())
-            .user_agent("DevDeck")
-            .build()
-            .map_err(|e| e.to_string())?;
-        let method = reqwest::Method::from_bytes(method.as_bytes()).map_err(|e| e.to_string())?;
-        let mut req = client
-            .request(method, format!("https://api.github.com/{endpoint}"))
-            .bearer_auth(token)
-            .header("Accept", "application/vnd.github+json");
-        if let Some(body) = body {
-            req = req.json(&body);
-        }
-        let response = req
-            .send()
-            .map_err(|_| "Could not reach GitHub.".to_string())?;
-        if !response.status().is_success() {
-            return Err(format!(
-                "GitHub returned {}. Check account access and required permissions.",
-                response.status().as_u16()
-            ));
-        }
-        response
-            .json()
-            .map_err(|_| "GitHub returned unreadable data.".into())
-    } else {
-        use std::io::Write;
-        let mut cmd = std::process::Command::new("gh");
-        cmd.args([
-            "api",
-            "--hostname",
-            "github.com",
-            "--method",
-            method,
-            endpoint,
-        ]);
-        if body.is_some() {
-            cmd.args(["--input", "-"]);
-        }
-        cmd.stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null());
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            cmd.creation_flags(0x0800_0000);
-        }
-        let mut child = cmd
-            .spawn()
-            .map_err(|_| "Connect GitHub in Settings or sign in with gh first.".to_string())?;
-        if let Some(body) = body {
-            let mut input = child.stdin.take().ok_or("GitHub input unavailable")?;
-            input
-                .write_all(body.to_string().as_bytes())
-                .map_err(|e| e.to_string())?;
-        } else {
-            drop(child.stdin.take());
-        }
-        let output = child.wait_with_output().map_err(|e| e.to_string())?;
-        if !output.status.success() {
-            return Err(
-                "GitHub request failed. Check account access and required permissions.".into(),
-            );
-        }
-        serde_json::from_slice(&output.stdout)
-            .map_err(|_| "GitHub returned unreadable data.".into())
-    }
+    crate::github_transport::request(endpoint, method, body, Duration::from_secs(20))
 }
 pub(crate) fn github_get(endpoint: &str) -> Result<serde_json::Value, String> {
     github_request(endpoint, "GET", None)

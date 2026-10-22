@@ -1,3 +1,4 @@
+import { LegacyControls } from './LegacyControls'
 import { useCallback, useEffect, useState } from 'react'
 import { feeds, inventory, services, type FeedAccess, type Inventory } from '../../lib/connectors'
 import { useApp } from '../../store'
@@ -21,6 +22,7 @@ export function ConnectorDetails({ serviceId, onUpdated }: { serviceId: string; 
         <h3 className="mt-4 text-xs font-semibold text-dim">Supported capabilities</h3><div className="mt-2 flex flex-wrap gap-2">{service.capabilities.map(c=><span key={c} className="rounded bg-raise px-2 py-1 font-mono text-xs">{c}</span>)}</div>
         <p className="mt-3 text-xs text-muted">Requirements: {service.requirements}</p>
         {service.manage && <button className="btn-primary mt-4" onClick={()=>navigate(service.manage!)}>{service.id === 'mcp' ? 'Manage / custom MCP' : `Manage ${service.name}`}</button>}
+        {service.id==='github' && <LegacyControls connectionKey="github:global" onUpdated={()=>{void refresh();onUpdated()}} />}
         <h3 className="mt-5 border-t border-line pt-4 text-sm font-semibold text-ink">Existing connections</h3>
         {data.unavailable.includes(service.id) && <p className="mt-2 text-xs text-warn">Saved connections could not be read. Refresh inventory to retry.</p>}
         {!loading && !data.unavailable.includes(service.id) && existing.length === 0 && <p className="mt-2 text-xs text-muted">No saved connections found for this service.</p>}
@@ -30,6 +32,7 @@ export function ConnectorDetails({ serviceId, onUpdated }: { serviceId: string; 
           <p className="mt-2 text-xs text-muted">Last check: {c.lastCheck ? new Date(c.lastCheck < 1e12 ? c.lastCheck * 1000 : c.lastCheck).toLocaleString() : 'Not checked'}</p>
           {c.credentialRef && <p className="mt-1 break-all text-xs text-muted">Credential reference: {c.credentialRef}</p>}
           <p className="mt-1 text-xs text-muted">Used by / bindings: {c.usedBy.join(', ') || 'None reported'}</p>
+          {c.service==='ai' && <LegacyControls connectionKey={c.id} onUpdated={()=>{void refresh();onUpdated()}} />}
           {feed && <><p className="mt-2 text-xs text-muted">Connection ID: {feed.id}</p><p className="mt-2 break-all text-xs text-dim">{feed.url}</p><div className="mt-3 flex flex-wrap gap-2">
             <button className="btn-ghost" disabled={busy || ['paused','disconnected'].includes(c.state)} onClick={()=>void run(()=>feeds.read(feed.id))}>Test / read feed</button>
             {c.state !== 'disconnected' && c.state !== 'paused' && <button className="btn-ghost" disabled={busy} onClick={()=>void run(()=>feeds.action(feed.id,'pause'))}>Pause</button>}

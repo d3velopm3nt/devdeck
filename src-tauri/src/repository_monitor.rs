@@ -33,25 +33,7 @@ pub fn refresh(repository: &str, previous: &mut ActivitySnapshot) {
 }
 
 fn fetch(endpoint: &str, timeout: Duration) -> Result<Value, String> {
-    if let Some(token) = crate::github::stored_token() {
-        let response = reqwest::blocking::Client::builder().timeout(timeout)
-            .redirect(reqwest::redirect::Policy::none()).user_agent("DevDeck")
-            .build().map_err(|_| "Could not initialize GitHub client")?
-            .get(format!("https://api.github.com/{endpoint}")).bearer_auth(token)
-            .header("Accept", "application/vnd.github+json").send()
-            .map_err(|_| "GitHub request failed or timed out")?;
-        if !response.status().is_success() {
-            return Err(format!("GitHub returned {}. Check account access or rate limits.", response.status().as_u16()));
-        }
-        response.json().map_err(|_| "Unreadable GitHub response".into())
-    } else {
-        let mut cmd = std::process::Command::new("gh");
-        cmd.args(["api", "--hostname", "github.com", endpoint])
-            .stdin(std::process::Stdio::null()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::null());
-        #[cfg(windows)] { use std::os::windows::process::CommandExt; cmd.creation_flags(0x0800_0000); }
-        let bytes = crate::github_issue_read::command_output(&mut cmd, timeout)?;
-        serde_json::from_slice(&bytes).map_err(|_| "Unreadable GitHub response".into())
-    }
+    crate::github_transport::request(endpoint, "GET", None, timeout)
 }
 
 fn list(value: &Value) -> Result<&Vec<Value>, String> { value.as_array().ok_or("GitHub returned an unexpected list".into()) }

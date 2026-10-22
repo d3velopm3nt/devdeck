@@ -1,7 +1,7 @@
 import { createRoot } from 'react-dom/client'
 import { ConnectorsPage } from '../src/components/connectors/ConnectorsPage'
 import { SEED } from './seed'
-import type { FeedConnection, FeedAccess } from '../src/lib/connectors'
+import type { LegacyControl, FeedConnection, FeedAccess } from '../src/lib/connectors'
 import '../src/index.css'
 const handlers = SEED as Record<string, (args?: Record<string, unknown>) => unknown>
 const read = (): FeedConnection[] => JSON.parse(localStorage.getItem('connector-fixture') ?? '[]')
@@ -28,3 +28,11 @@ createRoot(document.getElementById('root')!).render(<ConnectorsPage />)
 document.documentElement.style.height = 'auto'
 document.body.style.height = 'auto'
 document.getElementById('root')!.style.height = 'auto'
+
+const policies=():LegacyControl[]=>JSON.parse(localStorage.getItem('connector-controls')??'[]')
+handlers.connectors_controls=()=>policies()
+handlers.connectors_owner_checks=()=>JSON.parse(localStorage.getItem('connector-checks')??'[]')
+handlers.connectors_provider_bindings=()=>[]
+handlers.connectors_dependencies=()=>({uses:['Fixture saved mapping'],coverage:'Fixture direct saved mappings only; external sessions are not enumerated.'})
+handlers.connectors_control_save=a=>{const control=a?.control as LegacyControl,rows=policies(),old=rows.find(c=>c.key===control.key);if((old?.revision??0)!==a?.expected)throw Error('Connector changed. Refresh before saving controls.');localStorage.setItem('connector-controls',JSON.stringify([...rows.filter(c=>c.key!==control.key),{...control,revision:control.revision+1,activity:[...(old?.activity??[]),'fixture control changed']}]));}
+handlers.connectors_check_owner=a=>{const check={key:a?.key,at:1770000000,ok:true,summary:'Fixture owner health only; no live inference or account authentication.'};localStorage.setItem('connector-checks',JSON.stringify([check]));return check}

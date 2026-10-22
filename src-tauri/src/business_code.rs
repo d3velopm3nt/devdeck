@@ -123,30 +123,9 @@ pub fn example_repos() -> Vec<Repo> {
 }
 
 pub(crate) fn list_github(token: &str) -> Result<RepoList, String> {
-    let client = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .user_agent("DevDeck")
-        .build()
-        .map_err(err)?;
     let get = |url: &str| -> Result<serde_json::Value, String> {
-        let res = client
-            .get(url)
-            .header("Accept", "application/vnd.github+json")
-            .bearer_auth(token)
-            .send()
-            .map_err(|e| format!("could not reach GitHub: {e}"))?;
-        if !res.status().is_success() {
-            return Err(match res.status().as_u16() {
-                401 => "GitHub rejected the stored token. Paste a new one.".to_string(),
-                403 => {
-                    "GitHub refused (403). An organisation may need SSO authorising for this token."
-                        .to_string()
-                }
-                s => format!("GitHub answered {s}"),
-            });
-        }
-        res.json()
-            .map_err(|e| format!("GitHub sent something unreadable: {e}"))
+        let endpoint=url.strip_prefix("https://api.github.com/").ok_or("Invalid GitHub endpoint")?;
+        crate::github_transport::request_with_token(endpoint,std::time::Duration::from_secs(30),token)
     };
     let me = get("https://api.github.com/user")?;
     let login = me
@@ -210,6 +189,7 @@ pub async fn business_repos() -> Result<RepoList, String> {
                 note: "Example repositories. This run is not connected to GitHub.".into(),
             });
         }
+        crate::connector_policy::runtime_check("github:global", "repository.read", None, None)?;
         match crate::github::stored_token() {
             None => Ok(RepoList {
                 source: "github".into(),

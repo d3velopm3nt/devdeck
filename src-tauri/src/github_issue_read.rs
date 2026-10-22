@@ -144,10 +144,33 @@ pub fn read(
 /// Drain stdout concurrently (large pages exceed pipe capacity) and kill a
 /// stalled CLI. No credentials are passed on its command line or in errors.
 pub fn command_output(command: &mut Command, timeout: Duration) -> Result<Vec<u8>, String> {
+    command_output_with_input(command, timeout, None)
+}
+pub fn command_output_with_input(
+    command: &mut Command,
+    timeout: Duration,
+    input: Option<Vec<u8>>,
+) -> Result<Vec<u8>, String> {
     let started = Instant::now();
     let mut child = command
         .spawn()
         .map_err(|_| "Connect GitHub in Settings or sign in with gh first.".to_string())?;
+    let input_result = if let Some(input) = input {
+        let mut stdin = child.stdin.take().ok_or("GitHub CLI input unavailable")?;
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            use std::io::Write;
+            let result = stdin
+                .write_all(&input)
+                .map_err(|_| "GitHub CLI input failed".to_string());
+            drop(stdin);
+            let _ = tx.send(result);
+        });
+        Some(rx)
+    } else {
+        drop(child.stdin.take());
+        None
+    };
     let mut stdout = child
         .stdout
         .take()
@@ -168,8 +191,13 @@ pub fn command_output(command: &mut Command, timeout: Duration) -> Result<Vec<u8
                     return Err("GitHub CLI could not read the repository. Check sign-in and repository access.".into());
                 }
                 let remaining = timeout.saturating_sub(started.elapsed());
+                if let Some(input) = &input_result {
+                    input
+                        .recv_timeout(remaining)
+                        .map_err(|_| "GitHub CLI input timed out")??;
+                }
                 return rx
-                    .recv_timeout(remaining)
+                    .recv_timeout(timeout.saturating_sub(started.elapsed()))
                     .map_err(|_| "GitHub CLI output timed out.".to_string())?;
             }
             Ok(None) => {}

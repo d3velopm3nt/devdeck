@@ -1233,7 +1233,7 @@ impl Assistant {
                 // every agent, and the chat you would use to find out why.
                 let p = {
                     let providers = ws.providers.lock().unwrap();
-                    providers.get(&agent.provider)
+                    providers.get_for(&agent.provider, me, conv.project_id.as_deref())
                 }
                 .ok_or_else(|| format!("unknown provider '{}'", agent.provider))?;
                 // Streamed if the provider can; a provider that cannot falls

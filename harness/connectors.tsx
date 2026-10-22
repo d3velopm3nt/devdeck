@@ -7,9 +7,9 @@ const handlers = SEED as Record<string, (args?: Record<string, unknown>) => unkn
 const read = (): FeedConnection[] => JSON.parse(localStorage.getItem('connector-fixture') ?? '[]')
 const save = (rows: FeedConnection[]) => localStorage.setItem('connector-fixture', JSON.stringify(rows))
 handlers.github_token_stored = () => true
-handlers.mail_accounts_list = () => [{ id: 7, name: 'Fixture mailbox', auth: 'oauth', space: 'Personal', last_sync: 0, last_error: '', has_password: false }]
+handlers.mail_accounts_list = () => [{ id: 7, name: 'Gmail - Personal', kind: 'gmail', auth: 'oauth', space: 'Personal', last_sync: 0, last_error: '', has_password: false }]
 handlers.conn_list = () => [{ id: 9, name: 'Fixture database', engine: 'postgres', project_id: 42 }]
-handlers.aiw_provider_setups = () => [{ id: 'fixture-ai', name: 'Fixture provider' }]
+handlers.aiw_provider_setups = () => [{ id: 'fixture-ai', name: 'Anthropic', kind: 'anthropic' }]
 handlers.aiw_agents = () => [{ id: 'fixture-agent', name: 'Fixture agent', provider: 'fixture-ai' }]
 handlers.community_installed = () => [{ id: 'fixture-mcp', kind: 'mcp', name: 'Fixture MCP', blocked: 'Missing local dependency', reach: [] }]
 handlers.connectors_feeds = () => { if(localStorage.getItem('inventory-failure')) throw new Error('Fixture inventory failure'); return read() }
@@ -24,3 +24,7 @@ handlers.connectors_test_feed = a => update(a,f=>{ f.last_check=1770000000; if(l
 handlers.connectors_feed_action = a => update(a,f=>{ switch(a?.action) { case 'pause': f.state='paused';break;case 'reconnect':f.state='configured';break;case 'disconnect':f.state='disconnected';f.access=[];break;case 'delete-cache':f.entries=[];break;default:throw new Error('Unknown action') } f.activity.push(String(a?.action)) })
 handlers.connectors_feed_access = a => update(a,f=>{ f.access=f.access.filter(x=>!(x.scope===a?.scope&&x.id===a?.resource));if(a?.allow) f.access.push({scope:a.scope as FeedAccess['scope'],id:String(a.resource),capability:'feed.read'});f.activity.push('access changed') })
 createRoot(document.getElementById('root')!).render(<ConnectorsPage />)
+
+document.documentElement.style.height = 'auto'
+document.body.style.height = 'auto'
+document.getElementById('root')!.style.height = 'auto'

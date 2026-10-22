@@ -85,7 +85,8 @@ setup step supplies or changes credentials.
 
 - `src/lib/connectors/index.ts` separates service definitions, connection
   observations, capabilities and the narrow feed reader interface.
-- `src/components/connectors/ConnectorsPage.tsx` owns catalogue and administration UI.
+- `src/components/connectors/ConnectorsCatalogue.tsx` owns the card catalogue.
+  `ConnectorDetails.tsx` retains administration controls in a native modal drawer.
 - `src-tauri/src/connector_model.rs` owns additive persistence, feed state,
   policy and parsing. The only new table is `connector_feeds`, created
   idempotently. No existing table is modified.
@@ -163,3 +164,44 @@ worktree. They are intentionally ignored by Git. The repeatable UI fixture is
 
 The agent consumer proves a narrow cached-read path. It does not establish
 live HTTP intake or every legacy provider as an end-to-end connector flow.
+
+## Visual correction, 22 October 2026
+
+The content layout follows the inspected reference image
+`libfile_a761324142d88191950f26d72f44d762`. It has a full-width search field,
+All integrations/Connected/Explore views, category chips, three-column branded
+cards, saved accounts followed by the proposed catalogue, and a custom-MCP
+footer. Detailed capability, state, credential-reference and lifecycle controls
+remain available in a keyboard-accessible modal drawer. Narrow screens use one
+column and a full-width drawer. Existing DevDeck shell and theme tokens remain
+in place. No backend or policy file changed in this visual pass.
+
+The reference contains example Connected states. The implementation displays
+observed configuration and check states instead. Gmail identifies IMAP/SMTP
+mail only, not Google Calendar or Drive. Planned entries show preview details
+without connection or execution controls. The footer uses the existing MCP
+workflow rather than advertising an unimplemented arbitrary API connector.
+The catalogue has additional real database, MCP and feed entries, so the number
+of rows follows saved configuration. Local geometric brand marks approximate
+the reference; existing GitHub, Google and OpenAI artwork is reused.
+
+Verification uses the actual React components with fixture IPC and synthetic
+accounts, not live integrations or credentials. `node harness/check-connectors.mjs`
+now runs the visual/lifecycle suite in `check-connectors-visual.mjs`.
+All 13 checks passed, including grid layout, filters, truthful states, planned
+previews, keyboard tabs, existing management controls, cache/grant lifecycle,
+persisted feed configuration, inventory failure, narrow layout and browser
+errors. TypeScript, scoped oxlint and the frontend Vite build passed.
+
+Captures in `.artifacts/connectors-visual/` include the 1338 px desktop content
+area, 390 px narrow layout, viewport-sized management drawers and light theme.
+`capture-connectors-comparison.mjs` creates a side-by-side reference/content/
+narrow comparison from the downloaded reference PNG. The reference's left shell
+is cropped only in that comparison; DevDeck's actual shell is unchanged.
+The screenshots were inspected after correcting font/mark proportions, card
+ordering and a narrow-footer wrap. Modal screenshots use viewport capture so
+the fixed drawer is not misrepresented in a full-page image.
+
+Broader legacy-adapter consolidation remains pending. The uncertain offline
+`connector_policy.rs` creation was checked and the file was absent; it was not
+replayed as part of this visual task.

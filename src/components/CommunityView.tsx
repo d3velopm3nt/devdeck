@@ -78,7 +78,7 @@ const KIND: Record<string, { label: string; icon: IconName; tint: string }> = {
 
   skill: { label: 'Skill', icon: 'list', tint: 'text-viol' },
 
-  agent: { label: 'Agent', icon: 'agent', tint: 'text-indigo-400' },
+  agent: { label: 'Agent', icon: 'agent', tint: 'text-viol' },
 
   tool: { label: 'Tool', icon: 'tool', tint: 'text-info' },
 
@@ -902,7 +902,7 @@ function RepoPage({
 
                 <button
 
-                  className="inline-flex items-center gap-1 text-dim hover:text-indigo-300 hover:underline"
+                  className="inline-flex items-center gap-1 text-dim hover:text-accent hover:underline"
 
                   onClick={() => void ipc.openUrl(i.source)}
 
@@ -1656,7 +1656,7 @@ function FilterBar({
 
                   on
 
-                    ? 'border-indigo-400/40 bg-indigo-500/15 text-indigo-300'
+                    ? 'border-accent/40 bg-accent/12 text-ink'
 
                     : 'border-line bg-raise text-dim hover:bg-hover'
 
@@ -3244,7 +3244,7 @@ function InstalledList({
 
                             ? 'border-emerald-500/40 bg-emerald-500/10 text-ok'
 
-                            : 'border-line2 text-dim hover:border-indigo-500/50 hover:text-ink'
+                            : 'border-line2 text-dim hover:border-accent/50 hover:text-ink'
 
                         }`}
 

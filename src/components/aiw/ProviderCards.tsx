@@ -489,7 +489,7 @@ export function ProviderCards({ onChanged }: { onChanged?: () => void }) {
           )}
 
           <div className="mt-3 flex items-start gap-2.5 border-t border-line pt-3">
-            <Icon name="secret" size={13} className="mt-px shrink-0 text-indigo-400" />
+            <Icon name="secret" size={13} className="mt-px shrink-0 text-accent" />
             <div className="text-[10.5px] leading-[1.6] text-muted">
               Keys go to Windows Credential Manager under{' '}
               <span className="font-mono text-dim">devdeck:aiw:&lt;provider&gt;</span> — never the

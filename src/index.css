@@ -251,7 +251,7 @@ html[data-window='toast'] #root {
 
 /* shared control styles */
 .input {
-  @apply rounded border border-line2 bg-page px-2 py-1 text-ink outline-none placeholder:text-faint focus:border-indigo-500;
+  @apply rounded border border-line2 bg-page px-2 py-1 text-ink outline-none placeholder:text-faint focus:border-accent;
 }
 /* Buttons are flex rows. An icon inside an inline button wraps onto its own
    line above the label the moment the button is narrow — which is how a Back
@@ -276,7 +276,7 @@ html[data-window='toast'] #root {
    anyway. Owning the layout here makes every menu align by default, and lets
    a trailing `ml-auto` shortcut hint sit where it belongs. */
 .menu-item {
-  @apply flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[12px] text-body hover:bg-indigo-600/40 hover:text-ink;
+  @apply flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[12px] text-body hover:bg-accent/12 hover:text-ink;
 }
 
 /* Dockview: one theme class, all colors driven by our tokens so it follows

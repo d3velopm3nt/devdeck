@@ -91,7 +91,7 @@ function AgentProviders() {
   return (
     <>
       <div className="mb-3 flex items-start gap-2.5 rounded-md border border-line bg-raise px-3.5 py-3">
-        <Icon name="info" size={13} className="mt-px shrink-0 text-indigo-400" />
+        <Icon name="info" size={13} className="mt-px shrink-0 text-accent" />
         <div className="text-[11.5px] leading-[1.6] text-dim">
           Choose the default model once in Providers. Assistant-backed agents inherit it,
           and explicit choices here override it. Coding workers use their CLI connection.
@@ -246,7 +246,7 @@ function ToolPermissions() {
   return (
     <>
       <div className="mb-3 flex items-start gap-2.5 rounded-md border border-line bg-raise px-3.5 py-3">
-        <Icon name="info" size={13} className="mt-px shrink-0 text-indigo-400" />
+        <Icon name="info" size={13} className="mt-px shrink-0 text-accent" />
         <div className="text-[11.5px] leading-[1.6] text-dim">
           Tools are the only way an agent can touch your machine, and anything not granted here is
           refused. <span className="text-ink">Full</span> lets it go ahead,{' '}

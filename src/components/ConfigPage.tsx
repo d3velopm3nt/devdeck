@@ -34,7 +34,7 @@ function Toggle({
     <label className="flex w-fit cursor-pointer items-center gap-2 text-[12px] text-body">
       <input
         type="checkbox"
-        className="h-3.5 w-3.5 accent-indigo-500"
+        className="h-3.5 w-3.5 accent-accent"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
       />
@@ -620,7 +620,7 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
           <label className="flex w-fit cursor-pointer items-center gap-2 text-[12px] text-body">
             <input
               type="checkbox"
-              className="h-3.5 w-3.5 accent-indigo-500"
+              className="h-3.5 w-3.5 accent-accent"
               checked={gitMonitorEnabled}
               onChange={(e) => void setGitMonitor(e.target.checked, Number(gitIv) || gitMonitorIntervalMin)}
             />

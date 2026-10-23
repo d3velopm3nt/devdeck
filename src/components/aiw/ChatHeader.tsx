@@ -87,7 +87,7 @@ export function ProviderChip() {
           <div className="flex items-baseline gap-2">
             <span className="text-[11.5px] font-medium text-dim">Provider</span>
             <div className="flex-1" />
-            <button className="text-[11px] text-indigo-400" onClick={() => setSetupOpen(true)}>
+            <button className="text-[11px] text-accent" onClick={() => setSetupOpen(true)}>
               Set one up
             </button>
           </div>

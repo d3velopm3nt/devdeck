@@ -92,7 +92,7 @@ export function Bubble({
     <div className="flex gap-3 py-2.5">
       <div
         className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${
-          mine ? 'bg-hover text-dim' : 'bg-indigo-500/15 text-indigo-300'
+          mine ? 'bg-hover text-dim' : 'bg-accent/12 text-accent'
         }`}
       >
         {mine ? 'You' : <Icon name="ai" size={12} />}
@@ -217,7 +217,7 @@ function Live() {
       ))}
       {a.streaming ? (
         <div className="flex gap-3 py-2.5">
-          <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-500/15 text-indigo-300">
+          <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent/12 text-accent">
             <Icon name="ai" size={12} />
           </div>
           <div className="min-w-0 flex-1">
@@ -225,7 +225,7 @@ function Live() {
             <div className="whitespace-pre-wrap break-words text-[12.5px] leading-[1.65] text-body">
               {a.streaming}
               {/* A caret, so a pause between tokens still reads as "working". */}
-              <span className="ml-0.5 inline-block h-[13px] w-[2px] translate-y-[2px] animate-pulse bg-indigo-400" />
+              <span className="ml-0.5 inline-block h-[13px] w-[2px] translate-y-[2px] animate-pulse bg-accent" />
             </div>
           </div>
         </div>
@@ -328,7 +328,7 @@ export function Chat() {
               <span className="text-[10px] text-faint">{a.conversations.length}</span>
             )}
           </button>
-          <Icon name="ai" size={14} className="text-indigo-400" />
+          <Icon name="ai" size={14} className="text-accent" />
           <span className="truncate text-[13px] font-semibold text-ink">
             {conv?.title ?? 'Assistant'}
           </span>
@@ -368,7 +368,7 @@ export function Chat() {
 
         {onMock && (
           <div className="flex shrink-0 items-start gap-2.5 border-b border-line bg-raise px-5 py-2.5">
-            <Icon name="info" size={12} className="mt-px shrink-0 text-indigo-400" />
+            <Icon name="info" size={12} className="mt-px shrink-0 text-accent" />
             <div className="text-[11px] leading-[1.55] text-dim">
               Set up an agent to start chatting. Your local workspace is ready to use.{' '}
               Use the Set up agent control above to choose a connection.
@@ -409,7 +409,7 @@ export function Chat() {
             <><IssueConversation key={conv.id} id={conv.id} workItem={conv.work_item} messages={conv.messages} renderMessage={(m,key) => <Bubble key={key} m={m} who={m.by ? a.agents.find(agent => agent.id === m.by)?.name ?? m.by : 'Dev'}/>}/>{a.sending && a.sendingConversationId === conversationId && <Live/>}</>
           ) : conv.messages.length === 0 ? (
             <div className="mx-auto mt-16 max-w-md text-center">
-              <Icon name="ai" size={26} className="mx-auto text-indigo-400/50" />
+              <Icon name="ai" size={26} className="mx-auto text-accent/50" />
               <div className="mt-3 text-[14px] font-semibold text-ink">
                 What are we working on?
               </div>

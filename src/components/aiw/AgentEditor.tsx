@@ -193,7 +193,7 @@ export function AgentEditor({ id, onClose }: { id: string; onClose: () => void }
               <div className="mt-1.5 rounded border border-line bg-raise px-3 py-2.5 text-[11.5px] text-muted">
                 No skills yet.{' '}
                 <button
-                  className="text-indigo-300 underline-offset-2 hover:underline"
+                  className="text-accent underline-offset-2 hover:underline"
                   onClick={() => a.setPage('skills')}
                 >
                   Add one
@@ -209,7 +209,7 @@ export function AgentEditor({ id, onClose }: { id: string; onClose: () => void }
                       key={sk.name}
                       className={`rounded-full border px-2.5 py-1 text-[11px] ${
                         on
-                          ? 'border-indigo-500/50 bg-indigo-500/12 text-indigo-300'
+                          ? 'border-accent/50 bg-accent/12 text-ink'
                           : 'border-line2 text-dim hover:text-ink'
                       }`}
                       title={sk.description}

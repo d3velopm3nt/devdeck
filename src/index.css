@@ -33,7 +33,7 @@
   --c-ink: #e2e8f0;      /* headings, emphasized */
   --c-body: #cbd5e1;     /* default body */
   --c-dim: #94a3b8;      /* secondary */
-  --c-muted: #64748b;    /* tertiary */
+  --c-muted: #8492a6;    /* tertiary text on page, panel and raised surfaces */
   --c-faint: #475569;    /* barely-there */
 
   /* accent + status (text-safe on this theme's surfaces) */
@@ -63,7 +63,7 @@
   --c-ink: #16181d;
   --c-body: #333a45;
   --c-dim: #5a6472;
-  --c-muted: #7d8794;
+  --c-muted: #626b78;
   --c-faint: #a5aebb;
 
   --c-accent: #4f46e5;
@@ -95,10 +95,10 @@
   --c-ink: #1f1e1c;
   --c-body: #3d3a34;
   --c-dim: #6b665c;
-  --c-muted: #8c8577;
+  --c-muted: #706759;
   --c-faint: #b3ac9c;
 
-  --c-accent: #c96442;
+  --c-accent: #a34a31;
   --c-ok: #3c7a52;
   --c-warn: #9a6318;
   --c-err: #b3402f;
@@ -126,7 +126,7 @@
   --c-ink: #ededed;
   --c-body: #d4d4d4;
   --c-dim: #a1a1a1;
-  --c-muted: #7a7a7a;
+  --c-muted: #8e8e8e;
   --c-faint: #545454;
 
   /* #0070f3 is the brand blue, but as *text* on black it is too dark to read;
@@ -159,7 +159,7 @@
   --c-ink: #000000;
   --c-body: #171717;
   --c-dim: #666666;
-  --c-muted: #8f8f8f;
+  --c-muted: #6d6d6d;
   --c-faint: #b4b4b4;
 
   --c-accent: #0070f3;
@@ -190,7 +190,7 @@
   --c-ink: #e7e7e7;
   --c-body: #d4d4d4;
   --c-dim: #9d9d9d;
-  --c-muted: #808080;
+  --c-muted: #979797;
   --c-faint: #5a5a5a;
 
   /* #007acc is the chrome blue — right behind white text, unreadable as text

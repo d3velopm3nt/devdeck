@@ -193,11 +193,13 @@ export function ProviderCards({ onChanged }: { onChanged?: () => void }) {
             return (
               <button
                 key={d.id}
+                type="button"
+                aria-pressed={on}
                 className="flex items-start gap-2.5 rounded-[7px] border p-3 text-left hover:brightness-110"
                 style={
                   on
-                    ? { borderColor: `rgb(${d.tint})`, background: `rgba(${d.tint},0.07)` }
-                    : { borderColor: '#1e293b', background: '#151923' }
+                    ? { borderColor: `rgb(${d.tint})`, background: `color-mix(in srgb, rgb(${d.tint}) 7%, var(--c-panel))` }
+                    : { borderColor: 'var(--c-line2)', background: 'var(--c-panel)' }
                 }
                 onClick={() => setSelected(d.id)}
               >

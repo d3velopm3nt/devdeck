@@ -58,7 +58,7 @@ export const THEMES: ThemeDef[] = [
     label: 'Claude',
     blurb: 'Warm paper and clay — the look of Claude’s apps.',
     scheme: 'light',
-    swatch: { app: '#f0eee6', panel: '#faf9f5', accent: '#c96442', ink: '#1f1e1c' },
+    swatch: { app: '#f0eee6', panel: '#faf9f5', accent: '#a34a31', ink: '#1f1e1c' },
   },
   {
     id: 'vercel',

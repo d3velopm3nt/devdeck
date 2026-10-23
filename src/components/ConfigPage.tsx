@@ -533,6 +533,7 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
           </>
         )}
 
+        {tab === 'general' && (
         <section className="mt-7">
           <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
             Mail attachments
@@ -608,6 +609,7 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
             folder if you use it.
           </p>
         </section>
+        )}
 
         {tab === 'dev' && (
           <>

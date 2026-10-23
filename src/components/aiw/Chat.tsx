@@ -437,8 +437,7 @@ export function Chat() {
           <div className="mx-auto max-w-3xl">{conv&&<ContextBar conversationId={conv.id}/>}<ConversationComposer id={conversationId} value={draft} onChange={setDraft} onSend={submit} disabled={!conv} busy={a.sending||planningBusy}/></div>
           {root && (
             <div className="mx-auto mt-1.5 max-w-3xl text-[10px] text-faint">
-              Conversations and anything remembered are kept at{' '}
-              <span className="font-mono">{root}</span> — outside every repository, never committed.
+              <span title={`Conversations are stored at ${root}, outside every repository and never committed.`}>Stored locally · outside your repositories</span>
             </div>
           )}
         </div>

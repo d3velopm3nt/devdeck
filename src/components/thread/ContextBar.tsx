@@ -154,12 +154,13 @@ export function ContextBar({ conversationId }: { conversationId: string }) {
   }
 
   return (
-    <div className="mb-2 shrink-0 overflow-hidden rounded-lg border border-line bg-raise">
+    <div className="mb-2 shrink-0 overflow-hidden rounded-lg border border-line">
       <button
         className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-hover/40"
+        aria-expanded={open}
         onClick={() => setOpen(!open)}
       >
-        <Icon name="context" size={12} className="shrink-0 text-indigo-400" />
+        <Icon name="context" size={12} className="shrink-0 text-accent" />
         <span className="text-[11px] font-semibold text-dim">Context</span>
         <span className="min-w-0 flex-1 truncate text-[10.5px] text-muted">
           {view

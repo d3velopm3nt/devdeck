@@ -131,7 +131,7 @@ pub fn thread_context_edit(
 
 /// Whoever answers in this room: the bot whose thread it is, the bot managing
 /// the feature, or the assistant.
-fn persona_for_thread(
+pub(crate) fn persona_for_thread(
     app: &tauri::AppHandle,
     ws: &Arc<Workspace>,
     conv: &crate::aiw::assistant::ConversationMeta,
@@ -225,6 +225,7 @@ fn also_answer(
     text: &str,
     bots: Vec<crate::bots::Bot>,
     already: &str,
+    explicit_context: &str,
 ) {
     for bot in bots {
         let who = {
@@ -242,7 +243,7 @@ fn also_answer(
             let _ = emit.emit("aiw:chat", e);
         };
         let Ok(convs) = ws.convs() else { return };
-        if let Err(e) = Assistant::answer_as(ws, convs, conv_id, text, &sink, &who) {
+        if let Err(e) = Assistant::send_with_context(ws, convs, conv_id, text, &sink, &who, explicit_context, false) {
             eprintln!(
                 "[threads] {} was asked something and could not answer: {e}",
                 bot.name
@@ -263,6 +264,7 @@ pub fn answer_as_agents(
     conv_id: &str,
     text: &str,
     already: &str,
+    explicit_context: &str,
 ) {
     let Ok(convs) = ws.convs() else { return };
     let Ok(conv) = convs.load(conv_id) else {
@@ -280,7 +282,7 @@ pub fn answer_as_agents(
         let sink = move |e: ChatEvent| {
             let _ = emit.emit("aiw:chat", e);
         };
-        if let Err(e) = Assistant::answer_as(ws, convs, conv_id, text, &sink, &who) {
+        if let Err(e) = Assistant::send_with_context(ws, convs, conv_id, text, &sink, &who, explicit_context, false) {
             eprintln!("[threads] {} was named and could not answer: {e}", agent.id);
         }
     }
@@ -486,8 +488,13 @@ pub fn companion_send(
     conv_id: &str,
     text: &str,
 ) -> Result<AssistantReply, String> {
+    companion_send_context(app,ws,conv_id,text,"")
+}
+
+pub fn companion_send_context(app:&tauri::AppHandle,ws:&Arc<Workspace>,conv_id:&str,text:&str,explicit_context:&str)->Result<AssistantReply,String>{
     let convs = ws.convs()?;
     let conv = convs.load(conv_id)?;
+    if let Some(node_id)=conv.node.or(conv.bot_node) { register(app,ws,node_id)?; }
     let who = if let Some(node_id) = conv.node {
         register(app, ws, node_id)?;
         let name = {
@@ -504,9 +511,9 @@ pub fn companion_send(
     let sink = move |event: ChatEvent| {
         let _ = progress.emit("aiw:chat", event);
     };
-    let reply = Assistant::send_as(ws, convs, conv_id, text, &sink, &who)?;
-    also_answer(app, ws, conv_id, text, named, &who.agent_id);
-    answer_as_agents(app, ws, conv_id, text, &who.agent_id);
+    let reply = Assistant::send_with_context(ws, convs, conv_id, text, &sink, &who, explicit_context, true)?;
+    also_answer(app, ws, conv_id, text, named, &who.agent_id, explicit_context);
+    answer_as_agents(app, ws, conv_id, text, &who.agent_id, explicit_context);
     Ok(reply)
 }
 
@@ -539,8 +546,8 @@ pub async fn node_thread_send(
         };
         let convs = workspace.convs()?;
         let reply = Assistant::send_as(&workspace, convs, &conv_id, &text, &sink, &who)?;
-        also_answer(&emit, &workspace, &conv_id, &text, named, &who.agent_id);
-        answer_as_agents(&emit, &workspace, &conv_id, &text, &who.agent_id);
+        also_answer(&emit, &workspace, &conv_id, &text, named, &who.agent_id, "");
+        answer_as_agents(&emit, &workspace, &conv_id, &text, &who.agent_id, "");
         Ok(reply)
     })
     .await

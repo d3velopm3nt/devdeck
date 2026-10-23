@@ -26,9 +26,9 @@ import { useAiw } from '../../lib/aiwStore'
 import { aiw } from '../../lib/aiw'
 import { Icon } from '../../lib/icons'
 import { avatarLabel, nodeColor } from '../../lib/spaces'
-import { findNode, resolveDir, subtreeIds, workspaceOf } from '../../lib/tree'
+import { findNode, subtreeIds, workspaceOf } from '../../lib/tree'
 import { openAiwDoc, openBot, openNodeConfig, openNodeSetup, openSpace } from '../../lib/dock'
-import { Thread } from '../thread/Thread'
+import {ScopedChat} from '../thread/ScopedChat'
 import { NodeFiles } from './NodeFiles'
 import { NodeReminders } from './NodeReminders'
 import { NodeManagers } from './NodeManagers'
@@ -351,34 +351,7 @@ export function NodePage({ params }: IDockviewPanelProps<{ id: number }>) {
 
       <div className={tab === 'thread' ? 'flex min-h-0 flex-1 gap-4 px-5 py-3' : 'hidden'}>
         <div className="flex min-w-0 flex-1 flex-col">
-        <Thread
-          reloadKey={nodeId}
-          // Where a code block's Run opens its terminal: the space's own
-          // folder, so `git status` in the chat is about this repository.
-          dir={resolveDir(nodes, node)}
-          nodeId={nodeId}
-          // A bot that names an agent answers as that agent; otherwise the
-          // orchestrator does, and the bar under the box says which.
-          agentId={bot?.agent?.trim() ? bot.agent : 'assistant'}
-          load={() => ipc.nodeThread(nodeId)}
-          send={(text) => ipc.nodeThreadSend(nodeId, text)}
-          name={bot ? bot.name : 'Assistant'}
-          placeholder={`Ask about ${node.name}, or tell it what to do…`}
-          footnote={
-            isProject
-              ? 'This node owns a repository, so it can read the code and the commits under it.'
-              : 'No repository up here — it answers from its children’s headlines, and says so.'
-          }
-          empty={
-            <>
-              {bot
-                ? `${bot.name} watches this space. Its wakes land here as receipts.`
-                : managers.length > 1
-                  ? `${managers.map((m) => m.name).join(', ')} work in this space. Their wakes land here, each under its own name, and @ reaches one.`
-                  : 'Nothing watches this space yet. Ask about it, or give it a manager from its settings.'}
-            </>
-          }
-        />
+        <ScopedChat node={nodeId} name={node.name}/>
         </div>
         <NodeAside node={node} isProject={isProject} />
       </div>

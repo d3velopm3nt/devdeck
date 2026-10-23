@@ -101,6 +101,7 @@ mod work_records;
 mod work_conversations;
 mod github_completion;
 mod threads;
+mod chat_contract;
 mod vault;
 mod visibility;
 mod visibility_model;
@@ -1577,6 +1578,10 @@ pub fn run() {
             provider_defaults::aiw_provider_defaults,
             provider_defaults::aiw_default_provider_set,
             provider_defaults::aiw_agent_use_default,
+            chat_contract::chat_settings,
+            chat_contract::chat_select_model,
+            chat_contract::chat_send_input,
+            chat_contract::chat_open_manager,
             threads::thread_wake,
             threads::thread_context,
             threads::thread_context_set,

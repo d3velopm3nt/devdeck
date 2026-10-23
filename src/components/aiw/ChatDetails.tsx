@@ -1,3 +1,4 @@
+import {ConversationModel} from '../thread/ConversationModel'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useChatWorkspace, type PanelView } from '../../lib/chatWorkspace'
 import { useAiw } from '../../lib/aiwStore'
@@ -106,7 +107,7 @@ export function ChatInspector({ id }: { id: string }) {
     <div className="chat-inspector-heading"><strong>Conversation details</strong><button className="chat-icon-button" title="Hide conversation details" aria-label="Hide conversation details" onClick={() => useChatWorkspace.setState({ inspector: false })}><Icon name="close" size={14}/></button></div>
     <details open><summary>Environment</summary><p><Icon name="machine" size={14}/> Local workspace</p><p>{project?.name || 'No project attached'}</p>{project && <><p className="text-muted">{project.root}</p><p>Branch: {project.branch || 'Unavailable'}</p></>}</details>
     <details open><summary>Context</summary><p>{assistant?.skills.length ?? 0} attached skills</p><button className="chat-icon-button" title="Inspect context" aria-label="Inspect context" onClick={() => openView('context')}><Icon name="external" size={12}/></button></details>
-    <details open><summary>Connection</summary><p>{assistant?.provider || 'No connection selected'}</p><p className="text-muted">{assistant?.model || 'Default model'}</p><p>{a.tools.length} configured tools</p></details>
+    <details open><summary>Connection</summary><ConversationModel id={id} busy={a.sending} readOnly/><p>{a.tools.length} configured tools</p></details>
     <ChatWorkflow key={id} id={id} compact onOpen={() => openView('workflow')}/>
     <details open><summary>Outputs</summary>{subject?.proposal || subject?.team ? <button className="btn-ghost" onClick={() => openView('team')}><Icon name="agent" size={14}/>{subject.proposal?.name || subject.team?.name}</button> : <p className="text-muted">No team artifact yet.</p>}</details>
     <details><summary>Activity</summary><p>{a.conversation?.messages.filter(m => m.from !== 'user').length ?? 0} recorded entries</p><button className="chat-icon-button" title="Open activity" aria-label="Open activity" onClick={() => openView('activity')}><Icon name="external" size={12}/></button></details>

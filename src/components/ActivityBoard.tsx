@@ -1,3 +1,6 @@
+import {ConversationComposer} from './thread/ConversationComposer'
+import {ScopedChat} from './thread/ScopedChat'
+import {conversationApi,type ConversationInput} from '../lib/conversation'
 import { FilterTabs, PageHeader } from './ui/DesignSystem'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { aiw, type FeatureWork, type Session, type AgentDef, type ChatMessage } from '../lib/aiw'
@@ -69,6 +72,7 @@ export function ActivityBoard({ sessionsOnly = false, embedded = false, active =
   const [picked, setPicked] = useState('')
   const [showDone, setShowDone] = useState(false)
   const [chatTarget, setChatTarget] = useState('')
+  const [chatId,setChatId]=useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const [chatReady, setChatReady] = useState(false)
   const [chat, setChat] = useState<ChatMessage[]>([])
@@ -158,9 +162,9 @@ export function ActivityBoard({ sessionsOnly = false, embedded = false, active =
 
   useEffect(() => {
     let live = true
-    setChat([]); setNotice(''); setChatReady(false); setChatLoading(!!chatTarget); error('Conversation', '')
-    if (chatTarget) void ipc.managerConversation(chatTarget).then(messages => {
-      if (live) { setChat(messages); setChatReady(true); error('Conversation', '') }
+    setChat([]); setChatId(''); setNotice(''); setChatReady(false); setChatLoading(!!chatTarget); error('Conversation', '')
+    if (chatTarget) void Promise.all([ipc.managerConversation(chatTarget),conversationApi.manager(chatTarget)]).then(([messages,conv]) => {
+      if (live) { setChat(messages); setChatId(conv.id); setChatReady(true); error('Conversation', '') }
     }).catch(e => { if (live) error('Conversation', String(e)) }).finally(() => { if (live) setChatLoading(false) })
     return () => { live = false }
   }, [chatTarget, error])
@@ -258,15 +262,14 @@ export function ActivityBoard({ sessionsOnly = false, embedded = false, active =
   }, [allSessions, messages, team, chatTarget, chat, nodes, snapshot.products, product, space, assistant, session, status, source, showDone, query, scope])
   const timelineEntry = timeline.find(e => e.id === picked) || timeline[0]
   const chatManager = team.find(t => t.bot.handle === chatTarget)
-  const sendMessage = async () => {
-    if (!chatTarget || !chatReady || !messageBody.trim() || chatBusy.current) return
+  const sendMessage = async (input:ConversationInput) => {
+    if (!chatTarget || !chatReady || !chatId || !input.text.trim() || chatBusy.current) return false
     chatBusy.current = true; setSending(true); setNotice(''); error('Chat', '')
-    const text = messageBody.trim()
     try {
-      const response = await ipc.managerTurn(chatTarget, text)
+      const response = await conversationApi.send(chatId,input)
       setChat(current => [...current, ...response.appended])
-      setMessageBody(''); setNotice('Reply received.'); await reload()
-    } catch (e) { error('Chat', String(e)) } finally { chatBusy.current = false; setSending(false) }
+      setNotice('Reply received.'); await reload(); return true
+    } catch (e) { error('Chat', String(e)); return false } finally { chatBusy.current = false; setSending(false) }
   }
   const linkedIssue = Object.values(github).flatMap(g => g.items).find(i => i.url === timelineEntry?.url)
   const issueProduct = snapshot.products.find(p => p.id === product || p.id === timelineEntry?.productId)
@@ -341,11 +344,7 @@ export function ActivityBoard({ sessionsOnly = false, embedded = false, active =
               })}
             </div>
           </div></article>)}
-          <form className="sticky bottom-0 rounded-xl border border-line bg-panel p-3 shadow-sm" onSubmit={e => { e.preventDefault(); void sendMessage() }}>
-            <p className="mb-2 text-xs text-muted">{chatManager ? `Message ${chatManager.bot.name} directly. Existing context and permissions apply.` : 'Choose a manager above to start a conversation.'}</p>
-            <textarea aria-label="Team message" placeholder={chatManager ? `Message ${chatManager.bot.name}…` : 'Choose a manager to chat…'} disabled={!chatTarget || !chatReady || sending} maxLength={6000} className={`${field} mt-2 w-full resize-y`} value={messageBody} onChange={e => setMessageBody(e.target.value)} />
-            <div className="mt-2 flex items-center justify-between gap-3"><p role="status" className="text-xs text-muted">{notice}</p><button className="btn-primary" disabled={sending || chatLoading || !chatReady || !chatTarget || !messageBody.trim()}>{sending ? 'Replying…' : 'Send'}</button></div>
-          </form>
+          <div className="mt-4 rounded-xl border border-line bg-panel p-3"><p role="status" className="text-xs text-dim">{notice}</p>{chatTarget&&<ScopedChat manager={chatTarget} name={chatManager?.bot.name||chatTarget}/>}<ConversationComposer label="Team message" id={chatId} value={messageBody} onChange={setMessageBody} onSend={sendMessage} disabled={!chatReady||!chatId} busy={sending||chatLoading} placeholder={chatManager?`Message ${chatManager.bot.name}…`:'Choose a manager to chat…'}/></div>
         </div> : <div className="space-y-3">{filteredSessions.map(s => <button key={s.id} onClick={() => setPicked(s.id)} className={`w-full rounded-xl border p-4 text-left ${picked === s.id ? 'border-accent bg-raise' : 'border-line bg-panel'}`}><div className="flex justify-between gap-3"><b>{s.title}</b><span className="text-xs text-muted">{stage(s.status)} · {isStale(s.updated_at) && stage(s.status) !== 'Done' ? 'Stale' : 'Recorded'}</span></div><p className="mt-2 text-sm text-muted">{s.assistant} · {s.id}</p><p className="mt-1 text-xs text-muted">{[s.space,s.folder].filter(Boolean).join(' / ') || 'Unlinked to a space or project'} · {new Date(s.updated_at).toLocaleString()}</p></button>)}</div>}
       </main>
       {!sessionsOnly && <aside className="max-h-72 w-full shrink-0 overflow-auto border-t border-line bg-panel p-5 lg:max-h-none lg:w-80 lg:border-l lg:border-t-0">

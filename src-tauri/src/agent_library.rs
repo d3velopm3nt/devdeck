@@ -186,3 +186,12 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 }
+
+/// Inspect the configuration already pinned by a turn without creating a snapshot.
+pub fn read_snapshot<T: for<'de> Deserialize<'de>>(root: &Path, key: &str) -> Result<Option<T>, String> {
+    use rusqlite::OptionalExtension;
+    let db=connection(root)?;
+    db.execute_batch("CREATE TABLE IF NOT EXISTS agent_run_snapshots (id TEXT PRIMARY KEY, definition TEXT NOT NULL);").map_err(|e|e.to_string())?;
+    let raw:Option<String>=db.query_row("SELECT definition FROM agent_run_snapshots WHERE id=?1",[key],|r|r.get(0)).optional().map_err(|e|e.to_string())?;
+    raw.map(|s|serde_json::from_str(&s).map_err(|e|e.to_string())).transpose()
+}

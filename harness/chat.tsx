@@ -1,3 +1,4 @@
+import {ScopedChat} from '../src/components/thread/ScopedChat'
 import {useApp} from '../src/store'
 import { createRoot } from 'react-dom/client'
 import { SEED } from './seed'
@@ -23,7 +24,7 @@ let stale = false
 Object.assign(window,{setStale:(value:boolean)=>{stale=value},getTeam:()=>team})
 handlers.team_builder_create=({proposal})=>{Object.assign(window,{lastSave:proposal});if(stale || (proposal.target && proposal.target.revision!==team.revision))throw new Error('This team changed. Reload it and review a fresh proposal before saving.');if(proposal.target) {team.name=proposal.name;team.revision++;team.roles=proposal.members.map((m:any)=>({name:m.role,...m}));return team}return {...team,id:proposal.id,name:proposal.name,revision:1} }
 useAiw.setState({ready:true,agents:[{id:'assistant',name:'Dev',role:'assistant',provider:'chatgpt-subscription',model:'default',system:'',skills:['evidence-driven-testing'],permissions:{shell:'ask'}}],tools:[{id:'shell',name:'Shell',description:'Run commands with approval'}],projects:[{id:'devdeck',name:'DevDeck',root:'D:/devdeck',branch:'testing/desktop',features:0,active_agents:0,open_conflicts:0}]})
-createRoot(document.getElementById('root')!).render(<AssistantThread/>)
+createRoot(document.getElementById('root')!).render(<>{new URLSearchParams(location.search).has('scope')&&<ScopedChat node={7} name="Fixture project"/>}<AssistantThread/></>)
 
 const workflowSteps = [
  {id:'build',title:'Build the change',worker:'Builder',target:1,needs:[],instructions:'',status:'done',claim:'',run:'',evidence:'Implementation complete.',previous_runs:[]},
@@ -38,3 +39,18 @@ Object.assign(window,{finishWorkflow:()=>workflowSteps.forEach(step=>{step.statu
 
 handlers.worker_asks=()=>[]
 handlers.run_get=()=>({id:'fixture-run',worker:'agent:verifier',worker_name:'Verifier',title:'Verify the rendered design',space:'DevDeck',folder:'D:/fixture/devdeck',branch:'test',status:'done',started_at:now,seconds:12,minutes_limit:5,usd:0,usd_limit:0,ok:true,skills:['visual-review'],files:[],intent:'Check the actual rendered layout.',verdict:'Layout checked. Human review remains required.',steps:[{at:now,kind:'note',text:'Inspected the sidebar, focus order and status labels.'}]})
+
+// Unified chat boundary fixtures: no account access, probes or agent-default writes.
+const settings=new Map<string,any>(JSON.parse(localStorage.getItem('unified-fixture-settings')||'[]')),requests:any[]=[]
+let failSend=false,failSelection=false
+const config=(id:string)=>settings.get(id)||{conversation:id,agent_id:'assistant',provider:'fixture-provider',model:'pinned-model',revision:0,scope:'agent defaults / pinned conversation',capabilities:['text','user-selected-text-files','url-reference','installed-skills']}
+handlers.chat_settings=({conversation})=>structuredClone(config(conversation))
+handlers.aiw_providers=()=>[['fixture-provider','Fixture provider']]
+handlers.aiw_models=()=>({models:[{id:'pinned-model',name:'Pinned model'},{id:'new-model',name:'New model'}],live:false,note:'Fixture catalogue'})
+handlers.aiw_skills=()=>[{name:'review-evidence',description:'Fixture installed skill',body:'Verify actual evidence.'}]
+handlers.chat_select_model=({conversation,expected,provider,model})=>{if(failSelection)throw Error('Fixture selection failure');const old=config(conversation);if(expected!==old.revision)throw Error('Conversation settings changed');const value={...old,provider:provider||'fixture-provider',model:model||'agent-default-model',revision:old.revision+1,scope:provider?'conversation':'agent defaults'};settings.set(conversation,value);localStorage.setItem('unified-fixture-settings',JSON.stringify([...settings]));return value}
+handlers.chat_send_input=async({conversation,input})=>{requests.push(structuredClone({conversation,input}));if(failSend)throw Error('Fixture send failure');if(input.context.some((c:any)=>c.kind==='image'))throw Error('Unsupported image');if(input.skills.some((s:string)=>s!=='review-evidence'))throw Error('Installed skill unavailable');return handlers.aiw_send_message({conversationId:conversation,text:input.text})}
+handlers.node_thread=()=>{requests.push({kind:'scope-open'});let c=convs.find(c=>c.id==='scoped-project');if(!c){c={id:'scoped-project',title:'Fixture project discussion',started_at:now,updated_at:now,messages:[]} as any;Object.assign(c!,{node:7,project_id:'7'});convs.push(c!)}return c}
+Object.assign(window,{__unified:{requests,settings,failSend:(value:boolean)=>{failSend=value},failSelection:(value:boolean)=>{failSelection=value},agent:()=>useAiw.getState().agents.find(a=>a.id==='assistant')}})
+
+useAiw.setState(state=>({agents:[...state.agents,{id:'verifier',name:'Verifier',role:'worker',provider:'fixture-provider',model:'agent-default-model',system:'',skills:[],permissions:{}}]}))

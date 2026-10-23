@@ -1,3 +1,5 @@
+import {useConversationSelection,EMPTY_SELECTION} from '../../lib/conversationDraft'
+import {conversationApi} from '../../lib/conversation'
 import { useEffect, useRef, useState } from 'react'
 import { Mic, MessageSquare, VolumeX, Settings2 } from 'lucide-react'
 import { createLocalSpeechInput } from '../../lib/local-speech-input'
@@ -42,7 +44,9 @@ export function DesktopDev({ conversationId, onChat }: { conversationId: string;
         if(!alive)return
         try {
           // The same conversation command used by the existing typed Thread.
-          await aiw.sendMessage(conversationId,text)
+          const selection=useConversationSelection.getState().byId[conversationId]??EMPTY_SELECTION
+          await conversationApi.send(conversationId,{text,...selection})
+          if(useConversationSelection.getState().byId[conversationId]===selection)useConversationSelection.getState().put(conversationId,EMPTY_SELECTION)
           if(!alive)return
           const conversation=await aiw.conversation(conversationId)
           const last=[...conversation.messages].reverse().find(m=>m.from==='assistant'&&!m.tool)

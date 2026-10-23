@@ -1,3 +1,6 @@
+import {ConversationComposer} from '../thread/ConversationComposer'
+import {ContextBar} from '../thread/ContextBar'
+import type {ConversationInput} from '../../lib/conversation'
 // The assistant — the one AI you talk to.
 //
 // Everything else in this module is a surface you *watch*. This is the one you
@@ -20,7 +23,6 @@ import { Markdown } from '../thread/Markdown'
 import { useAiw } from '../../lib/aiwStore'
 import { aiw, ago, type ChatMessage } from '../../lib/aiw'
 import { useProjectsByWorkspace } from '../../lib/aiwLabels'
-import { ProviderChip } from './ChatHeader'
 import { useApp } from '../../store'
 import { openUrl } from '../../lib/ipc'
 import { useWorkData } from '../work/useWorkData'
@@ -256,7 +258,6 @@ export function Chat() {
   const [root, setRoot] = useState<string | null>(null)
   const [showList, setShowList] = useState(() => window.innerWidth > 760)
   const scroller = useRef<HTMLDivElement>(null)
-  const box = useRef<HTMLTextAreaElement>(null)
 
   // Load the list once, and open something so the surface is never a dead end.
   useEffect(() => {
@@ -301,13 +302,16 @@ export function Chat() {
   // Developer A on it" can be a true sentence about a scripted agent
   // producing fixture output. This is the only place that would say so.
 
-  const submit = () => {
-    const text = draft.trim()
-    if (!text || a.sending || workspace.pending || onMock) return
-    setDraft('')
-    if (subject.planning) void sendTeamMessage(conversationId, text)
-    else void a.send(text)
-    box.current?.focus()
+  const submit = async (input:ConversationInput) => {
+    if (a.sending || workspace.pending) return false
+    if (subject.planning) {
+      if (input.context.length || input.skills.length) throw Error('Context selections are supported in conversation mode. Finish or leave team planning before sending attachments or skills.')
+      await sendTeamMessage(conversationId,input.text)
+      return !useChatWorkspace.getState().subjects[conversationId]?.error
+    }
+    const sent=await a.sendInput(input)
+    if(!sent)throw Error(useAiw.getState().chatError || 'Message failed. Your draft and context are retained.')
+    return true
   }
 
   return (
@@ -354,7 +358,7 @@ export function Chat() {
               </optgroup>
             ))}
           </select>
-          <ProviderChip />
+
           <button className="chat-icon-button" title="Conversation details" aria-label="Conversation details" aria-pressed={workspace.inspector && !workspace.split} onClick={() => useChatWorkspace.setState({ inspector: workspace.split || !workspace.inspector, split: false })}><Icon name="info" size={17}/></button>
           <button className="chat-icon-button" title="Workspace panel" aria-label="Split" aria-pressed={workspace.split} onClick={() => useChatWorkspace.setState({ split: !workspace.split })}><Icon name="layout" size={17}/></button>
           <button
@@ -370,8 +374,8 @@ export function Chat() {
           <div className="flex shrink-0 items-start gap-2.5 border-b border-line bg-raise px-5 py-2.5">
             <Icon name="info" size={12} className="mt-px shrink-0 text-accent" />
             <div className="text-[11px] leading-[1.55] text-dim">
-              Set up an agent to start chatting. Your local workspace is ready to use.{' '}
-              Use the Set up agent control above to choose a connection.
+              The assistant default has no model configured. Choose a configured provider for this conversation below or edit agent defaults in Settings.{' '}
+
             </div>
           </div>
         )}
@@ -427,41 +431,10 @@ export function Chat() {
           )}
         </div>
 
-        {!!subject.choices?.length && <div className="flex flex-wrap gap-2 px-5 py-2">{subject.choices.map(choice => <button key={choice} className="btn-ghost" disabled={!!workspace.pending || a.sending} onClick={() => void sendTeamMessage(conversationId, choice)}>{choice}</button>)}<button className="btn-ghost" onClick={() => box.current?.focus()}>Write my own reply</button></div>}
+        {!!subject.choices?.length && <div className="flex flex-wrap gap-2 px-5 py-2">{subject.choices.map(choice => <button key={choice} className="btn-ghost" disabled={!!workspace.pending || a.sending} onClick={() => void sendTeamMessage(conversationId, choice)}>{choice}</button>)}<button className="btn-ghost" onClick={() => document.querySelector<HTMLTextAreaElement>('[aria-label="Conversation composer"] textarea')?.focus()}>Write my own reply</button></div>}
         {subject.error && <p role="alert" className="px-5 text-err">{subject.error}</p>}
         <div className="shrink-0 border-t border-line px-5 py-3">
-          <div className="mx-auto flex max-w-3xl items-end gap-2">
-            <textarea
-              ref={box}
-              rows={1}
-              className="input max-h-40 min-h-[34px] flex-1 resize-none py-2 text-[12.5px]"
-              placeholder="Ask the assistant…"
-              value={draft}
-              disabled={!conv || onMock}
-              onChange={(e) => {
-                setDraft(e.target.value)
-                // Grow with the text rather than scrolling a one-line box.
-                e.target.style.height = 'auto'
-                e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`
-              }}
-              onKeyDown={(e) => {
-                // Enter sends; Shift+Enter is a newline. The usual contract, and
-                // getting it backwards is the fastest way to lose a message.
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  submit()
-                }
-              }}
-            />
-            <button
-              className="btn-primary chat-send-button"
-              aria-label="Send" title="Send message"
-              disabled={!conv || onMock || !draft.trim() || a.sending || !!workspace.pending}
-              onClick={submit}
-            >
-              <Icon name={a.sending || planningBusy ? "spinner" : "send"} size={17} className={a.sending || planningBusy ? "animate-spin" : undefined}/>
-            </button>
-          </div>
+          <div className="mx-auto max-w-3xl">{conv&&<ContextBar conversationId={conv.id}/>}<ConversationComposer id={conversationId} value={draft} onChange={setDraft} onSend={submit} disabled={!conv} busy={a.sending||planningBusy}/></div>
           {root && (
             <div className="mx-auto mt-1.5 max-w-3xl text-[10px] text-faint">
               Conversations and anything remembered are kept at{' '}

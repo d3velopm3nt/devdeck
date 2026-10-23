@@ -1,3 +1,4 @@
+import {conversationApi,type ConversationInput} from './conversation'
 // Assistant UI state.
 //
 // Kept in its own store rather than bolted onto the main one: nothing here is
@@ -127,6 +128,7 @@ interface AiwState {
   deleteConversation: (id: string) => Promise<void>
   focusConversation: (projectId?: string) => Promise<void>
   send: (text: string) => Promise<void>
+  sendInput: (input: ConversationInput) => Promise<boolean>
   resolveApproval: (id: string, decision: ApprovalDecision) => Promise<void>
   refreshContext: () => Promise<void>
   runDemo: () => Promise<void>
@@ -391,15 +393,12 @@ export const useAiw = create<AiwState>((set, get) => ({
     }
   },
 
-  send: async (text) => {
+  send: async (text) => { await get().sendInput({text,context:[],skills:[]}) },
+  sendInput: async (input) => {
+    const text=input.text
     const conv = get().conversation
-    if (!conv || !text.trim() || get().sending) return
+    if (!conv || !text.trim() || get().sending) return false
 
-    const assistant = get().agents.find(agent => agent.id === 'assistant')
-    if (!assistant?.provider || assistant.provider === 'mock') {
-      set({ chatError: 'Set up an agent in Settings → Assistant before chatting.' })
-      return
-    }
     // Show what was said before the round-trip. The reply can take a while —
     // several provider turns, possibly an approval prompt — and a message that
     // vanishes until then reads as a dropped one.
@@ -413,7 +412,7 @@ export const useAiw = create<AiwState>((set, get) => ({
     })
 
     try {
-      const reply: AssistantReply = await aiw.sendMessage(conv.id, text.trim())
+      const reply: AssistantReply = await conversationApi.send(conv.id, input)
       // Re-read rather than splicing the optimistic message: the backend
       // decided the timestamps, the tool steps and the title, and a transcript
       // assembled from two sources drifts.
@@ -431,6 +430,7 @@ export const useAiw = create<AiwState>((set, get) => ({
       await get().loadConversations()
       // Delegation started real sessions; the rest of the workspace is now stale.
       if (reply.delegated.length > 0) void get().refresh()
+      return true
     } catch (e) {
       // Put the failure in the transcript rather than only in a banner — you
       // need to see which message did not get through.
@@ -446,9 +446,10 @@ export const useAiw = create<AiwState>((set, get) => ({
         sending: false,
         streaming: '',
         streamingSteps: [],
-        chatError: say(e),
+        chatError: current?.id === conv.id ? say(e) : get().chatError,
         conversation: current?.id === conv.id ? { ...current, messages: [...current.messages, failed] } : current,
       })
+      return false
     }
   },
 

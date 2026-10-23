@@ -54,3 +54,7 @@ if(workMode){
 const bridge={navigate:(view:'sessions'|'activity'|'team'|'chat')=>useApp.getState().setRailView(view),direct:(view:'sessions'|'activity')=>useApp.setState({railView:view}),state:()=>({rail:useApp.getState().railView,tab:useApp.getState().teamTab}),empty:()=>{data.sessions=[];fixture.aiw_sessions=()=>[]},failVault:()=>{fixture.visibility_snapshot=()=>{throw Error('Fixture vault unavailable')}}};Object.assign(window,{__workNavigation:bridge});
 function WorkFixture(){const rail=useApp(s=>s.railView);return <div style={{height:'100vh'}}>{rail==='sessions'||rail==='activity'?<LegacyWorkRedirect view={rail}/>:rail==='github'?<section><h1>GitHub destination fixture</h1><button onClick={()=>useApp.getState().setTeamTab('history')}>Back to Work history</button></section>:<WorkPage/>}</div>}
 createRoot(document.getElementById('root')!).render(workMode?<WorkFixture/>:<ActivityBoard sessionsOnly={new URLSearchParams(location.search).has('sessions')} />)
+
+fixture.chat_open_manager=args=>({id:'manager:'+args?.handle,title:String(args?.handle),messages:conversations[String(args?.handle)]||[]})
+fixture.chat_settings=args=>({conversation:args?.conversation,agent_id:'assistant',provider:'fixture-provider',model:'fixture-model',revision:0,scope:'manager agent defaults',capabilities:['text']})
+fixture.chat_send_input=args=>fixture.manager_turn({handle:String(args?.conversation).replace('manager:',''),text:(args?.input as any).text})

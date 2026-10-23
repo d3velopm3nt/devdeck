@@ -98,7 +98,7 @@ impl ChatMessage {
     /// Something the thread records rather than something anyone said: a
     /// participant pulled in, a claim moving, a session reporting back. Drawn
     /// as a receipt, never as a speech bubble — nobody asked it a question.
-    fn note(by: &str, tag: &str, ok: bool, text: impl Into<String>) -> Self {
+    pub(crate) fn note(by: &str, tag: &str, ok: bool, text: impl Into<String>) -> Self {
         Self {
             at: now_iso(),
             from: Speaker::Assistant,
@@ -168,6 +168,12 @@ pub struct ConversationMeta {
     /// sent — assembly is a starting point, not a verdict.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub context_edits: std::collections::BTreeMap<String, String>,
+    #[serde(default)]
+    pub model_revision: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_owner: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_selection: Option<crate::chat_contract::ModelSelection>,
     /// Everyone who has been pulled in, by agent or bot id.
     ///
     /// Being in a thread is free — this list is what a mention writes, and it
@@ -519,11 +525,10 @@ impl Conversations {
         id: &str,
         change: impl FnOnce(&mut ConversationMeta),
     ) -> Result<ConversationMeta, String> {
-        let _gate = writing();
-        let mut conv = self.load(id)?;
-        change(&mut conv);
-        self.save(&conv)?;
-        Ok(conv)
+        self.try_update_meta(id, |conv| { change(conv); Ok(()) })
+    }
+    pub fn try_update_meta(&self,id:&str,change:impl FnOnce(&mut ConversationMeta)->Result<(),String>)->Result<ConversationMeta,String>{
+        let _gate=writing();let mut conv=self.load(id)?;change(&mut conv)?;self.save(&conv)?;Ok(conv)
     }
 
     /// One persistent conversation per work item, under the existing write gate.
@@ -1027,7 +1032,7 @@ impl Assistant {
         sink: ChatSink,
         persona: &Persona,
     ) -> Result<AssistantReply, String> {
-        Self::turn(ws, convs, conversation_id, text, sink, persona, true)
+        Self::turn(ws, convs, conversation_id, text, sink, persona, true, "")
     }
 
     /// Answer something that is already in the thread.
@@ -1048,8 +1053,11 @@ impl Assistant {
         sink: ChatSink,
         persona: &Persona,
     ) -> Result<AssistantReply, String> {
-        Self::turn(ws, convs, conversation_id, text, sink, persona, false)
+        Self::turn(ws, convs, conversation_id, text, sink, persona, false, "")
     }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn send_with_context(ws:&Arc<Workspace>,convs:&Conversations,id:&str,text:&str,sink:ChatSink,persona:&Persona,context:&str,echo:bool)->Result<AssistantReply,String>{Self::turn(ws,convs,id,text,sink,persona,echo,context)}
 
     #[allow(clippy::too_many_arguments)]
     fn turn(
@@ -1060,25 +1068,23 @@ impl Assistant {
         sink: ChatSink,
         persona: &Persona,
         echo: bool,
+        explicit_context: &str,
     ) -> Result<AssistantReply, String> {
         if text.trim().is_empty() {
             return Err("nothing to send".into());
         }
         let mut conv = convs.load(conversation_id)?;
-        let agent = ws
+        let mut agent = ws
             .agent(&persona.runs_as)
             .ok_or_else(|| format!("no '{}' agent", persona.runs_as))?;
+        crate::chat_contract::apply_selection(&conv, &mut agent);
         #[cfg(not(test))]
         if agent.provider.is_empty() || agent.provider == "mock" {
             return Err("Set up an agent in Settings → Assistant before chatting.".into());
         }
         // Conversation agents keep their launch configuration across turns and reloads.
         // A manager turn is a separate run: its current coordination context must stay live.
-        let snapshot_key = if persona.manager_handle.is_some() {
-            format!("manager-turn:{}:{}:{}", conversation_id, persona.agent_id, conv.messages.len())
-        } else {
-            format!("conversation:{}:{}", conversation_id, persona.agent_id)
-        };
+        let snapshot_key = crate::chat_contract::snapshot_key(&conv, persona);
         let (mut pinned_agent, pinned_system): (super::state::AgentDef, String) = crate::agent_library::snapshot(convs.store().root(), &snapshot_key, &(agent.clone(), persona.system.clone()))?;
         // Snapshotting configuration must never restore revoked permissions.
         pinned_agent.permissions = agent.permissions;
@@ -1217,7 +1223,7 @@ impl Assistant {
                 role: agent.role.clone(),
                 model: agent.model.clone(),
                 system: Self::system_prompt(ws, convs, &conv, &persona.system),
-                context: Self::context(ws, convs, &conv),
+                context: format!("{}\n{}", Self::context(ws, convs, &conv), explicit_context),
                 goal: text.trim().to_string(),
                 tools: tools.clone(),
                 observations: observations.clone(),

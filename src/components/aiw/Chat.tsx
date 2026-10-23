@@ -255,7 +255,6 @@ export function Chat() {
   const setDraft = (draft: string) => workspace.patch(conversationId, { draft })
   const planningBusy = workspace.pending === conversationId
   const container = useRef<HTMLDivElement>(null)
-  const [root, setRoot] = useState<string | null>(null)
   const [showList, setShowList] = useState(() => window.innerWidth > 760)
   const scroller = useRef<HTMLDivElement>(null)
 
@@ -271,9 +270,6 @@ export function Chat() {
         else await useAiw.getState().newConversation()
       }
     })()
-    // Not knowing where the store is should not break the chat.
-    aiw.personalRoot().then(setRoot).catch(() => setRoot(null))
-
     // Live progress for the reply being produced right now.
     // Hold the promise, not the resolved unlisten: cleanup can run before it
     // resolves, and a listener captured late is never removed.
@@ -433,13 +429,9 @@ export function Chat() {
 
         {!!subject.choices?.length && <div className="flex flex-wrap gap-2 px-5 py-2">{subject.choices.map(choice => <button key={choice} className="btn-ghost" disabled={!!workspace.pending || a.sending} onClick={() => void sendTeamMessage(conversationId, choice)}>{choice}</button>)}<button className="btn-ghost" onClick={() => document.querySelector<HTMLTextAreaElement>('[aria-label="Conversation composer"] textarea')?.focus()}>Write my own reply</button></div>}
         {subject.error && <p role="alert" className="px-5 text-err">{subject.error}</p>}
-        <div className="shrink-0 border-t border-line px-5 py-3">
+        <div className="chat-composer-dock shrink-0 border-t border-line px-5 pt-3 pb-0">
           <div className="mx-auto max-w-3xl">{conv&&<ContextBar conversationId={conv.id}/>}<ConversationComposer id={conversationId} value={draft} onChange={setDraft} onSend={submit} disabled={!conv} busy={a.sending||planningBusy}/></div>
-          {root && (
-            <div className="mx-auto mt-1.5 max-w-3xl text-[10px] text-faint">
-              <span title={`Conversations are stored at ${root}, outside every repository and never committed.`}>Stored locally · outside your repositories</span>
-            </div>
-          )}
+
         </div>
       </div>
       {!workspace.split && workspace.inspector && conv && <><PanelResizer label="Resize conversation details" value={workspace.inspectorWidth} min={230} max={420} side="right" onChange={inspectorWidth => useChatWorkspace.setState({ inspectorWidth })}/><ChatInspector id={conv.id}/></>}

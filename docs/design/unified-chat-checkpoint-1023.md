@@ -61,3 +61,11 @@ Verification: TypeScript and production frontend build pass; scoped lint passes.
 Native screenshot: libfile_32da833911dc8191a805ddd23fc79332, version 0. It shows the actual running app's theme, provider popout and slim footer. The latest supplied reference libfile_20c92a7838d08191bfb27ff82643980b still could not be materialized through the supported route because no working Python transfer runtime is available; its pixels were not viewed. Library screenshot creation succeeded, while local metadata-helper application remains unavailable. No download workaround or dependency installation was used.
 
 Scoped lint's sole warning is the existing ModelPicker priceOf export / Fast Refresh warning. It was not suppressed. The final build also retains existing bundle-size warnings.
+
+## Single helper-line cleanup
+
+Removed the visible Stored locally / outside your repositories notice and its row. Its presentation-only personalRoot lookup is no longer needed; storage APIs and data are unchanged. The chat dock now has zero bottom padding, and the single helper row is 24px high with no wrapping or gap above it. Existing warnings and expandable privacy disclosures remain available. The accepted popout, input and toolbar geometry are unchanged.
+
+Typecheck, production build and scoped lint pass, with the existing Chat effect warning. Four light/dark desktop/narrow groups verify exactly one 24px footer, no storage notice, no reserved bottom padding/row, unchanged 165px composer body, keyboard privacy disclosure, viewport bounds and no overflow. Seven unified-chat regression groups pass. Actual native bottom-area pixels were inspected; the app and original Chat selection remain available without restart, inference or settings changes.
+
+Updated native screenshot: libfile_493ec13413ac8191bb9bb06d81a94770, version 0. The new reference libfile_73f015e5aea481918bdb75b5c2be203b was not viewed: the known unavailable transfer-helper route was not retried. Screenshot upload succeeded. Returned identity was retained in an artifact manifest; local xattrs are not claimed applied because the unavailable helper was not retried. No push or backend changes.

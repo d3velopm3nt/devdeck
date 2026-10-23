@@ -40,7 +40,7 @@ import { LibraryPanel, useLibrary } from './workers/LibraryPanel'
 
 import { RepositoryDiscovery } from './RepositoryDiscovery'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 
 import * as ipc from '../lib/ipc'
 
@@ -129,6 +129,11 @@ const LICENCE: Record<string, { label: string; tone: string; why: string }> = {
 export function CommunityView({ discoveryOnly = false }: { discoveryOnly?: boolean }) {
 
   const [repositoryOpen, setRepositoryOpen] = useState(false)
+  const [permissionTool, setPermissionTool] = useState<string | null>(null)
+  const permissionOrigin = useRef<HTMLElement | null>(null)
+  const managePermissions = (id: string) => { permissionOrigin.current = document.activeElement as HTMLElement; setPermissionTool(id) }
+  const closePermissions = () => { setPermissionTool(null); requestAnimationFrame(() => permissionOrigin.current?.focus()) }
+  useEffect(() => { if (permissionTool) requestAnimationFrame(() => document.getElementById('community-permissions-back')?.focus()) }, [permissionTool])
 
   const [requestedRepo, setRequestedRepo] = useState<{ url: string; request: number }>()
 
@@ -322,9 +327,18 @@ export function CommunityView({ discoveryOnly = false }: { discoveryOnly?: boole
 
 
 
-  return (
+  const selected = installed.filter(r => r.id === permissionTool && r.kind === 'tool')
+  const permissionPanel = permissionTool && <section className="community-view flex h-full min-h-0 flex-col bg-page p-5" aria-label="Tool permissions" onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); closePermissions() } }}>
+      <div className="mb-4"><button id="community-permissions-back" className="btn-ghost mb-3" onClick={closePermissions}>Back to Community</button><PageHeader title={selected[0] ? selected[0].name + ' permissions' : 'Tool permissions'} description="Choose which agents may use this tool. Opening this page grants nothing; new tool grants require approval on the first call."/></div>
+      {err && <p role="alert" className="mb-3 text-err">{err}</p>}
+      <div className="min-h-0 flex-1 overflow-auto">{selected.length ? <InstalledList rows={selected} agents={agents.map(a=>({id:a.id,name:a.name}))} busy={busy} onGrant={onGrant} onRemove={id=>void act(id,()=>ipc.communityUninstall(id))} onBrowse={closePermissions}/> : <p className="text-dim">This tool is no longer installed. Go back to review the catalogue.</p>}
+      {selected.length > 0 && agents.length === 0 && <p className="mt-3 text-dim">No agents are available. Add an agent in Teams, then return here to choose its access.</p>}</div>
+    </section>
 
-    <div className="community-view flex h-full min-h-0 flex-col bg-page">
+  return (
+    <>
+    {permissionPanel}
+    <div style={{display: permissionTool ? 'none' : undefined}} className="community-view flex h-full min-h-0 flex-col bg-page">
 
       <div className="shrink-0 border-b border-line px-5 py-3">
 
@@ -522,6 +536,7 @@ export function CommunityView({ discoveryOnly = false }: { discoveryOnly?: boole
 
           <Browse
 
+            onManagePermissions={managePermissions}
             rows={rows}
 
             busy={busy}
@@ -657,6 +672,7 @@ export function CommunityView({ discoveryOnly = false }: { discoveryOnly?: boole
       )}
 
     </div>
+    </>
 
   )
 
@@ -1243,6 +1259,7 @@ function Browse({
   onInstall,
 
   onRemove,
+  onManagePermissions,
 
 }: {
 
@@ -1252,6 +1269,7 @@ function Browse({
 
   onInstall: (r: ipc.CommunityListing) => void
 
+  onManagePermissions: (id: string) => void
   onRemove: (r: ipc.CommunityListing) => void
 
 }) {
@@ -1367,6 +1385,7 @@ function Browse({
               key={r.id}
 
               row={r}
+              onManagePermissions={onManagePermissions}
 
               busy={busy === r.id}
 
@@ -2913,6 +2932,7 @@ function Card({
   onInstall,
 
   onRemove,
+  onManagePermissions,
 
 }: {
 
@@ -2922,6 +2942,7 @@ function Card({
 
   onInstall: () => void
 
+  onManagePermissions: (id: string) => void
   onRemove: () => void
 
 }) {
@@ -2984,7 +3005,7 @@ function Card({
 
 
 
-      <div className="mt-3 flex items-center gap-2">
+      <div className="mt-3 flex flex-wrap items-center gap-2">
 
         {row.installed ? (
 
@@ -3009,6 +3030,7 @@ function Card({
             )}
 
             <span className="flex-1" />
+            {row.kind === 'tool' && <button className="btn text-[11px]" onClick={() => onManagePermissions(row.id)}>Manage permissions</button>}
 
             <button className="btn-ghost text-[11px]" disabled={busy} onClick={onRemove}>
 

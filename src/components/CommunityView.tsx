@@ -1,3 +1,4 @@
+import { PageHeader } from './ui/DesignSystem'
 import { FilterTabs } from './ui/DesignSystem'
 import { RepositoryListRow } from './RepositoryListRow'
 
@@ -327,17 +328,7 @@ export function CommunityView({ discoveryOnly = false }: { discoveryOnly?: boole
 
       <div className="shrink-0 border-b border-line px-5 py-3">
 
-        {!discoveryOnly && <div className="flex items-baseline gap-3">
-
-          <h1 className="text-[15px] font-semibold text-ink">{discoveryOnly ? 'Discover' : 'Community'}</h1>
-
-          <p className="text-[11.5px] text-muted">
-
-            {discoveryOnly ? 'Explore popular repositories, community tools, and what’s trending on GitHub.' : 'Open-source skills, agents and tools your bots can use. Machine installs for you; this installs for them.'}
-
-          </p>
-
-        </div>}
+        {!discoveryOnly && <PageHeader title="Community" description="Open-source skills, agents and tools your bots can use. Machine installs for you; this installs for them."/>}
 
         <div className={`${discoveryOnly ? '' : 'mt-2.5 '}flex items-center gap-1`}>
 

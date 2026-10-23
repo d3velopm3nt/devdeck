@@ -12,7 +12,8 @@ The rollout extends the existing DesignSystem.tsx primitives. It does not move f
 | Notifications, Deck, Routines, Setup, AI and GitHub Settings | Page headers migrated | Shared 24px headings; Notifications save uses the theme-aware primary control. Notification previews, schedules, AI providers/permissions and onboarding frames retain their domain layouts. Setup keeps smaller section density when embedded in onboarding. |
 | Chat, workspace tabs, Dockview, run/team/workflow editors | Deliberately specialized | Dense conversation and editor layouts are preserved. No blanket CSS migration. |
 | Library project design systems | Deliberately separate | Project assets and shell themes retain their existing boundaries. No import adapter. |
-| GitHub main view, Mail/Contacts, Calendar, Spaces/explorer, SQL Connections, Machine, Community/Discover, legacy Home | Deferred | Further page-by-page inspection and migration required. Existing shared filters/statuses still apply where already used. |
+| GitHub main, Mail/Contacts, Calendar, Spaces, SQL Connections, Machine, Community/Discover | Covered in the final bounded pass | Shared header/title or compact toolbar adopted where appropriate. See final-page-consistency-1023.md for specialist exceptions and verification. |
+| Legacy Home, standalone Stash, Analytics charts, onboarding/business wizards | Retained / not comprehensively reverified | Existing specialized components remain. No whole-app completion claim for these surfaces. |
 | Floating Deck, terminal and Monaco palettes | Deferred / specialized | Independent window and editor requirements need separate visual checks. |
 
 ## Verification for this group

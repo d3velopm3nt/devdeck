@@ -190,8 +190,8 @@ export function ContactsView() {
       <section className="flex w-[400px] shrink-0 flex-col border-r border-line bg-page">
         <MailPaneSwitch />
         {filterAccount && (
-          <div className="flex items-center gap-2 border-b border-line bg-indigo-500/5 px-3 py-1.5 text-[11px] text-dim">
-            <Icon name="mail" size={11} className="shrink-0 text-indigo-300" />
+          <div className="flex items-center gap-2 border-b border-line bg-accent/5 px-3 py-1.5 text-[11px] text-dim">
+            <Icon name="mail" size={11} className="shrink-0 text-accent" />
             <span className="min-w-0 flex-1 truncate">
               People in <span className="text-body">{filterAccount.address}</span>
             </span>
@@ -203,7 +203,7 @@ export function ContactsView() {
             </button>
           </div>
         )}
-        <div className="flex items-center gap-2 border-b border-line px-2.5 py-2">
+        <div className="ds-toolbar border-b border-line px-2.5 py-2" data-density="compact" aria-label="Contacts search toolbar">
           <div className="flex flex-1 items-center gap-1.5 rounded border border-line2 bg-page px-2 py-1">
             <Icon name="search" size={12} className="text-faint" />
             <input
@@ -214,7 +214,7 @@ export function ContactsView() {
             />
           </div>
           <button
-            className="btn-ghost inline-flex items-center gap-1 text-[11px]"
+            className="btn-ghost ds-button" data-density="compact"
             onClick={() => {
               selectContact(null)
               setEditing({ ...BLANK })
@@ -232,7 +232,7 @@ export function ContactsView() {
                 key={g.key}
                 className={`inline-flex items-center gap-1 rounded-full border px-2 py-[2px] font-mono text-[10px] ${
                   group === g.key
-                    ? 'border-transparent bg-indigo-500/20 text-indigo-300'
+                    ? 'border-transparent bg-indigo-500/20 text-accent'
                     : 'border-line2 text-dim hover:bg-hover/50'
                 }`}
                 onClick={() => setGroup(g.key)}
@@ -280,7 +280,7 @@ export function ContactsView() {
               key={c.id}
               className={`mb-1.5 block w-full rounded-lg border px-3 py-2.5 text-left ${
                 c.id === mailContactSelectedId
-                  ? 'border-indigo-500/50 bg-raise'
+                  ? 'border-accent/50 bg-raise'
                   : 'border-line bg-panel hover:border-line3'
               }`}
               onClick={() => selectContact(c.id)}
@@ -308,7 +308,7 @@ export function ContactsView() {
               <div className="mt-1.5 truncate font-mono text-[10.5px] text-muted">{c.email}</div>
               <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {c.node_id != null ? (
-                  <span className="rounded-full border border-indigo-500/30 px-1.5 py-[1px] font-mono text-[9.5px] text-indigo-300">
+                  <span className="rounded-full border border-indigo-500/30 px-1.5 py-[1px] font-mono text-[9.5px] text-accent">
                     {nodeName(c.node_id) || 'linked'}
                   </span>
                 ) : (
@@ -381,9 +381,9 @@ export function ContactsView() {
                 Linked to
               </span>
             </div>
-            <div className="rounded-lg border border-indigo-500/30 bg-indigo-500/5 px-3.5 py-3">
+            <div className="rounded-lg border border-indigo-500/30 bg-accent/5 px-3.5 py-3">
               <div className="flex items-center gap-2.5">
-                <Icon name="client" size={15} className="text-indigo-300" />
+                <Icon name="client" size={15} className="text-accent" />
                 <span className="min-w-0 flex-1 text-[13px] text-ink">
                   {selected.node_id != null
                     ? nodeName(selected.node_id)

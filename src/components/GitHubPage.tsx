@@ -1,3 +1,4 @@
+import { PageHeader } from './ui/DesignSystem'
 import { statePresentation } from './ui/states'
 import { DevAvatar } from './DevAvatar'
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
@@ -113,7 +114,7 @@ export function GitHubPage() {
   }
   if (work) return <div className="gh-workspace"><WorkflowDetail key={work.node+':'+work.workflow} node={work.node} name={picked?.repository || 'GitHub'} workflow={work.workflow} onSaved={() => void reload()} onDashboard={() => {setWork(null);void reload()}} backLabel="Back to GitHub"/></div>
   return <div className="gh-workspace">
-    <header className="gh-heading"><div><h1><Icon name="github" size={25}/>GitHub</h1><p>Issues, pull requests and work ready for review</p></div><div className="gh-header-actions"><button className="gh-action" disabled={refreshing || !sources.length} onClick={() => void refresh()}><Icon name={refreshing ? 'spinner' : 'restart'} size={14}/>{refreshing ? 'Refreshing…' : 'Refresh'}</button><button className="gh-action" onClick={() => setConnecting(v => !v)}><Icon name="add" size={14}/>Connect</button><button className="gh-action" onClick={() => setSettings(v => !v)} aria-expanded={settings}><Icon name="settings" size={15} /> Monitoring</button></div></header>
+    <PageHeader className="gh-heading" title={<><Icon name="github" size={25}/>GitHub</>} description="Issues, pull requests and work ready for review" actions={<div className="gh-header-actions"><button className="btn-ghost ds-button" disabled={refreshing || !sources.length} onClick={() => void refresh()}><Icon name={refreshing ? 'spinner' : 'restart'} size={14}/>{refreshing ? 'Refreshing…' : 'Refresh'}</button><button className="btn-ghost ds-button" onClick={() => setConnecting(v => !v)}><Icon name="add" size={14}/>Connect</button><button className="btn-ghost ds-button" onClick={() => setSettings(v => !v)} aria-expanded={settings}><Icon name="settings" size={15} /> Monitoring</button></div>}/>
     {connecting && <GitHubConnect onClose={() => setConnecting(false)} onConnected={() => {setConnecting(false);void reload()}}/>}
     {preparing && picked && <GitHubPrepareWork key={picked.id} repository={picked.repository} number={picked.number} title={picked.title} body={picked.body} onClose={() => setPreparing(false)} onPrepared={(node, workflow) => {setPreparing(false);setWork({node, workflow});void reload()}}/>}
     {actionError && <p role="alert" className="gh-banner text-err">{actionError}</p>}

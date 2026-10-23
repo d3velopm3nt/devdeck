@@ -272,8 +272,8 @@ export function CalendarPage() {
     <div className="flex h-full min-h-0 flex-col bg-page">
       {/* One row, the way the design has it: the day is the title, and
           everything that changes what you are looking at sits on the right. */}
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-4 py-2">
-        <span className="text-[14px] font-semibold text-ink">{title}</span>
+      <div className="ds-toolbar shrink-0 flex-wrap border-b border-line px-4 py-2" aria-label="Calendar toolbar">
+        <h1 className="ds-workspace-title">{title}</h1>
         {view === 'day' && sameDay(anchor, new Date()) && (
           <span className="text-[10.5px] text-faint">today</span>
         )}
@@ -284,20 +284,20 @@ export function CalendarPage() {
             icon into a four-pixel box and the chevrons became dots. */}
         <span className="flex items-center gap-1">
           <button
-            className="btn-ghost h-[24px] text-[11px]"
+            className="btn-ghost ds-button" data-density="compact"
             title="Back"
             onClick={() => app.setCalAnchor(step(view, anchor, -1).getTime())}
           >
             <Icon name="chevron-left" size={12} />
           </button>
           <button
-            className="btn-ghost h-[24px] text-[11px]"
+            className="btn-ghost ds-button" data-density="compact"
             onClick={() => app.setCalAnchor(Date.now())}
           >
             Today
           </button>
           <button
-            className="btn-ghost h-[24px] text-[11px]"
+            className="btn-ghost ds-button" data-density="compact"
             title="Forward"
             onClick={() => app.setCalAnchor(step(view, anchor, 1).getTime())}
           >

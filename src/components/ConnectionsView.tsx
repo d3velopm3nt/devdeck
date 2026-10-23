@@ -171,10 +171,10 @@ export function ConnectionsView() {
   return (
     <div className="flex h-full min-w-0 flex-col">
       {/* header */}
-      <div className="flex items-center gap-2.5 border-b border-line bg-panel px-3 py-2">
-        <Icon name="database" size={14} className="text-indigo-400" />
+      <div className="ds-toolbar border-b border-line bg-panel px-3 py-2" data-density="compact" aria-label="SQL connection toolbar">
+        <Icon name="database" size={14} className="text-accent" />
         <div className="min-w-0">
-          <div className="truncate text-[13px] font-semibold text-ink">{conn.name}</div>
+          <h1 className="ds-workspace-title truncate">{conn.name}</h1>
           <div className="truncate font-mono text-[10px] text-muted">
             {ENGINE_LABEL[conn.engine] ?? conn.engine}
             {conn.host ? ` · ${conn.host}${conn.port ? ':' + conn.port : ''}` : ''}
@@ -184,7 +184,7 @@ export function ConnectionsView() {
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
           <button
-            className="btn-ghost inline-flex items-center gap-1.5 text-[11.5px]"
+            className="btn-ghost ds-button" data-density="compact"
             title="Run `select 1` and see whether this is reachable"
             onClick={() => void testConnection(conn.id)}
           >
@@ -192,13 +192,13 @@ export function ConnectionsView() {
             {status === 'testing' ? 'Testing…' : 'Test'}
           </button>
           <button
-            className="btn-ghost inline-flex items-center gap-1.5 text-[11.5px]"
+            className="btn-ghost ds-button" data-density="compact"
             onClick={() => setShowHistory((v) => !v)}
           >
             <Icon name="history" size={12} /> History
           </button>
           <button
-            className="btn-primary inline-flex items-center gap-1.5 text-[11.5px]"
+            className="btn-primary ds-button" data-density="compact"
             disabled={connRunning || !connSql.trim()}
             onClick={() => void runConnQuery()}
           >

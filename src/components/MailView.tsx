@@ -76,7 +76,7 @@ function ThreadCard({
   return (
     <button
       className={`mb-1.5 block w-full rounded-lg border px-3 py-2.5 text-left ${
-        active ? 'border-indigo-500/50 bg-raise' : 'border-line bg-panel hover:border-line3'
+        active ? 'border-accent/50 bg-raise' : 'border-line bg-panel hover:border-line3'
       }`}
       onClick={onClick}
     >
@@ -240,10 +240,10 @@ function AssistantPane() {
         return (
           <div
             key={n.id}
-            className="rounded-lg border border-indigo-500/30 border-l-[3px] border-l-indigo-500 bg-indigo-500/5 px-3.5 py-3"
+            className="rounded-lg border border-indigo-500/30 border-l-[3px] border-l-indigo-500 bg-accent/5 px-3.5 py-3"
           >
             <div className="mb-2 flex items-center gap-2">
-              <Icon name={s.icon} size={13} className="text-indigo-300" />
+              <Icon name={s.icon} size={13} className="text-accent" />
               <span className="text-[12px] font-semibold text-ink">{s.label}</span>
               <span className="ml-auto font-mono text-[9.5px] text-muted">{n.status}</span>
             </div>
@@ -309,7 +309,7 @@ export function MailView() {
       {/* ---- thread list ---- */}
       <section className="flex w-[400px] shrink-0 flex-col border-r border-line bg-page">
         <MailPaneSwitch />
-        <div className="flex items-center gap-2 border-b border-line px-2.5 py-2">
+        <div className="ds-toolbar border-b border-line px-2.5 py-2" data-density="compact" aria-label="Mail search toolbar">
           <div className="flex flex-1 items-center gap-1.5 rounded border border-line2 bg-page px-2 py-1">
             <Icon name="search" size={12} className="text-faint" />
             <input
@@ -320,7 +320,7 @@ export function MailView() {
             />
           </div>
           <button
-            className="btn-ghost px-1.5 py-1"
+            className="btn-ghost ds-button" data-density="compact"
             title="Fetch new mail"
             disabled={mailSyncing}
             onClick={() => void syncMail()}
@@ -369,7 +369,7 @@ export function MailView() {
                   No mail accounts yet.
                   <br />
                   <button
-                    className="mt-2 text-indigo-300 hover:text-ink"
+                    className="mt-2 text-accent hover:text-ink"
                     onClick={() => openMailAccountEditor(0)}
                   >
                     Add one
@@ -381,7 +381,7 @@ export function MailView() {
                   Nothing fetched — {failing.address} could not sync.
                   <br />
                   <button
-                    className="mt-2 text-indigo-300 hover:text-ink"
+                    className="mt-2 text-accent hover:text-ink"
                     onClick={() => openMailAccountEditor(failing.id)}
                   >
                     Check its settings

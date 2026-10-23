@@ -73,3 +73,10 @@
 .ds-card { border-radius:var(--ds-card-radius); }
 @media(max-width:700px) { .ds-page-actions { width:100%; } .ds-inbox-header { padding:var(--ds-space-4); } }
 @media(pointer:coarse) { :is(.btn-primary,.btn-ghost,.connector-button).ds-button { min-height:44px; } }
+
+/* Dense operational toolbars keep their selected resource and editor context visible. */
+.ds-page-title { color:var(--c-ink); font-size:24px; font-weight:650; letter-spacing:-.025em; line-height:1.25; }
+.ds-workspace-title { color:var(--c-ink); font-size:14px; font-weight:600; line-height:1.4; }
+.ds-toolbar[data-density='compact'] { flex-wrap:nowrap; }
+:is(.btn-primary,.btn-ghost).ds-button[data-density='compact'] { min-height:28px; padding:4px 8px; font-size:11.5px; line-height:18px; }
+@media(pointer:coarse) { :is(.btn-primary,.btn-ghost).ds-button[data-density='compact'] { min-height:44px; } }

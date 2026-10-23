@@ -1,3 +1,4 @@
+import { PageHeader } from './ui/DesignSystem'
 import { FilterTabs, StateBadge } from './ui/DesignSystem'
 // Machine Setup: install dev software via winget/scoop, see what's already
 // installed, pick one-click bundles, and fully control the catalog — every
@@ -261,24 +262,15 @@ export function MachineSetup() {
   return (
     <div className="flex h-full flex-col bg-app text-body">
       <div className="border-b border-line px-5 py-4">
-        <div className="flex items-start gap-3">
-          <div className="min-w-0">
-            <h1 className="text-[17px] font-semibold text-ink">Machine Setup</h1>
-            <p className="mt-1 max-w-[62ch] text-[12.5px] text-muted">
-              Install and track your toolchain. Every package is yours to edit; export it as a
-              manifest, then rebuild a fresh Windows install in one click.
-            </p>
-          </div>
-          <div className="ml-auto flex shrink-0 flex-wrap justify-end gap-1.5">
-            <button className="btn-ghost inline-flex items-center gap-1 text-[12px]" onClick={() => setEditing(blankDraft())}><Icon name="add" size={13} /> Add software</button>
-            <button className="btn-ghost inline-flex items-center gap-1 text-[12px]" onClick={() => void doImport()}><Icon name="import" size={13} /> Import</button>
-            <button className="btn-ghost inline-flex items-center gap-1 text-[12px]" onClick={() => void doExport()}><Icon name="export" size={13} /> Export</button>
-            <button className="btn-ghost inline-flex items-center gap-1 text-[12px]" title="Read what's installed and write a manifest" onClick={() => void doSnapshot()}><Icon name="snapshot" size={13} /> Snapshot</button>
-            <button className="btn-primary inline-flex items-center gap-1 text-[12px]" disabled={selectableSelected.length === 0 || installing} onClick={installSelected}>
+        <PageHeader title="Machine Setup" description="Install and track your toolchain. Every package is yours to edit; export it as a manifest, then rebuild a fresh Windows install in one click." actions={<div className="ds-toolbar">
+            <button className="btn-ghost ds-button" onClick={() => setEditing(blankDraft())}><Icon name="add" size={13} /> Add software</button>
+            <button className="btn-ghost ds-button" onClick={() => void doImport()}><Icon name="import" size={13} /> Import</button>
+            <button className="btn-ghost ds-button" onClick={() => void doExport()}><Icon name="export" size={13} /> Export</button>
+            <button className="btn-ghost ds-button" title="Read what's installed and write a manifest" onClick={() => void doSnapshot()}><Icon name="snapshot" size={13} /> Snapshot</button>
+            <button className="btn-primary ds-button" disabled={selectableSelected.length === 0 || installing} onClick={installSelected}>
               {installing ? 'Installing…' : <><Icon name="download" size={13} /> Install selected · {selectableSelected.length}</>}
             </button>
-          </div>
-        </div>
+          </div>}/>
       </div>
 
       {(!avail.winget || !avail.scoop) && (
@@ -357,7 +349,7 @@ export function MachineSetup() {
               </label>
               <div className="inline-flex overflow-hidden rounded-lg border border-line2">
                 {(['all', 'winget', 'scoop'] as const).map((s) => (
-                  <button key={s} className={`px-3 py-1.5 text-[11.5px] ${source === s ? 'bg-indigo-500/20 text-indigo-200' : 'text-muted hover:text-ink'}`} onClick={() => setSource(s)}>
+                  <button key={s} type="button" aria-pressed={source === s} className={`px-3 py-1.5 text-[11.5px] ${source === s ? 'bg-accent/12 text-ink' : 'text-muted hover:text-ink'}`} onClick={() => setSource(s)}>
                     {s === 'all' ? 'All sources' : s}
                   </button>
                 ))}
@@ -536,7 +528,7 @@ function EditModal({ draft, idLocked, onChange, onSave, onCancel }: { draft: Dra
           <FieldLbl label="Source">
             <div className="inline-flex overflow-hidden rounded-lg border border-line2">
               {(['winget', 'scoop'] as const).map((s) => (
-                <button key={s} className={`px-3 py-1.5 text-[12px] ${draft.source === s ? 'bg-indigo-500/20 text-indigo-200' : 'text-muted hover:text-ink'}`} onClick={() => set({ source: s })}>{s}</button>
+                <button key={s} type="button" aria-pressed={draft.source === s} className={`px-3 py-1.5 text-[12px] ${draft.source === s ? 'bg-accent/12 text-ink' : 'text-muted hover:text-ink'}`} onClick={() => set({ source: s })}>{s}</button>
               ))}
             </div>
           </FieldLbl>

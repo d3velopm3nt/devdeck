@@ -174,7 +174,7 @@ export function SpaceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-[10px] uppercase tracking-wider text-muted">{nodeLabel(nodes, project)}</div>
-            <div className="truncate text-[22px] font-semibold text-ink">{project.name}</div>
+            <h1 className="ds-page-title truncate">{project.name}</h1>
             {baseDir && (
               <button
                 className="mt-0.5 inline-flex max-w-full items-center gap-1 truncate font-mono text-[11px] text-muted hover:text-ink"
@@ -193,7 +193,7 @@ export function SpaceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
               onReset={() => void setColor('')}
             />
             <button
-              className="inline-flex items-center gap-1 rounded-lg border border-line2 bg-soft px-3 py-1.5 text-[12px] text-ink hover:border-line3"
+              className="btn-ghost ds-button"
               disabled={!baseDir}
               onClick={() => void openTerminal(undefined, baseDir || undefined)}
             >
@@ -217,7 +217,7 @@ export function SpaceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
               </button>
             )}
             <button
-              className="inline-flex items-center gap-1 rounded-lg border border-line2 bg-soft px-3 py-1.5 text-[12px] text-ink hover:border-line3"
+              className="btn-ghost ds-button"
               onClick={() => openNodeSetup(project.id, project.name)}
             >
               <Icon name="settings" size={13} /> Setup

@@ -1,4 +1,4 @@
-import { FilterTabs } from './ui/DesignSystem'
+import { FilterTabs, PageHeader } from './ui/DesignSystem'
 // One inbox: what happened, and what is waiting on you, across every space.
 //
 // Nothing here is a new stream. `activity` already collects everything the app
@@ -258,12 +258,7 @@ export function InboxPage() {
 
   return (
     <div className="flex h-full flex-col bg-page">
-      <div className="flex shrink-0 items-center gap-2.5 border-b border-line px-5 py-3.5">
-        <div className="min-w-0">
-          <h2 className="text-[15px] font-semibold text-ink">Needs you</h2>
-          <p className="text-[11.5px] text-muted">Across every space. What merely happened is on Home.</p>
-        </div>
-        <div className="ml-auto flex items-center gap-2">
+      <PageHeader className="ds-inbox-header" title="Needs you" description="Across every space. What merely happened is on Home." actions={<>
           {waiting > 0 && (
             <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[11px] font-semibold text-warn">
               {waiting} need{waiting === 1 ? 's' : ''} you
@@ -271,7 +266,7 @@ export function InboxPage() {
           )}
 <FilterTabs label="Inbox filters" value={only} onChange={setOnly} options={[{id:'all',label:'All',icon:'inbox'},{id:'unread',label:'Unread',icon:'mail',count:unreadRows.length || undefined}]}/>
           <button
-            className="btn-ghost text-[11.5px]"
+            className="btn-ghost ds-button"
             disabled={unreadRows.length === 0}
             title={
               unreadRows.length === 0
@@ -283,19 +278,19 @@ export function InboxPage() {
             Mark all as read
           </button>
           {focus ? (
-            <button className="btn-ghost text-[11.5px]" onClick={() => void endFocus(held.length)}>
+            <button className="btn-ghost ds-button" onClick={() => void endFocus(held.length)}>
               <Icon name="focus" size={12} /> End focus
             </button>
           ) : (
-            <button className="btn-ghost text-[11.5px]" onClick={() => setStarting(true)}>
+            <button className="btn-ghost ds-button" onClick={() => setStarting(true)}>
               <Icon name="focus" size={12} /> Focus
             </button>
           )}
-          <button className="btn-ghost text-[11.5px]" onClick={() => void refreshActivity()}>
+          <button className="btn-ghost ds-button" onClick={() => void refreshActivity()}>
             <Icon name="update" size={12} /> Refresh
           </button>
-        </div>
-      </div>
+
+      </>}/>
 
       {held.length > 0 && (
         <button

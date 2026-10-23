@@ -16,10 +16,8 @@
 .connector-search:focus-within { border-color:var(--c-accent); box-shadow:0 0 0 2px color-mix(in srgb,var(--c-accent) 12%,transparent); }
 .connector-search input { width:100%; min-width:0; border:0; outline:0; background:transparent; color:var(--c-ink); font-size:13px; }
 .connector-search input::placeholder { color:var(--c-muted); }
-.connector-tabs { display:flex; gap:32px; margin-top:14px; border-bottom:1px solid var(--c-line2); }
-.connector-tabs button { padding:12px 8px 11px; border-bottom:3px solid transparent; color:var(--c-dim); font-size:13px; }
-.connector-tabs button[aria-selected=true] { color:var(--c-viol); border-color:var(--c-viol); font-weight:600; }
-.connector-tabs button:hover { color:var(--c-ink); }
+.connector-tabs { margin-top:14px; border-bottom:1px solid var(--c-line2); }
+.connector-tabs .ds-compact-tabs { gap:16px; }
 .connector-chips { display:flex; gap:12px; flex-wrap:wrap; margin-top:18px; margin-bottom:27px; }
 .connector-chips button { padding:7px 16px; min-height:33px; border:1px solid var(--c-line2); border-radius:13px; background:color-mix(in srgb,var(--c-panel) 80%,transparent); color:var(--c-dim); font-size:12px; }
 .connector-chips button[aria-pressed=true] { background:var(--c-accent); border-color:var(--c-accent); color:var(--c-app); font-weight:600; box-shadow:0 3px 15px color-mix(in srgb,var(--c-accent) 12%,transparent); }
@@ -28,7 +26,7 @@
 .connector-section-heading h2 { color:var(--c-ink); font-size:20px; font-weight:600; letter-spacing:-.3px; }
 .connector-count { padding:3px 10px; background:var(--c-raise); font-size:10px; border-color:var(--c-line); }
 .connector-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:13px 16px; }
-.connector-card { min-width:0; display:grid; grid-template-columns:60px minmax(0,1fr); column-gap:19px; padding:15px 16px; min-height:115px; border:1px solid var(--c-line2); border-radius:11px; background:linear-gradient(125deg,color-mix(in srgb,var(--c-panel) 94%,var(--c-accent)),color-mix(in srgb,var(--c-raise) 96%,var(--c-accent))); box-shadow:0 4px 16px rgb(0 0 0 / .045); transition:border-color .15s,transform .15s; }
+.connector-card { min-width:0; display:grid; grid-template-columns:60px minmax(0,1fr); column-gap:19px; padding:15px 16px; min-height:115px; border:1px solid var(--c-line2); border-radius:var(--ds-card-radius); background:linear-gradient(125deg,color-mix(in srgb,var(--c-panel) 94%,var(--c-accent)),color-mix(in srgb,var(--c-raise) 96%,var(--c-accent))); box-shadow:0 4px 16px rgb(0 0 0 / .045); transition:border-color .15s,transform .15s; }
 .connector-card:hover { border-color:color-mix(in srgb,var(--c-accent) 55%,var(--c-line2)); }
 .connector-mark { display:flex; align-items:center; justify-content:center; width:60px; height:62px; border-radius:10px; background:color-mix(in srgb,var(--c-app) 92%,black); color:var(--c-ink); flex-shrink:0; box-shadow:inset 0 1px 0 rgb(255 255 255 / .035); }
 .connector-mark>svg { width:40px; height:40px; }
@@ -84,7 +82,7 @@
 .connector-planned-detail .connector-status { margin-top:14px; }
 @media(min-width:1450px) { .connector-card { padding:19px; min-height:125px; } .connector-card-description { font-size:12px; } .connector-card h3 { font-size:15px; } }
 @media(max-width:1150px) { .connectors-inner { padding:27px; } .connector-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .connector-workspace-badge { display:none; } }
-@media(max-width:620px) { .connectors-inner { padding:24px 18px; } .connectors-header { flex-wrap:wrap; gap:17px; margin-bottom:21px; } .connectors-header h1 { font-size:31px; } .connectors-header p { font-size:13px; } .connectors-header-actions { width:100%; justify-content:space-between; } .connector-workspace-badge { display:inline-flex; } .connector-grid { grid-template-columns:minmax(0,1fr); gap:11px; } .connector-card { min-height:121px; padding:18px 16px; } .connector-card-description { font-size:12px; } .connector-card h3 { font-size:15px; } .connector-tabs { gap:18px; } .connector-tabs button { font-size:12px; padding-left:1px; padding-right:1px; } .connector-chips { gap:8px; margin-bottom:24px; } .connector-chips button { padding:7px 12px; } .connector-custom { flex-wrap:wrap; padding:18px; gap:12px; } .connector-custom>div:nth-child(2) { flex:1; } .connector-custom .connector-button { margin-left:56px; } .connector-section-heading h2 { font-size:17px; } .connector-dialog { width:100%; } }
+@media(max-width:620px) { .connectors-inner { padding:24px 18px; } .connectors-header { flex-wrap:wrap; gap:17px; margin-bottom:21px; } .connectors-header h1 { font-size:31px; } .connectors-header p { font-size:13px; } .connectors-header-actions { width:100%; justify-content:space-between; } .connector-workspace-badge { display:inline-flex; } .connector-grid { grid-template-columns:minmax(0,1fr); gap:11px; } .connector-card { min-height:121px; padding:18px 16px; } .connector-card-description { font-size:12px; } .connector-card h3 { font-size:15px; } .connector-tabs { gap:18px; } .connector-chips { gap:8px; margin-bottom:24px; } .connector-chips button { padding:7px 12px; } .connector-custom { flex-wrap:wrap; padding:18px; gap:12px; } .connector-custom>div:nth-child(2) { flex:1; } .connector-custom .connector-button { margin-left:56px; } .connector-section-heading h2 { font-size:17px; } .connector-dialog { width:100%; } }
 @media(prefers-reduced-motion:reduce) { .connector-card,.connector-button { transition:none; } }
 @media(max-width:620px) {
   .connector-custom { display:grid; grid-template-columns:44px minmax(0,1fr); align-items:start; }

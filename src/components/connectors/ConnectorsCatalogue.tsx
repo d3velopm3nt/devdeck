@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { PageHeader, TabStrip } from '../ui/DesignSystem'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { inventory, type Connection, type Inventory } from '../../lib/connectors'
 import { Icon } from '../../lib/icons'
 import { availableEntries, categories, plannedEntries, type CatalogueEntry } from './catalogue'
@@ -60,16 +61,7 @@ export function ConnectorsPage() {
   const explore = tab === 'All integrations' ? planned : [...available, ...planned]
   const noMatches = (tab === 'Connected' ? saved.length : tab === 'Explore' ? explore.length : saved.length + available.length + planned.length) === 0
   const openCustom = () => setSelected(availableEntries.find(entry => entry.id === 'mcp')!)
-  const changeTabWithKey = (event: KeyboardEvent<HTMLButtonElement>, item: Tab) => {
-    const current = TABS.indexOf(item)
-    const next = event.key === 'ArrowRight' ? (current + 1) % TABS.length
-      : event.key === 'ArrowLeft' ? (current + TABS.length - 1) % TABS.length
-      : event.key === 'Home' ? 0 : event.key === 'End' ? TABS.length - 1 : null
-    if (next === null) return
-    event.preventDefault()
-    setTab(TABS[next])
-    event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('button')[next]?.focus()
-  }
+
 
   const renderCard = (entry: CatalogueEntry, connection?: Connection) => {
     const title = connection && entry.id !== 'github' ? connection.name : entry.name
@@ -77,7 +69,7 @@ export function ConnectorsPage() {
       ? /anthropic|claude/i.test(connection.name) ? 'anthropic' : /openai|codex/i.test(connection.name) ? 'openai' : entry.mark
       : entry.mark)
     const unavailable = data.unavailable.includes(entry.id)
-    return <article key={connection?.id ?? entry.id} className="connector-card" data-service={entry.id} data-planned={entry.planned || undefined} aria-label={title}>
+    return <article key={connection?.id ?? entry.id} className="connector-card ds-card" data-service={entry.id} data-planned={entry.planned || undefined} aria-label={title}>
       <IntegrationMark name={mark} />
       <div className="connector-card-content">
         <div className="connector-card-top"><h3 title={title}>{title}</h3>
@@ -87,7 +79,7 @@ export function ConnectorsPage() {
         <div className="connector-card-bottom">
           {connection ? <>
             <span className="connector-status" data-state={connection.state}><span className="connector-status-dot" />{stateLabels[connection.state]}</span>
-            <button className="connector-button" aria-label={`Manage ${title}`} onClick={() => setSelected(entry)}>Manage</button>
+            <button className="ds-button connector-button" aria-label={`Manage ${title}`} onClick={() => setSelected(entry)}>Manage</button>
           </> : <>
             <span className="connector-category" data-category={entry.category}>{entry.category}</span>
             {entry.planned ? <span className="connector-status connector-status-planned"><Icon name="clock" size={11} />Planned</span> :
@@ -102,20 +94,14 @@ export function ConnectorsPage() {
   }
 
   return <div className="connectors-page"><div className="connectors-inner">
-    <header className="connectors-header">
-      <div><h1>Connectors</h1><p>Bring your tools, accounts and knowledge into DevDeck.</p></div>
-      <div className="connectors-header-actions">
+    <PageHeader className="connectors-header" density="overview" title="Connectors" description="Bring your tools, accounts and knowledge into DevDeck." actions={<>
         <span className="connector-workspace-badge">Local workspace <Icon name="info" size={13} /></span>
-        <button className="connector-button connector-button-accent" onClick={openCustom}><Icon name="add" size={15} />Custom connector</button>
-      </div>
-    </header>
+        <button className="ds-button connector-button connector-button-accent" onClick={openCustom}><Icon name="add" size={15} />Custom connector</button>
+    </>}/>
     <label className="connector-search"><Icon name="search" size={18} />
       <input aria-label="Search connectors" placeholder="Search integrations..." value={query} onChange={event => setQuery(event.target.value)} />
     </label>
-    <div className="connector-tabs" role="tablist" aria-label="Integration views">
-      {TABS.map(item => <button key={item} role="tab" aria-selected={tab === item} tabIndex={tab === item ? 0 : -1}
-        aria-controls="connector-catalogue-panel" onKeyDown={event => changeTabWithKey(event, item)} onClick={() => setTab(item)}>{item}</button>)}
-    </div>
+    <div className="connector-tabs"><TabStrip label="Integration views" panelId="connector-catalogue-panel" value={tab} onChange={setTab} options={TABS.map(item => ({id:item,label:item}))}/></div>
     <div className="connector-chips" role="group" aria-label="Connector category">
       {categories.map(item => <button key={item} aria-pressed={category === item} onClick={() => setCategory(item)}>{item}</button>)}
     </div>
@@ -140,7 +126,7 @@ export function ConnectorsPage() {
     <footer className="connector-custom">
       <div className="connector-custom-icon"><Icon name="puzzle" size={24} /></div>
       <div><h2>Need something else?</h2><p>Add an MCP server or configure an existing AI provider.</p></div>
-      <button className="connector-button connector-button-accent" onClick={openCustom}><Icon name="add" size={13} />Add custom</button>
+      <button className="ds-button connector-button connector-button-accent" onClick={openCustom}><Icon name="add" size={13} />Add custom</button>
     </footer>
     {selected && <ConnectionDialog key={selected.id} entry={selected} onClose={() => setSelected(null)} onUpdated={refresh} />}
   </div></div>

@@ -1,3 +1,4 @@
+import { PageHeader } from './ui/DesignSystem'
 import { NotificationSettings } from './NotificationSettings'
 import { CoreSetup } from './setup/CoreSetup'
 // Settings page (opens as a main-window tab): global behavior and
@@ -370,11 +371,7 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
         </>}
         {tab === 'general' && (
           <>
-            <div className="mb-5">
-              <h2 className="text-[16px] font-semibold text-ink">General</h2>
-              <p className="text-[12px] text-muted">How DevDeck behaves and looks.</p>
-              <button className="btn-ghost mt-2" onClick={() => setTab('core')}>Set up capabilities</button>
-            </div>
+            <PageHeader className="mb-5" density="section" level={2} title="General" description="How DevDeck behaves and looks." actions={<button className="btn-ghost ds-button" onClick={() => setTab('core')}>Set up capabilities</button>}/>
         <section>
           <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
             Global hotkey
@@ -429,10 +426,7 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
 
         {tab === 'vault' && (
           <>
-            <div className="mb-5">
-              <h2 className="text-[16px] font-semibold text-ink">Vault</h2>
-              <p className="text-[12px] text-muted">Where your folders live, and the words you file them under.</p>
-            </div>
+            <PageHeader className="mb-5" density="section" level={2} title="Vault" description="Where your folders live, and the words you file them under."/>
         <section>
           <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
             Vault folder
@@ -613,10 +607,7 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
 
         {tab === 'dev' && (
           <>
-            <div className="mb-5">
-              <h2 className="text-[16px] font-semibold text-ink">Development</h2>
-              <p className="text-[12px] text-muted">Repositories and the shells DevDeck can run.</p>
-            </div>
+            <PageHeader className="mb-5" density="section" level={2} title="Development" description="Repositories and the shells DevDeck can run."/>
         {/* First, because it is the thing that makes the rest of this tab
             work: a private repo cannot be fetched, pulled or pushed without
             it. */}
@@ -681,10 +672,7 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
 
         {tab === 'stash' && (
           <>
-            <div className="mb-5">
-              <h2 className="text-[16px] font-semibold text-ink">Stash</h2>
-              <p className="text-[12px] text-muted">Clipboard capture and what it keeps.</p>
-            </div>
+            <PageHeader className="mb-5" density="section" level={2} title="Stash" description="Clipboard capture and what it keeps."/>
         <section>
           <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
             Stash
@@ -760,10 +748,7 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
 
         {tab === 'data' && (
           <>
-            <div className="mb-5">
-              <h2 className="text-[16px] font-semibold text-ink">Data</h2>
-              <p className="text-[12px] text-muted">What is stored, and where.</p>
-            </div>
+            <PageHeader className="mb-5" density="section" level={2} title="Data" description="What is stored, and where."/>
         <section>
           <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
             Example workspace

@@ -21,7 +21,7 @@
 .wh-column-dot { width:7px; height:7px; border-radius:50%; background:var(--c-dim); }
 .wh-column-dot[data-state=working] { background:var(--c-accent); }.wh-column-dot[data-state=review] { background:var(--c-warn); }.wh-column-dot[data-state=completed] { background:var(--c-ok); }
 .wh-column-items { display:flex; flex-direction:column; gap:9px; padding:9px; }
-.wh-item-card { display:flex; flex-direction:column; gap:10px; min-width:0; width:100%; padding:12px; border:1px solid var(--c-line); border-radius:9px; background:var(--c-panel); text-align:left; transition:border-color .15s; }
+.wh-item-card { display:flex; flex-direction:column; gap:10px; min-width:0; width:100%; padding:12px; border:1px solid var(--c-line); border-radius:var(--ds-card-radius); background:var(--c-panel); text-align:left; transition:border-color .15s; }
 .wh-item-card:hover,.wh-item-card[aria-pressed=true] { border-color:var(--c-accent); }
 .wh-item-card > div:first-child { display:flex; justify-content:space-between; align-items:center; gap:4px; flex-wrap:wrap; }
 .wh-item-card h3 { color:var(--c-ink); font-size:13px; font-weight:600; line-height:1.5; overflow-wrap:anywhere; }

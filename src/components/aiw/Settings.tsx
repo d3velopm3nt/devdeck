@@ -1,3 +1,4 @@
+import { PageHeader } from '../ui/DesignSystem'
 import { FilterTabs } from '../ui/DesignSystem'
 // Assistant settings.
 //
@@ -334,12 +335,7 @@ export function Settings() {
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-line px-5 pt-3.5">
-        <div className="mb-3">
-          <div className="text-[18px] font-semibold tracking-[-0.01em] text-ink">Settings</div>
-          <div className="mt-0.5 text-[12px] text-dim">
-            Which AI services you use, who uses them, and what they&rsquo;re allowed to do.
-          </div>
-        </div>
+        <PageHeader className="mb-3" title="Settings" description="Which AI services you use, who uses them, and what they’re allowed to do."/>
 <div className="ds-view-switch"><FilterTabs label="Assistant settings" value={tab} onChange={setTab} options={TABS.map(t=>({...t,description:t.blurb}))}/></div>
       </div>
 

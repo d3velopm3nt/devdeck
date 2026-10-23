@@ -1,4 +1,4 @@
-import { FilterTabs, TabStrip, StateBadge } from './ui/DesignSystem'
+import { FilterTabs, TabStrip, StateBadge, PageHeader } from './ui/DesignSystem'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { aiw, type FeatureWork, type Session, type AgentDef, type ChatMessage } from '../lib/aiw'
 import { visibility, isStale, stage, type VisibilitySnapshot, type IssueSnapshot, type SessionRecord, type ProductLink } from '../lib/visibility'
@@ -283,11 +283,10 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
     finally { setBusy(false) }
   }
   return <div className="flex h-full min-h-0 flex-col bg-page text-ink">
-    <header className="border-b border-line px-6 py-3">
-      <div className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-xl font-semibold">{sessionsOnly ? 'Sessions' : 'Activity board'}</h1><p className="mt-1 text-sm text-muted">{sessionsOnly ? 'External conversations and DevDeck agents, connected to their work.' : 'Local agent messages, DevDeck work and linked GitHub issues.'}</p></div>
-        <div className="flex gap-2"><select aria-label="Add business or product" className={field} value="" onChange={e => { if(e.target.value === 'new') openBusiness(); else if(e.target.value) openBusiness({ nodeId: Number(e.target.value), step: 'sells' }) }}><option value="">Add business / product</option><option value="new">New business</option>{businesses.map(b => <option key={b.node_id} value={b.node_id}>Add product to {b.name}</option>)}</select><button className={field} disabled={busy} onClick={() => void reload(true)}><span className="inline-flex items-center gap-2"><span className={busy ? 'animate-spin' : ''}><Icon name="update" size={14} /></span>{busy ? 'Refreshing…' : 'Refresh'}</span></button></div></div>
+    <div className="border-b border-line px-6 py-4">
+      <PageHeader title={sessionsOnly ? 'Sessions' : 'Activity board'} description={sessionsOnly ? 'External conversations and DevDeck agents, connected to their work.' : 'Local agent messages, DevDeck work and linked GitHub issues.'} actions={<div className="ds-toolbar"><select aria-label="Add business or product" className={field} value="" onChange={e => { if(e.target.value === 'new') openBusiness(); else if(e.target.value) openBusiness({ nodeId: Number(e.target.value), step: 'sells' }) }}><option value="">Add business / product</option><option value="new">New business</option>{businesses.map(b => <option key={b.node_id} value={b.node_id}>Add product to {b.name}</option>)}</select><button className="btn-ghost ds-button" disabled={busy} onClick={() => void reload(true)}><span className="inline-flex items-center gap-2"><span className={busy ? 'animate-spin' : ''}><Icon name="update" size={14} /></span>{busy ? 'Refreshing…' : 'Refresh'}</span></button></div>}/>
 {!sessionsOnly && <div className="ds-view-switch"><TabStrip panelId="activity-view" label="Activity views" value={view} onChange={id=>{setView(id);setPicked('')}} options={[{id:'timeline',label:'Timeline',icon:'history'},{id:'local',label:'DevDeck issues',icon:'inbox'},{id:'github',label:'GitHub issues',icon:'github'}]}/></div>}
-      <div className="mt-4 flex flex-wrap items-center gap-3" aria-label="Activity toolbar">
+      <div className="mt-4 ds-toolbar" aria-label="Activity toolbar">
         <div className="relative min-w-56 flex-1">
           <span className="pointer-events-none absolute left-3 top-2.5 text-muted"><Icon name="search" size={16} /></span>
           <input type="search" className={`${field} w-full pl-9 pr-9`} placeholder={view === 'timeline' ? 'Search messages and checkpoints…' : 'Search issues…'} aria-label="Search activity" value={query} onChange={e => setQuery(e.target.value)} />
@@ -309,7 +308,7 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
         <button className="text-accent hover:underline" onClick={() => { setQuery(''); setSpace(''); setProduct(''); setAssistant(''); setSession(''); setSource(''); setStatus(''); setShowDone(false) }}>Clear all filters</button>
       </div>}
       <details className="mt-3 text-xs text-muted"><summary className="cursor-pointer">Refresh and status details</summary><p className="mt-2">{refreshMinutes === 0 ? 'GitHub refresh is manual only.' : `GitHub checkpoints refresh every ${refreshMinutes || 1} minute${refreshMinutes === 1 ? '' : 's'} while this page is visible.`} Last recorded activity is not a live heartbeat. Sessions become stale after 15 minutes. Columns show reported activity; cards retain GitHub issue state.</p></details>
-    </header>
+    </div>
     {Object.entries(errors).filter(([,v]) => v).map(([k,v]) => <p role="alert" key={k} className="border-b border-line px-6 py-2 text-sm text-err">{k}: {v}{snapshot.products.some(p => p.name === k && github[p.id]) ? ' Showing the previous GitHub snapshot.' : ''}</p>)}
     {[...snapshot.warnings, ...remoteWarnings].map(w => <p key={w} className="px-6 py-2 text-sm text-muted">{w}</p>)}
     {!sessionsOnly && view === 'github' && <section aria-label="GitHub connection status" className="flex flex-wrap items-center gap-3 border-b border-line bg-panel px-6 py-3 text-xs">

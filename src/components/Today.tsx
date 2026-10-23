@@ -1,4 +1,4 @@
-import { FilterTabs } from './ui/DesignSystem'
+import { FilterTabs, PageHeader } from './ui/DesignSystem'
 import { DashboardActivity, DashboardConnections } from './DashboardActivity'
 import './today-desktop.css'
 import { GitHubBriefing, RepositoryActivityProvider } from './GitHubPage'
@@ -278,15 +278,7 @@ export function Today() {
   return (
     <RepositoryActivityProvider><div className="today-desktop flex h-full min-h-0 min-w-0 flex-col bg-page">
       <div className="shrink-0 px-7 pb-3 pt-5">
-        <div className="flex items-end gap-3">
-          <div>
-            <h1 className="text-[20px] font-semibold tracking-[-0.01em] text-ink">
-              Today
-            </h1>
-            <p className="mt-1 text-[12.5px] text-dim">{new Date().toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long'})}</p>
-          </div>
-          <div className="flex-1" />
-        </div>
+        <PageHeader title="Today" description={new Date().toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long'})}/>
 
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
 <FilterTabs label="Workspace scope" value={todayArea==null?'all':String(todayArea)} onChange={v=>setSpaceScope(v==='all'||Number(v)===todayArea?null:Number(v))} options={[{id:'all',label:'All',icon:'workspace'},...areas.map(n=>({id:String(n.id),label:n.name,icon:'folder' as const}))]}/>

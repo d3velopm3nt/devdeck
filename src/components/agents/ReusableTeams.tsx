@@ -1,3 +1,4 @@
+import { PageHeader } from '../ui/DesignSystem'
 import { openAssistant } from '../../lib/dock'
 import { useChatWorkspace } from '../../lib/chatWorkspace'
 import { useAiw } from '../../lib/aiwStore'
@@ -297,22 +298,14 @@ export function ReusableTeams({
   if (!draft)
     return (
       <section aria-label="Reusable teams" className="space-y-4">
-        <div className="wf-section-heading">
-          <div className="flex-1">
-            <h2>Your teams <span className="wf-badge">{teams.length}</span></h2>
-            <p className="mt-1 text-sm text-muted">
-              A focused team for every kind of work. Start with one agent and grow from there.
-            </p>
-          </div>
-          <button
-            className="wf-primary"
+        <PageHeader className="wf-section-heading" density="section" level={2} title={<>Your teams <span className="wf-badge">{teams.length}</span></>} description="A focused team for every kind of work. Start with one agent and grow from there." actions={<button
+            className="btn-primary ds-button"
             disabled={loading}
             onClick={createTeam}
           >
             <Plus size={16} /> Create team
-          </button>
-        </div>
-        <div className="wf-toolbar">
+          </button>}/>
+        <div className="wf-toolbar ds-toolbar">
           <label className="wf-search"><Search size={17} /><input aria-label="Search teams" placeholder="Search your teamsâ€¦" value={search} onChange={e => setSearch(e.target.value)} /></label>
           <FilterTabs label="Filter teams" value={filter} onChange={setFilter} options={[{id:'all',label:'All teams',icon:'contacts'},{id:'active',label:'Working',icon:'run'},{id:'solo',label:'Solo',icon:'agent'}]}/>
           <select className="wf-filter" aria-label="Sort teams" value={sort} onChange={e => setSort(e.target.value)}><option value="name">Name Aâ€“Z</option><option value="size">Largest team</option></select>

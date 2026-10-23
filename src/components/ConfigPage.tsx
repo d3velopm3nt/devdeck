@@ -352,7 +352,7 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
         <button aria-current={tab === 'github' ? 'page' : undefined} className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${tab === 'github' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'}`} onClick={() => setTab('github')}><BrandIcon brand="github" size={14} />GitHub</button>
       </nav>
 
-      {tab === 'notifications' ? <div className="min-w-0 flex-1"><NotificationSettings /></div> : tab === 'github' ? <div className="min-w-0 flex-1 overflow-auto px-7 py-6"><div className="max-w-2xl space-y-6"><header><h1 className="flex items-center gap-2 text-[20px] font-semibold text-ink"><BrandIcon brand="github" size={20} />GitHub</h1><p className="mt-1 text-[12px] text-dim">Manage your account connection for repositories and issues.</p></header><GitHubConnection showRefreshSettings /></div></div> : tab === 'deck' ? (
+      {tab === 'notifications' ? <div className="min-w-0 flex-1"><NotificationSettings /></div> : tab === 'github' ? <div className="min-w-0 flex-1 overflow-auto px-7 py-6"><div className="max-w-2xl space-y-6"><PageHeader title={<><BrandIcon brand="github" size={20}/>GitHub</>} description="Manage your account connection for repositories and issues."/><GitHubConnection showRefreshSettings /></div></div> : tab === 'deck' ? (
         <div className="min-w-0 flex-1"><DeckSettings /></div>
       ) : tab === 'routines' ? (
         <div className="min-w-0 flex-1">

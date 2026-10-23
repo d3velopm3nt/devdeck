@@ -1,3 +1,4 @@
+import { PageHeader } from './ui/DesignSystem'
 import { useEffect, useState } from 'react'
 import { Icon } from '../lib/icons'
 import * as ipc from '../lib/ipc'
@@ -42,8 +43,7 @@ export function DeckSettings() {
   const select = 'rounded-md border border-line2 bg-raise px-2 py-1.5 text-[12px] text-ink'
   return <div className="h-full overflow-y-auto bg-page px-7 py-6 text-body">
     <div className="mx-auto max-w-4xl space-y-4">
-      <div><h1 className="text-[20px] font-semibold text-ink">Deck settings</h1>
-        <p className="text-[12px] text-dim">Configure your widget, shared spaces and focus sessions.</p></div>
+      <PageHeader title="Deck settings" description="Configure your widget, shared spaces and focus sessions."/>
       {!ready ? <p className="text-dim">Loading…</p> : <>
         <MobilePairing />
         <OrbSettings />
@@ -82,7 +82,7 @@ export function DeckSettings() {
           </div>)}
         </section>
         {message && <p role="status" className="text-[12px] text-dim">{message}</p>}
-        <div className="flex justify-end gap-2 pb-4"><button className="btn-ghost" onClick={() => setValue(DECK_DEFAULTS)}>Reset defaults</button><button className="btn-primary" onClick={() => void save()}>Save settings</button></div>
+        <div className="flex justify-end gap-2 pb-4"><button className="btn-ghost" onClick={() => setValue(DECK_DEFAULTS)}>Reset defaults</button><button className="btn-primary ds-button" onClick={() => void save()}>Save settings</button></div>
       </>}
     </div>
   </div>

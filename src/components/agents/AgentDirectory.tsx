@@ -1,3 +1,4 @@
+import { PageHeader } from '../ui/DesignSystem'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, BookOpen, Bot, Compass, Network, Plus, Search, Settings2, Sparkles, X } from 'lucide-react'
 import * as ipc from '../../lib/ipc'
@@ -46,10 +47,7 @@ export function AgentDirectory() {
   const templates = lib.items.filter(item => item.kind === 'brief' && `${item.name} ${item.what}`.toLowerCase().includes(search.toLowerCase()))
   return <div className="workforce">
     <div id="repository-page-host" />
-    <header className="wf-header">
-      <div className="wf-brand"><span className="wf-brand-icon"><Network size={20} /></span><h1>{section === 'teams' ? 'Teams' : section === 'library' ? 'Agent Library' : 'Discover'}</h1></div>
-      <button className="wf-icon-button" aria-label={settings ? 'Back to workforce' : 'AI & permissions'} title={settings ? 'Back to workforce' : 'AI & permissions'} onClick={() => setSettings(!settings)}>{settings ? <ArrowLeft size={19} /> : <Settings2 size={19} />}</button>
-    </header>
+    <PageHeader className="wf-header" title={<><span className="wf-brand-icon"><Network size={20}/></span>{section === 'teams' ? 'Teams' : section === 'library' ? 'Agent Library' : 'Discover'}</>} actions={<button className="wf-icon-button" aria-label={settings ? 'Back to workforce' : 'AI & permissions'} title={settings ? 'Back to workforce' : 'AI & permissions'} onClick={() => setSettings(!settings)}>{settings ? <ArrowLeft size={19} /> : <Settings2 size={19} />}</button>}/>
     {settings && <div className="wf-content"><Settings /></div>}
     <div hidden={settings} className="wf-main">
       <nav aria-label="Workforce sections" className="wf-navigation ds-compact-tabs">

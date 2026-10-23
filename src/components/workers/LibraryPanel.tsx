@@ -1,5 +1,5 @@
 import { DesignSystemsPanel } from '../design-systems/DesignSystemsPanel'
-import { FilterTabs } from '../ui/DesignSystem'
+import { FilterTabs, PageHeader } from '../ui/DesignSystem'
 // The library: the skills and briefs you installed, and the way to add more.
 //
 // Words only. A skill is instructions a worker is given; a brief is who it
@@ -115,11 +115,8 @@ export function LibraryPanel({
       </section></div>}
       {agentEditing && <div className="wf-overlay"><section className="wf-picker"><AgentEditor id={agentEditing} onClose={() => { setAgentEditing(null); loadAgents(); reload() }} /></section></div>}
       {workerEditing && <WorkerEditor worker={workerEditing} library={templates} onClose={() => setWorkerEditing(null)} onSaved={() => { setWorkerEditing(null); loadAgents(); reload() }} />}
-      <div className="wf-section-heading">
-        <div><h2>Your library <span className="wf-badge">{items.length + teamTemplates.length}</span></h2><p>The personalities and capabilities behind your teams.</p></div>
-        <div className="wf-actions"><button className="wf-secondary" onClick={() => setImportingTeam(true)}>Import team package</button><button className="wf-secondary" onClick={() => setAdding(true)}><Download size={15} />Import</button>{libraryTab !== 'team' && libraryTab !== 'design' && <button className="wf-primary" disabled={saving} onClick={() => setCustom({id:'',kind:libraryTab,name:'',what:'',body:'',expected:null})}><Plus size={16} />Create {libraryTab === 'brief' ? 'template' : 'skill'}</button>}</div>
-      </div>
-      <div className="wf-toolbar">
+      <PageHeader className="wf-section-heading" level={2} density="section" title={<>Your library <span className="wf-badge">{items.length + teamTemplates.length}</span></>} description="The personalities and capabilities behind your teams." actions={<div className="wf-actions"><button className="btn-ghost ds-button" onClick={() => setImportingTeam(true)}>Import team package</button><button className="btn-ghost ds-button" onClick={() => setAdding(true)}><Download size={15} />Import</button>{libraryTab !== 'team' && libraryTab !== 'design' && <button className="btn-primary ds-button" disabled={saving} onClick={() => setCustom({id:'',kind:libraryTab,name:'',what:'',body:'',expected:null})}><Plus size={16} />Create {libraryTab === 'brief' ? 'template' : 'skill'}</button>}</div>}/>
+      <div className="wf-toolbar ds-toolbar">
         <select className="wf-filter" aria-label="Filter by team template" value={teamFilter} onChange={e => setTeamFilter(e.target.value)}><option value="all">All team templates</option>{teamTemplates.map(t => <option key={t.team.id} value={t.team.id}>{t.team.name}</option>)}</select>
         <FilterTabs label="Library categories" value={libraryTab} onChange={setLibraryTab} options={[{id:'brief',label:'Agents',icon:'agent',count:briefs.length},{id:'skill',label:'Skills',icon:'ai',count:skills.length},{id:'team',label:'Teams',icon:'agent',count:visibleTeams.length},{id:'design',label:'Design systems',icon:'palette'}]}/>
         {libraryTab !== 'design' && <><label className="wf-search"><Search size={16} /><input aria-label="Search library" placeholder="Search your library…" value={search} onChange={e => setSearch(e.target.value)} /></label>

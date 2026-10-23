@@ -1,3 +1,4 @@
+import { PageHeader } from './ui/DesignSystem'
 // Everything that happens on a clock — yours and your agents'.
 //
 // A pillar rather than a face of the Assistant, because most of what belongs
@@ -178,20 +179,7 @@ export function SchedulerPage() {
 
   return (
     <div className="flex h-full flex-col bg-page">
-      <div className="flex shrink-0 items-center gap-2.5 border-b border-line px-5 py-3.5">
-        <div className="min-w-0">
-          <h2 className="text-[15px] font-semibold text-ink">Scheduler</h2>
-          <p className="text-[11.5px] text-muted">
-            Everything that happens on a clock — yours and your agents’.
-          </p>
-        </div>
-        <button
-          className="btn-primary ml-auto text-[11.5px]"
-          onClick={() => setEditing({ kind: 'reminder', every: 'daily', at_min: 420 })}
-        >
-          <Icon name="add" size={12} /> New schedule
-        </button>
-      </div>
+      <PageHeader className="ds-inbox-header" title="Scheduler" description="Everything that happens on a clock - yours and your agents'." actions={<button className="btn-primary ds-button" onClick={() => setEditing({ kind: 'reminder', every: 'daily', at_min: 420 })}><Icon name="add" size={12}/>New schedule</button>}/>
 
       {next && (
         <div className="flex shrink-0 items-center gap-3 border-b border-line bg-raise px-5 py-2.5">

@@ -58,14 +58,14 @@ export const THEMES: ThemeDef[] = [
     label: 'Claude',
     blurb: 'Warm paper and clay — the look of Claude’s apps.',
     scheme: 'light',
-    swatch: { app: '#f0eee6', panel: '#faf9f5', accent: '#a34a31', ink: '#1f1e1c' },
+    swatch: { app: '#f0eee6', panel: '#f5f4ee', accent: '#a34a31', ink: '#1f1e1c' },
   },
   {
     id: 'vercel',
     label: 'Vercel',
     blurb: 'Pure black, neutral greys, one blue.',
     scheme: 'dark',
-    swatch: { app: '#000000', panel: '#111111', accent: '#0070f3', ink: '#ededed' },
+    swatch: { app: '#000000', panel: '#111111', accent: '#3b9eff', ink: '#ededed' },
   },
   {
     id: 'vercel-light',
@@ -79,7 +79,7 @@ export const THEMES: ThemeDef[] = [
     label: 'VS Code',
     blurb: 'Dark+ — the editor you already live in.',
     scheme: 'dark',
-    swatch: { app: '#1e1e1e', panel: '#252526', accent: '#007acc', ink: '#d4d4d4' },
+    swatch: { app: '#181818', panel: '#252526', accent: '#4ea1f5', ink: '#e7e7e7' },
   },
 ]
 

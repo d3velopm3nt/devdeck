@@ -1,3 +1,5 @@
+import {WorkPage} from '../src/components/work/WorkPage'
+import {LegacyWorkRedirect} from '../src/components/team/TeamPage'
 import { createRoot } from 'react-dom/client'
 import '../src/index.css'
 import { ActivityBoard } from '../src/components/ActivityBoard'
@@ -14,7 +16,7 @@ const data: VisibilitySnapshot = {
 let remoteFails = false
 let commentsFail = false
 fixture.visibility_snapshot = () => structuredClone(data)
-fixture.visibility_github_issues = () => { if (remoteFails) throw Error('Repository read failed'); return {fetched_at:now,truncated:false,sessions:[],warnings:commentsFail ? ['Issues loaded; checkpoint comments could not be refreshed: GitHub request timed out.'] : [],items:[{number:8,title:'Activity board',state:'open',url:'https://github.com/d3velopm3nt/devdeck/issues/8',updated_at:now,assignees:[],pull_request:false},{number:9,title:'Unclaimed GitHub issue',state:'open',url:'https://github.com/d3velopm3nt/devdeck/issues/9',updated_at:now,assignees:[],pull_request:false}]} }
+fixture.visibility_github_issues = () => { if (remoteFails) throw Error('Repository read failed'); return {fetched_at:now,truncated:false,sessions:[{...data.sessions[0],id:'github:checkpoint',title:'GitHub recorded task',checkpoints:[{at:now,summary:'GitHub checkpoint retained',evidence:[]}]}],warnings:commentsFail ? ['Issues loaded; checkpoint comments could not be refreshed: GitHub request timed out.'] : [],items:[{number:8,title:'Activity board',state:'open',url:'https://github.com/d3velopm3nt/devdeck/issues/8',updated_at:now,assignees:[],pull_request:false},{number:9,title:'Unclaimed GitHub issue',state:'open',url:'https://github.com/d3velopm3nt/devdeck/issues/9',updated_at:now,assignees:[],pull_request:false}]} }
 fixture.visibility_products_save = args => { if(args?.expected!==data.config_raw) throw Error('Product links changed. Refresh before saving.'); data.products = args.products as typeof data.products; data.config_raw='version-2' }
 fixture.aiw_all_work = () => [{project_id:'1',project_name:'Home',feature_id:'garden',feature_name:'Garden',status:'planned',items:[{id:'weeds',title:'Clear pool weeds',status:'blocked',areas:[]}] }]
 fixture.aiw_sessions = () => []
@@ -42,4 +44,13 @@ if (new URLSearchParams(location.search).has('summary')) {
  data.sessions[0].checkpoints[0].evidence = ['https://github.com/d3velopm3nt/devdeck/pull/16', 'https://github.com/d3velopm3nt/devdeck/pull/19', 'https://github.com/d3velopm3nt/devdeck/pull/16#discussion', 'https://github.com/d3velopm3nt/devdeck/actions/runs/123']
  conversations.orchestrator = [{at:now,from:'user',text:'Verify linked work'}, {at:now,from:'tool',tool:'files.read',ok:true,text:'Read the requirements'}, {at:now,from:'tool',tool:'tests.run',ok:false,text:'One verification failed'}, {at:now,from:'assistant',by:'orchestrator',text:'Two checks recorded.'}]
 }
-createRoot(document.getElementById('root')!).render(<ActivityBoard sessionsOnly={new URLSearchParams(location.search).has('sessions')} />)
+const workMode=new URLSearchParams(location.search).has('work')
+if(workMode){
+ fixture.team_board=()=>[];fixture.work_records_list=()=>[];fixture.issue_monitor_get=()=>({bindings:[],sources:[],dispatches:[],warnings:[]});fixture.workers_list=()=>[];fixture.reusable_teams_list=()=>[];fixture.aiw_claims=()=>[];fixture.folder_workflow_list=()=>[];
+ data.sessions.push({id:'external-unlinked',assistant:'External helper',product_id:'',space:'',folder:'',title:'Unlinked external research',status:'blocked',started_at:'2026-01-01T00:00:00Z',updated_at:'2026-01-01T00:00:00Z',ticket_url:'',conversation_url:'https://example.invalid/conversation',step:'Research',blocker:'Waiting for context',next_action:'Review notes',checkpoints:[{at:now,summary:'Unlinked checkpoint retained',evidence:[]}]});
+ fixture.aiw_sessions=()=>[{id:'native-run',agent_id:'builder',agent_name:'Builder',role:'worker',project_id:'1',feature_id:'background',status:'working',started_at:now,stale:false,turns:1,context_tokens:0,files_touched:[],summary:'Background native task',transcript:[{at:now,kind:'checkpoint',text:'Native checkpoint retained'}]}];
+ if(new URLSearchParams(location.search).has('empty')){data.sessions=[];data.products=[];fixture.aiw_sessions=()=>[];fixture.manager_team=()=>[];fixture.manager_messages=()=>[];}
+}
+const bridge={navigate:(view:'sessions'|'activity'|'team'|'chat')=>useApp.getState().setRailView(view),direct:(view:'sessions'|'activity')=>useApp.setState({railView:view}),state:()=>({rail:useApp.getState().railView,tab:useApp.getState().teamTab}),empty:()=>{data.sessions=[];fixture.aiw_sessions=()=>[]},failVault:()=>{fixture.visibility_snapshot=()=>{throw Error('Fixture vault unavailable')}}};Object.assign(window,{__workNavigation:bridge});
+function WorkFixture(){const rail=useApp(s=>s.railView);return <div style={{height:'100vh'}}>{rail==='sessions'||rail==='activity'?<LegacyWorkRedirect view={rail}/>:rail==='github'?<section><h1>GitHub destination fixture</h1><button onClick={()=>useApp.getState().setTeamTab('history')}>Back to Work history</button></section>:<WorkPage/>}</div>}
+createRoot(document.getElementById('root')!).render(workMode?<WorkFixture/>:<ActivityBoard sessionsOnly={new URLSearchParams(location.search).has('sessions')} />)

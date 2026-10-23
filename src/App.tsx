@@ -8,7 +8,7 @@ import { Dock, buildDefaultLayout } from './Dock'
 import { BottomBar } from './components/BottomBar'
 import { InboxPage } from './components/InboxPage'
 import { AssistantThread } from './components/thread/AssistantThread'
-import { ActivityBoard } from './components/ActivityBoard'
+import { LegacyWorkRedirect } from './components/team/TeamPage'
 import { TeamPage } from './components/team/TeamPage'
 import { AnalyticsPage } from './components/AnalyticsPage'
 import { CalendarPage } from './components/CalendarPage'
@@ -1108,8 +1108,8 @@ export default function App() {
           {railView === 'machine' && <MachineSetup />}
           {railView === 'inbox' && <InboxPage />}
           {railView === 'chat' && <AssistantThread />}
-          {railView === 'activity' && <ActivityBoard />}
-          {railView === 'sessions' && <ActivityBoard sessionsOnly />}
+          {railView === 'activity' && <LegacyWorkRedirect view="activity" />}
+          {railView === 'sessions' && <LegacyWorkRedirect view="sessions" />}
           {railView === 'team' && <TeamPage />}
           {railView === 'workers' && <AgentsPage />}
           {railView === 'analytics' && <AnalyticsPage />}

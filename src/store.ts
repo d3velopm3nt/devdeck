@@ -474,7 +474,7 @@ const loadRecent = (): number[] => {
 /// being worked on" and "who is working on it" was a trip through the rail.
 const RAIL_KEY = 'devdeck.railView'
 
-export type TeamTab = 'goals' | 'features' | 'work' | 'bots' | 'workflows' | 'messages'
+export type TeamTab = 'goals' | 'features' | 'work' | 'bots' | 'workflows' | 'messages' | 'runs' | 'history'
 const TEAM_KEY = 'devdeck.team.tab'
 const loadTeamTab = (): TeamTab => {
   if (CAPTURE_TEAM_TAB) return CAPTURE_TEAM_TAB as TeamTab
@@ -482,8 +482,10 @@ const loadTeamTab = (): TeamTab => {
   // whose last view was that one lands on the tab it became.
   if (localStorage.getItem(RAIL_KEY) === 'bots') return 'bots'
   if (localStorage.getItem(RAIL_KEY) === 'messages') return 'messages'
+  if (localStorage.getItem(RAIL_KEY) === 'sessions') return 'runs'
+  if (localStorage.getItem(RAIL_KEY) === 'activity') return 'history'
   const v = localStorage.getItem(TEAM_KEY)
-  return v === 'messages' || v === 'features' || v === 'work' || v === 'bots' || v === 'workflows' || v === 'goals' ? v : 'work'
+  return v === 'messages' || v === 'features' || v === 'work' || v === 'bots' || v === 'workflows' || v === 'goals' || v === 'runs' || v === 'history' ? v : 'work'
 }
 
 /** When the Inbox was last looked at. Kept locally rather than in the database
@@ -536,7 +538,7 @@ const loadRailView = (): RailView => {
   // so this reads the raw string rather than a RailView. Somebody's stored
   // value still means something, and translating it beats failing it, which
   // would drop them on Today with no explanation.
-  if (saved === 'bots' || saved === 'messages') return 'team'
+  if (saved === 'bots' || saved === 'messages' || saved === 'sessions' || saved === 'activity') return 'team'
   if (saved === 'members') return 'workers'
   const v = saved as RailView | null
   // Home became Today. Moved once, not every launch: after this, landing on
@@ -1052,6 +1054,7 @@ export const useApp = create<AppState>((set, get) => ({
   workItemFocusId: null,
   focusWorkItem: (id) => { get().setSpaceScope(null); get().setTeamTab('work'); set({ workItemFocusId:id }) },
   setTeamTab: (t) => {
+    localStorage.setItem(RAIL_KEY, 'team')
     localStorage.setItem(TEAM_KEY, t)
     set({ teamTab: t, railView: 'team' })
   },
@@ -1354,6 +1357,7 @@ export const useApp = create<AppState>((set, get) => ({
     await ipc.settingSet('app_theme', t)
   },
   setRailView: (v) => {
+    if (v === 'sessions' || v === 'activity') { get().setTeamTab(v === 'sessions' ? 'runs' : 'history'); return }
     localStorage.setItem(RAIL_KEY, v)
     set({ railView: v })
     // Opening the Inbox used to mark everything read, which is why one glance

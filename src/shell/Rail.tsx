@@ -50,8 +50,6 @@ const SHARED: Item[] = [
 // Advanced surfaces stay behind one expandable entry.
 const TOOLS: Item[] = [
   { view: 'workers', icon: 'agent', label: 'Agent Library' },
-  { view: 'activity', icon: 'history', label: 'Activity history' },
-  { view: 'sessions', icon: 'agent', label: 'Sessions' },
   { view: 'home', icon: 'home', label: 'Operations' },
   { view: 'connections', icon: 'database', label: 'Connections' },
   { view: 'analytics', icon: 'history', label: 'Analytics' },

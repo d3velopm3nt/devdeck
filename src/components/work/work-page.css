@@ -113,3 +113,15 @@
 .wh-step-pips > :is(span,button)[data-state=skipped] { background-color:var(--c-muted); opacity:.45; }
 .wh-step-pips > button:hover { filter:brightness(1.25); }
 .wh-step-pips > button:focus-visible { outline:2px solid var(--c-accent); outline-offset:2px; }
+
+.wh-history { flex:1; min-height:0; overflow:hidden; }
+
+.wh-history input[type=search] { padding-left:36px; padding-right:36px; }
+
+@media(max-width:1023px) {
+  .wh-history { overflow:auto; }
+  .wh-history .activity-reader { height:auto; min-height:100%; }
+  .wh-history .activity-reader-body { display:block; }
+  .wh-history .activity-reader-body > main { overflow:visible; }
+  .wh-history .activity-reader-body > aside { max-height:none; }
+}

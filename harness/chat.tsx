@@ -1,3 +1,4 @@
+import {useApp} from '../src/store'
 import { createRoot } from 'react-dom/client'
 import { SEED } from './seed'
 import { useAiw } from '../src/lib/aiwStore'
@@ -30,6 +31,8 @@ const workflowSteps = [
  {id:'review',title:'Review evidence',worker:'Reviewer',target:1,needs:['verify'],instructions:'',status:'pending',claim:'',run:'',evidence:'',previous_runs:[]},
 ]
 handlers.work_records_list=()=>[{id:'workflow-test',node:1,title:'Verify Teams navigation',description:'',acceptance:'',goal:'',source_url:'',status:'working',revision:1,runs:[{node:1,workflow:'navigation',template:'factory'}]}]
+useApp.setState({nodes:[{id:1,parent_id:null,kind:'project',name:'DevDeck',path:null,rel_path:'DevDeck',dir:'fixture',sort:0,color:null,label:null}]})
+handlers.folder_workflow_list=()=>[{id:'navigation',title:'Teams navigation review',steps:3,done:1,error:''}]
 handlers.folder_workflow_get=()=>({raw:'',body:'',path:'fixture',definition:{title:'Teams navigation review',steps:workflowSteps}})
 Object.assign(window,{finishWorkflow:()=>workflowSteps.forEach(step=>{step.status='done';step.evidence='Fixture review accepted.'})})
 

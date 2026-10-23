@@ -1,4 +1,4 @@
-import { FilterTabs, TabStrip, StateBadge, PageHeader } from './ui/DesignSystem'
+import { FilterTabs, PageHeader } from './ui/DesignSystem'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { aiw, type FeatureWork, type Session, type AgentDef, type ChatMessage } from '../lib/aiw'
 import { visibility, isStale, stage, type VisibilitySnapshot, type IssueSnapshot, type SessionRecord, type ProductLink } from '../lib/visibility'
@@ -24,7 +24,6 @@ function mergeSessions(local: SessionRecord[], remote: SessionRecord[]) {
   for (const s of remote) { const old = records.get(s.id); if (!old || Date.parse(s.updated_at) >= Date.parse(old.updated_at)) records.set(s.id, s) }
   return [...records.values()]
 }
-type BoardView = 'timeline' | 'local' | 'github'
 function githubLabel(url: string) {
   const item = url.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/(issues|pull)\/(\d+)/)
   if (item) return `${item[2]} #${item[4]}`
@@ -45,11 +44,10 @@ function Link({ url, children }: { url: string; children: React.ReactNode }) {
   if (!/^https:\/\/github\.com\//.test(url)) return <span>{children}</span>
   return <button className="inline-flex items-center gap-1.5 rounded-full border border-line bg-soft px-2.5 py-1 text-xs text-info hover:bg-hover" onClick={() => void ipc.openUrl(url)}><BrandIcon brand="github" size={12} />{typeof children === 'string' && children.startsWith('https://') ? githubLabel(url) : children}</button>
 }
-export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean }) {
+export function ActivityBoard({ sessionsOnly = false, embedded = false, active = true }: { sessionsOnly?: boolean; embedded?: boolean; active?: boolean }) {
   const nodes = useApp(s => s.nodes)
   const scope = useApp(s => s.spaceScopeId)
   const [snapshot, setSnapshot] = useState(empty)
-  const [view, setView] = useState<BoardView>('timeline')
   const [status, setStatus] = useState('')
   const [refreshMinutes, setRefreshMinutes] = useState<number | null>(null)
   const [team, setTeam] = useState<ipc.TeamMember[]>([])
@@ -70,7 +68,6 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
   const [query, setQuery] = useState('')
   const [picked, setPicked] = useState('')
   const [showDone, setShowDone] = useState(false)
-  const [layout, setLayout] = useState<'board' | 'list'>('board')
   const [chatTarget, setChatTarget] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const [chatReady, setChatReady] = useState(false)
@@ -83,7 +80,9 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
   const [draft, setDraft] = useState<ProductLink[]>([])
   const inFlight = useRef(false)
   const remotePending = useRef(false)
+  const messageGeneration = useRef(0)
   const mounted = useRef(true)
+  const activeRef = useRef(active); activeRef.current = active
   const error = useCallback((key: string, value: string) => setErrors(e => ({ ...e, [key]: value })), [])
   const reload = useCallback(async (remote = false): Promise<void> => {
     if (inFlight.current) { if (remote) remotePending.current = true; return }
@@ -99,10 +98,11 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
       if (a.status === 'fulfilled') setAgents(a.value)
       setLoaded(true)
       const readMessages = async () => {
+        const generation = ++messageGeneration.current
         if (t.status === 'fulfilled') {
           setTeam(t.value)
           const mailboxes = await Promise.allSettled(t.value.map(member => bounded(ipc.managerMessages(member.bot.handle))))
-          if (!mounted.current) return
+          if (!mounted.current || generation !== messageGeneration.current) return
           if (mailboxes.every(r => r.status === 'fulfilled')) {
             setMessages([...new Map(mailboxes.flatMap(r => r.status === 'fulfilled' ? r.value : []).map(m => [m.id, m])).values()])
             error('Messages', '')
@@ -121,7 +121,10 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
           } catch (e) { if (mounted.current) error(p.name, String(e)) }
         }))
       }
-      await Promise.allSettled([readMessages(), readGithub()])
+      // A slow mailbox must not hold the snapshot/GitHub refresh lock. Older
+      // mailbox results are ignored if another refresh supersedes them.
+      void readMessages()
+      await readGithub()
     } finally {
       inFlight.current = false
       if (mounted.current) {
@@ -134,7 +137,7 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
     void ipc.businessList().then(setBusinesses).catch(e => error('Businesses', String(e)))
     mounted.current = true
     void reload()
-    const stop = aiw.onEvent(() => void reload())
+    const stop = aiw.onEvent(() => { if (activeRef.current) void reload() })
     return () => { mounted.current = false; void stop.then(un => un()) }
   }, [reload, error])
 
@@ -145,12 +148,13 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
     return () => { active = false; window.removeEventListener(GITHUB_REFRESH_EVENT, read) }
   }, [error])
   useEffect(() => {
-    if (refreshMinutes === null || refreshMinutes === 0) return
+    if (!active || refreshMinutes === null || refreshMinutes === 0) return
     const refresh = () => { if (document.visibilityState !== 'hidden') void reload(true) }
     refresh()
     const interval = window.setInterval(refresh, refreshMinutes * 60_000)
     return () => { window.clearInterval(interval) }
-  }, [refreshMinutes, reload])
+  }, [active, refreshMinutes, reload])
+  useEffect(() => { if (active) void reload() }, [active, reload])
 
   useEffect(() => {
     let live = true
@@ -211,8 +215,7 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
       return !!n && !!scopeIds?.has(n.id)
     })
   }, [snapshot.products, github, allSessions, work, native, nodes, scope])
-  const filteredSessions = allSessions.filter(s => (!source || (source === 'native' ? s.id.startsWith('native:') : !s.id.startsWith('native:'))) && (!product || s.product_id === product) && (!assistant || s.assistant === assistant) && (!session || s.id === session) && (!space || s.space === space) && (!query || `${s.title} ${s.folder} ${s.id}`.toLowerCase().includes(query.toLowerCase())) && (!status || stage(s.status) === status) && (showDone || stage(s.status) !== 'Done') && (scope == null || subtreeIds(nodes, scope).some(id => nodes.find(n => n.id === id)?.rel_path === s.folder)))
-  const filtered = rows.filter(r => (view === 'local' ? r.source === 'DevDeck task' : view === 'github' ? r.source.startsWith('GitHub') : true) && (!status || r.status === status) && (!source || r.sessions.some(s => source === 'native' ? s.id.startsWith('native:') : !s.id.startsWith('native:'))) && (!product || r.productId === product) && (!space || r.space === space) && (!assistant || r.sessions.some(s => s.assistant === assistant)) && (!session || r.sessions.some(s => s.id === session)) && (!query || `${r.title} ${r.product} ${r.folder}`.toLowerCase().includes(query.toLowerCase())) && (showDone || r.status !== 'Done'))
+  const filteredSessions = allSessions.filter(s => (!source || (source === 'native' ? s.id.startsWith('native:') : !s.id.startsWith('native:'))) && (!product || s.product_id === product) && (!assistant || s.assistant === assistant) && (!session || s.id === session) && (!space || s.space === space) && (!query || `${s.title} ${s.assistant} ${s.folder} ${s.id} ${s.step} ${s.blocker} ${s.next_action} ${s.checkpoints.map(c => c.summary).join(' ')}`.toLowerCase().includes(query.toLowerCase())) && (!status || stage(s.status) === status) && (showDone || stage(s.status) !== 'Done') && (scope == null || subtreeIds(nodes, scope).some(id => nodes.find(n => n.id === id)?.rel_path === s.folder)))
   const timeline = useMemo(() => {
     const list = allSessions.flatMap(s => s.checkpoints.map((c, i) => ({
       id: `${s.id}:${i}`, title: s.title, body: c.summary, at: c.at, from: s.assistant, to: '',
@@ -272,8 +275,8 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
     const body = `## Outcome\n${timelineEntry.title}\n\n## Local checkpoint\n${timelineEntry.body}\n\n## Context\nSpace: ${timelineEntry.space || 'Unscoped'}\nProject: ${issueProduct.name}\nRecorded by: ${timelineEntry.from}\nRecorded at: ${timelineEntry.at}\n\n## Acceptance criteria\n- [ ] Define completion criteria before execution.`
     void ipc.openUrl(`https://github.com/${issueProduct.repository}/issues/new?title=${encodeURIComponent(timelineEntry.title)}&body=${encodeURIComponent(body)}`).catch(e => error('Create issue', String(e)))
   }
-  const selected = sessionsOnly ? filteredSessions.find(s => s.id === picked) : filtered.find(r => r.id === picked)
-  const details = selected ? 'sessions' in selected ? selected.sessions : [selected] : []
+  const selected = filteredSessions.find(s => s.id === picked)
+  const details = selected ? [selected] : []
   const choices = (values: string[]) => [...new Set(values.filter(Boolean))].sort()
   const productChoices = new Map([...rows.map(r => [r.productId, r.product] as const), ...snapshot.products.map(p => [p.id, p.name] as const), ...allSessions.map(s => [s.product_id, snapshot.products.find(p => p.id === s.product_id)?.name || s.product_id] as const)])
   const save = async () => {
@@ -282,26 +285,24 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
     catch (e) { error('Save', String(e)) }
     finally { setBusy(false) }
   }
-  return <div className="flex h-full min-h-0 flex-col bg-page text-ink">
-    <div className="border-b border-line px-6 py-4">
-      <PageHeader title={sessionsOnly ? 'Sessions' : 'Activity board'} description={sessionsOnly ? 'External conversations and DevDeck agents, connected to their work.' : 'Local agent messages, DevDeck work and linked GitHub issues.'} actions={<div className="ds-toolbar"><select aria-label="Add business or product" className={field} value="" onChange={e => { if(e.target.value === 'new') openBusiness(); else if(e.target.value) openBusiness({ nodeId: Number(e.target.value), step: 'sells' }) }}><option value="">Add business / product</option><option value="new">New business</option>{businesses.map(b => <option key={b.node_id} value={b.node_id}>Add product to {b.name}</option>)}</select><button className="btn-ghost ds-button" disabled={busy} onClick={() => void reload(true)}><span className="inline-flex items-center gap-2"><span className={busy ? 'animate-spin' : ''}><Icon name="update" size={14} /></span>{busy ? 'Refreshing…' : 'Refresh'}</span></button></div>}/>
-{!sessionsOnly && <div className="ds-view-switch"><TabStrip panelId="activity-view" label="Activity views" value={view} onChange={id=>{setView(id);setPicked('')}} options={[{id:'timeline',label:'Timeline',icon:'history'},{id:'local',label:'DevDeck issues',icon:'inbox'},{id:'github',label:'GitHub issues',icon:'github'}]}/></div>}
+  return <div className="activity-reader flex h-full min-h-0 flex-col bg-page text-ink">
+    <div className={embedded ? 'border-b border-line px-5 py-3' : 'border-b border-line px-6 py-4'}>
+      <PageHeader title={sessionsOnly ? 'Runs' : 'History'} description={sessionsOnly ? 'Native and external runs, including records not linked to a work item.' : 'Cross-project checkpoints, team messages and recorded actions.'} actions={<div className="ds-toolbar"><button className="btn-ghost ds-button" onClick={() => useApp.getState().setRailView('github')}>Open GitHub</button><button className="btn-ghost ds-button" onClick={() => {setDraft(snapshot.products);setEditing(true)}}>Product links</button><select aria-label="Add business or product" className={field} value="" onChange={e => { if(e.target.value === 'new') openBusiness(); else if(e.target.value) openBusiness({ nodeId: Number(e.target.value), step: 'sells' }) }}><option value="">Add business / product</option><option value="new">New business</option>{businesses.map(b => <option key={b.node_id} value={b.node_id}>Add product to {b.name}</option>)}</select><button className="btn-ghost ds-button" disabled={busy} onClick={() => void reload(true)}><span className="inline-flex items-center gap-2"><span className={busy ? 'animate-spin' : ''}><Icon name="update" size={14} /></span>{busy ? 'Refreshing…' : 'Refresh'}</span></button></div>}/>
       <div className="mt-4 ds-toolbar" aria-label="Activity toolbar">
         <div className="relative min-w-56 flex-1">
           <span className="pointer-events-none absolute left-3 top-2.5 text-muted"><Icon name="search" size={16} /></span>
-          <input type="search" className={`${field} w-full pl-9 pr-9`} placeholder={view === 'timeline' ? 'Search messages and checkpoints…' : 'Search issues…'} aria-label="Search activity" value={query} onChange={e => setQuery(e.target.value)} />
+          <input type="search" className={`${field} w-full pl-9 pr-9`} placeholder={sessionsOnly ? 'Search runs and checkpoints…' : 'Search messages and checkpoints…'} aria-label="Search activity" value={query} onChange={e => setQuery(e.target.value)} />
           {query && <button aria-label="Clear search" className="absolute right-3 top-2.5 text-muted" onClick={() => setQuery('')}><Icon name="close" size={16} /></button>}
         </div>
         <select className={`${field} max-w-48`} aria-label="Space filter" value={space} onChange={e => setSpace(e.target.value)}><option value="">All spaces</option>{choices([...rows.map(r => r.space), ...allSessions.map(s => s.space)]).map(v => <option key={v}>{v}</option>)}</select>
         <select className={`${field} max-w-56`} aria-label="Project filter" value={product} onChange={e => setProduct(e.target.value)}><option value="">All projects</option>{[...productChoices].filter(([id]) => id).map(([id,name]) => <option key={id} value={id}>{name}</option>)}</select>
         <select className={`${field} max-w-48`} aria-label="Assistant filter" value={assistant} onChange={e => setAssistant(e.target.value)}><option value="">All assistants</option>{choices([...allSessions.map(s => s.assistant), ...team.map(t => t.bot.name)]).map(v => <option key={v}>{v}</option>)}</select>
         {sessionsOnly && <><select aria-label="Source filter" className={field} value={source} onChange={e => setSource(e.target.value)}><option value="">All sources</option><option value="native">DevDeck</option><option value="external">External</option></select><select className={`${field} max-w-60`} aria-label="Session filter" value={session} onChange={e => setSession(e.target.value)}><option value="">All sessions</option>{allSessions.map(s => <option key={s.id} value={s.id}>{s.assistant} · {s.id}</option>)}</select></>}
-        {!sessionsOnly && view !== 'timeline' && <FilterTabs label="Issue layout" value={layout} onChange={setLayout} options={[{id:'board',label:'Board',icon:'layout'},{id:'list',label:'List',icon:'list'}]}/>}
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2" role="group" aria-label="Status filter">
         <FilterTabs label="Status" value={status} onChange={c=>{setStatus(c);if(c==='Done')setShowDone(true)}} options={['',...columns].map(c=>({id:c,label:c||'All statuses',icon:statusIcons[c]||'layout'}))}/>
         <label className="ml-auto flex items-center gap-2 text-xs text-muted"><input type="checkbox" checked={showDone} onChange={e => { setShowDone(e.target.checked); if (!e.target.checked && status === 'Done') setStatus('') }} />Show done</label>
-        <span className="text-xs text-muted" role="status">{sessionsOnly ? filteredSessions.length : view === 'timeline' ? timeline.length : filtered.length} results</span>
+        <span className="text-xs text-muted" role="status">{sessionsOnly ? filteredSessions.length : timeline.length} results</span>
       </div>
       {(query || space || product || assistant || session || source || status || showDone) && <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
         {[[query, 'Search', () => setQuery('')], [space, 'Space', () => setSpace('')], [product, 'Project', () => setProduct('')], [assistant, 'Assistant', () => setAssistant('')], [session, 'Session', () => setSession('')], [source, 'Source', () => setSource('')], [status, 'Status', () => setStatus('')]].map(([value, label, clear]) => value ? <button key={String(label)} aria-label={`Remove filter: ${label}`} onClick={clear as () => void} className="flex max-w-64 items-center gap-2 rounded-full border border-line bg-soft px-3 py-1 text-body"><span className="truncate">{String(label)}: {label === 'Project' ? productChoices.get(String(value)) || String(value) : String(value)}</span><Icon name="close" size={12} /></button> : null)}
@@ -311,20 +312,16 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
     </div>
     {Object.entries(errors).filter(([,v]) => v).map(([k,v]) => <p role="alert" key={k} className="border-b border-line px-6 py-2 text-sm text-err">{k}: {v}{snapshot.products.some(p => p.name === k && github[p.id]) ? ' Showing the previous GitHub snapshot.' : ''}</p>)}
     {[...snapshot.warnings, ...remoteWarnings].map(w => <p key={w} className="px-6 py-2 text-sm text-muted">{w}</p>)}
-    {!sessionsOnly && view === 'github' && <section aria-label="GitHub connection status" className="flex flex-wrap items-center gap-3 border-b border-line bg-panel px-6 py-3 text-xs">
-      <BrandIcon brand="github" size={16} />
-      {!loaded ? <span>Reading repository connections…</span> : snapshot.products.length === 0 ? <><span className="text-muted">No repositories connected. Add a product repository to load its issues.</span><button className="text-accent" onClick={() => { setDraft(snapshot.products); setEditing(true) }}>Connect repository</button></> : snapshot.products.filter(p => !product || p.id === product).map(p => <span key={p.id} className="rounded-lg border border-line px-3 py-2"><b>{p.name}</b> · {p.repository} · {errors[p.name] ? <span className="text-err">Read failed{github[p.id] ? ' · showing saved results' : ''}</span> : github[p.id] ? <span className="text-muted">Read succeeded · {github[p.id].items.length} items{busy ? ' · checking for updates' : ''}</span> : busy ? 'Connecting…' : 'Not loaded'}</span>)}
-    </section>}
     {snapshot.products.map(p => github[p.id] && <p key={p.id} className="px-6 py-1 text-xs text-muted">{p.name} · GitHub checked {new Date(github[p.id].fetched_at).toLocaleString()}{github[p.id].truncated ? ' · Partial issue list; see warnings' : ''}{p.project_url && <> · <Link url={p.project_url}>Product backlog</Link></>}</p>)}
     {editing && <section className="border-b border-line p-5"><h2 className="font-semibold">Product connections</h2><p className="my-2 text-sm text-muted">Connect a repository and optionally link its GitHub Project. Changes are saved in your vault; use Git sync to share them.</p>
       {draft.map((p,i) => <div key={i} className="my-2 flex flex-wrap gap-2">{(['id','name','space','folder','repository','project_url'] as const).map(k => <input key={k} className={`${field} w-40`} aria-label={`Product ${i+1} ${k}`} placeholder={k === 'repository' ? 'owner/repository' : k.replace('_',' ')} value={p[k]} onChange={e => setDraft(d => d.map((v,j) => j === i ? {...v,[k]: e.target.value} : v))} />)}<button className={field} onClick={() => setDraft(d => d.filter((_,j) => i !== j))}>Remove</button></div>)}
       <div className="mt-3 flex gap-2"><button className={field} onClick={() => setDraft(d => [...d,{id:'',name:'',space:'',folder:'',repository:'',project_url:''}])}>Add product</button><button className="btn-primary" disabled={busy} onClick={() => void save()}>Save connections</button></div>
     </section>}
     <div className="flex min-h-0 flex-1 overflow-hidden">
-      <main id="activity-view" role={sessionsOnly ? "region" : "tabpanel"} aria-labelledby={sessionsOnly ? undefined : `activity-view-tab-${view}`} aria-label={sessionsOnly ? undefined : view === "timeline" ? "Timeline" : view === "local" ? "DevDeck issues" : "GitHub issues"} className="min-w-0 flex-1 overflow-auto p-5">
+      <main id={sessionsOnly ? 'work-runs' : 'work-history'} role="region" aria-label={sessionsOnly ? 'Runs' : 'History'} className="min-w-0 flex-1 overflow-auto p-5">
         {!loaded && <p className="text-muted">Reading shared activity…</p>}
-        {loaded && (sessionsOnly ? filteredSessions.length : view === 'timeline' ? timeline.length : filtered.length) === 0 && <p className="rounded-xl border border-line p-6 text-muted">No matching {sessionsOnly ? 'sessions' : view === 'timeline' ? 'messages or checkpoints' : 'work'}. Connect a product to read GitHub issues, or record a session in your shared vault.</p>}
-        {!sessionsOnly && view === 'timeline' ? <div className="space-y-3">
+        {loaded && (sessionsOnly ? filteredSessions.length : timeline.length) === 0 && <p className="rounded-xl border border-line p-6 text-muted">No matching {sessionsOnly ? 'runs' : 'messages or checkpoints'}. Connect a product to read GitHub issues, or record a session in your shared vault.</p>}
+        {!sessionsOnly ? <div className="space-y-3">
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3"><h2 className="text-xl font-semibold">{chatManager ? `Chat with ${chatManager.bot.name}` : 'Team timeline'}</h2><select aria-label="Chat with manager" className={field} disabled={sending} value={chatTarget} onChange={e => { setChatTarget(e.target.value); setPicked(''); setMessageBody('') }}><option value="">All activity · choose a manager to chat</option>{team.map(t => <option key={t.bot.handle} value={t.bot.handle}>{t.bot.name}</option>)}</select></div>
           {timeline.map(e => <article key={e.id} className={`relative flex gap-3 rounded-lg border-l-2 px-3 py-4 transition-colors hover:bg-hover/50 ${picked === e.id ? 'border-accent bg-raise' : 'border-transparent'}`}>
@@ -349,9 +346,9 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
             <textarea aria-label="Team message" placeholder={chatManager ? `Message ${chatManager.bot.name}…` : 'Choose a manager to chat…'} disabled={!chatTarget || !chatReady || sending} maxLength={6000} className={`${field} mt-2 w-full resize-y`} value={messageBody} onChange={e => setMessageBody(e.target.value)} />
             <div className="mt-2 flex items-center justify-between gap-3"><p role="status" className="text-xs text-muted">{notice}</p><button className="btn-primary" disabled={sending || chatLoading || !chatReady || !chatTarget || !messageBody.trim()}>{sending ? 'Replying…' : 'Send'}</button></div>
           </form>
-        </div> : sessionsOnly ? <div className="space-y-3">{filteredSessions.map(s => <button key={s.id} onClick={() => setPicked(s.id)} className={`w-full rounded-xl border p-4 text-left ${picked === s.id ? 'border-accent bg-raise' : 'border-line bg-panel'}`}><div className="flex justify-between gap-3"><b>{s.title}</b><span className="text-xs text-muted">{stage(s.status)} · {isStale(s.updated_at) && stage(s.status) !== 'Done' ? 'Stale' : 'Recorded'}</span></div><p className="mt-2 text-sm text-muted">{s.assistant} · {s.id}</p><p className="mt-1 text-xs text-muted">{s.space} / {s.folder} · {new Date(s.updated_at).toLocaleString()}</p></button>)}</div> : layout === 'list' ? <div className="overflow-hidden rounded-xl border border-line bg-panel"><div className="grid grid-cols-[minmax(0,1fr)_100px_140px] gap-4 border-b border-line bg-soft px-4 py-3 text-xs font-semibold text-muted"><span>Issue / project</span><span>Status</span><span>Updated</span></div>{filtered.map(r => <button key={r.id} onClick={() => setPicked(r.id)} className={`grid w-full grid-cols-[minmax(0,1fr)_100px_140px] items-center gap-4 border-b border-line px-4 py-3 text-left last:border-0 hover:bg-hover ${picked === r.id ? 'bg-accent/10' : ''}`}><span className="min-w-0"><span className="block truncate text-sm font-medium">{r.title}</span><span className="mt-1 block truncate text-xs text-muted">{r.product} · {r.source}{r.owners?.length ? ` · ${r.owners.join(', ')}` : ''}</span></span><StateBadge state={r.status} label={r.status}/><span className="text-xs text-muted">{r.updated ? new Date(r.updated).toLocaleString() : 'No update'}</span></button>)}</div> : <div className="grid min-w-[900px] grid-cols-5 gap-3">{columns.map(c => <section key={c}><h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><span className={statusColors[c]}><Icon name={statusIcons[c]} size={15} /></span>{c} <span className="ml-auto rounded-full bg-soft px-2 py-0.5 text-xs text-muted">{filtered.filter(r => r.status === c).length}</span></h2><div className="space-y-3">{filtered.filter(r => r.status === c).map(r => <button key={r.id} onClick={() => setPicked(r.id)} className={`w-full rounded-xl border p-3 text-left ${picked === r.id ? 'border-accent bg-raise' : 'border-line bg-panel hover:border-accent/50 hover:bg-hover'}`}><p className="text-[11px] text-muted">{r.product} · {r.source}</p><p className="mt-2 text-sm font-medium">{r.title}</p><p className="mt-3 text-xs text-muted">{r.owners?.length ? `GitHub assignee: ${r.owners.join(', ')} · ` : ''}{r.sessions.length ? r.sessions.map(s => `${s.assistant} · ${stage(s.status)}${isStale(s.updated_at) && stage(s.status) !== 'Done' ? ' · Stale' : ''}`).join(', ') : 'No linked session'}</p><p className="mt-2 text-[11px] text-muted">{r.updated ? new Date(r.updated).toLocaleString() : 'No recorded update'}</p></button>)}</div></section>)}</div>}
+        </div> : <div className="space-y-3">{filteredSessions.map(s => <button key={s.id} onClick={() => setPicked(s.id)} className={`w-full rounded-xl border p-4 text-left ${picked === s.id ? 'border-accent bg-raise' : 'border-line bg-panel'}`}><div className="flex justify-between gap-3"><b>{s.title}</b><span className="text-xs text-muted">{stage(s.status)} · {isStale(s.updated_at) && stage(s.status) !== 'Done' ? 'Stale' : 'Recorded'}</span></div><p className="mt-2 text-sm text-muted">{s.assistant} · {s.id}</p><p className="mt-1 text-xs text-muted">{[s.space,s.folder].filter(Boolean).join(' / ') || 'Unlinked to a space or project'} · {new Date(s.updated_at).toLocaleString()}</p></button>)}</div>}
       </main>
-      {!sessionsOnly && view === 'timeline' && <aside className="w-80 shrink-0 overflow-auto border-l border-line bg-panel p-5">
+      {!sessionsOnly && <aside className="max-h-72 w-full shrink-0 overflow-auto border-t border-line bg-panel p-5 lg:max-h-none lg:w-80 lg:border-l lg:border-t-0">
         <h2 className="text-lg font-semibold">Linked work</h2>
         <section className="mt-4 rounded-xl border border-line p-4"><h3 className="flex items-center gap-2 font-semibold">{timelineEntry?.url ? <BrandIcon brand="github" size={18} /> : <Icon name="inbox" size={18} />}{timelineEntry?.url ? githubLabel(timelineEntry.url) : 'Local discussion'}</h3><p className="mt-3 text-sm">{linkedIssue?.title || timelineEntry?.title || 'Select a message or checkpoint'}</p><p className="mt-2 text-xs text-muted">{timelineEntry?.space || 'Unscoped'} · {timelineEntry?.product || 'Project not linked'}</p>{timelineEntry?.status && <p className="mt-3 text-sm text-info">Recorded: {timelineEntry.status}</p>}{timelineEntry?.url && <p className="mt-4"><Link url={timelineEntry.url}>Open issue</Link></p>}</section>
         {timelineEntry && linkedItems(timelineEntry).length > 0 && <section className="mt-4 border-t border-line pt-4"><h3 className="text-xs font-semibold uppercase tracking-wide text-muted">References</h3><div className="mt-3 space-y-2">{linkedItems(timelineEntry).map(item => <div key={item.url} className="rounded-lg border border-line bg-soft p-3"><p className="mb-1 text-[10px] uppercase text-muted">{item.kind === 'PR' ? 'Pull request' : item.kind === 'run' ? 'Workflow run' : item.kind}</p><Link url={item.url}>{githubLabel(item.url)}</Link></div>)}</div></section>}
@@ -359,8 +356,8 @@ export function ActivityBoard({ sessionsOnly = false }: { sessionsOnly?: boolean
         <section className="mt-4 rounded-xl border border-line p-4"><h3 className="font-semibold">Create a task</h3><p className="mt-2 text-xs text-muted">Open this checkpoint as a GitHub issue draft. Review and submit it on GitHub.</p><button className="btn-ghost mt-3 w-full" disabled={!issueProduct || !timelineEntry} onClick={draftIssue}>Create GitHub issue</button>{!issueProduct && <p className="mt-2 text-xs text-muted">Choose a connected project first.</p>}</section>
         <h3 className="mt-6 border-t border-line pt-4 font-semibold">Participants</h3>{choices(timeline.flatMap(e => [e.from, e.to])).map(name => <p key={name} className="mt-3 flex items-center gap-3 text-sm"><span className="flex h-7 w-7 items-center justify-center rounded-lg border border-line bg-soft text-body"><SenderMark name={name} size={16} /></span>{name}</p>)}
       </aside>}
-      {(sessionsOnly || view !== 'timeline') && selected && <aside className="w-80 shrink-0 overflow-auto border-l border-line bg-panel p-5"><button className="float-right text-muted" aria-label="Close activity details" onClick={() => setPicked('')}>×</button><h2 className="pr-5 font-semibold">{selected.title}</h2>{'url' in selected && selected.url && <p className="mt-3 text-sm"><Link url={selected.url}>Open GitHub item</Link></p>}
-        <p className="mt-3 text-xs text-muted">{selected.space} / {selected.folder}</p>
+      {sessionsOnly && selected && <aside className="max-h-72 w-full shrink-0 overflow-auto border-t border-line bg-panel p-5 lg:max-h-none lg:w-80 lg:border-l lg:border-t-0"><button className="float-right text-muted" aria-label="Close activity details" onClick={() => setPicked('')}>×</button><h2 className="pr-5 font-semibold">{selected.title}</h2>
+        <p className="mt-3 text-xs text-muted">{[selected.space,selected.folder].filter(Boolean).join(' / ') || 'Unlinked to a space or project'}</p>
         {details.length === 0 && <p className="mt-4 text-sm text-muted">No session has reported working on this item.</p>}
         {details.map(s => <section key={s.id} className="mt-5 border-t border-line pt-4"><h3 className="text-sm font-semibold">{s.assistant}</h3><p className="mt-1 break-all text-xs text-muted">{s.id}</p><p className="mt-2 text-sm">{s.status} · {isStale(s.updated_at) && stage(s.status) !== 'Done' ? 'Stale update' : 'Recorded update'}</p><p className="mt-1 text-xs text-muted">Started {new Date(s.started_at).toLocaleString()}<br/>Updated {new Date(s.updated_at).toLocaleString()}</p>{s.ticket_url && <p className="mt-2 text-sm"><Link url={s.ticket_url}>Linked GitHub item</Link></p>}{s.conversation_url && <p className="mt-2 break-all text-xs text-muted">Conversation: {s.conversation_url}</p>}{s.step && <p className="mt-3 text-sm"><b>Current step:</b> {s.step}</p>}{s.blocker && <p className="mt-3 text-sm text-err"><b>Blocker:</b> {s.blocker}</p>}{s.next_action && <p className="mt-3 text-sm"><b>Next action:</b> {s.next_action}</p>}<h4 className="mt-4 text-xs font-semibold text-muted">Checkpoint history</h4>{s.checkpoints.length === 0 && <p className="mt-2 text-xs text-muted">No checkpoints recorded.</p>}{s.checkpoints.map((h,i) => <div key={`${h.at}:${i}`} className="mt-3 border-l-2 border-line pl-3"><p className="text-xs text-muted">{new Date(h.at).toLocaleString()}</p><p className="mt-1 text-sm">{h.summary}</p>{h.evidence.map(e => <p key={e} className="mt-1 break-all text-xs"><Link url={e}>{e}</Link></p>)}</div>)}</section>)}
       </aside>}

@@ -88,6 +88,7 @@ export function ModelPicker({
   hint,
   compact,
   onVerdict,
+  label,
 }: {
   providerId: string
   value: string
@@ -95,6 +96,7 @@ export function ModelPicker({
   hint?: string
   /** Table rows have no room for a note; the tooltip carries it instead. */
   compact?: boolean
+  label?: string
   /** Hand the verdict to whoever owns the layout.
    *
    *  A refusal is about the *agent*, not about the dropdown, and in a table it
@@ -199,6 +201,7 @@ export function ModelPicker({
         {typing ? (
           <input
             autoFocus
+            aria-label={label ? `${label} ID` : undefined}
             className="input min-w-0 flex-1 font-mono text-[11.5px]"
             value={value}
             placeholder="model id"
@@ -206,6 +209,7 @@ export function ModelPicker({
           />
         ) : (
           <select
+            aria-label={label}
             className="input min-w-0 flex-1 text-[11.5px]"
             value={value}
             title={compact ? status?.text : undefined}

@@ -1,3 +1,4 @@
+import { ConnectionStatus } from './ConnectionStatus'
 import { LegacyControls } from './LegacyControls'
 import { useCallback, useEffect, useState } from 'react'
 import { feeds, inventory, services, type FeedAccess, type Inventory } from '../../lib/connectors'
@@ -27,7 +28,7 @@ export function ConnectorDetails({ serviceId, onUpdated }: { serviceId: string; 
         {data.unavailable.includes(service.id) && <p className="mt-2 text-xs text-warn">Saved connections could not be read. Refresh inventory to retry.</p>}
         {!loading && !data.unavailable.includes(service.id) && existing.length === 0 && <p className="mt-2 text-xs text-muted">No saved connections found for this service.</p>}
         {existing.map(c => { const feed = data.feedConnections.find(f=>`feed:${f.id}` === c.id); return <article key={c.id} className="mt-3 rounded-lg border border-line bg-soft p-3">
-          <div className="flex flex-wrap justify-between gap-2"><h4 className="text-sm font-medium text-ink">{c.name}</h4><span className={`text-xs ${c.state === 'verified' ? 'text-ok' : c.state === 'degraded' || c.state === 'missing-dependency' ? 'text-warn' : 'text-muted'}`}>{c.state}</span></div>
+          <div className="flex flex-wrap justify-between gap-2"><h4 className="text-sm font-medium text-ink">{c.name}</h4><ConnectionStatus state={c.state}/></div>
           {c.note && <p className="mt-2 text-xs text-muted">{c.note}</p>}
           <p className="mt-2 text-xs text-muted">Last check: {c.lastCheck ? new Date(c.lastCheck < 1e12 ? c.lastCheck * 1000 : c.lastCheck).toLocaleString() : 'Not checked'}</p>
           {c.credentialRef && <p className="mt-1 break-all text-xs text-muted">Credential reference: {c.credentialRef}</p>}

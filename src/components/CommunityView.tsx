@@ -133,7 +133,7 @@ export function CommunityView({ discoveryOnly = false }: { discoveryOnly?: boole
   const permissionOrigin = useRef<HTMLElement | null>(null)
   const managePermissions = (id: string) => { permissionOrigin.current = document.activeElement as HTMLElement; setPermissionTool(id) }
   const closePermissions = () => { setPermissionTool(null); requestAnimationFrame(() => permissionOrigin.current?.focus()) }
-  useEffect(() => { if (permissionTool) requestAnimationFrame(() => document.getElementById('community-permissions-back')?.focus()) }, [permissionTool])
+  useEffect(() => { if (!permissionTool) return; const frame = requestAnimationFrame(() => document.getElementById('community-permissions-back')?.focus()); return () => cancelAnimationFrame(frame) }, [permissionTool])
 
   const [requestedRepo, setRequestedRepo] = useState<{ url: string; request: number }>()
 
@@ -3030,7 +3030,7 @@ function Card({
             )}
 
             <span className="flex-1" />
-            {row.kind === 'tool' && <button className="btn text-[11px]" onClick={() => onManagePermissions(row.id)}>Manage permissions</button>}
+            {row.kind === 'tool' && <button className="btn-ghost border border-line2 text-[11px]" onClick={() => onManagePermissions(row.id)}>Manage permissions</button>}
 
             <button className="btn-ghost text-[11px]" disabled={busy} onClick={onRemove}>
 
@@ -3271,6 +3271,7 @@ function InstalledList({
                         }`}
 
                         disabled={busy === r.id}
+                        aria-pressed={on}
 
                         title={
 

@@ -4,7 +4,7 @@
 .connectors-header h1 { color:var(--c-ink); font-size:40px; font-weight:700; letter-spacing:-1.1px; line-height:1.15; }
 .connectors-header p { margin-top:4px; color:var(--c-dim); font-size:17px; line-height:1.5; }
 .connectors-header-actions { display:flex; align-items:center; flex-shrink:0; gap:12px; }
-.connector-workspace-badge,.connector-count { display:inline-flex; align-items:center; gap:7px; border:1px solid var(--c-line); background:color-mix(in srgb,var(--c-raise) 75%,transparent); border-radius:20px; padding:5px 10px; font-size:11px; color:var(--c-dim); white-space:nowrap; }
+.connector-workspace-badge,.connector-count { display:inline-flex; align-items:center; gap:7px; border:1px solid var(--c-line); background:color-mix(in srgb,var(--c-raise) 75%,transparent); border-radius:20px; padding:5px 10px; font-size:11px; color:var(--c-dim); white-space:normal; }
 .connector-button { display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:8px 12px; min-height:34px; border:1px solid var(--c-line3); border-radius:8px; color:var(--c-body); background:color-mix(in srgb,var(--c-raise) 75%,transparent); font-size:11.5px; font-weight:500; white-space:nowrap; transition:background .15s,border-color .15s; }
 .connector-button:hover:not(:disabled) { background:var(--c-hover); border-color:var(--c-accent); color:var(--c-ink); }
 .connector-button:disabled { opacity:.5; cursor:not-allowed; }
@@ -48,10 +48,14 @@
 .connector-category[data-category=Social] { color:var(--c-viol); background:color-mix(in srgb,var(--c-viol) 13%,transparent); }
 .connector-status { display:inline-flex; align-items:center; gap:5px; font-size:11px; color:var(--c-dim); white-space:nowrap; }
 .connector-status-dot { width:6px; height:6px; border-radius:50%; background:var(--c-muted); }
-.connector-status[data-state=verified],.connector-status[data-state=authenticated] { color:var(--c-ok); }
-.connector-status[data-state=verified] .connector-status-dot,.connector-status[data-state=authenticated] .connector-status-dot { background:var(--c-ok); }
-.connector-status[data-state=degraded],.connector-status[data-state=missing-dependency],.connector-status[data-state=reconnect] { color:var(--c-warn); }
-.connector-status[data-state=degraded] .connector-status-dot,.connector-status[data-state=missing-dependency] .connector-status-dot,.connector-status[data-state=reconnect] .connector-status-dot { background:var(--c-warn); }
+.connector-status { --status-color:var(--c-dim); color:var(--status-color); }
+.connector-status-dot { width:7px; height:7px; background:var(--status-color); box-shadow:0 0 0 3px color-mix(in srgb,var(--status-color) 12%,transparent); flex-shrink:0; }
+.connector-status[data-state=verified] { --status-color:var(--c-ok); }
+.connector-status[data-state=authenticated] { --status-color:var(--c-info); }
+.connector-status[data-state=degraded] { --status-color:var(--c-err); }
+.connector-status[data-state=missing-dependency],.connector-status[data-state=reconnect] { --status-color:var(--c-warn); }
+.connector-status[data-state=paused] .connector-status-dot { background:transparent; border:1px solid currentColor; }
+.connector-status[data-state=disconnected] .connector-status-dot { border-radius:1px; background:transparent; border:1px solid currentColor; }
 .connector-status-planned { padding:4px 8px; border:1px solid var(--c-line2); border-radius:20px; background:color-mix(in srgb,var(--c-hover) 70%,transparent); font-size:10.5px; }
 .connector-card-bottom .connector-button { margin-left:auto; padding:5px 12px; min-height:28px; font-size:11px; }
 .connector-details-link { margin-left:auto; display:inline-flex; align-items:center; gap:8px; color:var(--c-dim); font-size:11px; white-space:nowrap; }

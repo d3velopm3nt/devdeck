@@ -1,3 +1,4 @@
+import { ConnectionStatus } from './ConnectionStatus'
 import { PageHeader, TabStrip } from '../ui/DesignSystem'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { inventory, type Connection, type Inventory } from '../../lib/connectors'
@@ -9,11 +10,6 @@ import './connectors.css'
 
 type Tab = 'All integrations' | 'Connected' | 'Explore'
 const TABS: Tab[] = ['All integrations', 'Connected', 'Explore']
-const stateLabels: Record<Connection['state'], string> = {
-  configured: 'Configured', authenticated: 'Authenticated', verified: 'Verified',
-  degraded: 'Needs attention', reconnect: 'Reconnect needed', 'missing-dependency': 'Missing dependency',
-  paused: 'Paused', disconnected: 'Disconnected',
-}
 
 function ConnectionDialog({ entry, onClose, onUpdated }: {
   entry: CatalogueEntry; onClose: () => void; onUpdated: () => void
@@ -78,7 +74,7 @@ export function ConnectorsPage() {
         <p className="connector-card-description" title={entry.description}>{entry.description}</p>
         <div className="connector-card-bottom">
           {connection ? <>
-            <span className="connector-status" data-state={connection.state}><span className="connector-status-dot" />{stateLabels[connection.state]}</span>
+            <ConnectionStatus state={connection.state}/>
             <button className="ds-button connector-button" aria-label={`Manage ${title}`} onClick={() => setSelected(entry)}>Manage</button>
           </> : <>
             <span className="connector-category" data-category={entry.category}>{entry.category}</span>

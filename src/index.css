@@ -205,6 +205,58 @@
   color-scheme: dark;
 }
 
+/* Unofficial chatgpt-inspired dark palette. */
+[data-theme='chatgpt'] {
+  --c-app: #171717;
+  --c-page: #212121;
+  --c-panel: #212121;
+  --c-raise: #292929;
+  --c-menu: #303030;
+  --c-hover: #3a3a3a;
+  --c-soft: rgb(255 255 255 / .06);
+  --c-line: #383838;
+  --c-line2: #505050;
+  --c-line3: #808080;
+  --c-ink: #f5f5f5;
+  --c-body: #e3e3e3;
+  --c-dim: #b8b8b8;
+  --c-muted: #adadad;
+  --c-faint: #929292;
+  --c-accent: #6ee7b7;
+  --c-ok: #7ee2a8;
+  --c-warn: #f5cb78;
+  --c-err: #ff9696;
+  --c-info: #8cc8ff;
+  --c-viol: #cfb2ff;
+  color-scheme: dark;
+}
+
+/* Unofficial github-inspired dark palette. */
+[data-theme='github'] {
+  --c-app: #010409;
+  --c-page: #0d1117;
+  --c-panel: #161b22;
+  --c-raise: #1c2128;
+  --c-menu: #21262d;
+  --c-hover: #30363d;
+  --c-soft: rgb(177 186 196 / .08);
+  --c-line: #30363d;
+  --c-line2: #484f58;
+  --c-line3: #6e7681;
+  --c-ink: #f0f6fc;
+  --c-body: #d0d7de;
+  --c-dim: #b1bac4;
+  --c-muted: #a1acb8;
+  --c-faint: #919ba7;
+  --c-accent: #79c0ff;
+  --c-ok: #7ee787;
+  --c-warn: #e3b341;
+  --c-err: #ff9b9b;
+  --c-info: #a5d6ff;
+  --c-viol: #d2a8ff;
+  color-scheme: dark;
+}
+
 @theme inline {
   --color-app: var(--c-app);
   --color-page: var(--c-page);

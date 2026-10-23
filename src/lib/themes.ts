@@ -11,7 +11,7 @@
 // tokens and needs to be told which family it is in — Monaco, xterm — so a
 // warm paper theme does not hand the editor a "dark" it never asked for.
 
-export type ThemeId = 'dark' | 'light' | 'claude' | 'vercel' | 'vercel-light' | 'vscode'
+export type ThemeId = 'dark' | 'light' | 'claude' | 'vercel' | 'vercel-light' | 'vscode' | 'chatgpt' | 'github'
 
 /// What a theme *is* underneath the palette, for consumers that only speak
 /// dark or light.
@@ -80,6 +80,18 @@ export const THEMES: ThemeDef[] = [
     blurb: 'Dark+ — the editor you already live in.',
     scheme: 'dark',
     swatch: { app: '#181818', panel: '#252526', accent: '#4ea1f5', ink: '#e7e7e7' },
+  },
+  {
+    id: 'chatgpt', label: 'ChatGPT',
+    blurb: 'Inspired by ChatGPT: neutral charcoal and a soft mint accent. Unofficial dark palette.',
+    scheme: 'dark',
+    swatch: { app: '#171717', panel: '#212121', accent: '#6ee7b7', ink: '#f5f5f5' },
+  },
+  {
+    id: 'github', label: 'GitHub',
+    blurb: 'Inspired by GitHub: cool dark surfaces and blue links. Unofficial dark palette.',
+    scheme: 'dark',
+    swatch: { app: '#010409', panel: '#161b22', accent: '#79c0ff', ink: '#f0f6fc' },
   },
 ]
 

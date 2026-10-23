@@ -1,7 +1,7 @@
 import { createRoot } from 'react-dom/client'
 import '../src/index.css'
 import { FolderWorkflowPage } from '../src/components/FolderWorkflowPage'
-import type { FolderWorkflow } from '../src/lib/ipc'
+import type { FolderWorkflow, IssueMonitorView } from '../src/lib/ipc'
 import { SEED } from './seed'
 import { emit } from './mockTauri'
 
@@ -20,7 +20,27 @@ const update = async () => {
   data.raw = `revision-${++revision}`
   await emit('aiw:event', { type: 'file.changed', project_id: '7', payload: { source: 'folder_workflow' } })
 }
-fixture.folder_workflow_get = copy
+const named = new Map<string, FolderWorkflow>()
+const web = copy(); web.definition.title = 'Web release'; web.path = 'C:/State/Marketing/.devdeck/workflows/web-release.md'; web.raw = 'web-revision'; web.definition.steps[0].status = 'done'; web.definition.steps[0].evidence = 'Web evidence only'; named.set('web-release', web)
+fixture.folder_workflow_get = args => args?.workflow && args.workflow !== 'default' ? structuredClone(named.get(String(args.workflow)) || { raw: '', definition: { title: '', steps: [] }, body: '', path: `C:/State/Marketing/.devdeck/workflows/${args.workflow}.md` }) : copy()
+fixture.folder_workflow_list = () => [{ id: 'default', title: data.definition.title, steps: 2, done: data.definition.steps.filter(s => s.status === 'done').length, error: null }, ...[...named].map(([id, d]) => ({ id, title: d.definition.title, steps: d.definition.steps.length, done: d.definition.steps.filter(s => s.status === 'done').length, error: null }))]
+fixture.visibility_snapshot = () => ({ products: [{ id: 'devdeck', name: 'DevDeck', repository: 'owner/devdeck' }], warnings: [], sessions: [], config_raw: '' })
+fixture.visibility_github_issues = () => ({ items: [{ number: 23, title: 'Orb test', state: 'open', pull_request: false, assignees: [] }], warnings: [], truncated: false })
+fixture.folder_workflow_route = args => {
+  calls.push({ command: 'route', args })
+  if (args?.expected !== data.raw) throw new Error('The workflow template changed. Reload before routing.')
+  const id = 'issue-fixture-23', duplicate = named.has(id)
+  if (!duplicate) { const run = copy(); run.definition.title = '#23 · Orb test'; run.definition.ticket_url = 'https://github.com/owner/devdeck/issues/23'; run.raw = 'issue-revision'; named.set(id, run) }
+  return { id, duplicate, workflow: structuredClone(named.get(id)) }
+}
+let monitor: IssueMonitorView = { bindings: [], dispatches: [], raw: '', enabled: false, sources: [{ repository: 'owner/devdeck', items: [], fetched_at: '', last_attempt: '', error: '', warnings: [], truncated: false }], warnings: [] }
+fixture.tree_list = () => [{ id: 7, name: 'Marketing', dir: 'C:/State/Marketing', kind: 'folder', parent_id: null }]
+fixture.issue_monitor_get = () => structuredClone(monitor)
+fixture.issue_monitor_save = args => { if (args?.expected !== monitor.raw) throw new Error('Issue monitor settings changed. Reload before saving.'); monitor = { ...monitor, raw: 'monitor-revision', enabled: !!args.enabled, bindings: (args.bindings as IssueMonitorView['bindings'] | undefined) || monitor.bindings }; return structuredClone(monitor) }
+fixture.issue_monitor_refresh = () => { monitor.sources[0].fetched_at = '2026-10-14T18:00:00Z'; return structuredClone(monitor) }
+fixture.reusable_teams_list = () => [{id:'writing',name:'Writing team',description:'Editorial work',revision:1,roles:[{name:'writer',worker:'writer'}]}]
+fixture.folder_workflow_parse = () => structuredClone(data.definition)
+fixture.folder_workflow_team_draft = args => { calls.push({command:'team-draft',args}); return 'team-draft' }
 fixture.workers_list = () => [{ handle: 'writer', name: 'Writer' }]
 fixture.worker_plan = args => {
   calls.push({ command: 'plan', args })

@@ -1,3 +1,4 @@
+import { FilterTabs, StateBadge } from './ui/DesignSystem'
 // Machine Setup: install dev software via winget/scoop, see what's already
 // installed, pick one-click bundles, and fully control the catalog — every
 // package (curated or your own) is seeded into the DB and editable. Export/
@@ -311,19 +312,7 @@ export function MachineSetup() {
 
       {/* tabs */}
       <div className="flex items-center gap-1 border-b border-line px-5">
-        {([
-          ['search', 'Search & install'],
-          ['bundles', 'One-click bundles'],
-        ] as const).map(([id, label]) => (
-          <button
-            key={id}
-            className={`-mb-px border-b-2 px-3 py-2 text-[12.5px] ${tab === id ? 'border-indigo-400 font-medium text-ink' : 'border-transparent text-muted hover:text-ink'}`}
-            onClick={() => setTab(id)}
-          >
-            {label}
-            {id === 'bundles' && <span className="ml-1.5 text-[10px] text-faint">{BUNDLES.length}</span>}
-          </button>
-        ))}
+<FilterTabs label="Machine setup" value={tab} onChange={setTab} options={[{id:'search',label:'Search & install',icon:'search'},{id:'bundles',label:'One-click bundles',icon:'package',count:BUNDLES.length}]}/>
         <div className="ml-auto flex items-center gap-1.5">
           <button className="btn-ghost inline-flex items-center gap-1 text-[11.5px]" disabled={loading} onClick={() => void refreshStatus()}>{loading ? 'Checking…' : <><Icon name="restart" size={12} /> Refresh</>}</button>
           <button className="btn-ghost text-[11.5px]" title="Re-seed curated packages and un-hide removed ones" onClick={() => void restoreDefaults()}>Restore defaults</button>
@@ -452,10 +441,7 @@ function Stat({ n, label, color, dot }: { n: number; label: string; color: strin
 }
 
 function StatusBadge({ status }: { status: 'installed' | 'installing' | 'failed' | 'none' }) {
-  if (status === 'installed') return <span className="shrink-0 rounded-full bg-emerald-500/12 px-2 py-0.5 text-[10.5px] text-ok">Installed</span>
-  if (status === 'installing') return <span className="shrink-0 rounded-full bg-indigo-500/15 px-2 py-0.5 text-[10.5px] text-indigo-300">Installing…</span>
-  if (status === 'failed') return <span className="shrink-0 rounded-full bg-red-500/12 px-2 py-0.5 text-[10.5px] text-err">Failed</span>
-  return <span className="shrink-0 rounded-full bg-white/[0.045] px-2 py-0.5 text-[10.5px] text-muted">Not installed</span>
+  return <StateBadge state={status} label={{installed:'Installed',installing:'Installing…',failed:'Failed',none:'Not installed'}[status]}/>
 }
 
 function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {

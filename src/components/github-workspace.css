@@ -1,0 +1,101 @@
+.gh-workspace{height:100%;min-width:0;overflow:auto;background:var(--c-page);color:var(--c-ink);font-size:13px;display:flex;flex-direction:column}
+.gh-heading{display:flex;align-items:center;gap:16px;padding:22px 24px 18px}.gh-heading h1{font-size:21px;font-weight:600;letter-spacing:-.5px}.gh-heading p{color:var(--c-muted);margin-top:4px}.gh-heading>.gh-action{margin-left:auto}
+.gh-action{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:5px 8px;border-radius:6px;font-size:12px;color:var(--c-accent);flex-shrink:0}.gh-action:hover{background:var(--c-hover)}
+.gh-layout{display:grid;grid-template-columns:180px minmax(0,1fr);border-top:1px solid var(--c-line);flex:1}.gh-repositories{padding:14px 10px;border-right:1px solid var(--c-line)}.gh-eyebrow{display:block;font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:var(--c-muted);padding:4px 8px 9px}.gh-repositories>button{display:flex;align-items:center;gap:8px;width:100%;text-align:left;border-radius:6px;padding:8px;margin-bottom:3px}.gh-repositories>button>span{flex:1;min-width:0;overflow-wrap:anywhere}.gh-repositories>button>small{margin-left:auto}.gh-repositories small{display:block;font-size:11px;color:var(--c-muted)}.gh-repositories button:hover,.gh-entry:hover{background:var(--c-hover)}.gh-repositories .selected,.gh-entry.selected{background:var(--c-raise)}.gh-coverage{margin-top:24px;padding:0 8px;color:var(--c-muted);font-size:12px}.gh-coverage .gh-eyebrow{padding-left:0}.gh-coverage small{margin-top:8px}
+.gh-feed{min-width:0}.gh-toolbar{padding:10px 14px;border-bottom:1px solid var(--c-line);display:flex;align-items:center;flex-wrap:wrap;gap:8px}.gh-search{display:flex;gap:7px;align-items:center;min-width:130px;flex:1;color:var(--c-muted)}.gh-search input{min-width:0;width:100%;background:transparent;color:var(--c-ink);padding:5px;font-size:12px}.gh-filters{display:flex;gap:2px;flex-wrap:wrap}.gh-filters button{padding:5px 8px;border-radius:5px;color:var(--c-muted);font-size:12px}.gh-filters button[aria-pressed=true]{background:var(--c-raise);color:var(--c-ink)}.gh-feed-body{display:grid;grid-template-columns:minmax(220px,1fr) 280px;min-height:400px}.gh-entries{min-width:0}.gh-entry{width:100%;display:flex;align-items:flex-start;gap:10px;padding:15px;text-align:left;border-bottom:1px solid var(--c-line)}.gh-entry>svg{margin-top:3px;color:var(--c-accent);flex-shrink:0}.gh-entry>span{flex:1;min-width:0}.gh-entry strong{display:block;font-size:13px;font-weight:500;overflow-wrap:anywhere}.gh-entry small{display:block;font-size:11px;color:var(--c-muted);margin-top:5px;overflow-wrap:anywhere}.gh-detail{min-width:0;border-left:1px solid var(--c-line);padding:18px;background:var(--c-panel)}.gh-byline{display:flex;align-items:center;gap:9px}.gh-byline h2{font-size:13px;font-weight:600}.gh-dev{width:29px;height:29px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--c-line);border-radius:9px;background:var(--c-raise);color:var(--c-accent);flex-shrink:0}.gh-detail-title{font-weight:500;margin:18px 0 9px;overflow-wrap:anywhere}.gh-status{font-size:11px;background:var(--c-raise);border-radius:4px;padding:3px 6px}.gh-detail-copy{color:var(--c-muted);font-size:12px;margin:16px 0;white-space:pre-wrap;overflow-wrap:anywhere;max-height:340px;overflow:auto}.gh-wrap{overflow-wrap:anywhere;color:var(--c-muted)}.gh-detail-actions{display:flex;align-items:flex-start;flex-direction:column;gap:6px;margin:16px 0}.gh-freshness{border-top:1px solid var(--c-line);padding-top:13px;margin-top:18px;color:var(--c-muted);font-size:11px}.gh-freshness p{margin-top:5px}.gh-footer{border-top:1px solid var(--c-line);display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 18px;font-size:11px;color:var(--c-muted)}.gh-banner{padding:8px 24px;font-size:12px}.gh-empty{padding:32px 20px;color:var(--c-muted)}.gh-empty h2{font-size:14px;color:var(--c-ink);margin-top:10px}.gh-empty p{margin:8px 0}.gh-muted{color:var(--c-muted)}
+.dev-briefing{border:1px solid var(--c-line);border-radius:11px;padding:18px;background:var(--c-panel);margin-bottom:20px}.gh-subtle{margin-left:auto;font-size:11px;color:var(--c-muted)}.gh-lead{font-size:18px;font-weight:500;letter-spacing:-.3px;margin:15px 0 6px}.dev-briefing>.gh-muted{font-size:12px}.gh-brief-row{display:flex;align-items:flex-start;gap:10px;padding:14px 0;border-bottom:1px solid var(--c-line);margin-top:5px}.gh-brief-row>svg{margin-top:3px;color:var(--c-accent);flex-shrink:0}.gh-brief-row>div{flex:1;min-width:0}.gh-brief-row strong{font-size:13px;font-weight:500}.gh-brief-row small{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:12px;color:var(--c-muted);margin-top:5px;overflow-wrap:anywhere}.gh-brief-links{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:14px}.gh-brief-links button{display:flex;align-items:center;gap:9px;text-align:left;padding:8px;border-radius:6px;min-width:0}.gh-brief-links button:hover{background:var(--c-hover)}.gh-brief-links span{flex:1;font-size:12px}.gh-brief-links small{display:block;font-size:11px;color:var(--c-muted);margin-top:3px}.gh-chat-link{display:flex;align-items:center;gap:8px;width:100%;padding:12px 0 0;border-top:1px solid var(--c-line);margin-top:12px;font-size:12px;color:var(--c-accent)}.gh-chat-link>svg:last-child{margin-left:auto}
+@media(max-width:1100px){.gh-feed-body{grid-template-columns:minmax(0,1fr)}.gh-detail{border-left:0;border-top:1px solid var(--c-line)}.gh-detail-copy{max-height:none}.gh-layout{grid-template-columns:160px minmax(0,1fr)}}
+@media(max-width:650px){.gh-heading{padding:16px}.gh-layout{grid-template-columns:1fr}.gh-repositories{display:flex;flex-wrap:wrap;border-right:0;border-bottom:1px solid var(--c-line);padding:7px}.gh-repositories>button{width:auto}.gh-repositories>.gh-eyebrow,.gh-coverage{display:none}.gh-brief-links{grid-template-columns:1fr}.gh-brief-row{flex-wrap:wrap}.gh-brief-row>.gh-action{margin-left:25px}.gh-subtle{display:none}.gh-chat-link .gh-muted{display:none}.gh-heading p{font-size:12px}.gh-workspace{overflow-wrap:anywhere}}
+@media(pointer:coarse){.gh-workspace button,.dev-briefing button{min-height:44px}.gh-search input{font-size:16px}}
+/* Keep selection and its evidence in view when a real repository has many rows. */
+@media(min-width:1101px){.gh-layout{min-height:0}.gh-feed{display:flex;flex-direction:column;min-height:0}.gh-feed-body{flex:1;min-height:0}.gh-entries,.gh-detail{overflow:auto}.gh-detail-copy{max-height:none;overflow:visible}.gh-heading,.gh-footer,.gh-toolbar{flex-shrink:0}}
+@media(max-width:1100px){.gh-entries{max-height:420px;overflow:auto}.gh-detail{order:-1}.gh-detail-copy{max-height:220px;overflow:auto}}
+/* GitHub consumes the shared state and filter primitives. */
+.gh-workspace { container-type: inline-size; }
+.gh-heading { padding: 22px 24px; }
+.gh-heading h1 { display: flex; align-items: center; gap: 10px; font-size: 25px; letter-spacing: -.6px; }
+.gh-heading p { color: var(--c-dim); font-size: 12px; }
+.gh-workspace .gh-action { min-height: 36px; padding: 7px 10px; border: 1px solid var(--c-line2); border-radius: 8px; background: var(--c-panel); color: var(--c-body); }
+.gh-workspace .gh-action:hover { background: var(--c-hover); }
+.gh-workspace .gh-action:disabled { opacity: .5; cursor: not-allowed; }
+.gh-workspace :is(button,input):focus-visible { outline: 2px solid var(--c-accent); outline-offset: -2px; }
+.gh-layout { grid-template-columns: 196px minmax(0,1fr); }
+.gh-repositories { background: var(--c-panel); padding: 16px 10px; }
+.gh-repositories > button { min-height: 44px; border: 1px solid transparent; border-radius: 8px; padding: 10px; }
+.gh-repositories > button.selected { border-color: color-mix(in srgb,var(--c-accent) 30%,var(--c-line)); background: color-mix(in srgb,var(--c-accent) 9%,var(--c-panel)); }
+.gh-repositories > button > svg { flex-shrink: 0; color: var(--c-dim); }
+.gh-repositories small,.gh-coverage,.gh-eyebrow { color: var(--c-dim); }
+.gh-toolbar { flex-direction: column; align-items: stretch; padding: 14px 16px; gap: 12px; background: var(--c-panel); }
+.gh-search { flex: none; min-height: 38px; padding: 0 10px; border: 1px solid var(--c-line2); border-radius: 8px; background: var(--c-page); }
+.gh-search:focus-within { border-color: var(--c-accent); }
+.gh-search input { font-size: 13px; }
+.gh-feed-body { grid-template-columns: minmax(240px,1fr) minmax(270px,34%); }
+.gh-entry { padding: 16px; gap: 12px; border-left: 3px solid transparent; }
+.gh-entry.selected { border-left-color: var(--c-accent); background: color-mix(in srgb,var(--c-accent) 8%,var(--c-panel)); }
+.gh-entry > svg:first-child { color: var(--ds-state-color); margin-top: 2px; }
+.gh-entry > svg:last-child { color: var(--c-dim); }
+.gh-entry strong { line-height: 1.5; font-weight: 550; }
+.gh-entry small { color: var(--c-dim); margin: 3px 0 8px; }
+.gh-detail { padding: 20px; }
+.gh-detail-title { font-size: 17px; font-weight: 600; line-height: 1.45; }
+.gh-detail-copy { color: var(--c-body); font-size: 13px; line-height: 1.7; }
+.gh-detail-actions { flex-direction: row; flex-wrap: wrap; gap: 8px; }
+.gh-freshness,.gh-footer,.gh-detail > small { color: var(--c-dim); }
+.gh-footer { padding: 12px 18px; }
+@container (max-width: 980px) {
+  .gh-layout { grid-template-columns: 165px minmax(0,1fr); }
+  .gh-feed-body { grid-template-columns: minmax(0,1fr); }
+  .gh-detail { order: -1; border-left: 0; border-bottom: 1px solid var(--c-line); }
+  .gh-detail-copy { max-height: 240px; overflow: auto; }
+  .gh-entries { max-height: 480px; overflow: auto; }
+}
+@container (max-width: 600px) {
+  .gh-layout { display: flex; flex-direction: column; }
+  .gh-repositories { display: flex; flex-wrap: wrap; gap: 4px; border-right: 0; border-bottom: 1px solid var(--c-line); }
+  .gh-repositories > button { width: auto; }
+  .gh-repositories > .gh-eyebrow,.gh-coverage { display: none; }
+  .gh-heading { padding: 16px; gap: 10px; }
+  .gh-heading h1 { font-size: 21px; }
+  .gh-toolbar { padding: 12px; }
+  .gh-heading > div { min-width: 0; }
+  .gh-heading > .gh-action { flex-shrink: 0; }
+}
+
+/* Repository workbench: compact navigation, readable evidence, clear actions. */
+.gh-heading { padding: 18px 20px; flex-wrap: wrap; }
+.gh-heading h1 { font-size: 22px; }
+.gh-header-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.gh-workspace .gh-action { min-height: 32px; padding: 5px 9px; border-radius: 6px; }
+.gh-layout { grid-template-columns: 168px minmax(0,1fr); }
+.gh-repositories { padding: 12px 8px; }
+.gh-repositories > button { min-height: 36px; padding: 8px; }
+.gh-toolbar { padding: 10px 14px 0; gap: 8px; }
+.gh-toolbar .ds-compact-tabs { gap: 2px; }
+.gh-toolbar .ds-compact-tabs > button { padding-inline: 7px; }
+.gh-search { min-height: 32px; border-radius: 6px; }
+.gh-entry { padding: 11px 13px; gap: 9px; }
+.gh-entry strong { font-size: 12px; line-height: 1.5; }
+.gh-entry .ds-state { padding: 2px 5px; font-size: 10px; }
+.gh-entry small { margin-bottom: 5px; }
+.gh-detail { padding: 18px; }
+.gh-detail-title { margin-top: 14px; font-size: 16px; }
+.gh-footer { padding: 8px 16px; }
+.gh-setup { padding: 18px 20px; border-top: 1px solid var(--c-line); background: var(--c-panel); flex-shrink: 0; }
+.gh-setup h2 { font-weight: 600; font-size: 14px; }
+.gh-setup p { font-size: 12px; color: var(--c-dim); margin: 6px 0 12px; }
+.gh-setup label { display: flex; flex-direction: column; gap: 6px; max-width: 680px; margin: 12px 0; font-size: 12px; }
+.gh-setup input,.gh-setup select,.gh-setup textarea { min-width: 0; width: 100%; padding: 8px 10px; border: 1px solid var(--c-line2); border-radius: 6px; background: var(--c-page); color: var(--c-ink); }
+.gh-setup > div { display: flex; gap: 8px; }
+.gh-setup p[role='alert'] { color: var(--c-err); }
+.gh-issue-body { margin: 16px 0; font-size: 12px; }
+.gh-issue-body summary { cursor: pointer; color: var(--c-dim); }
+.gh-issue-body p { margin-top: 10px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.65; }
+@container (max-width: 980px) {
+  .gh-layout { min-height: auto; }
+  .gh-feed-body { flex: none; }
+}
+@container (max-width: 600px) {
+  .gh-header-actions { margin-left: 0; }
+  .gh-heading { padding: 14px; gap: 12px; }
+}
+@media (pointer: coarse) { .gh-workspace .gh-action { min-height: 44px; } }

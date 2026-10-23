@@ -1,3 +1,4 @@
+import { StateBadge } from '../ui/DesignSystem'
 // Decisions and conflicts, on the space they belong to.
 //
 // These two were the only things the AI Workspace held that existed nowhere
@@ -101,17 +102,7 @@ export function DecisionsTab({ nodeId }: { nodeId: number }) {
                     >
                       {d.title}
                     </span>
-                    <Chip
-                      className={
-                        d.status === 'approved'
-                          ? 'bg-emerald-500/12 text-ok'
-                          : gone
-                            ? 'bg-slate-500/14 text-muted'
-                            : 'bg-sky-500/12 text-info'
-                      }
-                    >
-                      {d.status}
-                    </Chip>
+                    <StateBadge state={d.status}/>
                     {d.feature && <Chip className="bg-soft text-dim">{d.feature}</Chip>}
                     <div className="flex-1" />
                     <span className="text-[10.5px] text-faint">

@@ -1,0 +1,45 @@
+{
+  "notifications": [
+    {
+      "title": "Test notification",
+      "source": "Notification test",
+      "kind": "approval",
+      "count": 1,
+      "unread": 0,
+      "at": "2026-10-17T13:03:45.353Z"
+    },
+    {
+      "title": "Dev has a repository briefing",
+      "source": "d3velopm3nt/devdeck",
+      "kind": "info",
+      "count": 1,
+      "unread": 1,
+      "at": "2026-10-17T13:03:19.386Z"
+    }
+  ],
+  "testEvents": [
+    {
+      "kind": "notification.test",
+      "category": "Workspace"
+    }
+  ],
+  "afterRestart": [
+    {
+      "title": "Test notification",
+      "source": "Notification test",
+      "kind": "approval",
+      "count": 1,
+      "unread": 0,
+      "at": "2026-10-17T13:03:45.353Z"
+    },
+    {
+      "title": "Dev has a repository briefing",
+      "source": "d3velopm3nt/devdeck",
+      "kind": "info",
+      "count": 1,
+      "unread": 1,
+      "at": "2026-10-17T13:03:19.386Z"
+    }
+  ],
+  "preserved": true
+}

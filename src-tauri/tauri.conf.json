@@ -54,6 +54,21 @@
         "visible": false,
         "focus": false,
         "center": false
+      },
+      {
+        "label": "notifications",
+        "title": "DevDeck alerts",
+        "width": 370,
+        "height": 200,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "focus": false,
+        "center": false
       }
     ],
     "security": {

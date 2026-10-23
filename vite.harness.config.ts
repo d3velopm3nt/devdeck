@@ -9,6 +9,8 @@ import { fileURLToPath, URL } from 'node:url'
 const mock = fileURLToPath(new URL('./harness/mockTauri.ts', import.meta.url))
 
 export default defineConfig({
+  // The mock Tauri aliases must never replace the desktop server's optimized dependencies.
+  cacheDir: 'node_modules/.vite-harness',
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: [
@@ -22,5 +24,5 @@ export default defineConfig({
       { find: /^@tauri-apps\/plugin-updater$/, replacement: mock },
     ],
   },
-  server: { port: 5199, strictPort: true },
+  server: { port: 5199, strictPort: true, watch: { ignored: ['**/target/**', '**/mobile/dist/**', '**/src-tauri/**', '**/docs/test-reports/**', '**/test-results/**'] } },
 })

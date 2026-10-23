@@ -1,3 +1,5 @@
+import { Markdown } from '../thread/Markdown'
+import { StateBadge, TabStrip } from '../ui/DesignSystem'
 // A run, while it happens and after it.
 //
 // When the work happens in another process the transcript *is* the product,
@@ -7,7 +9,7 @@
 // decision that changes anything, because keeping writes a line into the
 // space's knowledge and the next worker starts from there.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useState } from 'react'
 import type { IDockviewPanelProps } from 'dockview-react'
 import * as ipc from '../../lib/ipc'
 import { Icon } from '../../lib/icons'
@@ -18,7 +20,10 @@ export function RunPanel({ params }: IDockviewPanelProps<{ id: string }>) {
 
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 
-export function RunView({ id }: { id: string }) {
+export function RunView({ id, compact = false }: { id: string; compact?: boolean }) {
+  const panelId = useId()
+  const [tab, setTab] = useState<'overview' | 'activity' | 'files' | 'request'>('overview')
+  useEffect(() => setTab('overview'), [id])
   const [run, setRun] = useState<ipc.Run | null>(null)
   const [live, setLive] = useState<ipc.RunStep[]>([])
   const [note, setNote] = useState('')
@@ -27,7 +32,6 @@ export function RunView({ id }: { id: string }) {
   // What it has stopped to ask. A worker sitting on one of these is burning
   // its clock, so this is the only thing on the page that is urgent.
   const [asks, setAsks] = useState<ipc.Ask[]>([])
-  const bottom = useRef<HTMLDivElement>(null)
 
   const load = useCallback(() => {
     void ipc
@@ -82,9 +86,6 @@ export function RunView({ id }: { id: string }) {
     return () => window.clearInterval(t)
   }, [run?.status])
 
-  useEffect(() => {
-    bottom.current?.scrollIntoView({ block: 'end' })
-  }, [live.length])
 
   if (!run) {
     return (
@@ -95,6 +96,7 @@ export function RunView({ id }: { id: string }) {
   }
 
   const running = run.status === 'running'
+  const nativeAgent = run.worker.startsWith('agent:')
   // `tick` is named so the dependency is honest: this clock re-reads on every
   // tick, and `+ tick * 0` was a way of saying that which added zero and read
   // as a mistake. Referencing it plainly says the same thing.
@@ -105,7 +107,7 @@ export function RunView({ id }: { id: string }) {
   const pct = run.minutes_limit > 0 ? Math.min(100, (seconds / (run.minutes_limit * 60)) * 100) : 0
   const spent = run.usd_limit > 0 ? Math.min(100, (run.usd / run.usd_limit) * 100) : 0
   const tone =
-    running ? 'text-indigo-400' : run.status === 'kept' ? 'text-ok' : run.ok ? 'text-ok' : 'text-warn'
+    running ? 'text-info' : run.status === 'kept' ? 'text-ok' : run.ok ? 'text-ok' : 'text-err'
 
   // What it is asking for, in the words it used. Never a paraphrase of ours:
   // approving a summary of a command is not approving the command.
@@ -138,7 +140,7 @@ export function RunView({ id }: { id: string }) {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-page">
+    <div className={`run-view flex h-full min-h-0 flex-col bg-page${compact ? ' run-view-compact' : ''}`}>
       {/* Above everything, because the run is stopped until this is answered
           and its minutes and its budget are still running down. */}
       {asks.map((a) => (
@@ -188,19 +190,7 @@ export function RunView({ id }: { id: string }) {
             {run.branch && <span className="font-mono"> · {run.branch}</span>}
           </div>
         </div>
-        <span
-          className={`rounded-full px-2 text-[9.5px] font-semibold uppercase tracking-wider leading-[1.7] ${
-            running
-              ? 'bg-indigo-500/15 text-indigo-300'
-              : run.status === 'kept'
-                ? 'bg-emerald-500/15 text-ok'
-                : run.ok
-                  ? 'bg-emerald-500/15 text-ok'
-                  : 'bg-amber-500/15 text-warn'
-          }`}
-        >
-          {run.status}
-        </span>
+        <StateBadge state={run.status} label={run.status}/>
         {running && (
           <button className="btn-danger text-[11.5px]" onClick={() => void ipc.workerStop(run.id)}>
             <Icon name="stop" size={12} /> Stop
@@ -208,15 +198,21 @@ export function RunView({ id }: { id: string }) {
         )}
       </div>
 
-      <div className="flex min-h-0 flex-1">
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 overflow-auto px-5 py-3">
+      <TabStrip label="Agent run details" value={tab} onChange={setTab} panelId={panelId} options={[
+        { id: 'overview', label: 'Overview', icon: 'info' },
+        { id: 'activity', label: 'Activity', icon: 'list', count: live.length },
+        { id: 'files', label: 'Files', icon: 'folder', count: run.files.length },
+        { id: 'request', label: 'Request', icon: 'note' },
+      ]}/>
+      <div id={panelId} role="tabpanel" aria-labelledby={panelId+'-tab-'+tab} className="run-view-body flex min-h-0 flex-1 overflow-auto flex-col">
+        <div className={`flex min-w-0 flex-col ${tab === 'activity' ? 'flex-1' : ''}`}>
+          {tab === 'activity' && <div className="min-h-0 flex-1 overflow-auto px-5 py-3">
             <div className="mb-2 flex items-center gap-2">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">What it did</span>
-              <span className="text-[10.5px] text-faint">every step as Claude Code reported it</span>
+              <span className="text-[10.5px] text-faint">{nativeAgent ? 'native agent messages and tool activity' : 'every step as Claude Code reported it'}</span>
             </div>
-            {live.map((s, i) => (
-              <div key={i} className="flex gap-3 border-t border-line py-2 first:border-t-0">
+            {[...live].reverse().map((s, i) => (
+              <div key={live.length - 1 - i} className="flex gap-3 border-t border-line py-2 first:border-t-0">
                 <span className="w-16 shrink-0 pt-px text-right font-mono text-[10.5px] text-faint">
                   {new Date(s.at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                 </span>
@@ -235,15 +231,14 @@ export function RunView({ id }: { id: string }) {
               </div>
             ))}
             {live.length === 0 && <div className="py-6 text-center text-[12px] text-muted">Nothing said yet.</div>}
-            <div ref={bottom} />
-          </div>
+          </div>}
 
-          {!running && (
+          {tab === 'overview' && !running && (
             <div className="shrink-0 border-t border-line px-5 py-3">
               {run.verdict && (
                 <div className="mb-2.5">
                   <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">It says</div>
-                  <p className="m-0 whitespace-pre-wrap text-[12.5px] leading-relaxed text-body">{run.verdict}</p>
+                  <Markdown text={run.verdict} />
                 </div>
               )}
               {run.status === 'kept' || run.status === 'discarded' ? (
@@ -255,12 +250,12 @@ export function RunView({ id }: { id: string }) {
                   {run.decision && <span className="italic text-dim">“{run.decision}”</span>}
                 </div>
               ) : (
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <button className="btn-primary text-[12px]" disabled={!run.ok || !note.trim()} onClick={() => void decide('keep')}>
                     Accept reviewed output
                   </button>
                   <input
-                    className="input flex-1 text-[12px]"
+                    className="input min-w-0 w-full flex-auto text-[12px]"
                     placeholder="Required: what did you check? Include tests or acceptance evidence."
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
@@ -275,35 +270,37 @@ export function RunView({ id }: { id: string }) {
           )}
         </div>
 
-        <div className="flex w-[300px] shrink-0 flex-col gap-3.5 border-l border-line px-4 py-3.5">
-          <div className="grid grid-cols-2 gap-2.5">
+        <div className="run-view-metadata flex min-w-0 flex-col gap-4 px-5 py-4">
+          {tab === 'overview' && <><div className="grid grid-cols-2 gap-2.5">
             <div className="rounded-[10px] border border-line bg-panel px-3 py-2">
               <div className="text-[10px] text-faint">Time</div>
               <div className="text-[16px] font-semibold tabular-nums text-ink">{mmss(seconds)}</div>
-              <div className="mt-1 h-[3px] overflow-hidden rounded-full bg-raise">
-                <span className="block h-full bg-indigo-500" style={{ width: `${pct}%` }} />
-              </div>
-              <div className="mt-1 text-[10px] text-faint">of {run.minutes_limit} min</div>
+              {run.minutes_limit > 0 && <div className="mt-1 h-[3px] overflow-hidden rounded-full bg-raise">
+                <span className="block h-full bg-info" style={{ width: `${pct}%` }} />
+              </div>}
+              <div className="mt-1 text-[10px] text-faint">{run.minutes_limit > 0 ? `of ${run.minutes_limit} min` : 'No overall time limit'}</div>
             </div>
             <div className="rounded-[10px] border border-line bg-panel px-3 py-2">
-              <div className="text-[10px] text-faint">Spent</div>
-              <div className="text-[16px] font-semibold tabular-nums text-ink">${run.usd.toFixed(2)}</div>
-              <div className="mt-1 h-[3px] overflow-hidden rounded-full bg-raise">
+              <div className="text-[10px] text-faint">{nativeAgent ? 'Model connection' : 'Spent'}</div>
+              <div className="text-[16px] font-semibold tabular-nums text-ink">{nativeAgent ? 'Existing' : `$${run.usd.toFixed(2)}`}</div>
+              {!nativeAgent && <div className="mt-1 h-[3px] overflow-hidden rounded-full bg-raise">
                 <span className="block h-full bg-emerald-500" style={{ width: `${spent}%` }} />
-              </div>
-              <div className="mt-1 text-[10px] text-faint">of ${run.usd_limit.toFixed(2)}</div>
+              </div>}
+              <div className="mt-1 text-[10px] text-faint">{nativeAgent ? 'Cost not reported here' : `of $${run.usd_limit.toFixed(2)}`}</div>
             </div>
           </div>
 
-          <div>
-            <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
+          {running && <p className="text-sm text-muted">The agent is working. Activity shows its recorded messages and tool calls; its report will appear here when it finishes.</p>}
+          </>}
+          {tab === 'files' && <div>
+            <div className="mb-1.5 text-sm font-semibold text-muted">
               Files it wrote {run.files.length > 0 && <span className="text-faint">{run.files.length}</span>}
             </div>
             {run.files.length === 0 ? (
-              <div className="text-[11.5px] text-faint">{running ? 'nothing yet' : 'nothing'}</div>
+              <div className="text-[11.5px] text-faint">{running ? 'No files recorded yet.' : 'No written files recorded for this run.'}</div>
             ) : (
               <div className="flex flex-col gap-1">
-                {run.files.slice(0, 14).map((f) => (
+                {run.files.map((f) => (
                   <div key={f.path} className="flex items-baseline gap-2">
                     <Icon name="note" size={11} className="shrink-0 text-muted" />
                     <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-body" title={f.path}>
@@ -314,10 +311,10 @@ export function RunView({ id }: { id: string }) {
                 ))}
               </div>
             )}
-          </div>
+          </div>}
 
-          <div>
-            <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">It was given</div>
+          {tab === 'request' && <><div>
+            <div className="mb-2 text-sm font-semibold text-muted">Skills supplied</div>
             <div className="flex flex-wrap gap-1">
               {run.skills.map((s) => (
                 <span key={s} className="rounded bg-indigo-500/10 px-1.5 py-px font-mono text-[10.5px] text-indigo-300">
@@ -328,9 +325,10 @@ export function RunView({ id }: { id: string }) {
             </div>
           </div>
 
-          <div className="mt-auto text-[10.5px] leading-relaxed text-faint">
-            Asked for: {run.intent || '—'}
-          </div>
+          <div className="min-w-0 text-sm leading-relaxed text-body">
+            <h3 className="mb-3 font-semibold">Request</h3>
+            <Markdown text={run.intent || 'No request recorded.'} />
+          </div></>}
         </div>
       </div>
     </div>

@@ -274,7 +274,7 @@ export function Thread({
   // needs one.
   const onMock = useAiw((s) => {
     const a = s.agents.find((x) => x.id === 'assistant')
-    return !!a && a.provider === 'mock'
+    return !a?.provider || a.provider === 'mock'
   })
 
   const reload = useCallback(() => {
@@ -351,7 +351,7 @@ export function Thread({
 
   const submit = async () => {
     const text = draft.trim()
-    if (!text || sending || !conv) return
+    if (!text || sending || !conv || onMock) return
     // Shown before the round trip: a message that vanishes until the reply
     // lands reads as a dropped one.
     const pending: ChatMessage = { at: new Date().toISOString(), from: 'user', text }
@@ -415,9 +415,8 @@ export function Thread({
         <div className="mb-2 flex shrink-0 items-start gap-2 rounded-lg border border-line bg-raise px-3 py-2 text-[11px] leading-[1.55] text-dim">
           <Icon name="info" size={12} className="mt-px shrink-0 text-indigo-400" />
           <span>
-            Running on the <span className="text-ink">mock provider</span>: replies here are
-            scripted. Spaces, bots and routines all still work with no API key — talking is the
-            part that needs one. Connect a provider under Settings → Assistant.
+            Set up an agent to start chatting. Spaces, projects and local tools remain available.
+            <button className="btn-ghost ml-2" onClick={() => { useApp.getState().setSettingsTab('assistant'); useApp.getState().setRailView('settings') }}>Set up agent</button>
           </span>
         </div>
       )}
@@ -549,7 +548,7 @@ export function Thread({
             className="input max-h-40 min-h-[34px] flex-1 resize-none py-2 text-[12.5px]"
             placeholder={placeholder ?? `Message ${name}…`}
             value={draft}
-            disabled={!conv || sending}
+            disabled={!conv || sending || onMock}
             onChange={(e) => {
               setDraft(e.target.value)
               setCaret(e.target.selectionStart ?? e.target.value.length)
@@ -586,7 +585,7 @@ export function Thread({
           />
           <button
             className="btn-primary h-[34px] px-3 text-[12px]"
-            disabled={!draft.trim() || sending || !conv}
+            disabled={!draft.trim() || sending || !conv || onMock}
             onClick={() => void submit()}
           >
             Send

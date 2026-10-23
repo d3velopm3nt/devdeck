@@ -1,3 +1,4 @@
+import { FilterTabs } from '../ui/DesignSystem'
 import { useCallback, useEffect, useState } from 'react'
 import * as ipc from '../../lib/ipc'
 import { useApp } from '../../store'
@@ -478,23 +479,7 @@ export function ManagerWorkspace({
           Plan, engine & schedule
         </button>
       </div>
-      <div className="flex gap-5 border-b border-line px-5">
-        {(['responsibilities', 'messages', 'conversation'] as const).map(
-          (t) => (
-            <button
-              key={t}
-              className={`py-3 text-sm ${tab === t ? 'font-semibold text-ink' : 'text-muted'}`}
-              onClick={() => setTab(t)}
-            >
-              {t === 'messages'
-                ? 'Communication'
-                : t === 'conversation'
-                  ? 'Conversation'
-                  : 'Responsibilities & team'}
-            </button>
-          )
-        )}
-      </div>
+<div className="ds-view-switch"><FilterTabs label="Agent views" value={tab} onChange={setTab} options={[{id:'responsibilities',label:'Responsibilities & team',icon:'contacts'},{id:'messages',label:'Communication',icon:'mail'},{id:'conversation',label:'Conversation',icon:'ai'}]}/></div>
       <div className="space-y-4 p-5">
         {error && (
           <p role="alert" className="text-sm text-err">

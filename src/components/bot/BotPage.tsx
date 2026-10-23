@@ -1,3 +1,4 @@
+import { FilterTabs } from '../ui/DesignSystem'
 // One bot, as a document.
 //
 // It opens in the dock rather than on a rail view because a bot is a file in a
@@ -282,27 +283,7 @@ export function BotDetail({
       </div>
 
       {/* Tabs */}
-      <div className="flex shrink-0 items-center gap-0.5 border-b border-line px-3">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            className={`relative flex items-center gap-1.5 px-3 py-2 text-[12px] ${
-              tab === t.id ? 'text-ink' : 'text-muted hover:text-dim'
-            }`}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-            {t.badge && (
-              <span className="rounded-full bg-soft px-1.5 text-[9.5px] tabular-nums text-muted">
-                {t.badge}
-              </span>
-            )}
-            {tab === t.id && (
-              <span className="absolute inset-x-2 -bottom-px h-[2px] rounded bg-indigo-500" />
-            )}
-          </button>
-        ))}
-      </div>
+<div className="ds-view-switch"><FilterTabs label="Bot views" value={tab} onChange={setTab} options={TABS.map(t=>({...t,count:t.badge,icon:({overview:'info',plan:'list',knows:'info',tools:'tool',settings:'settings'} as const)[t.id]}))}/></div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
         {err && (

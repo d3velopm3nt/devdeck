@@ -31,8 +31,8 @@ use super::provider::{AgentAction, AgentRequest, AgentResponse, ChatTurn, Observ
 use super::runtime::{AgentRuntime, LiveSession, StartAgentCommand};
 use super::state::Workspace;
 use super::tools::{
-    is_assistant_tool, ToolCall, TOOL_BOTS, TOOL_DELEGATE, TOOL_MEMORY, TOOL_ROUTINE, TOOL_SKILL,
-    TOOL_WORK,
+    is_assistant_tool, ToolCall, TOOL_BOTS, TOOL_DELEGATE, TOOL_LIBRARY, TOOL_MEMORY, TOOL_ROUTINE,
+    TOOL_SKILL, TOOL_WORK, TOOL_WORKFLOW,
 };
 
 /// The built-in orchestrator's agent id. It is a real entry in the agent list
@@ -127,6 +127,8 @@ pub struct ConversationMeta {
     /// this is a default rather than a boundary.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub work_item: Option<String>,
     /// The bot this is the thread of, when it is one. A bot's thread is the
     /// same shape as a conversation with the assistant — you, it, and what it
     /// did — so it is the same record, marked rather than duplicated.
@@ -447,6 +449,8 @@ pub struct ConversationSummary {
     pub started_at: String,
     pub updated_at: String,
     pub project_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub work_item: Option<String>,
     pub messages: usize,
     /// The last thing said, for the list.
     pub preview: String,
@@ -520,6 +524,25 @@ impl Conversations {
         change(&mut conv);
         self.save(&conv)?;
         Ok(conv)
+    }
+
+    /// One persistent conversation per work item, under the existing write gate.
+    pub fn for_work(&self, item: &crate::work_conversations::Subject) -> Result<ConversationMeta, String> {
+        let _gate = writing();
+        if let Some(existing) = self.list().into_iter().find(|c| c.work_item.as_deref() == Some(&item.id)) {
+            return self.load(&existing.id);
+        }
+        let now = now_iso();
+        let meta = ConversationMeta {
+            id: new_id("conv"), title: item.title.clone(),
+            started_at: now.clone(), updated_at: now,
+            project_id: (item.node > 0).then(|| item.node.to_string()),
+            work_item: Some(item.id.clone()),
+            messages: vec![ChatMessage::note("work-item", "work.source", true, item.source.clone())],
+            ..Default::default()
+        };
+        self.save(&meta)?;
+        Ok(meta)
     }
 
     pub fn create(&self, project_id: Option<&str>) -> Result<ConversationMeta, String> {
@@ -908,6 +931,7 @@ impl Conversations {
                 started_at: m.started_at,
                 updated_at: m.updated_at,
                 project_id: m.project_id,
+                work_item: m.work_item,
                 bot_node: m.bot_node,
                 bot_handle: m.bot_handle,
                 feature: m.feature,
@@ -1044,6 +1068,28 @@ impl Assistant {
         let agent = ws
             .agent(&persona.runs_as)
             .ok_or_else(|| format!("no '{}' agent", persona.runs_as))?;
+        #[cfg(not(test))]
+        if agent.provider.is_empty() || agent.provider == "mock" {
+            return Err("Set up an agent in Settings → Assistant before chatting.".into());
+        }
+        // Conversation agents keep their launch configuration across turns and reloads.
+        // A manager turn is a separate run: its current coordination context must stay live.
+        let snapshot_key = if persona.manager_handle.is_some() {
+            format!("manager-turn:{}:{}:{}", conversation_id, persona.agent_id, conv.messages.len())
+        } else {
+            format!("conversation:{}:{}", conversation_id, persona.agent_id)
+        };
+        let (mut pinned_agent, pinned_system): (super::state::AgentDef, String) = crate::agent_library::snapshot(convs.store().root(), &snapshot_key, &(agent.clone(), persona.system.clone()))?;
+        // Snapshotting configuration must never restore revoked permissions.
+        pinned_agent.permissions = agent.permissions;
+        let agent = pinned_agent;
+        let mut pinned_persona = persona.clone();
+        pinned_persona.system = pinned_system;
+        let persona = &pinned_persona;
+        #[cfg(not(test))]
+        if agent.provider.is_empty() || agent.provider == "mock" {
+            return Err("Set up an agent in Settings → Assistant before chatting.".into());
+        }
         let me: &str = &persona.agent_id;
 
         // The first thing said names the conversation. Better than "New
@@ -1187,7 +1233,7 @@ impl Assistant {
                 // every agent, and the chat you would use to find out why.
                 let p = {
                     let providers = ws.providers.lock().unwrap();
-                    providers.get(&agent.provider)
+                    providers.get_for(&agent.provider, me, conv.project_id.as_deref())
                 }
                 .ok_or_else(|| format!("unknown provider '{}'", agent.provider))?;
                 // Streamed if the provider can; a provider that cannot falls
@@ -2051,6 +2097,8 @@ impl Assistant {
                 TOOL_BOTS => Self::make_bot(ws, conv, me, call, scope, cause),
                 TOOL_ROUTINE => Self::make_routine(ws, conv, me, call, scope, cause),
                 TOOL_SKILL => Self::save_skill(ws, call),
+                TOOL_LIBRARY => Self::library(ws, me, call, scope, cause),
+                TOOL_WORKFLOW => Self::workflow(ws, conv, me, call, scope, cause),
                 TOOL_WORK => Self::plan_work(ws, conv, persona_plan, call),
                 _ => (false, format!("unknown assistant tool '{}'", call.tool)),
             };
@@ -2154,8 +2202,92 @@ impl Assistant {
         }
     }
 
+    /// Saving reusable text is always reviewed, even with Full permission.
+    /// Library contents never grant authority or activate runtime configuration.
+    fn library(
+        ws: &Arc<Workspace>,
+        me: &str,
+        call: &ToolCall,
+        scope: &EventScope,
+        cause: &DomainEvent,
+    ) -> (bool, String) {
+        use super::tools::Permission;
+        let write = match call.action.as_str() {
+            "list" | "read" => false,
+            "create" => true,
+            _ => return (false, "Unknown library action".into()),
+        };
+        let permission = ws.permission_matrix().get(me, TOOL_LIBRARY);
+        if permission == Permission::None || (write && permission == Permission::Read) {
+            return (
+                false,
+                "Library action is denied by your tool permissions".into(),
+            );
+        }
+        if write {
+            if scope.unattended {
+                return (false, "Saving a library definition needs a person to review it; this run is unattended".into());
+            }
+            if !ws.ask_approval(me, call, scope, cause).allows() {
+                return (false, "Library definition was not approved".into());
+            }
+        }
+        match ws.library(&call.action, &call.args) {
+            Ok(result) => (true, result),
+            Err(error) => (false, error),
+        }
+    }
+
+    /// Workflow mutations use the shared runtime and its dependency gates.
+    fn workflow(
+        ws: &Arc<Workspace>,
+        conv: &ConversationMeta,
+        me: &str,
+        call: &ToolCall,
+        scope: &EventScope,
+        cause: &DomainEvent,
+    ) -> (bool, String) {
+        use super::tools::Permission;
+        let write = match call.action.as_str() {
+            "list" | "get" => false,
+            "route" | "start" => true,
+            _ => return (false, "Unknown workflow action".into()),
+        };
+        let node = conv
+            .node
+            .or_else(|| conv.project_id.as_deref().and_then(|id| id.parse().ok()));
+        let Some(node) = node else {
+            return (
+                false,
+                "Select a folder or project for this conversation first".into(),
+            );
+        };
+        let permission = ws.permission_matrix().get(me, TOOL_WORKFLOW);
+        if permission == Permission::None || (write && permission == Permission::Read) {
+            return (
+                false,
+                "Workflow action is denied by your tool permissions".into(),
+            );
+        }
+        if permission == Permission::Approval && write && scope.unattended {
+            return (
+                false,
+                "Workflow action needs approval; this run is unattended".into(),
+            );
+        }
+        if permission == Permission::Approval
+            && write
+            && !ws.ask_approval(me, call, scope, cause).allows()
+        {
+            return (false, "Workflow action was not approved".into());
+        }
+        match ws.workflow(node, &call.action, &call.args) {
+            Ok(result) => (true, result),
+            Err(error) => (false, error),
+        }
+    }
+
     /// Turn a sentence into a routine.
-    ///
     /// Asked first, always, for the same reason a bot is: it keeps happening
     /// after the conversation ends. And refused outright when nobody is
     /// watching — a run started by a clock that quietly adds more clock rows
@@ -2580,6 +2712,9 @@ impl Assistant {
             });
         };
 
+        if let Some(work) = conv.context_edits.get("work_item") {
+            add("work_item", "Linked work item", "work records", "project", work.clone());
+        }
         let profile = convs.store().profile();
         if !profile.body.trim().is_empty() || !profile.meta.preferences.is_empty() {
             let mut s = String::from("## About you (personal, never committed)\n");
@@ -2837,6 +2972,164 @@ fn action_name(a: &AgentAction) -> &'static str {
 mod tests {
     use super::*;
 
+    #[test]
+    fn library_bridge_requires_review_and_never_grants_activation() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let ws = Arc::new(Workspace::with_approval_timeout(
+            std::time::Duration::from_millis(1),
+        ));
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = calls.clone();
+        ws.set_library_handler(Box::new(move |action, _| {
+            assert!(matches!(action, "list" | "read"));
+            seen.fetch_add(1, Ordering::SeqCst);
+            Ok("reference only".into())
+        }));
+        let invoke = |action, unattended| {
+            let scope = EventScope {
+                unattended,
+                ..Default::default()
+            };
+            let cause = DomainEvent::new(
+                EventType::ToolApprovalRequested,
+                scope.clone(),
+                serde_json::json!({}),
+            );
+            Assistant::library(
+                &ws,
+                ASSISTANT_ID,
+                &ToolCall::new(TOOL_LIBRARY, action, serde_json::json!({})),
+                &scope,
+                &cause,
+            )
+            .0
+        };
+        assert!(invoke("list", true));
+        assert!(!invoke("create", true));
+        ws.set_permission(ASSISTANT_ID, TOOL_LIBRARY, "read")
+            .unwrap();
+        assert!(invoke("read", true));
+        assert!(!invoke("create", false));
+        ws.set_permission(ASSISTANT_ID, TOOL_LIBRARY, "none")
+            .unwrap();
+        assert!(!invoke("list", false));
+        ws.set_permission(ASSISTANT_ID, TOOL_LIBRARY, "full")
+            .unwrap();
+        assert!(!invoke("create", true));
+        assert!(!invoke("create", false)); // review timeout denies, even with Full
+        assert!(!invoke("activate", false));
+        assert!(!invoke("remove", false));
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn library_approval_reviews_the_exact_definition_before_saving() {
+        let ws = Arc::new(Workspace::with_approval_timeout(
+            std::time::Duration::from_secs(5),
+        ));
+        let body = "Review the change and report evidence. Never bypass approval.";
+        ws.set_library_handler(Box::new(move |action, args| {
+            assert_eq!(action, "create");
+            assert_eq!(args["body"], body);
+            Ok("Saved as inactive reference text".into())
+        }));
+        let reviewer = {
+            let ws = ws.clone();
+            std::thread::spawn(move || {
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(4);
+                loop {
+                    if let Some(request) = ws.pending_approvals().into_iter().next() {
+                        assert_eq!(request.tool, TOOL_LIBRARY);
+                        assert!(request.detail.contains(body));
+                        ws.resolve_approval(&request.id, super::super::approval::Decision::Allow)
+                            .unwrap();
+                        break;
+                    }
+                    assert!(
+                        std::time::Instant::now() < deadline,
+                        "No review was requested"
+                    );
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+            })
+        };
+        let scope = EventScope::default();
+        let cause = DomainEvent::new(
+            EventType::ToolApprovalRequested,
+            scope.clone(),
+            serde_json::json!({}),
+        );
+        let result = Assistant::library(
+            &ws,
+            ASSISTANT_ID,
+            &ToolCall::new(
+                TOOL_LIBRARY,
+                "create",
+                serde_json::json!({
+                    "id":"reviewer", "kind":"brief", "name":"Reviewer", "what":"Review changes", "body":body
+                }),
+            ),
+            &scope,
+            &cause,
+        );
+        reviewer.join().unwrap();
+        assert!(result.0, "{}", result.1);
+    }
+
+    #[test]
+    fn workflow_bridge_enforces_permissions_and_keeps_folder_scope() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let ws = Arc::new(Workspace::with_approval_timeout(
+            std::time::Duration::from_millis(1),
+        ));
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = calls.clone();
+        ws.set_workflow_handler(Box::new(move |node, action, _| {
+            assert_eq!(node, 42);
+            assert!(matches!(action, "list" | "start"));
+            seen.fetch_add(1, Ordering::SeqCst);
+            Ok("ok".into())
+        }));
+        let conv = ConversationMeta {
+            node: Some(42),
+            project_id: Some("7".into()),
+            ..Default::default()
+        };
+        let scope = EventScope {
+            unattended: true,
+            ..Default::default()
+        };
+        let cause = DomainEvent::new(
+            EventType::ToolApprovalRequested,
+            scope.clone(),
+            serde_json::json!({}),
+        );
+        let invoke = |action| {
+            Assistant::workflow(
+                &ws,
+                &conv,
+                ASSISTANT_ID,
+                &ToolCall::new(TOOL_WORKFLOW, action, serde_json::json!({})),
+                &scope,
+                &cause,
+            )
+            .0
+        };
+        assert!(invoke("list"));
+        assert!(!invoke("start")); // unattended approval cannot start a worker
+        ws.set_permission(ASSISTANT_ID, TOOL_WORKFLOW, "read")
+            .unwrap();
+        assert!(!invoke("start"));
+        ws.set_permission(ASSISTANT_ID, TOOL_WORKFLOW, "none")
+            .unwrap();
+        assert!(!invoke("list"));
+        ws.set_permission(ASSISTANT_ID, TOOL_WORKFLOW, "full")
+            .unwrap();
+        assert!(invoke("start"));
+        assert!(!invoke("review")); // model cannot accept its own work
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
+
     struct Tmp(std::path::PathBuf);
     impl Tmp {
         fn new(tag: &str) -> Self {
@@ -2885,6 +3178,22 @@ mod tests {
         assert_eq!(back.messages[0].text, "line one\nline two");
         assert_eq!(back.messages[1].tool.as_deref(), Some("delegate.start"));
         assert_eq!(back.project_id.as_deref(), Some("tyrex"));
+    }
+
+    #[test]
+    fn work_conversation_is_reused_without_replacing_user_messages() {
+        let t = Tmp::new("work-conversation");
+        let c = convs(&t);
+        let subject = crate::work_conversations::Subject { id:"github:owner/repo:42".into(), title:"Issue title".into(), node:3, source:"Recorded source".into(), context:"Current steps".into() };
+        let first = c.for_work(&subject).unwrap();
+        c.update_meta(&first.id, |m| m.messages.push(ChatMessage::said(Speaker::User,"Keep my reply"))).unwrap();
+        let second = c.for_work(&subject).unwrap();
+        assert_eq!(first.id,second.id);
+        assert_eq!(second.messages.len(),2);
+        assert_eq!(second.messages[1].text,"Keep my reply");
+        assert_eq!(c.list()[0].work_item.as_deref(),Some(subject.id.as_str()));
+        let other = crate::work_conversations::Subject { id:"github:owner/repo:43".into(), ..subject };
+        assert_ne!(c.for_work(&other).unwrap().id,first.id);
     }
 
     #[test]

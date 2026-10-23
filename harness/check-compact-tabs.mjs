@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict'
+const {chromium}=await import(process.env.PLAYWRIGHT_MODULE)
+const browser=await chromium.launch({channel:'chrome',headless:true})
+const page=await browser.newPage({viewport:{width:1000,height:720}})
+try {
+await page.goto('http://localhost:5199/harness/workforce.html')
+const nav=page.getByRole('navigation',{name:'Workforce sections'})
+await nav.getByRole('button',{name:'Library',exact:true}).click()
+assert.equal(await nav.getByRole('button',{name:'Library',exact:true}).getAttribute('aria-pressed'),'true')
+assert.equal((await nav.getByRole('button',{name:'Library',exact:true}).boundingBox()).height,32)
+await page.screenshot({path:'test-results/workforce/compact-tabs.png'})
+await page.goto('http://localhost:5199/harness/index.html?view=workers')
+const group=page.getByRole('group',{name:'Utility panels'})
+await group.getByRole('button',{name:'Schedules',exact:true}).click()
+assert.equal((await group.boundingBox()).height,32)
+await page.setViewportSize({width:620,height:570})
+assert.equal((await group.boundingBox()).height,32)
+await group.getByRole('button',{name:'Logs',exact:true}).click()
+assert.equal(await group.getByRole('button',{name:'Logs',exact:true}).getAttribute('aria-pressed'),'true')
+await page.screenshot({path:'test-results/workforce/compact-utility-tabs.png'})
+console.log('PASS compact tab height, Workforce switching, utility switching and narrow layout')
+} finally {await browser.close()}

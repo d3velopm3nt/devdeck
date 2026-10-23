@@ -18,7 +18,7 @@ import { findNode, resolveDir } from '../lib/tree'
 import { widgetOpenTerminal, widgetRunCommand, serviceDir } from './widgetActions'
 import { DeckPanel, type DeckView } from './DeckPanel'
 import { DeckLogo } from './DeckLogo'
-import { DECK_DEFAULTS, loadDeckSettings, mayInterruptFocus } from '../lib/deck'
+import { DECK_DEFAULTS, loadDeckSettings, inQuietHours, mayInterruptFocus } from '../lib/deck'
 import { announceUpdates, updatesFromPaths, type DeckUpdate } from '../lib/deckUpdates'
 
 // Parse a design inline-style string ("a:b;c:d") into a React style object,
@@ -301,7 +301,7 @@ export function CommandWidget() {
         })
         const focus = await ipc.focusCurrent()
         await announceUpdates(fresh, deckSettings, !!focus)
-        if (deckSettings.popups && fresh.some((u) => u.kind !== 'info' && (!focus || mayInterruptFocus(u.kind, deckSettings.focusInterrupt)))) {
+        if (!inQuietHours(deckSettings) && deckSettings.notificationLevel !== 'off' && deckSettings.notificationLevel !== 'summary' && deckSettings.popups && fresh.some((u) => u.kind !== 'info' && (!focus || mayInterruptFocus(u.kind, deckSettings.focusInterrupt)))) {
           await goDeck('today')
           await ipc.widgetShow()
         }

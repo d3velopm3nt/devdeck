@@ -32,6 +32,8 @@ fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
 
+pub(crate) static WRITE: Mutex<()> = Mutex::new(());
+
 /// One thing in the library.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct Item {
@@ -116,7 +118,9 @@ fn write_index(ix: &Index) -> Result<(), String> {
         meta: ix.clone(),
         body: "Skills and briefs you installed. Words only: nothing here runs.\n".into(),
     };
-    std::fs::write(&p, crate::aiw::deck::write_doc(&doc)?).map_err(err)
+    let tmp = p.with_extension("md.tmp");
+    std::fs::write(&tmp, crate::aiw::deck::write_doc(&doc)?).map_err(err)?;
+    std::fs::rename(tmp, p).map_err(err)
 }
 
 /// Where one item's text lives.
@@ -126,6 +130,18 @@ pub fn item_path(it: &Item) -> Result<PathBuf, String> {
         base.join("skills").join(&it.id).join("SKILL.md")
     } else {
         base.join("briefs").join(format!("{}.md", it.id))
+    })
+}
+
+/// Add metadata only to a run's copy of plain custom/Community instructions.
+/// The shared source remains byte-for-byte unchanged and existing frontmatter wins.
+pub fn runtime_skill_text(item: &Item, raw: &str) -> Result<String, String> {
+    if raw.trim_start().starts_with("---") {
+        return Ok(raw.to_string());
+    }
+    crate::aiw::deck::write_doc(&crate::aiw::deck::Doc {
+        meta: serde_json::json!({"name": item.id, "description": if item.what.is_empty() { &item.name } else { &item.what }}),
+        body: raw.to_string(),
     })
 }
 
@@ -169,14 +185,20 @@ pub fn header(raw: &str) -> (String, String) {
     (name.trim().to_string(), what.trim().to_string())
 }
 
-/// `skills/brand-voice/SKILL.md` is the skill `brand-voice`; `agents/x.md` is
+/// `skills/brand-voice/SKILL.md` or `brand-voice/SKILL.md` is the skill
+/// `brand-voice`; `agents/x.md` is
 /// the brief `x`. Anything else is not something this library can hold.
 pub fn classify(path: &str) -> Option<(String, String)> {
     let p = path.trim_start_matches("./");
     let parts: Vec<&str> = p.split('/').collect();
     if parts.len() >= 2 && parts[parts.len() - 1].eq_ignore_ascii_case("SKILL.md") {
         let folder = parts[parts.len() - 2];
-        let inside = parts.contains(&"skills");
+        let root_skill = parts.len() == 2
+            && !folder.starts_with('.')
+            && !["docs", "agents", "tests", "examples"]
+                .iter()
+                .any(|p| folder.eq_ignore_ascii_case(p));
+        let inside = parts.contains(&"skills") || root_skill;
         if inside && !folder.is_empty() {
             return Some((SKILL.to_string(), folder.to_string()));
         }
@@ -216,6 +238,9 @@ fn rank(path: &str) -> usize {
 pub fn collection(path: &str) -> Option<String> {
     let p = path.trim_start_matches("./");
     let parts: Vec<&str> = p.split('/').collect();
+    if parts.len() == 2 && classify(p).is_some_and(|(kind, _)| kind == SKILL) {
+        return Some(".".into());
+    }
     let at = parts
         .iter()
         .rposition(|s| *s == "agents" || *s == "skills")?;
@@ -470,7 +495,7 @@ pub fn look(input: &str) -> Result<Source, String> {
         note.push_str(" The repository is too large for one listing, so this is part of it.");
     }
     if items.is_empty() {
-        note = "Nothing here is a skill or an agent brief. A library needs skills/<name>/SKILL.md or agents/<name>.md — this repository has neither, so there is nothing to read.".into();
+        note = "Nothing here is a skill or an agent brief. A library needs <name>/SKILL.md, skills/<name>/SKILL.md or agents/<name>.md — this repository has none, so there is nothing to read.".into();
     }
 
     Ok(Source {
@@ -524,6 +549,7 @@ pub fn install_cands(
     licence: &str,
     picks: &[Candidate],
 ) -> Result<Added, String> {
+    let _guard = WRITE.lock().map_err(|e| e.to_string())?;
     let c = client()?;
     let mut ix = read_index()?;
     let mut out = Added::default();
@@ -553,6 +579,16 @@ pub fn install_cands(
     });
 
     for (i, cand) in picks.iter().enumerate() {
+        if let Some(existing) = ix
+            .items
+            .iter()
+            .find(|it| it.id == cand.id && it.kind == cand.kind)
+        {
+            if existing.repo != repo || existing.path != cand.path {
+                out.missed.push(format!("{} already belongs to {}. No replacement made; remove it deliberately or create a custom definition with a distinct ID.", cand.id, existing.repo));
+                continue;
+            }
+        }
         let text = match texts[i].lock().unwrap().clone() {
             Some(Ok(t)) => t,
             Some(Err(e)) => {
@@ -687,6 +723,7 @@ pub fn library_kits() -> Result<Vec<KitRef>, String> {
 
 #[tauri::command(async)]
 pub fn library_remove(id: String, kind: String) -> Result<(), String> {
+    let _guard = WRITE.lock().map_err(|e| e.to_string())?;
     let mut ix = read_index()?;
     if let Some(it) = ix
         .items
@@ -708,6 +745,22 @@ pub fn library_remove(id: String, kind: String) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn plain_shared_skill_is_wrapped_only_for_its_runtime_copy() {
+        let item = Item {
+            id: "evidence-checks".into(),
+            name: "Evidence checks".into(),
+            what: "Verify claims: report evidence".into(),
+            ..Default::default()
+        };
+        let source = "Check each acceptance criterion and cite the result.";
+        let copy = runtime_skill_text(&item, source).unwrap();
+        let parsed = crate::aiw::deck::parse_doc::<serde_json::Value>(&copy).unwrap();
+        assert_eq!(parsed.meta["name"], "evidence-checks");
+        assert_eq!(parsed.meta["description"], item.what);
+        assert_eq!(parsed.body.trim(), source);
+        assert_eq!(runtime_skill_text(&item, &copy).unwrap(), copy);
+    }
 
     /// The bug this exists to stop: ECC keeps `code-reviewer` four times over
     /// — once for real, once under `.kiro` for another editor, and once per
@@ -755,6 +808,8 @@ mod tests {
             Some("skills/lead-intelligence/agents")
         );
         assert_eq!(collection("README.md"), None);
+        assert_eq!(collection("new-feature/SKILL.md").as_deref(), Some("."));
+        assert_eq!(collection("code-structure/SKILL.md").as_deref(), Some("."));
     }
 
     #[test]
@@ -771,6 +826,21 @@ mod tests {
 
     #[test]
     fn a_skill_folder_and_an_agent_file_are_the_two_things_a_library_holds() {
+        for id in [
+            "before-and-after",
+            "code-structure",
+            "evidence-driven-testing",
+            "greploop",
+            "greploop-apps",
+            "new-feature",
+            "unslop",
+        ] {
+            assert_eq!(
+                classify(&format!("{id}/SKILL.md")),
+                Some((SKILL.into(), id.into()))
+            );
+        }
+        assert_eq!(classify("AGENTS.md"), None);
         assert_eq!(
             classify("skills/brand-voice/SKILL.md"),
             Some((SKILL.into(), "brand-voice".into()))
@@ -795,7 +865,7 @@ mod tests {
         assert_eq!(
             classify("docs/SKILL.md"),
             None,
-            "a skill lives under skills/"
+            "documentation is not a root skill folder"
         );
     }
 

@@ -87,6 +87,8 @@ pub struct TranscriptEntry {
 /// One agent run.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Session {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_snapshot: Option<AgentDef>,
     pub id: String,
     pub agent_id: String,
     pub agent_name: String,
@@ -324,14 +326,19 @@ pub type CallLog = Box<dyn Fn(CallRecord) + Send + Sync>;
 /// an `AppHandle` and `aiw` must not.
 pub type LogSink = Box<dyn Fn(&str, &str, String) + Send + Sync>;
 
-/// Making a routine writes a `schedules` row and a line in a file, neither of
-/// which `aiw` knows anything about. Same arrangement as [`BotMaker`]: the
-/// outer app hands one over, and a build that does not simply cannot.
+/// Text-only personal library access supplied by the host, with no activation.
+pub type LibraryHandler =
+    Box<dyn Fn(&str, &serde_json::Value) -> Result<String, String> + Send + Sync>;
+
+pub type WorkflowHandler =
+    Box<dyn Fn(i64, &str, &serde_json::Value) -> Result<String, String> + Send + Sync>;
+
 pub type RoutineMaker = Box<dyn Fn(RoutineDraft) -> Result<String, String> + Send + Sync>;
 
 pub type ManagerMessenger = Box<dyn Fn(&str, &str) -> Result<String, String> + Send + Sync>;
 
 pub struct Workspace {
+    feed_consumer: std::sync::OnceLock<crate::connector_model::FeedConsumer>,
     manager_messenger: std::sync::OnceLock<ManagerMessenger>,
     pub bus: SharedBus,
     pub conflicts: ConflictService,
@@ -368,6 +375,8 @@ pub struct Workspace {
     /// build, where asking for a bot fails honestly rather than pretending.
     bot_maker: std::sync::OnceLock<BotMaker>,
     routine_maker: std::sync::OnceLock<RoutineMaker>,
+    workflow_handler: std::sync::OnceLock<WorkflowHandler>,
+    library_handler: std::sync::OnceLock<LibraryHandler>,
     call_log: std::sync::OnceLock<CallLog>,
     log_sink: std::sync::OnceLock<LogSink>,
     pub providers: Mutex<ProviderRegistry>,
@@ -401,6 +410,7 @@ impl Workspace {
     /// six-minute one — and a slow suite is one people stop running.
     pub fn with_approval_timeout(timeout: std::time::Duration) -> Self {
         Self {
+            feed_consumer: std::sync::OnceLock::new(),
             bus: Arc::new(EventBus::new()),
             mcp: crate::mcp::Hub::new(),
             mcp_servers: Mutex::new(Vec::new()),
@@ -408,13 +418,26 @@ impl Workspace {
             approvals: Arc::new(ApprovalBroker::new(timeout)),
             bot_maker: std::sync::OnceLock::new(),
             routine_maker: std::sync::OnceLock::new(),
+            workflow_handler: std::sync::OnceLock::new(),
+            library_handler: std::sync::OnceLock::new(),
             manager_messenger: std::sync::OnceLock::new(),
             call_log: std::sync::OnceLock::new(),
             log_sink: std::sync::OnceLock::new(),
             conversations: std::sync::OnceLock::new(),
             personal: Mutex::new(HashMap::new()),
             grants: std::sync::OnceLock::new(),
-            providers: Mutex::new(ProviderRegistry::new()),
+            providers: Mutex::new({
+                let mut registry = ProviderRegistry::new();
+                for tool in [
+                    crate::cli_setup_model::CliTool::ClaudeCode,
+                    crate::cli_setup_model::CliTool::Codex,
+                ] {
+                    registry.register(Box::new(super::subscription::SubscriptionProvider::new(
+                        tool,
+                    )));
+                }
+                registry
+            }),
             reconciler: Box::new(DeterministicReconciler),
             projects: Mutex::new(HashMap::new()),
             agents: Mutex::new(default_agents()),
@@ -527,6 +550,10 @@ impl Workspace {
     /// mutex and deadlocks forever. Even without that, a network call under the
     /// registry lock would stall every agent for its duration.
     pub fn test_provider(&self, id: &str) -> Result<String, String> {
+        self.providers
+            .lock()
+            .map_err(|_| "Provider registry unavailable")?
+            .check_connector(id)?;
         enum Probe {
             Openai(super::provider::OpenAICompatibleProvider),
             Anthropic(super::provider::AnthropicProvider),
@@ -575,6 +602,13 @@ impl Workspace {
     /// manage sixteen tokens in half a minute is not one to hand an agent, and
     /// waiting the full two minutes to be told so is its own small cruelty.
     pub fn test_model(&self, id: &str, model: &str) -> Result<String, String> {
+        self.providers
+            .lock()
+            .map_err(|_| "Provider registry unavailable")?
+            .check_connector(id)?;
+        if let Some(tool) = crate::subscription_model::tool_for(id) {
+            return super::subscription::SubscriptionProvider::new(tool).verify(model);
+        }
         enum Probe {
             Openai(super::provider::OpenAICompatibleProvider),
             Anthropic(super::provider::AnthropicProvider),
@@ -638,6 +672,7 @@ impl Workspace {
             root: root.clone(),
             deck_root: deck_root.clone(),
             tools: ToolService::new(root, id, matrix)
+                .with_feed_consumer(self.feed_consumer.get().cloned())
                 .with_deck_root(deck_root)
                 .with_approvals(self.approvals.clone())
                 .with_grants(self.grants()),
@@ -972,6 +1007,7 @@ impl Workspace {
                     root: old.root.clone(),
                     deck_root: old.deck_root.clone(),
                     tools: ToolService::new(old.root.clone(), &old.id, matrix.clone())
+                        .with_feed_consumer(self.feed_consumer.get().cloned())
                         .with_deck_root(old.deck_root.clone())
                         .with_approvals(self.approvals.clone())
                         .with_grants(self.grants())
@@ -1255,7 +1291,7 @@ impl Workspace {
             .iter()
             .find(|d| d.meta.id == super::assistant::ASSISTANT_ID)
             .map(|d| (d.meta.provider.clone(), d.meta.model.clone()))
-            .unwrap_or(("mock".into(), "mock-1".into()));
+            .unwrap_or_default();
         let agents: Vec<AgentDef> = docs
             .into_iter()
             .map(|d| {
@@ -1267,6 +1303,15 @@ impl Workspace {
                     if let Some(body) = skills.get(name) {
                         system.push_str(&format!("\n\n# {name}\n\n{}", body.trim()));
                     }
+                }
+                let mut permissions = d.meta.permissions;
+                if d.meta.id == super::assistant::ASSISTANT_ID {
+                    permissions
+                        .entry("workflow".into())
+                        .or_insert_with(|| "approval".into());
+                    permissions
+                        .entry("library".into())
+                        .or_insert_with(|| "approval".into());
                 }
                 AgentDef {
                     id: d.meta.id,
@@ -1283,7 +1328,7 @@ impl Workspace {
                         d.meta.model
                     },
                     system,
-                    permissions: d.meta.permissions,
+                    permissions,
                     skills: d.meta.skills,
                 }
             })
@@ -1416,6 +1461,11 @@ impl Workspace {
         let _ = self.bot_maker.set(f);
     }
 
+    pub fn set_feed_consumer(&self, consumer: crate::connector_model::FeedConsumer) {
+        let _ = self.feed_consumer.set(consumer);
+        self.rebuild_tool_services();
+    }
+
     /// Whether asking for a bot can lead anywhere. The assistant checks before
     /// offering, so it never proposes something it cannot carry out.
     pub fn can_make_bots(&self) -> bool {
@@ -1466,6 +1516,31 @@ impl Workspace {
             None if crate::coordination::outgoing(text)?.is_none() => Ok(String::new()),
             None => Err("Manager messaging is unavailable in this runtime.".into()),
         }
+    }
+
+    pub fn set_library_handler(&self, f: LibraryHandler) {
+        let _ = self.library_handler.set(f);
+    }
+
+    pub fn library(&self, action: &str, args: &serde_json::Value) -> Result<String, String> {
+        self.library_handler
+            .get()
+            .ok_or("Library is unavailable in this runtime")?(action, args)
+    }
+
+    pub fn set_workflow_handler(&self, f: WorkflowHandler) {
+        let _ = self.workflow_handler.set(f);
+    }
+
+    pub fn workflow(
+        &self,
+        node: i64,
+        action: &str,
+        args: &serde_json::Value,
+    ) -> Result<String, String> {
+        self.workflow_handler
+            .get()
+            .ok_or("Workflow runtime is unavailable")?(node, action, args)
     }
 
     pub fn set_routine_maker(&self, f: RoutineMaker) {
@@ -1614,8 +1689,8 @@ pub fn default_agents() -> Vec<AgentDef> {
             id: super::assistant::ASSISTANT_ID.into(),
             name: "Assistant".into(),
             role: "orchestrator".into(),
-            provider: "mock".into(),
-            model: "mock-1".into(),
+            provider: if cfg!(test) { "mock" } else { "" }.into(),
+            model: if cfg!(test) { "mock-1" } else { "" }.into(),
             // The voice is the first line and it is yours; the duties below it
             // are the job. Seeded plain because a first run has not happened
             // yet — the moment it does, this file is rewritten from what you
@@ -1625,6 +1700,8 @@ pub fn default_agents() -> Vec<AgentDef> {
             skills: Vec::new(),
             permissions: perms(&[
                 ("delegate", "full"),
+                ("workflow", "approval"),
+                ("library", "approval"),
                 ("memory", "full"),
                 ("knowledge", "full"),
                 ("files", "read"),
@@ -1638,8 +1715,8 @@ pub fn default_agents() -> Vec<AgentDef> {
             id: "architect".into(),
             name: "Architect".into(),
             role: "architect".into(),
-            provider: "mock".into(),
-            model: "mock-1".into(),
+            provider: if cfg!(test) { "mock" } else { "" }.into(),
+            model: if cfg!(test) { "mock-1" } else { "" }.into(),
             system: "You set direction and record decisions. You do not write application code."
                 .into(),
             skills: Vec::new(),
@@ -1656,8 +1733,8 @@ pub fn default_agents() -> Vec<AgentDef> {
             id: "dev-a".into(),
             name: "Developer A".into(),
             role: "developer".into(),
-            provider: "mock".into(),
-            model: "mock-1".into(),
+            provider: if cfg!(test) { "mock" } else { "" }.into(),
+            model: if cfg!(test) { "mock-1" } else { "" }.into(),
             system: "You implement work items and keep the shared interfaces coherent.".into(),
             skills: Vec::new(),
             permissions: perms(&[
@@ -1679,8 +1756,8 @@ pub fn default_agents() -> Vec<AgentDef> {
             id: "dev-b".into(),
             name: "Developer B".into(),
             role: "developer".into(),
-            provider: "mock".into(),
-            model: "mock-1".into(),
+            provider: if cfg!(test) { "mock" } else { "" }.into(),
+            model: if cfg!(test) { "mock-1" } else { "" }.into(),
             system: "You implement UI work items.".into(),
             skills: Vec::new(),
             permissions: perms(&[
@@ -1702,8 +1779,8 @@ pub fn default_agents() -> Vec<AgentDef> {
             id: "qa".into(),
             name: "QA Agent".into(),
             role: "qa".into(),
-            provider: "mock".into(),
-            model: "mock-1".into(),
+            provider: if cfg!(test) { "mock" } else { "" }.into(),
+            model: if cfg!(test) { "mock-1" } else { "" }.into(),
             system: "You verify behaviour. You run the app and the tests; you do not fix code."
                 .into(),
             skills: Vec::new(),
@@ -1727,8 +1804,8 @@ pub fn default_agents() -> Vec<AgentDef> {
             id: "reviewer".into(),
             name: "Reviewer".into(),
             role: "reviewer".into(),
-            provider: "mock".into(),
-            model: "mock-1".into(),
+            provider: if cfg!(test) { "mock" } else { "" }.into(),
+            model: if cfg!(test) { "mock-1" } else { "" }.into(),
             system: "You check the implementation against the requirements and decisions.".into(),
             skills: Vec::new(),
             permissions: perms(&[

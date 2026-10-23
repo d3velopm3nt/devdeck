@@ -1,3 +1,4 @@
+import { StateBadge } from './ui/DesignSystem'
 // Process dashboard: manage every service and terminal from one place.
 // Shows all configured services (running or not) plus live terminals,
 // with per-row actions — start (run), stop, restart, open, kill — and
@@ -28,12 +29,6 @@ interface Row {
   stat?: ProcStat
 }
 
-const STATUS_STYLE: Record<string, string> = {
-  running: 'text-ok',
-  live: 'text-ok',
-  stopped: 'text-muted',
-  crashed: 'text-err',
-}
 
 export function ProcessDashboard() {
   const services = useApp((s) => s.services)
@@ -115,9 +110,7 @@ export function ProcessDashboard() {
                       </span>
                     </td>
                     <td className="max-w-48 truncate px-2 py-1.5 text-ink">{r.name}</td>
-                    <td className={`px-2 py-1.5 uppercase text-[10px] tracking-wide ${STATUS_STYLE[r.status] ?? 'text-dim'}`}>
-                      {r.status === 'live' ? 'running' : r.status}
-                    </td>
+                    <td className="px-2 py-1.5"><StateBadge state={r.status==='live'?'running':r.status}/></td>
                     <td className="px-2 py-1.5 font-mono text-dim">{st?.pid ?? '—'}</td>
                     <td className={`px-2 py-1.5 font-mono ${st && st.cpu > 80 ? 'text-err' : st && st.cpu > 30 ? 'text-warn' : 'text-body'}`}>
                       {st ? st.cpu.toFixed(1) : '—'}

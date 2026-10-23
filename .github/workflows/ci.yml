@@ -20,8 +20,13 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+        env:
+          ONNXRUNTIME_NODE_INSTALL_CUDA: skip
       - run: npm install --no-save --package-lock=false playwright@1.62.1
       - run: npx playwright install --with-deps chromium
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check subscription protocol and CLI fixtures
+        run: cargo test --manifest-path harness/rust-core/Cargo.toml --locked
       - name: Check onboarding with mocked native IPC
         run: |
           npx vite --config vite.harness.config.ts --host 127.0.0.1 > /tmp/devdeck-harness.log 2>&1 &
@@ -31,8 +36,13 @@ jobs:
             sleep 1
           done
           node harness/check-beta5.mjs
+          node harness/check-cli-setup.mjs
+          node harness/check-space-switcher.mjs
           node harness/check-onboarding.mjs
           node harness/check-folder-workflows.mjs
+          node harness/check-mobile.mjs
+          node harness/check-orb.mjs
+          node --test scripts/voice-input.test.mjs
           HARNESS_URL=http://127.0.0.1:5199 node harness/check-visibility.mjs
           node --test scripts/session-checkpoint.test.mjs scripts/github-session-checkpoint.test.mjs
 
@@ -72,7 +82,7 @@ jobs:
       # Tauri's config names this sidecar as an external binary. Clippy and
       # tests run the build script too, so stage it before either command.
       - name: Stage asker sidecar
-        run: npm run ask
+        run: npm run mobile:voice && npm run ask
 
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
@@ -82,10 +92,17 @@ jobs:
         run: cargo test --workspace --all-targets
         working-directory: src-tauri
 
-      - name: Build app
+      # Validate PR builds without spending time packaging an installer.
+      - name: Build app (PR validation)
+        if: github.event_name == 'pull_request'
+        run: npx tauri build --no-bundle
+
+      - name: Build app and installer
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         run: npx tauri build
 
       - name: Upload installer
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         uses: actions/upload-artifact@v4
         with:
           name: devdeck-windows

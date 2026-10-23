@@ -72,3 +72,5 @@ export const check = async () => null
 export const isPermissionGranted = async () => false
 export const requestPermission = async () => 'denied'
 export const sendNotification = () => {}
+
+export const emitTo = async (_target: string, event: string, payload?: unknown) => emit(event, payload)

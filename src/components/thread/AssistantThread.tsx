@@ -1,55 +1,33 @@
-// The Assistant's own conversation, as a document.
-//
-// Opened from the Bots page, where the Assistant is the first contact. It is
-// the same `Thread` a bot's page uses, because it is the same loop: one
-// conversation record, one composer, one voice — this one happens to be the
-// orchestrator's.
+import { DevAvatar } from '../DevAvatar'
+// Dev’s shared conversation, opened from Chat or any assistant shortcut.
+// Text and voice use the same conversation record.
 
-import { useEffect, useState } from 'react'
-import { aiw } from '../../lib/aiw'
-import { Thread } from './Thread'
+import { useState } from 'react'
+import { useAiw } from '../../lib/aiwStore'
+import { Mic, MessageSquare } from 'lucide-react'
+import { DesktopDev } from '../orb/DesktopDev'
+import { Chat } from '../aiw/Chat'
 
 export function AssistantThread() {
-  const [id, setId] = useState<string | null>(null)
-  const [err, setErr] = useState('')
-
-  useEffect(() => {
-    void aiw
-      .conversations()
-      .then(async (list) => {
-        // Its own thread is the one that is nobody's room: no bot, no feature,
-        // no node. Made on first visit rather than left as an empty surface.
-        const mine = list.find((c) => !c.bot_node && !c.feature && !c.node)
-        setId(mine ? mine.id : (await aiw.newConversation()).id)
-      })
-      .catch((e) => setErr(String(e)))
-  }, [])
-
-  if (err) {
-    return <div className="p-5 text-[12px] text-err">{err}</div>
-  }
-  if (!id) {
-    return <div className="py-8 text-center text-[12px] text-muted">Opening the thread…</div>
-  }
+  const id = useAiw(s => s.conversation?.id)
+  const [voiceView, setVoiceView] = useState(false)
+  const showChat = () => { setVoiceView(false); if (id) void useAiw.getState().openConversation(id) }
   return (
     <div className="flex h-full min-h-0 flex-col bg-page">
       <div className="shrink-0 border-b border-line px-5 py-3">
-        <div className="text-[14px] font-semibold text-ink">Assistant</div>
-        <div className="text-[10.5px] text-muted">
-          The orchestrator. It can put an agent on a feature and leave a bot behind, and it asks
-          before anything that changes your machine.
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3"><DevAvatar size={38}/><div><h1 className="text-[14px] font-semibold text-ink">Chat</h1><p className="text-[11px] text-muted">Dev · your assistant</p></div></div>
+          <button className="btn-ghost flex items-center gap-2" disabled={!id} aria-pressed={voiceView} aria-controls="dev-conversation-view" onClick={()=>voiceView?showChat():setVoiceView(true)}>
+            {voiceView?<MessageSquare size={16} aria-hidden="true"/>:<Mic size={16} aria-hidden="true"/>}
+            {voiceView?'Show chat':'Talk to Dev'}
+          </button>
         </div>
+
       </div>
-      <div className="min-h-0 flex-1 px-5 py-3">
-        <Thread
-          reloadKey={id}
-          load={() => aiw.conversation(id)}
-          send={(text) => aiw.sendMessage(id, text)}
-          name="Assistant"
-          placeholder="Ask the assistant…"
-          footnote="Conversations and anything it remembers are kept outside every repository."
-        />
+      <div id="dev-conversation-view" className="min-h-0 flex-1" hidden={voiceView}>
+        <Chat />
       </div>
+      {voiceView&&id&&<div className="min-h-0 flex-1 p-4"><DesktopDev conversationId={id} onChat={showChat}/></div>}
     </div>
   )
 }

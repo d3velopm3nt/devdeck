@@ -1,11 +1,46 @@
 //! Durable workflow schema and dependency rules, independent of native UI.
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use std::path::{Path, PathBuf};
+
+pub fn workflow_path(dir: &Path, id: &str) -> Result<PathBuf, String> {
+    if id.is_empty()
+        || id.len() > 80
+        || !id
+            .bytes()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-' || c == b'_')
+    {
+        return Err("Workflow IDs use lowercase letters, numbers, - or _.".into());
+    }
+    let p = if id == "default" {
+        dir.join("WORKFLOW.md")
+    } else {
+        dir.join(".devdeck/workflows").join(format!("{id}.md"))
+    };
+    // Existing symlinks must not redirect a workflow outside its folder.
+    let base = dir.canonicalize().map_err(|e| e.to_string())?;
+    let mut ancestor = p.as_path();
+    while !ancestor.exists() {
+        ancestor = ancestor.parent().ok_or("Invalid workflow path")?;
+    }
+    if !ancestor
+        .canonicalize()
+        .map_err(|e| e.to_string())?
+        .starts_with(base)
+    {
+        return Err("Workflow path leaves its folder.".into());
+    }
+    Ok(p)
+}
 
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Definition {
     pub title: String,
+    #[serde(default)]
+    pub team: String,
+    #[serde(default)]
+    pub ticket_url: String,
     pub steps: Vec<Step>,
 }
 #[derive(Clone, Default, Serialize, Deserialize)]
@@ -13,12 +48,17 @@ pub struct Definition {
 pub struct Step {
     pub id: String,
     pub title: String,
+    #[serde(default)]
+    pub role: String,
+    #[serde(default)]
     pub worker: String,
     /// Existing target node, never a path guessed from the workflow's location.
     pub target: i64,
     #[serde(default)]
     pub needs: Vec<String>,
     pub instructions: String,
+    #[serde(default)]
+    pub team_context: String,
     #[serde(default)]
     pub status: Status,
     #[serde(default)]
@@ -47,6 +87,7 @@ pub enum Status {
     Review,
     Done,
     Blocked,
+    Skipped,
 }
 pub(crate) fn validate(d: &Definition) -> Result<(), String> {
     if d.title.trim().is_empty() || d.steps.is_empty() || d.steps.len() > 100 {
@@ -64,7 +105,7 @@ pub(crate) fn validate(d: &Definition) -> Result<(), String> {
             return Err("Step IDs must be unique words using letters, numbers, - or _.".into());
         }
         if s.title.trim().is_empty()
-            || s.worker.trim().is_empty()
+            || (s.worker.trim().is_empty() && (s.role.is_empty() || d.team.is_empty()))
             || s.target <= 0
             || s.instructions.trim().is_empty()
         {
@@ -93,6 +134,31 @@ pub(crate) fn validate(d: &Definition) -> Result<(), String> {
         }
     }
 }
+/// Only untouched steps can be excluded. Review and failed work must be resolved.
+pub(crate) fn finish_scope(d: &mut Definition, excluded: &[String], reason: &str) -> Result<(), String> {
+    if !d.steps.iter().any(|s| s.status == Status::Done) {
+        return Err("Accept at least one delivered step before completing this work item.".into());
+    }
+    let pending: HashSet<_> = d.steps.iter().filter(|s| s.status == Status::Pending).map(|s| s.id.clone()).collect();
+    let requested: HashSet<_> = excluded.iter().cloned().collect();
+    if pending != requested || requested.len() != excluded.len() || (!excluded.is_empty() && reason.trim().is_empty()) {
+        return Err("Confirm the exact pending steps outside this request and record why they are excluded.".into());
+    }
+    if d.steps.iter().any(|s| !matches!(s.status, Status::Done | Status::Skipped | Status::Pending)
+        || (s.status == Status::Pending && (!s.run.is_empty() || !s.claim.is_empty() || !s.previous_runs.is_empty() || !s.evidence.is_empty()))) {
+        return Err("Resolve active work, review requests and failed attempts before completing this work item.".into());
+    }
+    for step in &mut d.steps {
+        if requested.contains(&step.id) {
+            step.status = Status::Skipped;
+            step.evidence = format!("Outside request scope: {}", reason.trim());
+            step.next_action = "Excluded at work item completion; this step did not run.".into();
+            step.updated_at = chrono::Utc::now().to_rfc3339();
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn ready(d: &Definition, index: usize) -> bool {
     let s = &d.steps[index];
     matches!(s.status, Status::Pending | Status::Blocked)
@@ -152,6 +218,8 @@ mod tests {
     fn definition() -> Definition {
         Definition {
             title: "Ship".into(),
+            ticket_url: String::new(),
+            team: String::new(),
             steps: vec![
                 Step {
                     id: "build".into(),
@@ -172,6 +240,28 @@ mod tests {
                 },
             ],
         }
+    }
+    #[test]
+    fn scope_completion_never_fakes_acceptance_or_discards_attempts() {
+        let mut d = definition();
+        assert!(finish_scope(&mut d, &["build".into(),"docs".into()], "plan only").is_err());
+        d.steps[0].status = Status::Done;
+        assert!(finish_scope(&mut d, &[], "plan only").is_err());
+        assert!(finish_scope(&mut d, &["docs".into()], "").is_err());
+        for status in [Status::Running,Status::Starting,Status::Blocked,Status::Review] {
+            d.steps[1].status=status;
+            assert!(finish_scope(&mut d, &[], "plan only").is_err());
+        }
+        d.steps[1].status=Status::Pending;
+        d.steps[1].previous_runs=vec!["old".into()];
+        assert!(finish_scope(&mut d, &["docs".into()], "plan only").is_err());
+        d.steps[1].previous_runs.clear();
+        finish_scope(&mut d, &["docs".into()], "plan only").unwrap();
+        assert_eq!(d.steps[0].status,Status::Done);
+        assert_eq!(d.steps[1].status,Status::Skipped);
+        assert!(d.steps[1].evidence.contains("plan only"));
+        assert!(!ready(&d,1));
+        finish_scope(&mut d, &[], "retry local persistence").unwrap();
     }
     #[test]
     fn external_handoff_keeps_dependencies_and_live_claims() {
@@ -249,5 +339,99 @@ mod tests {
         }
         assert_eq!(receipt_status("done", false), Status::Blocked);
         assert_eq!(receipt_status("done", true), Status::Review);
+    }
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::*;
+    #[test]
+    fn workflows_share_a_folder_without_sharing_receipts() {
+        let dir = std::env::temp_dir().join(format!("workflow-paths-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mobile = workflow_path(&dir, "mobile-release").unwrap();
+        let web = workflow_path(&dir, "web-release").unwrap();
+        assert_ne!(mobile, web);
+        assert_eq!(
+            workflow_path(&dir, "default").unwrap(),
+            dir.join("WORKFLOW.md")
+        );
+        for id in ["", "../escape", "a/b", "C:\\file", "A", ".", ".."] {
+            assert!(workflow_path(&dir, id).is_err(), "{id}");
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+    #[cfg(unix)]
+    #[test]
+    fn symlinks_cannot_redirect_workflow_storage() {
+        let dir = std::env::temp_dir().join(format!("workflow-links-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::os::unix::fs::symlink(std::env::temp_dir(), dir.join(".devdeck")).unwrap();
+        assert!(workflow_path(&dir, "mobile").is_err());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+}
+
+/// Instantiate a reusable definition without copying ownership or prior receipts.
+pub fn for_ticket(
+    template: &Definition,
+    repository: &str,
+    number: u64,
+    title: &str,
+) -> Result<Definition, String> {
+    if !crate::visibility_model::repository_valid(repository)
+        || number == 0
+        || title.trim().is_empty()
+        || title.len() > 1000
+    {
+        return Err("Choose a valid GitHub issue.".into());
+    }
+    let mut definition = template.clone();
+    definition.title = format!("#{number} · {}", title.trim());
+    definition.ticket_url = format!("https://github.com/{repository}/issues/{number}");
+    for step in &mut definition.steps {
+        step.status = Status::Pending;
+        step.run.clear();
+        step.claim.clear();
+        step.evidence.clear();
+        step.previous_runs.clear();
+        step.actor.clear();
+        step.next_action.clear();
+        step.updated_at.clear();
+    }
+    validate(&definition)?;
+    Ok(definition)
+}
+#[cfg(test)]
+mod ticket_tests {
+    use super::*;
+    #[test]
+    fn a_new_ticket_never_inherits_completed_work_or_permissions_from_a_receipt() {
+        let template = Definition {
+            title: "Technical".into(),
+            steps: vec![Step {
+                id: "plan".into(),
+                title: "Plan".into(),
+                worker: "lead".into(),
+                target: 1,
+                instructions: "Plan".into(),
+                status: Status::Done,
+                run: "old-run".into(),
+                evidence: "old evidence".into(),
+                previous_runs: vec!["older".into()],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let run = for_ticket(&template, "owner/repo", 23, "Orb test").unwrap();
+        assert_eq!(run.ticket_url, "https://github.com/owner/repo/issues/23");
+        assert_eq!(run.steps[0].status, Status::Pending);
+        assert!(
+            run.steps[0].run.is_empty()
+                && run.steps[0].evidence.is_empty()
+                && run.steps[0].previous_runs.is_empty()
+        );
+        assert_eq!(template.steps[0].status, Status::Done);
+        assert!(for_ticket(&template, "../repo", 23, "Orb").is_err());
     }
 }

@@ -21,6 +21,8 @@
 )]
 
 mod activity;
+mod agent_library;
+mod team_builder;
 mod aiw;
 mod asks;
 mod botcatalog;
@@ -32,14 +34,24 @@ mod business_code;
 mod business_team;
 mod calendar;
 mod calls;
+mod cli_setup;
+mod cli_setup_model;
 mod community;
 mod community_index;
+mod companion;
+mod companion_protocol;
 mod conn;
+mod connector_model;
+mod connector_policy;
+mod github_transport;
+mod connectors;
+mod feed_reader;
 mod coordination;
 mod creds;
 mod db;
 mod deck;
 mod eventlog;
+mod notifications;
 mod events;
 mod execution_policy;
 mod files;
@@ -48,10 +60,17 @@ mod folder_workflows;
 mod gauth;
 mod git;
 mod github;
+mod github_issue_read;
 mod inbox;
 mod installed;
+mod issue_monitor;
+mod repository_monitor;
+mod native_workflow;
+mod issue_monitor_model;
 mod legacy;
 mod library;
+mod design_system_model;
+mod design_systems;
 mod machine;
 mod mail;
 mod mailfiles;
@@ -59,6 +78,7 @@ mod manager_team;
 mod managers;
 mod mcp;
 mod monitor;
+mod personal_library;
 mod product_github;
 mod provider_defaults;
 mod pty;
@@ -71,7 +91,15 @@ mod setup;
 mod shots;
 mod spaces;
 mod stash;
+mod subscription_diagnostic;
+mod subscription_model;
+mod subscription_process;
 mod team;
+mod team_library_model;
+mod team_package;
+mod work_records;
+mod work_conversations;
+mod github_completion;
 mod threads;
 mod vault;
 mod visibility;
@@ -796,7 +824,25 @@ pub fn run() {
         // The AI Workspace. Registered here with the rest of the state so the
         // first invoke from a webview cannot arrive before it exists.
         .manage(aiw_workspace)
+        .manage(companion::Companion::default())
         .setup(move |app| {
+            {
+                let handle = app.handle().clone();
+                let ws = app.state::<Arc<aiw::state::Workspace>>();
+                let policy_handle = handle.clone();
+                let guard: connector_policy::Guard = Arc::new(move |key, capability, agent, project| {
+                    let db = policy_handle.state::<db::Db>();
+                    let conn = db.conn();
+                    connector_policy::check(&conn, key, capability, agent, project)
+                });
+                connector_policy::install(guard.clone());
+                ws.providers.lock().unwrap().set_connector_guard(guard);
+                ws.set_feed_consumer(Arc::new(move |id, agent, project| {
+                    let db = handle.state::<db::Db>();
+                    let conn = db.conn();
+                    connector_model::read_cached(&conn, id, agent, project)
+                }));
+            }
             // MCP servers installed from Community, made reachable before any
             // agent asks. Without this an installed server would only wake up
             // after somebody happened to open the Community page, which is a
@@ -892,7 +938,7 @@ pub fn run() {
 
             // The log's own connection, on its own thread. Started before the
             // sink is attached, so the first event of the run is kept too.
-            eventlog::start_writer();
+            eventlog::start_writer(app.handle().clone());
 
             {
                 let h = app.handle().clone();
@@ -939,7 +985,31 @@ pub fn run() {
                 }));
             }
 
+            {
+                let handle = app.handle().clone();
+                aiw_for_setup.set_workflow_handler(Box::new(move |node, action, args| {
+                    folder_workflows::assistant_action(&handle, node, action, args)
+                }));
+            }
+            aiw_for_setup.set_library_handler(Box::new(|action, args| {
+                let text = |key: &str| -> Result<String, String> {
+                    args.get(key).and_then(serde_json::Value::as_str)
+                        .map(str::to_string).ok_or_else(|| format!("Missing library field: {key}"))
+                };
+                let value = match action {
+                    "list" => serde_json::json!({"items": library::library_list()?, "reference_only": true}),
+                    "read" => serde_json::json!({"body": library::library_read(text("id")?, text("kind")?)?, "reference_only": true}),
+                    "create" => serde_json::json!({
+                        "item": personal_library::save_item(text("id")?, text("kind")?, text("name")?, text("what")?, text("body")?, None)?,
+                        "active": false,
+                        "next": "Saved for reuse. Configure an agent in the agent editor to use this definition. No tools or permissions were granted."
+                    }),
+                    _ => return Err("Unknown library action".into()),
+                };
+                serde_json::to_string(&value).map_err(|e| e.to_string())
+            }));
             folder_workflows::install(app.handle());
+            issue_monitor::install(app.handle());
 
             // Give the AI Workspace bus a way out to the UI. The closure lives
             // here, in the shell, so the bus itself stays free of Tauri — which
@@ -1127,6 +1197,7 @@ pub fn run() {
             manager_team::manager_profile_save,
             manager_team::manager_messages,
             manager_team::manager_message_send,
+            manager_team::message_board,
             bots::bots_list,
             bots::bots_standing,
             bots::bot_get,
@@ -1135,6 +1206,13 @@ pub fn run() {
             bots::bot_delete,
             bots::bot_set_worker,
             eventlog::events_history,
+            notifications::notifications_list,
+            notifications::notification_read,
+            notifications::notification_test,
+            notifications::notification_popup_push,
+            notifications::notification_popup_list,
+            notifications::notification_popup_dismiss,
+            notifications::notification_popup_layout,
             eventlog::events_count,
             bots::work_agree,
             bots::work_decline,
@@ -1181,6 +1259,8 @@ pub fn run() {
             db::recent_bump,
             db::recents_list,
             pty::pty_create,
+            cli_setup::cli_setup_status,
+            cli_setup::cli_setup_plan,
             pty::pty_write,
             pty::pty_resize,
             pty::pty_kill,
@@ -1217,6 +1297,7 @@ pub fn run() {
             community::community_catalog,
             community::community_installed,
             community::community_install,
+            community::community_library_import,
             community::community_uninstall,
             community::community_grant,
             community::community_servers,
@@ -1254,6 +1335,17 @@ pub fn run() {
             stash::stash_set_retention,
             stash::stash_open_file,
             stash::stash_image,
+            connectors::connectors_provider_bindings,
+            connectors::connectors_dependencies,
+            connectors::connectors_controls,
+            connectors::connectors_owner_checks,
+            connectors::connectors_control_save,
+            connectors::connectors_check_owner,
+            connectors::connectors_feeds,
+            connectors::connectors_add_feed,
+            connectors::connectors_feed_action,
+            connectors::connectors_feed_access,
+            connectors::connectors_test_feed,
             conn::conn_list,
             conn::conn_save,
             conn::conn_delete,
@@ -1291,6 +1383,24 @@ pub fn run() {
             business::business_pipeline,
             business::business_stage_set,
             library::library_list,
+            design_systems::design_systems_list,
+            design_systems::design_system_assignment,
+            design_systems::design_system_assign,
+            agent_library::library_agents,
+            agent_library::library_manager_save,
+            team_builder::team_builder_create,
+            team_package::team_package_inspect,
+            team_package::team_package_create,
+            team_package::team_package_save_template,
+            team_package::team_package_templates,
+            work_records::work_records_list,
+            work_records::work_record_save,
+            work_records::work_record_complete,
+            work_records::work_record_sync,
+            work_records::work_record_attach,
+            personal_library::library_save_custom,
+            personal_library::reusable_teams_list,
+            personal_library::reusable_team_save,
             library::library_read,
             library::library_look,
             library::library_install,
@@ -1307,6 +1417,15 @@ pub fn run() {
             workers::worker_starters,
             workers::worker_plan,
             workers::worker_start,
+            issue_monitor::issue_monitor_get,
+            issue_monitor::issue_monitor_save,
+            issue_monitor::issue_monitor_refresh,
+            issue_monitor::issue_monitor_retry,
+            issue_monitor::repository_briefing_read,
+            folder_workflows::folder_workflow_route,
+            folder_workflows::folder_workflow_list,
+            folder_workflows::folder_workflow_parse,
+            folder_workflows::folder_workflow_team_draft,
             folder_workflows::folder_workflow_get,
             folder_workflows::folder_workflow_save,
             folder_workflows::folder_workflow_start,
@@ -1365,6 +1484,8 @@ pub fn run() {
             activity::activity_list,
             activity::activity_for,
             calls::calls_list,
+            inbox::inbox_requests,
+            inbox::inbox_request_resolve,
             inbox::inbox_marks,
             inbox::inbox_mark,
             inbox::inbox_floor,
@@ -1440,6 +1561,7 @@ pub fn run() {
             aiw::commands::aiw_delete_conversation,
             aiw::commands::aiw_focus_conversation,
             aiw::commands::aiw_send_message,
+            aiw::commands::aiw_team_planner_send,
             files::node_files,
             files::file_text,
             files::vault_files,
@@ -1461,6 +1583,9 @@ pub fn run() {
             threads::thread_context_edit,
             threads::node_thread,
             threads::node_thread_send,
+            companion::companion_start,
+            companion::companion_pair,
+            companion::companion_stop,
             aiw::commands::aiw_personal_root,
             aiw::commands::aiw_profile,
             aiw::commands::aiw_save_profile,

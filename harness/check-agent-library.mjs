@@ -1,0 +1,32 @@
+const {chromium}=await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
+import assert from 'node:assert/strict';
+const browser=await chromium.launch({channel:'msedge',headless:true});
+try {
+ const page=await browser.newPage({viewport:{width:1440,height:1000}});
+ await page.goto('http://localhost:5199/harness/workforce.html');
+ await page.evaluate(async()=>{const {SEED}=await import('/harness/seed.ts');SEED.library_agents=()=>[{id:'runtime:team-planner',name:'Team Builder',instructions:'Canonical planner instructions',skills:[],execution:'model',configuration:{id:'team-planner'}},{id:'worker:reviewer',name:'Saved reviewer',instructions:'Canonical worker instructions',skills:[],execution:'cli',configuration:{handle:'reviewer'}},{id:'manager:vault:lead',name:'Vault lead',instructions:'Coordinate work',skills:[],execution:'manager',configuration:{handle:'lead',goal:'Deliver'}}];});
+ await page.getByRole('button',{name:'Library Agents & skills',exact:true}).click();
+ await page.getByRole('heading',{name:'Team Builder',exact:true}).waitFor();
+ await page.getByRole('heading',{name:'Saved reviewer',exact:true}).waitFor();
+ await page.getByRole('heading',{name:'Vault lead',exact:true}).waitFor();
+ await page.screenshot({path:'docs/test-reports/workforce-2026-10-16/07-library-scopes.png',fullPage:true,animations:'disabled'});
+ await page.getByRole('button',{name:'Edit Vault lead',exact:true}).click();
+ await page.getByRole('dialog',{name:'Edit vault manager'}).waitFor();
+ await page.screenshot({path:'docs/test-reports/workforce-2026-10-16/08-vault-manager-editor.png',fullPage:true,animations:'disabled'});
+ await page.evaluate(async()=>{ const {SEED}=await import('/harness/seed.ts'); SEED.library_manager_save=(args)=>{window.savedVaultManager=args;return null}; });
+ await page.getByRole('dialog',{name:'Edit vault manager'}).getByLabel('Manager goal',{exact:true}).fill('Coordinate releases');
+ await page.getByRole('button',{name:'Save manager',exact:true}).click();
+ await page.getByRole('dialog',{name:'Edit vault manager'}).waitFor({state:'hidden'});
+ const saved=await page.evaluate(()=>window.savedVaultManager);
+ assert.equal(saved.goal,'Coordinate releases');
+ assert.equal(saved.expected.configuration.handle,'lead');
+ assert.equal(saved.instructions,'Coordinate work');
+ await page.getByLabel('Filter library source').selectOption('vault');
+ assert.equal(await page.getByRole('heading',{name:'Saved reviewer',exact:true}).count(),0);
+ await page.getByRole('heading',{name:'Vault lead',exact:true}).waitFor();
+ await page.getByLabel('Filter library source').selectOption('all');
+ await page.getByRole('button',{name:'Read Team Builder',exact:true}).click();
+ await page.getByText('Canonical planner instructions',{exact:true}).waitFor();
+ assert.equal(await page.getByRole('button',{name:'Remove Team Builder',exact:true}).count(),0);
+ console.log('Library displays all three agent types; vault filtering and manager save handoff pass.');
+} finally {await browser.close();}

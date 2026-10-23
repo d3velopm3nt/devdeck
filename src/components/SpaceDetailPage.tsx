@@ -1,8 +1,8 @@
+import { FilterTabs, StateIcon } from './ui/DesignSystem'
 // Personalized detail page for one space (Project): a themed hero header,
 // live activity/sessions, and the space's Services, Commands, and Profiles
 // with run controls (including multi-select "Run selected" for services).
 
-import { FolderWorkflowPage } from './FolderWorkflowPage'
 import { useMemo, useState } from 'react'
 import type { IDockviewPanelProps } from 'dockview-react'
 import { useApp } from '../store'
@@ -31,7 +31,6 @@ function hexA(hex: string, a: number): string {
 type Tab = 'services' | 'commands' | 'profiles'
 
 export function SpaceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
-  const [dashboard, setDashboard] = useState(false)
   const projectId = props.params.id
   const nodes = useApp((s) => s.nodes)
   const services = useApp((s) => s.services)
@@ -86,10 +85,6 @@ export function SpaceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
         This space no longer exists.
       </div>
     )
-  }
-
-  if (project.label?.trim().toLowerCase() === 'workflow' && !dashboard) {
-    return <FolderWorkflowPage key={projectId} node={projectId} name={project.name} onDashboard={() => setDashboard(true)} />
   }
 
   const act = async (id: number, fn: () => Promise<unknown>) => {
@@ -165,7 +160,6 @@ export function SpaceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
 
   return (
     <div className="flex h-full flex-col overflow-auto bg-page text-body">
-      {project.label?.trim().toLowerCase() === 'workflow' && <button className="border-b border-line p-2 text-left text-[12px] text-info" onClick={() => setDashboard(false)}>Open workflow</button>}
       {/* Hero */}
       <div
         className="relative border-b border-line px-5 pb-4 pt-5"
@@ -267,7 +261,7 @@ export function SpaceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
                 className="flex items-center gap-2 rounded-lg border border-sky-500/30 bg-sky-500/[0.07] px-2.5 py-1.5 text-[12px] hover:border-sky-500/60"
                 onClick={() => openTerminalPanel(t.id, t.title)}
               >
-                <span className="text-ok">❯_</span>
+                <Icon name="terminal" size={14}/>
                 <span className="text-ink">{t.title}</span>
               </button>
             ))}
@@ -276,22 +270,7 @@ export function SpaceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
       )}
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-line px-4 pt-2">
-        {(['services', 'commands', 'profiles'] as Tab[]).map((t) => {
-          const active = tab === t
-          const count = t === 'services' ? spaceServices.length : t === 'commands' ? spaceCommands.length : spaceProfiles.length
-          return (
-            <button
-              key={t}
-              className={`relative px-3 py-2 text-[12.5px] capitalize ${active ? 'text-ink' : 'text-muted hover:text-ink'}`}
-              onClick={() => setTab(t)}
-            >
-              {t} <span className="text-[10px] text-muted">{count}</span>
-              {active && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full" style={{ background: color }} />}
-            </button>
-          )
-        })}
-      </div>
+<div className="ds-view-switch"><FilterTabs label="Space views" value={tab} onChange={setTab} options={[{id:'services',label:'Services',icon:'service',count:spaceServices.length},{id:'commands',label:'Commands',icon:'terminal',count:spaceCommands.length},{id:'profiles',label:'Profiles',icon:'profile',count:spaceProfiles.length}]}/></div>
 
       {/* Panels */}
       <div className="flex-1 p-4">
@@ -363,7 +342,7 @@ function ServicesTab({
         return (
           <div key={s.id} className="group flex items-center gap-2.5 rounded-lg border border-line bg-raise px-3 py-2 hover:border-line2">
             <input type="checkbox" className="accent-indigo-500" checked={isSel} onChange={() => onToggle(s.id)} title="Select for Run selected" />
-            <span className={`h-2 w-2 shrink-0 rounded-full ${running ? 'animate-pulse bg-emerald-400' : st?.status === 'crashed' ? 'bg-red-400' : 'bg-faint'}`} />
+            <StateIcon state={st?.status ?? "stopped"}/>
             <button className="min-w-0 flex-1 text-left" title="Open the service page" onClick={() => openService(s.id, s.name || 'Service')}>
               <div className="truncate text-[12.5px] text-ink">{s.name}</div>
               <div className="truncate font-mono text-[10.5px] text-muted">{s.command}</div>

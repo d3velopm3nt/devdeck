@@ -1,0 +1,55 @@
+/* Semantic state roles resolve against each theme's existing accessible palette. */
+[data-tone] { --ds-state-color: var(--c-dim); }
+[data-tone='success'] { --ds-state-color: var(--c-ok); }
+[data-tone='warning'] { --ds-state-color: var(--c-warn); }
+[data-tone='danger'] { --ds-state-color: var(--c-err); }
+[data-tone='info'] { --ds-state-color: var(--c-info); }
+[data-tone='purple'] { --ds-state-color: var(--c-viol); }
+.ds-state { display: inline-flex; align-items: center; gap: 5px; width: fit-content; max-width: 100%; padding: 4px 7px; border-radius: 6px; border: 1px solid color-mix(in srgb, var(--ds-state-color) 25%, transparent); background: color-mix(in srgb, var(--ds-state-color) 9%, var(--c-panel)); color: var(--ds-state-color); font-size: 11px; font-weight: 550; line-height: 1.3; }
+.ds-state > svg { flex-shrink: 0; }
+.ds-filter-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+.ds-filter-tabs > button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; padding: 7px 10px; border-radius: 8px; border: 1px solid transparent; color: var(--c-dim); font-size: 12px; white-space: nowrap; }
+.ds-filter-tabs > button:hover { background: var(--c-hover); color: var(--c-ink); }
+.ds-filter-tabs > button[aria-pressed='true'] { color: var(--c-accent); background: color-mix(in srgb, var(--c-accent) 12%, var(--c-panel)); border-color: color-mix(in srgb, var(--c-accent) 32%, var(--c-line)); }
+.ds-filter-tabs > button:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+.ds-count { padding: 1px 5px; border-radius: 4px; background: var(--c-raise); color: var(--c-dim); font-size: 10px; font-variant-numeric: tabular-nums; }
+@media (pointer: coarse) { .ds-filter-tabs > button { min-height: 44px; } }
+.ds-state-icon { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--ds-state-color); }
+.ds-state-select { min-height: 32px; }
+.ds-state-select option { color: var(--c-ink); background: var(--c-panel); }
+.ds-view-switch { padding: 8px 12px; border-bottom: 1px solid var(--c-line); flex-shrink: 0; min-width: 0; }
+.ds-filter-tabs { min-width: 0; }
+.ds-filter-tabs > button { flex-shrink: 0; }
+.ds-filter-tabs > button > svg { flex-shrink: 0; }
+.ds-navigation > button, button.ds-navigation-item { min-height: 36px; border: 1px solid transparent; border-radius: 8px; color: var(--c-dim); }
+.ds-navigation > button:hover, button.ds-navigation-item:hover { background: var(--c-hover); color: var(--c-ink); }
+.ds-navigation > button[aria-current='page'], .ds-navigation > button[aria-pressed='true'], button.ds-navigation-item[aria-current='page'] { color: var(--c-accent); border-color: color-mix(in srgb,var(--c-accent) 30%,var(--c-line)); background: color-mix(in srgb,var(--c-accent) 10%,var(--c-panel)); }
+:is(.ds-navigation > button, button.ds-navigation-item, .btn-primary, .btn-ghost, .btn-danger):focus-visible { outline: 2px solid var(--c-accent); outline-offset: -2px; }
+@media (pointer: coarse) { .ds-navigation > button, button.ds-navigation-item { min-height: 44px; } }
+@media (prefers-reduced-motion: reduce) { .ds-filter-tabs > button, .ds-navigation > button, button.ds-navigation-item { transition: none; } }
+.ds-filter-tabs > button[aria-selected='true'] { color: var(--c-accent); background: color-mix(in srgb,var(--c-accent) 12%,var(--c-panel)); border-color: color-mix(in srgb,var(--c-accent) 32%,var(--c-line)); }
+/* Strengthen small status text against tinted surfaces in light and dark themes. */
+.ds-state { color: color-mix(in srgb, var(--ds-state-color) 78%, var(--c-ink)); }
+
+/* Dense navigation uses an underline, leaving pills for content filters. */
+.ds-compact-tabs { display: flex; flex-wrap: nowrap; gap: 6px; min-width: 0; overflow-x: auto; scrollbar-width: thin; }
+.ds-compact-tabs > button {
+  display: inline-flex; align-items: center; flex-shrink: 0; gap: 6px;
+  min-height: 32px; padding: 5px 8px; border: 0; border-bottom: 2px solid transparent;
+  border-radius: 0; background: transparent; color: var(--c-dim);
+  font-size: 12px; font-weight: 500; white-space: nowrap;
+}
+.ds-compact-tabs > button > svg { width: 14px; height: 14px; flex-shrink: 0; }
+.ds-compact-tabs > button:hover { background: var(--c-hover); color: var(--c-ink); }
+.ds-compact-tabs > button[aria-pressed='true'], .ds-compact-tabs > button[aria-selected='true'] {
+  background: transparent; color: var(--c-accent); border-color: var(--c-accent);
+}
+.ds-compact-tabs > button:focus-visible { outline: 2px solid var(--c-accent); outline-offset: -2px; }
+@media (pointer: coarse) { .ds-compact-tabs > button { min-height: 44px; } }
+
+/* Open artifacts in side panels. This opt-in variant never targets workspace or Dockview tabs. */
+.ds-editor-tabs { flex-wrap:nowrap; gap:0; overflow-x:auto; scrollbar-width:thin; background:var(--c-panel); border-bottom:1px solid var(--c-line); }
+.ds-editor-tabs > button { min-height:36px; padding:8px 12px; border:0; border-top:2px solid transparent; border-right:1px solid var(--c-line); border-radius:0; font-size:12px; font-weight:500; }
+.ds-editor-tabs > button[aria-selected='true'] { color:var(--c-ink); background:var(--c-page); border-top-color:var(--c-accent); border-right-color:var(--c-line); }
+.ds-editor-tabs > button:focus-visible { outline-offset:-2px; }
+@media(pointer:coarse) { .ds-editor-tabs > button { min-height:44px; } }

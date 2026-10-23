@@ -421,6 +421,7 @@ mod tests {
             feature: String::new(),
             work_item: String::new(),
             next_run: None,
+            running: false,
         }
     }
 

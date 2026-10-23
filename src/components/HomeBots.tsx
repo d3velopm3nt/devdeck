@@ -29,18 +29,18 @@ type Mood = 'blocked' | 'waiting' | 'working' | 'quiet' | 'handsoff'
 
 const TONE: Record<Mood, { ring: string; tile: string; text: string; dot: string }> = {
   blocked: {
-    ring: 'bg-red-400',
-    tile: 'border-red-500/35 bg-red-500/[0.07]',
+    ring: 'bg-err',
+    tile: 'border-err/35 bg-err/[0.07]',
     text: 'text-err',
-    dot: 'bg-red-400',
+    dot: 'bg-err',
   },
   waiting: {
-    ring: 'bg-amber-400',
-    tile: 'border-amber-500/32 bg-amber-500/[0.06]',
+    ring: 'bg-warn',
+    tile: 'border-warn/32 bg-warn/[0.06]',
     text: 'text-warn',
-    dot: 'bg-amber-400',
+    dot: 'bg-warn',
   },
-  working: { ring: 'bg-emerald-400', tile: 'border-line', text: 'text-ok', dot: 'bg-emerald-400' },
+  working: { ring: 'bg-info', tile: 'border-line', text: 'text-info', dot: 'bg-info' },
   quiet: { ring: '', tile: 'border-line', text: 'text-faint', dot: 'bg-slate-500' },
   handsoff: { ring: '', tile: 'border-line2 border-dashed', text: 'text-faint', dot: 'bg-slate-500' },
 }
@@ -238,7 +238,7 @@ export function HomeBots() {
               <button
                 key={bot.handle || bot.node_id}
                 className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-hover/40 ${
-                  mood === 'blocked' ? 'bg-red-500/[0.06]' : ''
+                  mood === 'blocked' ? 'bg-err/[0.06]' : ''
                 }`}
                 onClick={() => openBot(bot.node_id, bot.name, false, bot.handle)}
               >

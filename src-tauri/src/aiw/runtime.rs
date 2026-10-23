@@ -263,8 +263,15 @@ impl AgentRuntime {
         if super::cli_agent::is_cli_runner(&live.agent.provider) {
             Self::drive_delegated(ws, live)
         } else {
-            Self::drive_inner(ws, live)
+            Self::drive_inner(ws, live, None)
         }
+    }
+
+    /// Workflow runs use the same engine with cooperative cancellation.
+    /// An in-flight provider request finishes before cancellation is observed;
+    /// no subsequent tool action is performed.
+    pub fn drive_cancellable(ws: &Arc<Workspace>, live: LiveSession, stop: Arc<std::sync::atomic::AtomicBool>) -> Result<SessionOutcome, String> {
+        Self::drive_inner(ws, live, Some(stop))
     }
 
     /// Run one agent to completion.
@@ -284,6 +291,10 @@ impl AgentRuntime {
         let Some(agent) = ws.agent(&cmd.agent_id) else {
             return Err(format!("unknown agent '{}'", cmd.agent_id));
         };
+        #[cfg(not(test))]
+        if agent.provider.is_empty() || agent.provider == "mock" {
+            return Err("Set up this agent with a real provider before starting work.".into());
+        }
         let deck = project.deck();
         if !deck.feature_md(&cmd.feature_id).is_file() {
             return Err(format!(
@@ -308,6 +319,19 @@ impl AgentRuntime {
         }
 
         let session_id = new_session_id();
+        // Preserve the exact definition beside the run receipt, including before a crash.
+        // A new run gets a fresh snapshot; live permission checks remain authoritative.
+        let snapshot_dir = deck.feature_sessions(&cmd.feature_id);
+        std::fs::create_dir_all(&snapshot_dir).map_err(|e| e.to_string())?;
+        let snapshot_path = snapshot_dir.join(format!("{session_id}.agent.json"));
+        let snapshot = serde_json::to_vec_pretty(&agent).map_err(|e| e.to_string())?;
+        {
+            use std::io::Write;
+            let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(snapshot_path).map_err(|e| e.to_string())?;
+            file.write_all(&snapshot).map_err(|e| e.to_string())?;
+            file.sync_all().map_err(|e| e.to_string())?;
+        }
+
         let mut scope = EventScope::feature(&cmd.project_id, &cmd.feature_id)
             .with_agent(&cmd.agent_id)
             .with_session(&session_id);
@@ -367,6 +391,7 @@ impl AgentRuntime {
         );
 
         ws.add_session(Session {
+            agent_snapshot: Some(agent.clone()),
             id: session_id.clone(),
             agent_id: agent.id.clone(),
             agent_name: agent.name.clone(),
@@ -455,7 +480,7 @@ impl AgentRuntime {
     }
 
     /// The provider loop and everything after it.
-    fn drive_inner(ws: &Arc<Workspace>, live: LiveSession) -> Result<SessionOutcome, String> {
+    fn drive_inner(ws: &Arc<Workspace>, live: LiveSession, stop: Option<Arc<std::sync::atomic::AtomicBool>>) -> Result<SessionOutcome, String> {
         let LiveSession {
             session_id,
             cmd,
@@ -489,7 +514,9 @@ impl AgentRuntime {
         } else {
             REAL_TURNS
         };
+        let stopped = || stop.as_ref().is_some_and(|s| s.load(std::sync::atomic::Ordering::Relaxed));
         for turn in 0..budget {
+            if stopped() { failed = Some("Run stopped or timed out.".into()); break; }
             turns = turn + 1;
 
             let request = AgentRequest {
@@ -531,12 +558,17 @@ impl AgentRuntime {
                 // this one.
                 let p = {
                     let providers = ws.providers.lock().unwrap();
-                    providers.get(&agent.provider)
+                    providers.get_for(&agent.provider, &agent.id, Some(&project.id))
                 };
                 let Some(p) = p else {
                     return Err(format!("unknown provider '{}'", agent.provider));
                 };
-                p.run(&request)
+                super::provider_retry::run(|| p.run(&request), stopped, |attempt| {
+                    ws.update_session(&session_id, |s| s.transcript.push(TranscriptEntry {
+                        at: now_iso(), kind: "retry".into(),
+                        text: format!("Provider request failed; retrying attempt {attempt} of 3."),
+                    }));
+                })
             };
             // A session is where "it ran and did nothing" happens, so every
             // turn of it is written down: what it was asked, what came back.
@@ -576,6 +608,7 @@ impl AgentRuntime {
                 }
             };
 
+            if stopped() { failed = Some("Run stopped or timed out.".into()); break; }
             if !response.message.is_empty() {
                 ws.update_session(&session_id, |s| {
                     s.transcript.push(TranscriptEntry {
@@ -588,6 +621,7 @@ impl AgentRuntime {
 
             let mut done = response.complete;
             for action in &response.actions {
+                if stopped() { failed = Some("Run stopped or timed out.".into()); break; }
                 match action {
                     AgentAction::Tool(call) => {
                         // A review point stops the call before it happens.
@@ -884,6 +918,9 @@ impl AgentRuntime {
             }
 
             if done {
+                // Subscription providers finish with a message and no tool calls,
+                // rather than a synthetic Done action. Keep their actual verdict.
+                if summary.is_empty() { summary = response.message.clone(); }
                 break;
             }
         }
@@ -1196,7 +1233,7 @@ impl AgentRuntime {
                     EventType::WorkUpdated
                 },
                 scope.clone(),
-                serde_json::json!({ "claimId": claim_id, "status": if failed.is_some() { "blocked" } else { "needs-review" } }),
+                serde_json::json!({ "claimId": claim_id, "status": if failed.is_some() { "blocked" } else { "needs-review" }, "attention_owner": if cmd.on_behalf_of.as_deref() == Some("Issue intake execution. Complete only this step and return evidence for human review.") { "issue-intake" } else { "runtime" } }),
             )
             .caused_by(claimed),
         );

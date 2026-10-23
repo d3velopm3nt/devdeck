@@ -13,7 +13,7 @@ import { nodeColor, avatarLabel, projectUsage, rankSpaces } from '../lib/spaces'
 import { fmtUptime } from '../lib/time'
 import type { LogEntry, ProcStat, TreeNode } from '../lib/types'
 import { HomeAttention } from './HomeAttention'
-import { HomeBots } from './HomeBots'
+import { HomeActiveAgents } from './HomeActiveAgents'
 
 function hexA(hex: string, a: number): string {
   const n = parseInt(hex.slice(1), 16)
@@ -60,7 +60,7 @@ function SpaceCard({ project, topUsed }: { project: TreeNode; topUsed: boolean }
         <div className="mt-0.5 flex items-center gap-2 text-[10.5px] text-muted">
           {running > 0 && (
             <span className="flex items-center gap-1 text-ok">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-info" />
               {running} live
             </span>
           )}
@@ -321,7 +321,7 @@ export function Home() {
         {/* The bots, between the spaces and the counters: high enough to be
             seen without scrolling, below the spaces because a bot belongs to
             one of them. */}
-        <HomeBots />
+        <HomeActiveAgents />
 
         {/* summary counters */}
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 lg:grid-cols-7">
@@ -369,7 +369,7 @@ export function Home() {
               const port = servicePort(s.id)
               return (
                 <div key={`run-${s.id}`} className="mb-1.5 flex items-center gap-2.5 rounded-lg border border-line bg-raise/40 px-2.5 py-2 last:mb-0">
-                  <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-emerald-400" />
+                  <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-info" />
                   <button className="truncate text-[12.5px] font-semibold text-ink hover:underline" title="Open the service page" onClick={() => openService(s.id, s.name)}>
                     {s.name}
                   </button>

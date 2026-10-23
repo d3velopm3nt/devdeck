@@ -21,26 +21,60 @@ export function updatesFromPaths(head: string, paths: string[], spaces: { id: nu
   })
 }
 
+// Layered bell partials give each event a recognizable, rounded chime.
+let activeSound: AudioContext | null = null
 export function playDeckSound(kind: DeckEventKind) {
-  try {
-    const context = new AudioContext()
-    const tones = { info: [660], alert: [740, 560], approval: [660, 880], blocker: [440, 330] }[kind]
-    tones.forEach((tone, index) => {
-      const at = context.currentTime + index * 0.15
-      const oscillator = context.createOscillator(); const volume = context.createGain()
-      oscillator.frequency.value = tone; oscillator.type = 'sine'
-      volume.gain.setValueAtTime(0.0001, at)
-      volume.gain.exponentialRampToValueAtTime(0.055, at + 0.015)
-      volume.gain.exponentialRampToValueAtTime(0.0001, at + 0.12)
-      oscillator.connect(volume).connect(context.destination)
-      oscillator.start(at); oscillator.stop(at + 0.13)
-    })
-    window.setTimeout(() => void context.close(), 600)
-  } catch { /* no audio device */ }
+  void (async () => {
+    let context: AudioContext | null = null
+    try {
+      // Avoid stacked previews or event bursts becoming unexpectedly loud.
+      if (activeSound) await activeSound.close().catch(() => {})
+      context = new AudioContext()
+      activeSound = context
+      await context.resume()
+      if (activeSound !== context || context.state !== 'running') return
+      const output = context.createGain()
+      output.gain.value = 0.32
+      const limiter = context.createDynamicsCompressor()
+      limiter.threshold.value = -12
+      limiter.knee.value = 12
+      limiter.ratio.value = 6
+      output.connect(limiter).connect(context.destination)
+      const notes: Record<DeckEventKind, [number, number][]> = {
+        info: [[784, 0], [1175, 0.16]],
+        approval: [[523, 0], [659, 0.19], [988, 0.38]],
+        alert: [[880, 0], [698, 0.2], [880, 0.46]],
+        blocker: [[392, 0], [330, 0.28], [262, 0.56]],
+      }
+      for (const [frequency, delay] of notes[kind]) {
+        for (const [ratio, strength, decay] of [[1, 0.65, 0.75], [2, 0.2, 0.4], [3, 0.07, 0.22]]) {
+          const at = context.currentTime + 0.025 + delay
+          const oscillator = context.createOscillator()
+          const envelope = context.createGain()
+          oscillator.type = 'sine'
+          oscillator.frequency.value = frequency * ratio
+          envelope.gain.setValueAtTime(0.0001, at)
+          envelope.gain.exponentialRampToValueAtTime(strength, at + 0.012)
+          envelope.gain.exponentialRampToValueAtTime(0.0001, at + decay)
+          oscillator.connect(envelope).connect(output)
+          oscillator.start(at)
+          oscillator.stop(at + decay + 0.02)
+        }
+      }
+      const playing = context
+      window.setTimeout(() => {
+        if (activeSound === playing) activeSound = null
+        void playing.close().catch(() => {})
+      }, 1600)
+    } catch {
+      if (activeSound === context) activeSound = null
+      if (context) void context.close().catch(() => {})
+    }
+  })()
 }
-
 export async function announceUpdates(updates: DeckUpdate[], settings: DeckSettings, focusing: boolean) {
-  const eligible = updates.filter((u) => !focusing || mayInterruptFocus(u.kind, settings.focusInterrupt))
+  if (settings.notificationLevel === 'off' || settings.notificationLevel === 'summary') return
+  const eligible = updates.filter(u => settings.notificationLevel === 'all' || u.kind !== 'info').filter((u) => !focusing || mayInterruptFocus(u.kind, settings.focusInterrupt))
   if (!eligible.length || inQuietHours(settings)) return
   const strongest = eligible.find((u) => u.kind === 'blocker') ?? eligible.find((u) => u.kind === 'approval') ?? eligible.find((u) => u.kind === 'alert') ?? eligible[0]
   if (settings.sounds[strongest.kind]) playDeckSound(strongest.kind)

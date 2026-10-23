@@ -1,7 +1,13 @@
+import { ConnectorsPage } from './components/connectors/ConnectorsPage'
+import { DeckLogo } from './widget/DeckLogo'
+import { NotificationCenter } from './components/NotificationCenter'
+import { GitHubPage } from './components/GitHubPage'
+import { SetupBanner } from './components/setup/SetupBanner'
 import { useEffect, useRef, useState } from 'react'
 import { Dock, buildDefaultLayout } from './Dock'
 import { BottomBar } from './components/BottomBar'
 import { InboxPage } from './components/InboxPage'
+import { AssistantThread } from './components/thread/AssistantThread'
 import { ActivityBoard } from './components/ActivityBoard'
 import { TeamPage } from './components/team/TeamPage'
 import { AnalyticsPage } from './components/AnalyticsPage'
@@ -22,10 +28,10 @@ import { ClockToast } from './components/ClockToast'
 import { Rail } from './shell/Rail'
 import { WindowControls } from './shell/WindowControls'
 import { ThemeSwitch } from './shell/ThemeSwitch'
-import { AgentCluster, NotificationBell, AccountChip } from './shell/TopBarStatus'
+import { AgentCluster, AccountChip } from './shell/TopBarStatus'
 import { Home } from './components/Home'
 import { Today } from './components/Today'
-import { Explorer } from './components/Explorer'
+import { ExplorerSidebar } from './shell/ExplorerSidebar'
 import { MachineSetup } from './components/MachineSetup'
 import { CommunityView } from './components/CommunityView'
 import { MailSidebar } from './components/MailSidebar'
@@ -740,7 +746,7 @@ export default function App() {
     )
   }
 
-  if ((!met || CAPTURE_MEET_STEP || setupAt) && !CAPTURE_MET) {
+  if ((CAPTURE_MEET_STEP || setupAt) && !CAPTURE_MET) {
     return (
       <div className="flex h-screen flex-col bg-app text-body">
         <Meet
@@ -775,7 +781,7 @@ export default function App() {
         <Menu
           label={
             <span className="inline-flex items-center gap-1.5">
-              <span className="text-indigo-400">❯_</span> DevDeck
+              <DeckLogo size={20} /> DevDeck
             </span>
           }
         >
@@ -1017,7 +1023,7 @@ export default function App() {
           />
           <div className="h-4 w-px bg-line" />
           <ThemeSwitch />
-          <NotificationBell />
+          <NotificationCenter />
           <AccountChip />
         </div>
 
@@ -1056,15 +1062,14 @@ export default function App() {
       {/* An agent stopped mid-turn is on a 90-second clock, and the Assistant
           is no longer a place you sit — so the prompt lives above every view
           rather than on one of them. */}
+      <SetupBanner />
       <ApprovalBar />
 
       {/* Shell: rail → contextual sidebar → view surface */}
       <div className="flex min-h-0 flex-1">
         <Rail />
         {railView === 'projects' && (
-          <aside className="w-[280px] shrink-0 overflow-hidden border-r border-line">
-            <Explorer />
-          </aside>
+          <ExplorerSidebar />
         )}
         {railView === 'mail' && (
           <aside className="w-[250px] shrink-0 overflow-hidden border-r border-line">
@@ -1088,6 +1093,7 @@ export default function App() {
         )}
         <main className="min-w-0 flex-1">
           {railView === 'today' && <Today />}
+          {railView === 'github' && <GitHubPage />}
           {railView === 'home' && <Home />}
           {/* The Dock stays mounted (terminals live in it) — just hidden when
               another rail view is showing. */}
@@ -1096,10 +1102,12 @@ export default function App() {
           </div>
           {railView === 'mail' && (app.mailPane === 'contacts' ? <ContactsView /> : <MailView />)}
           {railView === 'stash' && <StashView />}
+          {railView === 'connectors' && <ConnectorsPage />}
           {railView === 'connections' && <ConnectionsView />}
           {railView === 'community' && <CommunityView />}
           {railView === 'machine' && <MachineSetup />}
           {railView === 'inbox' && <InboxPage />}
+          {railView === 'chat' && <AssistantThread />}
           {railView === 'activity' && <ActivityBoard />}
           {railView === 'sessions' && <ActivityBoard sessionsOnly />}
           {railView === 'team' && <TeamPage />}
@@ -1113,7 +1121,7 @@ export default function App() {
       {starting && <StartWorker open={starting} onClose={() => setStarting(null)} />}
 
       {/* Collapsible / resizable bottom bar: Logs + Processes */}
-      {['projects', 'home', 'machine', 'connections'].includes(railView) && <BottomBar
+      {<BottomBar
         tab={app.bottomTab}
         onTab={app.setBottomTab}
         collapsed={app.bottomCollapsed}

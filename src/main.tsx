@@ -4,6 +4,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import './index.css'
 import App from './App.tsx'
 import { CommandWidget } from './widget/CommandWidget'
+import { NotificationOverlay } from './widget/NotificationOverlay'
 import { CaptureToast } from './widget/CaptureToast'
 import { ErrorBoundary } from './ErrorBoundary'
 
@@ -17,10 +18,10 @@ try {
 
 // The toast floats over other apps, so its page must not paint a background
 // behind the card (see index.css).
-if (label === 'toast') document.documentElement.dataset.window = 'toast'
+if (label === 'toast' || label === 'notifications') document.documentElement.dataset.window = 'toast'
 
 const ui =
-  label === 'widget' ? <CommandWidget /> : label === 'toast' ? <CaptureToast /> : <App />
+  label === 'notifications' ? <NotificationOverlay /> : label === 'widget' ? <CommandWidget /> : label === 'toast' ? <CaptureToast /> : <App />
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

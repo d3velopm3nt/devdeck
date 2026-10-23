@@ -1,3 +1,5 @@
+import { NotificationSettings } from './NotificationSettings'
+import { CoreSetup } from './setup/CoreSetup'
 // Settings page (opens as a main-window tab): global behavior and
 // detected shells. Editing individual commands / services / profiles
 // lives in their own dedicated editor pages, opened from the side lists.
@@ -7,11 +9,11 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import * as ipc from '../lib/ipc'
 import { useApp } from '../store'
 import { loadExampleWorkspace } from '../lib/example'
+import { BrandIcon } from './BrandIcon'
 import { Icon } from '../lib/icons'
 import { SchedulerPage } from './SchedulerPage'
 import { Settings as AgentSettings } from './aiw/Settings'
 import { DeckSettings } from './DeckSettings'
-import { CoreSetup } from './setup/CoreSetup'
 import { GitHubConnection } from './GitHubConnection'
 import { GitHubToken } from './GitHubToken'
 import { CAPTURE_SETTINGS_TAB } from '../lib/devCapture'
@@ -115,7 +117,7 @@ export function ConfigPage() {
   const [vaultBusy, setVaultBusy] = useState(false)
   const [labelDraft, setLabelDraft] = useState('')
   const [labelMsg, setLabelMsg] = useState('')
-  const [tab, setTab] = useState(() => CAPTURE_SETTINGS_TAB || localStorage.getItem(TAB_KEY) || 'general')
+  const [tab, setTab] = useState(() => { const saved = CAPTURE_SETTINGS_TAB || localStorage.getItem(TAB_KEY) || 'general'; return saved })
 
   // Something elsewhere asked for a particular tab — the calendar's New
   // button, which needs the routines form. Consumed once, so coming back to
@@ -254,13 +256,13 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
       {/* A settings page long enough to scroll is a settings page you hunt
           through. The nav is fixed and the pane scrolls, so where you are
           stays visible while you read. */}
-      <nav className="flex w-[176px] shrink-0 flex-col gap-0.5 border-r border-line bg-panel p-2">
+      <nav aria-label="Settings sections" className="ds-navigation flex w-[176px] shrink-0 flex-col gap-0.5 border-r border-line bg-panel p-2">
         <div className="px-2.5 pb-2 pt-1 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-faint">
           Settings
         </div>
-            <button
+            <button aria-current={tab === 'general' ? 'page' : undefined}
               key="general"
-              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] ${
+              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
                 tab === 'general' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
               }`}
               onClick={() => setTab('general')}
@@ -268,9 +270,9 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
               <Icon name="settings" size={14} className="shrink-0" />
               General
             </button>
-            <button
+            <button aria-current={tab === 'vault' ? 'page' : undefined}
               key="vault"
-              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] ${
+              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
                 tab === 'vault' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
               }`}
               onClick={() => setTab('vault')}
@@ -278,9 +280,9 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
               <Icon name="folder" size={14} className="shrink-0" />
               Vault
             </button>
-            <button
+            <button aria-current={tab === 'dev' ? 'page' : undefined}
               key="dev"
-              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] ${
+              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
                 tab === 'dev' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
               }`}
               onClick={() => setTab('dev')}
@@ -291,9 +293,9 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
             {/* Routines were a rail entry of their own. They are settings: a
                 clock row that agrees with a line in a bot's file, and the one
                 place both can be read at once. */}
-            <button
+            <button aria-current={tab === 'routines' ? 'page' : undefined}
               key="routines"
-              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] ${
+              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
                 tab === 'routines' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
               }`}
               onClick={() => setTab('routines')}
@@ -301,9 +303,9 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
               <Icon name="schedule" size={14} className="shrink-0" />
               Routines
             </button>
-            <button
+            <button aria-current={tab === 'deck' ? 'page' : undefined}
               key="deck"
-              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] ${
+              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
                 tab === 'deck' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
               }`}
               onClick={() => setTab('deck')}
@@ -311,22 +313,24 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
               <Icon name="widget" size={14} className="shrink-0" />
               Deck
             </button>
+            <button aria-current={tab === 'notifications' ? 'page' : undefined} className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] ${tab === 'notifications' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50'}`} onClick={() => setTab('notifications')}><Icon name="history" size={14} />Notifications</button>
             {/* What the team is made of, as opposed to what it is doing: which
                 model each agent runs on, what each may touch, what you have
                 pre-authorised. Talking to them is Team. */}
-            <button
+            <button aria-current={tab === 'core' ? 'page' : undefined} className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] ${tab === 'core' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50'}`} onClick={() => setTab('core')}><Icon name="settings" size={14} />Setup</button>
+            <button aria-current={tab === 'assistant' ? 'page' : undefined}
               key="assistant"
-              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] ${
+              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
                 tab === 'assistant' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
               }`}
               onClick={() => setTab('assistant')}
             >
               <Icon name="ai" size={14} className="shrink-0" />
-              Assistant
+              AI
             </button>
-            <button
+            <button aria-current={tab === 'stash' ? 'page' : undefined}
               key="stash"
-              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] ${
+              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
                 tab === 'stash' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
               }`}
               onClick={() => setTab('stash')}
@@ -334,9 +338,9 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
               <Icon name="stash" size={14} className="shrink-0" />
               Stash
             </button>
-            <button
+            <button aria-current={tab === 'data' ? 'page' : undefined}
               key="data"
-              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] ${
+              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
                 tab === 'data' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
               }`}
               onClick={() => setTab('data')}
@@ -344,11 +348,10 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
               <Icon name="database" size={14} className="shrink-0" />
               Data
             </button>
-        <button className="btn-ghost justify-start text-sm" onClick={() => setTab('core')}>Core setup</button>
-        <button className="btn-ghost justify-start text-sm" onClick={() => setTab('github')}>GitHub</button>
+        <button aria-current={tab === 'github' ? 'page' : undefined} className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${tab === 'github' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'}`} onClick={() => setTab('github')}><BrandIcon brand="github" size={14} />GitHub</button>
       </nav>
 
-      {tab === 'core' ? <div className="min-w-0 flex-1 overflow-auto"><CoreSetup /></div> : tab === 'github' ? <div className="min-w-0 flex-1 overflow-auto p-6"><GitHubConnection /></div> : tab === 'deck' ? (
+      {tab === 'notifications' ? <div className="min-w-0 flex-1"><NotificationSettings /></div> : tab === 'github' ? <div className="min-w-0 flex-1 overflow-auto px-7 py-6"><div className="max-w-2xl space-y-6"><header><h1 className="flex items-center gap-2 text-[20px] font-semibold text-ink"><BrandIcon brand="github" size={20} />GitHub</h1><p className="mt-1 text-[12px] text-dim">Manage your account connection for repositories and issues.</p></header><GitHubConnection showRefreshSettings /></div></div> : tab === 'deck' ? (
         <div className="min-w-0 flex-1"><DeckSettings /></div>
       ) : tab === 'routines' ? (
         <div className="min-w-0 flex-1">
@@ -356,7 +359,8 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
         </div>
       ) : (
       <div className="min-w-0 flex-1 overflow-y-auto px-7 py-6">
-        <div className="max-w-2xl space-y-6">
+        <div className={`${tab === 'assistant' ? 'max-w-5xl' : 'max-w-2xl'} space-y-6`}>
+        {tab === 'core' && <CoreSetup />}
         {tab === 'assistant' && <>
           <AgentSettings />
           <details className="border-t border-line pt-4"><summary className="cursor-pointer text-sm text-muted">Advanced integrations</summary>
@@ -369,6 +373,7 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
             <div className="mb-5">
               <h2 className="text-[16px] font-semibold text-ink">General</h2>
               <p className="text-[12px] text-muted">How DevDeck behaves and looks.</p>
+              <button className="btn-ghost mt-2" onClick={() => setTab('core')}>Set up capabilities</button>
             </div>
         <section>
           <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted">

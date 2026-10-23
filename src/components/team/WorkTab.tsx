@@ -1,3 +1,4 @@
+import { StateIcon } from '../ui/DesignSystem'
 // Work — every open item, everywhere, grouped by the feature it belongs to.
 //
 // The Features tab answers "what is there". This answers the question you have
@@ -21,19 +22,6 @@ import { useSpeakers } from '../thread/speakers'
 import * as ipc from '../../lib/ipc'
 import type { Board } from './TeamPage'
 
-/// Colour per status. Blocked is the only warm one: it is the only status
-/// that is asking you for something.
-function statusDot(status: string): string {
-  // Violet, and its own colour on purpose: a proposal is not work yet. It is
-  // the one status nothing can start from, so it must not look like the ones
-  // that can.
-  if (status === 'proposed') return 'bg-violet-400'
-  if (status === 'done') return 'bg-line3'
-  if (status === 'blocked') return 'bg-amber-400'
-  if (status === 'in-progress') return 'bg-emerald-400'
-  if (status === 'claimed') return 'bg-indigo-400'
-  return 'bg-line2'
-}
 
 export function WorkList({
   board,
@@ -208,9 +196,7 @@ export function WorkList({
                       title={row ? 'Open it' : 'It is not on the board yet'}
                       onClick={() => row && onPick(key(row))}
                     >
-                      <span
-                        className={`h-[6px] w-[6px] shrink-0 rounded-full ${statusDot(i.status)}`}
-                      />
+                      <StateIcon state={i.status}/>
                       <span
                         className={`min-w-0 flex-1 truncate text-[11.5px] ${
                           i.status === 'done' ? 'text-muted line-through' : 'text-body'
@@ -219,11 +205,11 @@ export function WorkList({
                         {i.title}
                       </span>
                       {i.status === 'proposed' ? (
-                        <span className="shrink-0 rounded-full bg-violet-500/15 px-1.5 text-[9.5px] font-semibold text-viol">
+                        <span className="shrink-0 rounded-full bg-warn/15 px-1.5 text-[9.5px] font-semibold text-warn">
                           needs your yes
                         </span>
                       ) : by ? (
-                        <span className="shrink-0 rounded-full bg-emerald-500/15 px-1.5 text-[9.5px] font-semibold text-ok">
+                        <span className="shrink-0 rounded-full bg-info/15 px-1.5 text-[9.5px] font-semibold text-info">
                           {speakers(by)}
                         </span>
                       ) : i.assignee ? (

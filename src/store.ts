@@ -52,6 +52,7 @@ export type RailView =
   /// page, just not the first one.
   | 'home'
   | 'inbox'
+  | 'chat'
   /// Team: goals, features and work. Which of the three is open is the
   /// rail's sub-menu, so it is state here rather than inside the page.
   | 'team'
@@ -59,6 +60,7 @@ export type RailView =
   /// The hands: workers you own, the skills they draw on, and their runs.
   | 'workers'
   /// What the AI is costing, across every space.
+  | 'github'
   | 'activity'
   | 'sessions'
   | 'analytics'
@@ -72,13 +74,14 @@ export type RailView =
   | 'projects'
   | 'stash'
   | 'connections'
+  | 'connectors'
   /// Open-source skills, agents and tools for your bots. Sits above Machine
   /// because the pairing is the point: Machine installs for you, this
   /// installs for them.
   | 'community'
   | 'machine'
   | 'settings'
-export type BottomTab = 'logs' | 'processes' | 'events' | 'calls'
+export type BottomTab = 'logs' | 'processes' | 'events' | 'calls' | 'schedules'
 
 /** What the Stash view is currently showing. `noProject` narrows to clips
  *  captured outside any project (the sidebar's "no project" tag). */
@@ -301,6 +304,8 @@ export interface AppState {
   /// on the page — one navigation, not two.
   teamTab: TeamTab
   setTeamTab: (t: TeamTab) => void
+  workItemFocusId: string | null
+  focusWorkItem: (id: string) => void
   /// Which area Today is narrowed to, or null for all of them.
   ///
   /// On the view, not above it. The workspace tabs tried to be one frame every
@@ -469,15 +474,16 @@ const loadRecent = (): number[] => {
 /// being worked on" and "who is working on it" was a trip through the rail.
 const RAIL_KEY = 'devdeck.railView'
 
-export type TeamTab = 'goals' | 'features' | 'work' | 'bots'
+export type TeamTab = 'goals' | 'features' | 'work' | 'bots' | 'workflows' | 'messages'
 const TEAM_KEY = 'devdeck.team.tab'
 const loadTeamTab = (): TeamTab => {
   if (CAPTURE_TEAM_TAB) return CAPTURE_TEAM_TAB as TeamTab
   // Bots had a rail entry of its own until it came back to Team; someone
   // whose last view was that one lands on the tab it became.
   if (localStorage.getItem(RAIL_KEY) === 'bots') return 'bots'
+  if (localStorage.getItem(RAIL_KEY) === 'messages') return 'messages'
   const v = localStorage.getItem(TEAM_KEY)
-  return v === 'features' || v === 'work' || v === 'bots' ? v : 'goals'
+  return v === 'messages' || v === 'features' || v === 'work' || v === 'bots' || v === 'workflows' || v === 'goals' ? v : 'work'
 }
 
 /** When the Inbox was last looked at. Kept locally rather than in the database
@@ -491,7 +497,9 @@ const RAIL_VIEWS: readonly RailView[] = [
   'today',
   'home',
   'inbox',
+  'chat',
   'team',
+  'github',
   'activity',
   'sessions',
   'workers',
@@ -504,6 +512,7 @@ const RAIL_VIEWS: readonly RailView[] = [
   'projects',
   'stash',
   'connections',
+  'connectors',
   'community',
   'machine',
   'settings',
@@ -527,7 +536,8 @@ const loadRailView = (): RailView => {
   // so this reads the raw string rather than a RailView. Somebody's stored
   // value still means something, and translating it beats failing it, which
   // would drop them on Today with no explanation.
-  if (saved === 'bots') return 'team'
+  if (saved === 'bots' || saved === 'messages') return 'team'
+  if (saved === 'members') return 'workers'
   const v = saved as RailView | null
   // Home became Today. Moved once, not every launch: after this, landing on
   // the dashboard is a choice somebody made and it is kept.
@@ -1039,6 +1049,8 @@ export const useApp = create<AppState>((set, get) => ({
   activity: [],
   refreshActivity: async () => set({ activity: await ipc.activityList(60) }),
   teamTab: loadTeamTab(),
+  workItemFocusId: null,
+  focusWorkItem: (id) => { get().setSpaceScope(null); get().setTeamTab('work'); set({ workItemFocusId:id }) },
   setTeamTab: (t) => {
     localStorage.setItem(TEAM_KEY, t)
     set({ teamTab: t, railView: 'team' })

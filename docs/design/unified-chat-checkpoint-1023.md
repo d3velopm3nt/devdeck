@@ -24,8 +24,18 @@ Images are visible but block sending: current conversational adapters do not ser
 - Rust chat_contract tests: 6 pass; assistant tests: 10 pass; agent_library tests: 3 pass.
 - git diff --check: pass.
 
-Browser IPC/provider responses are mocked. Rust tests above use their existing temporary conversation/snapshot stores and pure contract checks. No live inference, account probes, credential edits or permission grants were performed. Full provider serialization/streaming, folder picker OS integration, voice capture and native new-command execution are not yet verified. Earlier unrelated Work-page regression and repository-wide lint baselines are not claimed fixed.
+Browser IPC/provider responses are mocked. Rust tests above use their existing temporary conversation/snapshot stores and pure contract checks. No live inference, account probes, credential edits or permission grants were performed. Full provider serialization/streaming, folder picker OS integration and voice capture are not yet verified. Native new-command wiring was subsequently verified below. Earlier unrelated Work-page regression and repository-wide lint baselines are not claimed fixed.
 
-## Native blocker
+## Native follow-up after explicit restart approval
 
-Read-only inspection verified DevDeck PID 24364 running, no Vite overlay, no open dialog or nonempty visible textarea. Its backend predates the new commands. The attempted supported graceful exit before rebuilding was rejected by automatic approval review because explicit approval for an additional relaunch is required. The command did not execute; the app remains running. No retry or alternate shutdown was attempted. User approval for one bounded rebuild/relaunch is needed before native verification. No push, main merge, deployment or design-system changes.
+The user approved one bounded rebuild/restart after the prior denial. The supported graceful close succeeded without a visible draft/dialog. `cargo build --manifest-path src-tauri/Cargo.toml --bin devdeck` passed (existing unused agent_md and imap-proto future compatibility warnings). The rebuilt app is running as PID 30376, version 0.4.0-beta.5, from the integration source at 9bc355e.
+
+Native verification passed:
+
+- Spaces tree refresh returns seven nodes; the actual Spaces explorer shows the existing project tree, with no loading error.
+- The new chat_settings command returns effective provider/model and supported context capabilities.
+- Actual Chat navigation renders the shared composer, resolved next-message model control, file input and voice entry point, with no Vite overlay.
+- A deliberately unsupported image request is rejected by chat_send_input before runtime; conversation messages are byte-for-byte unchanged.
+- The original Stash page was restored through actual navigation and its visible sidebar confirmed. The app remains open.
+
+An initial UI probe imported a separate development-store module instance and did not drive the real rendered navigation. That result was not accepted as UI evidence; subsequent checks clicked the actual native navigation controls and verified visible elements. No account settings, model selections, grants or records were changed; no message generation or voice capture was run. The previously reported restart blocker is resolved. No design-system changes, push, main merge or deployment occurred.

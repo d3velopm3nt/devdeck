@@ -208,7 +208,7 @@ export function Home() {
       .filter((s) => svcStates[s.id]?.status === 'crashed')
       .map((s) => ({
         key: `crash-${s.id}`,
-        ts: svcStates[s.id]?.started_at ?? 0,
+        ts: (svcStates[s.id]?.started_at ?? 0) * 1000,
         level: 'error' as const,
         serviceId: s.id,
         service: s.name,
@@ -376,7 +376,7 @@ export function Home() {
                   <span className="shrink-0 text-[11px] font-medium text-indigo-400">{projName(s.project_id)}</span>
                   <span className="ml-auto flex shrink-0 items-center gap-2.5 font-mono text-[10.5px] text-muted">
                     {port != null && <span className="text-indigo-300">:{port}</span>}
-                    <span>{fmtUptime(svcStates[s.id]?.started_at, now)}</span>
+                    <span>{fmtUptime((svcStates[s.id]?.started_at ?? 0) * 1000, now)}</span>
                     {st && <span>{st.cpu.toFixed(0)}%</span>}
                     {st && <span>{st.mem_mb.toFixed(0)}MB</span>}
                   </span>
@@ -388,7 +388,8 @@ export function Home() {
                     )}
                     <button
                       className="flex h-6 w-6 items-center justify-center rounded-md bg-red-500/10 text-err hover:bg-red-500/25"
-                      title="Stop"
+                      disabled={svcStates[s.id]?.external}
+                      title={svcStates[s.id]?.external ? 'Running externally; manage in the original terminal' : 'Stop'}
                       onClick={() => void ipc.svcStop(s.id).catch((e) => alert(String(e)))}
                     >
                       <Icon name="stop" size={11} />

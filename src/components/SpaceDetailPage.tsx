@@ -14,7 +14,7 @@ import { subtreeIds, resolveDir, serviceDir, nodeLabel } from '../lib/tree'
 import { nodeColor, avatarLabel } from '../lib/spaces'
 import { ColorPicker } from './ColorPicker'
 import { Icon } from '../lib/icons'
-import type { ProfileStep, ProfileDef, ServiceDef, CommandDef } from '../lib/types'
+import type { ProfileStep, ProfileDef, ServiceDef, CommandDef, SvcState } from '../lib/types'
 
 function fmtUptime(secs: number): string {
   const h = Math.floor(secs / 3600)
@@ -132,6 +132,7 @@ export function SpaceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
 
   const stopAll = async () => {
     for (const s of runningServices) {
+      if (svcStates[s.id]?.external) continue;
       try {
         await ipc.svcStop(s.id)
       } catch (e) {
@@ -251,7 +252,7 @@ export function SpaceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
                   {s.health_port != null && (
                     <button className="flex items-center text-info hover:underline" title={`Open http://localhost:${s.health_port}`} onClick={() => openBrowser(s.health_port!)}><Icon name="globe" size={13} /></button>
                   )}
-                  <button className="flex items-center text-err" title="Stop" onClick={() => void act(s.id, () => ipc.svcStop(s.id))}><Icon name="stop" size={13} /></button>
+                  <button className="flex items-center text-err" disabled={svcStates[s.id]?.external} title={svcStates[s.id]?.external ? 'Running externally; manage in the original terminal' : 'Stop'} onClick={() => void act(s.id, () => ipc.svcStop(s.id))}><Icon name="stop" size={13} /></button>
                 </div>
               )
             })}
@@ -310,7 +311,7 @@ function ServicesTab({
   dirOf,
 }: {
   list: ServiceDef[]
-  svcStates: Record<number, { status: string; pid: number | null } | undefined>
+  svcStates: Record<number, SvcState | undefined>
   selected: Set<number>
   busy: number | null
   color: string
@@ -358,11 +359,11 @@ function ServicesTab({
             )}
             {running ? (
               <>
-                <button className="btn-ghost flex items-center text-[11px]" disabled={busy === s.id} title="Restart" onClick={() => void onAct(s.id, () => ipc.svcRestart(s.id))}><Icon name="restart" size={12} /></button>
-                <button className="btn-danger inline-flex items-center gap-1 text-[11px]" disabled={busy === s.id} onClick={() => void onAct(s.id, () => ipc.svcStop(s.id))}><Icon name="stop" size={12} /> Stop</button>
+                <button className="btn-ghost flex items-center text-[11px]" disabled={busy === s.id || st?.external} title={st?.external ? 'Running externally; manage in the original terminal' : 'Restart'} onClick={() => void onAct(s.id, () => ipc.svcRestart(s.id))}><Icon name="restart" size={12} /></button>
+                <button className="btn-danger inline-flex items-center gap-1 text-[11px]" disabled={busy === s.id || st?.external} onClick={() => void onAct(s.id, () => ipc.svcStop(s.id))}><Icon name="stop" size={12} /> {st?.external ? 'External' : 'Stop'}</button>
               </>
             ) : (
-              <button className="btn-primary inline-flex items-center gap-1 text-[11px]" disabled={busy === s.id} onClick={() => void onAct(s.id, () => ipc.svcStart(s.id))}><Icon name="run" size={12} /> Start</button>
+              <button className="btn-primary inline-flex items-center gap-1 text-[11px]" disabled={busy === s.id || st?.external} onClick={() => void onAct(s.id, () => ipc.svcStart(s.id))}><Icon name="run" size={12} /> Start</button>
             )}
           </div>
         )

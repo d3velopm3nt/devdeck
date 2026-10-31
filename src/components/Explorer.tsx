@@ -543,9 +543,9 @@ export function Explorer() {
     return [
       { icon: 'view', label: 'Open page', onClick: () => openService(svc.id, svc.name || 'Service') },
       running
-        ? { icon: 'stop', label: 'Stop', onClick: () => void actSvc(svc.id, () => ipc.svcStop(svc.id)) }
+        ? { icon: 'stop', label: 'Stop', disabled: svcStates[svc.id]?.external, onClick: () => void actSvc(svc.id, () => ipc.svcStop(svc.id)) }
         : { icon: 'run', label: 'Start', onClick: () => void actSvc(svc.id, () => requestStartService(svc)) },
-      { icon: 'restart', label: 'Restart', disabled: !running, onClick: () => void actSvc(svc.id, () => ipc.svcRestart(svc.id)) },
+      { icon: 'restart', label: 'Restart', disabled: !running || svcStates[svc.id]?.external, onClick: () => void actSvc(svc.id, () => ipc.svcRestart(svc.id)) },
       { icon: 'logs', label: 'View logs', onClick: () => viewService(svc) },
       { icon: 'edit', label: 'Edit service…', onClick: () => openEditor('service', svc.id, svc.name || 'Service') },
       { separator: true, label: '' },
@@ -599,8 +599,8 @@ export function Explorer() {
         )}
         <button
           className="flex shrink-0 items-center rounded px-1 hover:bg-hover hover:text-ink"
-          disabled={busySvc === svc.id}
-          title={running ? 'Stop' : 'Start'}
+          disabled={busySvc === svc.id || svcStates[svc.id]?.external}
+          title={svcStates[svc.id]?.external ? 'Running externally; manage in the original terminal' : running ? 'Stop' : 'Start'}
           onClick={() =>
             void actSvc(svc.id, () => (running ? ipc.svcStop(svc.id) : requestStartService(svc)))
           }

@@ -26,6 +26,7 @@ interface Row {
   id: number
   name: string
   status: SvcStatus | 'live'
+  external?: boolean
   stat?: ProcStat
 }
 
@@ -42,7 +43,7 @@ export function ProcessDashboard() {
     const svcRows: Row[] = services.map((s) => {
       const status = svcStates[s.id]?.status ?? 'stopped'
       const stat = stats.find((p) => p.kind === 'service' && p.id === s.id)
-      return { key: `service-${s.id}`, kind: 'service', id: s.id, name: s.name, status, stat }
+      return { key: `service-${s.id}`, kind: 'service', id: s.id, name: s.name, status, stat, external: svcStates[s.id]?.external }
     })
     const termRows: Row[] = stats
       .filter((p) => p.kind === 'terminal')
@@ -110,7 +111,7 @@ export function ProcessDashboard() {
                       </span>
                     </td>
                     <td className="max-w-48 truncate px-2 py-1.5 text-ink">{r.name}</td>
-                    <td className="px-2 py-1.5"><StateBadge state={r.status==='live'?'running':r.status}/></td>
+                    <td className="px-2 py-1.5"><StateBadge state={r.status === 'live' ? 'running' : r.status} label={r.external ? 'running externally' : undefined}/></td>
                     <td className="px-2 py-1.5 font-mono text-dim">{st?.pid ?? '—'}</td>
                     <td className={`px-2 py-1.5 font-mono ${st && st.cpu > 80 ? 'text-err' : st && st.cpu > 30 ? 'text-warn' : 'text-body'}`}>
                       {st ? st.cpu.toFixed(1) : '—'}
@@ -161,16 +162,16 @@ export function ProcessDashboard() {
                             <>
                               <button
                                 className="inline-flex items-center gap-1 rounded border border-line2 bg-soft px-2 py-0.5 text-[11px] text-ink hover:border-line3 disabled:opacity-40"
-                                disabled={busy === r.key}
-                                title="Restart service"
+                                disabled={busy === r.key || r.external}
+                                title={r.external ? 'Manage in the original terminal' : 'Restart service'}
                                 onClick={() => void act(r.key, () => ipc.svcRestart(r.id))}
                               >
                                 <Icon name="restart" size={13} /> Restart
                               </button>
                               <button
                                 className="inline-flex items-center gap-1 rounded border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-[11px] text-err hover:bg-red-500/25 disabled:opacity-40"
-                                disabled={busy === r.key}
-                                title="Stop service"
+                                disabled={busy === r.key || r.external}
+                                title={r.external ? 'Manage in the original terminal' : 'Stop service'}
                                 onClick={() => void act(r.key, () => ipc.svcStop(r.id))}
                               >
                                 <Icon name="stop" size={13} /> Stop

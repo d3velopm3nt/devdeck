@@ -86,7 +86,9 @@ export interface SvcState {
   pid: number | null
   status: SvcStatus
   exit_code: number | null
+  /** Unix seconds, as returned by the process monitor. */
   started_at: number | null
+  external?: boolean
   ephemeral: boolean
 }
 

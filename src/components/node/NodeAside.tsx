@@ -139,12 +139,13 @@ export function NodeAside({ node, isProject }: { node: TreeNode; isProject: bool
                 )}
                 <button
                   className="btn-ghost shrink-0 text-[11px]"
-                  disabled={busy === sv.id}
+                  disabled={busy === sv.id || st?.external}
+                  title={st?.external ? 'Running externally; manage in the original terminal' : undefined}
                   onClick={() =>
                     void act(sv.id, () => (running ? ipc.svcStop(sv.id) : requestStartService(sv)))
                   }
                 >
-                  {running ? 'Stop' : 'Start'}
+                  {st?.external ? 'External' : running ? 'Stop' : 'Start'}
                 </button>
               </Row>
             )

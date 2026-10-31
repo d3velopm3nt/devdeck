@@ -1,21 +1,33 @@
 //! Conservative matching of saved services to process snapshots.
 
 /// Pick one process tree per service. Overlapping definitions are ambiguous.
-pub fn select_roots(candidates: &[(i64, u32, Vec<u32>)]) -> Vec<usize> {
+pub fn select_roots(candidates: &[(i64, u32, Vec<u32>, u8)]) -> Vec<usize> {
     let mut order: Vec<_> = (0..candidates.len()).collect();
-    order.sort_by_key(|&i| (std::cmp::Reverse(candidates[i].2.len()), candidates[i].1));
+    order.sort_by_key(|&i| {
+        (
+            std::cmp::Reverse(candidates[i].3),
+            std::cmp::Reverse(candidates[i].2.len()),
+            candidates[i].1,
+        )
+    });
     let mut selected: Vec<usize> = Vec::new();
     for i in order {
-        let (id, pid, tree) = &candidates[i];
-        if candidates.iter().any(|(other_id, other_pid, other_tree)| {
-            id != other_id && (tree.contains(other_pid) || other_tree.contains(pid))
-        }) {
+        let (id, pid, tree, strength) = &candidates[i];
+        if candidates
+            .iter()
+            .any(|(other_id, other_pid, other_tree, other_strength)| {
+                id != other_id
+                    && other_strength >= strength
+                    && (tree.contains(other_pid) || other_tree.contains(pid))
+            })
+        {
             continue;
         }
-        if selected
-            .iter()
-            .any(|&j| candidates[j].0 == *id || candidates[j].2.contains(pid))
-        {
+        if selected.iter().any(|&j| {
+            candidates[j].0 == *id
+                || candidates[j].2.contains(pid)
+                || tree.contains(&candidates[j].1)
+        }) {
             continue;
         }
         selected.push(i);
@@ -67,7 +79,7 @@ fn words(command: &str) -> Vec<String> {
             let base = s.rsplit('/').next().unwrap_or(&s);
             match base.to_ascii_lowercase().as_str() {
                 "npm-cli.js" | "npm.cmd" => "npm".into(),
-                "pnpm.cjs" | "pnpm.cmd" => "pnpm".into(),
+                "pnpm.cjs" | "pnpm.cmd" | "pnpm.exe" => "pnpm".into(),
                 "yarn.js" | "yarn.cmd" => "yarn".into(),
                 "node.exe" | "node" => "node".into(),
                 "python.exe" | "python" => "python".into(),
@@ -88,11 +100,9 @@ pub fn matches(
     if !same_directory(saved_dir, cwd) {
         return false;
     }
-    // A configured port is required when present; another script in the same
-    // repository must not claim the service just because its launcher matches.
-    if let Some(port) = port {
-        return ports.contains(&port);
-    }
+    // Launch commands can remain alive above a server in a different directory.
+    // Their identity remains valid when the server chooses a different port.
+    let port_matches = port.is_some_and(|port| ports.contains(&port));
     let expected = words(command);
     let mut actual = words(cmd);
     if let (Some(wanted), Some(executable)) = (expected.first(), actual.first_mut()) {
@@ -106,18 +116,19 @@ pub fn matches(
         }
     }
     if expected.is_empty() {
-        return false;
+        return port_matches;
     }
     if actual == expected {
         return true;
     }
     // Node package managers have an extra runtime argument. Do not match
     // arbitrary command fragments in an editor, shell, or an echo command.
-    actual.first().is_some_and(|s| s == "node")
-        && expected
-            .first()
-            .is_some_and(|s| matches!(s.as_str(), "npm" | "pnpm" | "yarn"))
-        && actual.get(1..) == Some(expected.as_slice())
+    port_matches
+        || (actual.first().is_some_and(|s| s == "node")
+            && expected
+                .first()
+                .is_some_and(|s| matches!(s.as_str(), "npm" | "pnpm" | "yarn"))
+            && actual.get(1..) == Some(expected.as_slice()))
 }
 
 #[cfg(test)]
@@ -126,13 +137,17 @@ mod tests {
 
     #[test]
     fn launcher_and_child_are_one_service_but_distinct_workers_survive() {
-        let candidates = vec![(1, 12, vec![12]), (1, 10, vec![10, 12]), (2, 20, vec![20])];
+        let candidates = vec![
+            (1, 12, vec![12], 1),
+            (1, 10, vec![10, 12], 2),
+            (2, 20, vec![20], 2),
+        ];
         assert_eq!(select_roots(&candidates), vec![1, 2]);
     }
 
     #[test]
     fn overlapping_definitions_are_not_assigned_arbitrarily() {
-        let candidates = vec![(1, 10, vec![10, 12]), (2, 12, vec![12])];
+        let candidates = vec![(1, 10, vec![10, 12], 2), (2, 12, vec![12], 2)];
         assert!(select_roots(&candidates).is_empty());
     }
     #[test]
@@ -158,7 +173,7 @@ mod tests {
             "npm run dev",
             Some(5173),
             "C:/repo",
-            "npm run dev",
+            "npm run preview",
             &[3000]
         ));
     }
@@ -249,5 +264,19 @@ mod tests {
             "node worker tasks.js",
             &[]
         ));
+    }
+
+    #[test]
+    fn exact_launcher_survives_a_changed_port_and_wins_over_port_inference() {
+        assert!(matches(
+            "C:/repo",
+            "pnpm dev:staging",
+            Some(3001),
+            "C:/repo",
+            "C:/tools/pnpm.exe dev:staging",
+            &[]
+        ));
+        let candidates = vec![(2, 10, vec![10, 12], 2), (3, 12, vec![12], 1)];
+        assert_eq!(select_roots(&candidates), vec![0]);
     }
 }

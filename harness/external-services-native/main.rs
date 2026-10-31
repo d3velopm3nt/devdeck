@@ -50,7 +50,7 @@ fn main() {
     ));
     assert!(!detection::matches(
         &args[2],
-        &args[3],
+        "different command",
         Some(port),
         &cwd,
         &cmd,

@@ -357,29 +357,50 @@ pub fn spawn(app: tauri::AppHandle) {
                     let process_ports = ports.get(&pid).map(Vec::as_slice).unwrap_or(&[]);
                     let matched: Vec<_> = definitions
                         .iter()
-                        .filter(|def| {
-                            !services.iter().any(|s| s.0 == def.id)
-                                && crate::services::detection::matches(
-                                    &def.cwd,
-                                    &def.command,
-                                    def.health_port,
-                                    &cwd,
-                                    &cmd,
-                                    process_ports,
-                                )
+                        .filter_map(|def| {
+                            if services.iter().any(|s| s.0 == def.id) {
+                                return None;
+                            }
+                            let strength = if crate::services::detection::matches(
+                                &def.cwd,
+                                &def.command,
+                                None,
+                                &cwd,
+                                &cmd,
+                                &[],
+                            ) {
+                                2
+                            } else if crate::services::detection::matches(
+                                &def.cwd,
+                                &def.command,
+                                def.health_port,
+                                &cwd,
+                                &cmd,
+                                process_ports,
+                            ) {
+                                1
+                            } else {
+                                return None;
+                            };
+                            Some((def, strength))
                         })
                         .collect();
-                    // Identical saved definitions are ambiguous; never choose by row order.
-                    if matched.len() == 1 {
-                        candidates.push((matched[0], pid, tree, process.start_time()));
+                    let strongest = matched.iter().map(|(_, strength)| *strength).max();
+                    let best: Vec<_> = matched
+                        .into_iter()
+                        .filter(|(_, strength)| Some(*strength) == strongest)
+                        .collect();
+                    // Equal evidence for multiple saved definitions is ambiguous.
+                    if best.len() == 1 {
+                        candidates.push((best[0].0, pid, tree, process.start_time(), best[0].1));
                     }
                 }
                 let roots: Vec<_> = candidates
                     .iter()
-                    .map(|(def, pid, tree, _)| (def.id, *pid, tree.clone()))
+                    .map(|(def, pid, tree, _, strength)| (def.id, *pid, tree.clone(), *strength))
                     .collect();
                 for index in crate::services::detection::select_roots(&roots) {
-                    let (def, pid, _, started_at) = &candidates[index];
+                    let (def, pid, _, started_at, _) = &candidates[index];
                     observed.push(crate::services::SvcState {
                         id: def.id,
                         name: def.name.clone(),

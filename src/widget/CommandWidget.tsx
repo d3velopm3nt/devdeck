@@ -555,11 +555,19 @@ export function CommandWidget() {
   const serviceToggle = (it: Item) => {
     const s = svcDef(it)
     if (!s) return
+    if (app.svcStates[it.refId]?.external) {
+      showToast('Running externally; manage in the original terminal', '#9BA3B2')
+      return
+    }
     const running = svcStatus(app.svcStates[it.refId]) === 'running'
     void (running ? ipc.svcStop(s.id) : ipc.svcStart(s.id))
     showToast((running ? 'Stopped ' : 'Started ') + it.name, running ? '#6B7280' : '#4ADE80')
   }
   const serviceRestart = (it: Item) => {
+    if (app.svcStates[it.refId]?.external) {
+      showToast('Running externally; manage in the original terminal', '#9BA3B2')
+      return
+    }
     const s = svcDef(it)
     if (s) void ipc.svcRestart(s.id)
     showToast('Restarting ' + it.name + '…', '#FBBF24')

@@ -60,7 +60,7 @@ export function NodeRuns({ node, only }: { node: TreeNode; only: 'services' | 'c
                   {/* Said, not implied by a grey dot: a service that fell over
                       and one that was never started look the same otherwise. */}
                   {crashed && <span className="shrink-0 text-[10.5px] text-err">crashed</span>}
-                  {sv.auto_restart && (
+                  {sv.auto_restart && !st?.external && (
                     <span className="shrink-0 text-[10px] text-faint">restarts itself</span>
                   )}
                 </div>
@@ -70,12 +70,13 @@ export function NodeRuns({ node, only }: { node: TreeNode; only: 'services' | 'c
               <div className="flex shrink-0 items-center gap-1.5">
                 <button
                   className="btn-ghost text-[11px]"
-                  disabled={busy === sv.id}
+                  disabled={busy === sv.id || st?.external}
+                  title={st?.external ? 'Running externally; manage in the original terminal' : undefined}
                   onClick={() =>
                     void act(sv.id, () => (running ? ipc.svcStop(sv.id) : requestStartService(sv)))
                   }
                 >
-                  {running ? 'Stop' : 'Start'}
+                  {st?.external ? 'External' : running ? 'Stop' : 'Start'}
                 </button>
                 <button
                   className="btn-ghost text-[11px]"

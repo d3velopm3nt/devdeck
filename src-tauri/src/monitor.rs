@@ -264,14 +264,8 @@ pub fn spawn(app: tauri::AppHandle) {
         loop {
             std::thread::sleep(std::time::Duration::from_secs(2));
 
-            // Minimised cost nothing to nobody, and it was reported: this
-            // walked every process on the machine every two seconds behind a
-            // hidden window. The sleep stays short rather than backing off, so
-            // the first sample after you come back is two seconds away and not
-            // ten — it is the walk that is skipped, not the clock.
-            if !on_screen(&app) {
-                continue;
-            }
+            // Keep service status current in the tray; hidden windows need no stats events.
+            let visible = on_screen(&app);
 
             let svc_mgr = app.state::<Arc<ServiceManager>>();
             let pty_mgr = app.state::<Arc<PtyManager>>();
@@ -300,7 +294,7 @@ pub fn spawn(app: tauri::AppHandle) {
                     .with_cpu()
                     .with_memory()
                     .with_cmd(UpdateKind::OnlyIfNotSet)
-                    .with_cwd(UpdateKind::OnlyIfNotSet),
+                    .with_cwd(UpdateKind::Always),
             );
 
             // Build parent → children map once.
@@ -314,6 +308,102 @@ pub fn spawn(app: tauri::AppHandle) {
                 }
             }
             let ports = listening_ports();
+
+            // Match before collecting stats so a saved external service has one row.
+            let mut owned = HashSet::new();
+            for root in std::iter::once(std::process::id())
+                .chain(services.iter().map(|s| s.2))
+                .chain(terminals.iter().map(|t| t.1))
+            {
+                owned.extend(tree_pids(root, &children));
+            }
+            let mut observed = Vec::new();
+            if let Ok(mut definitions) = crate::db::services_list(app.state::<crate::db::Db>()) {
+                {
+                    let db = app.state::<crate::db::Db>();
+                    let conn = db.conn();
+                    for def in &mut definitions {
+                        if def.cwd.trim().is_empty() {
+                            if let Some(id) = def.project_id {
+                                def.cwd = crate::db::resolve_node_dir(&conn, id);
+                            }
+                        }
+                    }
+                }
+                let mut candidates = Vec::new();
+                for (pid, process) in sys.processes() {
+                    let pid = pid.as_u32();
+                    if owned.contains(&pid) {
+                        continue;
+                    }
+                    let cwd = process
+                        .cwd()
+                        .map(|p| p.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    let cmd = process
+                        .cmd()
+                        .iter()
+                        .map(|s| {
+                            let arg = s.to_string_lossy();
+                            if arg.chars().any(char::is_whitespace) {
+                                format!("\"{arg}\"")
+                            } else {
+                                arg.into_owned()
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    let tree = tree_pids(pid, &children);
+                    let process_ports = ports.get(&pid).map(Vec::as_slice).unwrap_or(&[]);
+                    let matched: Vec<_> = definitions
+                        .iter()
+                        .filter(|def| {
+                            !services.iter().any(|s| s.0 == def.id)
+                                && crate::services::detection::matches(
+                                    &def.cwd,
+                                    &def.command,
+                                    def.health_port,
+                                    &cwd,
+                                    &cmd,
+                                    process_ports,
+                                )
+                        })
+                        .collect();
+                    // Identical saved definitions are ambiguous; never choose by row order.
+                    if matched.len() == 1 {
+                        candidates.push((matched[0], pid, tree, process.start_time()));
+                    }
+                }
+                let roots: Vec<_> = candidates
+                    .iter()
+                    .map(|(def, pid, tree, _)| (def.id, *pid, tree.clone()))
+                    .collect();
+                for index in crate::services::detection::select_roots(&roots) {
+                    let (def, pid, _, started_at) = &candidates[index];
+                    observed.push(crate::services::SvcState {
+                        id: def.id,
+                        name: def.name.clone(),
+                        pid: Some(*pid),
+                        status: crate::services::SvcStatus::Running,
+                        exit_code: None,
+                        started_at: Some(*started_at),
+                        ephemeral: false,
+                        external: true,
+                    });
+                }
+                crate::services::reconcile_external(&app, observed.clone());
+            }
+            let services: Vec<_> = services
+                .into_iter()
+                .chain(
+                    observed
+                        .into_iter()
+                        .filter_map(|s| s.pid.map(|pid| (s.id, s.name, pid))),
+                )
+                .collect();
+            if !visible {
+                continue;
+            }
 
             let mut stats: Vec<ProcStat> = Vec::new();
             let mut collect = |kind: &str, id: i64, name: String, root: u32| {

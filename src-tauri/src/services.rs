@@ -13,6 +13,9 @@ use tauri::{Emitter, Manager};
 
 use crate::db::{self, Db, ServiceDef};
 
+#[path = "service_detection.rs"]
+pub mod detection;
+
 const LOG_BUFFER_LIMIT: usize = 20_000; // lines kept in memory
 
 #[derive(Serialize, Clone, PartialEq)]
@@ -34,6 +37,7 @@ pub struct SvcState {
     pub exit_code: Option<i32>,
     pub started_at: Option<u64>, // unix seconds
     pub ephemeral: bool,
+    pub external: bool,
 }
 
 pub struct RunningService {
@@ -46,6 +50,7 @@ pub struct RunningService {
 #[derive(Default)]
 pub struct ServiceManager {
     pub running: Mutex<HashMap<i64, RunningService>>,
+    pub external: Mutex<HashMap<i64, SvcState>>,
     next_ephemeral: AtomicI64,
     pub logs: Mutex<VecDeque<LogEntry>>,
     /// Lines not yet sent to the UI. Drained by one flusher thread so a busy
@@ -344,6 +349,13 @@ fn start_internal(
         def.id
     };
 
+    if !ephemeral && mgr.external.lock().unwrap().contains_key(&id) {
+        return Err(format!(
+            "{} is running externally; manage it in its original terminal",
+            def.name
+        ));
+    }
+
     // Already running?
     if !ephemeral {
         if let Some(existing) = mgr.running.lock().unwrap().get(&id) {
@@ -404,6 +416,7 @@ fn start_internal(
         exit_code: None,
         started_at: Some(now_ms() / 1000),
         ephemeral,
+        external: false,
     };
     emit_status(app, &state);
 
@@ -504,9 +517,15 @@ pub fn svc_stop(
     mgr: tauri::State<Arc<ServiceManager>>,
     id: i64,
 ) -> Result<(), String> {
+    if mgr.external.lock().unwrap().contains_key(&id) {
+        return Err("This service is running externally; stop it in its original terminal".into());
+    }
     let (child, name) = {
         let running = mgr.running.lock().unwrap();
         let rs = running.get(&id).ok_or("service not running")?;
+        if rs.state.status != SvcStatus::Running {
+            return Err("service not running".into());
+        }
         rs.stopping.store(true, Ordering::SeqCst);
         (rs.child.clone(), rs.state.name.clone())
     };
@@ -534,6 +553,7 @@ pub fn stop_all_running(mgr: &ServiceManager) {
         let running = mgr.running.lock().unwrap();
         running
             .values()
+            .filter(|rs| rs.state.status == SvcStatus::Running)
             .map(|rs| {
                 rs.stopping.store(true, Ordering::SeqCst);
                 rs.child.lock().unwrap().id()
@@ -624,8 +644,65 @@ pub fn run_background(
 pub fn svc_states(mgr: tauri::State<Arc<ServiceManager>>) -> Vec<SvcState> {
     let running = mgr.running.lock().unwrap();
     let mut list: Vec<SvcState> = running.values().map(|r| r.state.clone()).collect();
+    for state in mgr.external.lock().unwrap().values() {
+        if !list
+            .iter()
+            .any(|s| s.id == state.id && s.status == SvcStatus::Running)
+        {
+            list.retain(|s| s.id != state.id);
+            list.push(state.clone());
+        }
+    }
     list.sort_by_key(|s| s.id);
     list
+}
+
+/// Publish observations separately from owned children; shutdown only stops owned children.
+pub fn reconcile_external(app: &tauri::AppHandle, observed: Vec<SvcState>) {
+    let mgr = app.state::<Arc<ServiceManager>>();
+    let mut running = mgr.running.lock().unwrap();
+    let mut external = mgr.external.lock().unwrap();
+    let next: HashMap<_, _> = observed
+        .into_iter()
+        .filter(|s| {
+            !running
+                .get(&s.id)
+                .is_some_and(|r| r.state.status == SvcStatus::Running)
+        })
+        .map(|s| (s.id, s))
+        .collect();
+    for (id, previous) in external.iter() {
+        if !next.contains_key(id) {
+            let state = running
+                .get(id)
+                .filter(|r| r.state.status == SvcStatus::Running)
+                .map(|r| r.state.clone())
+                .unwrap_or_else(|| {
+                    let mut stopped = previous.clone();
+                    stopped.status = SvcStatus::Stopped;
+                    stopped.pid = None;
+                    stopped.started_at = None;
+                    stopped.external = false;
+                    stopped
+                });
+            // A prior managed crash must not reappear on the next svc_states
+            // request after a newer external run has ended.
+            if let Some(previous_run) = running.get_mut(id) {
+                if previous_run.state.status != SvcStatus::Running {
+                    previous_run.state = state.clone();
+                }
+            }
+            let _ = app.emit("svc:status", state);
+        }
+    }
+    for (id, state) in &next {
+        if !external.get(id).is_some_and(|old| {
+            old.pid == state.pid && old.started_at == state.started_at && old.name == state.name
+        }) {
+            let _ = app.emit("svc:status", state);
+        }
+    }
+    *external = next;
 }
 
 // ---------- logs ----------

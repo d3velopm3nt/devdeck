@@ -76,7 +76,7 @@ export function ServiceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
   }
 
   const dir = serviceDir(nodes, svc)
-  const statusLabel = running ? 'running' : crashed ? `crashed${st?.exit_code != null ? ` · exit ${st.exit_code}` : ''}` : 'stopped'
+  const statusLabel = running ? (st?.external ? 'running externally' : 'running') : crashed ? `crashed${st?.exit_code != null ? ` · exit ${st.exit_code}` : ''}` : 'stopped'
 
   return (
     <div className="flex h-full flex-col overflow-y-auto bg-page px-5 py-4">
@@ -102,7 +102,7 @@ export function ServiceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
           </div>
           <div className="flex items-center gap-2.5 font-mono text-[10.5px] text-muted">
             <span className={running ? 'text-ok' : crashed ? 'text-err' : ''}>{statusLabel}</span>
-            {running && st?.started_at != null && <span>up {fmtUptime(st.started_at, now)}</span>}
+            {running && st?.started_at != null && <span>up {fmtUptime(st.started_at * 1000, now)}</span>}
             {running && st?.pid != null && <span>pid {st.pid}</span>}
             {port != null && <span className="text-indigo-400">:{port}</span>}
           </div>
@@ -138,14 +138,16 @@ export function ServiceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
             <>
               <button
                 className="btn-ghost inline-flex items-center gap-1 text-[11.5px]"
-                disabled={busy}
+                disabled={busy || st?.external}
+                title={st?.external ? 'Manage this process in its original terminal' : undefined}
                 onClick={() => void act(() => ipc.svcRestart(svc.id))}
               >
                 <Icon name="restart" size={12} /> Restart
               </button>
               <button
                 className="btn-danger inline-flex items-center gap-1 text-[11.5px]"
-                disabled={busy}
+                disabled={busy || st?.external}
+                title={st?.external ? 'Manage this process in its original terminal' : undefined}
                 onClick={() => void act(() => ipc.svcStop(svc.id))}
               >
                 <Icon name="stop" size={12} /> Stop
@@ -163,12 +165,18 @@ export function ServiceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
         </div>
       </div>
 
+      {running && st?.external && (
+        <p className="mt-3 text-[12px] text-muted">
+          Started outside DevDeck. Live usage is available; logs and process controls stay in its original terminal.
+        </p>
+      )}
+
       {/* live stats */}
       <div className="mt-4 grid grid-cols-4 gap-2.5">
         <InfoCell k="Status">
           <span className={running ? 'text-ok' : crashed ? 'text-err' : 'text-dim'}>{statusLabel}</span>
         </InfoCell>
-        <InfoCell k="Uptime">{running && st?.started_at != null ? fmtUptime(st.started_at, now) : '—'}</InfoCell>
+        <InfoCell k="Uptime">{running && st?.started_at != null ? fmtUptime(st.started_at * 1000, now) : '—'}</InfoCell>
         <InfoCell k="CPU">{stat ? `${stat.cpu.toFixed(1)}%` : '—'}</InfoCell>
         <InfoCell k="Memory">{stat ? `${stat.mem_mb.toFixed(0)} MB` : '—'}</InfoCell>
       </div>
@@ -190,7 +198,7 @@ export function ServiceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
                 ? `:${port} (detected)`
                 : 'none'}
           </InfoCell>
-          <InfoCell k="Auto-restart">{svc.auto_restart ? 'on' : 'off'}</InfoCell>
+          <InfoCell k="Auto-restart">{svc.auto_restart ? (st?.external ? 'on for DevDeck launches' : 'on') : 'off'}</InfoCell>
           <InfoCell k="Environment" mono>{svc.env && svc.env !== '{}' ? svc.env : '—'}</InfoCell>
         </div>
       </div>
@@ -204,7 +212,7 @@ export function ServiceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
         <div className="grid grid-cols-4 gap-2.5">
           <InfoCell k="Times started">{recent?.count ?? 0}</InfoCell>
           <InfoCell k="Last started">
-            {st?.started_at != null ? fmtAgo(st.started_at, now) : recent ? fmtAgo(recent.ts, now) : 'never'}
+            {st?.started_at != null ? fmtAgo(st.started_at * 1000, now) : recent ? fmtAgo(recent.ts, now) : 'never'}
           </InfoCell>
           <InfoCell k="Last exit code">{st?.exit_code != null ? String(st.exit_code) : '—'}</InfoCell>
           <InfoCell k="PID">{running && st?.pid != null ? String(st.pid) : '—'}</InfoCell>
@@ -229,7 +237,7 @@ export function ServiceDetailPage(props: IDockviewPanelProps<{ id: number }>) {
         <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-line bg-raise px-3 py-2 font-mono text-[11px] leading-[1.7] text-dim">
           {svcLogs.length === 0 && (
             <div className="py-5 text-center font-sans text-[12px] text-muted">
-              No output captured yet — start the service and its logs land here.
+              {st?.external ? 'Output is available in the terminal that started this service.' : 'No output captured yet — start the service and its logs land here.'}
             </div>
           )}
           {svcLogs.map((l) => (

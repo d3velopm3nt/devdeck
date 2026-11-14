@@ -197,7 +197,7 @@ export function Meet({
   // to finish it. Before anyone has met, the voice step has already been
   // saved by the time these show, so closing is safe there too.
   const close = onClose ?? onDone
-  if (step === 'core') return <div className="h-full overflow-auto bg-page"><CoreSetup onDone={() => go('voice')} /></div>
+  if (step === 'core') return <CoreSetup onDone={() => go('voice')} onClose={onClose} nav={nav} />
   if (step === 'learn') {
     return (
       <LearnStep onDone={() => go('life')} onSkip={() => go('life')} onClose={close} nav={nav} />
@@ -313,7 +313,7 @@ export function Meet({
   // Before anyone has met there is nothing to close to: the name is the
   // first thing the app needs. Reopened later, the corner has its Close.
   return (
-    <Frame step="voice" onClose={start ? close : undefined} nav={start ? nav : undefined}>
+    <Frame step="voice" onClose={start ? close : undefined} nav={nav}>
           <div className="flex items-start gap-4">
             <span className="flex h-[46px] w-[46px] flex-shrink-0 items-center justify-center rounded-[14px] bg-indigo-500/15">
               <Icon name="ai" size={22} className="text-indigo-400" />

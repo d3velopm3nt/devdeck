@@ -41,6 +41,7 @@ pub mod provider;
 pub mod runtime;
 pub mod site;
 pub mod state;
+pub mod subscription;
 pub mod tools;
 
 #[cfg(test)]

@@ -23,13 +23,14 @@
 
 import { useEffect, useState } from 'react'
 import * as ipc from '../lib/ipc'
+import { BrandIcon } from './BrandIcon'
 import { Icon } from '../lib/icons'
 
 /** github.com's own "new token" page, with our scopes pre-ticked. */
 const NEW_TOKEN_URL =
   'https://github.com/settings/tokens/new?scopes=repo,read:org,gist&description=DevDeck'
 
-export function GitHubToken({ onSignedIn }: { onSignedIn?: () => void } = {}) {
+export function GitHubToken({ onSignedIn, onSignedOut }: { onSignedIn?: () => void; onSignedOut?: () => void } = {}) {
   /** Whether a token is in Credential Manager. `null` until we know — which
    *  is not the same as "no", and must not be drawn as one. */
   const [stored, setStored] = useState<boolean | null>(null)
@@ -75,6 +76,7 @@ export function GitHubToken({ onSignedIn }: { onSignedIn?: () => void } = {}) {
       await ipc.githubSignOut(true)
       setStored(false)
       setResult(null)
+      onSignedOut?.()
     } catch (e) {
       setError(errText(e))
     }
@@ -94,7 +96,7 @@ export function GitHubToken({ onSignedIn }: { onSignedIn?: () => void } = {}) {
 
       {stored === true && (
         <div className="flex items-center gap-2 rounded-md border border-line bg-raise px-3 py-2">
-          <Icon name="github" size={14} className="shrink-0 text-ok" />
+          <span className="shrink-0 text-body"><BrandIcon brand="github" size={14} /></span>
           <span className="min-w-0 flex-1 text-[12px] text-body">
             {result ? (
               <>
@@ -105,7 +107,7 @@ export function GitHubToken({ onSignedIn }: { onSignedIn?: () => void } = {}) {
             )}
           </span>
           <button className="btn-ghost text-[11.5px]" onClick={() => void signOut()}>
-            Sign out
+            <Icon name="external" size={12} />Sign out
           </button>
         </div>
       )}
@@ -113,7 +115,7 @@ export function GitHubToken({ onSignedIn }: { onSignedIn?: () => void } = {}) {
       {result && <Verdict result={result} />}
 
       {error && (
-        <div className="mt-2 flex items-start gap-1.5 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] text-err">
+        <div className="mt-2 flex items-start gap-1.5 rounded-md border border-err/30 bg-err/10 px-3 py-2 text-[12px] text-err">
           <Icon name="alert" size={13} className="mt-px shrink-0" />
           <span className="min-w-0">{error}</span>
         </div>
@@ -154,7 +156,7 @@ export function GitHubToken({ onSignedIn }: { onSignedIn?: () => void } = {}) {
 
       <div className="mt-2 flex items-center gap-3 text-[11px] text-muted">
         <button
-          className="inline-flex shrink-0 items-center gap-1 text-indigo-400 hover:underline"
+          className="inline-flex shrink-0 items-center gap-1 text-accent hover:underline"
           onClick={() => void ipc.openUrl(NEW_TOKEN_URL)}
         >
           <Icon name="external" size={11} /> Create a token on GitHub
@@ -172,7 +174,7 @@ function Verdict({ result }: { result: ipc.TokenPasted }) {
   return (
     <div className="mt-2 space-y-1.5">
       {result.missing.length > 0 && (
-        <div className="flex items-start gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11.5px] leading-5 text-warn">
+        <div className="flex items-start gap-1.5 rounded-md border border-warn/30 bg-warn/10 px-3 py-2 text-[11.5px] leading-5 text-warn">
           <Icon name="alert" size={13} className="mt-px shrink-0" />
           <span>
             This token is missing <code>{result.missing.join(', ')}</code>.

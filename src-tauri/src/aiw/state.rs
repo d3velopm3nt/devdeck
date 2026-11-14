@@ -414,7 +414,18 @@ impl Workspace {
             conversations: std::sync::OnceLock::new(),
             personal: Mutex::new(HashMap::new()),
             grants: std::sync::OnceLock::new(),
-            providers: Mutex::new(ProviderRegistry::new()),
+            providers: Mutex::new({
+                let mut registry = ProviderRegistry::new();
+                for tool in [
+                    crate::cli_setup_model::CliTool::ClaudeCode,
+                    crate::cli_setup_model::CliTool::Codex,
+                ] {
+                    registry.register(Box::new(super::subscription::SubscriptionProvider::new(
+                        tool,
+                    )));
+                }
+                registry
+            }),
             reconciler: Box::new(DeterministicReconciler),
             projects: Mutex::new(HashMap::new()),
             agents: Mutex::new(default_agents()),
@@ -575,6 +586,9 @@ impl Workspace {
     /// manage sixteen tokens in half a minute is not one to hand an agent, and
     /// waiting the full two minutes to be told so is its own small cruelty.
     pub fn test_model(&self, id: &str, model: &str) -> Result<String, String> {
+        if let Some(tool) = crate::subscription_model::tool_for(id) {
+            return super::subscription::SubscriptionProvider::new(tool).verify(model);
+        }
         enum Probe {
             Openai(super::provider::OpenAICompatibleProvider),
             Anthropic(super::provider::AnthropicProvider),

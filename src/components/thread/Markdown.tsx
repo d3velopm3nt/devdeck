@@ -47,6 +47,7 @@ function mapText(children: ReactNode, fn?: (t: string) => ReactNode): ReactNode 
 export const Markdown = memo(function Markdown({
   text,
   renderText,
+  linkLabel,
   /** Where a Run button should open its terminal. Empty disables Run. */
   dir,
   /** Whose files an inline path can be opened from. Empty leaves every code
@@ -55,6 +56,8 @@ export const Markdown = memo(function Markdown({
 }: {
   text: string
   renderText?: (t: string) => ReactNode
+  /** Optional compact label for auto-linked URLs; meaningful written labels stay intact. */
+  linkLabel?: (href: string) => string | undefined
   dir?: string
   nodeId?: number
 }) {
@@ -130,7 +133,7 @@ export const Markdown = memo(function Markdown({
               target="_blank"
               rel="noreferrer"
             >
-              {T(children)}
+              {typeof children === 'string' && children === href ? linkLabel?.(href || '') || T(children) : T(children)}
               <Icon name="external" size={10} className="ml-0.5 inline align-baseline" />
             </a>
           ),

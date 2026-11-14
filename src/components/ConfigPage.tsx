@@ -7,11 +7,11 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import * as ipc from '../lib/ipc'
 import { useApp } from '../store'
 import { loadExampleWorkspace } from '../lib/example'
+import { BrandIcon } from './BrandIcon'
 import { Icon } from '../lib/icons'
 import { SchedulerPage } from './SchedulerPage'
 import { Settings as AgentSettings } from './aiw/Settings'
 import { DeckSettings } from './DeckSettings'
-import { CoreSetup } from './setup/CoreSetup'
 import { GitHubConnection } from './GitHubConnection'
 import { GitHubToken } from './GitHubToken'
 import { CAPTURE_SETTINGS_TAB } from '../lib/devCapture'
@@ -115,7 +115,7 @@ export function ConfigPage() {
   const [vaultBusy, setVaultBusy] = useState(false)
   const [labelDraft, setLabelDraft] = useState('')
   const [labelMsg, setLabelMsg] = useState('')
-  const [tab, setTab] = useState(() => CAPTURE_SETTINGS_TAB || localStorage.getItem(TAB_KEY) || 'general')
+  const [tab, setTab] = useState(() => { const saved = CAPTURE_SETTINGS_TAB || localStorage.getItem(TAB_KEY) || 'general'; return saved === 'core' ? 'assistant' : saved })
 
   // Something elsewhere asked for a particular tab — the calendar's New
   // button, which needs the routines form. Consumed once, so coming back to
@@ -123,7 +123,7 @@ export function ConfigPage() {
   const settingsTab = useApp((s) => s.settingsTab)
   useEffect(() => {
     if (!settingsTab) return
-    setTab(settingsTab)
+    setTab(settingsTab === 'core' ? 'assistant' : settingsTab)
     useApp.getState().setSettingsTab(null)
   }, [settingsTab])
   useEffect(() => localStorage.setItem(TAB_KEY, tab), [tab])
@@ -260,7 +260,7 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
         </div>
             <button
               key="general"
-              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] ${
+              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
                 tab === 'general' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
               }`}
               onClick={() => setTab('general')}
@@ -270,7 +270,7 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
             </button>
             <button
               key="vault"
-              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] ${
+              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
                 tab === 'vault' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
               }`}
               onClick={() => setTab('vault')}
@@ -280,7 +280,7 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
             </button>
             <button
               key="dev"
-              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] ${
+              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
                 tab === 'dev' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
               }`}
               onClick={() => setTab('dev')}
@@ -293,7 +293,7 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
                 place both can be read at once. */}
             <button
               key="routines"
-              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] ${
+              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
                 tab === 'routines' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
               }`}
               onClick={() => setTab('routines')}
@@ -303,7 +303,7 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
             </button>
             <button
               key="deck"
-              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] ${
+              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
                 tab === 'deck' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
               }`}
               onClick={() => setTab('deck')}
@@ -316,17 +316,17 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
                 pre-authorised. Talking to them is Team. */}
             <button
               key="assistant"
-              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] ${
+              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
                 tab === 'assistant' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
               }`}
               onClick={() => setTab('assistant')}
             >
               <Icon name="ai" size={14} className="shrink-0" />
-              Assistant
+              AI
             </button>
             <button
               key="stash"
-              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] ${
+              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
                 tab === 'stash' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
               }`}
               onClick={() => setTab('stash')}
@@ -336,7 +336,7 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
             </button>
             <button
               key="data"
-              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] ${
+              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
                 tab === 'data' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'
               }`}
               onClick={() => setTab('data')}
@@ -344,11 +344,10 @@ ${cost.keeps} item${cost.keeps === 1 ? '' : 's'} match. ${detail}`)) {
               <Icon name="database" size={14} className="shrink-0" />
               Data
             </button>
-        <button className="btn-ghost justify-start text-sm" onClick={() => setTab('core')}>Core setup</button>
-        <button className="btn-ghost justify-start text-sm" onClick={() => setTab('github')}>GitHub</button>
+        <button aria-current={tab === 'github' ? 'page' : undefined} className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] transition-colors focus-visible:outline-2 focus-visible:outline-accent ${tab === 'github' ? 'bg-raise text-ink' : 'text-dim hover:bg-hover/50 hover:text-ink'}`} onClick={() => setTab('github')}><BrandIcon brand="github" size={14} />GitHub</button>
       </nav>
 
-      {tab === 'core' ? <div className="min-w-0 flex-1 overflow-auto"><CoreSetup /></div> : tab === 'github' ? <div className="min-w-0 flex-1 overflow-auto p-6"><GitHubConnection /></div> : tab === 'deck' ? (
+      {tab === 'github' ? <div className="min-w-0 flex-1 overflow-auto px-7 py-6"><div className="max-w-2xl space-y-6"><header><h1 className="flex items-center gap-2 text-[20px] font-semibold text-ink"><BrandIcon brand="github" size={20} />GitHub</h1><p className="mt-1 text-[12px] text-dim">Manage your account connection for repositories and issues.</p></header><GitHubConnection showRefreshSettings /></div></div> : tab === 'deck' ? (
         <div className="min-w-0 flex-1"><DeckSettings /></div>
       ) : tab === 'routines' ? (
         <div className="min-w-0 flex-1">

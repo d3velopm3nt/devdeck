@@ -220,30 +220,27 @@ jobs:
             > warn "Windows protected your PC". Click **More info → Run anyway**, or
             > build from source. (Signed builds via SignPath Foundation clear this.)
 
-            ### Work & Life onboarding
+            ### Changes in 0.4.0
 
-            Connect your state repository or local folder, then use the new **Work & Life**
-            onboarding step. Work opens business setup with its existing manager-team flow.
-            Life drafts Family, Home, Finance, Health, Routines and Knowledge areas,
-            an editable manager goal, an evening check-in and a Sunday review.
-            Review the draft before creating it. Existing spaces are kept.
+            - Updated desktop layout, persistent notifications and workspace tabs.
+            - Connected work items, agent conversations and progress views.
+            - Added a project design system library and original HTML previews.
+            - Detects saved services started outside DevDeck and matches their launchers.
+            - Includes mobile voice, team workflows and optional setup.
 
-            Already set up? Open **Today → Set up Work & Life** to try it.
-            Configure your AI engine and manager permissions before running AI work.
-            Existing functional managers are suggested for reuse across companies.
-            Workflow folders include an assistant handoff packet and external progress checkpoints,
-            with evidence, next actions and review gates. Pull/commit/push the state repo
-            when switching assistants; automatic Git synchronization is not included.
-            Hierarchical reporting and automatic label-triggered workflows are not included.
+            ### Scoop
 
-            ### Activity board and sessions
+            First install:
+            ```powershell
+            scoop bucket add devdeck https://github.com/d3velopm3nt/devdeck
+            scoop install devdeck/devdeck
+            ```
 
-            Activity combines GitHub issues and PRs with Life and Personal tasks.
-            Filter by product, space, assistant or session. Sessions includes DevDeck
-            agents and external ChatGPT/Claude records, with checkpoints, blockers,
-            next actions and stale indicators. External chats must save checkpoints;
-            automatic external-chat updates and Git sync are not included.
-            GitHub Project custom status fields are not imported yet.
+            Existing Scoop installs:
+            ```powershell
+            scoop update
+            scoop update devdeck
+            ```
 
             **Requirements:** Windows 10/11 (x64). No runtime to install.
 

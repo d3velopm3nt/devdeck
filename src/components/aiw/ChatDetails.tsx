@@ -4,7 +4,7 @@ import { useAiw } from '../../lib/aiwStore'
 import { aiw } from '../../lib/aiw'
 import * as ipc from '../../lib/ipc'
 import { ProposalChart } from '../agents/TeamBuild'
-import { TabStrip, StateBadge } from '../ui/DesignSystem'
+import { StateBadge } from '../ui/DesignSystem'
 import '../agents/team-builder.css'
 import '../agents/workforce.css'
 import { ContextBar } from '../thread/ContextBar'
@@ -122,11 +122,27 @@ export function ChatDetails({ id }: { id: string }) {
   // Include views opened by existing team entry points as well as the tab launcher.
   const tabs = [...new Set([...w.tabs, w.tab])]
   const current = views.find(view => view.id === w.tab)!
-  const close = () => {
-    const remaining = tabs.filter(tab => tab !== w.tab)
-    useChatWorkspace.setState({ tabs: remaining.length ? remaining : ['home'], tab: remaining.at(-1) ?? 'home' })
+  const close = (closed: PanelView) => {
+    const index = tabs.indexOf(closed)
+    const remaining = tabs.filter(tab => tab !== closed)
+    const next = closed === w.tab ? remaining[Math.min(index, remaining.length - 1)] ?? 'home' : w.tab
+    useChatWorkspace.setState({ tabs: remaining.length ? remaining : ['home'], tab: next })
+    requestAnimationFrame(() => document.getElementById(panelId + '-tab-' + next)?.focus())
   }
-  return <><div className="chat-panel-toolbar"><div className="chat-panel-tabs"><TabStrip appearance="editor" label="Workspace views" panelId={panelId} value={w.tab} onChange={openView} options={tabs.map(tab => views.find(view => view.id === tab)!)}/></div><button className="chat-icon-button" title="New workspace tab" aria-label="New workspace tab" onClick={() => openView('home')}><Icon name="add" size={15}/></button><button className="chat-icon-button" title={'Close ' + current.label + ' tab'} aria-label={'Close ' + current.label + ' tab'} onClick={close}><Icon name="close" size={15}/></button><button className="chat-icon-button" title="Hide workspace" aria-label="Hide workspace" onClick={() => useChatWorkspace.setState({ split: false, ...(window.innerWidth <= 760 ? { inspector: false } : {}) })}><Icon name="layout" size={15}/></button></div>
+  return <><div className="chat-panel-toolbar"><div className="chat-panel-tabs" role="tablist" aria-label="Workspace views">
+    {tabs.map((tab, index) => {
+      const view = views.find(view => view.id === tab)!
+      return <div className="chat-editor-tab" data-active={tab === w.tab} key={tab} role="presentation">
+        <button type="button" role="tab" id={panelId + '-tab-' + tab} aria-controls={panelId} aria-selected={tab === w.tab} tabIndex={tab === w.tab ? 0 : -1} title={view.label} onClick={() => openView(tab)} onKeyDown={event => {
+          if (event.key === 'Delete') { event.preventDefault(); close(tab); return }
+          const nextIndex = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : event.key === 'ArrowRight' ? (index + 1) % tabs.length : event.key === 'ArrowLeft' ? (index - 1 + tabs.length) % tabs.length : null
+          if (nextIndex === null) return
+          event.preventDefault(); openView(tabs[nextIndex]); document.getElementById(panelId + '-tab-' + tabs[nextIndex])?.focus()
+        }}><Icon name={view.icon} size={15}/><span>{view.label}</span></button>
+        <button type="button" className="chat-editor-tab-close" aria-label={'Close ' + view.label + ' tab'} title={'Close ' + view.label + ' tab'} onClick={() => close(tab)}><Icon name="close" size={13}/></button>
+      </div>
+    })}
+    </div><button className="chat-icon-button" title="New workspace tab" aria-label="New workspace tab" onClick={() => openView('home')}><Icon name="add" size={15}/></button><button className="chat-icon-button" title="Hide workspace" aria-label="Hide workspace" onClick={() => useChatWorkspace.setState({ split: false, ...(window.innerWidth <= 760 ? { inspector: false } : {}) })}><Icon name="layout" size={15}/></button></div>
     <div className="min-h-0 flex-1 overflow-auto" id={panelId} role="tabpanel" aria-labelledby={panelId + '-tab-' + w.tab}>
     {w.tab === 'home' ? <div className="chat-panel-home"><h2>Workspace</h2><p className="text-muted">Open a view beside your conversation.</p><div className="chat-panel-launcher">{views.filter(view => view.id !== 'home' && view.id !== 'run').map(view => <button key={view.id} onClick={() => openView(view.id)}><Icon name={view.icon} size={20}/><span><strong>{view.label}</strong><small>{view.description}</small></span></button>)}</div></div>
     : w.tab === 'run' ? (selectedRun ? <RunView key={selectedRun.id} id={selectedRun.id} compact/> : <div className="chat-detail-content"><h3>Agent details</h3><p>Open a run from this conversation’s Progress view.</p><button className="btn-ghost" onClick={() => openView('workflow')}>Open Progress</button></div>)
